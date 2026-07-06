@@ -20,23 +20,11 @@ import {
  * (issue #2372/#1595) by using the same ReturnType<Config['getAgentClient']>
  * pattern packages/cli/src/ui/hooks/usePromptCompletion.ts uses.
  */
-interface AutoPromptAgentClient {
-  generateDirectMessage(
-    params: SendMessageParameters,
-    promptId: string,
-  ): Promise<{ text?: string }>;
-  dispose(): void;
-  clearTools(): void;
-}
-
-type ConfigAgentClient = ReturnType<Config['getAgentClient']>;
-
 const logger = new DebugLogger('llxprt:subagent:auto-prompt');
 
 export interface AutoPromptRuntime extends DetachedAutoPromptClientSource {
   getProvider(): string | undefined;
   getAgentClient(): AgentClientContract | null | undefined;
-}
 }
 
 function createAutoPromptRequest(description: string): SendMessageParameters {
@@ -111,8 +99,6 @@ function resolveClient(runtime: AutoPromptRuntime): {
     cleanupDetached,
     useRuntimeScope: !useDetachedClient,
     providerName,
-  };
-}
   };
 }
 

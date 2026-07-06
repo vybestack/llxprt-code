@@ -158,7 +158,6 @@ describe('#2373 config boundary guard', () => {
     expect(input).not.toMatch(/uiRuntime:\s*AppBootstrapResult/);
     expect(input).toMatch(/slashCommandRuntime:\s*SlashCommandRuntime/);
     expect(input).not.toMatch(/AppBootstrapResult\['config'\]/);
-    expect(input).toMatch(/agentClientSource\.getAgentClient\(\)/);
     expect(input).not.toMatch(/useAgentStream\([^)]*\bslashCommandRuntime\b/);
 
     expect(runtime).toMatch(/streamRuntime:\s*bootstrap\.streamRuntime/);

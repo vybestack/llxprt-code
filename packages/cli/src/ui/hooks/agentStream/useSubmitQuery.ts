@@ -13,8 +13,8 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
-  type AgentClientContract,
   type MessageSenderType,
   type RecordingIntegration,
   type ThinkingBlock,
@@ -56,7 +56,7 @@ function defaultGetContentPrefixIdentity(): string | null {
 
 export interface UseSubmitQueryDeps {
   runtime: StreamRuntime;
-  agentClient: AgentClientContract;
+  agent: Agent;
   addItem: (
     item: Omit<HistoryItem, 'id'>,
     timestamp?: number,

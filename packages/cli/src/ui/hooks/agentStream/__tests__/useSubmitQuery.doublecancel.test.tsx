@@ -28,6 +28,7 @@ import {
   type AgentClientContract,
   type RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
@@ -175,7 +176,7 @@ function renderUseSubmitQuery(
   return renderHook(() =>
     useSubmitQuery({
       runtime: createStreamRuntimeForTest(createMockOverrides()),
-      agentClient: createMockAgentClient(),
+      agent: createMockAgentClient() as unknown as Agent,
       addItem: vi.fn().mockReturnValue(1),
       settings: {} as never,
       onDebugMessage: vi.fn(),
@@ -582,7 +583,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       ({ streamingState }: { streamingState: StreamingState }) =>
         useSubmitQuery({
           runtime: createStreamRuntimeForTest(createMockOverrides()),
-          agentClient: createMockAgentClient(),
+          agent: createMockAgentClient() as unknown as Agent,
           addItem: vi.fn().mockReturnValue(1),
           settings: {} as never,
           onDebugMessage: vi.fn(),

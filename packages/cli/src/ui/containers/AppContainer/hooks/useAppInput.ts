@@ -313,7 +313,6 @@ function useInputStreamSetup(
 ) {
   const {
     streamRuntime,
-    agentClientSource,
     settings,
     history,
     addItem,

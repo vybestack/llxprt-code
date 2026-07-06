@@ -29,6 +29,7 @@ import type { UiRuntime } from '../../../cliUiRuntime.js';
 export interface AppLayoutParams {
   // From bootstrap
   uiRuntime: UiRuntime;
+  agent: AppBootstrapResult['agent'];
   settings: AppBootstrapResult['settings'];
   todoContinuationRef: AppBootstrapResult['todoContinuationRef'];
   hadToolCallsRef: AppBootstrapResult['hadToolCallsRef'];
@@ -178,6 +179,7 @@ function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
 function useLayoutMeasure(p: AppLayoutParams) {
   const {
     uiRuntime,
+    agent,
     todoContinuationRef,
     hadToolCallsRef,
     consoleMessages,
@@ -212,6 +214,7 @@ function useLayoutMeasure(p: AppLayoutParams) {
   useFlickerDetector(rootUiRef, terminalHeight, constrainHeight);
   useTodoContinuationFlow({
     uiRuntime,
+    agent,
     streamingState,
     history,
     pendingHistoryItems,

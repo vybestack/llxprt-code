@@ -28,11 +28,13 @@ import {
   type TodoContinuationHook,
 } from '../../../hooks/useTodoContinuation.js';
 import type { UiRuntime } from '../../../cliUiRuntime.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 
 export type { TodoContinuationHook };
 
 interface UseTodoContinuationFlowOptions {
   uiRuntime: UiRuntime;
+  agent: Agent;
   streamingState: StreamingState;
   history: HistoryItem[];
   pendingHistoryItems: HistoryItemWithoutId[];
@@ -54,6 +56,7 @@ export interface UseTodoContinuationFlowResult {
 
 export function useTodoContinuationFlow({
   uiRuntime,
+  agent,
   streamingState,
   history,
   pendingHistoryItems,
@@ -73,8 +76,6 @@ export function useTodoContinuationFlow({
    * Wire up task-list continuation detection to trigger continuation prompts
    * when streams complete without tool calls and active tasks exist.
    */
-  const agentClientForContinuation =
-    uiRuntime.agentClientSource.getAgentClient();
   const continuationRuntime = useMemo(
     () => ({
       getEphemeralSettings: () => uiRuntime.app.getEphemeralSettings(),
@@ -83,7 +84,7 @@ export function useTodoContinuationFlow({
     [uiRuntime.app, uiRuntime.approval],
   );
   const todoContinuation = useTodoContinuation(
-    agentClientForContinuation,
+    agent,
     continuationRuntime,
     streamingState === StreamingState.Responding ||
       streamingState === StreamingState.WaitingForConfirmation,

@@ -146,6 +146,7 @@ function buildLayoutParams(
 ): AppLayoutParams {
   return {
     uiRuntime: bootstrap.uiRuntime,
+    agent: bootstrap.agent,
     settings: bootstrap.settings,
     todoContinuationRef: bootstrap.todoContinuationRef,
     hadToolCallsRef: bootstrap.hadToolCallsRef,
