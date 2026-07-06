@@ -33,9 +33,7 @@ import {
   type RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import {
-  createStreamRuntimeForTest,
-} from './streamRuntimeTestHelper.js';
+import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
 

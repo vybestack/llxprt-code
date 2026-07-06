@@ -22,7 +22,6 @@ import {
   type HistoryItemWithoutId,
 } from '../../../types.js';
 
-
 import {
   useTodoContinuation,
   type TodoContinuationHook,
