@@ -128,19 +128,13 @@ const loadCommand: SlashCommand = {
       const statusBefore = runtime.getActiveProviderStatus();
       const result = await runtime.loadProfileByName(profileName);
       const profileLoadResult = result as ProfileLoadResultView;
+      let switchWarning: string | undefined;
       if (result.providerName) {
-        try {
-          await runtime.switchActiveProvider(result.providerName);
-          logger.debug(
-            () =>
-              `[profile] switchActiveProvider invoked for '${result.providerName}'`,
-          );
-        } catch (error) {
-          logger.error(
-            () =>
-              `[profile] failed to switch provider via runtime API: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
+        switchWarning = await switchProviderViaAgent(
+          context,
+          result.providerName,
+          profileLoadResult.modelName,
+        );
       }
       const infoMessages = formatProfileMessages(
         profileLoadResult.infoMessages,
@@ -150,21 +144,15 @@ const loadCommand: SlashCommand = {
         profileLoadResult.warnings,
         '⚠ ',
       );
+      const switchWarningMessage =
+        switchWarning !== undefined
+          ? `
+${switchWarning}`
+          : '';
 
       await applyLoadedProfileConfig(context, result);
 
-      try {
-        const status = runtime.getActiveProviderStatus();
-        logger.debug(
-          () =>
-            `[profile] runtime provider status after load: provider=${status.providerName}, model=${status.modelName}`,
-        );
-      } catch (error) {
-        logger.error(
-          () =>
-            `[profile] failed to read runtime provider status: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+      logRuntimeProviderStatus(runtime);
 
       recordProviderSwitch(context, result, profileLoadResult);
       schedulePaymentModeCheck(context, statusBefore.providerName ?? undefined);
@@ -172,7 +160,7 @@ const loadCommand: SlashCommand = {
       return {
         type: 'message',
         messageType: 'info',
-        content: `Profile '${profileName}' loaded${infoMessages}${warningMessages}`,
+        content: `Profile '${profileName}' loaded${infoMessages}${warningMessages}${switchWarningMessage}`,
       };
     } catch (error) {
       logger.error(
@@ -183,6 +171,73 @@ const loadCommand: SlashCommand = {
     }
   },
 };
+
+/**
+ * Switches the active provider through the agent facade after a profile load.
+ * When the agent facade is unavailable (null), surfaces a user-visible warning
+ * instead of silently skipping the switch — consistent with providerCommand's
+ * null-agent error style (#2374 finding 7). Errors from the switch itself are
+ * logged but never propagated — a provider-switch failure must not abort the
+ * profile load (the config has already been applied).
+ *
+ * Returns a warning message string when the agent is null so the caller can
+ * surface it to the user; returns undefined on success or when no switch was
+ * requested.
+ */
+async function switchProviderViaAgent(
+  context: CommandContext,
+  providerName: string,
+  modelName?: string,
+): Promise<string | undefined> {
+  const agent = context.services.agent;
+  if (!agent) {
+    // No agent facade — the provider config has been applied, but the runtime
+    // switch cannot run. Surface a user-visible warning instead of silently
+    // continuing (#2374 finding 7).
+    return `Provider '${providerName}' configured but the interactive Agent is unavailable — restart to activate it.`;
+  }
+  try {
+    const switchResult = await agent.setProvider(providerName, modelName);
+    logger.debug(
+      () => `[profile] provider switch invoked for '${providerName}'`,
+    );
+    // Surface infoMessages (base URL notices, fallback messages, auth info)
+    // from the switch result so the user sees what happened (#2374 CodeRabbit).
+    if (switchResult.infoMessages.length > 0) {
+      return switchResult.infoMessages.join('\n');
+    }
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    logger.error(
+      () => `[profile] failed to switch provider via agent facade: ${errMsg}`,
+    );
+    // Surface the failure to the user — returning undefined would hide the
+    // error and present "Profile loaded" as if the switch succeeded.
+    return `Provider '${providerName}' switch failed: ${errMsg}`;
+  }
+  return undefined;
+}
+
+/**
+ * Logs the runtime provider status after a profile load, swallowing errors so
+ * a status-read failure cannot abort the load flow.
+ */
+function logRuntimeProviderStatus(
+  runtime: ReturnType<typeof getRuntimeApi>,
+): void {
+  try {
+    const status = runtime.getActiveProviderStatus();
+    logger.debug(
+      () =>
+        `[profile] runtime provider status after load: provider=${status.providerName}, model=${status.modelName}`,
+    );
+  } catch (error) {
+    logger.error(
+      () =>
+        `[profile] failed to read runtime provider status: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
 
 /**
  * Profile delete subcommand

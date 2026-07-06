@@ -7,6 +7,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { type LoadedSettings } from '../../config/settings.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   isWelcomeCompleted,
   markWelcomeCompleted,
@@ -54,6 +55,7 @@ export interface WelcomeActions {
 export interface UseWelcomeOnboardingOptions {
   settings: LoadedSettings;
   isFolderTrustComplete: boolean;
+  agent: Agent;
 }
 
 export interface ModelInfo {
@@ -342,7 +344,10 @@ function useProfileSave(runtime: ReturnType<typeof useRuntimeApi>) {
   );
 }
 
-function useTriggerAuth(runtime: ReturnType<typeof useRuntimeApi>) {
+function useTriggerAuth(
+  runtime: ReturnType<typeof useRuntimeApi>,
+  agent: Agent,
+) {
   return useCallback(
     async (
       provider: string,
@@ -366,13 +371,13 @@ function useTriggerAuth(runtime: ReturnType<typeof useRuntimeApi>) {
       }
 
       // Now switch to the provider AFTER auth is complete
-      // IMPORTANT: Pass autoOAuth: false to prevent switchActiveProvider from triggering
-      // a second OAuth flow - we already authenticated above
-      const switchResult = await runtime.switchActiveProvider(provider, {
+      // IMPORTANT: Pass autoOAuth: false to prevent the agent provider switch
+      // from triggering a second OAuth flow - we already authenticated above
+      const switchResult = await agent.setProvider(provider, undefined, {
         autoOAuth: false,
       });
       debug.log(
-        `[triggerAuth] After switchActiveProvider - changed: ${switchResult.changed}, now active: ${providerManager.getActiveProviderName()}`,
+        `[triggerAuth] After provider switch - changed: ${switchResult.changed}, now active: ${providerManager.getActiveProviderName()}`,
       );
 
       // For API key method, set the key after switching provider
@@ -393,14 +398,14 @@ function useTriggerAuth(runtime: ReturnType<typeof useRuntimeApi>) {
         `[triggerAuth] END - active provider: ${providerManager.getActiveProviderName()}`,
       );
     },
-    [runtime],
+    [runtime, agent],
   );
 }
 
 export const useWelcomeOnboarding = (
   options: UseWelcomeOnboardingOptions,
 ): UseWelcomeOnboardingReturn => {
-  const { settings: _settings, isFolderTrustComplete } = options;
+  const { settings: _settings, isFolderTrustComplete, agent } = options;
   const runtime = useRuntimeApi();
   const [welcomeCompleted, setWelcomeCompleted] = useState(() =>
     isWelcomeCompleted(),
@@ -439,7 +444,7 @@ export const useWelcomeOnboarding = (
   );
 
   const saveProfile = useProfileSave(runtime);
-  const triggerAuth = useTriggerAuth(runtime);
+  const triggerAuth = useTriggerAuth(runtime, agent);
 
   const dismiss = useCallback(() => {
     const skipped = state.step === 'skipped';

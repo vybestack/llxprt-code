@@ -157,6 +157,26 @@ vi.mock('./cliAgentBootstrap.js', () => ({
   })),
 }));
 
+// Mock the provider-activation executor so the main() flow does not invoke the
+// real providers-runtime mutators (setActiveModel etc.) that require a wired
+// CLI runtime context. The activation is an internal detail of the bootstrap;
+// these tests verify the surrounding orchestration, not the activation itself.
+const { executeProviderActivationMock } = vi.hoisted(() => ({
+  executeProviderActivationMock: vi.fn().mockResolvedValue({
+    authFailed: false,
+    activeProvider: 'gemini',
+    infoMessages: [],
+  }),
+}));
+vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
+  return {
+    ...actual,
+    executeProviderActivation: executeProviderActivationMock,
+  };
+});
+
 vi.mock('./ui/utils/mouse.js', () => ({
   enableMouseEvents: vi.fn(),
   disableMouseEvents: vi.fn(),
@@ -201,6 +221,13 @@ describe('cli.tsx main function', () => {
   beforeEach(() => {
     loadSettingsMock = vi.mocked(loadSettings);
     dynamicSettingsRegistry.reset();
+    // Re-establish the default resolved value after afterEach's
+    // vi.restoreAllMocks() clears mock implementations.
+    executeProviderActivationMock.mockResolvedValue({
+      authFailed: false,
+      activeProvider: 'gemini',
+      infoMessages: [],
+    });
 
     // Store and clear sandbox-related env variables to ensure a consistent test environment
     originalEnvGeminiSandbox = process.env.LLXPRT_SANDBOX;

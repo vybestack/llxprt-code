@@ -17,10 +17,18 @@ const runtimeMocks = vi.hoisted(() => ({
   listSavedProfiles: vi.fn(),
   setDefaultProfileName: vi.fn(),
   getActiveProfileName: vi.fn(),
-  switchActiveProvider: vi.fn(),
   getActiveProviderStatus: vi.fn(),
   saveLoadBalancerProfile: vi.fn(),
   getEphemeralSettings: vi.fn(),
+}));
+
+const agentMocks = vi.hoisted(() => ({
+  setProvider: vi.fn().mockResolvedValue({
+    changed: true,
+    previousProvider: 'gemini',
+    nextProvider: 'openai',
+    infoMessages: [],
+  }),
 }));
 
 const tokenStoreMocks = vi.hoisted(() => ({
@@ -47,9 +55,18 @@ describe('profileCommand', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    context = createMockCommandContext();
+    context = createMockCommandContext({
+      services: {
+        agent: { setProvider: agentMocks.setProvider },
+      },
+    });
     runtimeMocks.listSavedProfiles.mockResolvedValue(['alpha', 'beta']);
-    runtimeMocks.switchActiveProvider.mockResolvedValue(undefined);
+    agentMocks.setProvider.mockResolvedValue({
+      changed: true,
+      previousProvider: 'gemini',
+      nextProvider: 'openai',
+      infoMessages: [],
+    });
     runtimeMocks.getActiveProviderStatus.mockReturnValue({
       providerName: 'gemini',
       modelName: 'gemini-1.5-pro',
@@ -145,7 +162,7 @@ describe('profileCommand', () => {
 
       const result = await load.action!(context, 'demo');
       expect(runtimeMocks.loadProfileByName).toHaveBeenCalledWith('demo');
-      expect(runtimeMocks.switchActiveProvider).toHaveBeenCalledWith('openai');
+      expect(agentMocks.setProvider).toHaveBeenCalledWith('openai', 'gpt-4');
       expect(result?.type).toBe('message');
       expect(result).toBeDefined();
       expect((result as { content: string }).content).toContain('message one');
@@ -179,6 +196,29 @@ describe('profileCommand', () => {
 
       await load.action!(contextWithConfig, 'demo');
       expect(setToolsSpy).toHaveBeenCalled();
+    });
+
+    it('surfaces a user-visible warning when agent is null but providerName is set (#2374 finding 7)', async () => {
+      const contextWithoutAgent = createMockCommandContext({
+        services: {
+          agent: null,
+        },
+      });
+
+      runtimeMocks.loadProfileByName.mockResolvedValue({
+        providerName: 'openai',
+        modelName: 'gpt-4',
+        infoMessages: [],
+      });
+
+      const result = await load.action!(contextWithoutAgent, 'demo');
+
+      expect(result?.type).toBe('message');
+      const content = (result as { content: string }).content;
+      expect(content).toContain('openai');
+      expect(content).toMatch(/unavailable|restart/i);
+      // The agent facade was never available, so setProvider was never called.
+      expect(agentMocks.setProvider).not.toHaveBeenCalled();
     });
   });
 

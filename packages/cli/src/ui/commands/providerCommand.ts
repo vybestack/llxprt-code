@@ -29,6 +29,7 @@ import {
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
+import type { AgentProviderSwitchResult } from '@vybestack/llxprt-code-agents';
 import {
   getOptionalString,
   hasFunction,
@@ -87,6 +88,40 @@ function getProviderBaseUrl(provider: IProvider): string | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * Translates the agent's OAuthUIEvent type into a UI MessageType. The agent
+ * emits a discriminated union ('info' | 'warning' | 'error' | 'oauth_url')
+ * while the UI HistoryItem expects a MessageType enum. oauth_url has no
+ * MessageType counterpart and is rendered as INFO.
+ */
+function mapOAuthEventType(
+  type: 'info' | 'warning' | 'error' | 'oauth_url',
+): MessageType {
+  switch (type) {
+    case 'warning':
+      return MessageType.WARNING;
+    case 'error':
+      return MessageType.ERROR;
+    default:
+      return MessageType.INFO;
+  }
+}
+
+/**
+ * Formats the agent's OAuthUIEvent into a display string. For oauth_url
+ * events, appends the URL to the text so the user can see and open it.
+ */
+function formatOAuthText(event: {
+  type: 'info' | 'warning' | 'error' | 'oauth_url';
+  text: string;
+  url?: string;
+}): string {
+  if (event.type === 'oauth_url' && event.url !== undefined) {
+    return `${event.text}: ${event.url}`;
+  }
+  return event.text;
 }
 
 function buildAliasConfig(
@@ -225,6 +260,7 @@ async function switchProvider(
   const runtime = getRuntimeApi();
   const providerManager = getProviderManager();
   const currentProvider = resolveCurrentProvider(runtime, providerManager);
+  const agent = context.services.agent;
 
   if (providerName === currentProvider) {
     return {
@@ -234,12 +270,25 @@ async function switchProvider(
     };
   }
 
+  if (!agent) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content:
+        'Cannot switch provider: the interactive Agent is not available. Restart the session.',
+    };
+  }
+
   const fromProvider = firstNonEmptyString(currentProvider, 'none');
 
-  let switchResult;
+  let switchResult: AgentProviderSwitchResult;
   try {
-    switchResult = await runtime.switchActiveProvider(providerName, {
-      addItem: context.ui.addItem,
+    switchResult = await agent.setProvider(providerName, undefined, {
+      addItem: (event, timestamp) =>
+        context.ui.addItem(
+          { type: mapOAuthEventType(event.type), text: formatOAuthText(event) },
+          timestamp ?? Date.now(),
+        ),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

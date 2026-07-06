@@ -26,7 +26,7 @@ interface AuthDialogState {
   enabledProviders: Set<string>;
   setEnabledProviders: React.Dispatch<React.SetStateAction<Set<string>>>;
   authStatuses: Map<string, AuthStatus>;
-  refreshAuthStatuses: () => Promise<void>;
+  reloadAuthStatuses: () => Promise<void>;
 }
 
 function getEnabledProviders(
@@ -174,7 +174,7 @@ function useAuthDialogState(
     () => new Map(),
   );
 
-  const refreshAuthStatuses = useCallback(async (): Promise<void> => {
+  const reloadAuthStatuses = useCallback(async (): Promise<void> => {
     try {
       const statuses = await runtime.getCliOAuthManager().getAuthStatus();
       if (!mountedRef.current) return;
@@ -194,14 +194,14 @@ function useAuthDialogState(
   }, [settings.merged.oauthEnabledProviders]);
 
   useEffect(() => {
-    void refreshAuthStatuses();
-  }, [refreshAuthStatuses]);
+    void reloadAuthStatuses();
+  }, [reloadAuthStatuses]);
 
   return {
     enabledProviders,
     setEnabledProviders,
     authStatuses,
-    refreshAuthStatuses,
+    reloadAuthStatuses,
   };
 }
 
@@ -250,7 +250,7 @@ export function AuthDialog({
     enabledProviders,
     setEnabledProviders,
     authStatuses,
-    refreshAuthStatuses,
+    reloadAuthStatuses,
   } = useAuthDialogState(settings, runtime, mountedRef);
   const items = useMemo(
     () => buildAuthItems(enabledProviders, authStatuses),
@@ -283,7 +283,7 @@ export function AuthDialog({
             }
             return next;
           });
-          await refreshAuthStatuses();
+          await reloadAuthStatuses();
         } catch (error) {
           if (mountedRef.current) {
             const errorMessage =
@@ -295,7 +295,7 @@ export function AuthDialog({
         }
       })();
     },
-    [mountedRef, onSelect, refreshAuthStatuses, runtime, setEnabledProviders],
+    [mountedRef, onSelect, reloadAuthStatuses, runtime, setEnabledProviders],
   );
 
   useCloseAuthDialogOnEscape(onSelect);

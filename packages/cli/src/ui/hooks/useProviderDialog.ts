@@ -25,9 +25,7 @@ interface UseProviderDialogParams {
 
 type AddMessage = UseProviderDialogParams['addMessage'];
 type RuntimeApi = ReturnType<typeof useRuntimeApi>;
-type ProviderSwitchResult = Awaited<
-  ReturnType<RuntimeApi['switchActiveProvider']>
->;
+type ProviderSwitchResult = Awaited<ReturnType<RuntimeApi['setProvider']>>;
 
 interface ProviderSwitchNotificationParams {
   addMessage: AddMessage;
@@ -115,7 +113,7 @@ export const useProviderDialog = ({
          * @requirement:REQ-SP-005
          * @pseudocode:cli-runtime.md line 9
          */
-        const result = await runtime.switchActiveProvider(providerName);
+        const result = await runtime.setProvider(providerName);
         onClear?.();
         notifyProviderSwitch({
           addMessage,

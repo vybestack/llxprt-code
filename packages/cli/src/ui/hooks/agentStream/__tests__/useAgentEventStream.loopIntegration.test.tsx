@@ -59,6 +59,7 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   getOrCreateScheduler,
   disposeScheduler,
@@ -311,7 +312,10 @@ function createRealEngineAgent(opts: RealEngineAgentOptions): Agent {
     opts.editorCallbacksHolder ??
     ({ current: {} } as { current: Record<string, unknown> });
 
-  const agent: Agent = {
+  // The stub implements the Agent methods/properties this test exercises.
+  // Unimplemented readonly control properties are cast at the boundary via
+  // `as unknown as Agent` (repo idiom) instead of per-field `as never`.
+  const agent = {
     async chat() {
       return { text: '', toolCalls: [], finishReason: 'stop' };
     },
@@ -338,7 +342,14 @@ function createRealEngineAgent(opts: RealEngineAgentOptions): Agent {
       );
     },
     getProvider: () => 'test',
-    async setProvider() {},
+    async setProvider() {
+      return {
+        changed: false,
+        previousProvider: 'test',
+        nextProvider: 'test',
+        infoMessages: [],
+      };
+    },
     getProviderStatus: () => ({
       provider: 'test',
       model: 'test-model',
@@ -357,7 +368,6 @@ function createRealEngineAgent(opts: RealEngineAgentOptions): Agent {
     setModelParam: () => {},
     clearModelParam: () => {},
     getUserTier: () => undefined,
-    profiles: {} as never,
     tools: {
       list: () => [],
       get: () => undefined,
@@ -372,19 +382,7 @@ function createRealEngineAgent(opts: RealEngineAgentOptions): Agent {
         displayCallbacksHolder.current = cbs;
       },
       recordCompletedToolCalls: () => {},
-      keys: {} as never,
     },
-    mcp: {} as never,
-    auth: {} as never,
-    ide: {} as never,
-    session: {} as never,
-    hooks: {} as never,
-    policy: {} as never,
-    tasks: {} as never,
-    memory: {} as never,
-    skills: {} as never,
-    workspace: {} as never,
-    lsp: {} as never,
     async getHistory() {
       return [];
     },
@@ -419,11 +417,15 @@ function createRealEngineAgent(opts: RealEngineAgentOptions): Agent {
     listProviders: () => [],
     listTools: () => [],
     async dispose() {},
-  };
+  } as unknown as Agent;
   return agent;
 }
 
 /** No-op stubs shared by scripted + hanging clients. */
+function unused(): never {
+  throw new Error('not used');
+}
+
 function createClientBase(): AgentClientContract {
   return {
     async initialize() {},
@@ -448,19 +450,11 @@ function createClientBase(): AgentClientContract {
     setHistory: async () => {},
     restoreHistory: async () => {},
     addDirectoryContext: async () => {},
-    getContentGenerator: () => {
-      throw new Error('not used');
-    },
-    startChat: async () => {
-      throw new Error('not used');
-    },
-    generateDirectMessage: () => {
-      throw new Error('not used');
-    },
+    getContentGenerator: () => unused(),
+    startChat: async () => unused(),
+    generateDirectMessage: () => unused(),
     generateJson: async () => ({}),
-    generateContent: () => {
-      throw new Error('not used');
-    },
+    generateContent: () => unused(),
     generateEmbedding: async () => [],
     async *sendMessageStream(): AsyncGenerator<ServerAgentStreamEvent> {
       /* override */
@@ -651,7 +645,7 @@ describe('useAgentEventStream loop integration', () => {
       clearHistory: () => {},
       getHistoryService: () => null,
       wasRecentlyCompressed: () => false,
-      performCompression: async () => 'compressed' as never,
+      performCompression: async () => PerformCompressionResult.COMPRESSED,
       recordCompletedToolCalls: () => {},
     } as unknown as ReturnType<AgentClientContract['getChat']>;
 

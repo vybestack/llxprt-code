@@ -21,6 +21,7 @@ import {
   AgentBootstrapError,
   validateAgentRuntimeId,
 } from './agentBootstrap.js';
+import { executeProviderActivation } from './providerActivationExecutor.js';
 import { finalizeAgent, registerProvidersOntoManager } from './createAgent.js';
 
 /**
@@ -30,6 +31,16 @@ import { finalizeAgent, registerProvidersOntoManager } from './createAgent.js';
  * ProviderManager, or (when a caller bus is supplied) a MessageBus. The
  * returned Agent's dispose() skips the caller-owned Config teardown
  * (REQ-001.3).
+ *
+ * Provider activation / auth (#2374): when `options.activation` is supplied,
+ * fromConfig executes the declarative intent via executeProviderActivation
+ * INSTEAD of the legacy bare refreshAuth(undefined) call, so frontends no longer
+ * need to orchestrate switchActiveProvider / refreshAuth / credential overrides
+ * by hand. Callers that need to observe fatal auth failure (`authFailed`)
+ * should invoke {@link executeProviderActivation} directly against the Config
+ * BEFORE calling fromConfig (without the activation option); this keeps
+ * fromConfig's existing callers (nonInteractiveCli.ts) working unchanged while
+ * exposing the typed result surface on the executor.
  *
  * @plan:PLAN-20260621-COREAPIREMED.P09
  * @requirement:REQ-001,REQ-005,REQ-INT-001
@@ -43,7 +54,10 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
   if (!hasConfig(options, 'config')) {
     throw new AgentBootstrapError('fromConfig requires an existing Config');
   }
-  FromConfigValidatableSchema.parse({ sessionId: options.sessionId });
+  FromConfigValidatableSchema.parse({
+    sessionId: options.sessionId,
+    activation: options.activation,
+  });
 
   // @pseudocode line 14: ADOPT — never construct.
   const config: Config = options.config;
@@ -93,15 +107,56 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
   if (!isConfigInitialized(config)) {
     await safeInitialize(config, messageBus);
   }
-  if (!hasPostAuthClient(config)) {
+  // @plan:PLAN-20270104-ISSUE2374.P03 @requirement:REQ-001
+  // When a declarative activation intent is supplied, execute it via
+  // executeProviderActivation INSTEAD of the legacy bare refreshAuth path.
+  // The executor performs the switchActiveProvider / refreshAuth /
+  // credential-override sequence the CLI bootstrap and Zed integration used to
+  // orchestrate by hand. authMode 'none' skips auth refresh entirely. When the
+  // intent is absent, preserve the backward-compatible bare refreshAuth call.
+  if (options.activation !== undefined) {
+    const activationResult = await executeProviderActivation(
+      config,
+      options.activation,
+    );
+    // A declarative intent whose auth sequence failed is FATAL — at HEAD,
+    // fromConfig's bare config.refreshAuth(undefined) threw on failure, so
+    // silent-continue would regress (#2374 finding 3). Surface the underlying
+    // error message via AgentBootstrapError. The already-active-with-profile-
+    // ephemerals skip path and the already-refreshed path report authFailed
+    // false, so this does not break the interactive createForegroundAgent path.
+    if (activationResult.authFailed) {
+      const underlying = activationResult.authError;
+      throw new AgentBootstrapError(
+        `fromConfig activation failed: ${
+          underlying instanceof Error ? underlying.message : String(underlying)
+        }`,
+        { cause: underlying },
+      );
+    }
+  } else if (!hasPostAuthClient(config)) {
     // resolveAuthForAdoptedConfig: refreshAuth accepts an optional authMethod
     // string; pass undefined so the adopted Config re-derives it internally.
     await config.refreshAuth(undefined);
   }
 
   // @pseudocode lines 37-48 (Mismatch 1): synthesize parsed + resolvedAuth.
+  //
+  // #2374 round-3 Fix 1: derive the provider from the POST-activation runtime
+  // truth (manager active provider name), NOT config.getProvider(). The
+  // executor may switch the provider without updating config.getProvider()
+  // (skip-when-already-active path when the manager already has the target
+  // active but config.getProvider() was set to something else). The model is
+  // read from config.getModel() which IS updated by setActiveModel /
+  // switchActiveProvider. When no activation intent ran, config.getProvider()
+  // is the correct source (backward compatibility).
+  const activeRuntimeProvider =
+    options.activation !== undefined
+      ? (config.getProviderManager()?.getActiveProviderName() ??
+        config.getProvider())
+      : config.getProvider();
   const parsed = {
-    provider: config.getProvider() ?? '',
+    provider: activeRuntimeProvider ?? '',
     model: config.getModel(),
     ...(options.sessionId !== undefined
       ? { sessionId: options.sessionId }

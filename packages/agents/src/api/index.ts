@@ -34,7 +34,12 @@ export type {
   AgentSchedulerFactory,
   AgentConfig,
   FromConfigOptions,
+  ProviderActivationIntent,
 } from './config-types.js';
+export {
+  executeProviderActivation,
+  type ProviderActivationResult,
+} from './providerActivationExecutor.js';
 export * from './event-types.js';
 export * from './agent.js';
 export * from './event-schema.js';
@@ -114,4 +119,8 @@ export type {
   MemoryRefreshResult,
   // Phase A issue #2372: post-construction display-callbacks type
   AgentDisplayCallbacks,
+  // Phase A issue #2374: control-plane provider switch options/result
+  AgentOAuthUIEvent,
+  AgentProviderSwitchOptions,
+  AgentProviderSwitchResult,
 } from './agent.js';

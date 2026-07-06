@@ -13,7 +13,6 @@
 
 import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { LlxprtExtension } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -55,6 +54,8 @@ import type {
   AgentSkillsControl,
   AgentWorkspaceControl,
   AgentLspControl,
+  AgentProviderSwitchOptions,
+  AgentProviderSwitchResult,
 } from './agent.js';
 import type { AgentEvent } from './event-types.js';
 import { mapLoopStream } from './eventAdapter.js';
@@ -101,6 +102,12 @@ import type { AgentAuthState } from './control/authState.js';
 import { computeAuthWinner } from './control/authState.js';
 import type { AuthWinner } from './control/authState.js';
 import type { AgentSchedulerHandle } from './config-types.js';
+import { toRuntimeSwitchOptions } from './providerSwitchOptionsAdapter.js';
+import {
+  disposeOAuthManager,
+  collectActiveExtensions,
+  unloadExtensionSafely,
+} from './agentDisposeHelpers.js';
 
 import { AggregateDisposeError } from './disposeErrors.js';
 
@@ -651,13 +658,24 @@ export class AgentImpl implements Agent {
    * generator internally) and, when a model is supplied, setActiveModel +
    * config.initializeContentGeneratorConfig (model-only rebuild). Then
    * rebuildLoop() so the next AgenticLoop.run binds to the CURRENT client.
+   *
+   * Returns the underlying switch result (changed / previousProvider /
+   * nextProvider / defaultModel / infoMessages) so the interactive UI (Part B)
+   * can replace direct `runtime.switchActiveProvider(name, opts)` calls. The
+   * richer return is non-breaking for existing callers that await the promise
+   * without reading the value.
    * @plan:PLAN-20260617-COREAPI.P16
+   * @plan:PLAN-20270104-ISSUE2374.P04
    * @requirement:REQ-004
    * @requirement:REQ-005
    * @pseudocode switch-rebind.md steps 30-42
    */
-  async setProvider(provider: string, model?: string): Promise<void> {
-    await this.applyProviderSwitch(provider, model);
+  async setProvider(
+    provider: string,
+    model?: string,
+    options?: AgentProviderSwitchOptions,
+  ): Promise<AgentProviderSwitchResult> {
+    return this.applyProviderSwitch(provider, model, options);
   }
 
   /**
@@ -1134,7 +1152,13 @@ export class AgentImpl implements Agent {
    * internally (try/catch for the fake seam where the named provider is not
    * registered). When a model is supplied, setActiveModel + the explicit
    * model-only rebuild. Then rebuildLoop(). Updates the per-agent state holder.
+   *
+   * Returns the underlying ProviderSwitchResult so setProvider can surface
+   * changed/previousProvider/nextProvider/defaultModel/infoMessages to the
+   * interactive UI. Under the fake-seam suppressed branch (provider not
+   * registered), synthesizes a `{changed:false}` result.
    * @plan:PLAN-20260617-COREAPI.P16
+   * @plan:PLAN-20270104-ISSUE2374.P04
    * @requirement:REQ-004
    * @requirement:REQ-005
    * @pseudocode switch-rebind.md steps 30-42
@@ -1142,13 +1166,22 @@ export class AgentImpl implements Agent {
   private async applyProviderSwitch(
     provider: string,
     model?: string,
-  ): Promise<void> {
+    options?: AgentProviderSwitchOptions,
+  ): Promise<AgentProviderSwitchResult> {
+    const previousProvider = this.providerState.provider;
     // switchActiveProvider rebuilds the content generator internally; under the
     // fake seam the named provider is not registered and this throws (no-op).
     let providerChanged = false;
+    let infoMessages: readonly string[] = [];
+    let defaultModel: string | undefined;
     try {
-      await switchActiveProvider(provider);
-      providerChanged = true;
+      const switchResult = await switchActiveProvider(
+        provider,
+        toRuntimeSwitchOptions(options),
+      );
+      providerChanged = switchResult.changed;
+      infoMessages = switchResult.infoMessages;
+      defaultModel = switchResult.defaultModel;
     } catch (error) {
       // Only the EXPECTED fake-seam case is suppressed: the fake seam sets
       // LLXPRT_FAKE_RESPONSES to a fixture-file path (never the string '1'), so
@@ -1171,6 +1204,13 @@ export class AgentImpl implements Agent {
         await this.deps.config.initializeContentGeneratorConfig();
       }
       await this.restoreChatVisibility();
+    } else if (model !== undefined && model !== this.providerState.model) {
+      // Same provider, different model — apply the model to the runtime
+      // without reinitializing the content generator (the provider did not
+      // change, so the client/HistoryService identity is preserved).
+      // setActiveModel updates the model on the existing provider; the
+      // rebuild() below propagates it to the loop (#2374 deepthinker finding).
+      await setActiveModel(model);
     }
     // Under the fake seam (providerChanged === false), the client is unchanged;
     // history/HistoryService identity is trivially preserved (same client).
@@ -1179,6 +1219,13 @@ export class AgentImpl implements Agent {
       this.providerState.model = model;
     }
     this.rebuild();
+    return {
+      changed: providerChanged,
+      previousProvider,
+      nextProvider: provider,
+      ...(defaultModel !== undefined ? { defaultModel } : {}),
+      infoMessages,
+    };
   }
 
   /**
@@ -1423,73 +1470,6 @@ export class AgentImpl implements Agent {
     } catch (e: unknown) {
       errors.push(e);
     }
-  }
-}
-
-/**
- * Defensively disposes an OAuthManager if it exposes a dispose method. The
- * runtime context cleanup (dispose.md line 55) normally owns this teardown; this
- * guard covers managers that are not torn down there.
- * @plan:PLAN-20260617-COREAPI.P24
- * @requirement:REQ-016
- * @pseudocode dispose.md 90-92
- */
-async function disposeOAuthManager(manager: OAuthManager): Promise<void> {
-  const holder = manager as unknown as {
-    dispose?: () => Promise<void> | void;
-  };
-  if (typeof holder.dispose === 'function') {
-    await holder.dispose();
-  }
-}
-
-/**
- * Structural view of the Config-owned extension loader's teardown surface. The
- * real ExtensionLoader (core/utils/extensionLoader.ts) exposes both methods;
- * this optional-method shape mirrors the disposeOAuthManager runtime-guard idiom
- * so a loader that does not surface them is skipped rather than crashing.
- * @plan:PLAN-20260617-COREAPI.P24
- * @requirement:REQ-016
- */
-interface ExtensionTeardownSurface {
-  getExtensions?: () => LlxprtExtension[];
-  unloadExtension?: (extension: LlxprtExtension) => Promise<void> | void;
-}
-
-/**
- * Returns the active extensions known to the Config-owned loader. Defensively
- * guards the loader's getExtensions surface (mirroring disposeOAuthManager) and
- * filters to active extensions, since only active ones have started teardownable
- * MCP servers/context/commands/subagents (dispose.md line 80).
- * @plan:PLAN-20260617-COREAPI.P24
- * @requirement:REQ-016
- * @pseudocode dispose.md 80
- */
-function collectActiveExtensions(loader: unknown): LlxprtExtension[] {
-  const surface = loader as ExtensionTeardownSurface;
-  if (typeof surface.getExtensions !== 'function') {
-    return [];
-  }
-  return surface.getExtensions().filter((extension) => extension.isActive);
-}
-
-/**
- * Unloads a single extension through the loader's documented dynamic-unload path
- * (ExtensionLoader.unloadExtension), which stops the extension's MCP servers,
- * context, custom commands, and subagents. Defensively guards the unloadExtension
- * surface (mirroring disposeOAuthManager). A thrown unload propagates so the
- * caller's safe() collects it into errors[] (dispose.md line 80).
- * @plan:PLAN-20260617-COREAPI.P24
- * @requirement:REQ-016
- * @pseudocode dispose.md 80
- */
-async function unloadExtensionSafely(
-  loader: unknown,
-  extension: LlxprtExtension,
-): Promise<void> {
-  const surface = loader as ExtensionTeardownSurface;
-  if (typeof surface.unloadExtension === 'function') {
-    await surface.unloadExtension(extension);
   }
 }
 

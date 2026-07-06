@@ -16,9 +16,9 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   getCliRuntimeContext,
   setCliRuntimeContext,
-  switchActiveProvider,
   applyCliSetArguments,
 } from '@vybestack/llxprt-code-providers/runtime.js';
+import { executeProviderActivation } from '@vybestack/llxprt-code-agents';
 import {
   READ_ONLY_TOOL_NAMES,
   EDIT_TOOL_NAME,
@@ -294,7 +294,21 @@ async function activateProviderAndProfile(
 
   if (!profileApplicationResult.appliedFromLoadedProfile) {
     try {
-      await switchActiveProvider(finalProvider);
+      // The executor's authMode 'none' path swallows the provider-switch error
+      // internally (safeActivateProvider does not throw) and surfaces it via
+      // result.switchError. The surrounding try/catch remains necessary because
+      // executeNoAuth also calls applyRuntimeProviderOverrides (file I/O for
+      // auth-keyfile resolution) and applyModelAndParams, which can still throw.
+      const activationResult = await executeProviderActivation(input.config, {
+        provider: finalProvider,
+        authMode: 'none',
+      });
+      if (activationResult.switchError !== undefined) {
+        logger.warn(
+          () =>
+            `[bootstrap] Failed to switch active provider to ${finalProvider}: ${activationResult.switchError}`,
+        );
+      }
     } catch (error) {
       logger.warn(
         () =>
@@ -329,7 +343,7 @@ function hasCliArgumentOverrides(args: BootstrapProfileArgs): boolean {
 
 /**
  * Step 14: Reapply CLI model override + CLI arg overrides after provider switch.
- * switchActiveProvider clears ephemerals, so we reapply CLI args here.
+ * The provider switch clears ephemerals, so we reapply CLI args here.
  */
 async function reapplyCliOverrides(
   input: ReapplyCliOverridesInput,
@@ -552,7 +566,7 @@ function finalizeMetadata(input: PostConfigInput): void {
  * Step 10: setCliRuntimeContext()
  * Step 11: registerCliProviderInfrastructure() — re-registration, conditional, dynamic import
  * Step 12: applyProfileToRuntime() — snapshot application
- * Step 13: switchActiveProvider()
+ * Step 13: executeProviderActivation() — declarative provider switch (authMode 'none'; auth happens later)
  * Step 14: reapplyCliOverrides() — CLI args win after provider switch clears ephemerals
  * Step 15: applyToolGovernance() — tool policy (ephemeral settings for allowed/excluded tools)
  * Step 16: applyEphemeralSettings() — emojifilter, profile ephemerals, CLI /set args, disabled hooks

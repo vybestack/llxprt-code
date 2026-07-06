@@ -9,11 +9,6 @@ import { parseArguments } from './config/cliArgParser.js';
 import { parseBootstrapArgs } from './config/profileBootstrap.js';
 import { coerceDebugFlag } from './config/yargsOptions.js';
 import {
-  hasProfileAuthEphemerals,
-  reapplyProfileAuthEphemerals,
-  snapshotProfileAuthEphemerals,
-} from './config/profileAuthEphemerals.js';
-import {
   dynamicSettingsRegistry,
   generateDynamicToolSettings,
 } from './utils/dynamicSettings.js';
@@ -28,7 +23,6 @@ import {
   parseDockerMemoryToMB,
 } from './utils/bootstrap.js';
 import { relaunchAppInChildProcess } from './utils/relaunch.js';
-import chalk from 'chalk';
 import type { DnsResolutionOrder, LoadedSettings } from './config/settings.js';
 import {
   type Config,
@@ -55,15 +49,11 @@ import { drainStdinBuffer } from './ui/utils/terminalContract.js';
 import { StdinRawModeManager } from './utils/stdinSafety.js';
 import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
 import { appEvents, AppEvent } from './utils/events.js';
+import { loadProfileByName } from '@vybestack/llxprt-code-providers/runtime.js';
 import {
-  switchActiveProvider,
-  setActiveModel,
-  setActiveModelParam,
-  clearActiveModelParam,
-  getActiveModelParams,
-  loadProfileByName,
-  applyCliArgumentOverrides,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+  executeProviderActivation,
+  type ProviderActivationIntent,
+} from '@vybestack/llxprt-code-agents';
 import { writeFileSync } from 'node:fs';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 
@@ -133,33 +123,6 @@ export type CliProviderManager = NonNullable<
 >;
 
 /**
- * Resolve the model to activate for the configured provider, honoring a CLI
- * bootstrap override and falling back to the provider's default model.
- */
-export function resolveProviderModel(
-  config: Config,
-  activeProvider: ReturnType<CliProviderManager['getActiveProvider']>,
-): string | undefined {
-  const configWithCliOverride = config as Config & {
-    _cliModelOverride?: string;
-  };
-  const cliModelFromBootstrap =
-    typeof configWithCliOverride._cliModelOverride === 'string'
-      ? configWithCliOverride._cliModelOverride.trim()
-      : undefined;
-  let configModel =
-    cliModelFromBootstrap && cliModelFromBootstrap.length > 0
-      ? cliModelFromBootstrap
-      : config.getModel();
-
-  if (!configModel || configModel === 'placeholder-model') {
-    // No model specified or placeholder, get the provider's default
-    configModel = activeProvider?.getDefaultModel?.() ?? configModel;
-  }
-  return configModel;
-}
-
-/**
  * Compute the merged model params (profile + CLI) that should be applied
  * before the first request for the configured provider.
  */
@@ -183,9 +146,87 @@ export function collectProviderModelParams(
 }
 
 /**
+ * Build the declarative CLI credential/model-override bundle for the
+ * activation intent. Mirrors the previous two-argument
+ * `applyCliArgumentOverrides(argv, bootstrapArgs)` call by merging the
+ * bootstrap-parsed overrides (preferred by the providers runtime) with the
+ * yargs-parsed argv (fallback). Each field is omitted when neither source
+ * supplies a value so the executor's conditional-spread adapters produce an
+ * empty shape.
+ */
+function buildActivationCliOverrides(
+  config: Config,
+  argv: ParsedCliArgs,
+): NonNullable<ProviderActivationIntent['cliOverrides']> {
+  const configWithBootstrapArgs = config as Config & {
+    _bootstrapArgs?: BootstrapOverrideShape;
+  };
+  const bootstrap = configWithBootstrapArgs._bootstrapArgs;
+
+  const overrides: {
+    key?: string;
+    keyfile?: string;
+    keyName?: string;
+    baseUrl?: string;
+    set?: string[];
+  } = {};
+
+  const key = bootstrap?.keyOverride ?? argv.key;
+  if (key !== undefined) {
+    overrides.key = key;
+  }
+
+  const keyfile = bootstrap?.keyfileOverride ?? argv.keyfile;
+  if (keyfile !== undefined) {
+    overrides.keyfile = keyfile;
+  }
+
+  const keyName = bootstrap?.keyNameOverride ?? undefined;
+  if (keyName !== undefined) {
+    overrides.keyName = keyName;
+  }
+
+  const baseUrl = bootstrap?.baseurlOverride ?? argv.baseurl;
+  if (baseUrl !== undefined) {
+    overrides.baseUrl = baseUrl;
+  }
+
+  const set = bootstrap?.setOverrides ?? argv.set;
+  if (set !== undefined) {
+    overrides.set = [...set];
+  }
+
+  return overrides;
+}
+
+interface BootstrapOverrideShape {
+  keyOverride?: string | null;
+  keyfileOverride?: string | null;
+  keyNameOverride?: string | null;
+  setOverrides?: string[] | null;
+  baseurlOverride?: string | null;
+}
+
+/**
  * Activate the provider that the resolved config points at (or the default
  * provider when none was explicitly requested). Returns true if the initial
  * authentication attempt failed.
+ *
+ * WHY THIS RUNS PRE-AGENT (#2374 round-3 Fix 3): the interactive CLI bootstrap
+ * needs the auth outcome BEFORE the Agent is constructed — the sandbox-hop
+ * decision (maybeHopIntoSandbox) and the fatal-exit path
+ * (FATAL_AUTHENTICATION_ERROR) depend on whether auth succeeded. Constructing
+ * the Agent first and then checking auth would defer the fatal-exit past agent
+ * construction, changing the observable process lifecycle. This function only
+ * assembles a ProviderActivationIntent and delegates to
+ * executeProviderActivation; new interactive code should prefer passing the
+ * activation intent to agent construction (fromConfig/createAgent) instead of
+ * calling this directly.
+ *
+ * Declarative activation (#2374): assembles a {@link ProviderActivationIntent}
+ * from the resolved config + CLI argv + bootstrap credential overrides and
+ * delegates the imperative switch/auth/override sequence to
+ * `executeProviderActivation` in the agents package.
  */
 export async function activateConfiguredProvider(
   config: Config,
@@ -193,84 +234,40 @@ export async function activateConfiguredProvider(
   argv: ParsedCliArgs,
 ): Promise<boolean> {
   const configProvider = config.getProvider();
-  if (!configProvider) {
-    // No explicit provider specified - ensure default provider (gemini) is
-    // activated so contentGeneratorConfig is initialized for the first request.
-    try {
-      const defaultProvider =
-        providerManager.getActiveProviderName() ?? 'gemini';
-      await switchActiveProvider(defaultProvider);
-      await config.refreshAuth();
-    } catch (e) {
-      // Log but don't exit - auth will be triggered lazily on first API call
-      const logger = new DebugLogger('llxprt:gemini');
-      logger.debug(
-        () => `Default provider activation skipped: ${(e as Error).message}`,
-      );
-    }
-    return false;
-  }
-
+  const cliModelOverride = (config as Config & { _cliModelOverride?: string })
+    ._cliModelOverride;
+  const intent: ProviderActivationIntent = {
+    ...(configProvider !== undefined && configProvider !== ''
+      ? { provider: configProvider }
+      : {
+          defaultProvider: providerManager.getActiveProviderName() ?? 'gemini',
+        }),
+    ...(typeof cliModelOverride === 'string' &&
+    cliModelOverride.trim().length > 0
+      ? { model: cliModelOverride.trim() }
+      : {}),
+    modelParams: collectProviderModelParams(config, argv),
+    cliOverrides: buildActivationCliOverrides(config, argv),
+    authMode: 'auto',
+  };
+  let result;
   try {
-    // Extract bootstrap args from config if available (for bundle compatibility)
-    const configWithBootstrapArgs = config as Config & {
-      _bootstrapArgs?: {
-        keyOverride?: string | null;
-        keyfileOverride?: string | null;
-        keyNameOverride?: string | null;
-        setOverrides?: string[] | null;
-        baseurlOverride?: string | null;
-      };
-    };
-
-    // Apply CLI argument overrides BEFORE provider switch so --key, --keyfile,
-    // --baseurl, and --set are applied at the right time and beat profile values.
-    await applyCliArgumentOverrides(
-      argv,
-      configWithBootstrapArgs._bootstrapArgs,
+    result = await executeProviderActivation(config, intent);
+  } catch (error) {
+    // The executor's auto authMode catches auth failures internally and
+    // returns { authFailed: true }, but a synchronous error in intent
+    // assembly or a non-auto authMode path bug would throw. Preserve the
+    // old contract (return true = auth failed) so bootstrap does not crash.
+    const bootstrapLogger = new DebugLogger('llxprt:bootstrap');
+    bootstrapLogger.error(
+      () =>
+        `[bootstrap] activateConfiguredProvider executor threw: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
     );
-
-    const cliModelOverride = (config as Config & { _cliModelOverride?: string })
-      ._cliModelOverride;
-    const profileAuthEphemerals = snapshotProfileAuthEphemerals(config);
-    const alreadyActive =
-      providerManager.getActiveProviderName() === configProvider;
-    if (!alreadyActive) {
-      await switchActiveProvider(configProvider);
-      if (hasProfileAuthEphemerals(profileAuthEphemerals)) {
-        reapplyProfileAuthEphemerals(config, profileAuthEphemerals);
-      }
-      await config.refreshAuth();
-    } else if (!hasProfileAuthEphemerals(profileAuthEphemerals)) {
-      await config.refreshAuth();
-    }
-
-    const activeProvider = providerManager.getActiveProvider();
-    const configModel =
-      typeof cliModelOverride === 'string' && cliModelOverride.trim().length > 0
-        ? cliModelOverride.trim()
-        : resolveProviderModel(config, activeProvider);
-    if (configModel && configModel !== 'placeholder-model') {
-      await setActiveModel(configModel);
-    }
-
-    const mergedModelParams = collectProviderModelParams(config, argv);
-    const existingParams = getActiveModelParams();
-    for (const [key, value] of Object.entries(mergedModelParams)) {
-      setActiveModelParam(key, value);
-    }
-    for (const key of Object.keys(existingParams)) {
-      if (!(key in mergedModelParams)) {
-        clearActiveModelParam(key);
-      }
-    }
-    // No need to set auth type when using a provider; CLI arguments were
-    // already applied by applyCliArgumentOverrides() above.
-    return false;
-  } catch (e) {
-    debugLogger.error(chalk.red((e as Error).message));
     return true;
   }
+  return result.authFailed;
 }
 
 /**
@@ -793,8 +790,8 @@ export async function maybeHopIntoSandbox(
   // We intentionally omit the list of extensions here because extensions
   // should not impact auth or setting up the sandbox.
   // Follow-up (#1569, jacobr): refactor loadCliConfig so there is a minimal
-  // version that only initializes enough config to enable refreshAuth or find
-  // another way to decouple refreshAuth from requiring a config.
+  // version that only initializes enough config to enable authentication or
+  // find another way to decouple authentication from requiring a config.
   const partialConfig = await loadCliConfig(
     settings.merged,
     [],

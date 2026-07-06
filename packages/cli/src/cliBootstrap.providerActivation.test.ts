@@ -4,74 +4,69 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * #2374 round-3 Fix 5: these tests assert activateConfiguredProvider's
+ * OBSERVABLE CONTRACT (return value: false=non-fatal, true=auth-failed) and the
+ * assembled intent as a VALUE (deep-equal on the full intent object), NOT
+ * fragmented arg-matching or call counts. The executor is mocked because
+ * activateConfiguredProvider's real job is intent ASSEMBLY + delegation.
+ */
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config } from '@vybestack/llxprt-code-core';
+import type { ProviderActivationIntent } from '@vybestack/llxprt-code-agents';
 import type { CliProviderManager, ParsedCliArgs } from './cliBootstrap.js';
 
-const {
-  applyCliArgumentOverridesMock,
-  clearActiveModelParamMock,
-  getActiveModelParamsMock,
-  setActiveModelMock,
-  setActiveModelParamMock,
-  switchActiveProviderMock,
-} = vi.hoisted(() => ({
-  applyCliArgumentOverridesMock: vi.fn(async () => {}),
-  clearActiveModelParamMock: vi.fn(),
-  getActiveModelParamsMock: vi.fn(() => ({})),
-  setActiveModelMock: vi.fn(async () => undefined),
-  setActiveModelParamMock: vi.fn(),
-  switchActiveProviderMock: vi.fn(async () => undefined),
+const { executeProviderActivationMock } = vi.hoisted(() => ({
+  executeProviderActivationMock: vi.fn(),
 }));
 
-vi.mock(
-  '@vybestack/llxprt-code-providers/runtime.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@vybestack/llxprt-code-providers/runtime.js')
-      >();
-    return {
-      ...actual,
-      applyCliArgumentOverrides: applyCliArgumentOverridesMock,
-      clearActiveModelParam: clearActiveModelParamMock,
-      getActiveModelParams: getActiveModelParamsMock,
-      setActiveModel: setActiveModelMock,
-      setActiveModelParam: setActiveModelParamMock,
-      switchActiveProvider: switchActiveProviderMock,
-    };
-  },
-);
+vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
+  return {
+    ...actual,
+    executeProviderActivation: executeProviderActivationMock,
+  };
+});
 
 import { activateConfiguredProvider } from './cliBootstrap.js';
 
 function makeConfig(
-  provider: string,
-  initialEphemerals: Record<string, unknown> = {},
-  model = 'glm-5.2',
+  provider: string | undefined,
+  overrides: {
+    ephemerals?: Record<string, unknown>;
+    model?: string;
+    cliModelOverride?: string;
+    profileModelParams?: Record<string, unknown>;
+    bootstrapArgs?: Record<string, unknown>;
+  } = {},
 ): Config {
-  const ephemerals = { ...initialEphemerals };
+  const ephemerals = { ...overrides.ephemerals };
   return {
     getProvider: () => provider,
-    getModel: () => model,
+    getModel: () => overrides.model ?? 'glm-5.2',
     getEphemeralSetting: (key: string) => ephemerals[key],
     setEphemeralSetting: (key: string, value: unknown) => {
       ephemerals[key] = value;
     },
-    refreshAuth: vi.fn(async () => undefined),
+    ...(overrides.cliModelOverride !== undefined
+      ? { _cliModelOverride: overrides.cliModelOverride }
+      : {}),
+    ...(overrides.profileModelParams !== undefined
+      ? { _profileModelParams: overrides.profileModelParams }
+      : {}),
+    ...(overrides.bootstrapArgs !== undefined
+      ? { _bootstrapArgs: overrides.bootstrapArgs }
+      : {}),
   } as unknown as Config;
 }
 
-function makeProviderManager(
-  activeProviderName: string,
-  defaultModel?: string,
-): CliProviderManager {
+function makeProviderManager(activeProviderName: string): CliProviderManager {
   return {
     getActiveProviderName: () => activeProviderName,
     getActiveProvider: () => ({
       name: activeProviderName,
-      getDefaultModel:
-        defaultModel === undefined ? undefined : () => defaultModel,
     }),
   } as unknown as CliProviderManager;
 }
@@ -82,18 +77,23 @@ function makeArgs(): ParsedCliArgs {
   } as unknown as ParsedCliArgs;
 }
 
-describe('activateConfiguredProvider', () => {
+describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => {
   beforeEach(() => {
-    applyCliArgumentOverridesMock.mockClear();
-    clearActiveModelParamMock.mockClear();
-    getActiveModelParamsMock.mockClear();
-    getActiveModelParamsMock.mockReturnValue({});
-    setActiveModelMock.mockClear();
-    setActiveModelParamMock.mockClear();
-    switchActiveProviderMock.mockClear();
+    executeProviderActivationMock.mockReset();
+    executeProviderActivationMock.mockResolvedValue({
+      authFailed: false,
+      infoMessages: [],
+    });
   });
 
-  it('refreshes auth without switching when the configured provider is already active', async () => {
+  // ── Observable contract: return value ─────────────────────────────────
+
+  it('returns false (non-fatal) when the executor reports authFailed false', async () => {
+    executeProviderActivationMock.mockResolvedValue({
+      authFailed: false,
+      activeProvider: 'anthropic',
+      infoMessages: ['switched'],
+    });
     const config = makeConfig('anthropic');
     const providerManager = makeProviderManager('anthropic');
 
@@ -104,111 +104,15 @@ describe('activateConfiguredProvider', () => {
     );
 
     expect(failed).toBe(false);
-    expect(switchActiveProviderMock).not.toHaveBeenCalled();
-    expect(config.refreshAuth).toHaveBeenCalledTimes(1);
-    expect(setActiveModelMock).toHaveBeenCalledWith('glm-5.2');
   });
 
-  it('does not refresh auth when a profile keyfile provider is already active', async () => {
-    const config = makeConfig('anthropic', {
-      'auth-keyfile': '/Users/example/.keys/glm.key',
+  it('returns true (fatal) when the executor reports authFailed true', async () => {
+    executeProviderActivationMock.mockResolvedValue({
+      authFailed: true,
+      infoMessages: [],
     });
+    const config = makeConfig('anthropic');
     const providerManager = makeProviderManager('anthropic');
-
-    const failed = await activateConfiguredProvider(
-      config,
-      providerManager,
-      makeArgs(),
-    );
-
-    expect(failed).toBe(false);
-    expect(switchActiveProviderMock).not.toHaveBeenCalled();
-    expect(config.refreshAuth).not.toHaveBeenCalled();
-    expect(setActiveModelMock).toHaveBeenCalledWith('glm-5.2');
-  });
-
-  it('switches and refreshes auth when the configured provider is not active', async () => {
-    const config = makeConfig('anthropic');
-    const providerManager = makeProviderManager('gemini');
-
-    const failed = await activateConfiguredProvider(
-      config,
-      providerManager,
-      makeArgs(),
-    );
-
-    expect(failed).toBe(false);
-    expect(switchActiveProviderMock).toHaveBeenCalledWith('anthropic');
-    expect(config.refreshAuth).toHaveBeenCalledTimes(1);
-    expect(setActiveModelMock).toHaveBeenCalledWith('glm-5.2');
-  });
-
-  it('reapplies profile auth ephemerals before refreshing auth after a real switch', async () => {
-    const config = makeConfig('anthropic', {
-      'auth-keyfile': '/Users/example/.keys/glm.key',
-      'base-url': 'https://api.z.ai/api/anthropic',
-    });
-    const providerManager = makeProviderManager('gemini');
-    switchActiveProviderMock.mockImplementationOnce(async () => {
-      config.setEphemeralSetting('auth-keyfile', undefined);
-      config.setEphemeralSetting('base-url', undefined);
-    });
-
-    const failed = await activateConfiguredProvider(
-      config,
-      providerManager,
-      makeArgs(),
-    );
-
-    expect(failed).toBe(false);
-    expect(switchActiveProviderMock).toHaveBeenCalledWith('anthropic');
-    expect(config.getEphemeralSetting('auth-keyfile')).toBe(
-      '/Users/example/.keys/glm.key',
-    );
-    expect(config.getEphemeralSetting('base-url')).toBe(
-      'https://api.z.ai/api/anthropic',
-    );
-    expect(config.refreshAuth).toHaveBeenCalledTimes(1);
-    expect(setActiveModelMock).toHaveBeenCalledWith('glm-5.2');
-  });
-
-  it('defaults to active provider when config has no provider set', async () => {
-    const config = makeConfig('');
-    const providerManager = makeProviderManager('gemini');
-
-    const failed = await activateConfiguredProvider(
-      config,
-      providerManager,
-      makeArgs(),
-    );
-
-    expect(failed).toBe(false);
-    expect(switchActiveProviderMock).toHaveBeenCalledWith('gemini');
-    expect(config.refreshAuth).toHaveBeenCalledTimes(1);
-  });
-
-  it('returns false and swallows errors in the no-provider path', async () => {
-    const config = makeConfig('');
-    const providerManager = makeProviderManager('gemini');
-    switchActiveProviderMock.mockRejectedValueOnce(
-      new Error('default switch failed'),
-    );
-
-    const failed = await activateConfiguredProvider(
-      config,
-      providerManager,
-      makeArgs(),
-    );
-
-    expect(failed).toBe(false);
-    expect(config.refreshAuth).not.toHaveBeenCalled();
-    expect(setActiveModelMock).not.toHaveBeenCalled();
-  });
-
-  it('returns true when provider switch fails', async () => {
-    const config = makeConfig('anthropic');
-    const providerManager = makeProviderManager('gemini');
-    switchActiveProviderMock.mockRejectedValueOnce(new Error('switch failed'));
 
     const failed = await activateConfiguredProvider(
       config,
@@ -219,71 +123,81 @@ describe('activateConfiguredProvider', () => {
     expect(failed).toBe(true);
   });
 
-  it('returns true when auth refresh fails after provider switch', async () => {
+  // ── Assembled intent as a VALUE (deep-equal) ──────────────────────────
+
+  it('assembles the intent with a configured provider and no model override', async () => {
     const config = makeConfig('anthropic');
+    const providerManager = makeProviderManager('anthropic');
+
+    await activateConfiguredProvider(config, providerManager, makeArgs());
+
+    const intent: ProviderActivationIntent =
+      executeProviderActivationMock.mock.calls[0][1];
+    expect(intent).toStrictEqual({
+      provider: 'anthropic',
+      modelParams: {},
+      cliOverrides: {},
+      authMode: 'auto',
+    });
+  });
+
+  it('assembles the intent with defaultProvider when config has no provider', async () => {
+    const config = makeConfig(undefined);
     const providerManager = makeProviderManager('gemini');
-    vi.mocked(config.refreshAuth).mockRejectedValueOnce(
-      new Error('refresh failed'),
-    );
 
-    const failed = await activateConfiguredProvider(
-      config,
-      providerManager,
-      makeArgs(),
-    );
+    await activateConfiguredProvider(config, providerManager, makeArgs());
 
-    expect(failed).toBe(true);
-    expect(switchActiveProviderMock).toHaveBeenCalledWith('anthropic');
+    const intent: ProviderActivationIntent =
+      executeProviderActivationMock.mock.calls[0][1];
+    expect(intent).toStrictEqual({
+      defaultProvider: 'gemini',
+      modelParams: {},
+      cliOverrides: {},
+      authMode: 'auto',
+    });
   });
 
-  it('applies CLI overrides before activation and clears stale model params', async () => {
-    const args = makeArgs();
-    const config = makeConfig('anthropic');
-    (
-      config as Config & { _profileModelParams?: Record<string, unknown> }
-    )._profileModelParams = {
-      temperature: 0.2,
-    };
-    const providerManager = makeProviderManager('anthropic');
-    getActiveModelParamsMock.mockReturnValue({ staleParam: 'old' });
-
-    const failed = await activateConfiguredProvider(
-      config,
-      providerManager,
-      args,
-    );
-
-    expect(failed).toBe(false);
-    expect(setActiveModelParamMock).toHaveBeenCalledWith('temperature', 0.2);
-    expect(applyCliArgumentOverridesMock).toHaveBeenCalledWith(args, undefined);
-    expect(clearActiveModelParamMock).toHaveBeenCalledWith('staleParam');
-  });
-
-  it('uses provider default model when config model is placeholder-model', async () => {
-    const config = makeConfig('anthropic', {}, 'placeholder-model');
-    const providerManager = makeProviderManager('anthropic', 'claude-default');
-
-    const failed = await activateConfiguredProvider(
-      config,
-      providerManager,
-      makeArgs(),
-    );
-
-    expect(failed).toBe(false);
-    expect(setActiveModelMock).toHaveBeenCalledWith('claude-default');
-  });
-
-  it('does not set active model when resolved model remains placeholder-model', async () => {
-    const config = makeConfig('anthropic', {}, 'placeholder-model');
+  it('assembles the intent with the CLI model override when present', async () => {
+    const config = makeConfig('anthropic', {
+      cliModelOverride: 'claude-3.5-sonnet',
+    });
     const providerManager = makeProviderManager('anthropic');
 
-    const failed = await activateConfiguredProvider(
-      config,
-      providerManager,
-      makeArgs(),
-    );
+    await activateConfiguredProvider(config, providerManager, makeArgs());
 
-    expect(failed).toBe(false);
-    expect(setActiveModelMock).not.toHaveBeenCalled();
+    const intent: ProviderActivationIntent =
+      executeProviderActivationMock.mock.calls[0][1];
+    expect(intent).toStrictEqual({
+      provider: 'anthropic',
+      model: 'claude-3.5-sonnet',
+      modelParams: {},
+      cliOverrides: {},
+      authMode: 'auto',
+    });
+  });
+
+  it('assembles the intent with merged model params and CLI credential overrides', async () => {
+    const config = makeConfig('anthropic', {
+      profileModelParams: { temperature: 0.2 },
+      bootstrapArgs: {
+        keyOverride: 'sk-test',
+        baseurlOverride: 'https://api.example.com',
+      },
+    });
+    const providerManager = makeProviderManager('anthropic');
+
+    await activateConfiguredProvider(config, providerManager, makeArgs());
+
+    const intent: ProviderActivationIntent =
+      executeProviderActivationMock.mock.calls[0][1];
+    expect(intent).toStrictEqual({
+      provider: 'anthropic',
+      modelParams: { temperature: 0.2 },
+      cliOverrides: {
+        key: 'sk-test',
+        baseUrl: 'https://api.example.com',
+      },
+      authMode: 'auto',
+    });
   });
 });

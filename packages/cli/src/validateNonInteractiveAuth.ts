@@ -55,8 +55,20 @@ function reportNonInteractiveAuthError(config: Config, message: string): void {
 /**
  * Validates and initializes authentication for non-interactive mode.
  *
- * @param useExternalAuth Skip auth initialization when external auth is used
- * @param nonInteractiveConfig The Config instance to initialize
+ * #2374 round-3 Fix 2: this function is now a GATE ONLY — it checks whether any
+ * auth is configured (provider or env var), applies compression settings, and
+ * wires the serverToolsProvider. It does NOT perform authentication. The actual
+ * provider activation + auth refresh is delegated to fromConfig's activation
+ * intent (constructed in nonInteractiveCli.ts processQuery), which executes
+ * executeProviderActivation internally. This keeps the failure semantics
+ * identical: at HEAD, the auth refresh threw here → runNonInteractiveSession
+ * caught → SessionEnd + report + exit 1. Now fromConfig throws
+ * AgentBootstrapError on authFailed → processQuery propagates → runNonInteractive
+ * catches → same handler.
+ *
+ * @param useExternalAuth Retained for the intent construction downstream (read
+ *   from settings.merged.useExternalAuth in nonInteractiveCli); NOT used here.
+ * @param nonInteractiveConfig The Config instance
  * @param settings Optional settings for compression config
  */
 export async function validateNonInteractiveAuth(
@@ -64,6 +76,8 @@ export async function validateNonInteractiveAuth(
   nonInteractiveConfig: Config,
   settings?: LoadedSettings,
 ) {
+  void useExternalAuth; // Gate-only; auth is performed by fromConfig's activation intent (#2374 Fix 2).
+
   const providerManager = nonInteractiveConfig.getProviderManager();
   const configProvider = nonInteractiveConfig.getProvider();
 
@@ -80,10 +94,6 @@ export async function validateNonInteractiveAuth(
       `Please set an Auth method. Use one of the following environment variables: GEMINI_API_KEY, LLXPRT_API_KEY, GOOGLE_GENAI_USE_VERTEXAI (requires GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION), GOOGLE_GENAI_USE_GCA, OPENAI_API_KEY, ANTHROPIC_API_KEY`,
     );
     process.exit(ExitCodes.FATAL_AUTHENTICATION_ERROR);
-  }
-
-  if (useExternalAuth !== true) {
-    await nonInteractiveConfig.refreshAuth();
   }
 
   // Apply compression settings after authentication

@@ -28,11 +28,13 @@ import {
   fromConfig,
   type Agent,
   type AgentToolHandle,
+  type ProviderActivationIntent,
 } from '@vybestack/llxprt-code-agents';
 
 import readline from 'node:readline';
 import { isSlashCommand } from './ui/utils/commandUtils.js';
 import type { LoadedSettings } from './config/settings.js';
+import type { BootstrapProfileArgs } from './config/profileBootstrap.js';
 
 import { handleSlashCommand } from './nonInteractiveCliCommands.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
@@ -264,6 +266,40 @@ function emitUserMessage(
     content: input,
   });
 }
+type ConfigWithBootstrapArgs = Config & {
+  readonly _bootstrapArgs?: BootstrapProfileArgs;
+};
+
+function readBootstrapArgs(config: Config): BootstrapProfileArgs | undefined {
+  return (config as ConfigWithBootstrapArgs)._bootstrapArgs;
+}
+
+function buildActivationCliOverrides(
+  config: Config,
+): ProviderActivationIntent['cliOverrides'] | undefined {
+  const bootstrapArgs = readBootstrapArgs(config);
+  if (bootstrapArgs === undefined) {
+    return undefined;
+  }
+  const overrides = {
+    ...(bootstrapArgs.keyOverride !== null
+      ? { key: bootstrapArgs.keyOverride }
+      : {}),
+    ...(bootstrapArgs.keyfileOverride !== null
+      ? { keyfile: bootstrapArgs.keyfileOverride }
+      : {}),
+    ...(bootstrapArgs.keyNameOverride !== null
+      ? { keyName: bootstrapArgs.keyNameOverride }
+      : {}),
+    ...(bootstrapArgs.baseurlOverride !== null
+      ? { baseUrl: bootstrapArgs.baseurlOverride }
+      : {}),
+    ...(bootstrapArgs.setOverrides !== null
+      ? { set: bootstrapArgs.setOverrides }
+      : {}),
+  };
+  return Object.keys(overrides).length > 0 ? overrides : undefined;
+}
 
 async function processQuery(
   query: Part[],
@@ -303,6 +339,25 @@ async function processQuery(
   );
 }
 
+function buildNonInteractiveActivationIntent(
+  params: RunNonInteractiveParams,
+): ProviderActivationIntent {
+  const useExternalAuth = params.settings.merged.useExternalAuth === true;
+  const cliOverrides = buildActivationCliOverrides(params.config);
+  const bootstrapArgs = readBootstrapArgs(params.config);
+  return {
+    provider:
+      params.config.getProvider() ?? bootstrapArgs?.providerOverride ?? undefined,
+    defaultProvider: 'gemini',
+    authMode: useExternalAuth ? 'none' : 'auto',
+    ...(bootstrapArgs?.modelOverride !== null &&
+    bootstrapArgs?.modelOverride !== undefined
+      ? { model: bootstrapArgs.modelOverride }
+      : {}),
+    ...(cliOverrides !== undefined ? { cliOverrides } : {}),
+  };
+}
+
 /**
  * Resolves the query, streams the response, and disposes the agent. Extracted
  * from runNonInteractive to keep function length within lint limits.
@@ -316,6 +371,15 @@ async function processQuery(
  * If `resolveSlashQuery` returns content it becomes the query; otherwise the
  * input falls through to @-command/prompt handling. The Agent is always
  * disposed in the `finally` below.
+ *
+ * #2374: non-interactive auth is now performed by fromConfig's activation
+ * intent, NOT by validateNonInteractiveAuth. The intent mirrors the previous
+ * validateNonInteractiveAuth executor call: provider from config, fallback
+ * 'gemini', authMode 'none' when useExternalAuth is true (skip auth refresh),
+ * else 'auto' (provider auth refresh + fallback). At HEAD, the auth refresh
+ * threw on failure -> runNonInteractiveSession caught -> SessionEnd + report +
+ * exit 1. Now fromConfig throws AgentBootstrapError on authFailed and the same
+ * handler emits the failure.
  */
 async function resolveAndStream(
   params: RunNonInteractiveParams,
@@ -339,6 +403,7 @@ async function resolveAndStream(
     config,
     messageBus: params.runtimeMessageBus,
     sessionId: config.getSessionId(),
+    activation: buildNonInteractiveActivationIntent(params),
   });
   try {
     const query =
@@ -349,8 +414,6 @@ async function resolveAndStream(
     emitUserMessage(options.streamFormatter, input);
     await processQuery(query, agent, params, options);
   } finally {
-    // Dispose in its own try/catch so a disposal failure never masks the
-    // original error thrown by resolve/processQuery above.
     try {
       await agent.dispose();
     } catch (disposeError) {
@@ -364,6 +427,7 @@ async function resolveAndStream(
     }
   }
 }
+
 
 export async function runNonInteractive(
   params: RunNonInteractiveParams,

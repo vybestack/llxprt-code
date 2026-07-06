@@ -54,9 +54,9 @@ export interface ProfilesControlDeps {
   readonly getState: () => AgentProviderState;
   /**
    * Applies a provider (+optional model) switch preserving context (the same
-   * path setProvider uses). Returns a promise.
+   * path setProvider uses). Returns a promise whose result is discarded.
    */
-  readonly applySwitch: (provider: string, model?: string) => Promise<void>;
+  readonly applySwitch: (provider: string, model?: string) => Promise<unknown>;
   /**
    * Applies a record of model params via the lazy runtime mutators and updates
    * the per-agent map.

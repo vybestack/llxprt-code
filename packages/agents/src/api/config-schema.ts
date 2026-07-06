@@ -31,6 +31,31 @@ export const ProviderAuthSchema = z
   })
   .strict();
 
+/**
+ * Declarative provider-activation / auth intent (#2374). Serializable mirror of
+ * {@link ProviderActivationIntent} so an intent can be validated from a config
+ * document or profile.
+ */
+export const ProviderActivationIntentSchema = z
+  .object({
+    provider: z.string().optional(),
+    defaultProvider: z.string().optional(),
+    model: z.string().optional(),
+    modelParams: z.record(z.unknown()).optional(),
+    cliOverrides: z
+      .object({
+        key: z.string().optional(),
+        keyfile: z.string().optional(),
+        keyName: z.string().optional(),
+        baseUrl: z.string().optional(),
+        set: z.array(z.string()).optional(),
+      })
+      .strict()
+      .optional(),
+    authMode: z.enum(['auto', 'provider-or-oauth', 'none']).optional(),
+  })
+  .strict();
+
 export const AgentAuthSchema = ProviderAuthSchema.extend({
   profile: z.string().optional(),
   perProvider: z.record(ProviderAuthSchema).optional(),
@@ -297,6 +322,7 @@ export const AgentConfigSchema = z
     disabledHooks: z.array(z.string()).optional(),
     interactive: z.boolean().optional(),
     lsp: LspConfigSchema.optional(),
+    activation: ProviderActivationIntentSchema.optional(),
     harness: AgentHarnessSchema.optional(),
     /**
      * UNSTABLE escape hatch. Long-tail settings merged into ConfigParameters.

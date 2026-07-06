@@ -51,8 +51,8 @@ import type { ProviderInfo, ToolInfo, SessionStats } from './agent.js';
  * @pseudocode createAgent.md steps 115-118
  */
 export class AgentBootstrapError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
     this.name = 'AgentBootstrapError';
     Object.setPrototypeOf(this, AgentBootstrapError.prototype);
   }

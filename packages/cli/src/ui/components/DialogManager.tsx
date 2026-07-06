@@ -85,10 +85,7 @@ function useModelDialogHandler(
         try {
           const selectedProvider = model.provider;
           if (selectedProvider !== currentProvider) {
-            const switchResult = await runtime.switchActiveProvider(
-              selectedProvider,
-              { addItem },
-            );
+            const switchResult = await runtime.setProvider(selectedProvider);
             const messages: string[] = [];
             messages.push(
               currentProvider

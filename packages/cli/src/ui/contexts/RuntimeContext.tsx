@@ -11,7 +11,13 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
 } from 'react';
+import type {
+  Agent,
+  AgentProviderSwitchOptions,
+  AgentProviderSwitchResult,
+} from '@vybestack/llxprt-code-agents';
 import {
   clearActiveModelParam,
   deleteProfileByName,
@@ -43,7 +49,6 @@ import {
   setActiveToolFormatOverride,
   setDefaultProfileName,
   setEphemeralSetting,
-  switchActiveProvider,
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
   getSessionTokenUsage,
@@ -62,7 +67,6 @@ import {
  */
 
 const runtimeFunctions = {
-  switchActiveProvider,
   listProviders,
   getActiveProviderName,
   setActiveModel,
@@ -101,7 +105,22 @@ const runtimeFunctions = {
 } as const;
 
 type RuntimeFunctions = typeof runtimeFunctions;
-type RuntimeApi = { [K in keyof RuntimeFunctions]: RuntimeFunctions[K] };
+
+/**
+ * Provider-switch wrapper that delegates to the Agent facade's setProvider
+ * method. The agent reference is stored when the RuntimeContextProvider
+ * mounts and updated on re-renders, so UI hooks can call setProvider
+ * without importing the raw provider-switch primitive (#2374).
+ */
+type AgentSetProvider = (
+  provider: string,
+  model?: string,
+  options?: AgentProviderSwitchOptions,
+) => Promise<AgentProviderSwitchResult>;
+
+type RuntimeApi = { [K in keyof RuntimeFunctions]: RuntimeFunctions[K] } & {
+  setProvider: AgentSetProvider;
+};
 
 interface RuntimeContextBridge {
   runtimeId: string;
@@ -116,6 +135,7 @@ const RuntimeContext = createContext<RuntimeContextBridge | null>(null);
 function makeRuntimeApi(
   runtimeId: string,
   metadata: Record<string, unknown>,
+  agentRef: { current: Agent | null },
 ): RuntimeApi {
   const scope = { runtimeId, metadata };
   const boundEntries = Object.entries(runtimeFunctions).map(([key, fn]) => {
@@ -128,15 +148,28 @@ function makeRuntimeApi(
       );
     return [key, wrapped];
   });
-  return Object.fromEntries(boundEntries) as RuntimeApi;
+  const base = Object.fromEntries(boundEntries) as {
+    [K in keyof RuntimeFunctions]: RuntimeFunctions[K];
+  };
+  const setProvider: AgentSetProvider = (provider, model, options) => {
+    const agent = agentRef.current;
+    if (!agent) {
+      return Promise.reject(
+        new Error('Agent facade is not available for provider switch.'),
+      );
+    }
+    return agent.setProvider(provider, model, options);
+  };
+  return { ...base, setProvider };
 }
 
 function createBridge(
   runtimeId: string,
   metadata: Record<string, unknown>,
+  agentRef: { current: Agent | null },
 ): RuntimeContextBridge {
   const scope = { runtimeId, metadata };
-  const api = makeRuntimeApi(runtimeId, metadata);
+  const api = makeRuntimeApi(runtimeId, metadata, agentRef);
   return {
     runtimeId,
     metadata,
@@ -165,9 +198,18 @@ function resolveRuntimeId(runtime: CliRuntimeContext): string {
   );
 }
 
-export const RuntimeContextProvider: React.FC<PropsWithChildren<unknown>> = ({
-  children,
-}) => {
+export interface RuntimeContextProviderProps {
+  agent: Agent;
+}
+
+export const RuntimeContextProvider: React.FC<
+  PropsWithChildren<RuntimeContextProviderProps>
+> = ({ children, agent }) => {
+  const agentRef = useRef<Agent | null>(agent);
+  useEffect(() => {
+    agentRef.current = agent;
+  }, [agent]);
+
   const runtime = getCliRuntimeContext();
   // Invariant: CLI bootstrap calls setCliRuntimeContext() with an explicit
   // runtimeId before the UI bridge mounts; violating that contract is fatal.
@@ -175,8 +217,8 @@ export const RuntimeContextProvider: React.FC<PropsWithChildren<unknown>> = ({
 
   const bridge = useMemo(() => {
     const normalizedMetadata = runtime.metadata ?? {};
-    return createBridge(runtimeId, normalizedMetadata);
-  }, [runtimeId, runtime]);
+    return createBridge(runtimeId, normalizedMetadata, agentRef);
+  }, [runtimeId, runtime, agentRef]);
 
   useEffect(() => {
     bridge.enterScope();
@@ -215,7 +257,7 @@ export function getRuntimeBridge(): RuntimeContextBridge {
   const runtime = getCliRuntimeContext();
   const runtimeId = resolveRuntimeId(runtime);
   const metadata = runtime.metadata ?? {};
-  const bridge = createBridge(runtimeId, metadata);
+  const bridge = createBridge(runtimeId, metadata, { current: null });
   bridge.enterScope();
   latestBridge = bridge;
   return bridge;

@@ -115,6 +115,20 @@ vi.mock('ink', () => ({
   render: vi.fn().mockReturnValue({ unmount: vi.fn() }),
 }));
 
+// Mock the provider-activation executor so main() does not invoke real
+// providers-runtime mutators that require a wired CLI runtime context.
+vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
+  return {
+    ...actual,
+    executeProviderActivation: vi.fn().mockResolvedValue({
+      authFailed: false,
+      infoMessages: [],
+    }),
+  };
+});
+
 vi.mock('./ui/utils/mouse.js', () => ({
   enableMouseEvents: vi.fn(),
   disableMouseEvents: vi.fn(),

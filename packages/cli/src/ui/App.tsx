@@ -85,7 +85,7 @@ export const AppWrapper = (props: AppProps) => {
                 <TodoProvider
                   sessionId={props.uiRuntime.session.getSessionId()}
                 >
-                  <RuntimeContextProvider>
+                  <RuntimeContextProvider agent={props.agent}>
                     <OverflowProvider>
                       <AppWithState {...props} />
                     </OverflowProvider>

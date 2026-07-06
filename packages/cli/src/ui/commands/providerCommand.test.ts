@@ -17,20 +17,37 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { Mock } from 'vitest';
 
 // This test writes real alias files, needs real providerAliases module
 vi.unmock('@vybestack/llxprt-code-providers/composition/providerAliases.js');
 
+/**
+ * Minimal typed Agent double for the /provider switch path. The command only
+ * invokes `agent.setProvider(...)`, so a stub typed to that exact Mock surface
+ * is a properly-typed test double (no `as never` / `as any`). The double is
+ * cast to `Agent` via the established `as unknown as Agent` idiom at the
+ * CommandContext boundary (see mockCommandContext.ts).
+ */
+interface AgentDouble {
+  setProvider: Mock;
+}
+
 const mocks = vi.hoisted(() => {
   const runtimeApi = {
     getActiveProviderName: vi.fn(),
-    switchActiveProvider: vi.fn(),
+    getActiveModelName: vi.fn(),
+  };
+  const agent: AgentDouble = {
+    setProvider: vi.fn(),
   };
   return {
     getProviderManagerMock: vi.fn(),
     refreshAliasProvidersMock: vi.fn(),
     runtimeApi,
     getRuntimeApiMock: vi.fn(() => runtimeApi),
+    agent,
   };
 });
 
@@ -160,7 +177,8 @@ describe('providerCommand /provider switch', () => {
     vi.clearAllMocks();
     mocks.getRuntimeApiMock.mockReturnValue(mocks.runtimeApi);
     mocks.runtimeApi.getActiveProviderName.mockReturnValue('openai');
-    mocks.runtimeApi.switchActiveProvider.mockResolvedValue({
+    mocks.runtimeApi.getActiveModelName.mockReturnValue('gpt-4');
+    mocks.agent.setProvider.mockResolvedValue({
       changed: true,
       previousProvider: 'openai',
       nextProvider: 'qwen',
@@ -169,22 +187,28 @@ describe('providerCommand /provider switch', () => {
     });
   });
 
-  it('delegates provider switching to runtime API and surfaces info messages', async () => {
+  it('delegates provider switching to the agent facade and surfaces info messages', async () => {
     const providerManager = {
       getActiveProviderName: vi.fn(() => 'openai'),
     };
     mocks.getProviderManagerMock.mockReturnValue(providerManager);
 
-    const context = createMockCommandContext();
+    const context = createMockCommandContext({
+      services: {
+        agent: mocks.agent as unknown as Agent,
+      },
+    });
 
     assertDefined(providerCommand.action);
 
     const result = await providerCommand.action(context, 'qwen');
 
     expect(mocks.runtimeApi.getActiveProviderName).toHaveBeenCalledTimes(1);
-    expect(mocks.runtimeApi.switchActiveProvider).toHaveBeenCalledWith('qwen', {
-      addItem: context.ui.addItem,
-    });
+    expect(mocks.agent.setProvider).toHaveBeenCalledWith(
+      'qwen',
+      undefined,
+      expect.objectContaining({ addItem: expect.any(Function) }),
+    );
     expect(context.ui.addItem).toHaveBeenCalledWith(
       {
         type: 'info',
@@ -199,16 +223,20 @@ describe('providerCommand /provider switch', () => {
     });
   });
 
-  it('returns an error message when runtime switching fails', async () => {
+  it('returns an error message when agent switching fails', async () => {
     const providerManager = {
       getActiveProviderName: vi.fn(() => 'openai'),
     };
     mocks.getProviderManagerMock.mockReturnValue(providerManager);
 
     const error = new Error('provider not found');
-    mocks.runtimeApi.switchActiveProvider.mockRejectedValueOnce(error);
+    mocks.agent.setProvider.mockRejectedValueOnce(error);
 
-    const context = createMockCommandContext();
+    const context = createMockCommandContext({
+      services: {
+        agent: mocks.agent as unknown as Agent,
+      },
+    });
 
     assertDefined(providerCommand.action);
 

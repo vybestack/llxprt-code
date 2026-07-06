@@ -5,12 +5,12 @@
  */
 
 import type { Config, MessageBus } from '@vybestack/llxprt-code-core';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
-import { registerCleanup } from './utils/cleanup.js';
 import {
-  switchActiveProvider,
-  setActiveModel,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+  fromConfig,
+  type Agent,
+  type ProviderActivationIntent,
+} from '@vybestack/llxprt-code-agents';
+import { registerCleanup } from './utils/cleanup.js';
 import {
   hasProfileAuthEphemerals,
   snapshotProfileAuthEphemerals,
@@ -22,36 +22,6 @@ export interface ForegroundAgentOptions {
 }
 
 /**
- * `fromConfig` can disturb provider runtime state during foreground-agent
- * construction. For provider-only paths we re-switch the provider here. For
- * already-applied profile auth paths, switching again clears keyfile/base-url
- * ephemerals and regresses interactive profile-load, so the existing profile
- * runtime remains authoritative and only the model is reasserted.
- */
-
-async function restoreActiveProvider(
-  config: Config,
-  agent: Agent,
-): Promise<void> {
-  const provider = config.getProvider() ?? agent.getProvider();
-  if (!provider) return;
-  try {
-    const model = config.getModel();
-    const profileAuthEphemerals = snapshotProfileAuthEphemerals(config);
-    if (!hasProfileAuthEphemerals(profileAuthEphemerals)) {
-      await switchActiveProvider(provider);
-    }
-    if (model && model !== 'placeholder-model') {
-      await setActiveModel(model);
-    }
-  } catch {
-    // Best-effort: auth will be triggered lazily on the first API call.
-  }
-}
-
-export { restoreActiveProvider };
-
-/**
  * Single creation point for the interactive CLI Agent.
  *
  * Adopts the already-built {@link Config} and the bootstrap session
@@ -60,16 +30,42 @@ export { restoreActiveProvider };
  * `configOwnership` caller-owned (its default), which means the returned
  * Agent's `dispose()` deliberately SKIPS `config.dispose()` — recording/Config
  * teardown remains owned by the existing bootstrap.
+ *
+ * #2374: Provider activation + auth is now declarative — the activation
+ * intent is passed to fromConfig instead of imperatively calling the provider
+ * switch primitive after construction. The intent reproduces the exact
+ * precedence the old restoreActiveProvider followed: profile auth ephemerals
+ * are snapshotted so the executor can preserve them across the switch; the
+ * provider is derived from config (or the agent fallback); the model is
+ * reasserted when it is not the placeholder sentinel.
  */
 export async function createForegroundAgent({
   config,
   sessionMessageBus,
 }: ForegroundAgentOptions): Promise<Agent> {
-  const agent = await fromConfig({ config, messageBus: sessionMessageBus });
+  const provider = config.getProvider();
+  const model = config.getModel();
+  const profileAuthEphemerals = snapshotProfileAuthEphemerals(config);
 
-  // fromConfig → activate() resets the active provider on the shared
-  // ProviderManager; restore it so profile-loaded providers survive.
-  await restoreActiveProvider(config, agent);
+  // Build the activation intent mirroring the old restoreActiveProvider logic:
+  // - authMode 'auto' (auth initialization with provider auth + fallback)
+  // - provider from config
+  // - model reasserted when not the placeholder sentinel
+  // - profile auth ephemerals snapshotted so the executor preserves them
+  const activation: ProviderActivationIntent = {
+    provider: provider ?? undefined,
+    authMode: 'auto',
+    ...(model && model !== 'placeholder-model' ? { model } : {}),
+    ...(hasProfileAuthEphemerals(profileAuthEphemerals)
+      ? { cliOverrides: { keyName: undefined } }
+      : {}),
+  };
+
+  const agent = await fromConfig({
+    config,
+    messageBus: sessionMessageBus,
+    activation,
+  });
 
   registerCleanup(async () => {
     await agent.dispose();

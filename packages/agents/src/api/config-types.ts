@@ -16,6 +16,7 @@ import type {
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { OutputFormat } from '@vybestack/llxprt-code-core/utils/output-format.js';
+import { ProviderActivationIntentSchema } from './config-schema.js';
 
 export interface ProviderAuth {
   readonly apiKey?: string;
@@ -23,6 +24,46 @@ export interface ProviderAuth {
   readonly keyName?: string;
   readonly baseUrl?: string;
   readonly oauth?: boolean;
+}
+
+/**
+ * Declarative provider-activation / authentication intent (#2374, part of
+ * #1595). Frontends assemble this as DATA; agent construction
+ * (executeProviderActivation / fromConfig) interprets it and performs the
+ * imperative switchActiveProvider / refreshAuth / credential-override sequence
+ * the CLI bootstrap and Zed integration previously orchestrated by hand.
+ *
+ * Every field is readonly and serializable so an intent can travel in a config
+ * document or a profile.
+ */
+export interface ProviderActivationIntent {
+  /** Explicit provider to activate (from config/profile/CLI). */
+  readonly provider?: string;
+  /** Fallback provider when none is configured (CLI uses active-or-'gemini'). */
+  readonly defaultProvider?: string;
+  /** Model override (CLI --model / profile model). */
+  readonly model?: string;
+  /**
+   * Merged model params to apply (profile then CLI, CLI wins). Stale params
+   * not in this map are cleared from the active provider.
+   */
+  readonly modelParams?: Readonly<Record<string, unknown>>;
+  /** CLI credential overrides applied BEFORE the provider switch. */
+  readonly cliOverrides?: Readonly<{
+    readonly key?: string;
+    readonly keyfile?: string;
+    readonly keyName?: string;
+    readonly baseUrl?: string;
+    readonly set?: readonly string[];
+  }>;
+  /**
+   * Auth execution mode:
+   * - 'auto' (default): refreshAuth with method derived internally;
+   * - 'provider-or-oauth': the Zed fallback — refreshAuth('provider') when a
+   *   provider is active on the manager, else refreshAuth('oauth');
+   * - 'none': skip auth refresh entirely (external auth / --use-external-auth).
+   */
+  readonly authMode?: 'auto' | 'provider-or-oauth' | 'none';
 }
 
 export interface AgentAuth extends ProviderAuth {
@@ -263,6 +304,20 @@ export interface AgentConfig {
   readonly interactive?: boolean;
   readonly lsp?: boolean | AgentLspConfig;
   /**
+   * Declarative provider-activation / auth intent (#2374, part of #1595). When
+   * present, this intent SUPPLANTS the legacy provider/model/auth application
+   * path: createAgent still runs `config.initialize()` first, but then executes
+   * the intent via executeProviderActivation INSTEAD of the legacy
+   * applyInitialProviderModelAuth + refreshAuth sequence. The intent drives the
+   * final provider/auth state: when `activation.provider` is set it wins over
+   * `config.provider` for the runtime switch; when `activation.model` is set it
+   * wins over `config.model`; `activation.modelParams` replaces the active
+   * provider's params (clearing stale entries). When omitted, createAgent
+   * preserves its current (backward-compatible) parsed-provider + refreshAuth
+   * behavior byte-for-byte.
+   */
+  readonly activation?: ProviderActivationIntent;
+  /**
    * Production-safety gate for createAgent harness seams. When omitted,
    * createAgent preserves its current (backward-compatible) defaults. Callers
    * who need production-safe behavior (e.g. non-interactive CLI migration)
@@ -296,8 +351,18 @@ export interface FromConfigOptions {
   readonly editorCallbacks?: EditorCallbacks;
   readonly toolSchedulerFactory?: AgentSchedulerFactory;
   readonly sessionId?: string;
+  /**
+   * Declarative provider-activation / auth intent (#2374). When supplied,
+   * fromConfig executes the intent via executeProviderActivation INSTEAD of the
+   * legacy bare config.refreshAuth(undefined) call, so frontends no longer need
+   * to orchestrate switchActiveProvider / refreshAuth / credential overrides by
+   * hand. When omitted, fromConfig preserves the backward-compatible bare
+   * refreshAuth path.
+   */
+  readonly activation?: ProviderActivationIntent;
 }
 
 export const FromConfigValidatableSchema = z.object({
   sessionId: z.string().optional(),
+  activation: ProviderActivationIntentSchema.optional(),
 });

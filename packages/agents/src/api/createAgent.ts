@@ -12,6 +12,7 @@
  */
 
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -33,8 +34,10 @@ import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
   AgentConfig,
+  AgentSchedulerFactory,
   AgentSchedulerHandle,
   EditorCallbacks,
+  ProviderActivationIntent,
 } from './config-types.js';
 import type { AgentAuth } from './config-types.js';
 import type { Agent } from './agent.js';
@@ -53,6 +56,7 @@ import {
   type LoopHolder,
 } from './loop/rebuildLoop.js';
 import { buildAgent } from './agentImpl.js';
+import { executeProviderActivation } from './providerActivationExecutor.js';
 import {
   resolveAuthType,
   generateRuntimeId,
@@ -101,71 +105,16 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
   // facade retains these and Agent.dispose() tears them down (dispose.md lines
   // 40-47). Empty unless a toolSchedulerFactory was supplied.
   const injectedSchedulerHandles: AgentSchedulerHandle[] = [];
-  // @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006
-  // DEFAULT scheduler factory: construct a CoreToolScheduler. The harness gate
-  // decides whether the registry is wrapped so every tool surfaces a REAL
-  // confirmation. Without a factory, Config.getOrCreateScheduler throws
-  // "toolSchedulerFactory is required".
-  const defaultSchedulerFactory = createDefaultToolSchedulerFactory({
+  params.toolSchedulerFactory = resolveSchedulerFactory(
     forceConfirmations,
-  });
-  if (toolSchedulerFactory !== undefined) {
-    // @plan:PLAN-20260617-COREAPI.P23 @requirement:REQ-006 @requirement:REQ-016
-    // The caller injected a factory: each per-turn scheduler is still a real,
-    // functioning CoreToolScheduler (built by defaultSchedulerFactory), while
-    // the injected factory is invoked alongside and the handle it returns is
-    // retained for facade-level disposal. The injected factory FUNCTION is
-    // never disposed — only the handle instances it creates.
-    params.toolSchedulerFactory = wrapSchedulerFactory(
-      toolSchedulerFactory,
-      defaultSchedulerFactory,
-      injectedSchedulerHandles,
-    );
-  } else {
-    params.toolSchedulerFactory = defaultSchedulerFactory;
-  }
-  // @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006
-  // @plan:PLAN-20260626-RUNTIMEBOUNDARY.P01
-  // Forced confirmations require an interactive runtime; otherwise ASK_USER is
-  // converted to DENY before the confirmation coordinator can prompt.
-
+    toolSchedulerFactory,
+    injectedSchedulerHandles,
+  );
   // @pseudocode createAgent.md steps 30-38: construct Config + ONE shared MessageBus
-  const config = new Config(params);
-  // @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006
-  // @plan:PLAN-20260626-RUNTIMEBOUNDARY.P01
-  // @pseudocode tool-confirmation-merge.md steps 10-31 (policy-ASK seam)
-  // Ensure the process working directory is a valid workspace root so that
-  // fixture paths using {{CWD}} (expanded by FakeProvider to process.cwd())
-  // resolve within the workspace boundary and do not fail tool build
-  // validation (ReadFileTool.validatePathWithinWorkspace). Without this, a
-  // workingDir narrower than process.cwd() would reject valid paths.
-  //
-  // The harness.includeProcessCwd gate (default true) lets production callers
-  // avoid mutating the workspace with process.cwd() when they supply their own
-  // workingDir.
-  const includeProcessCwd = parsed.harness?.includeProcessCwd ?? true;
-  if (includeProcessCwd) {
-    config.getWorkspaceContext().addDirectory(process.cwd());
-  }
-  // Inject a high-priority ASK policy rule that overrides the read-only.toml
-  // ALLOW rules (priority 1.050) for ALL tools. This forces the
-  // ConfirmationCoordinator's tryFastApprove to fall through (ASK is neither
-  // ALLOW nor DENY), so evaluateAndRoute runs and reaches
-  // shouldConfirmExecute — the confirmation-forcing seam returns truthy
-  // info-details, setupConfirmationPrompt publishes a real
-  // TOOL_CONFIRMATION_REQUEST, and the awaiting_approval ToolCall carries
-  // confirmationDetails (satisfying T2b/T3c/T11). Priority 4.0 sits above
-  // every TOML tier (1.x/2.x/3.x) and all settings bands, so it cannot be
-  // overridden by user/admin policy either.
-  //
-  // The harness.forceConfirmations gate (default true) lets production callers
-  // skip the policy injection when they do not want forced confirmations.
-  if (forceConfirmations) {
-    injectConfirmationForcingPolicy(config.getPolicyEngine());
-  }
-  const messageBus = new MessageBus(
-    config.getPolicyEngine(),
-    config.getDebugMode(),
+  const { config, messageBus } = initializeConfigAndMessageBus(
+    params,
+    parsed,
+    forceConfirmations,
   );
   const settingsService = config.getSettingsService();
 
@@ -191,19 +140,38 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
   // @pseudocode createAgent.md step 57-58: ACTIVATE (ASYNC — must be awaited)
   await handle.activate();
 
-  // @pseudocode createAgent.md steps 61-79: apply provider/model/auth via real mutators
-  await applyInitialProviderModelAuth(parsed, resolvedAuth, config);
-
-  // @pseudocode createAgent.md step 81-82: initialize (creates transient pre-auth client)
-  await config.initialize({ messageBus });
-
-  // @pseudocode createAgent.md step 95-96: refreshAuth (creates post-auth client)
-  await config.refreshAuth(resolvedAuth.authMethod);
+  // @plan:PLAN-20270104-ISSUE2374.P01 @requirement:REQ-001
+  // Declarative provider-activation intent (#2374): when config.activation is
+  // present, execute it via executeProviderActivation AFTER initialize, letting
+  // the intent drive the final provider/auth state. This REPLACES the legacy
+  // applyInitialProviderModelAuth + refreshAuth sequence — the intent takes
+  // precedence over the parsed-provider path where they conflict. When omitted,
+  // the legacy path runs byte-identically (backward compatibility).
+  //
+  // #2374 round-3 Fix 1: when the activation intent changes the runtime
+  // provider/model, the POST-activation truth (manager active provider + active
+  // model) may differ from the ORIGINAL parsed.provider/parsed.model. We derive
+  // the finalized provider/model from the post-activation runtime so the
+  // facade's getProvider()/getModel() report what was actually activated.
+  const activationOutcome = await applyActivationOrLegacy(
+    parsed,
+    resolvedAuth,
+    config,
+    messageBus,
+  );
+  const finalizedParsed =
+    activationOutcome !== undefined
+      ? {
+          ...parsed,
+          provider: activationOutcome.provider,
+          model: activationOutcome.model,
+        }
+      : parsed;
 
   // @pseudocode createAgent.md steps 105-166: finalize agent (runtime state,
   // client bind, loop build, ownership, facade, session-start hook)
   return finalizeAgent(
-    parsed,
+    finalizedParsed,
     resolvedAuth,
     config,
     manager,
@@ -446,6 +414,150 @@ function applyHarnessGates(
   return (
     (parsed.harness?.forceConfirmations ?? true) && params.interactive === true
   );
+}
+
+/**
+ * Constructs the Config, applies workspace-context + confirmation-forcing
+ * policy gates, and builds the shared MessageBus. Extracted from createAgent
+ * to stay within the per-function line budget.
+ *
+ * @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006
+ * @pseudocode createAgent.md steps 30-38 + tool-confirmation-merge.md steps 10-31
+ */
+function initializeConfigAndMessageBus(
+  params: ConfigParameters,
+  parsed: { readonly harness?: AgentConfig['harness'] },
+  forceConfirmations: boolean,
+): { readonly config: Config; readonly messageBus: MessageBus } {
+  const config = new Config(params);
+  // Ensure the process working directory is a valid workspace root so that
+  // fixture paths using {{CWD}} resolve within the workspace boundary. The
+  // harness.includeProcessCwd gate (default true) lets production callers
+  // avoid mutating the workspace with process.cwd().
+  const includeProcessCwd = parsed.harness?.includeProcessCwd ?? true;
+  if (includeProcessCwd) {
+    config.getWorkspaceContext().addDirectory(process.cwd());
+  }
+  // Inject a high-priority ASK policy rule that overrides the read-only.toml
+  // ALLOW rules (priority 1.050) for ALL tools so the ConfirmationCoordinator
+  // falls through to evaluateAndRoute — the confirmation-forcing seam. The
+  // harness.forceConfirmations gate (default true) lets production callers
+  // skip the policy injection.
+  if (forceConfirmations) {
+    injectConfirmationForcingPolicy(config.getPolicyEngine());
+  }
+  const messageBus = new MessageBus(
+    config.getPolicyEngine(),
+    config.getDebugMode(),
+  );
+  return { config, messageBus };
+}
+
+/**
+ * Resolves the tool scheduler factory for Config construction. When the caller
+ * injects a factory, wraps it around the default (confirmation-forcing)
+ * CoreToolScheduler and retains the handles for facade-level disposal. When no
+ * factory is injected, uses the default directly.
+ *
+ * @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006
+ */
+function resolveSchedulerFactory(
+  forceConfirmations: boolean,
+  injected: AgentSchedulerFactory | undefined,
+  injectedSchedulerHandles: AgentSchedulerHandle[],
+): ToolSchedulerFactory {
+  const defaultSchedulerFactory = createDefaultToolSchedulerFactory({
+    forceConfirmations,
+  });
+  if (injected !== undefined) {
+    // @plan:PLAN-20260617-COREAPI.P23 @requirement:REQ-006 @requirement:REQ-016
+    // The caller injected a factory: each per-turn scheduler is still a real,
+    // functioning CoreToolScheduler (built by defaultSchedulerFactory), while
+    // the injected factory is invoked alongside and the handle it returns is
+    // retained for facade-level disposal. The injected factory FUNCTION is
+    // never disposed — only the handle instances it creates.
+    return wrapSchedulerFactory(
+      injected,
+      defaultSchedulerFactory,
+      injectedSchedulerHandles,
+    );
+  }
+  return defaultSchedulerFactory;
+}
+
+/**
+ * Applies either the declarative activation intent (#2374) or the legacy
+ * provider/model/auth bootstrap sequence. When `parsed.activation` is present,
+ * the intent takes precedence — it is executed via executeProviderActivation
+ * after initialize(), replacing the legacy applyInitialProviderModelAuth +
+ * refreshAuth path where they'd conflict. When omitted, the legacy path runs
+ * byte-identically (backward compatibility).
+ *
+ * #2374 round-3 Fix 1: returns the POST-activation provider/model when the
+ * activation intent ran, so the caller can finalize the Agent facade with the
+ * runtime truth instead of the stale parsed-config values. Returns undefined
+ * for the legacy path (parsed values are already correct).
+ *
+ * @plan:PLAN-20270104-ISSUE2374.P01
+ * @requirement:REQ-001
+ */
+async function applyActivationOrLegacy(
+  parsed: {
+    readonly activation?: ProviderActivationIntent;
+    readonly provider: string;
+    readonly model: string;
+  },
+  resolvedAuth: {
+    readonly apiKey: string | undefined;
+    readonly baseUrl: string | undefined;
+    readonly authMethod: string | undefined;
+  },
+  config: Config,
+  messageBus: MessageBus,
+): Promise<{ readonly provider: string; readonly model: string } | void> {
+  if (parsed.activation !== undefined) {
+    await config.initialize({ messageBus });
+    const activationResult = await executeProviderActivation(
+      config,
+      parsed.activation,
+    );
+    if (activationResult.authFailed) {
+      const underlying = activationResult.authError;
+      throw new AgentBootstrapError(
+        `createAgent activation failed: ${
+          underlying instanceof Error ? underlying.message : String(underlying)
+        }`,
+        { cause: underlying },
+      );
+    }
+    // Derive the POST-activation provider/model from the runtime truth so the
+    // facade's getProvider()/getModel() reflect what was actually activated,
+    // not the stale parsed-config values. The executor may switch the provider
+    // without updating config.getProvider() (skip-when-already-active path), so
+    // the runtime accessors are the reliable source (#2374 round-3 Fix 1).
+    const runtimeProvider =
+      activationResult.activeProvider ??
+      config.getProviderManager()?.getActiveProviderName() ??
+      safeActiveProviderName();
+    const postProvider = runtimeProvider || parsed.provider;
+    // Filter out the 'placeholder-model' sentinel — switchActiveProvider sets
+    // it when no real model was activated. Since getModel() always returns a
+    // string (never undefined), use an explicit comparison instead of ?? .
+    const configModel = config.getModel();
+    const resolvedConfigModel =
+      configModel !== 'placeholder-model' ? configModel : '';
+    const activeModel = safeActiveModelName();
+    const runtimeModel = resolvedConfigModel || activeModel;
+    const postModel = runtimeModel || parsed.model;
+    return { provider: postProvider, model: postModel };
+  }
+  // @pseudocode createAgent.md steps 61-79: apply provider/model/auth via real mutators
+  await applyInitialProviderModelAuth(parsed, resolvedAuth, config);
+  // @pseudocode createAgent.md step 81-82: initialize (creates transient pre-auth client)
+  await config.initialize({ messageBus });
+  // @pseudocode createAgent.md step 95-96: refreshAuth (creates post-auth client)
+  await config.refreshAuth(resolvedAuth.authMethod);
+  return undefined;
 }
 
 /**

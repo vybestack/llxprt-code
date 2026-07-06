@@ -46,7 +46,7 @@ const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
 
 export interface AppDialogsParams {
   config: SlashCommandRuntime;
-  agent: Agent | null;
+  agent: Agent;
   settings: LoadedSettings;
   appState: AppState;
   appDispatch: React.Dispatch<AppAction>;
@@ -285,6 +285,7 @@ function useDialogsAuth(
     settings,
     isFolderTrustComplete:
       !folderTrust.isFolderTrustDialogOpen && !folderTrust.isRestarting,
+    agent: p.agent,
   });
   useIdeTrustEffect(config, st);
   const authProviders = useDialogsAuthProviders(

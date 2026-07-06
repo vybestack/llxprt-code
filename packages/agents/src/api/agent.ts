@@ -117,6 +117,56 @@ export interface ProviderInfo {
   readonly baseUrl?: string;
 }
 
+/**
+ * OAuth UI event shape surfaced during a control-plane provider switch (#2374).
+ * Structurally compatible with the auth package's OAuthUIEvent so the agent
+ * facade does not couple to the auth package for a callback type.
+ */
+export interface AgentOAuthUIEvent {
+  readonly type: 'info' | 'warning' | 'error' | 'oauth_url';
+  readonly text: string;
+  readonly url?: string;
+  readonly icon?: string;
+  readonly color?: string;
+}
+
+/**
+ * Options for a control-plane provider switch through the Agent facade (#2374).
+ * Mirrors the runtime {@link ProviderSwitchOptions} so the interactive UI (Part
+ * B) can replace direct `runtime.switchActiveProvider(name, opts)` calls with
+ * `agent.setProvider(name, model, opts)`.
+ */
+export interface AgentProviderSwitchOptions {
+  /** When true, initiate OAuth automatically for providers that require it. */
+  readonly autoOAuth?: boolean;
+  /**
+   * OAuth UI callback used to surface OAuth events (info/warning/error/
+   * oauth_url) to the interactive UI during an autoOAuth switch.
+   */
+  readonly addItem?: (
+    event: AgentOAuthUIEvent,
+    timestamp?: number,
+  ) => number | void;
+}
+
+/**
+ * Result of a control-plane provider switch through the Agent facade (#2374).
+ * Mirrors the runtime {@link ProviderSwitchResult} so callers observe whether
+ * the provider changed and the info messages the switch surfaced.
+ */
+export interface AgentProviderSwitchResult {
+  /** Whether the active provider actually changed. */
+  readonly changed: boolean;
+  /** The provider that was active before the switch (null when none). */
+  readonly previousProvider: string | null;
+  /** The provider active after the switch. */
+  readonly nextProvider: string;
+  /** The default model the switch applied, when known. */
+  readonly defaultModel?: string;
+  /** Info messages surfaced by the underlying provider switch. */
+  readonly infoMessages: readonly string[];
+}
+
 export interface ToolInfo {
   readonly name: string;
   readonly description?: string;
@@ -791,7 +841,11 @@ export interface Agent {
   stream(input: AgentInput, opts?: TurnOptions): AsyncIterable<AgentEvent>;
 
   getProvider(): string;
-  setProvider(provider: string, model?: string): Promise<void>;
+  setProvider(
+    provider: string,
+    model?: string,
+    options?: AgentProviderSwitchOptions,
+  ): Promise<AgentProviderSwitchResult>;
   getProviderStatus(): ProviderStatus;
   getModel(): string;
   setModel(model: string): Promise<void>;

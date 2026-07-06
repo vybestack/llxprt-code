@@ -248,10 +248,11 @@ describe('mutation P23 — target 5: provider-switch model-change guard (agentIm
     try {
       // providerState.model stays 'fake-model'; switching to the same model
       // exercises the `model !== current` guard's false branch — it must NOT
-      // throw and the model stays unchanged.
-      await expect(
-        agent.setProvider('fake', 'fake-model'),
-      ).resolves.toBeUndefined();
+      // throw and the model stays unchanged. setProvider now returns a richer
+      // AgentProviderSwitchResult (#2374); assert on its shape rather than
+      // undefined.
+      const result = await agent.setProvider('fake', 'fake-model');
+      expect(result.nextProvider).toBe('fake');
       expect(agent.getModel()).toBe('fake-model');
     } finally {
       await cleanup();
