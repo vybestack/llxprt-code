@@ -319,7 +319,6 @@ export class GeminiProvider extends BaseProvider {
       yield* this.yieldMappedChunks(result.chunks);
       return;
     }
-    yield* result.preludeChunks ?? [];
     yield* consumeGeminiStream(
       result.stream,
       setup.mapResponseToChunks,

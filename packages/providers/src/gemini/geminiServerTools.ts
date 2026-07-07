@@ -71,7 +71,7 @@ async function invokeWebSearchApiKey(
   httpOptions: HttpOptions,
   query: string,
 ): Promise<unknown> {
-  if (!authToken || authToken === '') {
+  if (!authToken) {
     throw new Error('No valid Gemini API key available for web search');
   }
   const genAI = await context.createGenAIClient(
@@ -137,7 +137,7 @@ async function invokeWebFetchApiKey(
   httpOptions: HttpOptions,
   prompt: string,
 ): Promise<unknown> {
-  if (!authToken || authToken === '') {
+  if (!authToken) {
     throw new Error('No valid Gemini API key available for web fetch');
   }
   const genAI = await context.createGenAIClient(

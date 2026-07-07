@@ -28,7 +28,6 @@ export interface GeminiGenerationResult {
   stream: AsyncIterable<GenerateContentResponse> | null;
   emitted: boolean;
   chunks?: IContent[];
-  preludeChunks?: IContent[];
 }
 
 const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com';

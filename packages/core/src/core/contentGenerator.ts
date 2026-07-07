@@ -152,14 +152,15 @@ export async function createContentGenerator(
     );
   }
 
+  const requestOptions = { headers: {} as Record<string, string> };
+  if (gcConfig.getUsageStatisticsEnabled()) {
+    const installationManager = new InstallationManager();
+    const installationId = installationManager.getInstallationId();
+    requestOptions.headers['x-gemini-api-privileged-user-id'] =
+      `${installationId}`;
+  }
+
   if (config.vertexai === true) {
-    const requestOptions = { headers: {} as Record<string, string> };
-    if (gcConfig.getUsageStatisticsEnabled()) {
-      const installationManager = new InstallationManager();
-      const installationId = installationManager.getInstallationId();
-      requestOptions.headers['x-gemini-api-privileged-user-id'] =
-        `${installationId}`;
-    }
     return new GoogleGenAIWrapper(config, requestOptions);
   }
 
@@ -169,12 +170,5 @@ export async function createContentGenerator(
     );
   }
 
-  const requestOptions = { headers: {} as Record<string, string> };
-  if (gcConfig.getUsageStatisticsEnabled()) {
-    const installationManager = new InstallationManager();
-    const installationId = installationManager.getInstallationId();
-    requestOptions.headers['x-gemini-api-privileged-user-id'] =
-      `${installationId}`;
-  }
   return new GoogleGenAIWrapper(config, requestOptions);
 }

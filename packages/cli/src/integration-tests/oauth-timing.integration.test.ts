@@ -326,6 +326,7 @@ describe('OAuth Timing Integration Tests', () => {
           isOAuthEnabled: true,
           supportsOAuth: true,
           oauthProvider: 'anthropic',
+          providerId: 'anthropic',
         },
         {
           oauthManager: oauthManager as CoreOAuthManager,
@@ -359,6 +360,7 @@ describe('OAuth Timing Integration Tests', () => {
           isOAuthEnabled: true,
           supportsOAuth: true,
           oauthProvider: 'anthropic',
+          providerId: 'anthropic',
         },
         {
           oauthManager: oauthManager as CoreOAuthManager,
@@ -397,6 +399,7 @@ describe('OAuth Timing Integration Tests', () => {
             isOAuthEnabled: true,
             supportsOAuth: true,
             oauthProvider: 'anthropic',
+            providerId: 'anthropic',
           },
           {
             oauthManager: oauthManager as CoreOAuthManager,
@@ -429,6 +432,7 @@ describe('OAuth Timing Integration Tests', () => {
           isOAuthEnabled: false, // OAuth disabled
           supportsOAuth: true,
           oauthProvider: 'anthropic',
+          providerId: 'anthropic',
         },
         {
           oauthManager: oauthManager as CoreOAuthManager,
@@ -469,7 +473,7 @@ describe('OAuth Timing Integration Tests', () => {
           isOAuthEnabled: true,
           supportsOAuth: true,
           oauthProvider: 'anthropic',
-          providerId: 'gemini',
+          providerId: 'anthropic',
         },
         {
           oauthManager: oauthManager as CoreOAuthManager,
@@ -603,6 +607,7 @@ describe('OAuth Timing Integration Tests', () => {
           isOAuthEnabled: true,
           supportsOAuth: true,
           oauthProvider: 'anthropic',
+          providerId: 'anthropic',
         },
         {
           oauthManager: oauthManager as CoreOAuthManager,
@@ -629,7 +634,7 @@ describe('OAuth Timing Integration Tests', () => {
           isOAuthEnabled: true,
           supportsOAuth: true,
           oauthProvider: 'anthropic',
-          providerId: 'gemini',
+          providerId: 'anthropic',
         },
         {
           oauthManager: oauthManager as CoreOAuthManager,
