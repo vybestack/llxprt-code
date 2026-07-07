@@ -212,12 +212,12 @@ async function createAndInitClient(
   // mock data ({ embeddings: [{ values: number[] }] }).
   client['contentGenerator'] = {
     embedContent: async (request: { texts: string[] }) => {
-      const raw = (await mockFns.mockEmbedContentFn(request)) as {
-        embeddings?: Array<{ values?: number[] }>;
-      };
+      const raw = (await mockFns.mockEmbedContentFn(request)) as
+        | { embeddings?: Array<{ values?: number[] }> }
+        | undefined;
       // Missing embeddings intentionally becomes an empty result so
       // BaseLLMClient exercises its no-embeddings error path.
-      const embeddings = Array.isArray(raw.embeddings)
+      const embeddings = Array.isArray(raw?.embeddings)
         ? raw.embeddings.map((emb) => emb.values ?? [])
         : [];
       return { embeddings };

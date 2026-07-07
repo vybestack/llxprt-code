@@ -264,7 +264,7 @@ export class DirectMessageProcessor {
         this._executeDirectProviderCall(provider, params, userIContents),
       {
         shouldRetryOnError: (error: unknown) => {
-          if (isProviderApiError(error) && error.message) {
+          if (isProviderApiError(error)) {
             const status = error.status;
             if (status === 400) return false;
             if (isSchemaDepthError(error.message)) return false;

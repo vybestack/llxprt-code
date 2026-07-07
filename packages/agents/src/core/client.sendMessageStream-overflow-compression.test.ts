@@ -47,17 +47,13 @@ vi.mock('./clientToolGovernance.js', () => ({
 }));
 
 // --- Mocks (hoisted so vi.mock factories can reference them) ---
-const {
-  mockChatCreateFn,
-  mockGenerateContentFn,
-  mockEmbedContentFn,
-  mockTurnRunFn,
-} = vi.hoisted(() => ({
-  mockChatCreateFn: vi.fn(),
-  mockGenerateContentFn: vi.fn(),
-  mockEmbedContentFn: vi.fn(),
-  mockTurnRunFn: vi.fn(),
-}));
+const { mockGenerateContentFn, mockEmbedContentFn, mockTurnRunFn } = vi.hoisted(
+  () => ({
+    mockGenerateContentFn: vi.fn(),
+    mockEmbedContentFn: vi.fn(),
+    mockTurnRunFn: vi.fn(),
+  }),
+);
 
 const {
   todoStoreReadMock,
@@ -250,7 +246,6 @@ describe('Gemini Client — preflight compression recovery (issue 2402)', () => 
 
   beforeEach(async () => {
     const ctx = await setupGeminiClient({
-      mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,
     });

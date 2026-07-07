@@ -55,6 +55,10 @@ import {
 } from './hookToolRestrictions.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import { shouldRetryStreamAttempt } from './turnAbortHelpers.js';
+import {
+  selectRequestTools,
+  type ToolGroupArray,
+} from './streamRequestHelpers.js';
 
 import {
   AgentExecutionStoppedError,
@@ -63,9 +67,6 @@ import {
 import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
 import { responseToModelStreamChunk } from './streamChunkWrapper.js';
 import { enrichSchemaDepthError } from './schemaDepthErrorEnrichment.js';
-type ToolGroupArray = Array<{
-  functionDeclarations: Array<{ name: string }>;
-}>;
 
 interface ToolSelectionHookResult {
   tools: ToolGroupArray | undefined;
@@ -628,9 +629,9 @@ export class TurnProcessor {
   private _selectRequestTools(
     params: SendMessageParameters,
   ): ToolGroupArray | undefined {
-    return (
-      (params.config?.tools as ToolGroupArray | undefined) ??
-      (this.generationConfig.tools as ToolGroupArray | undefined)
+    return selectRequestTools(
+      params,
+      this.generationConfig.tools as ToolGroupArray | undefined,
     );
   }
 
@@ -670,8 +671,8 @@ export class TurnProcessor {
     const filteredTools = toolsFromConfig
       .map((toolGroup) => ({
         ...toolGroup,
-        functionDeclarations: toolGroup.functionDeclarations.filter((fn) =>
-          allowedNames.has(canonicalizeToolName(fn.name)),
+        functionDeclarations: (toolGroup.functionDeclarations ?? []).filter(
+          (fn) => allowedNames.has(canonicalizeToolName(fn.name)),
         ),
       }))
       .filter((toolGroup) => toolGroup.functionDeclarations.length > 0);

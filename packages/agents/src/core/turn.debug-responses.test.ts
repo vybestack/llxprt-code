@@ -15,6 +15,10 @@ import {
   findFinishedEvent,
   mockResponseToChunk,
 } from './turn-test-helpers.js';
+import {
+  getFunctionCallsFromParts,
+  getResponseTextFromParts,
+} from './googlePartHelpers.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -39,18 +43,11 @@ vi.mock(
       // Legacy Part/GenerateContentResponse helpers retained for any callers
       // still on the old shapes.
       getResponseText: (resp: GenerateContentResponse) =>
-        resp.candidates?.[0]?.content?.parts
-          ?.filter((part) => (part as { thought?: boolean }).thought !== true)
-          .map((part) => part.text)
-          .join('') ?? undefined,
+        getResponseTextFromParts(resp.candidates?.[0]?.content?.parts ?? []),
       getFunctionCalls: (resp: GenerateContentResponse) =>
         resp.functionCalls ?? [],
-      getFunctionCallsFromParts: (parts: Part[]) => {
-        const functionCalls = parts
-          .filter((part) => part.functionCall !== undefined)
-          .map((part) => part.functionCall!);
-        return functionCalls.length > 0 ? functionCalls : undefined;
-      },
+      getFunctionCallsFromParts: (parts: Part[]) =>
+        getFunctionCallsFromParts(parts),
     };
   },
 );
