@@ -74,7 +74,7 @@ jobs:
         startsWith(toJSON(github.event.comment.body), '"/open-code-review\t')))
     steps:
       - name: Resolve PR context
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
         id: pr-context
         with:
           script: |
@@ -98,7 +98,7 @@ jobs:
       - name: Checkout trusted base
         # Fork-safety keystone: check out the trusted base branch (never the
         # PR head) so the working tree never reflects PR-supplied files.
-        uses: actions/checkout@v4
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # ratchet:actions/checkout@v5
         with:
           ref: ${{ steps.pr-context.outputs.base_sha }}
           fetch-depth: 0
@@ -355,7 +355,7 @@ jobs:
 
       - name: Upload OCR artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
         with:
           name: ocr-review-output
           path: |
@@ -369,7 +369,7 @@ jobs:
           if-no-files-found: error
 
       - name: Post OCR results
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
         env:
           BASE_SHA: ${{ env.BASE_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
