@@ -26,8 +26,11 @@ const SPAWN_KILL_TIMEOUT_MS = 120_000;
 // aborting the test with no cause.
 const SMOKE_TEST_TIMEOUT_MS = SPAWN_KILL_TIMEOUT_MS + 30_000;
 
-// `--version` prints a semver-prefixed line (e.g. "0.10.0").
-const VERSION_REGEX = /^\d+\.\d+\.\d+/;
+// `--version` prints exactly a semver line: a release ("0.10.0") or a
+// prerelease ("0.1.13-nightly.250727.2261021c"). Anchor both ends so trailing
+// garbage (e.g. an error appended after the version) fails the assertion, while
+// still accepting the optional "-<prerelease>" suffix nightly builds emit.
+const VERSION_REGEX = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 function runLauncherVersion(env: NodeJS.ProcessEnv): {
   status: number | null;
