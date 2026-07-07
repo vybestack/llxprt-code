@@ -88,6 +88,15 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
+   * OAuth is only eligible when the effective base URL is Anthropic's own API
+   * host. A third-party gateway (e.g. https://api.z.ai/api/anthropic) must never
+   * trigger an Anthropic OAuth handshake against api.anthropic.com.
+   */
+  protected override isOAuthEligible(baseURL?: string): boolean {
+    return isAnthropicOAuthBaseURL(baseURL);
+  }
+
+  /**
    * Classify whether a given auth token is an Anthropic OAuth token.
    * Anthropic OAuth tokens start with the 'sk-ant-oat' prefix.
    */
@@ -190,17 +199,22 @@ export class AnthropicProvider extends BaseProvider {
       authToken = await this.getAuthTokenForPrompt();
     }
 
+    const baseURL = options.resolved.baseURL;
     if (authToken === '') {
       authLogger.debug(
         () => 'No authentication available for Anthropic API calls',
       );
+      if (isAnthropicOAuthBaseURL(baseURL)) {
+        throw new Error(
+          'No authentication available for Anthropic API calls. Use /auth anthropic to re-authenticate or /auth anthropic logout to clear any expired session.',
+        );
+      }
       throw new Error(
-        'No authentication available for Anthropic API calls. Use /auth anthropic to re-authenticate or /auth anthropic logout to clear any expired session.',
+        `No API key resolved for Anthropic-compatible endpoint "${baseURL}". Configure an explicit credential (auth-key, auth-keyfile, or auth-key-name) for this profile; OAuth against api.anthropic.com is not used for third-party base URLs.`,
       );
     }
 
     authLogger.debug(() => 'Creating fresh client instance (stateless)');
-    const baseURL = options.resolved.baseURL;
     const client = this.instantiateClient(authToken, baseURL);
 
     telemetry?.record?.('stateless-provider.call', {
@@ -723,6 +737,25 @@ export class AnthropicProvider extends BaseProvider {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
+
+/**
+ * True when the given base URL is Anthropic's own API host (or unset), meaning
+ * OAuth against api.anthropic.com is a valid credential path. For any
+ * third-party gateway (e.g. https://api.z.ai/api/anthropic) this returns false
+ * so we never attempt an Anthropic OAuth handshake against the wrong endpoint.
+ */
+export function isAnthropicOAuthBaseURL(baseURL?: string): boolean {
+  if (baseURL === undefined || baseURL.trim() === '') {
+    return true;
+  }
+  try {
+    const host = new URL(baseURL).hostname.toLowerCase();
+    return host === 'anthropic.com' || host.endsWith('.anthropic.com');
+  } catch {
+    return false;
+  }
+}
+
 function isRuntimeAuthTokenProvider(
   value: unknown,
 ): value is RuntimeAuthTokenProvider {
