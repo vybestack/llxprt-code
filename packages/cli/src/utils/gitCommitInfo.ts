@@ -14,6 +14,12 @@ const NOT_AVAILABLE = 'N/A';
 const INFO_FILENAME = 'git-commit.json';
 const logger = new DebugLogger('llxprt:git-commit');
 
+/**
+ * Environment variable that overrides the git-commit.json lookup path. Exported
+ * so tests reference the same constant as the implementation (no name drift).
+ */
+export const GIT_COMMIT_INFO_PATH_ENV = 'LLXPRT_GIT_COMMIT_INFO_PATH';
+
 interface GitCommitInfo {
   commit: string;
 }
@@ -22,7 +28,7 @@ let infoCache: string | null = null;
 let infoLoaded = false;
 
 function candidatePaths(): string[] {
-  const override = process.env.LLXPRT_GIT_COMMIT_INFO_PATH;
+  const override = process.env[GIT_COMMIT_INFO_PATH_ENV];
   if (override && override.trim() !== '') {
     // Override-exclusivity: when the override is set it is the SOLE candidate.
     // This is what makes the #2435 regression test hermetic — pointing the

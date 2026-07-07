@@ -11,10 +11,11 @@ import path from 'node:path';
 import {
   __resetGitCommitInfoCacheForTests,
   getGitCommitInfo,
+  GIT_COMMIT_INFO_PATH_ENV,
 } from './gitCommitInfo.js';
 
 describe('gitCommitInfo', () => {
-  const envVar = 'LLXPRT_GIT_COMMIT_INFO_PATH';
+  const envVar = GIT_COMMIT_INFO_PATH_ENV;
   let tempDir: string;
   let infoPath: string;
 
@@ -92,7 +93,15 @@ describe('gitCommitInfo', () => {
   });
 
   it('treats a whitespace-only override as unset (ignores it)', () => {
-    // With a valid artifact at the override path, the override is honored.
+    // Baseline: with no override, the loader consults its default candidates.
+    // Whatever it resolves (the real generated hash or 'N/A') is the exact
+    // behaviour a whitespace-only override must reproduce.
+    delete process.env[envVar];
+    __resetGitCommitInfoCacheForTests();
+    const unsetResult = getGitCommitInfo();
+
+    // Prove the override path is otherwise live: a valid artifact there is
+    // honored, so it is a genuine sentinel distinct from the default result.
     writeFileSync(
       infoPath,
       JSON.stringify({ commit: 'override-only' }),
@@ -102,14 +111,14 @@ describe('gitCommitInfo', () => {
     __resetGitCommitInfoCacheForTests();
     expect(getGitCommitInfo()).toBe('override-only');
 
-    // A whitespace-only override must be ignored (treated as unset), so the
-    // loader stops reading infoPath and falls through to its default
-    // candidates. It must therefore NOT return the override artifact's value.
-    // This is deterministic regardless of whether default candidates exist:
-    // the default result is either the real generated hash or 'N/A', neither
-    // of which equals the sentinel written above.
+    // A whitespace-only override must be treated as unset: the loader ignores
+    // infoPath entirely and falls through to the default candidates, yielding
+    // exactly the unset baseline (positive assertion) and never the override
+    // sentinel (guards against a "trimmed but still used" regression).
     process.env[envVar] = '   ';
     __resetGitCommitInfoCacheForTests();
-    expect(getGitCommitInfo()).not.toBe('override-only');
+    const whitespaceResult = getGitCommitInfo();
+    expect(whitespaceResult).toBe(unsetResult);
+    expect(whitespaceResult).not.toBe('override-only');
   });
 });
