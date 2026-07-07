@@ -254,8 +254,14 @@ jobs:
           # TS-monorepo scope guard: match *.test.*, *.spec.*, and any file
           # inside a __tests__/, tests/, or test/ directory. Covers
           # .ts/.tsx/.js/.jsx/.mjs/.cjs variants used throughout packages/**.
+          #
+          # --diff-filter=d excludes Deleted files: OCR reviews the content of
+          # added/modified/renamed files, but a deleted test has no post-image
+          # to review, so OCR legitimately omits it from the reviewed set.
+          # Without this filter, any PR that removes a test file would fail the
+          # scope check for a file that no longer exists.
           changed_tests="$(
-            git diff --name-only "${BASE_SHA}..${HEAD_SHA}" \
+            git diff --name-only --diff-filter=d "${BASE_SHA}..${HEAD_SHA}" \
               | grep -Ei '(^|/)(__tests__|tests?)/.*\.(ts|tsx|js|jsx|mjs|cjs)$|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$' \
               || true
           )"
