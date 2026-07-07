@@ -26,7 +26,7 @@ on:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: "Pull request number to review"
+        description: 'Pull request number to review'
         required: true
         type: string
 
@@ -42,10 +42,10 @@ permissions:
   issues: write
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
   # Disable colorized CLI output so text parsers (e.g. the changed-test
   # scope guard) always see plain text.
-  NO_COLOR: "1"
+  NO_COLOR: '1'
 
 jobs:
   code-review:
