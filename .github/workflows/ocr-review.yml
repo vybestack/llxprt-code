@@ -30,12 +30,6 @@ on:
         required: true
         type: string
 
-# Duplicate OCR runs for the same PR are cancelled so only the latest
-# head SHA is reviewed.
-concurrency:
-  group: ocr-review-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
   pull-requests: write
@@ -43,6 +37,8 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  # Keep CI reviews deterministic by disabling OCR self-update checks.
+  OCR_NO_UPDATE: '1'
   # Disable colorized CLI output so text parsers (e.g. the changed-test
   # scope guard) always see plain text.
   NO_COLOR: '1'
@@ -51,6 +47,13 @@ jobs:
   code-review:
     name: OpenCodeReview
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Infrastructure failures are intentionally non-blocking for PR checks, but
+    # this output lets downstream jobs distinguish a completed OCR review from a
+    # review that could not run because of provider, install, or script issues.
+    outputs:
+      infrastructure_failure: ${{ steps.ocr-classification.outputs.infrastructure_failure }}
+      policy_failure: ${{ steps.ocr-classification.outputs.policy_failure }}
     # For issue_comment, only run on PR comments requesting a review.
     # The toJSON checks intentionally support LF, CRLF, and tab after the
     # command; other whitespace is not matched to keep triggers predictable.
@@ -72,6 +75,14 @@ jobs:
         startsWith(toJSON(github.event.comment.body), '"/open-code-review\n') ||
         startsWith(toJSON(github.event.comment.body), '"/open-code-review\r\n') ||
         startsWith(toJSON(github.event.comment.body), '"/open-code-review\t')))
+    # Job-level concurrency is evaluated only for runs that pass this job if filter,
+    # so ordinary, unauthorized, and non-PR issue comments cannot cancel OCR.
+    # All authorized OCR triggers for the same PR share one group so the latest
+    # run owns the sticky summary and inline-comment posting.
+    concurrency:
+      group: >-
+        ocr-review-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+      cancel-in-progress: true
     steps:
       - name: Resolve PR context
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
@@ -105,6 +116,7 @@ jobs:
           persist-credentials: false
 
       - name: Fetch PR head and compute merge-base
+        shell: bash
         env:
           PR_NUMBER: ${{ steps.pr-context.outputs.number }}
           HEAD_SHA: ${{ steps.pr-context.outputs.head_sha }}
@@ -168,7 +180,9 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Initialize OCR artifact files
+        shell: bash
         run: |
+          set -euo pipefail
           : > ocr-result.json
           : > ocr-stdout.raw
           : > ocr-stderr.log
@@ -176,15 +190,55 @@ jobs:
           : > ocr-preview.txt
           : > ocr-preview-stderr.log
           : > ocr-exit-code.txt
+          : > ocr-phase.txt
+          : > ocr-infrastructure-failure.txt
+          : > ocr-policy-failure.txt
+          cat > ocr-workflow-helpers.sh <<'EOF'
+          mark_infrastructure_failure() {
+            echo "phase=$1; reason=$2" > ocr-infrastructure-failure.txt
+          }
+          mark_policy_failure() {
+            echo "$1" > ocr-policy-failure.txt
+          }
+          EOF
 
       - name: Install OpenCodeReview
+        shell: bash
         run: |
-          # Global install of OCR only; package lifecycle scripts are disabled.
-          npm install -g --ignore-scripts @alibaba-group/open-code-review@1.6.1
-          ocr version > ocr-version.txt
+          set -euo pipefail
+          echo "install" > ocr-phase.txt
+          if ! . ./ocr-workflow-helpers.sh; then
+            echo "::warning::Could not load OCR workflow helper script."
+            echo "127" > ocr-exit-code.txt
+            echo "phase=install; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            exit 0
+          fi
+          OCR_PREFIX="${RUNNER_TEMP}/ocr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if ! npm install --prefix "$OCR_PREFIX" --ignore-scripts @alibaba-group/open-code-review@1.6.1 2>> ocr-stderr.log; then
+            echo "::warning::OpenCodeReview installation failed."
+            echo "70" > ocr-exit-code.txt
+            mark_infrastructure_failure "install" "OpenCodeReview installation failed"
+            exit 0
+          fi
+          OCR_BIN="${OCR_PREFIX}/node_modules/.bin"
+          echo "$OCR_BIN" >> "$GITHUB_PATH"
+          export PATH="${OCR_BIN}:${PATH}"
+          if ! command -v ocr >/dev/null 2>&1; then
+            echo "::warning::OpenCodeReview command was not found after install."
+            echo "127" > ocr-exit-code.txt
+            mark_infrastructure_failure "install" "OpenCodeReview command was not found after install"
+            exit 0
+          fi
+          if ! ocr version > ocr-version.txt 2>> ocr-stderr.log; then
+            echo "::warning::OpenCodeReview version check failed."
+            echo "70" > ocr-exit-code.txt
+            mark_infrastructure_failure "install" "OpenCodeReview version check failed"
+            exit 0
+          fi
           cat ocr-version.txt
 
       - name: Configure OCR review rules
+        shell: bash
         # Project policy: changed test files must be reviewed. OCR's default
         # rules exclude test/spec files, so re-include them here. This config
         # is written from this trusted workflow only (env-provided JSON); no
@@ -217,6 +271,7 @@ jobs:
           printf '%s' "$OCR_RULES_JSON" > "${HOME}/.opencodereview/rule.json"
 
       - name: Validate OCR configuration
+        shell: bash
         env:
           OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
           OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
@@ -224,20 +279,41 @@ jobs:
           OCR_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC }}
         run: |
           set -euo pipefail
+          if [ -s ocr-exit-code.txt ]; then
+            echo "::warning::Skipping OCR configuration validation because an earlier OCR setup failure was recorded."
+            exit 0
+          fi
+          echo "validate" > ocr-phase.txt
+          if ! . ./ocr-workflow-helpers.sh; then
+            echo "::warning::Could not load OCR workflow helper script."
+            echo "127" > ocr-exit-code.txt
+            echo "phase=validate; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            exit 0
+          fi
+          missing=0
           if [ -z "${OCR_LLM_URL:-}" ]; then
-            echo "::error::Required variable OCR_LLM_URL is not set"
-            exit 1
+            echo "::warning::Required variable OCR_LLM_URL is not set"
+            echo "Required variable OCR_LLM_URL is not set" >> ocr-stderr.log
+            missing=1
           fi
           if [ -z "${OCR_LLM_TOKEN:-}" ]; then
-            echo "::error::Required secret OCR_LLM_AUTH_TOKEN is not set"
-            exit 1
+            echo "::warning::Required secret OCR_LLM_AUTH_TOKEN is not set"
+            echo "Required secret OCR_LLM_AUTH_TOKEN is not set" >> ocr-stderr.log
+            missing=1
           fi
           if [ -z "${OCR_LLM_MODEL:-}" ]; then
-            echo "::error::Required variable OCR_LLM_MODEL is not set"
-            exit 1
+            echo "::warning::Required variable OCR_LLM_MODEL is not set"
+            echo "Required variable OCR_LLM_MODEL is not set" >> ocr-stderr.log
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            echo "78" > ocr-exit-code.txt
+            mark_infrastructure_failure "validate" "OCR configuration is missing required variables or secrets"
+            exit 0
           fi
 
       - name: Verify review scope includes changed tests
+        shell: bash
         env:
           BASE_SHA: ${{ env.BASE_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
@@ -247,19 +323,19 @@ jobs:
           OCR_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC }}
         run: |
           set -euo pipefail
-          # Fail loudly rather than silently letting OCR exclude changed
-          # test/spec files (project policy: tests must be reviewed).
+          if [ -s ocr-exit-code.txt ]; then
+            echo "::warning::Skipping OCR preview because an earlier OCR setup/configuration failure was recorded."
+            exit 0
+          fi
+          echo "preview" > ocr-phase.txt
           : > ocr-preview.txt
           : > ocr-preview-stderr.log
-          # TS-monorepo scope guard: match *.test.*, *.spec.*, and any file
-          # inside a __tests__/, tests/, or test/ directory. Covers
-          # .ts/.tsx/.js/.jsx/.mjs/.cjs variants used throughout packages/**.
-          #
-          # --diff-filter=d excludes Deleted files: OCR reviews the content of
-          # added/modified/renamed files, but a deleted test has no post-image
-          # to review, so OCR legitimately omits it from the reviewed set.
-          # Without this filter, any PR that removes a test file would fail the
-          # scope check for a file that no longer exists.
+          if ! . ./ocr-workflow-helpers.sh; then
+            echo "::warning::Could not load OCR workflow helper script."
+            echo "127" > ocr-exit-code.txt
+            echo "phase=preview; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            exit 0
+          fi
           changed_tests="$(
             git diff --name-only --diff-filter=d "${BASE_SHA}..${HEAD_SHA}" \
               | grep -Ei '(^|/)(__tests__|tests?)/.*\.(ts|tsx|js|jsx|mjs|cjs)$|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$' \
@@ -268,18 +344,30 @@ jobs:
           if [ -n "$changed_tests" ]; then
             echo "Changed test/spec files detected that must be reviewed:"
             echo "$changed_tests"
-            # Inspect OCR preview scope. Each changed test must appear in
-            # the reviewed set and must not appear in the excluded set.
-            if ! ocr review --preview --from "$BASE_SHA" --to "$HEAD_SHA" \
-              > ocr-preview.txt 2> ocr-preview-stderr.log; then
-              echo "::error::Could not verify OCR preview scope for changed test files."
-              exit 1
+            if ! command -v ocr >/dev/null 2>&1; then
+              echo "::warning::OpenCodeReview command is unavailable before preview."
+              echo "OpenCodeReview command is unavailable before preview." >> ocr-preview-stderr.log
+              echo "127" > ocr-exit-code.txt
+              mark_infrastructure_failure "preview" "OpenCodeReview command is unavailable before preview"
+              exit 0
             fi
-            # Belt-and-suspenders: NO_COLOR is set workflow-wide, but if the
-            # CLI still emits escapes, strip CSI and OSC sequences so the
-            # section/path parsers below see plain text (otherwise every
-            # changed test is reported as missing).
-            sed -i 's/\x1b\[[0-9;?<>=]*[A-Za-z]//g; s/\x1b\][^\x07\x1b]*\(\x07\|\x1b\\\)//g' ocr-preview.txt
+            set +e
+            ocr review --preview --from "$BASE_SHA" --to "$HEAD_SHA" \
+              > ocr-preview.txt 2> ocr-preview-stderr.log
+            status=$?
+            set -e
+            if [ "$status" -ne 0 ]; then
+              echo "::warning::Could not verify OCR preview scope for changed test files."
+              echo "$status" > ocr-exit-code.txt
+              mark_infrastructure_failure "preview" "OCR preview command failed"
+              exit 0
+            fi
+            if ! sed -i 's/\x1b\[[0-9;?<>=]*[A-Za-z]//g; s/\x1b\][^\x07\x1b]*\(\x07\|\x1b\\\)//g' ocr-preview.txt; then
+              echo "::warning::Could not normalize OCR preview output."
+              echo "1" > ocr-exit-code.txt
+              mark_infrastructure_failure "preview" "OCR preview normalization failed"
+              exit 0
+            fi
             reviewed="$(awk '
               BEGIN { IGNORECASE = 1; in_section = 0 }
               /^Will review[[:space:]]*\(/ { in_section = 1; next }
@@ -326,16 +414,23 @@ jobs:
             if [ -n "$missing" ]; then
               echo "::error::OCR preview did not list changed test files in the reviewed set:"
               echo "$missing"
+              echo "changed-test-missing" > ocr-phase.txt
+              echo "1" > ocr-exit-code.txt
+              mark_policy_failure "changed test files were missing from OCR reviewed set"
               exit 1
             fi
             if [ -n "$excluded_tests" ]; then
               echo "::error::OCR would exclude changed test files that must be reviewed:"
               echo "$excluded_tests"
+              echo "changed-test-excluded" > ocr-phase.txt
+              echo "1" > ocr-exit-code.txt
+              mark_policy_failure "changed test files were excluded from OCR reviewed set"
               exit 1
             fi
           fi
 
       - name: Run OpenCodeReview
+        shell: bash
         # Full merge-base..head diff. Parse failures are handled distinctly
         # in the posting step (OCR failed vs. no findings).
         env:
@@ -347,6 +442,24 @@ jobs:
           OCR_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC }}
         run: |
           set +e
+          if [ -s ocr-exit-code.txt ]; then
+            echo "::warning::Skipping OCR review because an earlier OCR setup/configuration/preview failure was recorded."
+            exit 0
+          fi
+          echo "review" > ocr-phase.txt
+          if ! . ./ocr-workflow-helpers.sh; then
+            echo "::warning::Could not load OCR workflow helper script."
+            echo "127" > ocr-exit-code.txt
+            echo "phase=review; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            exit 0
+          fi
+          if ! command -v ocr >/dev/null 2>&1; then
+            echo "::warning::OpenCodeReview command is unavailable before review."
+            echo "OpenCodeReview command is unavailable before review." >> ocr-stderr.log
+            echo "127" > ocr-exit-code.txt
+            mark_infrastructure_failure "review" "OpenCodeReview command is unavailable before review"
+            exit 0
+          fi
           ocr review \
             --from "$BASE_SHA" \
             --to "$HEAD_SHA" \
@@ -355,36 +468,38 @@ jobs:
             --timeout 30 \
             > ocr-stdout.raw 2> ocr-stderr.log
           status=$?
-          cp ocr-stdout.raw ocr-result.json
+          if ! cp ocr-stdout.raw ocr-result.json; then
+            : > ocr-result.json
+          fi
           echo "$status" > ocr-exit-code.txt
+          if [ "$status" -ne 0 ]; then
+            mark_infrastructure_failure "review" "OCR review command failed"
+          fi
           exit 0
 
-      - name: Upload OCR artifacts
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
-        with:
-          name: ocr-review-output
-          path: |
-            ocr-result.json
-            ocr-stdout.raw
-            ocr-stderr.log
-            ocr-version.txt
-            ocr-preview.txt
-            ocr-preview-stderr.log
-            ocr-exit-code.txt
-          if-no-files-found: error
-
       - name: Post OCR results
+        if: always()
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
         env:
           BASE_SHA: ${{ env.BASE_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
           PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          # Exact OCR endpoint/credential values are provided only for redaction;
+          # do not log process.env from this step.
+          OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+          OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
         with:
           script: |
             const fs = require('fs');
             const MARKER = '<!-- llxprt-code-ocr-review -->';
             const INLINE_MARKER = '<!-- llxprt-code-ocr-inline -->';
+            const INFRA_FAILURE_FILE = 'ocr-infrastructure-failure.txt';
+            const POLICY_FAILURE_FILE = 'ocr-policy-failure.txt';
+            const REDACTION = '[REDACTED]';
+            const ocrTokenForRedaction = process.env.OCR_LLM_TOKEN;
+            const ocrUrlForRedaction = process.env.OCR_LLM_URL;
+            delete process.env.OCR_LLM_TOKEN;
+            delete process.env.OCR_LLM_URL;
             const number = Number(process.env.PR_NUMBER);
             if (!Number.isInteger(number) || number <= 0) {
               core.setFailed('No valid PR number resolved from pr-context step.');
@@ -397,21 +512,91 @@ jobs:
             }
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
 
-            let ocrVersion = 'unknown';
-            try {
-              ocrVersion = fs.readFileSync('ocr-version.txt', 'utf8').trim();
-            } catch (_) { /* leave unknown */ }
+            function readTrimmed(fileName, fallback = '') {
+              try {
+                return fs.readFileSync(fileName, 'utf8').trim();
+              } catch (_) {
+                return fallback;
+              }
+            }
+
+            function escapeRegExp(value) {
+              return String(value).replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
+            }
+
+            function redactSecretDiagnostics(value) {
+              let sanitized = String(value ?? '');
+              const exactSecrets = [ocrTokenForRedaction, ocrUrlForRedaction]
+                .filter((secret) => typeof secret === 'string' && secret.length > 0);
+              for (const secret of exactSecrets) {
+                try {
+                  sanitized = sanitized.replace(new RegExp(escapeRegExp(secret), 'g'), REDACTION);
+                } catch (_) {
+                  sanitized = sanitized.split(secret).join(REDACTION);
+                }
+              }
+              sanitized = sanitized
+                .replace(/\b(Authorization\s*:\s*(?:(?:Bearer|Basic|token|ApiKey)\s+)?)([^\s,;]+)/gi, '$1[REDACTED]')
+                .replace(/\b(x-api-key\s*:\s*)([^\s,;]+)/gi, '$1[REDACTED]')
+                .replace(/\b(api[_-]?key\s*[=:]\s*)([^\s,;&]+)/gi, '$1[REDACTED]')
+                .replace(/([?&](?:key|api[_-]?key|token)=)([^\s,;&]+)/gi, '$1[REDACTED]')
+                .replace(/\b(access[_-]?token\s*[=:]\s*)([^\s,;&]+)/gi, '$1[REDACTED]')
+                .replace(/\b(refresh[_-]?token\s*[=:]\s*)([^\s,;&]+)/gi, '$1[REDACTED]')
+                .replace(/\b(id[_-]?token\s*[=:]\s*)([^\s,;&]+)/gi, '$1[REDACTED]')
+                .replace(/\b(token\s*[=:]\s*)([A-Za-z0-9_./+=:@-]{16,})/gi, '$1[REDACTED]')
+                .replace(/\b(secret\s*[=:]\s*)([A-Za-z0-9_./+=:@-]{16,})/gi, '$1[REDACTED]');
+              return sanitized;
+            }
+
+            function sanitizeExcerpt(value) {
+              return redactSecretDiagnostics(value)
+                .split('\n')
+                .slice(0, 40)
+                .join('\n') || '(empty)';
+            }
+
+            let ocrVersion = readTrimmed('ocr-version.txt', 'unknown');
+            if (!ocrVersion) {
+              ocrVersion = 'unknown';
+            }
+            const phase = readTrimmed('ocr-phase.txt', 'unknown') || 'unknown';
+            let diagnosticPhase = phase;
+
+            function markInfrastructureFailure(markerPhase, reason) {
+              const message = redactSecretDiagnostics(`phase=${markerPhase}; reason=${reason}`);
+              fs.writeFileSync(INFRA_FAILURE_FILE, `${message}\n`);
+              diagnosticPhase = markerPhase;
+              fs.writeFileSync('ocr-phase.txt', `${markerPhase}\n`);
+              core.warning(`OCR infrastructure diagnostic recorded: ${message}`);
+            }
+
+            function stderrSection(title, fileName) {
+              const excerpt = sanitizeExcerpt(readTrimmed(fileName, ''));
+              return [
+                `### ${title}`,
+                '',
+                '```text',
+                excerpt.slice(0, 4000),
+                '```',
+              ];
+            }
+
+            function readExitCode(fileName) {
+              const raw = readTrimmed(fileName, '');
+              if (!raw) {
+                return 1;
+              }
+              const parsed = Number(raw);
+              return Number.isInteger(parsed) ? parsed : 1;
+            }
 
             let ran = true;
             let findings = [];
-            let exitCode = 0;
-            try {
-              exitCode = Number(fs.readFileSync('ocr-exit-code.txt', 'utf8').trim());
-            } catch (_) {
-              exitCode = 1;
-            }
-            if (!Number.isInteger(exitCode) || exitCode !== 0) {
+            const policyFailure = readTrimmed(POLICY_FAILURE_FILE, '');
+            const exitCode = readExitCode('ocr-exit-code.txt');
+            if (exitCode !== 0) {
               ran = false;
             }
             function findingsFromParsed(parsed) {
@@ -426,20 +611,33 @@ jobs:
 
             function parseFindings(raw) {
               const trimmed = raw.trim();
-              if (!trimmed) return null;
+              if (!trimmed) {
+                markInfrastructureFailure('parse', 'OCR output was empty or unusable');
+                return null;
+              }
               try {
-                return findingsFromParsed(JSON.parse(trimmed));
+                const parsed = findingsFromParsed(JSON.parse(trimmed));
+                if (!parsed) {
+                  markInfrastructureFailure('parse', 'OCR output did not contain a supported findings array');
+                }
+                return parsed;
               } catch (parseErr) {
                 const start = trimmed.indexOf('[');
                 const end = trimmed.lastIndexOf(']');
                 if (start < 0 || end <= start) {
-                  core.warning(`OCR result was not valid JSON and no JSON array could be extracted: ${parseErr.message || parseErr}`);
+                  markInfrastructureFailure('parse', `OCR output could not be parsed: ${parseErr.message || parseErr}`);
+                  core.warning(redactSecretDiagnostics(`OCR result was not valid JSON and no JSON array could be extracted: ${parseErr.message || parseErr}`));
                   return null;
                 }
                 try {
-                  return findingsFromParsed(JSON.parse(trimmed.slice(start, end + 1)));
+                  const parsed = findingsFromParsed(JSON.parse(trimmed.slice(start, end + 1)));
+                  if (!parsed) {
+                    markInfrastructureFailure('parse', 'OCR output did not contain a supported findings array');
+                  }
+                  return parsed;
                 } catch (innerErr) {
-                  core.warning(`OCR result was not valid JSON and extracted array substring could not be parsed: ${innerErr.message || innerErr}`);
+                  markInfrastructureFailure('parse', `OCR output could not be parsed: ${innerErr.message || innerErr}`);
+                  core.warning(redactSecretDiagnostics(`OCR result was not valid JSON and extracted array substring could not be parsed: ${innerErr.message || innerErr}`));
                   return null;
                 }
               }
@@ -453,7 +651,8 @@ jobs:
             }
 
             function renderFindingText(value) {
-              const text = escapeMarkdownHtml(String(typeof value === 'string' && value ? value : 'OCR finding')
+              const sanitized = redactSecretDiagnostics(typeof value === 'string' && value ? value : 'OCR finding');
+              const text = escapeMarkdownHtml(sanitized
                 .replace(/<!--[\s\S]*?-->/g, '')
                 .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
                 .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1'))
@@ -463,10 +662,10 @@ jobs:
             }
 
             function unrenderFindingText(value) {
-              return String(value || 'OCR finding')
+              return redactSecretDiagnostics(String(value || 'OCR finding')
                 .replace(/<!--[\s\S]*?-->/g, '')
                 .replace(/^> ?/gm, '')
-                .trim();
+                .trim());
             }
 
             function inlineCommentKey(comment) {
@@ -489,17 +688,25 @@ jobs:
                   body: comment.body,
                 })));
             }
-            try {
-              const raw = fs.readFileSync('ocr-result.json', 'utf8');
-              const parsed = parseFindings(raw);
-              if (parsed) {
-                findings = parsed;
-              } else {
+            if (policyFailure) {
+              ran = false;
+              core.warning('Skipping OCR output parsing because OCR policy failure was recorded.');
+            } else if (exitCode === 0) {
+              try {
+                const raw = fs.readFileSync('ocr-result.json', 'utf8');
+                const parsed = parseFindings(raw);
+                if (parsed) {
+                  findings = parsed;
+                } else {
+                  ran = false;
+                }
+              } catch (parseErr) {
+                markInfrastructureFailure('parse', `OCR output could not be parsed: ${parseErr.message || parseErr}`);
+                core.warning(redactSecretDiagnostics(`Failed to parse OCR JSON output: ${parseErr.message || parseErr}`));
                 ran = false;
               }
-            } catch (parseErr) {
-              core.warning(`Failed to parse OCR JSON output: ${parseErr.message || parseErr}`);
-              ran = false;
+            } else {
+              core.warning(`Skipping OCR output parsing because phase ${phase} already recorded exit code ${exitCode}.`);
             }
 
             // Split findings into inline (resolvable file/line) vs. lineless.
@@ -538,7 +745,7 @@ jobs:
               try {
                 existingInlineKeys = await existingInlineCommentKeys();
               } catch (listErr) {
-                core.warning(`Could not list existing OCR inline comments before posting: ${listErr.message || listErr}`);
+                core.warning(redactSecretDiagnostics(`Could not list existing OCR inline comments before posting: ${listErr.message || listErr}`));
               }
               const inlineToPost = inline.filter((c) => !existingInlineKeys.has(inlineCommentKey(c)));
               if (inlineToPost.length === 0) {
@@ -551,12 +758,12 @@ jobs:
                 });
                 postedInline = inlineToPost.length;
               } catch (batchErr) {
-                core.warning(`Batch review post failed (${inlineToPost.length} comments), falling back to individual posting: ${batchErr.message || batchErr}`);
+                core.warning(redactSecretDiagnostics(`Batch review post failed (${inlineToPost.length} comments), falling back to individual posting: ${batchErr.message || batchErr}`));
                 // Fallback: post each inline comment individually, with a cap to avoid secondary rate limits.
                 try {
                   existingInlineKeys = await existingInlineCommentKeys();
                 } catch (listErr) {
-                  core.warning(`Could not list existing OCR inline comments before fallback posting: ${listErr.message || listErr}`);
+                  core.warning(redactSecretDiagnostics(`Could not list existing OCR inline comments before fallback posting: ${listErr.message || listErr}`));
                 }
                 const MAX_INLINE_FALLBACK = 50;
                 for (const [index, c] of inlineToPost.entries()) {
@@ -593,7 +800,7 @@ jobs:
                     postedInline += 1;
                     await new Promise((resolve) => setTimeout(resolve, 1000));
                   } catch (commentErr) {
-                    core.warning(`Failed to post inline comment on ${c.path}:${c.line}: ${commentErr.message || commentErr}`);
+                    core.warning(redactSecretDiagnostics(`Failed to post inline comment on ${c.path}:${c.line}: ${commentErr.message || commentErr}`));
                     const lineRange = c.start_line && c.start_line !== c.line
                       ? `${c.start_line}-${c.line}`
                       : String(c.line);
@@ -612,15 +819,18 @@ jobs:
 
             // Build the sticky summary, including lineless findings.
             const artifactLine =
-              'Artifacts: download the `ocr-review-output` artifact from this workflow run for the raw JSON and stderr.';
+              'Artifacts: `ocr-review-output` contains raw JSON, stdout, stderr, preview, phase, and exit-code diagnostics.';
             let statusLine;
             if (!ran) {
-              statusLine = '⚠️ OCR failed to run or parse output.';
+              statusLine = policyFailure
+                ? `OCR policy failure: ${policyFailure}`
+                : 'OCR failed to run or parse output.';
             } else if (findings.length === 0) {
-              statusLine = '✅ No findings.';
+              statusLine = 'No findings.';
             } else {
-              statusLine = `🔎 ${findings.length} finding(s) (${postedInline} posted inline).`;
+              statusLine = `${findings.length} finding(s) (${postedInline} posted inline).`;
             }
+            const infrastructureFailure = readTrimmed(INFRA_FAILURE_FILE, '');
             let body = [
               MARKER,
               `## OpenCodeReview — PR #${number}`,
@@ -628,9 +838,30 @@ jobs:
               `- Reviewed head SHA: \`${headSha}\``,
               `- Merge base: \`${process.env.BASE_SHA}\``,
               `- OCR version: \`${ocrVersion}\``,
+              `- Phase: \`${diagnosticPhase}\``,
+              `- Exit code: \`${exitCode}\``,
+              `- Run: ${runUrl}`,
               `- ${statusLine}`,
               `- ${artifactLine}`,
             ];
+            if (!ran || infrastructureFailure) {
+              body.push(
+                '',
+                ...stderrSection('OCR stderr excerpt', 'ocr-stderr.log'),
+                '',
+                ...stderrSection('OCR preview stderr excerpt', 'ocr-preview-stderr.log'),
+              );
+            }
+            if (infrastructureFailure) {
+              const sanitizedInfrastructureFailure = redactSecretDiagnostics(infrastructureFailure);
+              const infrastructureDiagnosticLine = `- Infrastructure diagnostic: \`${sanitizedInfrastructureFailure.replace(/`/g, "\\`")}\``;
+              const artifactLineIndex = body.indexOf(`- ${artifactLine}`);
+              if (artifactLineIndex >= 0) {
+                body.splice(artifactLineIndex + 1, 0, infrastructureDiagnosticLine);
+              } else {
+                body.push(infrastructureDiagnosticLine);
+              }
+            }
             if (lineless.length > 0) {
               body.push('', '### Findings without a resolvable position', '');
               for (const f of lineless) {
@@ -644,37 +875,411 @@ jobs:
             const summary = body.join('\n');
 
             // Sticky summary: update in place if the marker exists, else create.
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner, repo, issue_number: number, per_page: 100,
-            });
-            const markerComments = comments.filter((c) =>
-              c.body && c.body.includes(MARKER));
-            const existing = markerComments[0];
-            for (const duplicate of markerComments.slice(1)) {
-              try {
-                await github.rest.issues.deleteComment({
-                  owner, repo, comment_id: duplicate.id,
-                });
-                await new Promise((resolve) => setTimeout(resolve, 1000));
-              } catch (duplicateError) {
-                core.warning(`Failed to delete duplicate OCR marker comment ${duplicate.id}: ${duplicateError.message || duplicateError}`);
+            try {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner, repo, issue_number: number, per_page: 100,
+              });
+              const markerComments = comments.filter((c) =>
+                c.body && c.body.includes(MARKER));
+              const existing = markerComments[0];
+              for (const duplicate of markerComments.slice(1)) {
+                try {
+                  await github.rest.issues.deleteComment({
+                    owner, repo, comment_id: duplicate.id,
+                  });
+                  await new Promise((resolve) => setTimeout(resolve, 1000));
+                } catch (duplicateError) {
+                  core.warning(redactSecretDiagnostics(`Failed to delete duplicate OCR marker comment ${duplicate.id}: ${duplicateError.message || duplicateError}`));
+                }
               }
-            }
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner, repo, comment_id: existing.id, body: summary,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner, repo, issue_number: number, body: summary,
-              });
-            }
-            if (!ran) {
-              core.setFailed(`OpenCodeReview failed or produced unparsable output (exit code ${exitCode}).`);
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner, repo, comment_id: existing.id, body: summary,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: number, body: summary,
+                });
+              }
+            } catch (summaryError) {
+              core.warning(redactSecretDiagnostics(`Failed to post OCR sticky summary; continuing without failing the workflow: ${summaryError.message || summaryError}`));
             }
 
+            if (!ran) {
+              if (policyFailure) {
+                core.setFailed(`OCR policy failure: ${policyFailure}`);
+              } else {
+                core.warning(`OpenCodeReview failed or produced unparsable output (exit code ${exitCode}).`);
+              }
+            }
+
+      - name: Resolve OCR failure classification
+        shell: bash
+        id: ocr-classification
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -s ocr-policy-failure.txt ]; then
+            echo "policy_failure=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "policy_failure=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -s ocr-infrastructure-failure.txt ]; then
+            echo "infrastructure_failure=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "infrastructure_failure=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Redact OCR diagnostic artifacts
+        shell: bash
+        if: always()
+        env:
+          OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+          OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const REDACTION = '[REDACTED]';
+          const escapeRegExp = (value) => String(value).replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
+          const redact = (value) => {
+            let sanitized = String(value ?? '');
+            for (const secret of [process.env.OCR_LLM_TOKEN, process.env.OCR_LLM_URL]) {
+              if (typeof secret === 'string' && secret.length > 0) {
+                sanitized = sanitized.replace(new RegExp(escapeRegExp(secret), 'g'), REDACTION);
+              }
+            }
+            return sanitized
+              .replace(/\b(Authorization\s*:\s*(?:(?:Bearer|Basic|token|ApiKey)\s+)?)([^\s,;]+)/gi, `$1${REDACTION}`)
+              .replace(/\b(x-api-key\s*:\s*)([^\s,;]+)/gi, `$1${REDACTION}`)
+              .replace(/\b(api[_-]?key\s*[=:]\s*)([^\s,;&]+)/gi, `$1${REDACTION}`)
+              .replace(/([?&](?:key|api[_-]?key|token)=)([^\s,;&]+)/gi, `$1${REDACTION}`)
+              .replace(/\b(access[_-]?token\s*[=:]\s*)([^\s,;&]+)/gi, `$1${REDACTION}`)
+              .replace(/\b(refresh[_-]?token\s*[=:]\s*)([^\s,;&]+)/gi, `$1${REDACTION}`)
+              .replace(/\b(id[_-]?token\s*[=:]\s*)([^\s,;&]+)/gi, `$1${REDACTION}`)
+              .replace(/\b(token\s*[=:]\s*)([A-Za-z0-9_./+=:@-]{16,})/gi, `$1${REDACTION}`)
+              .replace(/\b(secret\s*[=:]\s*)([A-Za-z0-9_./+=:@-]{16,})/gi, `$1${REDACTION}`);
+          };
+          const diagnosticArtifacts = [
+            'ocr-result.json',
+            'ocr-stdout.raw',
+            'ocr-stderr.log',
+            'ocr-version.txt',
+            'ocr-preview.txt',
+            'ocr-preview-stderr.log',
+            'ocr-exit-code.txt',
+            'ocr-phase.txt',
+            'ocr-infrastructure-failure.txt',
+            'ocr-policy-failure.txt',
+          ];
+          const replaceWithRedactionFailure = (fileName, error) => {
+            const code = error && error.code ? error.code : 'unknown';
+            const diagnostic = `redaction failed for ${fileName}: ${code}\n`;
+            try {
+              fs.writeFileSync(fileName, diagnostic);
+            } catch (_) {
+              try {
+                fs.rmSync(fileName, { force: true });
+              } catch (_) {
+                process.exitCode = 1;
+              }
+            }
+          };
+          for (const fileName of diagnosticArtifacts) {
+            try {
+              fs.writeFileSync(fileName, redact(fs.readFileSync(fileName, 'utf8')));
+            } catch (error) {
+              if (error && error.code !== 'ENOENT') {
+                replaceWithRedactionFailure(fileName, error);
+              }
+            }
+          }
+          NODE
+      - name: Ensure OCR artifact placeholders exist
+        shell: bash
+        if: always()
+        run: |
+          set -euo pipefail
+          missing=""
+          for file_name in \
+            ocr-result.json \
+            ocr-stdout.raw \
+            ocr-stderr.log \
+            ocr-version.txt \
+            ocr-preview.txt \
+            ocr-preview-stderr.log \
+            ocr-exit-code.txt \
+            ocr-phase.txt \
+            ocr-infrastructure-failure.txt \
+            ocr-policy-failure.txt; do
+            if [ ! -e "$file_name" ]; then
+              : > "$file_name"
+              missing="${missing}${file_name}"$'\n'
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::warning::OCR artifact placeholders were missing before upload:"
+            echo "$missing"
+            if [ ! -s ocr-exit-code.txt ]; then
+              echo "127" > ocr-exit-code.txt
+            fi
+            if [ ! -s ocr-phase.txt ]; then
+              echo "artifact" > ocr-phase.txt
+            fi
+            if [ ! -s ocr-infrastructure-failure.txt ]; then
+              echo "phase=artifact; reason=OCR artifact placeholders were missing before upload" > ocr-infrastructure-failure.txt
+            fi
+          fi
+          for critical_artifact in ocr-exit-code.txt ocr-phase.txt; do
+            if [ ! -s "$critical_artifact" ]; then
+              echo "::warning::Critical OCR artifact $critical_artifact is empty before upload."
+            fi
+          done
+
+      - name: Upload OCR artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+        with:
+          name: ocr-review-output
+          path: |
+            ocr-result.json
+            ocr-stdout.raw
+            ocr-stderr.log
+            ocr-version.txt
+            ocr-preview.txt
+            ocr-preview-stderr.log
+            ocr-exit-code.txt
+            ocr-phase.txt
+            ocr-infrastructure-failure.txt
+            ocr-policy-failure.txt
+          if-no-files-found: warn
+
       - name: Clean up scoped safe.directory
+        shell: bash
         if: always()
         run: |
           set +e
           git config --file "${HOME}/.gitconfig" --unset-all safe.directory "$GITHUB_WORKSPACE" 2>/dev/null || true
+
+  notify-ocr-infrastructure-failure:
+    name: Notify OCR infrastructure failure
+    runs-on: ubuntu-latest
+    needs: code-review
+    # Skipped/cancelled superseded OCR runs should not create infrastructure issues;
+    # successful runs check artifacts because OCR runtime failures are non-blocking,
+    # and failed runs may still have artifacts from an unexpected later failure.
+    if: ${{ !cancelled() && (needs.code-review.result == 'success' || needs.code-review.result == 'failure') }}
+    timeout-minutes: 5
+    concurrency:
+      group: ocr-review-infrastructure-issue
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      issues: write
+    steps:
+      - name: Download OCR artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # ratchet:actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: ocr-review-output
+          path: ocr-review-output
+
+      - name: Notify OCR infrastructure failure issue
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CODE_REVIEW_RESULT: ${{ needs.code-review.result }}
+          CODE_REVIEW_POLICY_FAILURE: ${{ needs.code-review.outputs.policy_failure }}
+          CODE_REVIEW_INFRASTRUCTURE_FAILURE: ${{ needs.code-review.outputs.infrastructure_failure }}
+          OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+          OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
+        run: |
+          set -uo pipefail
+          sanitize_diagnostics() {
+            local diagnostic
+            local exact_secret
+            local exact_url
+            diagnostic="$1"
+            exact_secret="${OCR_LLM_TOKEN:-}"
+            exact_url="${OCR_LLM_URL:-}"
+            OCR_EXACT_SECRET="$exact_secret" OCR_EXACT_URL="$exact_url" perl -0pe '
+              BEGIN {
+                $redaction = "[REDACTED]";
+                $secret = $ENV{"OCR_EXACT_SECRET"} // "";
+                $url = $ENV{"OCR_EXACT_URL"} // "";
+              }
+              if (length($secret) > 0) {
+                my $quoted_secret = quotemeta($secret);
+                s/$quoted_secret/$redaction/g;
+              }
+              if (length($url) > 0) {
+                my $quoted_url = quotemeta($url);
+                s/$quoted_url/$redaction/g;
+              }
+              s/\b(Authorization\s*:\s*(?:(?:Bearer|Basic|token|ApiKey)\s+)?)([^\s,;]+)/$1$redaction/gi;
+              s/\b(x-api-key\s*:\s*)([^\s,;]+)/$1$redaction/gi;
+              s/\b(api[_-]?key\s*[=:]\s*)([^\s,;&]+)/$1$redaction/gi;
+              s/([?&](?:key|api[_-]?key|token)=)([^\s,;&]+)/$1$redaction/gi;
+              s/\b(access[_-]?token\s*[=:]\s*)([^\s,;&]+)/$1$redaction/gi;
+              s/\b(refresh[_-]?token\s*[=:]\s*)([^\s,;&]+)/$1$redaction/gi;
+              s/\b(id[_-]?token\s*[=:]\s*)([^\s,;&]+)/$1$redaction/gi;
+              s/\b(token\s*[=:]\s*)([A-Za-z0-9_.\/+=:\@-]{16,})/$1$redaction/gi;
+              s/\b(secret\s*[=:]\s*)([A-Za-z0-9_.\/+=:\@-]{16,})/$1$redaction/gi;
+            ' <<< "$diagnostic" || return 1
+          }
+          notify_ocr_infrastructure_failure() {
+            if ! command -v gh >/dev/null 2>&1; then
+              echo "::warning::GitHub CLI is unavailable; skipping OCR infrastructure issue notification."
+              printf '%s\n' '### OCR infrastructure notification skipped' '' 'GitHub CLI was unavailable; see workflow warnings and artifacts for diagnostics.' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+              return 0
+            fi
+            if ! gh auth status >/dev/null 2>&1; then
+              echo "::warning::GitHub CLI is not authenticated; skipping OCR infrastructure issue notification."
+              printf '%s\n' '### OCR infrastructure notification skipped' '' 'GitHub CLI was not authenticated; see workflow warnings and artifacts for diagnostics.' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+              return 0
+            fi
+            exit_code="unknown"
+            phase="unknown"
+            infra_failure=""
+            policy_failure=""
+            if [ -d ocr-review-output ]; then
+              cd ocr-review-output || return 1
+              missing_diagnostics=""
+              for diagnostic_file in ocr-exit-code.txt ocr-phase.txt ocr-infrastructure-failure.txt ocr-policy-failure.txt; do
+                if [ ! -f "$diagnostic_file" ]; then
+                  missing_diagnostics="${missing_diagnostics}${diagnostic_file} "
+                fi
+              done
+              if [ -f ocr-exit-code.txt ] && [ -s ocr-exit-code.txt ]; then
+                raw_exit_code="$(cat ocr-exit-code.txt)"
+                case "$raw_exit_code" in
+                  ''|*[!0-9]*) exit_code="unknown" ;;
+                  *) exit_code="$raw_exit_code" ;;
+                esac
+              fi
+              if [ -f ocr-phase.txt ] && [ -s ocr-phase.txt ]; then
+                phase="$(cat ocr-phase.txt)"
+              fi
+              if [ -f ocr-infrastructure-failure.txt ]; then
+                infra_failure="$(cat ocr-infrastructure-failure.txt)"
+              fi
+              if [ -f ocr-policy-failure.txt ]; then
+                policy_failure="$(cat ocr-policy-failure.txt)"
+              fi
+              if [ -z "$policy_failure" ] && [ "${CODE_REVIEW_POLICY_FAILURE:-}" = "true" ]; then
+                policy_failure="policy failure recorded by code-review job output"
+              fi
+              if [ -z "$infra_failure" ] && [ -n "$missing_diagnostics" ] && [ "${CODE_REVIEW_RESULT:-}" = "failure" ]; then
+                phase="artifact"
+                infra_failure="phase=artifact; reason=OCR diagnostic artifact was incomplete: ${missing_diagnostics}"
+              fi
+              if [ -z "$infra_failure" ] && [ "$exit_code" = "0" ] && [ ! -s ocr-result.json ]; then
+                phase="artifact"
+                infra_failure="phase=artifact; reason=OCR result artifact was missing after a zero-exit review"
+              fi
+            elif [ "${CODE_REVIEW_RESULT:-}" = "failure" ] || [ "${CODE_REVIEW_INFRASTRUCTURE_FAILURE:-}" = "true" ]; then
+              if [ "${CODE_REVIEW_POLICY_FAILURE:-}" = "true" ]; then
+                echo "::notice::OCR policy failure output was set; skipping missing-artifact infrastructure notification."
+                return 0
+              fi
+              phase="artifact"
+              infra_failure="phase=artifact; reason=OCR artifacts were unavailable after code-review completed with failure or infrastructure diagnostics"
+              echo "::warning::OCR artifacts were unavailable after code-review completed with failure or infrastructure diagnostics; creating infrastructure notification."
+            else
+              echo "::warning::OCR artifacts were unavailable; cannot determine whether an infrastructure failure occurred."
+              printf '%s\n' '### OCR artifact diagnostics unavailable' '' 'The OCR artifact download failed, and the code-review job did not report a policy or infrastructure failure output. See workflow logs for details.' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+              return 0
+            fi
+            if [ -n "$policy_failure" ]; then
+              echo "::notice::OCR policy failure detected; skipping infrastructure issue notification."
+              return 0
+            fi
+            if [ -z "$infra_failure" ]; then
+              return 0
+            fi
+            if ! command -v perl >/dev/null 2>&1; then
+              echo "::warning::Perl is unavailable; skipping OCR infrastructure issue notification."
+              printf '%s\n' '### OCR infrastructure notification skipped' '' 'Perl was unavailable, so the final issue-notification sanitizer could not run. See the redacted OCR artifacts and workflow warnings for diagnostics.' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+              return 0
+            fi
+            # Keep ISSUE_TITLE as a simple repository-owned literal; it is used inside gh search strings below.
+            ISSUE_TITLE="OCR review infrastructure failure"
+            if ! sanitized_infra_failure="$(sanitize_diagnostics "$infra_failure")"; then
+              echo "::warning::Failed to sanitize OCR infrastructure diagnostic; skipping notification."
+              return 1
+            fi
+            retry_gh() {
+              local attempt
+              for attempt in 1 2 3 4; do
+                if "$@"; then
+                  return 0
+                fi
+                if [ "$attempt" -lt 4 ]; then
+                  sleep $(( attempt * 5 ))
+                fi
+              done
+              echo "All retries exhausted for: $*" >&2
+              return 1
+            }
+            create_infrastructure_issue() {
+              local issue_body_file
+              issue_body_file="$1"
+              shift
+              if retry_gh gh issue create "$@" --body-file "$issue_body_file" --label "ci/cd"; then
+                return 0
+              fi
+              echo "::warning::Failed to create OCR infrastructure issue with ci/cd label; retrying without labels."
+              if retry_gh gh issue create "$@" --body-file "$issue_body_file"; then
+                return 0
+              fi
+              echo "::warning::Failed to create OCR infrastructure issue."
+              return 1
+            }
+            if ! EXISTING_ISSUE="$(
+              retry_gh gh issue list \
+                --search "\"${ISSUE_TITLE}\" in:title is:issue state:open sort:created-desc" \
+                --limit 30 \
+                --json number,title \
+                --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty"
+            )"; then
+              echo "::warning::Failed to search for existing OCR infrastructure issue."
+              return 0
+            fi
+            diagnostic_block="$(printf '%s\n' "$sanitized_infra_failure" | sed 's/^/    /')"
+            body="$(printf 'OCR review infrastructure failure on %s. Phase: %s. Exit code: %s. Artifact: ocr-review-output. Infrastructure diagnostic:\n\n%s\n\nRun: %s. Raw stderr remains available only in the workflow artifact.' "$(TZ=UTC date +'%Y-%m-%d')" "$phase" "$exit_code" "$diagnostic_block" "$RUN_URL")"
+            if ! body_file="$(mktemp)"; then
+              echo "::warning::Failed to create OCR infrastructure issue body file."
+              return 1
+            fi
+            trap 'rm -f "$body_file"' EXIT
+            if ! printf '%s\n' "$body" > "$body_file"; then
+              echo "::warning::Failed to write OCR infrastructure issue body file."
+              rm -f "$body_file"
+              return 1
+            fi
+            if [ -n "$EXISTING_ISSUE" ]; then
+              retry_gh gh issue comment "${EXISTING_ISSUE}" --body-file "$body_file" || echo "::warning::Failed to comment on OCR infrastructure issue."
+              return 0
+            fi
+            if ! EXISTING_ISSUE="$(
+              retry_gh gh issue list \
+                --search "\"${ISSUE_TITLE}\" in:title is:issue state:open sort:created-desc" \
+                --limit 30 \
+                --json number,title \
+                --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty"
+            )"; then
+              echo "::warning::Failed to recheck for existing OCR infrastructure issue before create."
+              return 0
+            fi
+            if [ -n "$EXISTING_ISSUE" ]; then
+              retry_gh gh issue comment "${EXISTING_ISSUE}" --body-file "$body_file" || echo "::warning::Failed to comment on OCR infrastructure issue after recheck."
+              return 0
+            fi
+            create_infrastructure_issue "$body_file" \
+              --title "${ISSUE_TITLE}"
+            return 0
+          }
+          notify_ocr_infrastructure_failure || echo "::warning::OCR infrastructure issue notification failed; continuing."
+          exit 0
