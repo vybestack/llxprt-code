@@ -21,18 +21,6 @@ interface GitCommitInfo {
 let infoCache: string | null = null;
 let infoLoaded = false;
 
-function isDebugEnabled(): boolean {
-  try {
-    const flag = process.env.DEBUG;
-    if (flag === '1' || flag === 'true') {
-      return true;
-    }
-    return typeof flag === 'string' && flag.includes('llxprt:git-commit');
-  } catch {
-    return false;
-  }
-}
-
 function candidatePaths(): string[] {
   const override = process.env.LLXPRT_GIT_COMMIT_INFO_PATH;
   if (override && override.trim() !== '') {
@@ -64,7 +52,6 @@ function loadGitCommitInfo(): string {
     return infoCache ?? NOT_AVAILABLE;
   }
 
-  const debug = isDebugEnabled();
   const candidates = candidatePaths();
   for (const candidate of candidates) {
     try {
@@ -76,14 +63,14 @@ function loadGitCommitInfo(): string {
         return infoCache;
       }
     } catch (error) {
-      if (debug) {
-        logger.debug(
-          () =>
-            `[GIT_COMMIT] Failed to read ${candidate}: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-        );
-      }
+      // DebugLogger gates emission on the DEBUG namespace itself (wildcards
+      // included); the lazy message builder runs only when it is enabled.
+      logger.debug(
+        () =>
+          `[GIT_COMMIT] Failed to read ${candidate}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
       // Fall through to the next candidate.
     }
   }
