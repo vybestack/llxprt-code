@@ -9,12 +9,11 @@
 
 import { promises as fsPromises } from 'fs';
 import * as path from 'path';
-import { parse } from '@ast-grep/napi';
 import type { IToolHost } from '../../interfaces/index.js';
 import type { ASTEditToolParams } from './types.js';
 import { ToolErrorType } from '../../types/tool-error.js';
 import { isNodeError } from '../../utils/errors.js';
-import { LANGUAGE_MAP } from '../../utils/ast-grep-utils.js';
+import { parse, LANGUAGE_MAP } from '../../utils/ast-grep-utils.js';
 import { applyReplacement } from './edit-helpers.js';
 
 /**
