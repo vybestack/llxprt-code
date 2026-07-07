@@ -19,7 +19,11 @@
  * lives under __tests__/helpers/ which is excluded from the P09 boundary scan.
  */
 
-import { type Content, type Part, type PartListUnion } from '@google/genai';
+import {
+  type Content,
+  type Part,
+  type PartListUnion,
+} from '../../../core/sdkTypeBridge.js';
 import { FakeProvider } from '@vybestack/llxprt-code-providers';
 import {
   PerformCompressionResult,

@@ -33,7 +33,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { PartListUnion } from '@google/genai';
+import type { ContractPartListUnion as PartListUnion } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
   AgentEventType,
   type ToolCallRequestInfo,

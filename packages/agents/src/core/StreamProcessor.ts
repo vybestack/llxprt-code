@@ -3,7 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { GenerateContentResponse } from '@google/genai';
+import type { GenerateContentResponse } from './sdkTypeBridge.js';
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import {
   type Content,
@@ -11,7 +11,7 @@ import {
   type Part,
   type FinishReason,
   type GenerateContentConfig,
-} from '@google/genai';
+} from './sdkTypeBridge.js';
 import {
   isRetryableError,
   retryWithBackoff,
@@ -395,7 +395,7 @@ export class StreamProcessor {
 
   private _prepareRequestPayload(
     requestContents: IContent[],
-    tools: GenerateContentConfig['tools'],
+    tools: ToolGroupArray | undefined,
     params: SendMessageParameters,
   ): {
     requestPayload: { contents: IContent[]; tools: unknown };
@@ -511,13 +511,16 @@ export class StreamProcessor {
   }
   private _selectRequestTools(
     params: SendMessageParameters,
-  ): GenerateContentConfig['tools'] {
-    return selectRequestTools(params, this.generationConfig.tools);
+  ): ToolGroupArray | undefined {
+    return selectRequestTools(
+      params,
+      this.generationConfig.tools as ToolGroupArray | undefined,
+    );
   }
 
   private async _applyToolSelectionHook(
     configForHooks: AgentRuntimeContext['providerRuntime']['config'],
-    tools: GenerateContentConfig['tools'],
+    tools: ToolGroupArray | undefined,
   ): Promise<ToolSelectionHookResult> {
     if (configForHooks === undefined) {
       return { tools, allowedFunctionNames: undefined };
@@ -541,9 +544,7 @@ export class StreamProcessor {
     }
 
     await hookSystem.initialize();
-    const toolsFromConfig = Array.isArray(tools)
-      ? (tools as ToolGroupArray)
-      : [];
+    const toolsFromConfig = Array.isArray(tools) ? tools : [];
 
     const toolSelectionResult =
       await hookSystem.fireBeforeToolSelectionEvent(toolsFromConfig);

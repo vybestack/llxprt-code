@@ -347,7 +347,9 @@ function buildNonInteractiveActivationIntent(
   const bootstrapArgs = readBootstrapArgs(params.config);
   return {
     provider:
-      params.config.getProvider() ?? bootstrapArgs?.providerOverride ?? undefined,
+      params.config.getProvider() ??
+      bootstrapArgs?.providerOverride ??
+      undefined,
     defaultProvider: 'gemini',
     authMode: useExternalAuth ? 'none' : 'auto',
     ...(bootstrapArgs?.modelOverride !== null &&
@@ -427,7 +429,6 @@ async function resolveAndStream(
     }
   }
 }
-
 
 export async function runNonInteractive(
   params: RunNonInteractiveParams,

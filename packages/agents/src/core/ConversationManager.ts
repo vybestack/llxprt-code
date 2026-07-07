@@ -12,7 +12,7 @@
  * metadata injection, and model output consolidation.
  */
 
-import type { Content } from '@google/genai';
+import { toBridgeContentArray, type Content } from './sdkTypeBridge.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
@@ -420,7 +420,7 @@ export class ConversationManager {
 
     // Deep copy the history to avoid mutating the history outside of the
     // chat session.
-    return structuredClone(contents);
+    return structuredClone(toBridgeContentArray(contents));
   }
 
   /**

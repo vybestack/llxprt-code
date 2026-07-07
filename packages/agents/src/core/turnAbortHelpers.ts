@@ -16,7 +16,7 @@
  * for errors that escape the stream loop in TurnProcessor._runStreamAttempt.
  */
 
-import type { SendMessageParameters } from '@google/genai';
+import type { SendMessageParameters } from './sdkTypeBridge.js';
 import {
   InvalidStreamError,
   EmptyStreamError,

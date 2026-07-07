@@ -10,12 +10,12 @@
  * into the neutral ModelStreamChunk that the StreamEvent.CHUNK type now
  * carries. The agents internal pipeline remains Google-shaped until #2349;
  * this wrap lives at the TurnProcessor yield boundary so core's StreamEvent
- * type has zero @google/genai imports.
+ * type has zero provider SDK imports.
  *
  * @issue #2348
  */
 
-import type { GenerateContentResponse } from '@google/genai';
+import type { GenerateContentResponse } from './sdkTypeBridge.js';
 import type {
   ModelStreamChunk,
   HookRestrictions,

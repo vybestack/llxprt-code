@@ -25,8 +25,8 @@ import {
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
-import type { Part } from '@google/genai';
-import { Type } from '@google/genai';
+import type { Part } from './sdkTypeBridge.js';
+import { Type } from './sdkTypeBridge.js';
 const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi

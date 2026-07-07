@@ -11,7 +11,7 @@ import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/scheduler
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import type { Part } from '@google/genai';
+import type { Part } from '../../sdkTypeBridge.js';
 import {
   type ApprovalHandler,
   createScriptedAgentClient,

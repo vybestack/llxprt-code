@@ -25,7 +25,7 @@ import type {
   ThinkingBlock,
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Part, Content } from '@google/genai';
+import type { Part, Content } from './sdkTypeBridge.js';
 
 /**
  * Type for thought parts (matches chatSession.ts ThoughtPart)

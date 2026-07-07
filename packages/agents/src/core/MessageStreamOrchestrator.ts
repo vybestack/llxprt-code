@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type PartListUnion, type Part, type Content } from '@google/genai';
+import {
+  type PartListUnion,
+  type Part,
+  type Content,
+} from './sdkTypeBridge.js';
 import {
   Turn,
   type ServerAgentStreamEvent,

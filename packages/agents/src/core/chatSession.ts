@@ -13,7 +13,7 @@ import type {
   SendMessageParameters,
   Tool,
   PartListUnion,
-} from '@google/genai';
+} from './sdkTypeBridge.js';
 import type { CompletedToolCall } from './coreToolScheduler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';

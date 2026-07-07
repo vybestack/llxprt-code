@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { GenerateContentConfig, Content } from '@google/genai';
+import type { GenerateContentConfig, Content } from './sdkTypeBridge.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import {
   getEnabledToolNamesForPrompt,

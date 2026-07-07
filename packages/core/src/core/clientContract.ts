@@ -70,21 +70,16 @@ export interface ContractPart {
   thoughtSignature?: string;
 }
 
-export type ContractPartListUnion =
-  | ContractPart
-  | string
-  | Array<ContractPart | string>;
-
 export interface ContractContent {
   role?: string;
   parts?: ContractPart[];
 }
 
-export type ContractContentUnion =
-  | ContractContent
-  | ContractPart
-  | string
-  | Array<ContractPart | string>;
+export type ContractPartUnion = ContractPart | string;
+
+export type ContractPartListUnion = ContractPartUnion | ContractPartUnion[];
+
+export type ContractContentUnion = ContractContent | ContractPartListUnion;
 
 export interface ContractGenerateContentConfig {
   temperature?: number;
@@ -95,6 +90,24 @@ export interface ContractGenerateContentConfig {
   abortSignal?: AbortSignal;
   tools?: unknown;
   toolConfig?: unknown;
+  responseMimeType?: string;
+  responseJsonSchema?: unknown;
+  thinkingConfig?: unknown;
+}
+
+export interface ContractUsageMetadata {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  totalTokenCount?: number;
+  cachedContentTokenCount?: number;
+  thoughtsTokenCount?: number;
+  toolUsePromptTokenCount?: number;
+  /**
+   * Provider-usage detail arrays kept for parity with SDK usage payloads while
+   * converters migrate; no in-repo consumer relies on their internals yet.
+   */
+  promptTokensDetails?: unknown[];
+  candidatesTokensDetails?: unknown[];
 }
 
 export interface ContractGenerateContentResponse {
@@ -109,14 +122,9 @@ export interface ContractGenerateContentResponse {
     index?: number;
     safetyRatings?: unknown[];
   }>;
-  usageMetadata?: {
-    promptTokenCount?: number;
-    candidatesTokenCount?: number;
-    totalTokenCount?: number;
-    cachedContentTokenCount?: number;
-    thoughtsTokenCount?: number;
-    toolUsePromptTokenCount?: number;
-  };
+  usageMetadata?: ContractUsageMetadata;
+  responseId?: string;
+  automaticFunctionCallingHistory?: ContractContent[];
 }
 
 export interface ContractSendMessageParameters {

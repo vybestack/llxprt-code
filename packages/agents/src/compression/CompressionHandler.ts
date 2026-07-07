@@ -6,7 +6,7 @@
 
 import path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import type { GenerateContentConfig } from '@google/genai';
+import type { GenerateContentConfig } from '../core/sdkTypeBridge.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';

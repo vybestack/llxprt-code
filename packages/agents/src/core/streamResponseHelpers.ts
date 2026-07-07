@@ -13,8 +13,12 @@
  * in isolation.
  */
 
-import type { Content, GenerateContentResponse, Part } from '@google/genai';
-import { FinishReason } from '@google/genai';
+import type {
+  Content,
+  GenerateContentResponse,
+  Part,
+} from './sdkTypeBridge.js';
+import { FinishReason } from './sdkTypeBridge.js';
 import type {
   IContent,
   UsageStats,

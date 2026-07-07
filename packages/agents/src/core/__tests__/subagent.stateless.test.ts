@@ -46,7 +46,7 @@ import type {
 } from '../subagentTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ContentGenerator } from '../contentGenerator.js';
-import type { Part } from '@google/genai';
+import type { Part } from '../sdkTypeBridge.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 

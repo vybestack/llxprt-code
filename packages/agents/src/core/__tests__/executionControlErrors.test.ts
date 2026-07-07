@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { GenerateContentResponse } from '@google/genai';
+import type { GenerateContentResponse } from '../sdkTypeBridge.js';
 import {
   AgentExecutionStoppedError,
   AgentExecutionBlockedError,

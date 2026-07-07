@@ -16,8 +16,8 @@ import type {
   Content,
   GenerateContentResponse,
   SendMessageParameters,
-} from '@google/genai';
-import { FinishReason, type GenerateContentConfig } from '@google/genai';
+} from './sdkTypeBridge.js';
+import { FinishReason } from './sdkTypeBridge.js';
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -38,7 +38,7 @@ export type ToolGroupArray = Array<{
 }>;
 
 export interface ToolSelectionHookResult {
-  tools: GenerateContentConfig['tools'];
+  tools: ToolGroupArray | undefined;
   allowedFunctionNames: string[] | undefined;
 }
 
@@ -90,9 +90,19 @@ export function buildRequestContentsResult(
  */
 export function selectRequestTools(
   params: SendMessageParameters,
-  fallbackTools: GenerateContentConfig['tools'],
-): GenerateContentConfig['tools'] {
-  return params.config?.tools ?? fallbackTools;
+  fallbackTools: ToolGroupArray | undefined,
+): ToolGroupArray | undefined {
+  const tools = params.config?.tools;
+  if (tools === undefined) {
+    return fallbackTools;
+  }
+  if (!Array.isArray(tools)) {
+    return fallbackTools;
+  }
+  // Tools remain provider-serialized at this layer; the transitional contract
+  // types them as unknown, so preserve prior behavior by accepting array-shaped
+  // values and leaving element validation to the provider serialization path.
+  return tools as ToolGroupArray;
 }
 
 /**
@@ -116,7 +126,7 @@ export function buildRuntimeContext(
 
 interface PrepareRequestPayloadParams {
   requestContents: IContent[];
-  tools: GenerateContentConfig['tools'];
+  tools: ToolGroupArray | undefined;
   logger: DebugLogger;
   providerRuntimeBuilder: (
     source: string,

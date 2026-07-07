@@ -41,7 +41,7 @@ import type {
   AgentClientContract,
 } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { Content, Part, PartListUnion } from '@google/genai';
+import type { Content, Part, PartListUnion } from '../../sdkTypeBridge.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 /**

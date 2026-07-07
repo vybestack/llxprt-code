@@ -13,7 +13,7 @@ import type {
   Content,
   GenerateContentConfig,
   GenerateContentResponseUsageMetadata,
-} from '@google/genai';
+} from './sdkTypeBridge.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 
@@ -44,7 +44,7 @@ export function extractDirectGeminiOverrides(config?: GenerateContentConfig):
   if (Object.prototype.hasOwnProperty.call(rawConfig, 'serverTools')) {
     overrides.serverTools = rawConfig.serverTools;
   }
-  if (config.toolConfig) {
+  if (Object.prototype.hasOwnProperty.call(rawConfig, 'toolConfig')) {
     overrides.toolConfig = config.toolConfig;
   }
 

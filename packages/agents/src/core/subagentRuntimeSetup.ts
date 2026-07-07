@@ -27,7 +27,7 @@ import {
   type FunctionDeclaration,
   type GenerateContentConfig,
   Type,
-} from '@google/genai';
+} from './sdkTypeBridge.js';
 import { ChatSession } from './chatSession.js';
 import type {
   AgentRuntimeContext,

@@ -15,10 +15,13 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { PartListUnion, Part } from '@google/genai';
+import type {
+  AgentClientContract,
+  ContractPart as Part,
+  ContractPartListUnion as PartListUnion,
+} from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type {
   ToolSchedulerFactory,
   ToolSchedulerFactoryOptions,

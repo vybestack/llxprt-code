@@ -16,11 +16,11 @@
  * project line budget while preserving exact behavior.
  */
 
-import { Type } from '@google/genai';
-import type { Content, Part, FunctionCall } from '@google/genai';
+import { Type } from '../core/sdkTypeBridge.js';
+import type { Content, Part, FunctionCall } from '../core/sdkTypeBridge.js';
 import { type z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import type { Schema, FunctionDeclaration } from '@google/genai';
+import type { Schema, FunctionDeclaration } from '../core/sdkTypeBridge.js';
 import { executeToolCall } from '../core/nonInteractiveToolExecutor.js';
 import { convertBlocksToParts } from '../core/MessageConverter.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';

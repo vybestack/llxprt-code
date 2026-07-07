@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Turn } from './turn.js';
 import type { ChatSession } from './chatSession.js';
-import type { FunctionCall } from '@google/genai';
+import type { FunctionCall } from './sdkTypeBridge.js';
 import { AgentEventType } from './turn.js';
 
 describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => {

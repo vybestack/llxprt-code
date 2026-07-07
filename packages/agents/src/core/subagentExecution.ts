@@ -21,7 +21,7 @@ import {
   type SchedulerCallbacks,
   type SchedulerOptions,
 } from '@vybestack/llxprt-code-core/config/config.js';
-import type { Content, FunctionCall } from '@google/genai';
+import type { Content, FunctionCall } from './sdkTypeBridge.js';
 import type { EmojiFilter } from '@vybestack/llxprt-code-core/filters/EmojiFilter.js';
 import type { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
 import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';

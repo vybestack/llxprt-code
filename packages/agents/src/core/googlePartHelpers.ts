@@ -11,21 +11,20 @@
  * llm-types layer.
  *
  * @issue #2348 — moved from core/src/core/chatSessionTypes.ts so core has zero
- * @google/genai imports.
+ * provider SDK imports.
  */
 
 import type {
   Part,
   FunctionCall,
   GenerateContentResponseUsageMetadata,
-} from '@google/genai';
+} from './sdkTypeBridge.js';
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResponseOutcome } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 
 export type UsageMetadataWithCache = GenerateContentResponseUsageMetadata & {
   cache_read_input_tokens?: number;
   cache_creation_input_tokens?: number;
-  toolUsePromptTokenCount?: number;
 };
 
 export type ThoughtPart = Part & {

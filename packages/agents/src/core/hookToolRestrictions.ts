@@ -9,7 +9,7 @@ import type {
   FunctionCall,
   GenerateContentResponse,
   Part,
-} from '@google/genai';
+} from './sdkTypeBridge.js';
 import { getFunctionCallsFromParts } from './googlePartHelpers.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 

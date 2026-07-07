@@ -9,14 +9,14 @@
  * Handles format conversion, speaker semantics, finish-reason mapping, and validation.
  */
 
-import type { GenerateContentResponse } from '@google/genai';
+import type { GenerateContentResponse } from './sdkTypeBridge.js';
 import {
   type Content,
   type Part,
   createUserContent,
   type PartListUnion,
   FinishReason,
-} from '@google/genai';
+} from './sdkTypeBridge.js';
 import type {
   IContent,
   ContentBlock,

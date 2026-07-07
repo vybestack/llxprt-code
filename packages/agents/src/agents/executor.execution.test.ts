@@ -11,7 +11,7 @@ import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils
 import { LSTool } from '@vybestack/llxprt-code-tools';
 import { ReadFileTool } from '@vybestack/llxprt-code-tools';
 import { ChatSession } from '../core/chatSession.js';
-import { type FunctionCall } from '@google/genai';
+import { type FunctionCall } from '../core/sdkTypeBridge.js';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import {

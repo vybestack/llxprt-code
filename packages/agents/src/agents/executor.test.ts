@@ -10,7 +10,7 @@ import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils
 import { LSTool } from '@vybestack/llxprt-code-tools';
 import { ReadFileTool } from '@vybestack/llxprt-code-tools';
 import { ChatSession, StreamEventType } from '../core/chatSession.js';
-import { type FunctionCall } from '@google/genai';
+import { type FunctionCall } from '../core/sdkTypeBridge.js';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import {
   setupExecutorFixture,

@@ -4,14 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { GenerateContentResponse } from '@google/genai';
+import type { GenerateContentResponse } from './sdkTypeBridge.js';
 import {
   type Content,
   type GenerateContentConfig,
   type SendMessageParameters,
   type PartListUnion,
-  ApiError,
-} from '@google/genai';
+  isProviderApiError,
+  toBridgeContentArray,
+} from './sdkTypeBridge.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -175,7 +176,9 @@ export class DirectMessageProcessor {
     }
 
     const userIContents = this._convertUserInput(params.message);
-    const requestContents = ContentConverters.toGeminiContents(userIContents);
+    const requestContents = toBridgeContentArray(
+      ContentConverters.toGeminiContents(userIContents),
+    );
 
     logApiRequest(
       this.runtimeContext,
@@ -261,11 +264,13 @@ export class DirectMessageProcessor {
         this._executeDirectProviderCall(provider, params, userIContents),
       {
         shouldRetryOnError: (error: unknown) => {
-          if (error instanceof ApiError && error.message) {
-            if (error.status === 400) return false;
+          if (isProviderApiError(error) && error.message) {
+            const status = error.status;
+            if (status === 400) return false;
             if (isSchemaDepthError(error.message)) return false;
-            if (error.status === 429) return true;
-            if (error.status >= 500 && error.status < 600) return true;
+            if (status === 429) return true;
+            if (status !== undefined && status >= 500 && status < 600)
+              return true;
           }
           return false;
         },
@@ -509,8 +514,18 @@ export class DirectMessageProcessor {
 
   private _selectRequestTools(
     params: SendMessageParameters,
-  ): GenerateContentConfig['tools'] {
-    return params.config?.tools ?? this.generationConfig.tools;
+  ): ToolGroupArray | undefined {
+    const requestTools = params.config?.tools;
+    if (requestTools !== undefined) {
+      return Array.isArray(requestTools)
+        ? (requestTools as ToolGroupArray)
+        : undefined;
+    }
+
+    const configuredTools = this.generationConfig.tools;
+    return Array.isArray(configuredTools)
+      ? (configuredTools as ToolGroupArray)
+      : undefined;
   }
 
   /**
@@ -527,9 +542,7 @@ export class DirectMessageProcessor {
     allowedFunctionNames: string[] | undefined;
   }> {
     const requestTools = this._selectRequestTools(params);
-    const toolsFromConfig = Array.isArray(requestTools)
-      ? (requestTools as ToolGroupArray)
-      : [];
+    const toolsFromConfig = Array.isArray(requestTools) ? requestTools : [];
 
     const configForHooks = this.runtimeContext.providerRuntime.config;
     let contentsForApi: IContent[] = userIContents;

@@ -21,7 +21,7 @@ import type {
   ThinkingBlock,
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Part, GenerateContentResponse } from '@google/genai';
+import type { Part, GenerateContentResponse } from './sdkTypeBridge.js';
 
 function extractParts(response: GenerateContentResponse): Part[] {
   const content = response.candidates?.[0]?.content;

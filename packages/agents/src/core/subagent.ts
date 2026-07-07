@@ -14,7 +14,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type ToolCallRequestInfo, AgentEventType, Turn } from './turn.js';
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
-import { type Content, type Part } from '@google/genai';
+import { type Content, type Part } from './sdkTypeBridge.js';
 
 import { type ChatSession } from './chatSession.js';
 import { isHookRestrictedToolCall } from './hookToolRestrictions.js';

@@ -20,7 +20,7 @@ import {
   executeToolCall,
   type ToolExecutionConfig,
 } from './nonInteractiveToolExecutor.js';
-import { type Part, type FunctionCall, type Content } from '@google/genai';
+import { type Part, type FunctionCall, type Content } from './sdkTypeBridge.js';
 import type {
   AgentRuntimeContext,
   ToolRegistryView,

@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { FinishReason } from '@google/genai';
+import { FinishReason } from './sdkTypeBridge.js';
 import { ChatSession } from './chatSession.js';
 import { getProviderStopReason } from './providerStopReason.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';

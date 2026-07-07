@@ -8,7 +8,7 @@
  * @fileoverview Defines the core configuration interfaces and types for the agent architecture.
  */
 
-import type { Content, FunctionDeclaration } from '@google/genai';
+import type { Content, FunctionDeclaration } from '../core/sdkTypeBridge.js';
 import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import { type z } from 'zod';
 

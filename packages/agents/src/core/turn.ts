@@ -10,7 +10,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { PartListUnion, FunctionCall } from '@google/genai';
+import type { PartListUnion, FunctionCall } from './sdkTypeBridge.js';
 import type {
   ModelStreamChunk,
   CanonicalFinishReason,

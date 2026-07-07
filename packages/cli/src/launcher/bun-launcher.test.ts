@@ -848,6 +848,7 @@ describe('runBunLauncherIfNeeded', () => {
   it('stops the credential proxy before exiting with the child close code', async () => {
     const exitCalls: number[] = [];
     const stopCalls: string[] = [];
+    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
     let capturedChild: EventEmitter | null = null;
     const spawnFn = vi.fn(() => {
       capturedChild = new EventEmitter();

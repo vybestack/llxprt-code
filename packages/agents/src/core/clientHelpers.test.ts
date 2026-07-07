@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { Content } from '@google/genai';
+import type { Content } from './sdkTypeBridge.js';
 import {
   isThinkingSupported,
   findCompressSplitPoint,

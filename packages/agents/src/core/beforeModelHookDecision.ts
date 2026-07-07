@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { FinishReason, GenerateContentResponse } from '@google/genai';
+import type { FinishReason, GenerateContentResponse } from './sdkTypeBridge.js';
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import {
   AgentExecutionStoppedError,

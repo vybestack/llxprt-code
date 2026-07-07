@@ -12,13 +12,14 @@
  * all imports. Each test file that exercises AgentClient must declare its
  * own vi.mock() calls and vi.hoisted() mock-fn references at the top of
  * the file. The setup function below receives those mock fns as arguments
- * so it can wire them into the shared Config/GoogleGenAI mock.
+ * so it can wire them into the shared Config / provider-mock surface.
  */
 
 import { vi } from 'vitest';
-import type { Chat, GenerateContentResponse } from '@google/genai';
-import { GoogleGenAI } from '@google/genai';
-import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import type {
+  ContentGenerator,
+  ContentGeneratorConfig,
+} from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentClient } from './client.js';
@@ -52,7 +53,6 @@ export interface ClientTestContext {
 }
 
 export interface ClientMockFns {
-  mockChatCreateFn: ReturnType<typeof vi.fn>;
   mockGenerateContentFn: ReturnType<typeof vi.fn>;
   mockEmbedContentFn: ReturnType<typeof vi.fn>;
 }
@@ -94,33 +94,19 @@ function resetAndApplyServiceMocks(): void {
   setSimulate429(false);
 }
 
-/** Wire the GoogleGenAI constructor mock to the provided mock fns. */
-function setupGoogleGenAIMock(mockFns: ClientMockFns): void {
-  const { mockChatCreateFn, mockGenerateContentFn, mockEmbedContentFn } =
-    mockFns;
+/** Wire the content-generator mock fns. The AgentClient obtains its provider
+ * surface via createContentGenerator (core), not a provider SDK constructor;
+ * these mock fns are assigned directly onto client['contentGenerator'] /
+ * client['chat'] by individual tests as needed. */
+function setupProviderMocks(mockFns: ClientMockFns): void {
+  const { mockGenerateContentFn } = mockFns;
 
-  const MockedGoogleGenAI = vi.mocked(GoogleGenAI);
-  MockedGoogleGenAI.mockImplementation((..._args: unknown[]): GoogleGenAI => {
-    const mockInstance = {
-      chats: { create: mockChatCreateFn },
-      models: {
-        generateContent: mockGenerateContentFn,
-        embedContent: mockEmbedContentFn,
-      },
-    };
-    return mockInstance as unknown as GoogleGenAI;
-  });
-
-  mockChatCreateFn.mockResolvedValue({} as Chat);
   mockGenerateContentFn.mockResolvedValue({
-    candidates: [
-      {
-        content: {
-          parts: [{ text: '{"key": "value"}' }],
-        },
-      },
-    ],
-  } as unknown as GenerateContentResponse);
+    content: {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: '{"key": "value"}' }],
+    },
+  });
 }
 
 /** Build and register the mock Config implementation. */
@@ -185,9 +171,10 @@ function setupConfigMock(): ContentGeneratorConfig {
   return contentGeneratorConfig;
 }
 
-/** Instantiate the AgentClient and wire its chat mock. */
+/** Instantiate the AgentClient and wire its chat/content-generator mocks. */
 async function createAndInitClient(
   contentGeneratorConfig: ContentGeneratorConfig,
+  mockFns: ClientMockFns,
 ): Promise<AgentClient> {
   const mockConfig = new Config({
     sessionId: 'test-session-id',
@@ -218,6 +205,28 @@ async function createAndInitClient(
   };
   client['chat'] = mockChat as unknown as ChatSession;
 
+  // Wire a mock content generator so tests that exercise BaseLLMClient paths
+  // (generateEmbedding, generateJson, generateContent) hit the provided mock
+  // fns instead of the real provider SDK. The embedContent adapter mirrors
+  // the core GoogleGenAIWrapper transform so tests can use the Google-shaped
+  // mock data ({ embeddings: [{ values: number[] }] }).
+  client['contentGenerator'] = {
+    embedContent: async (request: { texts: string[] }) => {
+      const raw = (await mockFns.mockEmbedContentFn(request)) as {
+        embeddings?: Array<{ values?: number[] }>;
+      };
+      // Missing embeddings intentionally becomes an empty result so
+      // BaseLLMClient exercises its no-embeddings error path.
+      const embeddings = Array.isArray(raw.embeddings)
+        ? raw.embeddings.map((emb) => emb.values ?? [])
+        : [];
+      return { embeddings };
+    },
+    generateContent: mockFns.mockGenerateContentFn,
+    countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+    generateContentStream: vi.fn(async () => (async function* () {})()),
+  } as unknown as ContentGenerator;
+
   return client;
 }
 
@@ -229,9 +238,9 @@ export async function setupGeminiClient(
   mockFns: ClientMockFns,
 ): Promise<ClientTestContext> {
   resetAndApplyServiceMocks();
-  setupGoogleGenAIMock(mockFns);
+  setupProviderMocks(mockFns);
   const contentGeneratorConfig = setupConfigMock();
-  const client = await createAndInitClient(contentGeneratorConfig);
+  const client = await createAndInitClient(contentGeneratorConfig, mockFns);
   const mockConfig = client['config'];
   return { client, mockConfig };
 }

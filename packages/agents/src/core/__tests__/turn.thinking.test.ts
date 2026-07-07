@@ -9,7 +9,7 @@
  * @requirement REQ-THINK-003
  */
 import { describe, it, expect } from 'vitest';
-import type { GenerateContentResponse, Part } from '@google/genai';
+import type { GenerateContentResponse, Part } from '../sdkTypeBridge.js';
 
 /**
  * Helper to create a mock GenerateContentResponse with parts

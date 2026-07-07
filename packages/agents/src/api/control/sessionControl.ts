@@ -14,9 +14,9 @@
  *
  * - Checkpoint trio is backed by the core Logger (checkpoint-<tag>.json files
  *   under the project storage temp dir). The client's getHistory() already
- *   returns Gemini Content[], so SAVE persists that Content[] directly to the
- *   Logger (no conversion). Only RESTORE bridges back: ContentConverters
- *   converts the loaded Content[] to IContent[] before the client restore path.
+ *   returns ContractContent[], so SAVE persists that ContractContent[] directly
+ *   to the Logger (no conversion). Only RESTORE bridges back: ContentConverters
+ *   converts the loaded ContractContent[] to IContent[] before the client restore path.
  * - Recording is backed by SessionRecordingService; setRecording(true) starts a
  *   service and seeds it with the current history so a file is materialized,
  *   setRecording(false) flushes + disposes it.
@@ -26,7 +26,6 @@
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import type { Content } from '@google/genai';
 import { join } from 'node:path';
 import {
   Logger,
@@ -180,7 +179,7 @@ export class SessionControl implements AgentSessionControl {
 
   /**
    * Creates a checkpoint of the live conversation history. The live history is
-   * obtained via the client's getHistory() (which returns Gemini Content[]) and
+   * obtained via the client's getHistory() (which returns ContractContent[]) and
    * persisted directly via the core Logger under the tag (defaulting to a
    * timestamped tag when no label is supplied); no conversion is needed on save.
    * The returned SessionCheckpoint reflects the tag, the save timestamp, and the
@@ -191,7 +190,7 @@ export class SessionControl implements AgentSessionControl {
   async createCheckpoint(label?: string): Promise<SessionCheckpoint> {
     const logger = await this.getLogger();
     const tag = label ?? `checkpoint-${Date.now()}`;
-    const history = (await this.deps.resolveClient().getHistory()) as Content[];
+    const history = await this.deps.resolveClient().getHistory();
     await logger.saveCheckpoint(
       history as Parameters<typeof logger.saveCheckpoint>[0],
       tag,
@@ -205,8 +204,8 @@ export class SessionControl implements AgentSessionControl {
   }
 
   /**
-   * Restores a previously created checkpoint by id (tag). The persisted Gemini
-   * Content[] history is converted to IContent[] and fed through the SAME
+   * Restores a previously created checkpoint by id (tag). The persisted
+   * Logger checkpoint history is converted to IContent[] and fed through the SAME
    * client restore path the public restoreHistory uses, so the next turn (and
    * getHistory) observe the restored conversation.
    * @plan:PLAN-20260617-COREAPI.P20
@@ -310,7 +309,7 @@ export class SessionControl implements AgentSessionControl {
       provider: this.deps.getProvider(),
       model: this.deps.getModel(),
     });
-    const history = (await this.deps.resolveClient().getHistory()) as Content[];
+    const history = await this.deps.resolveClient().getHistory();
     const items: IContent[] = ContentConverters.toIContents(history);
     for (const item of items) {
       service.recordContent(item);

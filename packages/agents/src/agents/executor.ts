@@ -11,12 +11,14 @@ import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRunti
 import { type ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createSettingsProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import { createAgentRuntimeStateFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeStateFactory.js';
-import type {
-  Content,
-  FunctionCall,
-  GenerateContentConfig,
-  FunctionDeclaration,
-} from '@google/genai';
+import {
+  toBridgeFunctionDeclaration,
+  toBridgeFunctionDeclarations,
+  type Content,
+  type FunctionCall,
+  type GenerateContentConfig,
+  type FunctionDeclaration,
+} from '../core/sdkTypeBridge.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -30,6 +32,7 @@ import type {
   SubagentActivityEvent,
 } from './types.js';
 import { AgentTerminateMode } from './types.js';
+
 import { validateToolsForNonInteractiveUse } from './executor-validation.js';
 import {
   buildAgentSystemPrompt,
@@ -53,6 +56,13 @@ import {
   buildCompleteTaskDeclaration,
 } from './executor-tool-dispatch.js';
 import { callModelAndConsumeStream } from './executor-stream-processor.js';
+
+type FunctionDeclarationInput = FunctionDeclaration | Record<string, unknown>;
+type ToolRefWithSchema = { schema: FunctionDeclarationInput };
+
+function hasSchema(toolRef: unknown): toolRef is ToolRefWithSchema {
+  return typeof toolRef === 'object' && toolRef !== null && 'schema' in toolRef;
+}
 
 /** Result type for a single agent loop iteration. */
 type AgentLoopIterationResult =
@@ -851,17 +861,19 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       for (const toolRef of toolConfig.tools) {
         if (typeof toolRef === 'string') {
           toolNamesToLoad.push(toolRef);
-        } else if (typeof toolRef === 'object' && 'schema' in toolRef) {
+        } else if (hasSchema(toolRef)) {
           // Tool instance with an explicit schema property.
-          toolsList.push(toolRef.schema);
+          toolsList.push(toBridgeFunctionDeclaration(toolRef.schema));
         } else {
           // Raw `FunctionDeclaration` object.
-          toolsList.push(toolRef);
+          toolsList.push(toBridgeFunctionDeclaration(toolRef));
         }
       }
       // Add schemas from tools that were registered by name.
       toolsList.push(
-        ...this.toolRegistry.getFunctionDeclarationsFiltered(toolNamesToLoad),
+        ...toBridgeFunctionDeclarations(
+          this.toolRegistry.getFunctionDeclarationsFiltered(toolNamesToLoad),
+        ),
       );
     }
 

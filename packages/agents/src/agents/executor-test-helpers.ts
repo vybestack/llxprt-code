@@ -18,7 +18,7 @@ import {
   type FunctionCall,
   type Part,
   type GenerateContentConfig,
-} from '@google/genai';
+} from '../core/sdkTypeBridge.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { responseToModelStreamChunk } from '../core/streamChunkWrapper.js';

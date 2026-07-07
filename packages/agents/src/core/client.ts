@@ -4,14 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { GenerateContentResponse } from '@google/genai';
 import {
   type GenerateContentConfig,
+  type GenerateContentResponse,
   type PartListUnion,
   type Content,
   type Tool,
   type SendMessageParameters,
-} from '@google/genai';
+  toBridgeContentArray,
+  toBridgeFunctionDeclarations,
+} from './sdkTypeBridge.js';
 import {
   getDirectoryContextString,
   getEnvironmentContext,
@@ -418,8 +420,8 @@ export class AgentClient implements AgentClientContract {
     }
 
     if (this._storedHistoryService) {
-      return ContentConverters.toGeminiContents(
-        this._storedHistoryService.getAll(),
+      return toBridgeContentArray(
+        ContentConverters.toGeminiContents(this._storedHistoryService.getAll()),
       );
     }
 
@@ -525,7 +527,11 @@ export class AgentClient implements AgentClientContract {
       );
     }
 
-    const tools: Tool[] = [{ functionDeclarations: toolDeclarations }];
+    const tools: Tool[] = [
+      {
+        functionDeclarations: toBridgeFunctionDeclarations(toolDeclarations),
+      },
+    ];
     if (!this.hasChatInitialized()) {
       this.chat = await this.startChat(this._previousHistory ?? []);
     }

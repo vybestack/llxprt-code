@@ -28,7 +28,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { PartListUnion } from '@google/genai';
+import type { PartListUnion } from './sdkTypeBridge.js';
 import type {
   ServerAgentStreamEvent,
   ToolCallResponseInfo,

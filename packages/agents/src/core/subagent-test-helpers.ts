@@ -21,7 +21,7 @@ import type {
   FunctionCall,
   GenerateContentResponse,
   Part,
-} from '@google/genai';
+} from './sdkTypeBridge.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { StreamEventType } from './chatSession.js';

@@ -14,7 +14,7 @@ import {
   type StreamEvent,
 } from '../core/chatSession.js';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
-import type { Part } from '@google/genai';
+import type { Part } from '../core/sdkTypeBridge.js';
 import {
   setupExecutorFixture,
   createTestDefinition,

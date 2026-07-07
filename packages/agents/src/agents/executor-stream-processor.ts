@@ -10,7 +10,7 @@ import type {
   Part,
   FunctionCall,
   FunctionDeclaration,
-} from '@google/genai';
+} from '../core/sdkTypeBridge.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   filterHookRestrictedFunctionCalls,

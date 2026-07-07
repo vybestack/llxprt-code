@@ -10,7 +10,10 @@
  * Engine-owned multi-turn agentic loop types.
  */
 
-import type { PartListUnion } from '@google/genai';
+import type {
+  AgentClientContract,
+  ContractPartListUnion as PartListUnion,
+} from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ServerAgentStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
 import type {
   ToolCall,
@@ -24,7 +27,6 @@ import {
   type ToolConfirmationPayload,
 } from '@vybestack/llxprt-code-tools';
 import type { ToolConfirmationRequest } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import type {

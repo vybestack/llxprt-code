@@ -17,7 +17,7 @@
  * lives under __tests__/helpers/ which is excluded from the P09 boundary scan.
  */
 
-import { type Part } from '@google/genai';
+import { type Part } from '../../../core/sdkTypeBridge.js';
 import type { CanonicalFinishReason } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {

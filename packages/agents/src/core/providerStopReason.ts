@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Candidate } from '@google/genai';
+import type { Candidate } from './sdkTypeBridge.js';
 
 /**
  * Repo-owned carrier for the raw provider stop reason (e.g. Anthropic

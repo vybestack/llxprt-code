@@ -13,10 +13,10 @@
  * → 'user' role, to maintain well-formed Gemini turn history).
  */
 
-import type { Part } from '@google/genai';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { Part } from '../sdkTypeBridge.js';
 import { convertBlocksToParts } from '../MessageConverter.js';
 
 function isFunctionCallPart(part: Part): boolean {

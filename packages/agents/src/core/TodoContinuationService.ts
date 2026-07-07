@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type PartListUnion, type Part } from '@google/genai';
+import { type PartListUnion, type Part } from './sdkTypeBridge.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { AgentEventType } from './turn.js';
 import type { ServerAgentStreamEvent, ToolCallResponseInfo } from './turn.js';

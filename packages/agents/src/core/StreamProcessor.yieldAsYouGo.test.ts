@@ -9,8 +9,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StreamProcessor } from './StreamProcessor.js';
 import { attachHookRestrictedAllowedTools } from './hookToolRestrictions.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { GenerateContentResponse } from '@google/genai';
-import type { Content, Part } from '@google/genai';
+import type {
+  Content,
+  GenerateContentResponse,
+  Part,
+} from './sdkTypeBridge.js';
 
 // Minimal mock of dependencies needed by StreamProcessor
 function createMockRuntimeContext() {

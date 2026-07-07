@@ -23,7 +23,7 @@ import {
   type FunctionCall,
   type FunctionDeclaration,
   type Content,
-} from '@google/genai';
+} from './sdkTypeBridge.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import {
   nextStreamEventWithIdleTimeout,

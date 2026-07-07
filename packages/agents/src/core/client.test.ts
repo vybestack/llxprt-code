@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { Content } from '@google/genai';
+import type { Content } from './sdkTypeBridge.js';
 import { findCompressSplitPoint, isThinkingSupported } from './client.js';
 
 describe('isThinkingSupported', () => {

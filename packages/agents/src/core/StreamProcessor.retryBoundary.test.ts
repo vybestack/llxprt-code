@@ -15,8 +15,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StreamProcessor } from './StreamProcessor.js';
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateContentResponse } from '@google/genai';
-import type { Content, SendMessageParameters } from '@google/genai';
+import type {
+  Content,
+  GenerateContentResponse,
+  SendMessageParameters,
+} from './sdkTypeBridge.js';
 
 // Import retry utility types
 import type * as retryModule from '@vybestack/llxprt-code-core/utils/retry.js';

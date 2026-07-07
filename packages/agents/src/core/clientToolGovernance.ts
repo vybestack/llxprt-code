@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { FunctionDeclaration } from '@google/genai';
+import {
+  toBridgeFunctionDeclarations,
+  type FunctionDeclaration,
+} from './sdkTypeBridge.js';
 import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -78,9 +81,9 @@ export function buildToolDeclarationsFromView(
   const declarations: FunctionDeclaration[] = [];
   if (typeof toolRegistry.getFunctionDeclarations === 'function') {
     const declarationsByName = new Map(
-      toolRegistry
-        .getFunctionDeclarations()
-        .map((decl) => [decl.name, decl] as const),
+      toBridgeFunctionDeclarations(toolRegistry.getFunctionDeclarations()).map(
+        (decl) => [decl.name, decl] as const,
+      ),
     );
     for (const name of allowedNames) {
       const declaration = declarationsByName.get(name);

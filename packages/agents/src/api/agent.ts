@@ -4,7 +4,10 @@
  * @plan:PLAN-20260621-COREAPIREMED.P06
  */
 
-import type { Content, Part } from '@google/genai';
+import type {
+  ContractContent as Content,
+  ContractPart as Part,
+} from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {

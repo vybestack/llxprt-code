@@ -10,7 +10,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { Part, PartListUnion } from '@google/genai';
+import type {
+  GenerateContentResponse,
+  Part,
+  PartListUnion,
+} from './sdkTypeBridge.js';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
@@ -45,17 +49,13 @@ vi.mock('./clientToolGovernance.js', () => ({
 }));
 
 // --- Mocks (hoisted so vi.mock factories can reference them) ---
-const {
-  mockChatCreateFn,
-  mockGenerateContentFn,
-  mockEmbedContentFn,
-  mockTurnRunFn,
-} = vi.hoisted(() => ({
-  mockChatCreateFn: vi.fn(),
-  mockGenerateContentFn: vi.fn(),
-  mockEmbedContentFn: vi.fn(),
-  mockTurnRunFn: vi.fn(),
-}));
+const { mockGenerateContentFn, mockEmbedContentFn, mockTurnRunFn } = vi.hoisted(
+  () => ({
+    mockGenerateContentFn: vi.fn(),
+    mockEmbedContentFn: vi.fn(),
+    mockTurnRunFn: vi.fn(),
+  }),
+);
 
 const {
   todoStoreReadMock,
@@ -79,7 +79,6 @@ const {
   };
 });
 
-vi.mock('@google/genai');
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -180,7 +179,6 @@ describe('Gemini Client (client.ts)', () => {
 
   beforeEach(async () => {
     const ctx = await setupGeminiClient({
-      mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,
     });

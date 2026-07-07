@@ -13,7 +13,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { FinishReason } from '@google/genai';
+import { FinishReason } from './sdkTypeBridge.js';
 
 let convertIContentToResponse: typeof import('./MessageConverter.js').convertIContentToResponse;
 
@@ -100,7 +100,7 @@ describe('issue #1844 – MessageConverter finishReason/stopReason mapping', () 
     };
 
     const response = convertIContentToResponse(input);
-    expect(response.candidates?.[0]?.finishReason).toBe('SAFETY');
+    expect(response.candidates?.[0]?.finishReason).toBe(FinishReason.SAFETY);
   });
 
   it('should prefer stopReason over finishReason when both are present', () => {

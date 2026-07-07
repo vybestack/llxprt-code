@@ -4,13 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { GenerateContentResponse } from '@google/genai';
 import {
   type Content,
   type GenerateContentConfig,
+  type GenerateContentResponse,
   type SendMessageParameters,
-  ApiError,
-} from '@google/genai';
+  isProviderApiError,
+  toBridgeContentArray,
+} from './sdkTypeBridge.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import {
@@ -388,12 +389,13 @@ export class TurnProcessor {
           ),
         {
           shouldRetryOnError: (error: unknown) => {
-            if (error instanceof ApiError && error.message) {
-              if (error.status === 400 || isSchemaDepthError(error.message))
+            if (isProviderApiError(error) && error.message) {
+              const status = error.status;
+              if (status === 400 || isSchemaDepthError(error.message))
                 return false;
               if (
-                error.status === 429 ||
-                (error.status >= 500 && error.status < 600)
+                status === 429 ||
+                (status !== undefined && status >= 500 && status < 600)
               )
                 return true;
             }
@@ -454,7 +456,7 @@ export class TurnProcessor {
     logApiRequest(
       this.runtimeContext,
       this.runtimeContext.state,
-      ContentConverters.toGeminiContents(iContents),
+      toBridgeContentArray(ContentConverters.toGeminiContents(iContents)),
       this.runtimeContext.state.model,
       prompt_id,
     );
@@ -625,17 +627,18 @@ export class TurnProcessor {
   }
   private _selectRequestTools(
     params: SendMessageParameters,
-  ): GenerateContentConfig['tools'] {
-    return params.config?.tools ?? this.generationConfig.tools;
+  ): ToolGroupArray | undefined {
+    return (
+      (params.config?.tools as ToolGroupArray | undefined) ??
+      (this.generationConfig.tools as ToolGroupArray | undefined)
+    );
   }
 
   private async _applyToolSelectionHook(
     configForHooks: Config | undefined,
-    tools: GenerateContentConfig['tools'],
+    tools: ToolGroupArray | undefined,
   ): Promise<ToolSelectionHookResult> {
-    const toolsFromConfig = Array.isArray(tools)
-      ? (tools as ToolGroupArray)
-      : [];
+    const toolsFromConfig = Array.isArray(tools) ? tools : [];
     if (
       configForHooks === undefined ||
       typeof configForHooks.getEnableHooks !== 'function' ||

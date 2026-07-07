@@ -18,7 +18,7 @@
  * original termination reason is preserved and the loop ends immediately.
  */
 
-import type { Content, FunctionCall } from '@google/genai';
+import type { Content, FunctionCall } from '../core/sdkTypeBridge.js';
 import { AgentTerminateMode, type SubagentActivityEventType } from './types.js';
 
 /** Tool name used to signal task completion. */

@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { FinishReason } from '@google/genai';
+import { FinishReason } from './sdkTypeBridge.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { convertIContentToResponse } from './MessageConverter.js';
 import { getProviderStopReason } from './providerStopReason.js';

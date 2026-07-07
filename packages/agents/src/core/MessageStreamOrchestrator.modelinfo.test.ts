@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Content, PartListUnion } from '@google/genai';
+import type { Content, PartListUnion } from './sdkTypeBridge.js';
 import type { ServerAgentStreamEvent, ModelInfo } from './turn.js';
 import { AgentEventType } from './turn.js';
 import type { ChatSession } from './chatSession.js';

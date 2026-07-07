@@ -24,7 +24,7 @@ import {
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
-import type { Content, GenerateContentConfig } from '@google/genai';
+import type { Content, GenerateContentConfig } from './sdkTypeBridge.js';
 import {
   createMockConfig,
   createMockStream,

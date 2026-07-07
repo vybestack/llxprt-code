@@ -19,7 +19,7 @@ import * as fc from 'fast-check';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
-import { FinishReason } from '@google/genai';
+import { FinishReason } from '../../core/sdkTypeBridge.js';
 import {
   runAdapterStatic,
   wrapStream,

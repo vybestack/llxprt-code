@@ -19,7 +19,8 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { Content } from '@google/genai';
+import type { ThoughtPart } from './googlePartHelpers.js';
+import type { Content } from './sdkTypeBridge.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -154,7 +155,7 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
             text: 'reasoning about the answer',
             thoughtSignature: 'sig-A',
             llxprtSourceField: 'thinking',
-          },
+          } satisfies ThoughtPart,
           { text: 'The answer is 42.' },
         ],
       },

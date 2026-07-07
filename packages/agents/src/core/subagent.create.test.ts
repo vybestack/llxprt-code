@@ -24,8 +24,11 @@ import {
   createContentGenerator,
   type ContentGenerator,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type { Content, GenerateContentConfig } from '@google/genai';
-import { Type } from '@google/genai';
+import {
+  Type,
+  type Content,
+  type GenerateContentConfig,
+} from './sdkTypeBridge.js';
 const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi

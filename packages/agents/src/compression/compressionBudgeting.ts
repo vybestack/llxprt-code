@@ -6,7 +6,7 @@
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { GenerateContentConfig } from '@google/genai';
+import type { GenerateContentConfig } from '../core/sdkTypeBridge.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { estimateTokens as estimateTextTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
