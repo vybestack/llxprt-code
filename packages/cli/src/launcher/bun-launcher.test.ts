@@ -6,50 +6,20 @@
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { access } from 'node:fs/promises';
 import { FatalError } from '@vybestack/llxprt-code-core';
 import {
   relaunchUnderBunIfNeeded,
   runBunLauncherIfNeeded,
 } from './bun-launcher.js';
 
-const providerAuthMocks = vi.hoisted(() => ({
-  createAndStartProxy: vi.fn(),
-  getProxySocketPath: vi.fn(),
-}));
-
-vi.mock('@vybestack/llxprt-code-providers/auth.js', () => providerAuthMocks);
-
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await access(targetPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 describe('relaunchUnderBunIfNeeded', () => {
   let originalArgv: string[];
   let originalEnv: NodeJS.ProcessEnv;
-  let createdSocketDir: string | undefined;
 
   beforeEach(() => {
     originalArgv = process.argv;
     originalEnv = process.env;
-    createdSocketDir = undefined;
     process.env = { ...process.env };
-    providerAuthMocks.createAndStartProxy.mockImplementation(
-      async ({ socketPath }: { socketPath: string }) => {
-        createdSocketDir = socketPath;
-        return { stop: vi.fn(async () => {}) };
-      },
-    );
-    providerAuthMocks.getProxySocketPath.mockImplementation(() =>
-      createdSocketDir === undefined
-        ? undefined
-        : `${createdSocketDir}/proxy.sock`,
-    );
   });
 
   afterEach(() => {
@@ -308,241 +278,10 @@ describe('relaunchUnderBunIfNeeded', () => {
     expect(spawnEnv.CUSTOM_LAUNCHER_VAR).toBe('hello');
   });
 
-  it('starts a credential proxy before spawning Bun and stops it after close', async () => {
+  it('does not set a credential socket when none is present in the parent env', async () => {
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
     process.argv = ['/node', '/script.js'];
     let capturedChild: EventEmitter | null = null;
-    const stopProxy = vi.fn(async () => {});
-    const createCredentialProxy = vi.fn(async () => ({
-      socketPath: '/tmp/lxcp-test.sock',
-      stop: stopProxy,
-    }));
-    const spawnFn = vi.fn(
-      (_cmd: string, _args: string[], _options: { env: NodeJS.ProcessEnv }) => {
-        capturedChild = new EventEmitter();
-        return capturedChild;
-      },
-    );
-
-    const promise = relaunchUnderBunIfNeeded({
-      isRunningUnderBun: () => false,
-      envGuardSet: () => false,
-      resolveBun: vi.fn(async () => '/path/to/bun'),
-      resolveEntry: vi.fn(async () => '/entry.ts'),
-      spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
-      createCredentialProxy,
-    });
-
-    await vi.waitFor(() => expect(capturedChild).not.toBeNull());
-    expect(createCredentialProxy).toHaveBeenCalledTimes(1);
-    const spawnEnv = spawnFn.mock.calls[0][2].env as Record<string, string>;
-    expect(spawnEnv.LLXPRT_CREDENTIAL_SOCKET).toBe('/tmp/lxcp-test.sock');
-
-    capturedChild!.emit('close', 0);
-    await promise;
-
-    expect(stopProxy).toHaveBeenCalledTimes(1);
-  });
-
-  it('passes through an existing credential socket without starting a proxy', async () => {
-    process.env.LLXPRT_CREDENTIAL_SOCKET = '/already-running.sock';
-    let capturedChild: EventEmitter | null = null;
-    const createCredentialProxy = vi.fn(async () => ({
-      socketPath: '/tmp/unused.sock',
-      stop: vi.fn(async () => {}),
-    }));
-    const spawnFn = vi.fn(
-      (_cmd: string, _args: string[], _options: { env: NodeJS.ProcessEnv }) => {
-        capturedChild = new EventEmitter();
-        return capturedChild;
-      },
-    );
-
-    const promise = relaunchUnderBunIfNeeded({
-      isRunningUnderBun: () => false,
-      envGuardSet: () => false,
-      resolveBun: vi.fn(async () => '/path/to/bun'),
-      resolveEntry: vi.fn(async () => '/entry.ts'),
-      spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
-      createCredentialProxy,
-    });
-
-    await vi.waitFor(() => expect(capturedChild).not.toBeNull());
-    capturedChild!.emit('close', 0);
-    await promise;
-
-    const spawnEnv = spawnFn.mock.calls[0][2].env as Record<string, string>;
-    expect(spawnEnv.LLXPRT_CREDENTIAL_SOCKET).toBe('/already-running.sock');
-    expect(createCredentialProxy).not.toHaveBeenCalled();
-  });
-
-  it('treats an empty credential socket as missing and starts a proxy', async () => {
-    process.env.LLXPRT_CREDENTIAL_SOCKET = '';
-    let capturedChild: EventEmitter | null = null;
-    const stopProxy = vi.fn(async () => {});
-    const createCredentialProxy = vi.fn(async () => ({
-      socketPath: '/tmp/new.sock',
-      stop: stopProxy,
-    }));
-    const spawnFn = vi.fn(
-      (_cmd: string, _args: string[], _options: { env: NodeJS.ProcessEnv }) => {
-        capturedChild = new EventEmitter();
-        return capturedChild;
-      },
-    );
-
-    const promise = relaunchUnderBunIfNeeded({
-      isRunningUnderBun: () => false,
-      envGuardSet: () => false,
-      resolveBun: vi.fn(async () => '/path/to/bun'),
-      resolveEntry: vi.fn(async () => '/entry.ts'),
-      spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
-      createCredentialProxy,
-    });
-
-    await vi.waitFor(() => expect(capturedChild).not.toBeNull());
-    capturedChild!.emit('close', 0);
-    await promise;
-
-    const spawnEnv = spawnFn.mock.calls[0][2].env as Record<string, string>;
-    expect(spawnEnv.LLXPRT_CREDENTIAL_SOCKET).toBe('/tmp/new.sock');
-    expect(createCredentialProxy).toHaveBeenCalledTimes(1);
-    expect(stopProxy).toHaveBeenCalledTimes(1);
-  });
-
-  it('restores process credential socket mutations from the default proxy lifecycle', async () => {
-    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    process.argv = ['/node', '/script.js'];
-    let capturedChild: EventEmitter | null = null;
-    const stopProxy = vi.fn(async () => {
-      delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    });
-    providerAuthMocks.createAndStartProxy.mockImplementation(
-      async ({ socketPath }: { socketPath: string }) => {
-        createdSocketDir = socketPath;
-        process.env.LLXPRT_CREDENTIAL_SOCKET = `${socketPath}/proxy.sock`;
-        return { stop: stopProxy };
-      },
-    );
-    const spawnFn = vi.fn(
-      (_cmd: string, _args: string[], _options: { env: NodeJS.ProcessEnv }) => {
-        capturedChild = new EventEmitter();
-        return capturedChild;
-      },
-    );
-
-    const promise = relaunchUnderBunIfNeeded({
-      isRunningUnderBun: () => false,
-      envGuardSet: () => false,
-      resolveBun: vi.fn(async () => '/path/to/bun'),
-      resolveEntry: vi.fn(async () => '/entry.ts'),
-      spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
-    });
-
-    await vi.waitFor(() => expect(capturedChild).not.toBeNull());
-    const spawnEnv = spawnFn.mock.calls[0][2].env as Record<string, string>;
-    expect(createdSocketDir).not.toBeUndefined();
-    expect(spawnEnv.LLXPRT_CREDENTIAL_SOCKET).toBe(
-      `${createdSocketDir}/proxy.sock`,
-    );
-    expect(process.env.LLXPRT_CREDENTIAL_SOCKET).toBeUndefined();
-
-    capturedChild!.emit('close', 0);
-    await promise;
-
-    expect(stopProxy).toHaveBeenCalledTimes(1);
-    expect(process.env.LLXPRT_CREDENTIAL_SOCKET).toBeUndefined();
-    expect(createdSocketDir).not.toBeUndefined();
-    expect(await pathExists(createdSocketDir!)).toBe(false);
-  });
-
-  it('cleans up the temp dir when default credential proxy startup fails', async () => {
-    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    providerAuthMocks.createAndStartProxy.mockImplementation(
-      async ({ socketPath }: { socketPath: string }) => {
-        createdSocketDir = socketPath;
-        throw new Error('listen EINVAL');
-      },
-    );
-
-    await expect(
-      relaunchUnderBunIfNeeded({
-        isRunningUnderBun: () => false,
-        envGuardSet: () => false,
-        resolveBun: vi.fn(async () => '/path/to/bun'),
-        resolveEntry: vi.fn(async () => '/entry.ts'),
-        spawn: vi.fn(),
-      }),
-    ).rejects.toThrow(/credential proxy/);
-
-    expect(createdSocketDir).not.toBeUndefined();
-    expect(await pathExists(createdSocketDir!)).toBe(false);
-    expect(process.env.LLXPRT_CREDENTIAL_SOCKET).toBeUndefined();
-  });
-
-  it('stops and cleans up when default credential proxy starts without a socket path', async () => {
-    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    const stopProxy = vi.fn(async () => {
-      delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    });
-    providerAuthMocks.createAndStartProxy.mockImplementation(
-      async ({ socketPath }: { socketPath: string }) => {
-        createdSocketDir = socketPath;
-        process.env.LLXPRT_CREDENTIAL_SOCKET = `${socketPath}/proxy.sock`;
-        return { stop: stopProxy };
-      },
-    );
-    providerAuthMocks.getProxySocketPath.mockReturnValue(undefined);
-
-    await expect(
-      relaunchUnderBunIfNeeded({
-        isRunningUnderBun: () => false,
-        envGuardSet: () => false,
-        resolveBun: vi.fn(async () => '/path/to/bun'),
-        resolveEntry: vi.fn(async () => '/entry.ts'),
-        spawn: vi.fn(),
-      }),
-    ).rejects.toThrow(/socket path/);
-
-    expect(stopProxy).toHaveBeenCalledTimes(1);
-    expect(createdSocketDir).not.toBeUndefined();
-    expect(await pathExists(createdSocketDir!)).toBe(false);
-    expect(process.env.LLXPRT_CREDENTIAL_SOCKET).toBeUndefined();
-  });
-
-  it('stops the credential proxy when spawn throws synchronously', async () => {
-    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    const stopProxy = vi.fn(async () => {});
-    const createCredentialProxy = vi.fn(async () => ({
-      socketPath: '/tmp/lxcp-test.sock',
-      stop: stopProxy,
-    }));
-    const spawnFn = vi.fn(() => {
-      throw new Error('spawn EACCES');
-    });
-
-    await expect(
-      relaunchUnderBunIfNeeded({
-        isRunningUnderBun: () => false,
-        envGuardSet: () => false,
-        resolveBun: vi.fn(async () => '/path/to/bun'),
-        resolveEntry: vi.fn(async () => '/entry.ts'),
-        spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
-        createCredentialProxy,
-      }),
-    ).rejects.toBeInstanceOf(FatalError);
-
-    expect(stopProxy).toHaveBeenCalledTimes(1);
-  });
-
-  it('stops the credential proxy when the child emits an async error', async () => {
-    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    let capturedChild: EventEmitter | null = null;
-    const stopProxy = vi.fn(async () => {});
-    const createCredentialProxy = vi.fn(async () => ({
-      socketPath: '/tmp/lxcp-test.sock',
-      stop: stopProxy,
-    }));
     const spawnFn = vi.fn(() => {
       capturedChild = new EventEmitter();
       return capturedChild;
@@ -554,14 +293,43 @@ describe('relaunchUnderBunIfNeeded', () => {
       resolveBun: vi.fn(async () => '/path/to/bun'),
       resolveEntry: vi.fn(async () => '/entry.ts'),
       spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
-      createCredentialProxy,
     });
 
     await vi.waitFor(() => expect(capturedChild).not.toBeNull());
-    capturedChild!.emit('error', new Error('spawn ENOENT'));
+    capturedChild!.emit('close', 0);
+    await promise;
 
-    await expect(promise).rejects.toBeInstanceOf(FatalError);
-    expect(stopProxy).toHaveBeenCalledTimes(1);
+    // The child env must not set a credential socket in non-sandbox mode: the
+    // Bun child reads the keychain directly (issue #2419).
+    const spawnEnv = spawnFn.mock.calls[0][2].env as Record<string, string>;
+    expect(spawnEnv.LLXPRT_BUN_RELAUNCHED).toBe('true');
+    expect(spawnEnv.LLXPRT_CREDENTIAL_SOCKET).toBeUndefined();
+  });
+
+  it('passes through an existing credential socket without starting a proxy', async () => {
+    process.env.LLXPRT_CREDENTIAL_SOCKET = '/already-running.sock';
+    let capturedChild: EventEmitter | null = null;
+    const spawnFn = vi.fn(() => {
+      capturedChild = new EventEmitter();
+      return capturedChild;
+    });
+
+    const promise = relaunchUnderBunIfNeeded({
+      isRunningUnderBun: () => false,
+      envGuardSet: () => false,
+      resolveBun: vi.fn(async () => '/path/to/bun'),
+      resolveEntry: vi.fn(async () => '/entry.ts'),
+      spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
+    });
+
+    await vi.waitFor(() => expect(capturedChild).not.toBeNull());
+    capturedChild!.emit('close', 0);
+    await promise;
+
+    // A pre-existing credential socket (e.g. inside a sandbox) must be passed
+    // through unchanged so the Bun child routes to the proxy-backed store.
+    const spawnEnv = spawnFn.mock.calls[0][2].env as Record<string, string>;
+    expect(spawnEnv.LLXPRT_CREDENTIAL_SOCKET).toBe('/already-running.sock');
   });
 
   it('spawns a Windows .cmd shim with shell:true so child_process can execute it safely', async () => {
@@ -598,10 +366,8 @@ describe('relaunchUnderBunIfNeeded', () => {
     );
   });
 
-  it('rejects unsafe Windows .cmd shim arguments and cleans up the credential proxy', async () => {
-    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+  it('rejects unsafe Windows .cmd shim arguments before spawning', async () => {
     process.argv = ['/node', '/script.js', '--prompt', 'hello & whoami'];
-    const stopProxy = vi.fn(async () => {});
     const spawnFn = vi.fn();
 
     await expect(
@@ -612,15 +378,10 @@ describe('relaunchUnderBunIfNeeded', () => {
         resolveEntry: vi.fn(async () => '/entry.ts'),
         spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
         platform: 'win32',
-        createCredentialProxy: vi.fn(async () => ({
-          socketPath: '/tmp/lxcp-test.sock',
-          stop: stopProxy,
-        })),
       }),
     ).rejects.toThrow(/command-shell metacharacters/i);
 
     expect(spawnFn).not.toHaveBeenCalled();
-    expect(stopProxy).toHaveBeenCalledTimes(1);
   });
 
   it('does not set shell:true when spawning a direct non-cmd executable', async () => {
@@ -814,8 +575,6 @@ describe('runBunLauncherIfNeeded', () => {
     originalArgv = process.argv;
     originalEnv = process.env;
     process.env = { ...process.env };
-    providerAuthMocks.createAndStartProxy.mockClear();
-    providerAuthMocks.getProxySocketPath.mockClear();
   });
 
   afterEach(() => {
@@ -845,9 +604,8 @@ describe('runBunLauncherIfNeeded', () => {
     expect(exitCalls).toHaveLength(0);
   });
 
-  it('stops the credential proxy before exiting with the child close code', async () => {
+  it('exits with the child close code', async () => {
     const exitCalls: number[] = [];
-    const stopCalls: string[] = [];
     let capturedChild: EventEmitter | null = null;
     const spawnFn = vi.fn(() => {
       capturedChild = new EventEmitter();
@@ -864,19 +622,12 @@ describe('runBunLauncherIfNeeded', () => {
         exitCalls.push(code ?? 0);
         return undefined as never;
       },
-      createCredentialProxy: vi.fn(async () => ({
-        socketPath: '/tmp/lxcp-test.sock',
-        stop: async () => {
-          stopCalls.push('stop');
-        },
-      })),
     });
 
     await vi.waitFor(() => expect(capturedChild).not.toBeNull());
     capturedChild!.emit('close', 9);
     await promise;
 
-    expect(stopCalls).toStrictEqual(['stop']);
     expect(exitCalls).toStrictEqual([9]);
   });
 
@@ -918,7 +669,6 @@ describe('runBunLauncherIfNeeded', () => {
         exitCalls.push(code ?? 0);
         return undefined as never;
       },
-      createCredentialProxy: vi.fn(async () => null),
     });
 
     await vi.waitFor(() => expect(capturedChild).not.toBeNull());
