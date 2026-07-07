@@ -45,6 +45,12 @@ import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/co
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+import {
+  createIsolatedRuntimeContext,
+  type IsolatedRuntimeContextHandle,
+} from '@vybestack/llxprt-code-providers/runtime.js';
+import { registerProvidersOntoManager } from '../api/createAgent.js';
+import { executeProviderActivation } from '../api/providerActivationExecutor.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 
 type RuntimeLoader = (
@@ -129,6 +135,7 @@ export class SubagentOrchestrator {
   private buildScopeDispose(
     scope: SubAgentScope,
     runtimeResult: AgentRuntimeLoaderResult,
+    isolatedHandle: IsolatedRuntimeContextHandle,
   ): () => Promise<void> {
     return async () => {
       if (typeof scope.dispose === 'function') {
@@ -140,6 +147,8 @@ export class SubagentOrchestrator {
         scope.runtimeContext.history,
       );
       disposeHistoryLike(history);
+
+      await isolatedHandle.cleanup();
     };
   }
 
@@ -209,7 +218,7 @@ export class SubagentOrchestrator {
     );
 
     const agentRuntimeId = this.createRuntimeId(subagent.name);
-    const runtimeResult = await this.createRuntimeBundle(
+    const { runtimeResult, isolatedHandle } = await this.createRuntimeBundle(
       { subagent, runtimeProfile, modelConfig, agentRuntimeId },
       signal,
     );
@@ -241,7 +250,7 @@ export class SubagentOrchestrator {
       profile,
       config: subagent,
       runtime: runtimeResult,
-      dispose: this.buildScopeDispose(scope, runtimeResult),
+      dispose: this.buildScopeDispose(scope, runtimeResult, isolatedHandle),
     };
   }
 
@@ -371,22 +380,26 @@ export class SubagentOrchestrator {
       return { effectiveProfile: profile };
     }
 
-    const firstProfileName = profile.profiles[0];
-    if (!firstProfileName) {
+    if (profile.profiles.length === 0) {
       throw new Error(
-        'Load balancer subagent profile must reference a profile.',
+        'Load balancer subagent profile must reference at least one profile.',
       );
     }
 
-    const effectiveProfile =
-      await this.options.profileManager.loadProfile(firstProfileName);
-    if (isLoadBalancerProfile(effectiveProfile)) {
-      throw new Error(
-        `Load balancer subagent profile cannot use nested load balancer profile '${firstProfileName}'.`,
-      );
+    // Validate that referenced sub-profiles exist and are not nested
+    // load balancers, but preserve the load-balancer profile as the
+    // effective profile so its failover/round-robin logic is used.
+    for (const subProfileName of profile.profiles) {
+      const subProfile =
+        await this.options.profileManager.loadProfile(subProfileName);
+      if (isLoadBalancerProfile(subProfile)) {
+        throw new Error(
+          `Load balancer subagent profile cannot use nested load balancer profile '${subProfileName}'.`,
+        );
+      }
     }
 
-    return { effectiveProfile };
+    return { effectiveProfile: profile };
   }
 
   private baseSessionId(): string {
@@ -748,7 +761,10 @@ export class SubagentOrchestrator {
       agentRuntimeId: string;
     },
     signal?: AbortSignal,
-  ): Promise<AgentRuntimeLoaderResult> {
+  ): Promise<{
+    runtimeResult: AgentRuntimeLoaderResult;
+    isolatedHandle: IsolatedRuntimeContextHandle;
+  }> {
     const { runtimeProfile, modelConfig, agentRuntimeId, subagent } = params;
     const { effectiveProfile } = runtimeProfile;
 
@@ -768,10 +784,17 @@ export class SubagentOrchestrator {
       subagent.profile,
     );
 
+    const isolatedHandle = await this.createIsolatedRuntime(
+      settingsService,
+      effectiveProfile,
+      subagent.name,
+      agentRuntimeId,
+    );
+
     const providerRuntime: ProviderRuntimeContext =
       createSettingsProviderRuntimeContext({
-        settingsService,
-        config: this.options.foregroundConfig,
+        settingsService: isolatedHandle.settingsService,
+        config: isolatedHandle.config,
         runtimeId: agentRuntimeId,
         metadata: {
           source: 'SubagentOrchestrator',
@@ -784,13 +807,7 @@ export class SubagentOrchestrator {
       effectiveProfile,
       modelConfig,
     );
-    const providerManager =
-      typeof this.options.foregroundConfig.getProviderManager === 'function'
-        ? this.options.foregroundConfig.getProviderManager()
-        : undefined;
-    if (providerManager) {
-      contentGeneratorConfig.providerManager = providerManager;
-    }
+    contentGeneratorConfig.providerManager = isolatedHandle.providerManager;
 
     const toolRegistry: ToolRegistry | undefined =
       typeof this.options.foregroundConfig.getToolRegistry === 'function'
@@ -799,18 +816,66 @@ export class SubagentOrchestrator {
 
     const loaderOptions: AgentRuntimeLoaderOptions = {
       profile: {
-        config: this.options.foregroundConfig,
+        config: isolatedHandle.config,
         state: runtimeState,
         settings: settingsSnapshot,
         providerRuntime,
         contentGeneratorConfig,
         toolRegistry,
-        providerManager,
+        providerManager: isolatedHandle.providerManager,
       },
       signal,
     };
 
-    return this.runtimeLoader(loaderOptions);
+    const runtimeResult = await this.runtimeLoader(loaderOptions);
+    return { runtimeResult, isolatedHandle };
+  }
+
+  /**
+   * Builds, registers providers onto, activates, and runs provider
+   * activation for an isolated runtime so the subagent uses its OWN provider
+   * instead of the parent's active provider (Issue #2410).
+   */
+  private async createIsolatedRuntime(
+    settingsService: SettingsService,
+    effectiveProfile: Profile,
+    subagentName: string,
+    agentRuntimeId: string,
+  ): Promise<IsolatedRuntimeContextHandle> {
+    // Do NOT pass the foreground config — the isolated runtime must get its
+    // own Config so executeProviderActivation operates on the subagent's
+    // provider, not the parent's (Issue #2410).
+    const handle = createIsolatedRuntimeContext({
+      runtimeId: agentRuntimeId,
+      settingsService,
+      messageBus: this.options.messageBus,
+      model: effectiveProfile.model,
+      metadata: {
+        source: 'SubagentOrchestrator',
+        subagent: subagentName,
+      },
+      prepare: (context) => {
+        registerProvidersOntoManager(
+          context.providerManager,
+          {
+            settingsService: context.settingsService,
+            runtimeId: context.runtimeId,
+            metadata: context.metadata,
+          },
+          context.config,
+        );
+      },
+    });
+
+    await handle.activate();
+
+    await executeProviderActivation(handle.config, {
+      provider: effectiveProfile.provider,
+      model: effectiveProfile.model,
+      modelParams: effectiveProfile.modelParams,
+    });
+
+    return handle;
   }
 }
 

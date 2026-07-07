@@ -181,6 +181,15 @@ export function resolveToolName(
 // Output finalization
 // ---------------------------------------------------------------------------
 
+/**
+ * Codex/GPT-5.5 sometimes returns the literal string "Null" as the
+ * final_message. Treat it as a placeholder so the proper completion
+ * message is used instead (Issue #2410, Mode 2).
+ */
+function isNullishFinalMessageText(value: string): boolean {
+  return value.trim().toLowerCase() === 'null';
+}
+
 export function finalizeOutput(output: OutputObject): void {
   const emittedVars = asUnknownRecord(output.emitted_vars);
   const emittedEntries = Object.entries(emittedVars)
@@ -198,7 +207,11 @@ export function finalizeOutput(output: OutputObject): void {
       : '';
 
   const existing = output.final_message;
-  if (typeof existing === 'string' && existing.trim().length > 0) {
+  if (
+    typeof existing === 'string' &&
+    existing.trim().length > 0 &&
+    !isNullishFinalMessageText(existing)
+  ) {
     // Preserve model-emitted text, but still surface emitted variables so
     // callers can introspect what the subagent produced.
     output.final_message = `${existing.trim()}${varsSuffix}`.trim();

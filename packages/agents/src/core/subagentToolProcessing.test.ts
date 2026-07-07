@@ -224,6 +224,37 @@ describe('subagentToolProcessing', () => {
       finalizeOutput(output);
       expect(output.final_message).toContain('result=hello');
     });
+
+    it('should treat literal "Null" as a placeholder and use the default completion message (Issue #2410)', () => {
+      const output: OutputObject = {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+        final_message: 'Null',
+      };
+      finalizeOutput(output);
+      expect(output.final_message).toContain('Completed');
+      expect(output.final_message).not.toBe('Null');
+    });
+
+    it('should treat case-insensitive "null" as a placeholder (Issue #2410)', () => {
+      const output: OutputObject = {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+        final_message: '  null  ',
+      };
+      finalizeOutput(output);
+      expect(output.final_message).toContain('Completed');
+    });
+
+    it('should preserve non-Null final_message text (Issue #2410)', () => {
+      const output: OutputObject = {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+        final_message: 'Task completed successfully',
+      };
+      finalizeOutput(output);
+      expect(output.final_message).toContain('Task completed successfully');
+    });
   });
 
   // --- handleEmitValueCall ---
