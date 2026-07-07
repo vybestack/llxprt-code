@@ -177,6 +177,75 @@ vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   },
 }));
 
+// All scenarios share the same token geometry: a 1000-token limit with a
+// 900-token preflight baseline, leaving 100 tokens of capacity. A 400-char
+// request estimates to ~100 tokens (100 > 100 * 0.95 = 95 → overflow).
+const MOCKED_TOKEN_LIMIT = 1000;
+const PREFLIGHT_BASELINE = 900;
+const OVERFLOW_REQUEST_CHARS = 400;
+
+interface OverflowScenario {
+  /** Post-compression projected baseline; omit when recovery never rechecks. */
+  projectedBaseline?: number;
+  /** Compression outcome: a result enum value, or an Error to reject with. */
+  compressionResult: PerformCompressionResult | Error;
+  /** Whether the turn should proceed (sets up a content stream on Turn.run). */
+  proceeds: boolean;
+}
+
+interface OverflowScenarioHandle {
+  mockChat: Partial<ChatSession>;
+  request: Part[];
+  estimatedRequestTokenCount: number;
+  remainingTokenCount: number;
+}
+
+/** Builds the shared mockChat/generator/request scaffolding for one scenario. */
+function buildOverflowScenario(
+  client: AgentClient,
+  scenario: OverflowScenario,
+): OverflowScenarioHandle {
+  vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+  vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+    PREFLIGHT_BASELINE,
+  );
+
+  const mockChat: Partial<ChatSession> = {
+    addHistory: vi.fn(),
+    getHistory: vi.fn().mockReturnValue([]),
+    getLastPromptTokenCount: vi.fn().mockReturnValue(PREFLIGHT_BASELINE),
+    performCompression:
+      scenario.compressionResult instanceof Error
+        ? vi.fn().mockRejectedValue(scenario.compressionResult)
+        : vi.fn().mockResolvedValue(scenario.compressionResult),
+  };
+  if (scenario.projectedBaseline !== undefined) {
+    mockChat.getProjectedPromptBaseline = vi
+      .fn()
+      .mockReturnValue(scenario.projectedBaseline);
+  }
+  client['chat'] = mockChat as ChatSession;
+  client['contentGenerator'] = {
+    countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+  } as Partial<ContentGenerator> as ContentGenerator;
+
+  if (scenario.proceeds) {
+    mockTurnRunFn.mockReturnValue(
+      (async function* () {
+        yield { type: AgentEventType.Content, value: 'ok' };
+      })(),
+    );
+  }
+
+  const longText = 'a'.repeat(OVERFLOW_REQUEST_CHARS);
+  return {
+    mockChat,
+    request: [{ text: longText }],
+    estimatedRequestTokenCount: Math.floor(longText.length / 4),
+    remainingTokenCount: MOCKED_TOKEN_LIMIT - PREFLIGHT_BASELINE,
+  };
+}
+
 describe('Gemini Client — preflight compression recovery (issue 2402)', () => {
   let client: AgentClient;
 
@@ -213,46 +282,21 @@ describe('Gemini Client — preflight compression recovery (issue 2402)', () => 
     });
 
     it('should recover via automatic compression and proceed instead of bailing on a small overflow (issue 2402)', async () => {
-      const MOCKED_TOKEN_LIMIT = 1000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      // Initial preflight baseline (900) overflows; the post-compression
+      // projected baseline (100) fits, so the turn proceeds.
+      const { mockChat, request } = buildOverflowScenario(client, {
+        projectedBaseline: 100,
+        compressionResult: PerformCompressionResult.COMPRESSED,
+        proceeds: true,
+      });
 
-      const lastPromptTokenCount = 900;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      const events = await fromAsync(
+        client.sendMessageStream(
+          request,
+          new AbortController().signal,
+          'prompt-id-overflow-recovered',
+        ),
       );
-
-      // Initial preflight baseline (900) is over the limit → triggers
-      // recovery; the post-compression projected baseline (100) fits.
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(900),
-        getProjectedPromptBaseline: vi.fn().mockReturnValue(100),
-        performCompression: vi
-          .fn()
-          .mockResolvedValue(PerformCompressionResult.COMPRESSED),
-      };
-      client['chat'] = mockChat as ChatSession;
-
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
-
-      const longText = 'a'.repeat(400);
-      const request: Part[] = [{ text: longText }];
-
-      const mockStream = (async function* () {
-        yield { type: AgentEventType.Content, value: 'ok' };
-      })();
-      mockTurnRunFn.mockReturnValue(mockStream);
-
-      const stream = client.sendMessageStream(
-        request,
-        new AbortController().signal,
-        'prompt-id-overflow-recovered',
-      );
-      const events = await fromAsync(stream);
 
       expect(events).not.toContainEqual(
         expect.objectContaining({
@@ -260,8 +304,8 @@ describe('Gemini Client — preflight compression recovery (issue 2402)', () => 
         }),
       );
       expect(mockTurnRunFn).toHaveBeenCalled();
-      // The recovery is an automatic compression, so it must be reported as
-      // 'auto' (matching the downstream hard-limit paths), not 'manual'.
+      // The recovery is an automatic compression, reported as 'auto' (matching
+      // the downstream hard-limit paths), not 'manual'.
       expect(mockChat.performCompression).toHaveBeenCalledWith(
         'prompt-id-overflow-recovered',
         { bypassCooldown: true, trigger: 'auto' },
@@ -269,238 +313,125 @@ describe('Gemini Client — preflight compression recovery (issue 2402)', () => 
     });
 
     it('should bail with ContextWindowWillOverflow when compression fails (issue 2402)', async () => {
-      const MOCKED_TOKEN_LIMIT = 1000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      const handle = buildOverflowScenario(client, {
+        compressionResult: PerformCompressionResult.FAILED,
+        proceeds: false,
+      });
 
-      const lastPromptTokenCount = 900;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      const events = await fromAsync(
+        client.sendMessageStream(
+          handle.request,
+          new AbortController().signal,
+          'prompt-id-overflow-compression-failed',
+        ),
       );
-
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
-        performCompression: vi
-          .fn()
-          .mockResolvedValue(PerformCompressionResult.FAILED),
-      };
-      client['chat'] = mockChat as ChatSession;
-
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
-
-      const longText = 'a'.repeat(400);
-      const request: Part[] = [{ text: longText }];
-      const estimatedRequestTokenCount = Math.floor(longText.length / 4);
-      const remainingTokenCount = MOCKED_TOKEN_LIMIT - lastPromptTokenCount;
-
-      const stream = client.sendMessageStream(
-        request,
-        new AbortController().signal,
-        'prompt-id-overflow-compression-failed',
-      );
-      const events = await fromAsync(stream);
 
       expect(events).toContainEqual({
         type: AgentEventType.ContextWindowWillOverflow,
         value: {
-          estimatedRequestTokenCount,
-          remainingTokenCount,
+          estimatedRequestTokenCount: handle.estimatedRequestTokenCount,
+          remainingTokenCount: handle.remainingTokenCount,
         },
       });
       expect(mockTurnRunFn).not.toHaveBeenCalled();
     });
 
     it('should still bail when compression does not reduce enough (issue 2402)', async () => {
-      const MOCKED_TOKEN_LIMIT = 1000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      // Partial reduction (900 → 950) but not enough: newRemaining = 50,
+      // estimated 100 > 50 * 0.95 → still overflows → bail.
+      const handle = buildOverflowScenario(client, {
+        projectedBaseline: 950,
+        compressionResult: PerformCompressionResult.COMPRESSED,
+        proceeds: false,
+      });
 
-      const lastPromptTokenCount = 900;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      const events = await fromAsync(
+        client.sendMessageStream(
+          handle.request,
+          new AbortController().signal,
+          'prompt-id-overflow-compression-insufficient',
+        ),
       );
-
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
-        // Partial reduction (900 → 950) but not enough: newRemaining = 50,
-        // estimated 100 > 50 * 0.95 → still overflows → bail.
-        getProjectedPromptBaseline: vi.fn().mockReturnValue(950),
-        performCompression: vi
-          .fn()
-          .mockResolvedValue(PerformCompressionResult.COMPRESSED),
-      };
-      client['chat'] = mockChat as ChatSession;
-
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
-
-      const longText = 'a'.repeat(400);
-      const request: Part[] = [{ text: longText }];
-      const estimatedRequestTokenCount = Math.floor(longText.length / 4);
-      const remainingTokenCount = MOCKED_TOKEN_LIMIT - lastPromptTokenCount;
-
-      const stream = client.sendMessageStream(
-        request,
-        new AbortController().signal,
-        'prompt-id-overflow-compression-insufficient',
-      );
-      const events = await fromAsync(stream);
 
       expect(events).toContainEqual({
         type: AgentEventType.ContextWindowWillOverflow,
         value: {
-          estimatedRequestTokenCount,
-          remainingTokenCount,
+          estimatedRequestTokenCount: handle.estimatedRequestTokenCount,
+          remainingTokenCount: handle.remainingTokenCount,
         },
       });
       expect(mockTurnRunFn).not.toHaveBeenCalled();
     });
 
     it('should bail when performCompression throws during recovery (issue 2402)', async () => {
-      const MOCKED_TOKEN_LIMIT = 1000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      const handle = buildOverflowScenario(client, {
+        compressionResult: new Error('boom'),
+        proceeds: false,
+      });
 
-      const lastPromptTokenCount = 900;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      const events = await fromAsync(
+        client.sendMessageStream(
+          handle.request,
+          new AbortController().signal,
+          'prompt-id-overflow-compression-throws',
+        ),
       );
-
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
-        performCompression: vi.fn().mockRejectedValue(new Error('boom')),
-      };
-      client['chat'] = mockChat as ChatSession;
-
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
-
-      const longText = 'a'.repeat(400);
-      const request: Part[] = [{ text: longText }];
-      const estimatedRequestTokenCount = Math.floor(longText.length / 4);
-      const remainingTokenCount = MOCKED_TOKEN_LIMIT - lastPromptTokenCount;
-
-      const stream = client.sendMessageStream(
-        request,
-        new AbortController().signal,
-        'prompt-id-overflow-compression-throws',
-      );
-      const events = await fromAsync(stream);
 
       expect(events).toContainEqual({
         type: AgentEventType.ContextWindowWillOverflow,
         value: {
-          estimatedRequestTokenCount,
-          remainingTokenCount,
+          estimatedRequestTokenCount: handle.estimatedRequestTokenCount,
+          remainingTokenCount: handle.remainingTokenCount,
         },
       });
       expect(mockTurnRunFn).not.toHaveBeenCalled();
     });
 
     it('should bail when compression is skipped because history is empty (issue 2402)', async () => {
-      // SKIPPED_EMPTY: there is nothing to compress, so the baseline is
-      // unchanged and the request still overflows. Must not falsely recover.
-      const MOCKED_TOKEN_LIMIT = 1000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      // SKIPPED_EMPTY: nothing to compress → baseline unchanged → still
+      // overflows. Must not falsely recover.
+      const handle = buildOverflowScenario(client, {
+        projectedBaseline: PREFLIGHT_BASELINE,
+        compressionResult: PerformCompressionResult.SKIPPED_EMPTY,
+        proceeds: false,
+      });
 
-      const lastPromptTokenCount = 900;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      const events = await fromAsync(
+        client.sendMessageStream(
+          handle.request,
+          new AbortController().signal,
+          'prompt-id-overflow-skipped-empty',
+        ),
       );
-
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
-        // Nothing compressed → baseline unchanged → still overflows → bail.
-        getProjectedPromptBaseline: vi
-          .fn()
-          .mockReturnValue(lastPromptTokenCount),
-        performCompression: vi
-          .fn()
-          .mockResolvedValue(PerformCompressionResult.SKIPPED_EMPTY),
-      };
-      client['chat'] = mockChat as ChatSession;
-
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
-
-      const longText = 'a'.repeat(400);
-      const request: Part[] = [{ text: longText }];
-      const estimatedRequestTokenCount = Math.floor(longText.length / 4);
-      const remainingTokenCount = MOCKED_TOKEN_LIMIT - lastPromptTokenCount;
-
-      const stream = client.sendMessageStream(
-        request,
-        new AbortController().signal,
-        'prompt-id-overflow-skipped-empty',
-      );
-      const events = await fromAsync(stream);
 
       expect(events).toContainEqual({
         type: AgentEventType.ContextWindowWillOverflow,
-        value: { estimatedRequestTokenCount, remainingTokenCount },
+        value: {
+          estimatedRequestTokenCount: handle.estimatedRequestTokenCount,
+          remainingTokenCount: handle.remainingTokenCount,
+        },
       });
       expect(mockTurnRunFn).not.toHaveBeenCalled();
     });
 
     it('should proceed when compression drives remaining capacity non-positive, deferring to the downstream path (issue 2402)', async () => {
-      // After compression the baseline exceeds the limit (newRemaining <= 0).
-      // Recovery returns true so the normal send/enforcement path resolves it,
+      // After compression the projected baseline (1005) exceeds the 1000-token
+      // limit, making remaining capacity negative → defer to downstream,
       // mirroring the negative-remaining guard (issue #2139).
-      const MOCKED_TOKEN_LIMIT = 1000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      buildOverflowScenario(client, {
+        projectedBaseline: 1005,
+        compressionResult: PerformCompressionResult.COMPRESSED,
+        proceeds: true,
+      });
+      const request: Part[] = [{ text: 'a'.repeat(OVERFLOW_REQUEST_CHARS) }];
 
-      const lastPromptTokenCount = 900;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      const events = await fromAsync(
+        client.sendMessageStream(
+          request,
+          new AbortController().signal,
+          'prompt-id-overflow-defer',
+        ),
       );
-
-      // Initial preflight baseline (900) overflows; the post-compression
-      // projected baseline (1005) exceeds the 1000-token limit, making
-      // remaining capacity negative → defer to downstream (issue #2139).
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(900),
-        getProjectedPromptBaseline: vi.fn().mockReturnValue(1005),
-        performCompression: vi
-          .fn()
-          .mockResolvedValue(PerformCompressionResult.COMPRESSED),
-      };
-      client['chat'] = mockChat as ChatSession;
-
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
-
-      const longText = 'a'.repeat(400);
-      const request: Part[] = [{ text: longText }];
-
-      const mockStream = (async function* () {
-        yield { type: AgentEventType.Content, value: 'ok' };
-      })();
-      mockTurnRunFn.mockReturnValue(mockStream);
-
-      const stream = client.sendMessageStream(
-        request,
-        new AbortController().signal,
-        'prompt-id-overflow-defer',
-      );
-      const events = await fromAsync(stream);
 
       expect(events).not.toContainEqual(
         expect.objectContaining({
