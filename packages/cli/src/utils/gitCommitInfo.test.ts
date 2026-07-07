@@ -59,6 +59,26 @@ describe('gitCommitInfo', () => {
     expect(info).toBe('N/A');
   });
 
+  it('returns "N/A" without throwing when process.cwd is unusable', () => {
+    // AboutBox resolves the commit at module load, so importing it under a
+    // partial `node:process` mock (one lacking cwd()) must not crash the whole
+    // module graph. With no override set, candidatePaths() calls process.cwd();
+    // if that throws, the loader must still degrade to 'N/A'. Regression guard
+    // for the AppContainer.mount collection failure ("default.cwd is not a
+    // function").
+    delete process.env[envVar];
+    __resetGitCommitInfoCacheForTests();
+    const originalCwd = process.cwd;
+    process.cwd = (() => {
+      throw new TypeError('cwd is not a function');
+    }) as typeof process.cwd;
+    try {
+      expect(getGitCommitInfo()).toBe('N/A');
+    } finally {
+      process.cwd = originalCwd;
+    }
+  });
+
   it('returns "N/A" when the file exists but is malformed JSON', () => {
     writeFileSync(infoPath, '{ not valid json', 'utf-8');
 

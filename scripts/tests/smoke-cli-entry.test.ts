@@ -19,6 +19,9 @@ const launcher = join(repoRoot, 'packages', 'cli', 'bin', 'llxprt.cjs');
 // the first cold spawn can be slow on CI runners.
 const SMOKE_TEST_TIMEOUT_MS = 30_000;
 
+// `--version` prints a semver-prefixed line (e.g. "0.10.0").
+const VERSION_REGEX = /^\d+\.\d+\.\d+/;
+
 function runLauncherVersion(env: NodeJS.ProcessEnv): {
   status: number | null;
   stdout: string;
@@ -78,7 +81,7 @@ describe('CLI entry smoke guard (issue #2435)', () => {
         status,
         `CLI exited ${status} (expected 0). stderr:\n${stderr}`,
       ).toBe(0);
-      expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+      expect(stdout.trim()).toMatch(VERSION_REGEX);
     },
     SMOKE_TEST_TIMEOUT_MS,
   );
@@ -102,7 +105,7 @@ describe('CLI entry smoke guard (issue #2435)', () => {
         status,
         `CLI exited ${status} (expected 0). stderr:\n${stderr}`,
       ).toBe(0);
-      expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+      expect(stdout.trim()).toMatch(VERSION_REGEX);
     },
     SMOKE_TEST_TIMEOUT_MS,
   );

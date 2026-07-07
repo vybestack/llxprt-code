@@ -9,6 +9,10 @@ import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import { getGitCommitInfo } from '../../utils/gitCommitInfo.js';
 
+// Resolve once at module load (the loader is cached and does synchronous file
+// I/O on first call), keeping the React render path free of side effects.
+const GIT_COMMIT_INFO = getGitCommitInfo();
+
 interface AboutBoxProps {
   cliVersion: string;
   osVersion: string;
@@ -81,25 +85,22 @@ const AboutBoxContent: React.FC<{
   gcpProject,
   baseURL,
   ideClient,
-}) => {
-  const gitCommitInfo = getGitCommitInfo();
-  return (
-    <>
-      <AboutBoxHeader />
-      <InfoRow label="CLI Version" value={cliVersion} />
-      {!['', 'N/A'].includes(gitCommitInfo) && (
-        <InfoRow label="Git Commit" value={gitCommitInfo} />
-      )}
-      <InfoRow label="Model" value={modelVersion} />
-      <InfoRow label="Provider" value={provider} />
-      <ConditionalInfoRow label="Base URL" value={baseURL} />
-      <InfoRow label="Sandbox" value={sandboxEnv} />
-      <InfoRow label="OS" value={osVersion} />
-      <ConditionalInfoRow label="GCP Project" value={gcpProject} />
-      <ConditionalInfoRow label="IDE Client" value={ideClient} />
-    </>
-  );
-};
+}) => (
+  <>
+    <AboutBoxHeader />
+    <InfoRow label="CLI Version" value={cliVersion} />
+    {!['', 'N/A'].includes(GIT_COMMIT_INFO) && (
+      <InfoRow label="Git Commit" value={GIT_COMMIT_INFO} />
+    )}
+    <InfoRow label="Model" value={modelVersion} />
+    <InfoRow label="Provider" value={provider} />
+    <ConditionalInfoRow label="Base URL" value={baseURL} />
+    <InfoRow label="Sandbox" value={sandboxEnv} />
+    <InfoRow label="OS" value={osVersion} />
+    <ConditionalInfoRow label="GCP Project" value={gcpProject} />
+    <ConditionalInfoRow label="IDE Client" value={ideClient} />
+  </>
+);
 
 export const AboutBox: React.FC<AboutBoxProps> = ({
   cliVersion,

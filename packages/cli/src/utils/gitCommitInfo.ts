@@ -58,7 +58,25 @@ function loadGitCommitInfo(): string {
     return infoCache ?? NOT_AVAILABLE;
   }
 
-  const candidates = candidatePaths();
+  let candidates: string[];
+  try {
+    candidates = candidatePaths();
+  } catch (error) {
+    // The loader must always return a string, never throw. Building the
+    // candidate list touches the environment (process.env / process.cwd),
+    // which can be unusable under a partial test mock or an exotic runtime;
+    // degrade gracefully to 'N/A' instead of crashing the importing module.
+    logger.debug(
+      () =>
+        `[GIT_COMMIT] Failed to resolve candidate paths: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+    );
+    infoCache = null;
+    infoLoaded = true;
+    return NOT_AVAILABLE;
+  }
+
   for (const candidate of candidates) {
     try {
       const raw = readFileSync(candidate, 'utf-8');
