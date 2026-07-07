@@ -100,11 +100,6 @@ function buildAuthItems(
 }> {
   return [
     {
-      key: 'oauth_gemini',
-      label: `Gemini (Google OAuth) ${enabledProviders.has('oauth_gemini') ? '[ON]' : '[OFF]'}${getStatusLabel('gemini', authStatuses)}`,
-      value: 'oauth_gemini',
-    },
-    {
       key: 'oauth_anthropic',
       label: `Anthropic Claude (OAuth) ${enabledProviders.has('oauth_anthropic') ? '[ON]' : '[OFF]'}${getStatusLabel('anthropic', authStatuses)}`,
       value: 'oauth_anthropic',

@@ -146,15 +146,15 @@ Guidance:
 /model gemini-2.5-pro
 ```
 
-#### Or OAuth
+#### Or API Key
 
 ```bash
-/auth gemini enable
+/key save gemini your-gemini-key
 ```
 
-Note: OAuth is lazy — authentication happens when you first use the provider.
+Note: Set the key before your first request to that provider.
 
-> **Important (gemini-cli → Antigravity):** Google ended free consumer "Login with Google" access for the Gemini CLI integration in mid-2026, directing individual users to **Antigravity**. OAuth via `/auth gemini` still works for **paid Gemini API keys** and **Gemini Code Assist Standard/Enterprise** accounts. If a free personal Google login no longer authorizes, use a Gemini **API key** instead. See [Google Cloud auth](../cli/google-cloud-auth.md).
+> **Important (Gemini "Login with Google" removed):** Google has removed the free consumer "Login with Google" flow for the Gemini CLI entirely. Use a Gemini **API key** (`GEMINI_API_KEY`) or **Vertex AI** credentials instead. See [Google Cloud auth](../cli/google-cloud-auth.md).
 
 #### Model geometry & recommended settings (Gemini)
 
@@ -162,7 +162,7 @@ Common models: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` (st
 
 Guidance:
 
-- Context-limit up to 1048576 (API key) for Gemini 2.5 models; lower if you see provider limit errors. OAuth/Code-Assist windows can be smaller depending on plan.
+- Context-limit up to 1048576 (API key) for Gemini 2.5 models; lower if you see provider limit errors.
 - Max output tokens: up to 65536
 
 ```bash
@@ -579,13 +579,12 @@ Set directly with `/key` or load from file:
 
 ### OAuth
 
-**Three** providers support OAuth for authentication: Anthropic, Codex (ChatGPT), and Gemini.
+**Two** providers support OAuth for authentication: Anthropic and Codex (ChatGPT).
 
 ```bash
 # Enable OAuth provider (lazy authentication - happens on first use)
 /auth anthropic enable
 /auth codex enable
-/auth gemini enable
 
 # Check OAuth status
 /auth

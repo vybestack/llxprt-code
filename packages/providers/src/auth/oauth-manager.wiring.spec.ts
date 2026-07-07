@@ -33,7 +33,6 @@ const wiring = vi.hoisted(() => {
   const getAnthropicUsageInfo = vi.fn();
   const getAllAnthropicUsageInfo = vi.fn();
   const getAllCodexUsageInfo = vi.fn();
-  const getAllGeminiUsageInfo = vi.fn();
   const getHigherPriorityAuth = vi.fn();
 
   return {
@@ -47,7 +46,6 @@ const wiring = vi.hoisted(() => {
     getAnthropicUsageInfo,
     getAllAnthropicUsageInfo,
     getAllCodexUsageInfo,
-    getAllGeminiUsageInfo,
     getHigherPriorityAuth,
   };
 });
@@ -74,7 +72,6 @@ vi.mock('./provider-usage-info.js', () => ({
   getAnthropicUsageInfo: wiring.getAnthropicUsageInfo,
   getAllAnthropicUsageInfo: wiring.getAllAnthropicUsageInfo,
   getAllCodexUsageInfo: wiring.getAllCodexUsageInfo,
-  getAllGeminiUsageInfo: wiring.getAllGeminiUsageInfo,
   getHigherPriorityAuth: wiring.getHigherPriorityAuth,
 }));
 
@@ -186,7 +183,6 @@ describe('OAuthManager wiring', () => {
     wiring.getAnthropicUsageInfo.mockResolvedValue(null);
     wiring.getAllAnthropicUsageInfo.mockResolvedValue(new Map());
     wiring.getAllCodexUsageInfo.mockResolvedValue(new Map());
-    wiring.getAllGeminiUsageInfo.mockResolvedValue(new Map());
     wiring.getHigherPriorityAuth.mockResolvedValue(null);
   });
 
@@ -379,9 +375,6 @@ describe('OAuthManager wiring', () => {
     wiring.getAllCodexUsageInfo.mockResolvedValue(
       new Map([['bucket-a', { usage: 2 }]]),
     );
-    wiring.getAllGeminiUsageInfo.mockResolvedValue(
-      new Map([['bucket-a', { usage: 3 }]]),
-    );
 
     await expect(manager.getToken('anthropic')).resolves.toBe('oauth-token');
     expect(tokenAccessCoordinator.getToken).toHaveBeenCalledWith(
@@ -468,11 +461,6 @@ describe('OAuthManager wiring', () => {
       tokenStore,
       config,
     );
-
-    await expect(manager.getAllGeminiUsageInfo()).resolves.toStrictEqual(
-      new Map([['bucket-a', { usage: 3 }]]),
-    );
-    expect(wiring.getAllGeminiUsageInfo).toHaveBeenCalledWith(tokenStore);
 
     const bus = {} as import('@vybestack/llxprt-code-core').MessageBus;
     manager.runtimeMessageBus = bus;

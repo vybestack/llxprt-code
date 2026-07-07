@@ -9,7 +9,7 @@ import type { GeminiAuthMode } from './geminiAuth.js';
 
 const MODEL_LIST_TIMEOUT_MS = 10_000;
 
-/** Default model list used for OAuth mode and as fallback. */
+/** Default model list used as fallback. */
 export function getDefaultModelList(providerName: string): IModel[] {
   return [
     {
@@ -101,9 +101,6 @@ export async function resolveModelList(
   getBaseURL: () => string | undefined,
 ): Promise<IModel[]> {
   const defaultModels = getDefaultModelList(providerName);
-  if (authMode === 'oauth') {
-    return defaultModels;
-  }
   if (authMode === 'gemini-api-key' || authMode === 'vertex-ai') {
     const fetched = await fetchModelsFromApi(
       providerName,

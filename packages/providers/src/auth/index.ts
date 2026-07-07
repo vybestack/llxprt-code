@@ -45,14 +45,12 @@ export { OAuthBucketManager } from './OAuthBucketManager.js';
 // ─── OAuth Providers ─────────────────────────────────────────────────────────
 export { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
 export { CodexOAuthProvider } from './codex-oauth-provider.js';
-export { GeminiOAuthProvider } from './gemini-oauth-provider.js';
 
 // ─── Usage Info ──────────────────────────────────────────────────────────────
 export {
   getAnthropicUsageInfo,
   getAllAnthropicUsageInfo,
   getAllCodexUsageInfo,
-  getAllGeminiUsageInfo,
   getHigherPriorityAuth,
 } from './provider-usage-info.js';
 

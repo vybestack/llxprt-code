@@ -4,27 +4,26 @@ LLxprt Code needs credentials to talk to AI providers. How you authenticate depe
 
 ## Which Method Should I Use?
 
-| Situation                                       | Method  | Setup                     |
-| ----------------------------------------------- | ------- | ------------------------- |
-| Provider offers OAuth (Gemini, Anthropic, etc.) | OAuth   | `/auth <provider> enable` |
-| Provider gives you an API key                   | Keyring | `/key save <name> <key>`  |
-| CI / automation (no human to enter codes)       | Keyfile | `--keyfile /path/to/key`  |
+| Situation                                 | Method  | Setup                     |
+| ----------------------------------------- | ------- | ------------------------- |
+| Provider offers OAuth (Anthropic, Codex)  | OAuth   | `/auth <provider> enable` |
+| Provider gives you an API key             | Keyring | `/key save <name> <key>`  |
+| CI / automation (no human to enter codes) | Keyfile | `--keyfile /path/to/key`  |
 
-Three providers support OAuth: quota-based logins (Gemini Code Assist) and subscription-based logins (Anthropic/Claude Pro, OpenAI via Codex/ChatGPT Plus/Pro). Others, including Qwen, offer API keys. Both OAuth tokens and API keys are stored the same way — in your OS keyring.
+Two providers support OAuth: subscription-based logins (Anthropic/Claude Pro, OpenAI via Codex/ChatGPT Plus/Pro). Others, including Gemini and Qwen, offer API keys. Both OAuth tokens and API keys are stored the same way — in your OS keyring.
 
 ## OAuth
 
-Three providers support OAuth login: **Gemini**, **Anthropic**, and **Codex** (OpenAI/ChatGPT).
+Two providers support OAuth login: **Anthropic** and **Codex** (OpenAI/ChatGPT).
 
 ```text
-/auth gemini enable
 /auth anthropic enable
 /auth codex enable
 ```
 
-Gemini uses the Gemini Code Assist login. Anthropic and Codex use your existing subscription (Claude Pro, ChatGPT Plus/Pro, etc.) — you get subscription pricing rather than per-token API rates.
+Anthropic and Codex use your existing subscription (Claude Pro, ChatGPT Plus/Pro, etc.) — you get subscription pricing rather than per-token API rates.
 
-> **Note on Gemini access (mid-2026):** Google moved free consumer "Login with Google" access for the standalone Gemini CLI toward [Antigravity](https://antigravity.google); `/auth gemini` continues to work for paid Gemini API keys and Gemini Code Assist Standard/Enterprise.
+> **Note on Gemini access (mid-2026):** Google has removed the free consumer "Login with Google" access for the standalone Gemini CLI entirely. Use a Gemini API key (`GEMINI_API_KEY` or `/key save gemini <key>`) or Vertex AI / ADC methods instead.
 >
 > **Qwen is now API-key-only.** Qwen's free OAuth tier ended 2026-04-15 and the OAuth provider has been removed. Use a DashScope API key (`DASHSCOPE_API_KEY`) with the `qwen` alias, or use the `openrouter` provider with an OpenRouter API key.
 

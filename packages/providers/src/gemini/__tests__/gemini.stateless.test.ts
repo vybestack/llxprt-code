@@ -14,7 +14,6 @@ import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IProviderConfig } from '../types/IProviderConfig.js';
 import { GeminiProvider } from '../GeminiProvider.js';
-import { createCodeAssistContentGenerator } from '@vybestack/llxprt-code-core/code_assist/codeAssist.js';
 import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
@@ -28,14 +27,6 @@ const googleGenAIState = {
   instances: [] as Array<{ options: Record<string, unknown> }>,
   streamCalls: [] as Array<{ request: Record<string, unknown> }>,
   nonStreamCalls: [] as Array<{ request: Record<string, unknown> }>,
-  streamPlans: [] as Array<Array<Record<string, unknown>>>,
-};
-
-const codeAssistState = {
-  streamCalls: [] as Array<{
-    request: Record<string, unknown>;
-    sessionId: string | undefined;
-  }>,
   streamPlans: [] as Array<Array<Record<string, unknown>>>,
 };
 
@@ -72,35 +63,8 @@ vi.mock('@google/genai', () => {
   return { GoogleGenAI: FakeGoogleGenAI, Type };
 });
 
-vi.mock('@vybestack/llxprt-code-core/code_assist/codeAssist.js', () => ({
-  createCodeAssistContentGenerator: vi.fn(async () => ({
-    generateContentStream: vi.fn(
-      (request: Record<string, unknown>, sessionId?: string) => {
-        codeAssistState.streamCalls.push({
-          request,
-          sessionId,
-        });
-        const plan = codeAssistState.streamPlans.shift() ?? [];
-        return {
-          async *[Symbol.asyncIterator]() {
-            for (const response of plan) {
-              yield response;
-            }
-          },
-        };
-      },
-    ),
-  })),
-}));
-
 const queueGoogleStream = (responses: Array<Record<string, unknown>>): void => {
   googleGenAIState.streamPlans.push(responses);
-};
-
-const queueCodeAssistStream = (
-  responses: Array<Record<string, unknown>>,
-): void => {
-  codeAssistState.streamPlans.push(responses);
 };
 
 function buildCallOptions(
@@ -125,18 +89,6 @@ class TestGeminiProvider extends GeminiProvider {
       getEphemeralSettings: () => settings,
     };
   }
-
-  protected override async createOAuthContentGenerator(
-    httpOptions: Record<string, unknown>,
-    config: unknown,
-    baseURL?: string,
-  ) {
-    return createCodeAssistContentGenerator(
-      httpOptions,
-      config as never,
-      baseURL,
-    );
-  }
 }
 
 /**
@@ -149,7 +101,7 @@ class TestGeminiProvider extends GeminiProvider {
  * determineBestAuth now returns {authMode, token} object.
  */
 const mockDetermineBestAuth = (
-  modes: Array<{ authMode: 'gemini-api-key' | 'oauth'; token: string }>,
+  modes: Array<{ authMode: 'gemini-api-key'; token: string }>,
 ) => {
   let activeIndex = 0;
   const spy = vi.spyOn(
@@ -197,9 +149,6 @@ describe('Gemini provider stateless contract tests', () => {
     googleGenAIState.streamCalls.length = 0;
     googleGenAIState.nonStreamCalls.length = 0;
     googleGenAIState.streamPlans.length = 0;
-    codeAssistState.streamCalls.length = 0;
-    codeAssistState.streamPlans.length = 0;
-    vi.mocked(createCodeAssistContentGenerator).mockClear();
     // Set up default runtime context for tests
     setActiveProviderRuntimeContext(
       createProviderRuntimeContext({
@@ -476,140 +425,6 @@ describe('Gemini provider stateless contract tests', () => {
         }),
       }),
     );
-  });
-
-  it('scopes OAuth streaming sessions by runtime @plan:PLAN-20251018-STATELESSPROVIDER2.P11 @requirement:REQ-SP2-001 @pseudocode anthropic-gemini-stateless.md lines 3-6', async () => {
-    queueCodeAssistStream([
-      {
-        candidates: [
-          {
-            content: {
-              parts: [{ text: 'oauth-chunk' }],
-            },
-          },
-        ],
-      },
-    ]);
-
-    const authMock = mockDetermineBestAuth([
-      { authMode: 'oauth', token: 'oauth-token' },
-      { authMode: 'oauth', token: 'oauth-token' },
-    ]);
-    authMock.useMode(0);
-
-    const provider = new TestGeminiProvider();
-    const settingsA = new SettingsService();
-    settingsA.set('call-id', 'runtime-oauth-a');
-    const configA = createRuntimeConfigStub(settingsA);
-    const settingsB = new SettingsService();
-    settingsB.set('call-id', 'runtime-oauth-b');
-    const configB = createRuntimeConfigStub(settingsB);
-    provider.setConfig(configA);
-    const runtimeA = createProviderRuntimeContext({
-      runtimeId: 'runtime-oauth-a',
-      settingsService: settingsA,
-      config: configA,
-    });
-
-    const runtimeB = createProviderRuntimeContext({
-      runtimeId: 'runtime-oauth-b',
-      settingsService: settingsB,
-      config: configB,
-    });
-
-    const oauthIteratorA = provider.generateChatCompletion(
-      buildCallOptions(provider, {
-        contents: [createHumanContent('oauth-a')],
-        settings: settingsA,
-        config: configA,
-        runtime: runtimeA,
-      }),
-    );
-    await oauthIteratorA.next();
-
-    authMock.useMode(1);
-
-    queueCodeAssistStream([
-      {
-        candidates: [
-          {
-            content: {
-              parts: [{ text: 'oauth-chunk-b' }],
-            },
-          },
-        ],
-      },
-    ]);
-
-    const oauthIteratorB = provider.generateChatCompletion(
-      buildCallOptions(provider, {
-        contents: [createHumanContent('oauth-b')],
-        settings: settingsB,
-        config: configB,
-        runtime: runtimeB,
-      }),
-    );
-    await oauthIteratorB.next();
-
-    authMock.restore();
-
-    expect(codeAssistState.streamCalls).toHaveLength(2);
-    const firstSession = codeAssistState.streamCalls[0]?.sessionId;
-    const secondSession = codeAssistState.streamCalls[1]?.sessionId;
-    expect(firstSession).toContain('runtime-oauth-a');
-    expect(secondSession).toContain('runtime-oauth-b');
-    expect(firstSession).not.toBe(secondSession);
-  });
-
-  it('ignores provider base URL for OAuth Code Assist requests', async () => {
-    queueCodeAssistStream([
-      {
-        candidates: [
-          {
-            content: {
-              parts: [{ text: 'oauth-chunk' }],
-            },
-          },
-        ],
-      },
-    ]);
-
-    const authMock = mockDetermineBestAuth([
-      { authMode: 'oauth', token: 'oauth-token' },
-    ]);
-    authMock.useMode(0);
-
-    const provider = new TestGeminiProvider(
-      undefined,
-      'https://generativelanguage.googleapis.com/v1beta',
-    );
-    const settings = new SettingsService();
-    settings.set('call-id', 'runtime-oauth-base-url');
-    const config = createRuntimeConfigStub(settings);
-    provider.setConfig(config);
-    const runtime = createProviderRuntimeContext({
-      runtimeId: 'runtime-oauth-base-url',
-      settingsService: settings,
-      config,
-    });
-
-    const oauthIterator = provider.generateChatCompletion(
-      buildCallOptions(provider, {
-        contents: [createHumanContent('oauth-base-url')],
-        settings,
-        config,
-        runtime,
-      }),
-    );
-    await oauthIterator.next();
-
-    authMock.restore();
-
-    expect(createCodeAssistContentGenerator).toHaveBeenCalled();
-    const lastCall = vi
-      .mocked(createCodeAssistContentGenerator)
-      .mock.calls.at(-1);
-    expect(lastCall?.[2]).toBeUndefined();
   });
 
   it('honors invocation overrides without touching config ephemerals', async () => {

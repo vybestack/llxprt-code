@@ -21,9 +21,7 @@ const mockOAuthManager = {
   getToken: vi.fn(),
   getOAuthToken: getOAuthTokenMock,
   peekStoredToken: peekStoredTokenMock,
-  getSupportedProviders: vi
-    .fn()
-    .mockReturnValue(['gemini', 'anthropic', 'codex']),
+  getSupportedProviders: vi.fn().mockReturnValue(['anthropic', 'codex']),
   getHigherPriorityAuth: vi.fn(),
   logout: vi.fn(),
 } as unknown as OAuthManager;
@@ -74,8 +72,8 @@ describe('AuthCommandExecutor OAuth Support', () => {
   });
 
   describe('@requirement REQ-005: Direct provider OAuth enablement', () => {
-    it('@given user enters /auth gemini @when provider specified without action @then shows provider status', async () => {
-      // Given: OAuth is enabled and authenticated for gemini
+    it('@given user enters /auth anthropic @when provider specified without action @then shows provider status', async () => {
+      // Given: OAuth is enabled and authenticated for anthropic
       const mockIsEnabled = vi.fn().mockReturnValue(true);
       const mockIsAuthenticated = vi.fn().mockResolvedValue(true);
       const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
@@ -85,18 +83,18 @@ describe('AuthCommandExecutor OAuth Support', () => {
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      // When: User enters /auth gemini (without action)
-      const result = await executor.execute(mockContext, 'gemini');
+      // When: User enters /auth anthropic (without action)
+      const result = await executor.execute(mockContext, 'anthropic');
 
       // Then: Should show provider status
-      expect(mockIsEnabled).toHaveBeenCalledWith('gemini');
-      expect(mockIsAuthenticated).toHaveBeenCalledWith('gemini');
+      expect(mockIsEnabled).toHaveBeenCalledWith('anthropic');
+      expect(mockIsAuthenticated).toHaveBeenCalledWith('anthropic');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth for gemini: ENABLED (authenticated)',
+        content: 'OAuth for anthropic: ENABLED (authenticated)',
       });
-      expect(peekStoredTokenMock).toHaveBeenCalledWith('gemini');
+      expect(peekStoredTokenMock).toHaveBeenCalledWith('anthropic');
       expect(getOAuthTokenMock).not.toHaveBeenCalled();
     });
 
@@ -120,25 +118,25 @@ describe('AuthCommandExecutor OAuth Support', () => {
         (mockOAuthManager.getHigherPriorityAuth as unknown) =
           mockGetHigherPriority;
 
-        const result = await executor.execute(mockContext, 'gemini');
+        const result = await executor.execute(mockContext, 'anthropic');
 
         expect(result).toStrictEqual({
           type: 'message',
           messageType: 'info',
           content:
-            'gemini OAuth: Enabled and authenticated\n' +
+            'anthropic OAuth: Enabled and authenticated\n' +
             'Token expires: 2025-01-01T02:00:00.000Z\n' +
             'Time remaining: 2h 0m\n' +
-            'Use /auth gemini logout to sign out',
+            'Use /auth anthropic logout to sign out',
         });
-        expect(peekStoredTokenMock).toHaveBeenCalledWith('gemini');
+        expect(peekStoredTokenMock).toHaveBeenCalledWith('anthropic');
         expect(getOAuthTokenMock).not.toHaveBeenCalled();
       } finally {
         vi.useRealTimers();
       }
     });
 
-    it('@given user enters /auth gemini enable @when provider specified with action @then toggles OAuth enablement for Gemini', async () => {
+    it('@given user enters /auth anthropic enable @when provider specified with action @then toggles OAuth enablement for Anthropic', async () => {
       // Given: OAuth currently disabled, no higher priority auth
       const mockIsEnabled = vi.fn().mockReturnValue(false);
       const mockToggleOAuth = vi.fn().mockResolvedValue(true);
@@ -148,15 +146,15 @@ describe('AuthCommandExecutor OAuth Support', () => {
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      // When: User enters /auth gemini enable
-      const result = await executor.execute(mockContext, 'gemini enable');
+      // When: User enters /auth anthropic enable
+      const result = await executor.execute(mockContext, 'anthropic enable');
 
       // Then: Should toggle OAuth enablement and return success
-      expect(mockToggleOAuth).toHaveBeenCalledWith('gemini');
+      expect(mockToggleOAuth).toHaveBeenCalledWith('anthropic');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth enabled for gemini',
+        content: 'OAuth enabled for anthropic',
       });
     });
 
@@ -193,21 +191,21 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: User enters /auth with leading/trailing spaces
-      const result = await executor.execute(mockContext, '  gemini  ');
+      const result = await executor.execute(mockContext, '  anthropic  ');
 
       // Then: Should trim and show provider status
-      expect(mockIsEnabled).toHaveBeenCalledWith('gemini');
-      expect(mockIsAuthenticated).toHaveBeenCalledWith('gemini');
+      expect(mockIsEnabled).toHaveBeenCalledWith('anthropic');
+      expect(mockIsAuthenticated).toHaveBeenCalledWith('anthropic');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth for gemini: DISABLED',
+        content: 'OAuth for anthropic: DISABLED',
       });
     });
 
-    it('@given user enters /auth gemini invalid @when invalid action specified @then returns error', async () => {
+    it('@given user enters /auth anthropic invalid @when invalid action specified @then returns error', async () => {
       // When: User enters invalid action
-      const result = await executor.execute(mockContext, 'gemini invalid');
+      const result = await executor.execute(mockContext, 'anthropic invalid');
 
       // Then: Should return error message
       expect(result).toStrictEqual({
@@ -237,10 +235,8 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
   describe('Provider validation', () => {
     it('@given unknown provider @when provider not supported @then returns error message', async () => {
-      // Given: getSupportedProviders returns gemini, anthropic, codex
-      const mockGetSupported = vi
-        .fn()
-        .mockReturnValue(['gemini', 'anthropic', 'codex']);
+      // Given: getSupportedProviders returns anthropic, codex
+      const mockGetSupported = vi.fn().mockReturnValue(['anthropic', 'codex']);
       (mockOAuthManager.getSupportedProviders as unknown) = mockGetSupported;
 
       // When: User enters unknown provider
@@ -251,7 +247,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         type: 'message',
         messageType: 'error',
         content:
-          'Unknown provider: unknown-provider. Supported providers: gemini, anthropic, codex',
+          'Unknown provider: unknown-provider. Supported providers: anthropic, codex',
       });
     });
 
@@ -287,14 +283,14 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: Enable OAuth
-      const result = await executor.execute(mockContext, 'gemini enable');
+      const result = await executor.execute(mockContext, 'anthropic enable');
 
       // Then: Should enable OAuth and show success message
-      expect(mockToggleOAuth).toHaveBeenCalledWith('gemini');
+      expect(mockToggleOAuth).toHaveBeenCalledWith('anthropic');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth enabled for gemini',
+        content: 'OAuth enabled for anthropic',
       });
     });
 
@@ -329,13 +325,13 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: Try to enable already enabled OAuth
-      const result = await executor.execute(mockContext, 'gemini enable');
+      const result = await executor.execute(mockContext, 'anthropic enable');
 
       // Then: Should show already enabled message
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth for gemini is already enabled',
+        content: 'OAuth for anthropic is already enabled',
       });
     });
 
@@ -371,14 +367,14 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: Enabling OAuth with higher priority auth present
-      const result = await executor.execute(mockContext, 'gemini enable');
+      const result = await executor.execute(mockContext, 'anthropic enable');
 
       // Then: Should show warning about precedence
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
-          'OAuth enabled for gemini (Note: API Key will take precedence)',
+          'OAuth enabled for anthropic (Note: API Key will take precedence)',
       });
     });
   });
@@ -395,15 +391,15 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: Enable OAuth for provider
-      await executor.execute(mockContext, 'gemini enable');
+      await executor.execute(mockContext, 'anthropic enable');
 
       // Then: OAuth manager should save the enabled state
-      expect(mockToggleOAuth).toHaveBeenCalledWith('gemini');
+      expect(mockToggleOAuth).toHaveBeenCalledWith('anthropic');
 
       // And: Status should reflect the change
       const mockGetAuthStatus = vi.fn().mockResolvedValue([
         {
-          provider: 'gemini',
+          provider: 'anthropic',
           authenticated: false,
           oauthEnabled: true,
         },
@@ -412,7 +408,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
       const result = await executor.getAuthStatus();
       expect(result).toStrictEqual([
-        '[] gemini: not authenticated [OAuth enabled]',
+        '[] anthropic: not authenticated [OAuth enabled]',
       ]);
     });
   });
@@ -422,7 +418,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       // Given: Mock auth status response with OAuth enablement
       const mockGetAuthStatus = vi.fn().mockResolvedValue([
         {
-          provider: 'gemini',
+          provider: 'anthropic',
           authenticated: true,
           oauthEnabled: true,
           expiresIn: 3600,
@@ -440,7 +436,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
       // Then: Should return formatted status indicators with enablement info
       expect(result).toStrictEqual([
-        '[✓] gemini: authenticated (expires in 60m) [OAuth enabled]',
+        '[✓] anthropic: authenticated (expires in 60m) [OAuth enabled]',
         '[] qwen: not authenticated [OAuth disabled]',
       ]);
     });
@@ -460,13 +456,13 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: User attempts OAuth enable
-      const result = await executor.execute(mockContext, 'gemini enable');
+      const result = await executor.execute(mockContext, 'anthropic enable');
 
       // Then: Should return error message
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Failed to enable OAuth for gemini: Toggle failed',
+        content: 'Failed to enable OAuth for anthropic: Toggle failed',
       });
     });
 
@@ -514,7 +510,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       });
     });
 
-    it('@given user enters /auth GEMINI @when provider is all-caps @then shows status for gemini', async () => {
+    it('@given user enters /auth ANTHROPIC @when provider is all-caps @then shows status for anthropic', async () => {
       const mockIsEnabled = vi.fn().mockReturnValue(false);
       const mockIsAuthenticated = vi.fn().mockResolvedValue(false);
       const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
@@ -523,18 +519,18 @@ describe('AuthCommandExecutor OAuth Support', () => {
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      const result = await executor.execute(mockContext, 'GEMINI');
+      const result = await executor.execute(mockContext, 'ANTHROPIC');
 
-      expect(mockIsEnabled).toHaveBeenCalledWith('gemini');
-      expect(mockIsAuthenticated).toHaveBeenCalledWith('gemini');
+      expect(mockIsEnabled).toHaveBeenCalledWith('anthropic');
+      expect(mockIsAuthenticated).toHaveBeenCalledWith('anthropic');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth for gemini: DISABLED',
+        content: 'OAuth for anthropic: DISABLED',
       });
     });
 
-    it('@given user enters /auth Gemini ENABLE @when both provider and action are mixed case @then enables OAuth for gemini', async () => {
+    it('@given user enters /auth Anthropic ENABLE @when both provider and action are mixed case @then enables OAuth for anthropic', async () => {
       const mockIsEnabled = vi.fn().mockReturnValue(false);
       const mockToggleOAuth = vi.fn().mockResolvedValue(true);
       const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
@@ -543,13 +539,13 @@ describe('AuthCommandExecutor OAuth Support', () => {
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      const result = await executor.execute(mockContext, 'Gemini ENABLE');
+      const result = await executor.execute(mockContext, 'Anthropic ENABLE');
 
-      expect(mockToggleOAuth).toHaveBeenCalledWith('gemini');
+      expect(mockToggleOAuth).toHaveBeenCalledWith('anthropic');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth enabled for gemini',
+        content: 'OAuth enabled for anthropic',
       });
     });
   });

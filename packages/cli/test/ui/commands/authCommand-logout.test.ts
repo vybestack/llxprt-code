@@ -25,7 +25,7 @@ import {
 } from '@vybestack/llxprt-code-storage';
 import {
   OAuthManager,
-  GeminiOAuthProvider,
+  CodexOAuthProvider,
   AnthropicOAuthProvider,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import {
@@ -113,13 +113,13 @@ describe.skipIf(skipInCI)(
       context = createMockContext();
 
       // Register test providers
-      oauthManager.registerProvider(new GeminiOAuthProvider(tokenStore));
+      oauthManager.registerProvider(new CodexOAuthProvider(tokenStore));
       oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
     });
 
     afterEach(async () => {
       try {
-        await tokenStore.removeToken('gemini');
+        await tokenStore.removeToken('codex');
         await tokenStore.removeToken('anthropic');
       } catch {
         // Ignore cleanup errors
@@ -147,15 +147,15 @@ describe.skipIf(skipInCI)(
         token_type: 'Bearer',
       };
 
-      await tokenStore.saveToken('gemini', token);
+      await tokenStore.saveToken('codex', token);
 
-      const result = await authCommand.execute(context, 'gemini logout');
+      const result = await authCommand.execute(context, 'codex logout');
 
       expect(result.type).toBe('message');
       const messageResult = result as MessageActionReturn;
       expect(messageResult.messageType).toBe('info');
       expect(messageResult.content).toContain('Successfully logged out');
-      expect(messageResult.content).toContain('gemini');
+      expect(messageResult.content).toContain('codex');
     });
 
     /**
@@ -194,7 +194,7 @@ describe.skipIf(skipInCI)(
       const messageResult = result as MessageActionReturn;
       expect(messageResult.messageType).toBe('error');
       expect(messageResult.content).toContain('Supported providers');
-      expect(messageResult.content).toContain('gemini');
+      expect(messageResult.content).toContain('codex');
       expect(messageResult.content).toContain('anthropic');
     });
 
@@ -208,16 +208,16 @@ describe.skipIf(skipInCI)(
      */
     it('should return success message even with no existing token', async () => {
       // Ensure no token exists
-      const existingToken = await tokenStore.getToken('gemini');
+      const existingToken = await tokenStore.getToken('codex');
       expect(existingToken).toBeNull();
 
-      const result = await authCommand.execute(context, 'gemini logout');
+      const result = await authCommand.execute(context, 'codex logout');
 
       expect(result.type).toBe('message');
       const messageResult = result as MessageActionReturn;
       expect(messageResult.messageType).toBe('info');
       expect(messageResult.content).toContain('Successfully logged out');
-      expect(messageResult.content).toContain('gemini');
+      expect(messageResult.content).toContain('codex');
     });
 
     /**
@@ -230,9 +230,9 @@ describe.skipIf(skipInCI)(
      */
     it('should parse logout arguments correctly', async () => {
       const testCases = [
-        'gemini logout',
-        '  gemini   logout  ', // Extra whitespace
-        'gemini    logout', // Multiple spaces
+        'codex logout',
+        '  codex   logout  ', // Extra whitespace
+        'codex    logout', // Multiple spaces
       ];
 
       for (const args of testCases) {
@@ -241,7 +241,7 @@ describe.skipIf(skipInCI)(
         expect(result.type).toBe('message');
         const messageResult = result as MessageActionReturn;
         expect(messageResult.messageType).toBe('info');
-        expect(messageResult.content).toContain('gemini');
+        expect(messageResult.content).toContain('codex');
       }
     });
 
@@ -255,10 +255,10 @@ describe.skipIf(skipInCI)(
      */
     it('should handle case variations for logout action', async () => {
       const testCases = [
-        'gemini logout',
-        'gemini LOGOUT',
-        'gemini Logout',
-        'gemini LogOut',
+        'codex logout',
+        'codex LOGOUT',
+        'codex Logout',
+        'codex LogOut',
       ];
 
       for (const args of testCases) {
@@ -304,7 +304,7 @@ describe.skipIf(skipInCI)(
         throw new Error('OAuth manager failure');
       };
 
-      const result = await authCommand.execute(context, 'gemini logout');
+      const result = await authCommand.execute(context, 'codex logout');
 
       // Restore original method
       oauthManager.logout = originalLogout;
@@ -313,7 +313,7 @@ describe.skipIf(skipInCI)(
       const messageResult = result as MessageActionReturn;
       expect(messageResult.messageType).toBe('error');
       expect(messageResult.content).toContain('Failed to logout');
-      expect(messageResult.content).toContain('gemini');
+      expect(messageResult.content).toContain('codex');
       expect(messageResult.content).toContain('OAuth manager failure');
     });
   },
@@ -334,13 +334,13 @@ describe.skipIf(skipInCI)(
       context = createMockContext();
 
       // Register test providers
-      oauthManager.registerProvider(new GeminiOAuthProvider(tokenStore));
+      oauthManager.registerProvider(new CodexOAuthProvider(tokenStore));
       oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
     });
 
     afterEach(async () => {
       try {
-        await tokenStore.removeToken('gemini');
+        await tokenStore.removeToken('codex');
         await tokenStore.removeToken('anthropic');
       } catch {
         // Ignore cleanup errors
@@ -406,7 +406,7 @@ describe.skipIf(skipInCI)(
      * @then Provider names normalize consistently
      */
     it('should handle provider name formatting consistently', async () => {
-      const providerVariations = ['gemini', 'Gemini', 'GEMINI'];
+      const providerVariations = ['codex', 'Codex', 'CODEX'];
 
       for (const provider of providerVariations) {
         const result = await authCommand.execute(context, `${provider} logout`);
@@ -430,7 +430,7 @@ describe.skipIf(skipInCI)(
       const availableProviders = oauthManager.getSupportedProviders();
 
       // Should include all registered providers
-      expect(availableProviders).toContain('gemini');
+      expect(availableProviders).toContain('codex');
       expect(availableProviders).toContain('anthropic');
 
       // Test that error messages include these providers
@@ -460,13 +460,13 @@ describe.skipIf(skipInCI)(
       context = createMockContext();
 
       // Register test providers
-      oauthManager.registerProvider(new GeminiOAuthProvider(tokenStore));
+      oauthManager.registerProvider(new CodexOAuthProvider(tokenStore));
       oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
     });
 
     afterEach(async () => {
       try {
-        await tokenStore.removeToken('gemini');
+        await tokenStore.removeToken('codex');
         await tokenStore.removeToken('anthropic');
       } catch {
         // Ignore cleanup errors
@@ -488,15 +488,15 @@ describe.skipIf(skipInCI)(
      * @then Success message contains required information
      */
     it('should provide informative success messages', async () => {
-      const result = await authCommand.execute(context, 'gemini logout');
+      const result = await authCommand.execute(context, 'codex logout');
 
       expect(result.type).toBe('message');
       const messageResult = result as MessageActionReturn;
       expect(messageResult.messageType).toBe('info');
 
       const content = messageResult.content;
-      expect(content).toMatch(/successfully|logged out|gemini/i);
-      expect(content).toContain('gemini');
+      expect(content).toMatch(/successfully|logged out|codex/i);
+      expect(content).toContain('codex');
     });
 
     /**
@@ -530,7 +530,7 @@ describe.skipIf(skipInCI)(
      */
     it('should use appropriate message types', async () => {
       // Success case should be 'info'
-      const successResult = await authCommand.execute(context, 'gemini logout');
+      const successResult = await authCommand.execute(context, 'codex logout');
       expect(successResult.type).toBe('message');
       expect((successResult as MessageActionReturn).messageType).toBe('info');
 
@@ -551,7 +551,7 @@ describe.skipIf(skipInCI)(
     it('should provide clear and actionable feedback', async () => {
       // Test various scenarios for message clarity
       const testCases = [
-        { args: 'gemini logout', expectSuccess: true },
+        { args: 'codex logout', expectSuccess: true },
         { args: 'invalid logout', expectSuccess: false },
         { args: 'anthropic logout', expectSuccess: true },
       ];
@@ -624,13 +624,13 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
     context = createMockContext();
 
     // Register test providers
-    oauthManager.registerProvider(new GeminiOAuthProvider(tokenStore));
+    oauthManager.registerProvider(new CodexOAuthProvider(tokenStore));
     oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
   });
 
   afterEach(async () => {
     try {
-      await tokenStore.removeToken('gemini');
+      await tokenStore.removeToken('codex');
       await tokenStore.removeToken('anthropic');
     } catch {
       // Ignore cleanup errors
@@ -647,7 +647,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
    * Property Test 1: Command parsing with random whitespace
    */
   it.prop([
-    fc.constantFrom('gemini', 'anthropic'),
+    fc.constantFrom('codex', 'anthropic'),
     fc.string().filter((s) => /^\s*$/.test(s) && s.length < 5), // Only whitespace, shorter
     fc.string().filter((s) => /^\s*$/.test(s) && s.length < 5),
   ])(
@@ -673,7 +673,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
    * Property Test 3: Command argument normalization
    */
   it.prop([
-    fc.constantFrom('gemini', 'anthropic'),
+    fc.constantFrom('codex', 'anthropic'),
     fc.constantFrom('logout', 'LOGOUT', 'Logout', 'logOut', 'LogOut'),
   ])(
     'should normalize command argument case variations',
@@ -695,7 +695,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
    * Property Test 4: Concurrent command execution
    */
   it.prop([
-    fc.array(fc.constantFrom('gemini', 'anthropic'), {
+    fc.array(fc.constantFrom('codex', 'anthropic'), {
       minLength: 2,
       maxLength: 10,
     }),
@@ -732,7 +732,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
    * @requirement REQ-002
    * Property Test 5: Message content validation
    */
-  it.prop([fc.constantFrom('gemini', 'anthropic')])(
+  it.prop([fc.constantFrom('codex', 'anthropic')])(
     'should always include provider name in response messages',
     async (provider) => {
       const result = await authCommand.execute(context, `${provider} logout`);

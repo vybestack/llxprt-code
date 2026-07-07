@@ -6,7 +6,6 @@
 
 import {
   type Config,
-  clearCachedCredentialFile,
   getErrorStatus,
   DebugLogger,
   EmojiFilter,
@@ -35,7 +34,6 @@ import { type Part } from '@google/genai';
 import { type LoadedSettings } from '../config/settings.js';
 import { randomUUID } from 'crypto';
 import {
-  getActiveProfileName,
   loadProfileByName,
   setCliRuntimeContext,
 } from '@vybestack/llxprt-code-providers/runtime.js';
@@ -198,11 +196,6 @@ export class ZedAgent {
       ? await profileManager.listProfiles()
       : [];
     const profileName = parseZedAuthMethodId(methodId, availableProfiles);
-
-    const currentProfile = getActiveProfileName();
-    if (!currentProfile || currentProfile !== profileName) {
-      await clearCachedCredentialFile();
-    }
 
     await loadProfileByName(profileName);
   }

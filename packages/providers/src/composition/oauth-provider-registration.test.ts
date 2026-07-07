@@ -23,7 +23,7 @@ describe('registerStandardOAuthProviders', () => {
     resetRegisteredProviders();
   });
 
-  it('registers gemini, anthropic, and codex on a fresh manager', () => {
+  it('registers anthropic and codex on a fresh manager', () => {
     const oauthManager = createFreshManager();
 
     expect(oauthManager.getSupportedProviders()).toStrictEqual([]);
@@ -33,7 +33,6 @@ describe('registerStandardOAuthProviders', () => {
     expect(oauthManager.getSupportedProviders().sort()).toStrictEqual([
       'anthropic',
       'codex',
-      'gemini',
     ]);
   });
 
@@ -46,7 +45,6 @@ describe('registerStandardOAuthProviders', () => {
     expect(oauthManager.getSupportedProviders().sort()).toStrictEqual([
       'anthropic',
       'codex',
-      'gemini',
     ]);
   });
 
@@ -56,7 +54,6 @@ describe('registerStandardOAuthProviders', () => {
 
     registerStandardOAuthProviders(oauthManager, explicitTokenStore);
 
-    expect(isOAuthProviderRegistered('gemini', oauthManager)).toBe(true);
     expect(isOAuthProviderRegistered('anthropic', oauthManager)).toBe(true);
     expect(isOAuthProviderRegistered('codex', oauthManager)).toBe(true);
   });
@@ -69,7 +66,6 @@ describe('registerStandardOAuthProviders', () => {
     expect(oauthManager.getSupportedProviders().sort()).toStrictEqual([
       'anthropic',
       'codex',
-      'gemini',
     ]);
   });
 });
