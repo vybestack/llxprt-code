@@ -21,8 +21,8 @@ import {
   type EmojiFilterMode,
   type MessageBus,
   debugLogger,
+  type ContractPart,
 } from '@vybestack/llxprt-code-core';
-import { type Part } from '@google/genai';
 import { activateSettingsRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import {
   fromConfig,
@@ -209,7 +209,7 @@ async function resolveSlashQuery(
   abortController: AbortController,
   config: Config,
   settings: LoadedSettings,
-): Promise<Part[] | undefined> {
+): Promise<ContractPart[] | undefined> {
   if (!isSlashCommand(input)) {
     return undefined;
   }
@@ -223,7 +223,7 @@ async function resolveSlashQuery(
     slashCommandResult !== undefined &&
     (typeof slashCommandResult !== 'string' || slashCommandResult.length > 0)
   ) {
-    return slashCommandResult as Part[];
+    return slashCommandResult as ContractPart[];
   }
   return undefined;
 }
@@ -233,7 +233,7 @@ async function resolveAtQuery(
   abortController: AbortController,
   config: Config,
   getToolHandle: (name: string) => AgentToolHandle | undefined,
-): Promise<Part[]> {
+): Promise<ContractPart[]> {
   const { processedQuery, error } = await handleAtCommand({
     query: input,
     config,
@@ -252,7 +252,7 @@ async function resolveAtQuery(
         : 'Exiting due to an error processing the @ command.';
     throw new FatalInputError(fatalMessage);
   }
-  return processedQuery as Part[];
+  return processedQuery as ContractPart[];
 }
 
 function emitUserMessage(
@@ -302,7 +302,7 @@ function buildActivationCliOverrides(
 }
 
 async function processQuery(
-  query: Part[],
+  query: ContractPart[],
   agent: Agent,
   params: RunNonInteractiveParams,
   options: {

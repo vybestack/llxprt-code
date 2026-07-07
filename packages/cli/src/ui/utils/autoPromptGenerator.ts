@@ -4,10 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { AgentClientContract } from '@vybestack/llxprt-code-core';
+import type {
+  AgentClientContract,
+  ContractSendMessageParameters,
+  ContractGenerateContentConfig,
+} from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import type { SendMessageParameters } from '@google/genai';
-import { FunctionCallingConfigMode } from '@google/genai';
 import { getRuntimeBridge } from '../contexts/RuntimeContext.js';
 import {
   createDetachedAutoPromptClient,
@@ -26,7 +28,9 @@ export interface AutoPromptRuntime extends DetachedAutoPromptClientSource {
   getAgentClient(): AgentClientContract | null | undefined;
 }
 
-function createAutoPromptRequest(description: string): SendMessageParameters {
+function createAutoPromptRequest(
+  description: string,
+): ContractSendMessageParameters {
   const autoModePrompt = `Generate a detailed system prompt for a subagent with the following purpose:\n\n${description}\n\nRequirements:\n- Create a comprehensive system prompt that defines the subagent's role, capabilities, and behavior\n- Be specific and actionable\n- Use clear, professional language\n- Output ONLY the system prompt text, no explanations or metadata`;
 
   return {
@@ -34,17 +38,17 @@ function createAutoPromptRequest(description: string): SendMessageParameters {
     config: {
       toolConfig: {
         functionCallingConfig: {
-          mode: FunctionCallingConfigMode.NONE,
+          mode: 'NONE',
         },
       },
       serverTools: [],
-    } as SendMessageParameters['config'] & { serverTools: unknown[] },
+    } as ContractGenerateContentConfig & { serverTools: unknown[] },
   };
 }
 
 async function requestFromClient(
   targetClient: AgentClientContract,
-  requestPayload: SendMessageParameters,
+  requestPayload: ContractSendMessageParameters,
   options?: { useRuntimeScope?: boolean },
 ): Promise<{ text?: string }> {
   const executeRequest = () =>

@@ -15,8 +15,8 @@ import {
   type ToolCallRequestInfo,
   UserPromptEvent,
   MessageSenderType,
+  type ContractPartListUnion,
 } from '@vybestack/llxprt-code-core';
-import { type PartListUnion } from '@google/genai';
 import { type SlashCommandProcessorResult } from '../../types.js';
 import { isAtCommand, isSlashCommand } from '../../utils/commandUtils.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
@@ -44,7 +44,7 @@ export interface PrepareQueryDeps {
   onDebugMessage: (message: string) => void;
   handleShellCommand: (query: string, signal: AbortSignal) => boolean;
   handleSlashCommand: (
-    cmd: PartListUnion,
+    cmd: ContractPartListUnion,
   ) => Promise<SlashCommandProcessorResult | false>;
   logger:
     | { logMessage: (sender: MessageSenderType, text: string) => Promise<void> }
@@ -58,12 +58,15 @@ export interface PrepareQueryDeps {
 }
 
 export async function prepareQueryForAgent(
-  query: PartListUnion,
+  query: ContractPartListUnion,
   userMessageTimestamp: number,
   abortSignal: AbortSignal,
   promptId: string,
   deps: PrepareQueryDeps,
-): Promise<{ queryToSend: PartListUnion | null; shouldProceed: boolean }> {
+): Promise<{
+  queryToSend: ContractPartListUnion | null;
+  shouldProceed: boolean;
+}> {
   const { onDebugMessage } = deps;
   // Gate on THIS turn's own abort signal, not the shared turnCancelledRef: a
   // turn's own signal is the precise indicator of whether that specific turn
@@ -76,7 +79,7 @@ export async function prepareQueryForAgent(
     return { queryToSend: null, shouldProceed: false };
   }
 
-  let localQueryToSendToAgent: PartListUnion | null = null;
+  let localQueryToSendToAgent: ContractPartListUnion | null = null;
 
   if (typeof query === 'string') {
     localQueryToSendToAgent = await processStringQuery(
@@ -105,7 +108,7 @@ async function processStringQuery(
   abortSignal: AbortSignal,
   promptId: string,
   deps: PrepareQueryDeps,
-): Promise<PartListUnion | null> {
+): Promise<ContractPartListUnion | null> {
   const {
     runtime,
     logUserPrompt,

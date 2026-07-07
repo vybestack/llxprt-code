@@ -4,19 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
 import {
   getErrorMessage,
   isNodeError,
   isWithinRoot,
   debugLogger,
+  type Config,
+  type ContractPart,
 } from '@vybestack/llxprt-code-core';
 import type {
   FileSystemService,
   FilterFilesOptions,
 } from '@vybestack/llxprt-code-storage';
 import type * as acp from '@agentclientprotocol/sdk';
-import type { Part } from '@google/genai';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { glob } from 'glob';
@@ -35,7 +35,7 @@ export class ZedPathResolver {
   async resolvePrompt(
     message: acp.ContentBlock[],
     abortSignal: AbortSignal,
-  ): Promise<Part[]> {
+  ): Promise<ContractPart[]> {
     const FILE_URI_SCHEME = 'file://';
 
     const { parts, embeddedContext } = this.convertContentBlocks(
@@ -81,7 +81,7 @@ export class ZedPathResolver {
       );
     }
 
-    const processedQueryParts: Part[] = [{ text: initialQueryText }];
+    const processedQueryParts: ContractPart[] = [{ text: initialQueryText }];
 
     // Preserve existing inlineData parts (images/audio) from the original prompt.
     for (const part of parts) {
@@ -115,7 +115,7 @@ export class ZedPathResolver {
     message: acp.ContentBlock[],
     fileUriScheme: string,
   ): {
-    parts: Part[];
+    parts: ContractPart[];
     embeddedContext: acp.EmbeddedResourceResource[];
   } {
     const embeddedContext: acp.EmbeddedResourceResource[] = [];
@@ -159,7 +159,7 @@ export class ZedPathResolver {
   }
 
   private async resolvePathSpecs(
-    atPathCommandParts: Part[],
+    atPathCommandParts: ContractPart[],
     abortSignal: AbortSignal,
     fileDiscovery: ReturnType<Config['getFileService']>,
     fileFilteringOptions: FilterFilesOptions,
@@ -345,7 +345,7 @@ export class ZedPathResolver {
   }
 
   private buildQueryText(
-    parts: Part[],
+    parts: ContractPart[],
     atPathToResolvedSpecMap: Map<string, string>,
   ): string {
     let queryText = '';
@@ -367,8 +367,8 @@ export class ZedPathResolver {
   }
 
   private appendPathToQueryText(
-    chunk: Part,
-    parts: Part[],
+    chunk: ContractPart,
+    parts: ContractPart[],
     i: number,
     queryText: string,
     atPathToResolvedSpecMap: Map<string, string>,
@@ -427,7 +427,7 @@ export class ZedPathResolver {
     pathSpecsToRead: string[],
     contentLabelsForDisplay: string[],
     abortSignal: AbortSignal,
-    processedQueryParts: Part[],
+    processedQueryParts: ContractPart[],
   ): Promise<void> {
     const targetDir = this.config.getTargetDir();
     const fileSystemService = this.config.getFileSystemService();
@@ -458,7 +458,7 @@ export class ZedPathResolver {
     targetDir: string,
     fileSystemService: FileSystemService,
     abortSignal: AbortSignal,
-    processedQueryParts: Part[],
+    processedQueryParts: ContractPart[],
   ): Promise<void> {
     if (this.isGlobPath(spec)) {
       await this.appendGlobSpec(
@@ -487,7 +487,7 @@ export class ZedPathResolver {
     targetDir: string,
     fileSystemService: FileSystemService,
     abortSignal: AbortSignal,
-    processedQueryParts: Part[],
+    processedQueryParts: ContractPart[],
   ): Promise<void> {
     try {
       const matches = await glob(spec, {
@@ -533,7 +533,7 @@ export class ZedPathResolver {
     absolute: string,
     fileSystemService: FileSystemService,
     abortSignal: AbortSignal,
-    processedQueryParts: Part[],
+    processedQueryParts: ContractPart[],
   ): Promise<boolean> {
     const content = await fileSystemService.readTextFile(absolute);
     if (abortSignal.aborted) {
@@ -556,7 +556,7 @@ export class ZedPathResolver {
     targetDir: string,
     fileSystemService: FileSystemService,
     abortSignal: AbortSignal,
-    processedQueryParts: Part[],
+    processedQueryParts: ContractPart[],
   ): Promise<void> {
     try {
       const absolute = path.isAbsolute(spec)
@@ -588,7 +588,7 @@ export class ZedPathResolver {
   }
 
   private appendEmbeddedContext(
-    processedQueryParts: Part[],
+    processedQueryParts: ContractPart[],
     embeddedContext: acp.EmbeddedResourceResource[],
   ): void {
     processedQueryParts.push({

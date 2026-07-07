@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type {
+  ContractContent,
+  ContractPart,
+  ContractPartListUnion,
+} from '@vybestack/llxprt-code-core';
+
 /**
  * Integration tests for useAgentEventStream that drive the REAL engine
  * (createAgenticLoop + mapLoopStream) through the hook. The only mock boundary
@@ -30,7 +36,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook } from '../../../../test-utils/render.js';
 import { act } from 'react';
-import type { PartListUnion, Content, Part } from '@google/genai';
 
 import {
   createAgenticLoop,
@@ -106,14 +111,14 @@ function finishedEvent(): ServerAgentStreamEvent {
 
 interface ScriptedClientState {
   scriptQueue: ServerAgentStreamEvent[][];
-  history: Content[];
-  turnMessages: PartListUnion[];
+  history: ContractContent[];
+  turnMessages: ContractPartListUnion[];
   recordedToolCalls: CompletedToolCall[][];
-  sendMessageStreamCalls: PartListUnion[];
+  sendMessageStreamCalls: ContractPartListUnion[];
 }
 
-function partListUnionToParts(req: PartListUnion): Part[] {
-  if (Array.isArray(req)) return req as Part[];
+function partListUnionToParts(req: ContractPartListUnion): ContractPart[] {
+  if (Array.isArray(req)) return req as ContractPart[];
   if (typeof req === 'string') return [{ text: req }];
   return [req];
 }
@@ -135,7 +140,7 @@ function createScriptedAgentClient(scripts: ServerAgentStreamEvent[][]): {
     getHistory() {
       return state.history;
     },
-    setHistory(h: Content[]) {
+    setHistory(h: ContractContent[]) {
       state.history.splice(0, state.history.length, ...h);
     },
     clearHistory() {
@@ -164,12 +169,12 @@ function createScriptedAgentClient(scripts: ServerAgentStreamEvent[][]): {
       return state.history;
     },
     storeHistoryServiceForReuse: () => {},
-    storeHistoryForLaterUse: (h: Content[]) => state.history.push(...h),
-    addHistory: async (content: Content) => {
+    storeHistoryForLaterUse: (h: ContractContent[]) => state.history.push(...h),
+    addHistory: async (content: ContractContent) => {
       state.history.push(content);
     },
     async *sendMessageStream(
-      req: PartListUnion,
+      req: ContractPartListUnion,
       signal: AbortSignal,
       _promptId: string,
     ): AsyncGenerator<ServerAgentStreamEvent> {
@@ -334,7 +339,7 @@ function createRealEngineAgent(opts: RealEngineAgentOptions): Agent {
       });
       yield* mapLoopStream(
         loop.run(
-          input as PartListUnion,
+          input as ContractPartListUnion,
           streamOpts?.signal ?? new AbortController().signal,
           streamOpts?.promptId ?? 'test',
         ),
@@ -468,7 +473,7 @@ interface HookHarness {
   result: {
     current: {
       runStream: (
-        msg: PartListUnion,
+        msg: ContractPartListUnion,
         sig: AbortSignal,
         pid: string,
       ) => Promise<void>;
@@ -510,7 +515,7 @@ function setupHookWithAgent(agent: Agent): HookHarness {
   return { result, routedEvents, addItem, onToolCallsUpdate, unmount };
 }
 
-function hasFunctionResponse(history: Content[]): boolean {
+function hasFunctionResponse(history: ContractContent[]): boolean {
   return history
     .filter((h) => h.role === 'user')
     .flatMap((h) => h.parts)
@@ -567,7 +572,7 @@ describe('useAgentEventStream loop integration', () => {
     const controller = new AbortController();
     await act(async () => {
       await harness.result.current.runStream(
-        'user message' as PartListUnion,
+        'user message' as ContractPartListUnion,
         controller.signal,
         'prompt-1',
       );
@@ -581,7 +586,7 @@ describe('useAgentEventStream loop integration', () => {
 
     // The second turn's message contained a functionResponse part.
     expect(hasFunctionResponse(state.history)).toBe(true);
-    const turn2Parts = state.turnMessages[1] as Part[];
+    const turn2Parts = state.turnMessages[1] as ContractPart[];
     expect(
       Array.isArray(turn2Parts) &&
         turn2Parts.some((p) => 'functionResponse' in p),
@@ -632,13 +637,13 @@ describe('useAgentEventStream loop integration', () => {
       approvalMode: ApprovalMode.YOLO,
     });
 
-    // A scripted client that emits one Content chunk, then hangs on a
+    // A scripted client that emits one ContractContent chunk, then hangs on a
     // never-resolving promise unless the signal aborts, at which point it
     // emits UserCancelled (matching the real client's abort behavior).
     let callCount = 0;
     const hangingChat = {
       getHistory() {
-        return [] as Content[];
+        return [] as ContractContent[];
       },
       setHistory: () => {},
       clearHistory: () => {},
@@ -655,7 +660,7 @@ describe('useAgentEventStream loop integration', () => {
       },
       addHistory: async () => {},
       async *sendMessageStream(
-        _req: PartListUnion,
+        _req: ContractPartListUnion,
         signal: AbortSignal,
         _promptId: string,
       ): AsyncGenerator<ServerAgentStreamEvent> {
@@ -689,7 +694,7 @@ describe('useAgentEventStream loop integration', () => {
     const controller = new AbortController();
     const runPromise = act(async () => {
       await harness.result.current.runStream(
-        'go' as PartListUnion,
+        'go' as ContractPartListUnion,
         controller.signal,
         'prompt-cancel',
       );
@@ -836,7 +841,7 @@ describe('useAgentEventStream loop integration', () => {
     // we resolve via onConfirm.
     const runPromise = act(async () => {
       await harness.result.current.runStream(
-        'go' as PartListUnion,
+        'go' as ContractPartListUnion,
         controller.signal,
         'prompt-appr',
       );
@@ -878,7 +883,7 @@ describe('useAgentEventStream loop integration', () => {
 
     const runPromise = act(async () => {
       await harness.result.current.runStream(
-        'go' as PartListUnion,
+        'go' as ContractPartListUnion,
         controller.signal,
         'prompt-rej',
       );

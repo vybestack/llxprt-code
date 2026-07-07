@@ -7,14 +7,15 @@
 import type { FileWorkspaceState } from '../cliUiRuntime.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { PartListUnion, PartUnion } from '@google/genai';
 import {
   debugLogger,
   getErrorMessage,
   isNodeError,
   validatePathWithinWorkspace,
+  type ContractPartListUnion,
+  type ContractPart,
+  type DiscoveredMCPResource,
 } from '@vybestack/llxprt-code-core';
-import type { DiscoveredMCPResource } from '@vybestack/llxprt-code-core';
 import type {
   AgentToolHandle,
   AgentToolInvocation,
@@ -31,7 +32,7 @@ export interface AtCommandPart {
 }
 
 export interface AtCommandProcessResult {
-  processedQuery: PartListUnion | null;
+  processedQuery: ContractPartListUnion | null;
   error?: string;
 }
 
@@ -93,7 +94,7 @@ interface FileReadParams {
   pathSpecsToRead: string[];
   contentLabelsForDisplay: string[];
   absoluteToRelativePathMap: Map<string, string>;
-  processedQueryParts: PartUnion[];
+  processedQueryParts: Array<ContractPart | string>;
   resourceReadDisplays: IndividualToolCallDisplay[];
   readManyFilesTool: NonNullable<MaybeToolHandle>;
   respectFileIgnore: ReturnType<
@@ -615,7 +616,7 @@ function buildReadErrorDisplay(
 
 function appendReadManyFilesContent(
   llmContent: unknown,
-  processedQueryParts: PartUnion[],
+  processedQueryParts: Array<ContractPart | string>,
   absoluteToRelativePathMap: Map<string, string>,
   config: AtCommandHelperRuntime,
   onDebugMessage: (message: string) => void,
@@ -638,12 +639,12 @@ function appendReadManyFilesContent(
 
 function processReadManyFilesPart(
   part: unknown,
-  processedQueryParts: PartUnion[],
+  processedQueryParts: Array<ContractPart | string>,
   absoluteToRelativePathMap: Map<string, string>,
   config: AtCommandHelperRuntime,
 ): void {
   if (typeof part !== 'string') {
-    processedQueryParts.push(part as PartUnion);
+    processedQueryParts.push(part as ContractPart | string);
     return;
   }
   const parsed = parseFileContentPart(part, absoluteToRelativePathMap, config);

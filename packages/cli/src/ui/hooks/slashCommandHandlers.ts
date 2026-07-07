@@ -5,11 +5,11 @@
  */
 
 import type { CliUiRuntime } from '../cliUiRuntime.js';
-import type { PartListUnion } from '@google/genai';
 import type {
   RecordingIntegration,
   ToolCallConfirmationDetails,
   DebugLogger,
+  ContractPartListUnion,
 } from '@vybestack/llxprt-code-core';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import {
@@ -76,7 +76,7 @@ interface ParsedCommandState {
 
 export async function processSlashCommand(
   deps: SlashCommandHandlerDeps,
-  rawQuery: PartListUnion,
+  rawQuery: ContractPartListUnion,
   oneTimeShellAllowlist?: Set<string>,
   overwriteConfirmed?: boolean,
   addToHistory: boolean = true,
@@ -223,7 +223,7 @@ async function handleActionResult(
     case 'submit_prompt':
       return {
         type: 'submit_prompt',
-        content: stringifyPrompt(result.content as PartListUnion),
+        content: stringifyPrompt(result.content as ContractPartListUnion),
       };
     case 'confirm_shell_commands':
       return confirmShellCommands(deps, result);
@@ -379,7 +379,7 @@ function handleLoadHistoryResult(
   return { type: 'handled' };
 }
 
-function stringifyPrompt(content: PartListUnion): string {
+function stringifyPrompt(content: ContractPartListUnion): string {
   if (typeof content === 'string') {
     return content;
   }
