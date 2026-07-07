@@ -15,9 +15,16 @@ const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
 const launcher = join(repoRoot, 'packages', 'cli', 'bin', 'llxprt.cjs');
 
-// Generous per-test budget: the Node launcher re-execs the CLI under Bun, so
-// the first cold spawn can be slow on CI runners.
-const SMOKE_TEST_TIMEOUT_MS = 30_000;
+// spawnSync blocks the event loop, so Vitest's per-test timeout cannot
+// interrupt a hung child; the spawnSync `timeout` below is the real guard. Keep
+// it generous — the Node launcher re-execs the CLI under Bun, so a cold spawn on
+// a loaded CI runner takes seconds — while still bounding a genuine hang.
+const SPAWN_KILL_TIMEOUT_MS = 120_000;
+
+// Vitest per-test budget. Kept above SPAWN_KILL_TIMEOUT_MS so the spawnSync
+// timeout fires first and surfaces a diagnosable error, rather than Vitest
+// aborting the test with no cause.
+const SMOKE_TEST_TIMEOUT_MS = SPAWN_KILL_TIMEOUT_MS + 30_000;
 
 // `--version` prints a semver-prefixed line (e.g. "0.10.0").
 const VERSION_REGEX = /^\d+\.\d+\.\d+/;
@@ -32,16 +39,22 @@ function runLauncherVersion(env: NodeJS.ProcessEnv): {
     encoding: 'utf8',
     maxBuffer: 1024 * 1024,
     env,
-    // spawnSync blocks the event loop, so Vitest's per-test timeout cannot
-    // interrupt a hung child. Kill it here instead so a stuck launcher surfaces
-    // as a failure rather than stalling the runner indefinitely.
-    timeout: SMOKE_TEST_TIMEOUT_MS,
+    // Kill a hung child here (spawnSync blocks the event loop, so Vitest's
+    // per-test timeout cannot). Generous enough to absorb a cold Bun re-exec on
+    // a loaded CI runner, tight enough to bound a genuine hang.
+    timeout: SPAWN_KILL_TIMEOUT_MS,
   });
   if (result.error) {
     // Surface spawn failures (e.g. missing launcher or a timeout kill)
     // explicitly; otherwise a null status with empty stderr makes the CI
     // failure undiagnosable.
     throw new Error(`Failed to spawn CLI launcher: ${result.error.message}`);
+  }
+  if (result.signal) {
+    // A signal-killed child (e.g. the OOM killer's SIGKILL) leaves result.error
+    // unset with a null status. Surface the signal so CI shows the real cause
+    // instead of a confusing "Expected null to be 0".
+    throw new Error(`CLI launcher was killed by signal ${result.signal}`);
   }
   return {
     status: result.status,

@@ -24,8 +24,10 @@ interface GitCommitInfo {
   commit: string;
 }
 
+// Non-null once a valid commit has been read. Misses are intentionally not
+// cached (see loadGitCommitInfo), so consumers self-heal after the artifact is
+// generated instead of locking in a transient 'N/A'.
 let infoCache: string | null = null;
-let infoLoaded = false;
 
 function candidatePaths(): string[] {
   const override = process.env[GIT_COMMIT_INFO_PATH_ENV];
@@ -54,8 +56,8 @@ function candidatePaths(): string[] {
 }
 
 function loadGitCommitInfo(): string {
-  if (infoLoaded) {
-    return infoCache ?? NOT_AVAILABLE;
+  if (infoCache !== null) {
+    return infoCache;
   }
 
   let candidates: string[];
@@ -72,8 +74,10 @@ function loadGitCommitInfo(): string {
           error instanceof Error ? error.message : String(error)
         }`,
     );
-    infoCache = null;
-    infoLoaded = true;
+    // Do not cache this miss: a load before the artifact exists (fresh checkout
+    // or incremental build) must not lock in 'N/A' for the process lifetime.
+    // Only a successful read is cached, so call-time consumers self-heal once
+    // git-commit.json is generated.
     return NOT_AVAILABLE;
   }
 
@@ -85,7 +89,6 @@ function loadGitCommitInfo(): string {
         typeof parsed.commit === 'string' ? parsed.commit.trim() : '';
       if (commit !== '') {
         infoCache = commit;
-        infoLoaded = true;
         return infoCache;
       }
       // Found and parsed, but the commit field is missing/blank/wrong type.
@@ -107,8 +110,10 @@ function loadGitCommitInfo(): string {
     }
   }
 
-  infoCache = null;
-  infoLoaded = true;
+  // No candidate yielded a valid commit. Do not cache this miss: the artifact
+  // may not have been generated yet (fresh checkout / incremental build), so a
+  // later call must re-read rather than serve a stale 'N/A'. Only successful
+  // reads are cached (see the early return above).
   return NOT_AVAILABLE;
 }
 
@@ -118,5 +123,4 @@ export function getGitCommitInfo(): string {
 
 export function __resetGitCommitInfoCacheForTests(): void {
   infoCache = null;
-  infoLoaded = false;
 }

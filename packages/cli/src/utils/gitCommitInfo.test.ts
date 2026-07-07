@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -68,14 +68,13 @@ describe('gitCommitInfo', () => {
     // function").
     delete process.env[envVar];
     __resetGitCommitInfoCacheForTests();
-    const originalCwd = process.cwd;
-    process.cwd = (() => {
+    const cwdSpy = vi.spyOn(process, 'cwd').mockImplementation(() => {
       throw new TypeError('cwd is not a function');
-    }) as typeof process.cwd;
+    });
     try {
       expect(getGitCommitInfo()).toBe('N/A');
     } finally {
-      process.cwd = originalCwd;
+      cwdSpy.mockRestore();
     }
   });
 
@@ -124,6 +123,16 @@ describe('gitCommitInfo', () => {
 
     __resetGitCommitInfoCacheForTests();
     expect(getGitCommitInfo()).toBe('changed999');
+  });
+
+  it('does not cache a miss: re-reads once the artifact appears', () => {
+    // A load before the artifact exists (fresh checkout / incremental build)
+    // must not lock in 'N/A' for the process lifetime. Only successful reads
+    // are cached, so a later call self-heals without a manual cache reset.
+    expect(getGitCommitInfo()).toBe('N/A');
+
+    writeFileSync(infoPath, JSON.stringify({ commit: 'appeared1' }), 'utf-8');
+    expect(getGitCommitInfo()).toBe('appeared1');
   });
 
   it('treats a whitespace-only override as unset (ignores it)', () => {
