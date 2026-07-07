@@ -12,7 +12,7 @@ import {
   CommandKind,
 } from './types.js';
 import { MessageType } from '../types.js';
-import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
+import { getGitCommitInfo } from '../../utils/gitCommitInfo.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
 import { getCliVersion } from '../../utils/version.js';
 import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
@@ -34,6 +34,7 @@ async function buildBugInfo(context: CommandContext): Promise<string> {
   const sandboxEnv = getSandboxEnv();
   const modelVersion = config?.getModel() ?? 'Unknown';
   const cliVersion = await getCliVersion();
+  const gitCommitInfo = getGitCommitInfo();
   const memoryUsage = formatMemoryUsage(process.memoryUsage().rss);
   const ideClient =
     (config?.getIdeMode() === true &&
@@ -48,7 +49,7 @@ async function buildBugInfo(context: CommandContext): Promise<string> {
 
   let info = `
 * **CLI Version:** ${cliVersion}
-* **Git Commit:** ${GIT_COMMIT_INFO}
+* **Git Commit:** ${gitCommitInfo}
 * **Operating System:** ${osVersion}
 * **Sandbox Environment:** ${sandboxEnv}
 * **Model Version:** ${modelVersion}
