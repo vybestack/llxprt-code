@@ -9,12 +9,33 @@ import {
   createContentGenerator,
   createContentGeneratorConfig,
 } from './contentGenerator.js';
-import { GoogleGenAIWrapper } from '../code_assist/googleGenAIWrapper.js';
 import type { Config } from '../config/config.js';
 
-vi.mock('@google/genai', () => ({
-  GoogleGenAI: vi.fn().mockImplementation(() => ({
-    models: {},
+const mockGoogleGenAIWrapperConstructor = vi.hoisted(() => vi.fn());
+const mockGoogleGenAIWrapperInstance = vi.hoisted(() => ({
+  generateContent: async (): Promise<unknown> => ({}),
+  generateContentStream: async (): Promise<AsyncGenerator<unknown>> => {
+    async function* emptyStream(): AsyncGenerator<unknown> {
+      yield* [];
+    }
+    return emptyStream();
+  },
+  countTokens: async (): Promise<unknown> => ({}),
+  embedContent: async (): Promise<unknown> => ({}),
+}));
+
+vi.mock('../code_assist/googleGenAIWrapper.js', () => ({
+  GoogleGenAIWrapper: vi
+    .fn()
+    .mockImplementation((config: unknown, requestOptions: unknown) => {
+      mockGoogleGenAIWrapperConstructor(config, requestOptions);
+      return mockGoogleGenAIWrapperInstance;
+    }),
+}));
+
+vi.mock('../utils/installationManager.js', () => ({
+  InstallationManager: vi.fn().mockImplementation(() => ({
+    getInstallationId: () => 'test-installation-id',
   })),
 }));
 
@@ -23,7 +44,11 @@ const mockConfig = {
 } as unknown as Config;
 
 describe('createContentGenerator', () => {
-  it('should create a GoogleGenAIWrapper content generator with API key', async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should create a GoogleGenAIWrapper content generator', async () => {
     const generator = await createContentGenerator(
       {
         model: 'test-model',
@@ -31,13 +56,34 @@ describe('createContentGenerator', () => {
       },
       mockConfig,
     );
-    // We expect a GoogleGenAIWrapper instance wrapping the mocked GoogleGenAI
-    // from the code_assist enclave.
-    expect(generator).toBeInstanceOf(GoogleGenAIWrapper);
-    expect(generator).toHaveProperty('generateContent');
-    expect(generator).toHaveProperty('generateContentStream');
-    expect(generator).toHaveProperty('countTokens');
-    expect(generator).toHaveProperty('embedContent');
+    expect(generator).toBe(mockGoogleGenAIWrapperInstance);
+    expect(mockGoogleGenAIWrapperConstructor).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'test-model', apiKey: 'test-api-key' }),
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
+  });
+
+  it('should add usage-statistics header when enabled', async () => {
+    const statsConfig = {
+      getUsageStatisticsEnabled: vi.fn().mockReturnValue(true),
+    } as unknown as Config;
+
+    await createContentGenerator(
+      {
+        model: 'test-model',
+        apiKey: 'test-api-key',
+      },
+      statsConfig,
+    );
+
+    expect(mockGoogleGenAIWrapperConstructor).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'test-model', apiKey: 'test-api-key' }),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'x-gemini-api-privileged-user-id': 'test-installation-id',
+        }),
+      }),
+    );
   });
 
   it('should create a GoogleGenAIWrapper content generator with Vertex AI', async () => {
@@ -48,9 +94,11 @@ describe('createContentGenerator', () => {
       },
       mockConfig,
     );
-    expect(generator).toBeInstanceOf(GoogleGenAIWrapper);
-    expect(generator).toHaveProperty('generateContent');
-    expect(generator).toHaveProperty('generateContentStream');
+    expect(generator).toBe(mockGoogleGenAIWrapperInstance);
+    expect(mockGoogleGenAIWrapperConstructor).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'test-model', vertexai: true }),
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
   });
 
   it('should throw an error when no authentication is provided', async () => {

@@ -24,6 +24,7 @@ import {
   ApiError,
   Outcome,
   Language,
+  type Content,
   type Part,
   type GenerateContentResponseUsageMetadata,
   type GroundingMetadata,
@@ -47,6 +48,8 @@ import {
   type UsageStats,
   type GroundingInfo,
   type UrlAccessInfo,
+  type GeminiContent,
+  type GeminiContentPart,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 // ---------------------------------------------------------------------------
@@ -60,6 +63,21 @@ function makeApiError(status: number, message: string): ApiError {
 function roundTrip(part: Part): Part {
   return blocksToGeminiParts(geminiPartsToBlocks([part]))[0];
 }
+
+describe('core Gemini content neutral type compatibility', () => {
+  it('stays structurally compatible with Google SDK content types', () => {
+    const sdkPart: Part = { text: 'hello' };
+    const neutralPart: GeminiContentPart = sdkPart;
+    const sdkContent: Content = { role: 'model', parts: [neutralPart] };
+    const neutralContent: GeminiContent = sdkContent;
+
+    expect(neutralPart.text).toBe('hello');
+    expect(neutralContent).toMatchObject({
+      role: 'model',
+      parts: [{ text: 'hello' }],
+    });
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Round-trip invariance (REQ-010.2) — all 10 supported Part shapes

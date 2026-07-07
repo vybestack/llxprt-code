@@ -5,13 +5,14 @@ import type {
   ToolResponseBlock,
   ThinkingBlock,
 } from './IContent';
+import type { GeminiContent } from '../../llm-types/geminiContent.js';
 import { describe, it, expect } from 'vitest';
 
 /**
  * Structural shape matching Google's Content for test fixtures.
  * The bridge (ContentConverters.ts) accepts structurally-compatible objects;
- * tests build them with this local type to avoid importing @google/genai
- * outside the sanctioned bridge file.
+ * tests build them with this local type to keep fixtures decoupled from the
+ * SDK.
  */
 interface TestContent {
   role: string;
@@ -434,5 +435,130 @@ describe('ContentConverters - History ID Conversion for Gemini', () => {
       expect(geminiContent.parts[1].functionCall?.name).toBe('second_tool');
       expect(geminiContent.parts[2].functionCall?.name).toBe('third_tool');
     });
+  });
+});
+
+describe('ContentConverters - neutral type I/O (#2397)', () => {
+  it('toGeminiContent returns a value assignable to the neutral GeminiContent type', () => {
+    const iContent: IContent = {
+      speaker: 'ai',
+      blocks: [
+        { type: 'text', text: 'hello' },
+        {
+          type: 'tool_call',
+          id: 'hist_tool_1_1',
+          name: 'search',
+          parameters: { q: 'cats' },
+        },
+      ],
+    };
+
+    const result = ContentConverters.toGeminiContent(iContent);
+
+    // Compile-time proof: the return value is structurally assignable to
+    // the neutral GeminiContent type (not @google/genai).
+    const neutral: GeminiContent = result;
+    expect(neutral).toMatchObject({
+      role: 'model',
+      parts: [
+        { text: 'hello' },
+        {
+          functionCall: {
+            name: 'search',
+            args: { q: 'cats' },
+            id: 'hist_tool_1_1',
+          },
+        },
+      ],
+    });
+  });
+
+  it('toIContent accepts a neutral GeminiContent input', () => {
+    const geminiInput: GeminiContent = {
+      role: 'model',
+      parts: [
+        { text: 'response text' },
+        {
+          functionCall: { name: 'run_tool', args: {}, id: 'call_1' },
+        },
+      ],
+    };
+
+    // Compile-time proof: neutral GeminiContent is accepted as input.
+    const result = ContentConverters.toIContent(
+      geminiInput,
+      undefined,
+      undefined,
+      'turn-neutral',
+    );
+
+    expect(result.speaker).toBe('ai');
+    expect(result.blocks).toHaveLength(2);
+    expect(result.blocks[0].type).toBe('text');
+    expect(result.blocks[1]).toMatchObject({
+      type: 'tool_call',
+      id: expect.stringMatching(CANONICAL_ID_PATTERN),
+      name: 'run_tool',
+      parameters: {},
+    });
+  });
+
+  it('toGeminiContents / toIContents round-trip through neutral types', () => {
+    const original: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'hi' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'hello back' }],
+      },
+    ];
+
+    const geminiContents: GeminiContent[] =
+      ContentConverters.toGeminiContents(original);
+    expect(geminiContents).toHaveLength(2);
+
+    const roundTripped: IContent[] =
+      ContentConverters.toIContents(geminiContents);
+    expect(roundTripped).toHaveLength(2);
+    expect(roundTripped[0].speaker).toBe('human');
+    expect(roundTripped[0].blocks[0]).toStrictEqual({
+      type: 'text',
+      text: 'hi',
+    });
+    expect(roundTripped[1].speaker).toBe('ai');
+    expect(roundTripped[1].blocks[0]).toStrictEqual({
+      type: 'text',
+      text: 'hello back',
+    });
+  });
+
+  it('preserves llxprtSourceField through a Gemini round-trip via neutral types', () => {
+    const thinking: IContent = {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'thinking',
+          thought: 'reasoning here',
+          sourceField: 'thinking',
+          signature: 'sig-abc',
+        } as ThinkingBlock,
+      ],
+    };
+
+    const gemini: GeminiContent = ContentConverters.toGeminiContent(thinking);
+    const back: IContent = ContentConverters.toIContent(
+      gemini,
+      undefined,
+      undefined,
+      'turn-rt',
+    );
+
+    const block = back.blocks[0] as ThinkingBlock;
+    expect(block.type).toBe('thinking');
+    expect(block.sourceField).toBe('thinking');
+    expect(block.signature).toBe('sig-abc');
+    expect(block.thought).toBe('reasoning here');
   });
 });
