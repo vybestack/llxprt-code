@@ -124,9 +124,6 @@ describe('statsCommand', () => {
       getAllCodexUsageInfo: vi
         .fn()
         .mockRejectedValue(new Error('codex unavailable')),
-      getAllGeminiUsageInfo: vi
-        .fn()
-        .mockResolvedValue(new Map<string, Record<string, unknown>>()),
     };
 
     getCliOAuthManagerMock.mockReturnValue(oauthManager);
@@ -187,9 +184,6 @@ describe('statsCommand', () => {
         .fn()
         .mockRejectedValue(new Error('anthropic unavailable')),
       getAllCodexUsageInfo: vi.fn().mockResolvedValue(codexUsage),
-      getAllGeminiUsageInfo: vi
-        .fn()
-        .mockResolvedValue(new Map<string, Record<string, unknown>>()),
     };
 
     getCliOAuthManagerMock.mockReturnValue(oauthManager);
@@ -307,9 +301,6 @@ describe('statsCommand', () => {
     const oauthManager = {
       getAllAnthropicUsageInfo: vi.fn().mockResolvedValue(anthropicUsage),
       getAllCodexUsageInfo: vi
-        .fn()
-        .mockResolvedValue(new Map<string, Record<string, unknown>>()),
-      getAllGeminiUsageInfo: vi
         .fn()
         .mockResolvedValue(new Map<string, Record<string, unknown>>()),
     };
@@ -486,92 +477,6 @@ describe('statsCommand', () => {
     // Should show no-quota-available message since fetch failed
     expect(lastItem.type).toBe(MessageType.INFO);
     expect(lastItem.text).toContain('No quota information available');
-
-    vi.restoreAllMocks();
-  });
-
-  it('should show Gemini quota when OAuthManager returns quota data', async () => {
-    const geminiUsage = new Map<string, Record<string, unknown>>([
-      [
-        'default',
-        {
-          buckets: [
-            {
-              modelId: 'gemini-2.5-pro',
-              tokenType: 'input_tokens',
-              remainingAmount: '8000',
-              remainingFraction: 0.8,
-              resetTime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-            },
-            {
-              modelId: 'gemini-2.5-flash',
-              tokenType: 'input_tokens',
-              remainingAmount: '45000',
-              remainingFraction: 0.95,
-            },
-          ],
-        },
-      ],
-    ]);
-
-    const oauthManager = {
-      getAllAnthropicUsageInfo: vi
-        .fn()
-        .mockResolvedValue(new Map<string, Record<string, unknown>>()),
-      getAllCodexUsageInfo: vi
-        .fn()
-        .mockResolvedValue(new Map<string, Record<string, unknown>>()),
-      getAllGeminiUsageInfo: vi.fn().mockResolvedValue(geminiUsage),
-    };
-
-    getCliOAuthManagerMock.mockReturnValue(oauthManager);
-
-    const quotaSubCommand = statsCommand.subCommands?.find(
-      (cmd) => cmd.name === 'quota',
-    );
-
-    await quotaSubCommand.action!(mockContext, '');
-
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
-    const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
-      type: MessageType;
-      text?: string;
-    };
-
-    expect(lastItem.type).toBe(MessageType.INFO);
-    expect(lastItem.text).toContain('Gemini Quota Information');
-    expect(lastItem.text).toContain('gemini-2.5-pro');
-    expect(lastItem.text).toContain('80%');
-    expect(lastItem.text).toContain('gemini-2.5-flash');
-    expect(lastItem.text).toContain('95%');
-
-    vi.restoreAllMocks();
-  });
-
-  it('should gracefully handle Gemini quota fetch failure', async () => {
-    const oauthManager = {
-      getAllAnthropicUsageInfo: vi
-        .fn()
-        .mockResolvedValue(new Map<string, Record<string, unknown>>()),
-      getAllCodexUsageInfo: vi
-        .fn()
-        .mockResolvedValue(new Map<string, Record<string, unknown>>()),
-      getAllGeminiUsageInfo: vi
-        .fn()
-        .mockRejectedValue(new Error('Network error')),
-    };
-
-    getCliOAuthManagerMock.mockReturnValue(oauthManager);
-
-    const quotaSubCommand = statsCommand.subCommands?.find(
-      (cmd) => cmd.name === 'quota',
-    );
-
-    await quotaSubCommand.action!(mockContext, '');
-
-    // Should not crash — graceful failure results in no quota section or "no quota available"
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
-    expect(addItemCalls.length).toBeGreaterThan(0);
 
     vi.restoreAllMocks();
   });

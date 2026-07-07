@@ -18,8 +18,8 @@ import {
   type AnsiOutput,
   type ShellOutputEvent,
   debugLogger,
+  type ContractPartListUnion,
 } from '@vybestack/llxprt-code-core';
-import type { PartListUnion } from '@google/genai';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type UseHistoryManagerReturn } from './useHistoryManager.js';
 import { SHELL_COMMAND_NAME } from '../constants.js';
@@ -603,7 +603,7 @@ export const useShellCommandProcessor = (
   const [activeShellPtyId, setActiveShellPtyId] = useState<number | null>(null);
   const [lastShellOutputTime, setLastShellOutputTime] = useState(0);
   const handleShellCommand = useCallback(
-    (rawQuery: PartListUnion, abortSignal: AbortSignal): boolean => {
+    (rawQuery: ContractPartListUnion, abortSignal: AbortSignal): boolean => {
       if (typeof rawQuery !== 'string' || rawQuery.trim() === '') {
         return false;
       }

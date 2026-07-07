@@ -36,3 +36,12 @@ reviews:
     # disabled, follow-up commits merged unreviewed (e.g. #2394, #2384).
     auto_incremental_review: true
     auto_pause_after_reviewed_commits: 3
+
+# Issue automation. CodeRabbit was auto-applying incorrect labels to new issues
+# (e.g. tagging an OAuth-removal task as `documentation`). The dashboard/UI
+# toggle alone is not durable, so pin it off here where the repo config is
+# authoritative. Schema key: issue_enrichment.labeling.auto_apply_labels.
+issue_enrichment:
+  labeling:
+    # Never let CodeRabbit apply labels to issues automatically.
+    auto_apply_labels: false

@@ -30,7 +30,6 @@ import {
   getAnthropicUsageInfo,
   getAllAnthropicUsageInfo,
   getAllCodexUsageInfo,
-  getAllGeminiUsageInfo,
   getHigherPriorityAuth,
 } from './provider-usage-info.js';
 
@@ -458,15 +457,6 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    */
   async getAllCodexUsageInfo(): Promise<Map<string, Record<string, unknown>>> {
     return getAllCodexUsageInfo(this.tokenStore, this.config);
-  }
-
-  /**
-   * Get Gemini quota information for all authenticated buckets.
-   * Uses the CodeAssist retrieveUserQuota API via direct HTTP calls.
-   * Returns a map of bucket name to quota response.
-   */
-  async getAllGeminiUsageInfo(): Promise<Map<string, Record<string, unknown>>> {
-    return getAllGeminiUsageInfo(this.tokenStore);
   }
 
   private async getCurrentProfileSessionMetadata(

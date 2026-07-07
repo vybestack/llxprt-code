@@ -6,7 +6,6 @@ OAuth lets you authenticate with AI providers without managing API keys. Tokens 
 
 | Provider                     | Flow          | What Opens                  |
 | ---------------------------- | ------------- | --------------------------- |
-| **Gemini** (Google AI)       | Browser-based | Browser opens automatically |
 | **Anthropic**                | Browser-based | Browser opens automatically |
 | **Codex** (ChatGPT Plus/Pro) | Browser-based | Browser opens automatically |
 
@@ -17,7 +16,6 @@ OAuth lets you authenticate with AI providers without managing API keys. Tokens 
 Use the `/auth` command inside a session:
 
 ```
-/auth gemini enable
 /auth anthropic enable
 /auth codex enable
 ```

@@ -26,6 +26,7 @@ import {
   extractPromptText,
 } from './clientHelpers.js';
 import { getTokenLimitForConfiguredContext } from './contextLimitResolver.js';
+import { resolvePreflightOverflow } from './preflightRecovery.js';
 import type { Todo } from '@vybestack/llxprt-code-tools';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
 import { handleTerminalEvent } from './MessageStreamTerminalHandler.js';
@@ -299,21 +300,26 @@ export class MessageStreamOrchestrator {
             .catch(() => fallback)
         : fallback;
 
-    if (estimatedRequestTokenCount > remainingTokenCount * 0.95) {
-      yield {
-        type: AgentEventType.ContextWindowWillOverflow,
-        value: { estimatedRequestTokenCount, remainingTokenCount },
-      };
-      yield* this._fireAfterHookAndEmitClearContext(ctx);
-      return new Turn(
-        getChat(),
-        ctx.prompt_id,
-        DEFAULT_AGENT_ID,
-        this._getProviderName(),
-      );
-    }
-
-    return undefined;
+    // Overflow guard: attempt automatic compression before bailing (issue
+    // #2402), matching manual /compress, the load-balancer guard (#2207),
+    // and the provider content enforcer (#2299).
+    const proceed = await resolvePreflightOverflow(this.deps, {
+      promptId: ctx.prompt_id,
+      estimatedRequestTokenCount,
+      remainingTokenCount,
+    });
+    if (proceed) return undefined;
+    yield {
+      type: AgentEventType.ContextWindowWillOverflow,
+      value: { estimatedRequestTokenCount, remainingTokenCount },
+    };
+    yield* this._fireAfterHookAndEmitClearContext(ctx);
+    return new Turn(
+      getChat(),
+      ctx.prompt_id,
+      DEFAULT_AGENT_ID,
+      this._getProviderName(),
+    );
   }
 
   private async _injectIdeContext(): Promise<void> {

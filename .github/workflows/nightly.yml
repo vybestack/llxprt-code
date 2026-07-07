@@ -362,11 +362,6 @@ jobs:
           else
             echo "Warning: continuing without ci/cd label" >&2
           fi
-          if ensure_label "bug" "d73a4a" "Something is not working"; then
-            LABEL_ARGS+=(--label "bug")
-          else
-            echo "Warning: continuing without bug label" >&2
-          fi
 
           FAILED_JOBS=()
           [[ "${WINDOWS_CI_RESULT}" =~ ^(failure|cancelled)$ ]] && FAILED_JOBS+=("windows_ci=${WINDOWS_CI_RESULT}")

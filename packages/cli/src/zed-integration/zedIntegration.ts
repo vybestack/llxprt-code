@@ -6,20 +6,20 @@
 
 import {
   type Config,
-  clearCachedCredentialFile,
   getErrorStatus,
-  DebugLogger,
-  EmojiFilter,
-  type FilterConfiguration,
   todoEvents,
-  type TodoUpdateEvent,
-  type Todo,
   DEFAULT_AGENT_ID,
-  type ApprovalMode,
-  type RuntimeProviderManager,
   isWithinRoot,
   debugLogger,
   createInkStdio,
+  type ContractPart,
+  DebugLogger,
+  EmojiFilter,
+  type FilterConfiguration,
+  type TodoUpdateEvent,
+  type Todo,
+  type ApprovalMode,
+  type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import * as acp from '@agentclientprotocol/sdk';
 import {
@@ -31,11 +31,9 @@ import {
 } from '@vybestack/llxprt-code-agents';
 import { Readable, Writable } from 'node:stream';
 import * as path from 'node:path';
-import { type Part } from '@google/genai';
 import { type LoadedSettings } from '../config/settings.js';
 import { randomUUID } from 'crypto';
 import {
-  getActiveProfileName,
   loadProfileByName,
   setCliRuntimeContext,
 } from '@vybestack/llxprt-code-providers/runtime.js';
@@ -198,11 +196,6 @@ export class ZedAgent {
       ? await profileManager.listProfiles()
       : [];
     const profileName = parseZedAuthMethodId(methodId, availableProfiles);
-
-    const currentProfile = getActiveProfileName();
-    if (!currentProfile || currentProfile !== profileName) {
-      await clearCachedCredentialFile();
-    }
 
     await loadProfileByName(profileName);
   }
@@ -429,7 +422,7 @@ export class Session {
     const promptId = Math.random().toString(16).slice(2);
 
     try {
-      let parts: Part[];
+      let parts: ContractPart[];
       try {
         parts = await this.pathResolver.resolvePrompt(
           params.prompt,
@@ -493,7 +486,7 @@ export class Session {
   }
 
   private async consumeAgentStream(
-    parts: Part[],
+    parts: ContractPart[],
     pendingSend: AbortController,
     promptId: string,
     promptGeneration: number,

@@ -106,6 +106,14 @@ const RENAMED_DESTINATION_OVERRIDES = new Map<string, string>([
     'packages/core/src/providers/openai-responses/CODEX_MODELS.ts',
     'packages/providers/src/composition/aliases/codex.config',
   ],
+  // #2398: gemini/usageInfo.ts was DELETED — the Gemini OAuth quota function
+  // (fetchGeminiQuota) was removed because Google terminated the Code Assist
+  // free-tier OAuth flow. The override maps to geminiModels.ts (a surviving
+  // sibling in the same directory) so the move-map assertion still resolves.
+  [
+    'packages/core/src/providers/gemini/usageInfo.ts',
+    'packages/providers/src/gemini/geminiModels.ts',
+  ],
 ]);
 const AGENT_OWNED_DESTINATION_OVERRIDES = new Map<string, string>([
   [

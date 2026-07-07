@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   InitializationState,
   InitializationGuard,
@@ -12,13 +12,12 @@ import {
   isTokenExpired,
   hasValidRefreshToken,
 } from '../oauth-provider-base.js';
-import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-auth';
+import type { OAuthToken } from '@vybestack/llxprt-code-auth';
 import {
   OAuthError,
   OAuthErrorType,
   OAuthErrorFactory,
 } from '@vybestack/llxprt-code-auth';
-import { GeminiOAuthProvider } from '../gemini-oauth-provider.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -363,47 +362,5 @@ describe('hasValidRefreshToken', () => {
     expect(hasValidRefreshToken(token)).toBe(true);
     // TypeScript should consider token.refresh_token a string here
     expect(typeof token.refresh_token).toBe('string');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// GeminiOAuthProvider.isAuthenticated()
-// ---------------------------------------------------------------------------
-
-describe('GeminiOAuthProvider.isAuthenticated()', () => {
-  let provider: GeminiOAuthProvider;
-  let mockTokenStore: TokenStore;
-
-  beforeEach(() => {
-    mockTokenStore = {
-      getToken: vi.fn().mockResolvedValue(null),
-      saveToken: vi.fn().mockResolvedValue(undefined),
-      removeToken: vi.fn().mockResolvedValue(undefined),
-      listProviders: vi.fn().mockResolvedValue([]),
-      listBuckets: vi.fn().mockResolvedValue(['default']),
-      getBucketStats: vi.fn().mockResolvedValue(null),
-      acquireRefreshLock: vi.fn().mockResolvedValue(true),
-      releaseRefreshLock: vi.fn().mockResolvedValue(undefined),
-      acquireAuthLock: vi.fn().mockResolvedValue(true),
-      releaseAuthLock: vi.fn().mockResolvedValue(undefined),
-    };
-    provider = new GeminiOAuthProvider(mockTokenStore);
-  });
-
-  it('returns true unconditionally (Gemini regularization G1)', async () => {
-    const result = await provider.isAuthenticated();
-    expect(result).toBe(true);
-  });
-
-  it('returns true even when token store has no token', async () => {
-    vi.mocked(mockTokenStore.getToken).mockResolvedValue(null);
-    const result = await provider.isAuthenticated();
-    expect(result).toBe(true);
-  });
-
-  it('returns true when constructed without a token store', async () => {
-    const noStoreProvider = new GeminiOAuthProvider(undefined);
-    const result = await noStoreProvider.isAuthenticated();
-    expect(result).toBe(true);
   });
 });

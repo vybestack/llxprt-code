@@ -9,11 +9,7 @@
  */
 
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import {
-  GeminiOAuthProvider,
-  AnthropicOAuthProvider,
-  CodexOAuthProvider,
-} from '../auth/index.js';
+import { AnthropicOAuthProvider, CodexOAuthProvider } from '../auth/index.js';
 import type { OAuthProvider, TokenStore, OAuthManager } from '../auth/index.js';
 import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
 
@@ -65,9 +61,6 @@ export function ensureOAuthProviderRegistered(
   let oauthProvider: OAuthProviderWithAddItem;
 
   switch (providerName) {
-    case 'gemini':
-      oauthProvider = new GeminiOAuthProvider(effectiveTokenStore, addItem);
-      break;
     case 'anthropic':
       oauthProvider = new AnthropicOAuthProvider(effectiveTokenStore, addItem);
       break;
@@ -89,17 +82,16 @@ export function ensureOAuthProviderRegistered(
 }
 
 /**
- * Register all three standard OAuth providers (gemini, anthropic, codex) on an
- * OAuthManager instance. This is the canonical way to ensure a manager has the
- * full provider set available, regardless of which creation path produced it.
- * Delegates to ensureOAuthProviderRegistered for dedup and tokenStore handling.
+ * Register the standard OAuth providers (anthropic, codex) on an OAuthManager
+ * instance. This is the canonical way to ensure a manager has the full provider
+ * set available, regardless of which creation path produced it. Delegates to
+ * ensureOAuthProviderRegistered for dedup and tokenStore handling.
  */
 export function registerStandardOAuthProviders(
   oauthManager: OAuthRegistrationManager,
   tokenStore?: TokenStore,
   addItem?: AddItemCallback,
 ): void {
-  ensureOAuthProviderRegistered('gemini', oauthManager, tokenStore, addItem);
   ensureOAuthProviderRegistered('anthropic', oauthManager, tokenStore, addItem);
   ensureOAuthProviderRegistered('codex', oauthManager, tokenStore, addItem);
 }

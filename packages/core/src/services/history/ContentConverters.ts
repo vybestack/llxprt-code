@@ -15,7 +15,10 @@
  */
 
 import { randomUUID } from 'crypto';
-import { type Content, type Part } from '@google/genai';
+import type {
+  GeminiContent,
+  GeminiContentPart,
+} from '../../llm-types/geminiContent.js';
 import type { IContent, ContentBlock, ThinkingBlock } from './IContent.js';
 import { DebugLogger } from '../../debug/index.js';
 import {
@@ -57,7 +60,7 @@ export class ContentConverters {
   }
 
   /** Convert a single IContent block to a Gemini Part. */
-  private static blockToPart(block: ContentBlock): Part | null {
+  private static blockToPart(block: ContentBlock): GeminiContentPart | null {
     switch (block.type) {
       case 'text': {
         const textBlock = block;
@@ -105,7 +108,7 @@ export class ContentConverters {
       }
       case 'thinking': {
         const thinkingBlock = block;
-        const thinkingPart: Part = {
+        const thinkingPart: GeminiContentPart = {
           thought: true,
           text: thinkingBlock.thought,
         };
@@ -113,11 +116,7 @@ export class ContentConverters {
           thinkingPart.thoughtSignature = thinkingBlock.signature;
         }
         if (ContentConverters.hasLegacyTruthyValue(thinkingBlock.sourceField)) {
-          (
-            thinkingPart as Part & {
-              llxprtSourceField?: ThinkingBlock['sourceField'];
-            }
-          ).llxprtSourceField = thinkingBlock.sourceField;
+          thinkingPart.llxprtSourceField = thinkingBlock.sourceField;
         }
         return thinkingPart;
       }
@@ -139,7 +138,7 @@ export class ContentConverters {
   /**
    * Convert IContent to Gemini Content format
    */
-  static toGeminiContent(iContent: IContent): Content {
+  static toGeminiContent(iContent: IContent): GeminiContent {
     const blocksForDebug = ContentConverters.blocksOrEmpty(iContent);
     this.logger.debug('Converting IContent to Gemini Content:', {
       speaker: iContent.speaker,
@@ -154,7 +153,7 @@ export class ContentConverters {
     });
 
     const role = this.resolveRole(iContent.speaker);
-    const parts: Part[] = [];
+    const parts: GeminiContentPart[] = [];
 
     for (const block of iContent.blocks) {
       const part = this.blockToPart(block);
@@ -189,11 +188,8 @@ export class ContentConverters {
   }
 
   /** Convert a thinking/thought Part into a ThinkingBlock. */
-  private static partToThinkingBlock(part: Part): ThinkingBlock {
-    const partWithMetadata = part as Part & {
-      llxprtSourceField?: ThinkingBlock['sourceField'];
-    };
-    const sourceField = partWithMetadata.llxprtSourceField ?? 'thought';
+  private static partToThinkingBlock(part: GeminiContentPart): ThinkingBlock {
+    const sourceField = part.llxprtSourceField ?? 'thought';
     const thinkingBlock: ThinkingBlock = {
       type: 'thinking',
       thought: part.text ?? '',
@@ -284,7 +280,7 @@ export class ContentConverters {
 
   /** Convert a functionCall Part into tool_call ContentBlock(s). */
   private static processFunctionCallPart(
-    part: Part,
+    part: GeminiContentPart,
     context: {
       turnKey: string;
       providerName: string;
@@ -327,7 +323,7 @@ export class ContentConverters {
 
   /** Convert a functionResponse Part into tool_response ContentBlock(s). */
   private static processFunctionResponsePart(
-    part: Part,
+    part: GeminiContentPart,
     context: {
       turnKey: string;
       providerName: string;
@@ -381,7 +377,7 @@ export class ContentConverters {
   }
 
   /** Convert a text-or-thought Part into a ContentBlock. */
-  private static textPartToBlock(part: Part): ContentBlock {
+  private static textPartToBlock(part: GeminiContentPart): ContentBlock {
     if (
       'thought' in part &&
       ContentConverters.hasLegacyTruthyValue(part.thought)
@@ -393,7 +389,7 @@ export class ContentConverters {
 
   /** Convert a single Gemini Part into ContentBlocks, returning any tool-call index counters. */
   private static processPartToBlocks(
-    part: Part,
+    part: GeminiContentPart,
     context: {
       turnKey: string;
       providerName: string;
@@ -435,7 +431,7 @@ export class ContentConverters {
    * Convert Gemini Content to IContent format
    */
   static toIContent(
-    content: Content,
+    content: GeminiContent,
     generateIdCb?: () => string,
     getNextUnmatchedToolCall?: () => { historyId: string; toolName?: string },
     turnKeyOverride?: string,
@@ -525,7 +521,7 @@ export class ContentConverters {
   /**
    * Convert array of IContent to array of Gemini Content
    */
-  static toGeminiContents(iContents: IContent[]): Content[] {
+  static toGeminiContents(iContents: IContent[]): GeminiContent[] {
     this.logger.debug('Converting IContent array to Gemini Contents:', {
       count: iContents.length,
       speakers: iContents.map((ic) => ic.speaker),
@@ -554,7 +550,7 @@ export class ContentConverters {
   /**
    * Convert array of Gemini Content to array of IContent
    */
-  static toIContents(contents: Content[]): IContent[] {
+  static toIContents(contents: GeminiContent[]): IContent[] {
     this.logger.debug('Converting Gemini Contents array to IContent:', {
       count: contents.length,
       roles: contents.map((c) => c.role),

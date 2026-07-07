@@ -1,8 +1,8 @@
 # Google Cloud Authentication
 
-Most users should use OAuth (`/auth gemini enable`) or a Gemini API key (`/key save gemini <key>`). This page covers advanced Google Cloud authentication methods for enterprise and Workspace users.
+Most users should use a Gemini API key (`/key save gemini <key>`) or Vertex AI. This page covers advanced Google Cloud authentication methods for enterprise and Workspace users.
 
-> **Free individual access changed in mid-2026.** Google moved free consumer "Login with Google" CLI access toward [Antigravity](https://antigravity.google). OAuth and the project/Vertex/ADC methods below continue to work for **Gemini API keys**, **Gemini Code Assist Standard/Enterprise**, and **Google Workspace** accounts. If free individual "Login with Google" no longer authorizes, use a Gemini API key or one of the Google Cloud methods on this page.
+> **Free individual access removed in mid-2026.** Google has fully removed the free consumer "Login with Google" CLI access. Use a Gemini API key for individual use; Google Workspace users can still use the project / Vertex / ADC methods below.
 
 ## When You Need This
 

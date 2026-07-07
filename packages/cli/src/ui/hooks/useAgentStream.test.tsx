@@ -26,14 +26,15 @@ import type {
 } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type {
-  Config,
-  EditorType,
-  AnyToolInvocation,
   AnyDeclarativeTool,
+  AnyToolInvocation,
+  Config,
+  ContractPart,
+  ContractPartListUnion,
+  EditorType,
   ToolRegistry,
 } from '@vybestack/llxprt-code-core';
 import { ApprovalMode, ToolErrorType } from '@vybestack/llxprt-code-core';
-import type { Part, PartListUnion } from '@google/genai';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { SlashCommandProcessorResult } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
@@ -225,7 +226,7 @@ describe('useAgentStream', () => {
       config: mockConfig,
       onDebugMessage: mockOnDebugMessage,
       handleSlashCommand: mockHandleSlashCommand as unknown as (
-        cmd: PartListUnion,
+        cmd: ContractPartListUnion,
       ) => Promise<SlashCommandProcessorResult | false>,
       shellModeActive: false,
       loadedSettings: mockLoadedSettings,
@@ -376,8 +377,12 @@ describe('useAgentStream', () => {
   });
 
   it('should not call sendMessageStream when all primary tool calls complete (continuation owned by Agent loop)', async () => {
-    const toolCall1ResponseParts: Part[] = [{ text: 'tool 1 final response' }];
-    const toolCall2ResponseParts: Part[] = [{ text: 'tool 2 final response' }];
+    const toolCall1ResponseParts: ContractPart[] = [
+      { text: 'tool 1 final response' },
+    ];
+    const toolCall2ResponseParts: ContractPart[] = [
+      { text: 'tool 2 final response' },
+    ];
     const completedToolCalls: TrackedToolCall[] = [
       {
         request: {
@@ -480,7 +485,7 @@ describe('useAgentStream', () => {
   });
 
   it('should not call sendMessageStream for completed tool calls with functionResponse parts (continuation owned by Agent loop)', async () => {
-    const functionResponseParts: Part[] = [
+    const functionResponseParts: ContractPart[] = [
       {
         functionResponse: {
           name: 'toolFilter',

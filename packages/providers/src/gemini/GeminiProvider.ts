@@ -12,8 +12,6 @@ import {
   type BaseProviderConfig,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
-import { type OAuthManager } from '@vybestack/llxprt-code-auth';
-import type { createCodeAssistServer as _createCodeAssistServer } from '@vybestack/llxprt-code-core/code_assist/codeAssist.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   type GenerateContentParameters,
@@ -22,9 +20,7 @@ import {
 } from '@google/genai';
 import {
   hasVertexAICredentials,
-  isOAuthEnabled,
   setupVertexAIAuth,
-  updateOAuthState,
   type GeminiAuthMode,
 } from './geminiAuth.js';
 import { throwIfAborted } from './geminiAbort.js';
@@ -41,20 +37,11 @@ import {
 import {
   consumeGeminiStream,
   executeNonOAuthGeneration,
-  executeOAuthGeneration,
   nonOAuthNonStreamingGenerate as executeNonOAuthNonStreamingGenerate,
   nonOAuthStreamingGenerate as executeNonOAuthStreamingGenerate,
-  oauthNonStreamingGenerate as executeOAuthNonStreamingGenerate,
-  oauthStreamingGenerate as executeOAuthStreamingGenerate,
   type GeminiGenerationResult,
   type NonOAuthContentGenerator,
-  type OAuthContentGeneratorFactory,
 } from './geminiGenerationExecution.js';
-
-type CodeAssistGeneratorFactory = typeof _createCodeAssistServer;
-type CodeAssistContentGenerator = Awaited<
-  ReturnType<CodeAssistGeneratorFactory>
->;
 
 /**
  * Represents the default Gemini provider.
@@ -66,26 +53,15 @@ type CodeAssistContentGenerator = Awaited<
  * package to keep the provider class thin and within lint budgets.
  */
 export class GeminiProvider extends BaseProvider {
-  private readonly geminiOAuthManager?: OAuthManager;
-
-  constructor(
-    apiKey?: string,
-    baseURL?: string,
-    config?: Config,
-    oauthManager?: OAuthManager,
-  ) {
+  constructor(apiKey?: string, baseURL?: string, config?: Config) {
     const baseConfig: BaseProviderConfig = {
       name: 'gemini',
       apiKey,
       baseURL,
       envKeyNames: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
-      isOAuthEnabled: !!oauthManager,
-      oauthProvider: oauthManager ? 'gemini' : undefined,
-      oauthManager,
     };
 
     super(baseConfig, config);
-    this.geminiOAuthManager = oauthManager;
   }
 
   private getLogger(): DebugLogger {
@@ -104,35 +80,20 @@ export class GeminiProvider extends BaseProvider {
     return streamingSetting !== 'disabled';
   }
 
-  protected async createOAuthContentGenerator(
-    httpOptions: Record<string, unknown>,
-    config: Config,
-    baseURL?: string,
-  ): Promise<CodeAssistContentGenerator> {
-    const { createCodeAssistServer } = await import(
-      '@vybestack/llxprt-code-core/code_assist/codeAssist.js'
-    );
-    return createCodeAssistServer(httpOptions, config, baseURL);
-  }
-
   clearClientCache(_runtimeKey?: string): void {
     this.getLogger().debug(
       () => 'Cache clear called on stateless provider - no operation',
     );
   }
 
-  private updateOAuthState(): void {
-    updateOAuthState(this.geminiOAuthManager, (enabled, provider, manager) =>
-      this.updateOAuthConfig(enabled, provider, manager),
-    );
+  protected override supportsOAuth(): boolean {
+    return false;
   }
 
   private async determineBestAuth(): Promise<{
     authMode: GeminiAuthMode;
     token: string;
   }> {
-    this.updateOAuthState();
-
     const standardAuth = await this.authResolver.resolveAuthentication({
       settingsService: this.resolveSettingsService(),
       includeOAuth: false,
@@ -147,18 +108,9 @@ export class GeminiProvider extends BaseProvider {
       return { authMode: 'vertex-ai', token: 'USE_VERTEX_AI' };
     }
 
-    if (isOAuthEnabled(this.geminiOAuthManager, 'gemini')) {
-      return { authMode: 'oauth', token: 'USE_LOGIN_WITH_GOOGLE' };
-    }
-
     throw new Error(
-      'No Gemini authentication configured. ' +
-        'Set GEMINI_API_KEY environment variable, use --keyfile, or configure Vertex AI credentials.',
+      'No Gemini authentication configured. Set GEMINI_API_KEY environment variable, use --keyfile, or configure Vertex AI credentials.',
     );
-  }
-
-  protected supportsOAuth(): boolean {
-    return isOAuthEnabled(this.geminiOAuthManager, 'gemini');
   }
 
   private createHttpOptions(): { headers: Record<string, string> } {
@@ -173,13 +125,12 @@ export class GeminiProvider extends BaseProvider {
 
   override setConfig(config: Config): void {
     super.setConfig?.(config);
-    this.updateOAuthState();
   }
 
   async getModels(): Promise<IModel[]> {
     const defaultModels = resolveModelList(
       this.name,
-      'oauth',
+      'none',
       () => Promise.resolve(''),
       () => this.getBaseURL(),
     );
@@ -321,12 +272,6 @@ export class GeminiProvider extends BaseProvider {
       createGenAIClient: (token, mode, opts, baseURL) =>
         this.createGenAIClient(token, mode, opts, baseURL),
       globalConfig: this.globalConfig,
-      createOAuthContentGenerator: (async (httpOptions, config, baseURL) =>
-        this.createOAuthContentGenerator(
-          httpOptions,
-          config,
-          baseURL,
-        )) as OAuthContentGeneratorFactory,
     };
   }
 
@@ -374,7 +319,6 @@ export class GeminiProvider extends BaseProvider {
       yield* this.yieldMappedChunks(result.chunks);
       return;
     }
-    yield* result.preludeChunks ?? [];
     yield* consumeGeminiStream(
       result.stream,
       setup.mapResponseToChunks,
@@ -388,35 +332,6 @@ export class GeminiProvider extends BaseProvider {
     setup: GeminiGenerationSetup,
     streamingEnabled: boolean,
   ): Promise<GeminiGenerationResult> {
-    const oauthFactory = (async (
-      httpOptions: Record<string, unknown>,
-      config: Config,
-      baseURL?: string,
-    ) =>
-      this.createOAuthContentGenerator(
-        httpOptions,
-        config,
-        baseURL,
-      )) as OAuthContentGeneratorFactory;
-
-    if (setup.authMode === 'oauth') {
-      return executeOAuthGeneration(
-        options,
-        this.globalConfig,
-        setup.httpOptions,
-        setup.contentsWithSignatures,
-        setup.requestConfig,
-        setup.currentModel,
-        setup.toolNamesForPrompt,
-        streamingEnabled,
-        setup.shouldDumpSuccess,
-        setup.shouldDumpError,
-        setup.baseURL,
-        setup.mapResponseToChunks,
-        setup.reasoningConfig.includeInResponse,
-        oauthFactory,
-      );
-    }
     return executeNonOAuthGeneration(
       options,
       this.globalConfig,
@@ -488,50 +403,6 @@ export class GeminiProvider extends BaseProvider {
       baseURL,
       () => [],
       false,
-    );
-  }
-
-  protected oauthStreamingGenerate(
-    generator: Parameters<typeof executeOAuthStreamingGenerate>[0],
-    oauthRequest: GenerateContentParameters,
-    runtimeId: string,
-    sessionId: string,
-    streamingEnabled: boolean,
-    shouldDumpSuccess: boolean,
-    shouldDumpError: boolean,
-    baseURL: string | undefined,
-  ): Promise<GeminiGenerationResult> {
-    return executeOAuthStreamingGenerate(
-      generator,
-      oauthRequest,
-      runtimeId,
-      sessionId,
-      streamingEnabled,
-      shouldDumpSuccess,
-      shouldDumpError,
-      baseURL,
-    );
-  }
-
-  protected oauthNonStreamingGenerate(
-    generator: Parameters<typeof executeOAuthNonStreamingGenerate>[0],
-    oauthRequest: GenerateContentParameters,
-    sessionId: string,
-    shouldDumpSuccess: boolean,
-    shouldDumpError: boolean,
-    baseURL: string | undefined,
-    mapResponseToChunks: GeminiGenerationSetup['mapResponseToChunks'],
-    reasoningIncludeInResponse: boolean,
-  ): Promise<GeminiGenerationResult> {
-    return executeOAuthNonStreamingGenerate(
-      generator,
-      oauthRequest,
-      sessionId,
-      shouldDumpSuccess,
-      shouldDumpError,
-      baseURL,
-      mapResponseToChunks,
-      reasoningIncludeInResponse,
     );
   }
 

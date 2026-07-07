@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { PartUnion } from '@google/genai';
 import {
   DEFAULT_AGENT_ID,
   debugLogger,
   getErrorMessage,
+  type ContractPart,
+  type DiscoveredMCPResource,
 } from '@vybestack/llxprt-code-core';
-import type { DiscoveredMCPResource } from '@vybestack/llxprt-code-core';
 import type {
   HistoryItemToolGroup,
   IndividualToolCallDisplay,
@@ -31,7 +31,7 @@ export type McpClientManagerForResources =
 
 export interface ResourceReadParams {
   resourceAttachments: DiscoveredMCPResource[];
-  processedQueryParts: PartUnion[];
+  processedQueryParts: Array<ContractPart | string>;
   addItem: UseHistoryManagerReturn['addItem'];
   userMessageTimestamp: number;
   mcpClientManager: McpClientManagerForResources;
@@ -88,7 +88,7 @@ async function readSingleResource(
   resource: DiscoveredMCPResource,
   uri: string,
   mcpClientManager: McpClientManagerForResources,
-  processedQueryParts: PartUnion[],
+  processedQueryParts: Array<ContractPart | string>,
   index: number,
 ): Promise<IndividualToolCallDisplay> {
   const client = getResourceClient(mcpClientManager, resource.serverName);
@@ -255,8 +255,8 @@ export function addToolGroup(
 
 function convertResourceContentsToParts(
   response: ResourceResponse,
-): PartUnion[] {
-  const parts: PartUnion[] = [];
+): Array<ContractPart | string> {
+  const parts: Array<ContractPart | string> = [];
   for (const content of response.contents ?? []) {
     const candidate = content.resource ?? content;
     if (candidate.text) {

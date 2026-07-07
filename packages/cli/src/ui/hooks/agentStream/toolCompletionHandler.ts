@@ -11,13 +11,15 @@
  * partitions completed tools and triggers memory refresh for the CLI display.
  */
 
-import type { CompletedToolCall } from '@vybestack/llxprt-code-core';
-import type { Part } from '@google/genai';
+import type {
+  CompletedToolCall,
+  ContractPart,
+} from '@vybestack/llxprt-code-core';
 import { classifyCompletedTools as classifyCompletedToolsEngine } from '@vybestack/llxprt-code-agents';
 import type { TrackedToolCall } from '../useReactToolScheduler.js';
 
 type ToolCallWithRuntimeResponseParts = CompletedToolCall & {
-  response: { responseParts: Part[] };
+  response: { responseParts: ContractPart[] };
 };
 
 function isToolCallWithResponseParts(

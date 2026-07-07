@@ -12,7 +12,6 @@ import {
 import type { Config } from '@vybestack/llxprt-code-core';
 
 const mockFromConfig = vi.hoisted(() => vi.fn());
-const mockGetActiveProfileName = vi.fn<() => string | null>();
 const mockLoadProfileByName = vi.fn<(name: string) => Promise<void>>();
 
 vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
@@ -28,22 +27,10 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   resetAgentRuntimeFactories: vi.fn(),
   clearActiveModelParam: vi.fn(),
   getActiveModelParams: vi.fn(),
-  getActiveProfileName: (...args: unknown[]) =>
-    mockGetActiveProfileName(...(args as [])),
   loadProfileByName: (...args: unknown[]) =>
     mockLoadProfileByName(...(args as [string])),
   setCliRuntimeContext: vi.fn(),
 }));
-
-const mockClearCachedCredentialFile = vi.fn<() => Promise<void>>();
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    clearCachedCredentialFile: (...args: unknown[]) =>
-      mockClearCachedCredentialFile(...(args as [])),
-  };
-});
 
 describe('zedIntegration auth method validation', () => {
   it('accepts known profile names', () => {
@@ -246,36 +233,24 @@ describe('ZedAgent.authenticate credential cache', () => {
     );
   }
 
-  it('clears credential cache when switching to a different profile', async () => {
-    mockGetActiveProfileName.mockReturnValue('alpha');
-    mockClearCachedCredentialFile.mockResolvedValue(undefined);
-
+  it('loads profile when switching to a different profile', async () => {
     const agent = createAgent();
     await agent.authenticate({ methodId: 'beta' });
 
-    expect(mockClearCachedCredentialFile).toHaveBeenCalledOnce();
     expect(mockLoadProfileByName).toHaveBeenCalledWith('beta');
   });
 
-  it('does NOT clear credential cache when re-authenticating same profile', async () => {
-    mockGetActiveProfileName.mockReturnValue('alpha');
-    mockClearCachedCredentialFile.mockResolvedValue(undefined);
-
+  it('loads profile when re-authenticating same profile', async () => {
     const agent = createAgent();
     await agent.authenticate({ methodId: 'alpha' });
 
-    expect(mockClearCachedCredentialFile).not.toHaveBeenCalled();
     expect(mockLoadProfileByName).toHaveBeenCalledWith('alpha');
   });
 
-  it('clears credential cache when no active profile exists', async () => {
-    mockGetActiveProfileName.mockReturnValue(null);
-    mockClearCachedCredentialFile.mockResolvedValue(undefined);
-
+  it('loads profile when no active profile exists', async () => {
     const agent = createAgent();
     await agent.authenticate({ methodId: 'alpha' });
 
-    expect(mockClearCachedCredentialFile).toHaveBeenCalledOnce();
     expect(mockLoadProfileByName).toHaveBeenCalledWith('alpha');
   });
 });

@@ -4,13 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { Config, ContractPart } from '@vybestack/llxprt-code-core';
 import {
   shutdownTelemetry,
   isTelemetrySdkInitialized,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
-import type { Part } from '@google/genai';
 import type {
   Agent,
   AgentEvent,
@@ -184,7 +183,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     const mockHandleAtCommand = vi.mocked(handleAtCommand);
 
     const rawInput = 'Summarize @file.txt';
-    const processedParts: Part[] = [
+    const processedParts: ContractPart[] = [
       { text: 'Summarize @file.txt' },
       { text: '\n--- Content from referenced files ---\n' },
       { text: 'This is the content of the file.' },

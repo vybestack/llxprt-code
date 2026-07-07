@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { PartUnion } from '@google/genai';
-import { unescapePath } from '@vybestack/llxprt-code-core';
+import { unescapePath, type ContractPart } from '@vybestack/llxprt-code-core';
 import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import {
@@ -216,7 +215,9 @@ export async function handleAtCommand({
     return handleNoValidPaths(query, initialQueryText, onDebugMessage);
   }
 
-  const processedQueryParts: PartUnion[] = [{ text: initialQueryText }];
+  const processedQueryParts: Array<ContractPart | string> = [
+    { text: initialQueryText },
+  ];
   const resourceResult = await processResourceAttachments({
     resourceAttachments: resolution.resourceAttachments,
     processedQueryParts,

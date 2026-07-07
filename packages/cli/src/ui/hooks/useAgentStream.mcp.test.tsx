@@ -22,11 +22,11 @@ import type { TrackedToolCall } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type {
   Config,
+  ContractPartListUnion,
   EditorType,
   ToolRegistry,
 } from '@vybestack/llxprt-code-core';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
-import type { PartListUnion } from '@google/genai';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { SlashCommandProcessorResult } from '../types.js';
 import { MessageType } from '../types.js';
@@ -251,7 +251,7 @@ describe('useAgentStream', () => {
         config: mcpMockConfig,
         onDebugMessage: mockOnDebugMessage,
         handleSlashCommand: mockHandleSlashCommand as unknown as (
-          cmd: PartListUnion,
+          cmd: ContractPartListUnion,
         ) => Promise<SlashCommandProcessorResult | false>,
         shellModeActive: false,
         loadedSettings: mockLoadedSettings,
@@ -389,7 +389,7 @@ describe('useAgentStream', () => {
         config: noMcpConfig,
         onDebugMessage: mockOnDebugMessage,
         handleSlashCommand: mockHandleSlashCommand as unknown as (
-          cmd: PartListUnion,
+          cmd: ContractPartListUnion,
         ) => Promise<SlashCommandProcessorResult | false>,
         shellModeActive: false,
         loadedSettings: mockLoadedSettings,

@@ -18,7 +18,7 @@ import type {
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
-import { AgentEventType } from './turn.js';
+import { AgentEventType, PerformCompressionResult } from './turn.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import { fromAsync, setupGeminiClient } from './client-test-helpers.js';
@@ -224,6 +224,9 @@ describe('Gemini Client (client.ts)', () => {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        performCompression: vi
+          .fn()
+          .mockResolvedValue(PerformCompressionResult.FAILED),
       };
       client['chat'] = mockChat as ChatSession;
 
@@ -260,6 +263,11 @@ describe('Gemini Client (client.ts)', () => {
       });
       // Ensure turn.run is not called
       expect(mockTurnRunFn).not.toHaveBeenCalled();
+      // Recovery must have attempted (auto) compression before bailing (#2402).
+      expect(mockChat.performCompression).toHaveBeenCalledWith(
+        'prompt-id-overflow',
+        { bypassCooldown: true, trigger: 'auto' },
+      );
     });
 
     it('should NOT emit ContextWindowWillOverflow when remaining capacity is already negative (issue 2139)', async () => {

@@ -29,10 +29,6 @@ vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
 }));
 
-vi.mock('@vybestack/llxprt-code-core/code_assist/codeAssist.js', () => ({
-  createCodeAssistContentGenerator: vi.fn(),
-}));
-
 const mockSettingsService = vi.hoisted(() => ({
   set: vi.fn(),
   get: vi.fn(),
@@ -386,7 +382,7 @@ describe('GeminiProvider', () => {
     });
   });
 
-  it('should include gemini-3-flash-preview in OAuth model list', async () => {
+  it('should include gemini-3-flash-preview in model list', async () => {
     const provider = new GeminiProvider();
 
     vi.spyOn(
@@ -395,8 +391,8 @@ describe('GeminiProvider', () => {
       },
       'determineBestAuth',
     ).mockResolvedValue({
-      authMode: 'oauth',
-      token: 'test-oauth-token',
+      authMode: 'gemini-api-key',
+      token: 'test-api-key-token',
     });
 
     const models = await provider.getModels();

@@ -6,8 +6,11 @@
 
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useCallback, useState } from 'react';
-import { type PartListUnion } from '@google/genai';
-import type { RecordingIntegration, Todo } from '@vybestack/llxprt-code-core';
+import type {
+  RecordingIntegration,
+  Todo,
+  ContractPartListUnion,
+} from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
@@ -41,7 +44,7 @@ interface TodoContextValue {
 
 export type SlashCommandProcessorCoreResult = {
   handleSlashCommand: (
-    rawQuery: PartListUnion,
+    rawQuery: ContractPartListUnion,
     oneTimeShellAllowlist?: Set<string>,
     overwriteConfirmed?: boolean,
     addToHistory?: boolean,
@@ -171,7 +174,7 @@ export function useSlashCommandProcessorCore(
   );
   const handleSlashCommand = useCallback(
     (
-      rawQuery: PartListUnion,
+      rawQuery: ContractPartListUnion,
       oneTimeShellAllowlist?: Set<string>,
       overwriteConfirmed: boolean | undefined = undefined,
       addToHistory: boolean = true,

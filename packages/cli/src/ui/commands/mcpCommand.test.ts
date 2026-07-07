@@ -15,8 +15,6 @@ import {
   DiscoveredMCPTool,
 } from '@vybestack/llxprt-code-mcp';
 import type { MessageActionReturn } from './types.js';
-import type { CallableTool } from '@google/genai';
-import { Type } from '@google/genai';
 import type {
   Agent,
   McpDetailStatus,
@@ -78,13 +76,13 @@ const createMockMCPTool = (
     {
       callTool: vi.fn(),
       tool: vi.fn(),
-    } as unknown as CallableTool,
+    } as unknown as ConstructorParameters<typeof DiscoveredMCPTool>[0],
     serverName,
     serverToolName,
     description === undefined || description === ''
       ? `Description for ${serverToolName}`
       : description,
-    { type: Type.OBJECT, properties: {} },
+    { type: 'OBJECT', properties: {} },
     true,
   );
 

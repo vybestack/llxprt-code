@@ -5,7 +5,6 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { FunctionCallingConfigMode } from '@google/genai';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core';
 import type { AutoPromptRuntime } from './autoPromptGenerator.js';
 
@@ -70,7 +69,7 @@ describe('generateAutoPrompt', () => {
           serverTools: [],
           toolConfig: {
             functionCallingConfig: {
-              mode: FunctionCallingConfigMode.NONE,
+              mode: 'NONE',
             },
           },
         }),
@@ -96,7 +95,7 @@ describe('generateAutoPrompt', () => {
           serverTools: [],
           toolConfig: {
             functionCallingConfig: {
-              mode: FunctionCallingConfigMode.NONE,
+              mode: 'NONE',
             },
           },
         }),
@@ -191,7 +190,7 @@ describe('generateAutoPrompt', () => {
 
     await expect(
       generateAutoPrompt(makeRuntime('gemini', null), 'No clients'),
-    ).rejects.toThrow('Unable to access Gemini client');
+    ).rejects.toThrow('Unable to access the AI client');
   });
 
   it('propagates detached client creation failures', async () => {

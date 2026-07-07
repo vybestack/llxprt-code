@@ -7,7 +7,7 @@
 import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Content } from '@google/genai';
+import type { ContractContent } from '@vybestack/llxprt-code-core';
 
 /**
  * Sanitizes a transcript by redacting sensitive credentials and keys.
@@ -113,7 +113,7 @@ export function sanitizeTranscript(text: string): string {
  * Formats a single part of a history item to markdown.
  */
 function formatPartToMarkdown(
-  part: NonNullable<Content['parts']>[number],
+  part: NonNullable<ContractContent['parts']>[number],
 ): string {
   if (part.text) {
     return `${part.text}\n\n`;
@@ -142,10 +142,9 @@ function formatPartToMarkdown(
 /**
  * Formats conversation history into a markdown transcript.
  *
- * @param history - Array of Content objects from @google/genai
- * @returns Formatted markdown string
+ * @param history - Array of ContractContent objects from the conversation
  */
-function formatHistoryAsMarkdown(history: Content[]): string {
+function formatHistoryAsMarkdown(history: ContractContent[]): string {
   let transcript = '# LLxprt Code Conversation Transcript\n\n';
 
   for (const item of history) {
@@ -167,11 +166,11 @@ function formatHistoryAsMarkdown(history: Content[]): string {
 /**
  * Exports conversation history to a temporary file for bug reporting.
  *
- * @param history - Array of Content objects from the conversation
+ * @param history - Array of ContractContent objects from the conversation
  * @returns Object containing the export file path and sanitized content
  */
 export async function exportHistoryForBugReport(
-  history: Content[],
+  history: ContractContent[],
 ): Promise<{ filePath: string; sanitized: string }> {
   // Format history as markdown
   const markdown = formatHistoryAsMarkdown(history);

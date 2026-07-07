@@ -17,8 +17,8 @@ import {
   type EditorType,
   type MessageBus,
   type RecordingIntegration,
+  type ContractPartListUnion,
 } from '@vybestack/llxprt-code-core';
-import { type PartListUnion } from '@google/genai';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
@@ -42,7 +42,7 @@ export const useAgentStream = (
   settings: LoadedSettings,
   onDebugMessage: (message: string) => void,
   handleSlashCommand: (
-    cmd: PartListUnion,
+    cmd: ContractPartListUnion,
   ) => Promise<SlashCommandProcessorResult | false>,
   shellModeActive: boolean,
   getPreferredEditor: () => EditorType | undefined,
