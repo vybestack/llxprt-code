@@ -389,12 +389,16 @@ export class SubagentOrchestrator {
     // Validate that referenced sub-profiles exist and are not nested
     // load balancers, but preserve the load-balancer profile as the
     // effective profile so its failover/round-robin logic is used.
-    for (const subProfileName of profile.profiles) {
-      const subProfile =
-        await this.options.profileManager.loadProfile(subProfileName);
+    const subProfiles = await Promise.all(
+      profile.profiles.map(async (name) => ({
+        name,
+        profile: await this.options.profileManager.loadProfile(name),
+      })),
+    );
+    for (const { name, profile: subProfile } of subProfiles) {
       if (isLoadBalancerProfile(subProfile)) {
         throw new Error(
-          `Load balancer subagent profile cannot use nested load balancer profile '${subProfileName}'.`,
+          `Load balancer subagent profile cannot use nested load balancer profile '${name}'.`,
         );
       }
     }
@@ -791,44 +795,49 @@ export class SubagentOrchestrator {
       agentRuntimeId,
     );
 
-    const providerRuntime: ProviderRuntimeContext =
-      createSettingsProviderRuntimeContext({
-        settingsService: isolatedHandle.settingsService,
-        config: isolatedHandle.config,
-        runtimeId: agentRuntimeId,
-        metadata: {
-          source: 'SubagentOrchestrator',
-          subagent: subagent.name,
+    try {
+      const providerRuntime: ProviderRuntimeContext =
+        createSettingsProviderRuntimeContext({
+          settingsService: isolatedHandle.settingsService,
+          config: isolatedHandle.config,
+          runtimeId: agentRuntimeId,
+          metadata: {
+            source: 'SubagentOrchestrator',
+            subagent: subagent.name,
+          },
+        });
+
+      const settingsSnapshot = this.createSettingsSnapshot(effectiveProfile);
+      const contentGeneratorConfig = this.buildContentGeneratorConfig(
+        effectiveProfile,
+        modelConfig,
+      );
+      contentGeneratorConfig.providerManager = isolatedHandle.providerManager;
+
+      const toolRegistry: ToolRegistry | undefined =
+        typeof this.options.foregroundConfig.getToolRegistry === 'function'
+          ? this.options.foregroundConfig.getToolRegistry()
+          : undefined;
+
+      const loaderOptions: AgentRuntimeLoaderOptions = {
+        profile: {
+          config: isolatedHandle.config,
+          state: runtimeState,
+          settings: settingsSnapshot,
+          providerRuntime,
+          contentGeneratorConfig,
+          toolRegistry,
+          providerManager: isolatedHandle.providerManager,
         },
-      });
+        signal,
+      };
 
-    const settingsSnapshot = this.createSettingsSnapshot(effectiveProfile);
-    const contentGeneratorConfig = this.buildContentGeneratorConfig(
-      effectiveProfile,
-      modelConfig,
-    );
-    contentGeneratorConfig.providerManager = isolatedHandle.providerManager;
-
-    const toolRegistry: ToolRegistry | undefined =
-      typeof this.options.foregroundConfig.getToolRegistry === 'function'
-        ? this.options.foregroundConfig.getToolRegistry()
-        : undefined;
-
-    const loaderOptions: AgentRuntimeLoaderOptions = {
-      profile: {
-        config: isolatedHandle.config,
-        state: runtimeState,
-        settings: settingsSnapshot,
-        providerRuntime,
-        contentGeneratorConfig,
-        toolRegistry,
-        providerManager: isolatedHandle.providerManager,
-      },
-      signal,
-    };
-
-    const runtimeResult = await this.runtimeLoader(loaderOptions);
-    return { runtimeResult, isolatedHandle };
+      const runtimeResult = await this.runtimeLoader(loaderOptions);
+      return { runtimeResult, isolatedHandle };
+    } catch (error) {
+      await isolatedHandle.cleanup();
+      throw error;
+    }
   }
 
   /**
@@ -867,13 +876,18 @@ export class SubagentOrchestrator {
       },
     });
 
-    await handle.activate();
+    try {
+      await handle.activate();
 
-    await executeProviderActivation(handle.config, {
-      provider: effectiveProfile.provider,
-      model: effectiveProfile.model,
-      modelParams: effectiveProfile.modelParams,
-    });
+      await executeProviderActivation(handle.config, {
+        provider: effectiveProfile.provider,
+        model: effectiveProfile.model,
+        modelParams: effectiveProfile.modelParams,
+      });
+    } catch (error) {
+      await handle.cleanup();
+      throw error;
+    }
 
     return handle;
   }
