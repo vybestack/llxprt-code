@@ -119,7 +119,7 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
     return { child, exitCalls, spawnFn };
   }
 
-  it('spawns bun with the entry + forwarded args and relaunch guard env', async () => {
+  it('spawns Bun with the entry + forwarded args and relaunch guard env', async () => {
     delete process.env[credentialSocketEnv];
     process.argv = ['/node', '/llxprt.cjs', '--profile-load', 'dev'];
     const { child, exitCalls, spawnFn } = await runLauncher();
@@ -177,7 +177,7 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
     ['SIGHUP', 129],
     ['SIGBREAK', 149],
   ] satisfies Array<[NodeJS.Signals, number]>)(
-    'forwards %s to the bun child until close',
+    'forwards %s to the Bun child until close',
     async (signal, exitCode) => {
       delete process.env[credentialSocketEnv];
       const { child, exitCalls } = await runLauncher();
@@ -210,7 +210,7 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
     await vi.waitFor(() => expect(exitCalls).toStrictEqual([1]));
   });
 
-  it('exits with 43 and does not spawn when bun cannot be resolved', async () => {
+  it('exits with 43 and does not spawn when Bun cannot be resolved', async () => {
     const { exitCalls, spawnFn } = await runLauncher({
       resolveBun: () => null,
     });
