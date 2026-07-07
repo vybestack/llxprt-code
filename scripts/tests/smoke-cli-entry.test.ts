@@ -15,6 +15,10 @@ const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
 const launcher = join(repoRoot, 'packages', 'cli', 'bin', 'llxprt.cjs');
 
+// Generous per-test budget: the Node launcher re-execs the CLI under Bun, so
+// the first cold spawn can be slow on CI runners.
+const SMOKE_TEST_TIMEOUT_MS = 30_000;
+
 function runLauncherVersion(env: NodeJS.ProcessEnv): {
   status: number | null;
   stdout: string;
@@ -54,26 +58,30 @@ describe('CLI entry smoke guard (issue #2435)', () => {
   // fresh-checkout "no generated artifact" state without deleting any real
   // on-disk file, so the test is reproducible on developer machines where the
   // generated JSON already exists.
-  it('prints the version and exits 0 when the git-commit artifact is missing', () => {
-    // randomUUID (not process.pid) guards against PID recycling leaving a
-    // stale file at this path, which would defeat the missing-artifact intent.
-    const missingArtifact = join(
-      tmpdir(),
-      `definitely-missing-git-commit-${randomUUID()}.json`,
-    );
+  it(
+    'prints the version and exits 0 when the git-commit artifact is missing',
+    () => {
+      // randomUUID (not process.pid) guards against PID recycling leaving a
+      // stale file at this path, which would defeat the missing-artifact intent.
+      const missingArtifact = join(
+        tmpdir(),
+        `definitely-missing-git-commit-${randomUUID()}.json`,
+      );
 
-    const { status, stdout, stderr } = runLauncherVersion({
-      ...process.env,
-      LLXPRT_GIT_COMMIT_INFO_PATH: missingArtifact,
-      LLXPRT_BUN_RELAUNCHED: 'true',
-    });
+      const { status, stdout, stderr } = runLauncherVersion({
+        ...process.env,
+        LLXPRT_GIT_COMMIT_INFO_PATH: missingArtifact,
+        LLXPRT_BUN_RELAUNCHED: 'true',
+      });
 
-    expect(
-      status,
-      `CLI exited ${status} (expected 0). stderr:\n${stderr}`,
-    ).toBe(0);
-    expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
-  }, 30000);
+      expect(
+        status,
+        `CLI exited ${status} (expected 0). stderr:\n${stderr}`,
+      ).toBe(0);
+      expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+    },
+    SMOKE_TEST_TIMEOUT_MS,
+  );
 
   // Covers the non-override default-candidate lookup path of candidatePaths():
   // with the env override unset (empty), the loader consults its default
@@ -81,17 +89,21 @@ describe('CLI entry smoke guard (issue #2435)', () => {
   // this exercises graceful degradation; on a built/dev tree it finds the real
   // artifact. Either way the CLI must print its version and exit 0. The
   // hermetic graceful-degradation guarantee is proven by the first test above.
-  it('prints the version and exits 0 with no override set', () => {
-    const { status, stdout, stderr } = runLauncherVersion({
-      ...process.env,
-      LLXPRT_GIT_COMMIT_INFO_PATH: '',
-      LLXPRT_BUN_RELAUNCHED: 'true',
-    });
+  it(
+    'prints the version and exits 0 with no override set',
+    () => {
+      const { status, stdout, stderr } = runLauncherVersion({
+        ...process.env,
+        LLXPRT_GIT_COMMIT_INFO_PATH: '',
+        LLXPRT_BUN_RELAUNCHED: 'true',
+      });
 
-    expect(
-      status,
-      `CLI exited ${status} (expected 0). stderr:\n${stderr}`,
-    ).toBe(0);
-    expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
-  }, 30000);
+      expect(
+        status,
+        `CLI exited ${status} (expected 0). stderr:\n${stderr}`,
+      ).toBe(0);
+      expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+    },
+    SMOKE_TEST_TIMEOUT_MS,
+  );
 });

@@ -68,6 +68,12 @@ function loadGitCommitInfo(): string {
         infoLoaded = true;
         return infoCache;
       }
+      // Found and parsed, but the commit field is missing/empty/wrong type.
+      // Log so a corrupt artifact is distinguishable from a missing one.
+      logger.debug(
+        () =>
+          `[GIT_COMMIT] Ignoring ${candidate}: missing or invalid "commit" field`,
+      );
     } catch (error) {
       // DebugLogger gates emission on the DEBUG namespace itself (wildcards
       // included); the lazy message builder runs only when it is enabled.
