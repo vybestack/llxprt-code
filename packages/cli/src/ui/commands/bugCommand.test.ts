@@ -19,7 +19,6 @@ vi.mock('../utils/formatters.js');
 // the real loader's output against itself (a tautology).
 vi.mock('../../utils/gitCommitInfo.js', () => ({
   getGitCommitInfo: vi.fn().mockReturnValue('test-commit-hash'),
-  __resetGitCommitInfoCacheForTests: vi.fn(),
 }));
 vi.mock('node:process', () => ({
   default: {

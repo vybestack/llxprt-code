@@ -81,12 +81,14 @@ function loadGitCommitInfo(): string {
     try {
       const raw = readFileSync(candidate, 'utf-8');
       const parsed = JSON.parse(raw) as GitCommitInfo;
-      if (typeof parsed.commit === 'string' && parsed.commit !== '') {
-        infoCache = parsed.commit;
+      const commit =
+        typeof parsed.commit === 'string' ? parsed.commit.trim() : '';
+      if (commit !== '') {
+        infoCache = commit;
         infoLoaded = true;
         return infoCache;
       }
-      // Found and parsed, but the commit field is missing/empty/wrong type.
+      // Found and parsed, but the commit field is missing/blank/wrong type.
       // Log so a corrupt artifact is distinguishable from a missing one.
       logger.debug(
         () =>

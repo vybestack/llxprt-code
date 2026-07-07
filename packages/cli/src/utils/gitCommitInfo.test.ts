@@ -100,6 +100,20 @@ describe('gitCommitInfo', () => {
     expect(info).toBe('N/A');
   });
 
+  it('returns "N/A" when commit field is whitespace only', () => {
+    writeFileSync(infoPath, JSON.stringify({ commit: '   ' }), 'utf-8');
+
+    const info = getGitCommitInfo();
+    expect(info).toBe('N/A');
+  });
+
+  it('trims surrounding whitespace from a valid commit hash', () => {
+    writeFileSync(infoPath, JSON.stringify({ commit: '  abc1234  ' }), 'utf-8');
+
+    const info = getGitCommitInfo();
+    expect(info).toBe('abc1234');
+  });
+
   it('caches the result and does not re-read on subsequent calls', () => {
     writeFileSync(infoPath, JSON.stringify({ commit: 'abc1234' }), 'utf-8');
     expect(getGitCommitInfo()).toBe('abc1234');

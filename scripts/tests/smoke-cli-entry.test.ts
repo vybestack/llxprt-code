@@ -32,10 +32,15 @@ function runLauncherVersion(env: NodeJS.ProcessEnv): {
     encoding: 'utf8',
     maxBuffer: 1024 * 1024,
     env,
+    // spawnSync blocks the event loop, so Vitest's per-test timeout cannot
+    // interrupt a hung child. Kill it here instead so a stuck launcher surfaces
+    // as a failure rather than stalling the runner indefinitely.
+    timeout: SMOKE_TEST_TIMEOUT_MS,
   });
   if (result.error) {
-    // Surface spawn failures (e.g. missing launcher) explicitly; otherwise a
-    // null status with empty stderr makes the CI failure undiagnosable.
+    // Surface spawn failures (e.g. missing launcher or a timeout kill)
+    // explicitly; otherwise a null status with empty stderr makes the CI
+    // failure undiagnosable.
     throw new Error(`Failed to spawn CLI launcher: ${result.error.message}`);
   }
   return {
