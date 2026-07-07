@@ -256,7 +256,7 @@ jobs:
           # .ts/.tsx/.js/.jsx/.mjs/.cjs variants used throughout packages/**.
           changed_tests="$(
             git diff --name-only "${BASE_SHA}..${HEAD_SHA}" \
-              | grep -Ei '(^|/)(__tests__|tests?)/.*\.(ts|tsx|js|jsx|mjs|cjs)$|(\.test\.|\.spec\.)\.(ts|tsx|js|jsx|mjs|cjs)$' \
+              | grep -Ei '(^|/)(__tests__|tests?)/.*\.(ts|tsx|js|jsx|mjs|cjs)$|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$' \
               || true
           )"
           if [ -n "$changed_tests" ]; then
@@ -528,23 +528,32 @@ jobs:
             // Post inline comments via a COMMENT review on the head SHA.
             let postedInline = 0;
             if (ran && inline.length > 0) {
+              let existingInlineKeys = new Set();
+              try {
+                existingInlineKeys = await existingInlineCommentKeys();
+              } catch (listErr) {
+                core.warning(`Could not list existing OCR inline comments before posting: ${listErr.message || listErr}`);
+              }
+              const inlineToPost = inline.filter((c) => !existingInlineKeys.has(inlineCommentKey(c)));
+              if (inlineToPost.length === 0) {
+                core.info('All OCR inline comments already exist on this head SHA; skipping inline posting.');
+              } else {
               try {
                 await github.rest.pulls.createReview({
                   owner, repo, pull_number: number,
-                  event: 'COMMENT', commit_id: headSha, comments: inline,
+                  event: 'COMMENT', commit_id: headSha, comments: inlineToPost,
                 });
-                postedInline = inline.length;
+                postedInline = inlineToPost.length;
               } catch (batchErr) {
-                core.warning(`Batch review post failed (${inline.length} comments), falling back to individual posting: ${batchErr.message || batchErr}`);
+                core.warning(`Batch review post failed (${inlineToPost.length} comments), falling back to individual posting: ${batchErr.message || batchErr}`);
                 // Fallback: post each inline comment individually, with a cap to avoid secondary rate limits.
-                let existingInlineKeys = new Set();
                 try {
                   existingInlineKeys = await existingInlineCommentKeys();
                 } catch (listErr) {
                   core.warning(`Could not list existing OCR inline comments before fallback posting: ${listErr.message || listErr}`);
                 }
                 const MAX_INLINE_FALLBACK = 50;
-                for (const [index, c] of inline.entries()) {
+                for (const [index, c] of inlineToPost.entries()) {
                   if (index >= MAX_INLINE_FALLBACK) {
                     const lineRange = c.start_line && c.start_line !== c.line
                       ? `${c.start_line}-${c.line}`
@@ -591,6 +600,7 @@ jobs:
                     });
                   }
                 }
+              }
               }
             }
 
