@@ -459,6 +459,17 @@ export function shouldStopNonInteractiveLoop(
 }
 
 /**
+ * Type guard: returns true when nextMessages is non-null AND non-empty.
+ * Issue #2410: the inverse of shouldStopNonInteractiveLoop, but as a proper
+ * type guard so the caller gets TS narrowing to Content[] without a cast.
+ */
+export function hasNonInteractiveMessages(
+  nextMessages: Content[] | null,
+): nextMessages is Content[] {
+  return nextMessages !== null && nextMessages.length > 0;
+}
+
+/**
  * Run one iteration of the non-interactive loop body. Returns a
  * discriminated result so the caller loop has a single control branch.
  */
@@ -521,15 +532,10 @@ async function runNonInteractiveLoopIteration(
   // so an empty array would slip through and propagate a zero-part user
   // message into provider history (issue #2410). Treat null and empty
   // array the same as "no further messages" and stop the loop.
-  if (shouldStopNonInteractiveLoop(nextMessages)) {
+  if (!hasNonInteractiveMessages(nextMessages)) {
     return { action: 'stop' };
   }
-  // shouldStopNonInteractiveLoop returned false, so nextMessages is
-  // non-null and non-empty — safe to forward.
-  return {
-    action: 'continue',
-    messages: nextMessages as Content[],
-  };
+  return { action: 'continue', messages: nextMessages };
 }
 
 /**
