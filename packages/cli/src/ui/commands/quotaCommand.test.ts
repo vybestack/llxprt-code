@@ -17,6 +17,10 @@ const { mockConsumeCodexRateLimitResetCredit } = vi.hoisted(() => ({
 const getCliOAuthManagerMock = vi.fn();
 const maybeGetCliOAuthManagerMock = vi.fn();
 const getEphemeralSettingMock = vi.fn();
+// These runtime-API mocks intentionally return undefined for the API-key
+// provider path (getActiveProviderName / getCliProviderManager) so that only
+// the OAuth quota path is exercised here; the API-key path is covered
+// elsewhere (statsQuota tests).
 const getActiveProviderNameMock = vi.fn();
 const getCliProviderManagerMock = vi.fn();
 
@@ -42,6 +46,19 @@ vi.mock('@vybestack/llxprt-code-providers', async () => {
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Get the last item added to the UI, typed for assertion convenience.
+ * Uses the pre-existing `as { type: MessageType; text?: string }` convention
+ * established in this test file.
+ */
+function getLastUiItem(ctx: CommandContext): {
+  type: MessageType;
+  text?: string;
+} {
+  const calls = vi.mocked(ctx.ui.addItem).mock.calls;
+  return calls[calls.length - 1]?.[0] as { type: MessageType; text?: string };
+}
 
 function makeCodexCreditsMap(
   entries: Array<{
@@ -188,11 +205,7 @@ describe('quotaCommand', () => {
 
       await quotaCommand.action!(mockContext, '');
 
-      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
-      const lastItem = calls[calls.length - 1]?.[0] as {
-        type: MessageType;
-        text?: string;
-      };
+      const lastItem = getLastUiItem(mockContext);
       expect(lastItem.type).toBe(MessageType.INFO);
       expect(lastItem.text).toContain('No quota information available');
     });
@@ -217,11 +230,7 @@ describe('quotaCommand', () => {
 
       await quotaCommand.action!(mockContext, '');
 
-      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
-      const lastItem = calls[calls.length - 1]?.[0] as {
-        type: MessageType;
-        text?: string;
-      };
+      const lastItem = getLastUiItem(mockContext);
       expect(lastItem.type).toBe(MessageType.INFO);
       expect(lastItem.text).toContain('Anthropic Quota Information');
     });
@@ -239,11 +248,7 @@ describe('quotaCommand', () => {
       );
       await credits!.action!(mockContext, '');
 
-      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
-      const lastItem = calls[calls.length - 1]?.[0] as {
-        type: MessageType;
-        text?: string;
-      };
+      const lastItem = getLastUiItem(mockContext);
       expect(lastItem.type).toBe(MessageType.INFO);
       expect(lastItem.text).toContain('No Codex reset credits available');
     });
@@ -262,11 +267,7 @@ describe('quotaCommand', () => {
       );
       await credits!.action!(mockContext, '');
 
-      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
-      const lastItem = calls[calls.length - 1]?.[0] as {
-        type: MessageType;
-        text?: string;
-      };
+      const lastItem = getLastUiItem(mockContext);
       expect(lastItem.type).toBe(MessageType.INFO);
       expect(lastItem.text).toContain('No Codex reset credits available');
     });
@@ -291,11 +292,7 @@ describe('quotaCommand', () => {
       );
       await credits!.action!(mockContext, '');
 
-      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
-      const lastItem = calls[calls.length - 1]?.[0] as {
-        type: MessageType;
-        text?: string;
-      };
+      const lastItem = getLastUiItem(mockContext);
       expect(lastItem.type).toBe(MessageType.INFO);
       expect(lastItem.text).toContain('Available reset credits: 2');
     });
@@ -314,13 +311,65 @@ describe('quotaCommand', () => {
       );
       await credits!.action!(mockContext, '');
 
-      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
-      const lastItem = calls[calls.length - 1]?.[0] as {
-        type: MessageType;
-        text?: string;
-      };
+      const lastItem = getLastUiItem(mockContext);
       expect(lastItem.type).toBe(MessageType.ERROR);
       expect(lastItem.text).toContain('Failed to retrieve reset credits:');
+    });
+
+    it('shows bucket headers for multiple buckets with available credits', async () => {
+      const oauthManager = {
+        getAllCodexRateLimitResetCredits: vi.fn().mockResolvedValue(
+          makeCodexCreditsMap([
+            {
+              bucket: 'bucket-a',
+              availableCount: 1,
+              credits: [{ id: 'credit-a' }],
+            },
+            {
+              bucket: 'bucket-b',
+              availableCount: 2,
+              credits: [{ id: 'credit-b1' }, { id: 'credit-b2' }],
+            },
+          ]),
+        ),
+      };
+      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
+      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+
+      const credits = quotaCommand.subCommands?.find(
+        (sc) => sc.name === 'credits',
+      );
+      await credits!.action!(mockContext, '');
+
+      const lastItem = getLastUiItem(mockContext);
+      expect(lastItem.type).toBe(MessageType.INFO);
+      expect(lastItem.text).toContain('### Bucket: bucket-a');
+      expect(lastItem.text).toContain('### Bucket: bucket-b');
+    });
+
+    it('shows no-credits message when map is non-empty but all buckets have zero available', async () => {
+      const oauthManager = {
+        getAllCodexRateLimitResetCredits: vi.fn().mockResolvedValue(
+          makeCodexCreditsMap([
+            {
+              bucket: 'bucket-a',
+              availableCount: 0,
+              credits: [],
+            },
+          ]),
+        ),
+      };
+      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
+      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+
+      const credits = quotaCommand.subCommands?.find(
+        (sc) => sc.name === 'credits',
+      );
+      await credits!.action!(mockContext, '');
+
+      const lastItem = getLastUiItem(mockContext);
+      expect(lastItem.type).toBe(MessageType.INFO);
+      expect(lastItem.text).toContain('No Codex reset credits available');
     });
   });
 
@@ -329,11 +378,7 @@ describe('quotaCommand', () => {
       const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
       await reset!.action!(mockContext, 'anthropic');
 
-      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
-      const lastItem = calls[calls.length - 1]?.[0] as {
-        type: MessageType;
-        text?: string;
-      };
+      const lastItem = getLastUiItem(mockContext);
       expect(lastItem.type).toBe(MessageType.ERROR);
       expect(lastItem.text).toContain("Only 'codex' supports reset");
     });
@@ -352,11 +397,7 @@ describe('quotaCommand', () => {
       const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
       await reset!.action!(mockContext, '');
 
-      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
-      const lastItem = calls[calls.length - 1]?.[0] as {
-        type: MessageType;
-        text?: string;
-      };
+      const lastItem = getLastUiItem(mockContext);
       expect(lastItem.type).toBe(MessageType.INFO);
       expect(lastItem.text).toContain('/auth codex');
     });
@@ -375,11 +416,7 @@ describe('quotaCommand', () => {
       const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
       await reset!.action!(mockContext, '');
 
-      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
-      const lastItem = calls[calls.length - 1]?.[0] as {
-        type: MessageType;
-        text?: string;
-      };
+      const lastItem = getLastUiItem(mockContext);
       expect(lastItem.type).toBe(MessageType.INFO);
       expect(lastItem.text).toContain('No reset credits available');
     });
@@ -459,11 +496,7 @@ describe('quotaCommand', () => {
       const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
       await reset!.action!(mockContext, '');
 
-      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
-      const lastItem = calls[calls.length - 1]?.[0] as {
-        type: MessageType;
-        text?: string;
-      };
+      const lastItem = getLastUiItem(mockContext);
       expect(lastItem.type).toBe(MessageType.ERROR);
       expect(lastItem.text).toContain('Failed to reset');
     });
@@ -480,11 +513,7 @@ describe('quotaCommand', () => {
       const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
       await reset!.action!(mockContext, '');
 
-      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
-      const lastItem = calls[calls.length - 1]?.[0] as {
-        type: MessageType;
-        text?: string;
-      };
+      const lastItem = getLastUiItem(mockContext);
       expect(lastItem.type).toBe(MessageType.ERROR);
       expect(lastItem.text).toContain('Failed to reset rate-limit window');
     });
@@ -501,11 +530,7 @@ describe('quotaCommand', () => {
       const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
       await reset!.action!(mockContext, '');
 
-      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
-      const lastItem = calls[calls.length - 1]?.[0] as {
-        type: MessageType;
-        text?: string;
-      };
+      const lastItem = getLastUiItem(mockContext);
       expect(lastItem.type).toBe(MessageType.ERROR);
       expect(lastItem.text).toContain('Failed to resolve Codex credentials');
     });
@@ -522,11 +547,7 @@ describe('quotaCommand', () => {
       const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
       await reset!.action!(mockContext, '');
 
-      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
-      const lastItem = calls[calls.length - 1]?.[0] as {
-        type: MessageType;
-        text?: string;
-      };
+      const lastItem = getLastUiItem(mockContext);
       expect(lastItem.type).toBe(MessageType.ERROR);
       expect(lastItem.text).toContain('Failed to reset rate-limit window:');
     });
@@ -540,14 +561,36 @@ describe('quotaCommand', () => {
       const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
       await reset!.action!(mockContext, '');
 
-      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
-      const lastItem = calls[calls.length - 1]?.[0] as {
-        type: MessageType;
-        text?: string;
-      };
+      const lastItem = getLastUiItem(mockContext);
       expect(lastItem.type).toBe(MessageType.INFO);
       expect(lastItem.text).toContain('/auth codex');
       expect(lastItem.text).toContain('Not authenticated with Codex');
+    });
+
+    it('succeeds when provider arg is explicitly codex', async () => {
+      const oauthManager = makeCodexResetOauthManager();
+      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
+      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+
+      mockConsumeCodexRateLimitResetCredit.mockResolvedValue({
+        code: 'reset',
+        credit: { id: 'credit-1' },
+      });
+
+      const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
+      await reset!.action!(mockContext, 'codex');
+
+      expect(mockConsumeCodexRateLimitResetCredit).toHaveBeenCalledTimes(1);
+
+      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const successItem = calls.find((call) => {
+        const item = call[0] as { text: string; type: MessageType };
+        return (
+          item.text.includes('reset successfully') &&
+          item.type === MessageType.INFO
+        );
+      });
+      expect(successItem).toBeDefined();
     });
   });
 });

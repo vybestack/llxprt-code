@@ -8,7 +8,10 @@ import { describe, it, expect } from 'vitest';
 import { createCompletionHandler } from '../schema/index.js';
 import { quotaCommand } from '../quotaCommand.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
-import type { CommandArgumentSchema } from '../schema/types.js';
+import type {
+  CommandArgumentSchema,
+  CompletionResult,
+} from '../schema/types.js';
 
 describe('quotaCommand schema completion', () => {
   // The completion handler is read-only with respect to the context for these
@@ -35,13 +38,11 @@ describe('quotaCommand schema completion', () => {
   }
 
   /**
-   * Invoke the reset completion handler and return only the suggestion values.
+   * Invoke the reset completion handler and return the full result object.
    */
-  async function getResetSuggestions(
-    partialArg: string,
-  ): Promise<readonly string[]> {
+  async function getResetResult(partialArg: string): Promise<CompletionResult> {
     const handler = createCompletionHandler(getResetSchema());
-    const result = await handler(
+    return handler(
       mockContext,
       {
         args: '',
@@ -51,7 +52,15 @@ describe('quotaCommand schema completion', () => {
       },
       `/quota reset ${partialArg}`,
     );
-    return result.suggestions.map((s) => s.value);
+  }
+
+  /**
+   * Invoke the reset completion handler and return only the suggestion values.
+   */
+  async function getResetSuggestions(
+    partialArg: string,
+  ): Promise<readonly string[]> {
+    return (await getResetResult(partialArg)).suggestions.map((s) => s.value);
   }
 
   it('only the reset subcommand has a schema', () => {
@@ -75,35 +84,12 @@ describe('quotaCommand schema completion', () => {
   });
 
   it('partialArg "xyz" yields no suggestions', async () => {
-    const schema = getResetSchema();
-    const handler = createCompletionHandler(schema);
-    const result = await handler(
-      mockContext,
-      {
-        args: '',
-        completedArgs: [],
-        partialArg: 'xyz',
-        commandPathLength: 2,
-      },
-      '/quota reset xyz',
-    );
-
-    expect(result.suggestions).toStrictEqual([]);
+    const values = await getResetSuggestions('xyz');
+    expect(values).toStrictEqual([]);
   });
 
   it('the codex suggestion has description Codex (ChatGPT)', async () => {
-    const schema = getResetSchema();
-    const handler = createCompletionHandler(schema);
-    const result = await handler(
-      mockContext,
-      {
-        args: '',
-        completedArgs: [],
-        partialArg: '',
-        commandPathLength: 2,
-      },
-      '/quota reset ',
-    );
+    const result = await getResetResult('');
 
     const codexSuggestion = result.suggestions.find((s) => s.value === 'codex');
     expect(codexSuggestion).toBeDefined();

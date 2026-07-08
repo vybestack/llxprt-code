@@ -262,6 +262,40 @@ describe('codexRateLimitReset', () => {
       expect(secondArg.signal).toBeDefined();
       expect(secondArg.signal).toBeInstanceOf(AbortSignal);
     });
+
+    it('should return null when fetch times out via DOMException TimeoutError', async () => {
+      fetchMock.mockRejectedValueOnce(
+        new DOMException('The operation timed out.', 'TimeoutError'),
+      );
+
+      const result = await fetchCodexRateLimitResetCredits(
+        'token123',
+        'account123',
+      );
+      expect(result).toBeNull();
+    });
+
+    it('should attempt a fetch for a whitespace-only access token (current behavior)', async () => {
+      // The guard checks `!accessToken` which treats '   ' as truthy, so a
+      // whitespace-only token passes validation and a fetch IS attempted.
+      // This documents the actual current behavior; tightening to reject
+      // whitespace would be a behavior change out of scope here.
+      const mockResponse = {
+        rate_limit_reset_credits: {
+          available_count: 0,
+          credits: [],
+        },
+      };
+
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+
+      await fetchCodexRateLimitResetCredits('   ', 'account123');
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('consumeCodexRateLimitResetCredit', () => {
@@ -470,6 +504,44 @@ describe('codexRateLimitReset', () => {
         expect.objectContaining({
           method: 'POST',
         }),
+      );
+    });
+
+    it('should send the full request shape (body + headers) when using a custom base URL', async () => {
+      const mockResponse = {
+        code: 'reset',
+        credit: { id: 'credit-1' },
+      };
+
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+
+      await consumeCodexRateLimitResetCredit(
+        'token123',
+        'account123',
+        'credit-1',
+        'redeem-1',
+        'https://custom.example.com/backend-api',
+      );
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://custom.example.com/backend-api/wham/rate-limit-reset-credits/consume',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer token123',
+            'ChatGPT-Account-Id': 'account123',
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            credit_id: 'credit-1',
+            redeem_request_id: 'redeem-1',
+          }),
+          signal: expect.any(AbortSignal),
+        },
       );
     });
 

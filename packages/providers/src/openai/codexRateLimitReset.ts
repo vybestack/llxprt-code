@@ -189,7 +189,9 @@ export async function fetchCodexRateLimitResetCredits(
     const normalized = normalizeResetCredits(parsedData.data);
     logger.debug(
       () =>
-        `Fetched Codex reset credits from ${endpoints.list}: ${JSON.stringify(normalized)}`,
+        `Fetched Codex reset credits from ${endpoints.list}: available_count=${
+          normalized.rate_limit_reset_credits?.available_count ?? 0
+        }, credits=${normalized.rate_limit_reset_credits?.credits.length ?? 0}`,
     );
 
     return normalized;
@@ -280,7 +282,9 @@ export async function consumeCodexRateLimitResetCredit(
 
     logger.debug(
       () =>
-        `Consumed Codex reset credit from ${endpoints.consume}: ${JSON.stringify(parsedData.data)}`,
+        `Consumed Codex reset credit from ${endpoints.consume}: code=${parsedData.data.code}, credit_id=${
+          parsedData.data.credit?.id ?? 'N/A'
+        }`,
     );
 
     return parsedData.data;

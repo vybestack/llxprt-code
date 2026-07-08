@@ -43,9 +43,29 @@ interface BucketCredits {
   readonly firstCreditId: string | null;
 }
 
+/**
+ * A bucket + credit guaranteed to be redeemable (non-null credit id).
+ * Returned by findRedeemableCredit so callers need no null-narrowing guard.
+ */
+interface RedeemableCredit {
+  readonly bucket: string;
+  readonly firstCreditId: string;
+}
+
 interface BucketTokenInfo {
   readonly accessToken: string | null;
   readonly accountId: string | null;
+}
+
+/**
+ * Parse a raw reset-credits payload via the Zod schema once.
+ * Returns the validated response or null when the shape does not validate.
+ */
+function safeParseResetCredits(
+  raw: Record<string, unknown>,
+): CodexRateLimitResetCreditsResponse | null {
+  const parsed = CodexRateLimitResetCreditsResponseSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
 }
 
 /**
@@ -112,11 +132,11 @@ function parseBucketCredits(
   bucket: string,
   raw: Record<string, unknown>,
 ): BucketCredits | null {
-  const parsed = CodexRateLimitResetCreditsResponseSchema.safeParse(raw);
-  if (!parsed.success) {
+  const parsed = safeParseResetCredits(raw);
+  if (parsed === null) {
     return null;
   }
-  const credits = parsed.data.rate_limit_reset_credits;
+  const credits = parsed.rate_limit_reset_credits;
   const availableCount = credits?.available_count ?? 0;
   const creditList = credits?.credits ?? [];
   const firstCreditId =
@@ -158,12 +178,11 @@ function formatAllResetCreditsLines(
   const multiBucket = creditsMap.size > 1;
 
   for (const [bucket, raw] of creditsMap.entries()) {
-    const parsedResult =
-      CodexRateLimitResetCreditsResponseSchema.safeParse(raw);
-    if (!parsedResult.success) {
+    const parsed = safeParseResetCredits(raw);
+    if (parsed === null) {
       continue;
     }
-    const bucketLines = formatOneBucket(bucket, parsedResult.data, multiBucket);
+    const bucketLines = formatOneBucket(bucket, parsed, multiBucket);
     if (bucketLines !== null) {
       output.push(...bucketLines);
     }
@@ -223,7 +242,7 @@ async function isCodexAuthed(oauthManager: OAuthManager): Promise<boolean> {
  */
 async function findRedeemableCredit(
   oauthManager: OAuthManager,
-): Promise<BucketCredits | null> {
+): Promise<RedeemableCredit | null> {
   const creditsMap = await oauthManager.getAllCodexRateLimitResetCredits();
 
   for (const [bucket, raw] of creditsMap.entries()) {
@@ -233,7 +252,7 @@ async function findRedeemableCredit(
       parsed.availableCount > 0 &&
       parsed.firstCreditId !== null
     ) {
-      return parsed;
+      return { bucket: parsed.bucket, firstCreditId: parsed.firstCreditId };
     }
   }
   return null;
@@ -297,14 +316,7 @@ async function resetAction(
       addInfo(context, NO_REDEEMABLE_CREDITS_MSG);
       return;
     }
-    // Type-narrowing guard: BucketCredits.firstCreditId is typed string | null,
-    // so this local check narrows creditId to string for the consume call below
-    // without a non-null assertion.
     const creditId = redeemable.firstCreditId;
-    if (creditId === null) {
-      addInfo(context, NO_REDEEMABLE_CREDITS_MSG);
-      return;
-    }
     const bucket = redeemable.bucket;
 
     const tokenInfo = await resolveBucketToken(oauthManager, bucket);
@@ -340,16 +352,12 @@ async function resetAction(
       addInfo(context, 'Credit already redeemed.');
     }
 
-    // Refresh and display updated quota after a successful reset.
-    // A refresh failure is non-fatal: the reset itself already succeeded.
-    try {
-      const runtimeApi = getRuntimeApi();
-      const quotaLines = await fetchAllQuotaInfo(runtimeApi);
-      if (quotaLines.length > 0) {
-        addInfo(context, quotaLines.join('\n'));
-      }
-    } catch {
-      // Intentionally ignored — reset succeeded; only the refresh view failed.
+    // fetchAllQuotaInfo has its own internal error handling and returns [] on
+    // failure, so it never throws — no extra guard is needed here.
+    const runtimeApi = getRuntimeApi();
+    const quotaLines = await fetchAllQuotaInfo(runtimeApi);
+    if (quotaLines.length > 0) {
+      addInfo(context, quotaLines.join('\n'));
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';

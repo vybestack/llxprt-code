@@ -18,7 +18,10 @@
 
 import { DebugLogger, type Config } from '@vybestack/llxprt-code-core';
 import { getRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
-import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
+import {
+  CodexOAuthTokenSchema,
+  type IOAuthSettingsProvider,
+} from '@vybestack/llxprt-code-auth';
 import type { TokenStore } from './types.js';
 import { isAuthOnlyEnabled } from './auth-utils.js';
 import type { CodexRateLimitResetCreditsResponse } from '../openai/codexRateLimitReset.js';
@@ -264,11 +267,10 @@ export async function getAllCodexRateLimitResetCredits(
     }
 
     const nowInSeconds = Math.floor(Date.now() / 1000);
-    const tokenObj = token as Record<string, unknown>;
-    const accountId =
-      typeof tokenObj['account_id'] === 'string'
-        ? tokenObj['account_id']
-        : undefined;
+    const parsedToken = CodexOAuthTokenSchema.safeParse(token);
+    const accountId = parsedToken.success
+      ? parsedToken.data.account_id
+      : undefined;
 
     if (token.expiry > nowInSeconds && accountId) {
       await fetchAndStoreCodexResetCredits(
