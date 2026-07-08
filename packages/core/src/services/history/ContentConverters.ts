@@ -481,7 +481,11 @@ export class ContentConverters {
       this.logger.warn(
         () =>
           `[ContentConverters] toIContent produced zero blocks (issue #2410) — this turn will be dropped by history`,
-        { role: content.role, partCount: content.parts?.length ?? 0 },
+        {
+          role: content.role,
+          partCount: content.parts?.length ?? 0,
+          partTypes: content.parts?.map((p) => Object.keys(p)) ?? [],
+        },
       );
     }
 

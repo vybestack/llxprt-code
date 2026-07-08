@@ -306,7 +306,8 @@ export function extractSystemInstructionText(
     return undefined;
   }
   if (typeof value === 'string') {
-    return value.trim().length > 0 ? value : undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
   }
   // Content shape: { role, parts: Part[] }
   if (
