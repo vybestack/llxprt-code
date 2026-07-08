@@ -435,7 +435,7 @@ describe('getAllCodexUsageInfo', () => {
     );
   });
 
-  it('passes undefined base-url when config returns empty string', async () => {
+  it('passes undefined base-url when config returns a blank/whitespace string', async () => {
     const token = {
       access_token: 'codex-token',
       token_type: 'Bearer',
@@ -619,7 +619,7 @@ describe('getAllCodexRateLimitResetCredits', () => {
     );
   });
 
-  it('passes undefined base-url when config returns empty string', async () => {
+  it('passes undefined base-url when config returns a blank/whitespace string', async () => {
     const token = {
       access_token: 'codex-token',
       token_type: 'Bearer',

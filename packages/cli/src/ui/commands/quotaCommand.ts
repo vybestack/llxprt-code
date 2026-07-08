@@ -14,6 +14,7 @@ import {
   consumeCodexRateLimitResetCredit,
   formatCodexResetCredits,
 } from '@vybestack/llxprt-code-providers';
+import type { CodexRateLimitResetCreditsResponse } from '@vybestack/llxprt-code-providers';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   CodexOAuthTokenSchema,
@@ -28,6 +29,11 @@ import { randomUUID } from 'node:crypto';
 // Making /quota reset work there requires a cross-cutting change to load
 // built-ins + provide a real non-interactive UI sink, which affects every
 // built-in and is out of scope for this issue.
+
+const NO_RESET_CREDITS_MSG =
+  'No Codex reset credits available. Reset credits are earned via referrals or purchased.';
+const NOT_AUTHED_CODEX_MSG =
+  'Not authenticated with Codex. Run /auth codex to login.';
 
 interface BucketCredits {
   readonly bucket: string;
@@ -122,14 +128,10 @@ function parseBucketCredits(
  */
 function formatOneBucket(
   bucket: string,
-  raw: Record<string, unknown>,
+  parsed: CodexRateLimitResetCreditsResponse,
   multiBucket: boolean,
 ): string[] | null {
-  const parsedResult = CodexRateLimitResetCreditsResponseSchema.safeParse(raw);
-  if (!parsedResult.success) {
-    return null;
-  }
-  const lines = formatCodexResetCredits(parsedResult.data);
+  const lines = formatCodexResetCredits(parsed);
   if (lines.length === 0) {
     return null;
   }
@@ -144,6 +146,8 @@ function formatOneBucket(
 
 /**
  * Format all bucket reset-credits into display lines with bucket headers.
+ * Each bucket is parsed once via the schema; buckets that fail to validate
+ * are skipped.
  */
 function formatAllResetCreditsLines(
   creditsMap: Map<string, Record<string, unknown>>,
@@ -152,7 +156,12 @@ function formatAllResetCreditsLines(
   const multiBucket = creditsMap.size > 1;
 
   for (const [bucket, raw] of creditsMap.entries()) {
-    const bucketLines = formatOneBucket(bucket, raw, multiBucket);
+    const parsedResult =
+      CodexRateLimitResetCreditsResponseSchema.safeParse(raw);
+    if (!parsedResult.success) {
+      continue;
+    }
+    const bucketLines = formatOneBucket(bucket, parsedResult.data, multiBucket);
     if (bucketLines !== null) {
       output.push(...bucketLines);
     }
@@ -170,10 +179,7 @@ function formatAllResetCreditsLines(
 async function creditsAction(context: CommandContext): Promise<void> {
   const oauthManager = resolveOAuthManager();
   if (!oauthManager) {
-    addInfo(
-      context,
-      'No Codex reset credits available. Reset credits are earned via referrals or purchased.',
-    );
+    addInfo(context, NO_RESET_CREDITS_MSG);
     return;
   }
 
@@ -181,19 +187,13 @@ async function creditsAction(context: CommandContext): Promise<void> {
     const creditsMap = await oauthManager.getAllCodexRateLimitResetCredits();
 
     if (creditsMap.size === 0) {
-      addInfo(
-        context,
-        'No Codex reset credits available. Reset credits are earned via referrals or purchased.',
-      );
+      addInfo(context, NO_RESET_CREDITS_MSG);
       return;
     }
 
     const lines = formatAllResetCreditsLines(creditsMap);
     if (lines.length === 0) {
-      addInfo(
-        context,
-        'No Codex reset credits available. Reset credits are earned via referrals or purchased.',
-      );
+      addInfo(context, NO_RESET_CREDITS_MSG);
       return;
     }
 
@@ -279,22 +279,26 @@ async function resetAction(
 
   const oauthManager = resolveOAuthManager();
   if (!oauthManager) {
-    addInfo(context, 'Not authenticated with Codex. Run /auth codex to login.');
+    addInfo(context, NOT_AUTHED_CODEX_MSG);
     return;
   }
 
   try {
     const authed = await isCodexAuthed(oauthManager);
     if (!authed) {
-      addInfo(
-        context,
-        'Not authenticated with Codex. Run /auth codex to login.',
-      );
+      addInfo(context, NOT_AUTHED_CODEX_MSG);
       return;
     }
 
     const redeemable = await findRedeemableCredit(oauthManager);
-    if (redeemable?.firstCreditId == null) {
+    if (redeemable === null) {
+      addInfo(
+        context,
+        'No reset credits available to redeem. Reset credits are earned via referrals or purchased.',
+      );
+      return;
+    }
+    if (redeemable.firstCreditId === null) {
       addInfo(
         context,
         'No reset credits available to redeem. Reset credits are earned via referrals or purchased.',

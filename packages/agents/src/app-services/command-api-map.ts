@@ -709,7 +709,7 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
   ),
   runtime(
     '/quota credits',
-    'agent.getStats',
+    'agent.auth',
     'Reset-credit listing reflects the live provider account state',
   ),
   runtime(

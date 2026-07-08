@@ -86,13 +86,16 @@ vi.mock('../ui/commands/modelCommand.js', () => ({
 }));
 vi.mock('../ui/commands/privacyCommand.js', () => ({ privacyCommand: {} }));
 vi.mock('../ui/commands/quitCommand.js', () => ({ quitCommand: {} }));
-vi.mock('../ui/commands/quotaCommand.js', () => ({
-  quotaCommand: {
-    name: 'quota',
-    description: 'Quota command',
-    kind: 'built-in',
-  },
-}));
+vi.mock('../ui/commands/quotaCommand.js', async () => {
+  const { CommandKind } = await import('../ui/commands/types.js');
+  return {
+    quotaCommand: {
+      name: 'quota',
+      description: 'Quota command',
+      kind: CommandKind.BUILT_IN,
+    },
+  };
+});
 vi.mock('../ui/commands/resumeCommand.js', () => ({ resumeCommand: {} }));
 vi.mock('../ui/commands/statsCommand.js', () => ({ statsCommand: {} }));
 vi.mock('../ui/commands/themeCommand.js', () => ({ themeCommand: {} }));

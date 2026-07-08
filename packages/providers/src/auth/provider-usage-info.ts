@@ -21,6 +21,7 @@ import { getRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/s
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import type { TokenStore } from './types.js';
 import { isAuthOnlyEnabled } from './auth-utils.js';
+import type { CodexRateLimitResetCreditsResponse } from '../openai/codexRateLimitReset.js';
 
 const logger = new DebugLogger('llxprt:oauth:provider-usage');
 
@@ -210,7 +211,7 @@ async function fetchAndStoreCodexResetCredits(
     token: string,
     accountId: string,
     baseUrl?: string,
-  ) => Promise<Record<string, unknown> | null | undefined>,
+  ) => Promise<CodexRateLimitResetCreditsResponse | null>,
   result: Map<string, Record<string, unknown>>,
   logger: DebugLogger,
 ): Promise<void> {

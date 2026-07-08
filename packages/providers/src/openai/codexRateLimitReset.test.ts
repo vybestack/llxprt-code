@@ -9,6 +9,7 @@ import {
   fetchCodexRateLimitResetCredits,
   consumeCodexRateLimitResetCredit,
   formatCodexResetCredits,
+  CodexRateLimitResetCreditsResponseSchema,
 } from './codexRateLimitReset.js';
 
 describe('codexRateLimitReset', () => {
@@ -213,6 +214,7 @@ describe('codexRateLimitReset', () => {
       );
 
       expect(result).not.toBeNull();
+      expect(result?.rate_limit_reset_credits).toBeDefined();
       expect(result?.rate_limit_reset_credits.available_count).toBe(0);
       expect(result?.rate_limit_reset_credits.credits).toStrictEqual([]);
     });
@@ -432,9 +434,66 @@ describe('codexRateLimitReset', () => {
         }),
       );
     });
+
+    it('should strip /backend-api/codex to backend-api root for the consume endpoint', async () => {
+      const mockResponse = {
+        code: 'reset',
+        credit: { id: 'credit-1' },
+      };
+
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+
+      await consumeCodexRateLimitResetCredit(
+        'token123',
+        'account123',
+        'credit-1',
+        'redeem-1',
+        'https://chatgpt.com/backend-api/codex',
+      );
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    it('should fall back to ChatGPT backend-api root when base URL lacks /backend-api', async () => {
+      const mockResponse = {
+        code: 'reset',
+        credit: { id: 'credit-1' },
+      };
+
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+
+      await consumeCodexRateLimitResetCredit(
+        'token123',
+        'account123',
+        'credit-1',
+        'redeem-1',
+        'https://proxy.example.com/v1',
+      );
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
   });
 
   describe('formatCodexResetCredits', () => {
+    it('should return empty array when rate_limit_reset_credits is undefined', () => {
+      const data = CodexRateLimitResetCreditsResponseSchema.parse({});
+
+      const result = formatCodexResetCredits(data);
+      expect(result).toStrictEqual([]);
+    });
+
     it('should format credits with available count and credit ids', () => {
       const data = {
         rate_limit_reset_credits: {

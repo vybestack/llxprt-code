@@ -62,6 +62,42 @@ function makeCodexCreditsMap(
   return map;
 }
 
+function makeCodexToken(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    access_token: 'codex-access',
+    token_type: 'Bearer',
+    expiry: Math.floor(Date.now() / 1000) + 3600,
+    account_id: 'acct-123',
+    ...overrides,
+  };
+}
+
+function makeCodexResetOauthManager(
+  overrides: Record<string, unknown> = {},
+): Record<string, ReturnType<typeof vi.fn>> {
+  return {
+    getAllCodexRateLimitResetCredits: vi
+      .fn()
+      .mockResolvedValue(
+        makeCodexCreditsMap([
+          {
+            bucket: 'default',
+            availableCount: 1,
+            credits: [{ id: 'credit-1' }],
+          },
+        ]),
+      ),
+    getToken: vi.fn().mockResolvedValue('codex-access'),
+    listBuckets: vi.fn().mockResolvedValue(['default']),
+    getTokenStore: vi.fn().mockReturnValue({
+      getToken: vi.fn().mockResolvedValue(makeCodexToken()),
+    }),
+    ...overrides,
+  };
+}
+
 describe('quotaCommand', () => {
   let mockContext: CommandContext;
 
@@ -243,6 +279,29 @@ describe('quotaCommand', () => {
       expect(lastItem.type).toBe(MessageType.INFO);
       expect(lastItem.text).toContain('Available reset credits: 2');
     });
+
+    it('shows error when getAllCodexRateLimitResetCredits rejects', async () => {
+      const oauthManager = {
+        getAllCodexRateLimitResetCredits: vi
+          .fn()
+          .mockRejectedValue(new Error('upstream down')),
+      };
+      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
+      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+
+      const credits = quotaCommand.subCommands?.find(
+        (sc) => sc.name === 'credits',
+      );
+      await credits!.action!(mockContext, '');
+
+      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const lastItem = calls[calls.length - 1]?.[0] as {
+        type: MessageType;
+        text?: string;
+      };
+      expect(lastItem.type).toBe(MessageType.ERROR);
+      expect(lastItem.text).toContain('Failed to retrieve reset credits:');
+    });
   });
 
   describe('reset subcommand', () => {
@@ -306,28 +365,7 @@ describe('quotaCommand', () => {
     });
 
     it('successfully redeems a credit and shows success + refreshed quota', async () => {
-      const codexToken = {
-        access_token: 'codex-access',
-        token_type: 'Bearer',
-        expiry: Math.floor(Date.now() / 1000) + 3600,
-        account_id: 'acct-123',
-      };
-      const oauthManager = {
-        getAllCodexRateLimitResetCredits: vi.fn().mockResolvedValue(
-          makeCodexCreditsMap([
-            {
-              bucket: 'default',
-              availableCount: 1,
-              credits: [{ id: 'credit-1' }],
-            },
-          ]),
-        ),
-        getToken: vi.fn().mockResolvedValue('codex-access'),
-        listBuckets: vi.fn().mockResolvedValue(['default']),
-        getTokenStore: vi.fn().mockReturnValue({
-          getToken: vi.fn().mockResolvedValue(codexToken),
-        }),
-      };
+      const oauthManager = makeCodexResetOauthManager();
       maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
       getCliOAuthManagerMock.mockReturnValue(oauthManager);
       getEphemeralSettingMock.mockReturnValue(undefined);
@@ -360,28 +398,7 @@ describe('quotaCommand', () => {
     });
 
     it('shows already_redeemed message', async () => {
-      const codexToken = {
-        access_token: 'codex-access',
-        token_type: 'Bearer',
-        expiry: Math.floor(Date.now() / 1000) + 3600,
-        account_id: 'acct-123',
-      };
-      const oauthManager = {
-        getAllCodexRateLimitResetCredits: vi.fn().mockResolvedValue(
-          makeCodexCreditsMap([
-            {
-              bucket: 'default',
-              availableCount: 1,
-              credits: [{ id: 'credit-1' }],
-            },
-          ]),
-        ),
-        getToken: vi.fn().mockResolvedValue('codex-access'),
-        listBuckets: vi.fn().mockResolvedValue(['default']),
-        getTokenStore: vi.fn().mockReturnValue({
-          getToken: vi.fn().mockResolvedValue(codexToken),
-        }),
-      };
+      const oauthManager = makeCodexResetOauthManager();
       maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
       getCliOAuthManagerMock.mockReturnValue(oauthManager);
 
@@ -402,28 +419,7 @@ describe('quotaCommand', () => {
     });
 
     it('shows error when consume returns null', async () => {
-      const codexToken = {
-        access_token: 'codex-access',
-        token_type: 'Bearer',
-        expiry: Math.floor(Date.now() / 1000) + 3600,
-        account_id: 'acct-123',
-      };
-      const oauthManager = {
-        getAllCodexRateLimitResetCredits: vi.fn().mockResolvedValue(
-          makeCodexCreditsMap([
-            {
-              bucket: 'default',
-              availableCount: 1,
-              credits: [{ id: 'credit-1' }],
-            },
-          ]),
-        ),
-        getToken: vi.fn().mockResolvedValue('codex-access'),
-        listBuckets: vi.fn().mockResolvedValue(['default']),
-        getTokenStore: vi.fn().mockReturnValue({
-          getToken: vi.fn().mockResolvedValue(codexToken),
-        }),
-      };
+      const oauthManager = makeCodexResetOauthManager();
       maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
       getCliOAuthManagerMock.mockReturnValue(oauthManager);
 
@@ -442,28 +438,7 @@ describe('quotaCommand', () => {
     });
 
     it('shows error when consume throws an exception', async () => {
-      const codexToken = {
-        access_token: 'codex-access',
-        token_type: 'Bearer',
-        expiry: Math.floor(Date.now() / 1000) + 3600,
-        account_id: 'acct-123',
-      };
-      const oauthManager = {
-        getAllCodexRateLimitResetCredits: vi.fn().mockResolvedValue(
-          makeCodexCreditsMap([
-            {
-              bucket: 'default',
-              availableCount: 1,
-              credits: [{ id: 'credit-1' }],
-            },
-          ]),
-        ),
-        getToken: vi.fn().mockResolvedValue('codex-access'),
-        listBuckets: vi.fn().mockResolvedValue(['default']),
-        getTokenStore: vi.fn().mockReturnValue({
-          getToken: vi.fn().mockResolvedValue(codexToken),
-        }),
-      };
+      const oauthManager = makeCodexResetOauthManager();
       maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
       getCliOAuthManagerMock.mockReturnValue(oauthManager);
 
@@ -484,22 +459,11 @@ describe('quotaCommand', () => {
     });
 
     it('shows error when token store returns token without access_token', async () => {
-      const oauthManager = {
-        getAllCodexRateLimitResetCredits: vi.fn().mockResolvedValue(
-          makeCodexCreditsMap([
-            {
-              bucket: 'default',
-              availableCount: 1,
-              credits: [{ id: 'credit-1' }],
-            },
-          ]),
-        ),
-        getToken: vi.fn().mockResolvedValue('codex-access'),
-        listBuckets: vi.fn().mockResolvedValue(['default']),
+      const oauthManager = makeCodexResetOauthManager({
         getTokenStore: vi.fn().mockReturnValue({
           getToken: vi.fn().mockResolvedValue({ account_id: 'acct-123' }),
         }),
-      };
+      });
       maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
       getCliOAuthManagerMock.mockReturnValue(oauthManager);
 
@@ -513,6 +477,46 @@ describe('quotaCommand', () => {
       };
       expect(lastItem.type).toBe(MessageType.ERROR);
       expect(lastItem.text).toContain('Failed to resolve Codex credentials');
+    });
+
+    it('shows error when getAllCodexRateLimitResetCredits rejects during reset flow', async () => {
+      const oauthManager = makeCodexResetOauthManager({
+        getAllCodexRateLimitResetCredits: vi
+          .fn()
+          .mockRejectedValue(new Error('reset fetch failed')),
+      });
+      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
+      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+
+      const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
+      await reset!.action!(mockContext, '');
+
+      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const lastItem = calls[calls.length - 1]?.[0] as {
+        type: MessageType;
+        text?: string;
+      };
+      expect(lastItem.type).toBe(MessageType.ERROR);
+      expect(lastItem.text).toContain('Failed to reset rate-limit window:');
+    });
+
+    it('shows /auth codex info when getCliOAuthManager throws', async () => {
+      maybeGetCliOAuthManagerMock.mockReturnValue(null);
+      getCliOAuthManagerMock.mockImplementation(() => {
+        throw new Error('not registered');
+      });
+
+      const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
+      await reset!.action!(mockContext, '');
+
+      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const lastItem = calls[calls.length - 1]?.[0] as {
+        type: MessageType;
+        text?: string;
+      };
+      expect(lastItem.type).toBe(MessageType.INFO);
+      expect(lastItem.text).toContain('/auth codex');
+      expect(lastItem.text).toContain('Not authenticated with Codex');
     });
   });
 });
