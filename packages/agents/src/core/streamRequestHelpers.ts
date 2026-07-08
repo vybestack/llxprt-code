@@ -324,8 +324,10 @@ export function extractSystemInstructionText(
     const text = extractPartsText(value);
     return text.length > 0 ? text : undefined;
   }
-  // Single Part shape: { text: string }
-  if (typeof value === 'object' && 'text' in value) {
+  // Single Part shape: { text: string } — exclude Content objects that
+  // happen to have a text property alongside parts (makes this check
+  // self-contained and order-independent).
+  if (typeof value === 'object' && 'text' in value && !('parts' in value)) {
     const text = typeof value.text === 'string' ? value.text.trim() : '';
     return text.length > 0 ? text : undefined;
   }

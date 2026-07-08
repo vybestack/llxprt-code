@@ -521,10 +521,10 @@ async function runNonInteractiveLoopIteration(
   // so an empty array would slip through and propagate a zero-part user
   // message into provider history (issue #2410). Treat an empty array the
   // same as "no further messages" and stop the loop.
-  if (shouldStopNonInteractiveLoop(nextMessages)) {
+  if (shouldStopNonInteractiveLoop(nextMessages) || nextMessages === null) {
     return { action: 'stop' };
   }
-  return { action: 'continue', messages: nextMessages ?? [] };
+  return { action: 'continue', messages: nextMessages };
 }
 
 /**
