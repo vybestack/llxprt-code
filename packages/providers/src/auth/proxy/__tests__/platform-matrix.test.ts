@@ -14,7 +14,7 @@
  * @requirement R4.1, R4.2, R4.3, R27.1, R27.2, R27.3
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as net from 'node:net';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -612,6 +612,134 @@ describe('Platform Matrix Tests (Phase 38)', () => {
         // Clean up
         for (const client of clients) {
           client.close();
+        }
+      },
+    );
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Windows Named Pipe Transport
+  // ─────────────────────────────────────────────────────────────────────────
+
+  describe('Windows named pipe transport', () => {
+    /**
+     * @requirement R3.1 (Windows)
+     * @scenario start() returns a named-pipe endpoint on win32
+     * @given A CredentialProxyServer is started on Windows
+     * @when start() is called
+     * @then The returned path is a `\\.\pipe\lxcp-...` pipe name (not a .sock file)
+     */
+    it.skipIf(!isWindows)(
+      'win32: start() returns a \\\\.\\pipe\\ endpoint with lxcp- prefix',
+      async () => {
+        const tokenStore = new InMemoryTokenStore();
+        const keyStorage = new InMemoryProviderKeyStorage();
+        server = new CredentialProxyServer({
+          tokenStore,
+          providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
+          // socketDir is intentionally passed and must be IGNORED on Windows
+          socketDir: tmpDir,
+        });
+
+        const pipePath = await server.start();
+
+        expect(pipePath.startsWith('\\\\.\\pipe\\lxcp-')).toBe(true);
+        expect(pipePath.endsWith('.sock')).toBe(false);
+      },
+    );
+
+    /**
+     * @requirement R2.1, R3.3 (Windows)
+     * @scenario ProxySocketClient round-trips a request over the named pipe
+     * @given A CredentialProxyServer on Windows with a pre-populated token
+     * @when A ProxySocketClient connects and requests the token
+     * @then The full handshake + request + response succeeds
+     */
+    it.skipIf(!isWindows)(
+      'win32: ProxySocketClient round-trips a request over the named pipe',
+      async () => {
+        const tokenStore = new InMemoryTokenStore();
+        const keyStorage = new InMemoryProviderKeyStorage();
+
+        await tokenStore.saveToken(
+          'anthropic',
+          {
+            access_token: 'win-pipe-token',
+            expiry: Math.floor(Date.now() / 1000) + 3600,
+            token_type: 'Bearer',
+          },
+          'default',
+        );
+
+        server = new CredentialProxyServer({
+          tokenStore,
+          providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
+          socketDir: tmpDir,
+        });
+
+        const pipePath = await server.start();
+        const client = new ProxySocketClient(pipePath);
+        try {
+          await client.ensureConnected();
+
+          const res = await client.request('get_token', {
+            provider: 'anthropic',
+          });
+          expect(res.ok).toBe(true);
+          expect(res.data?.access_token).toBe('win-pipe-token');
+
+          const listRes = await client.request('list_providers', {});
+          expect(listRes.ok).toBe(true);
+          expect(listRes.data?.providers).toContain('anthropic');
+        } finally {
+          client.close();
+        }
+      },
+    );
+
+    /**
+     * @requirement R3.2 (Windows)
+     * @scenario No POSIX-only fs/permission call runs for the named pipe
+     * @given A CredentialProxyServer on Windows
+     * @when start() and then stop() are called
+     * @then The POSIX-only fs calls (mkdirSync/chmodSync/unlinkSync) are never
+     *   invoked, and no file materializes at the pipe path
+     */
+    it.skipIf(!isWindows)(
+      'win32: start()/stop() invoke no mkdirSync/chmodSync/unlinkSync for the pipe',
+      async () => {
+        const tokenStore = new InMemoryTokenStore();
+        const keyStorage = new InMemoryProviderKeyStorage();
+        server = new CredentialProxyServer({
+          tokenStore,
+          providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
+          socketDir: tmpDir,
+        });
+
+        const mkdirSpy = vi.spyOn(fs, 'mkdirSync');
+        const chmodSpy = vi.spyOn(fs, 'chmodSync');
+        const unlinkSpy = vi.spyOn(fs, 'unlinkSync');
+
+        try {
+          const pipePath = await server.start();
+
+          // The spy assertions are the authoritative guard that no POSIX-only
+          // fs/permission call ran. We deliberately do not assert
+          // fs.existsSync(pipePath) while the pipe is live: on Windows an
+          // active named pipe can resolve as an existing system object, so
+          // that check is unreliable until the server is stopped.
+          expect(mkdirSpy).not.toHaveBeenCalled();
+          expect(chmodSpy).not.toHaveBeenCalled();
+
+          await server.stop();
+
+          expect(unlinkSpy).not.toHaveBeenCalled();
+          // After stop the pipe is released; no on-disk file was ever created.
+          expect(fs.existsSync(pipePath)).toBe(false);
+        } finally {
+          mkdirSpy.mockRestore();
+          chmodSpy.mockRestore();
+          unlinkSpy.mockRestore();
         }
       },
     );
