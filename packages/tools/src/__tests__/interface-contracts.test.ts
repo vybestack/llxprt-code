@@ -190,7 +190,7 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
           if (key.length <= 8) return '****';
           return '*'.repeat(key.length - 4) + key.slice(-4);
         },
-        getSupportedToolNames: () => ['codesearch', 'exa-web-search', 'exa'],
+        getSupportedToolNames: () => ['codesearch', 'exa'],
       };
       assertImplements<IToolKeyStorage>(keyStorage);
 
@@ -210,12 +210,11 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
         hasKey: async () => false,
         resolveKey: async () => null,
         maskKeyForDisplay: (key: string) => key,
-        getSupportedToolNames: () => ['codesearch', 'exa-web-search', 'exa'],
+        getSupportedToolNames: () => ['codesearch', 'exa'],
       };
       const names = keyStorage.getSupportedToolNames();
       expect(Array.isArray(names)).toBe(true);
       expect(names).toContain('codesearch');
-      expect(names).toContain('exa-web-search');
       expect(names).toContain('exa');
     });
   });
