@@ -39,6 +39,7 @@ function classifyPartType(part: GeminiContentPart): string {
   if ('text' in part) return 'text';
   if ('functionCall' in part) return 'functionCall';
   if ('functionResponse' in part) return 'functionResponse';
+  if ('inlineData' in part) return 'inlineData';
   if ('thought' in part) return 'thought';
   return 'other';
 }
@@ -489,6 +490,7 @@ export class ContentConverters {
         () =>
           `[ContentConverters] toIContent produced zero blocks (issue #2410) — this turn will be dropped by history`,
         {
+          turnKey,
           role: content.role,
           partCount: content.parts?.length ?? 0,
           partTypes: content.parts?.map(classifyPartType) ?? [],

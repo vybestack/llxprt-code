@@ -352,13 +352,22 @@ function extractPartsText(parts: unknown[]): string {
       }
       // Unrecognized part type — warn so malformed parts in a systemInstruction
       // (which carries the subagent persona, issue #2410) are not silently lost.
+      const partDesc = describeUnrecognizedPart(part);
       systemInstructionLogger.warn(
         () =>
-          `extractPartsText: dropping unrecognized systemInstruction part (type=${part === null ? 'null' : typeof part})`,
+          `extractPartsText: dropping unrecognized systemInstruction part (type=${partDesc})`,
       );
       return '';
     })
     .filter((text) => text.length > 0)
     .join('\n')
     .trim();
+}
+
+function describeUnrecognizedPart(part: unknown): string {
+  if (part === null) return 'null';
+  if (typeof part === 'object') {
+    return `object(keys=${Object.keys(part).join(',')})`;
+  }
+  return typeof part;
 }
