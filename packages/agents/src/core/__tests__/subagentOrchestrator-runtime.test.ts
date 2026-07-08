@@ -140,7 +140,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     ).toBeUndefined();
   });
 
-  it('seeds default disabled tools into subagent runtime settings when profile omits disabled tools', async () => {
+  it('does not seed default disabled tools when profile omits disabled tools', async () => {
     const profileWithoutDisabled: Profile = {
       ...profile,
       ephemeralSettings: {
@@ -177,10 +177,8 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     });
 
     const loaderArgs = runtimeLoader.mock.calls[0][0];
-    expect(loaderArgs.profile.settings.tools?.disabled).toStrictEqual([
-      'google_web_fetch',
-      'google_web_search',
-    ]);
+    // With default-disabled tools removed, no defaults are seeded.
+    expect(loaderArgs.profile.settings.tools?.disabled).toBeUndefined();
   });
 
   it('preserves profile disabled tools even when they are present in tools.allowed', async () => {
@@ -188,7 +186,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       ...profile,
       ephemeralSettings: {
         'auth-key': 'test-api-key',
-        'tools.allowed': ['read_file', 'write_file', 'google_web_fetch'],
+        'tools.allowed': ['read_file', 'write_file', 'glob'],
         'tools.disabled': ['write_file'],
       },
     };
@@ -225,7 +223,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const loaderArgs = runtimeLoader.mock.calls[0][0];
     expect(loaderArgs.profile.settings.tools?.disabled).toStrictEqual([
       'write_file',
-      'google_web_search',
     ]);
   });
 

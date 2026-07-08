@@ -63,11 +63,6 @@ priority = 15
 modes = ["autoEdit"]
 
 [[rule]]
-toolName = "web_fetch"
-decision = "ask_user"
-priority = 10
-
-[[rule]]
 toolName = "insert_at_line"
 decision = "ask_user"
 priority = 10

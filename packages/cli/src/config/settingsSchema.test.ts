@@ -477,10 +477,7 @@ describe('SettingsSchema', () => {
       expect(SETTINGS_SCHEMA.defaultDisabledTools).toBeDefined();
       expect(SETTINGS_SCHEMA.defaultDisabledTools.type).toBe('array');
       expect(SETTINGS_SCHEMA.defaultDisabledTools.category).toBe('Advanced');
-      expect(SETTINGS_SCHEMA.defaultDisabledTools.default).toStrictEqual([
-        'google_web_fetch',
-        'google_web_search',
-      ]);
+      expect(SETTINGS_SCHEMA.defaultDisabledTools.default).toStrictEqual([]);
       expect(SETTINGS_SCHEMA.defaultDisabledTools.showInDialog).toBe(false);
       expect(SETTINGS_SCHEMA.defaultDisabledTools.requiresRestart).toBe(true);
     });

@@ -63,14 +63,6 @@ const createAbortError = (message: string): Error => {
   return error;
 };
 
-const DEFAULT_DISABLED_TOOLS = [
-  'google_web_fetch',
-  'google_web_search',
-] as const;
-
-const normalizeDefaultToolSet = (tools: readonly string[]): Set<string> =>
-  new Set(tools.map((tool) => canonicalizeToolName(tool)).filter(Boolean));
-
 export interface SubagentLaunchRequest {
   name: string;
   runConfig?: RunConfig;
@@ -115,9 +107,6 @@ export class SubagentOrchestrator {
   private readonly runtimeLoader: RuntimeLoader;
   private readonly scopeFactory: ScopeFactory;
   private readonly idFactory: () => string;
-  private readonly defaultDisabledTools = normalizeDefaultToolSet(
-    DEFAULT_DISABLED_TOOLS,
-  );
 
   constructor(private readonly options: SubagentOrchestratorOptions) {
     this.runtimeLoader = options.runtimeLoader ?? loadAgentRuntime;
@@ -429,12 +418,11 @@ export class SubagentOrchestrator {
       'tools.allowed',
       'tools_allowed',
     ]);
-    const disabled = this.mergeDefaultDisabledTools(
+    const disabled = this.dedupeDisabledTools(
       this.getStringArraySetting(profile.ephemeralSettings, [
         'tools.disabled',
         'disabled-tools',
       ]),
-      allowed,
     );
 
     return {
@@ -589,12 +577,11 @@ export class SubagentOrchestrator {
       service.set('tools.allowed', allowed);
     }
 
-    const disabled = this.mergeDefaultDisabledTools(
+    const disabled = this.dedupeDisabledTools(
       this.getStringArraySetting(profile.ephemeralSettings, [
         'tools.disabled',
         'disabled-tools',
       ]),
-      allowed,
     );
     if (disabled) {
       service.set('tools.disabled', disabled);
@@ -675,38 +662,20 @@ export class SubagentOrchestrator {
     return (settings as Record<string, unknown>)[key];
   }
 
-  private mergeDefaultDisabledTools(
+  private dedupeDisabledTools(
     disabled: string[] | undefined,
-    allowed: string[] | undefined,
   ): string[] | undefined {
     const disabledSource = Array.isArray(disabled) ? disabled : [];
-    const allowedSet = new Set(
-      (allowed ?? [])
-        .map((tool) => canonicalizeToolName(tool))
-        .filter((tool) => tool.length > 0),
-    );
 
     const merged: string[] = [];
     const seen = new Set<string>();
-    const addTool = (toolName: string, respectAllowed: boolean) => {
+    for (const toolName of disabledSource) {
       const canonical = canonicalizeToolName(toolName);
-      if (
-        !canonical ||
-        seen.has(canonical) ||
-        (respectAllowed && allowedSet.has(canonical))
-      ) {
-        return;
+      if (!canonical || seen.has(canonical)) {
+        continue;
       }
       seen.add(canonical);
       merged.push(canonical);
-    };
-
-    for (const tool of disabledSource) {
-      addTool(tool, false);
-    }
-
-    for (const tool of this.defaultDisabledTools) {
-      addTool(tool, true);
     }
 
     return merged.length > 0 ? merged : undefined;

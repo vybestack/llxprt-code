@@ -313,7 +313,6 @@ export type {
   ContextAwareTool,
 } from '@vybestack/llxprt-code-tools';
 export {
-  GOOGLE_WEB_SEARCH_TOOL,
   EXA_WEB_SEARCH_TOOL,
   EDIT_TOOL_NAME,
   GREP_TOOL_NAME,
@@ -335,7 +334,6 @@ export {
   LS_TOOL,
   LIST_DIRECTORY_TOOL,
   CODE_SEARCH_TOOL,
-  GOOGLE_WEB_FETCH_TOOL,
   DIRECT_WEB_FETCH_TOOL,
   TASK_TOOL,
   MEMORY_TOOL,
@@ -397,11 +395,6 @@ export {
   WriteFileTool,
   type WriteFileToolParams,
 } from '@vybestack/llxprt-code-tools';
-export {
-  GoogleWebFetchTool,
-  type GoogleWebFetchToolParams,
-  parsePrompt,
-} from '@vybestack/llxprt-code-tools';
 export { DirectWebFetchTool } from '@vybestack/llxprt-code-tools';
 export type { DirectWebFetchToolParams } from '@vybestack/llxprt-code-tools';
 export {
@@ -425,11 +418,8 @@ export {
   type ShellToolParams,
 } from '@vybestack/llxprt-code-tools';
 export {
-  GoogleWebSearchTool,
   ExaWebSearchTool,
   CodeSearchTool,
-  type WebSearchToolParams,
-  type WebSearchToolResult,
   type ExaWebSearchToolParams,
   type CodeSearchToolParams,
 } from '@vybestack/llxprt-code-tools';

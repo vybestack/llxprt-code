@@ -214,14 +214,14 @@ describe('TaskTool', () => {
     const configWithRegistry = {
       ...config,
       getEphemeralSettings: () => ({
-        'tools.disabled': ['google_web_fetch'],
+        'tools.disabled': ['glob'],
       }),
       getExcludeTools: () => [],
       getToolRegistry: () => ({
         getEnabledTools: () => [
           { name: 'read_file' },
           { name: 'write_file' },
-          { name: 'google_web_fetch' },
+          { name: 'glob' },
           { name: 'task' },
           { name: 'list_subagents' },
         ],
@@ -236,12 +236,7 @@ describe('TaskTool', () => {
     const invocation = tool.build({
       subagent_name: 'helper',
       goal_prompt: 'Ship the feature',
-      tool_whitelist: [
-        'google_web_fetch',
-        'ReadFileTool',
-        'task',
-        'list_subagents',
-      ],
+      tool_whitelist: ['glob', 'ReadFileTool', 'task', 'list_subagents'],
     });
 
     await invocation.execute(new AbortController().signal, undefined);
@@ -278,14 +273,14 @@ describe('TaskTool', () => {
     const configWithRegistry = {
       ...config,
       getEphemeralSettings: () => ({
-        'tools.disabled': ['google_web_fetch'],
+        'tools.disabled': ['glob'],
       }),
       getExcludeTools: () => [],
       getToolRegistry: () => ({
         getEnabledTools: () => [
           { name: 'read_file' },
           { name: 'write_file' },
-          { name: 'google_web_fetch' },
+          { name: 'glob' },
           { name: 'task' },
           { name: 'list_subagents' },
         ],
@@ -300,7 +295,7 @@ describe('TaskTool', () => {
     const invocation = tool.build({
       subagent_name: 'helper',
       goal_prompt: 'Ship the feature',
-      tool_whitelist: ['google_web_fetch', 'task', 'list_subagents'],
+      tool_whitelist: ['glob', 'task', 'list_subagents'],
     });
 
     await invocation.execute(new AbortController().signal, undefined);
@@ -339,7 +334,7 @@ describe('TaskTool', () => {
     const configWithRegistry = {
       ...config,
       getEphemeralSettings: () => ({
-        'tools.disabled': ['google_web_fetch'],
+        'tools.disabled': ['glob'],
       }),
       getExcludeTools: () => [],
       getToolRegistry: () => ({
@@ -396,7 +391,7 @@ describe('TaskTool', () => {
     const configWithRegistry = {
       ...config,
       getEphemeralSettings: () => ({
-        'tools.disabled': ['google_web_fetch'],
+        'tools.disabled': ['glob'],
       }),
       getExcludeTools: () => [],
       getToolRegistry: () => ({

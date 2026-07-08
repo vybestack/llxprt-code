@@ -37,7 +37,7 @@ export const VALID_KEY_CHECK_FIXTURES = [
     isValid: false,
   },
   {
-    input: 'google-web-search',
+    input: 'unknown-tool',
     isValid: false,
   },
 ] as const;
