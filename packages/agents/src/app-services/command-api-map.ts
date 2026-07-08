@@ -709,8 +709,8 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
   ),
   runtime(
     '/quota credits',
-    'agent.auth',
-    'Reset-credit listing reflects the live provider account state',
+    'agent.getStats',
+    'Reset-credit listing reflects the live provider quota',
   ),
   runtime(
     '/quota reset',

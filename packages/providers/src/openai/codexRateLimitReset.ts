@@ -316,11 +316,19 @@ export function formatCodexResetCredits(
   }
   const { available_count: availableCount, credits } = resetCredits;
 
-  if (availableCount === 0 || credits.length === 0) {
+  if (availableCount === 0) {
     return lines;
   }
 
+  // Always surface a server-reported available count, even when the credits
+  // array is empty (the server may report available_count > 0 without
+  // returning individual credit details).
   lines.push(`  Available reset credits: ${availableCount}`);
+
+  if (credits.length === 0) {
+    lines.push('  - (no credit details returned)');
+    return lines;
+  }
 
   for (const credit of credits) {
     lines.push(`  - ${credit.id}`);

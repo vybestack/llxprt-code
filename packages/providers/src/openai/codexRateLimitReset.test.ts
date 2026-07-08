@@ -631,16 +631,18 @@ describe('codexRateLimitReset', () => {
       expect(result).toStrictEqual([]);
     });
 
-    it('should return empty array when credits is empty despite available_count > 0', () => {
+    it('should surface available count with placeholder when credits is empty but available_count > 0', () => {
       const data = CodexRateLimitResetCreditsResponseSchema.parse({
         rate_limit_reset_credits: {
-          available_count: 2,
+          available_count: 3,
           credits: [],
         },
       });
 
       const result = formatCodexResetCredits(data);
-      expect(result).toStrictEqual([]);
+      expect(result.length).toBe(2);
+      expect(result[0]).toBe('  Available reset credits: 3');
+      expect(result[1]).toBe('  - (no credit details returned)');
     });
 
     it('should format single credit', () => {

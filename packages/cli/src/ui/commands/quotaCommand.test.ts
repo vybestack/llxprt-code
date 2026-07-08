@@ -592,5 +592,47 @@ describe('quotaCommand', () => {
       });
       expect(successItem).toBeDefined();
     });
+
+    it('forwards the custom base-url as the 5th arg to consumeCodexRateLimitResetCredit', async () => {
+      const oauthManager = makeCodexResetOauthManager();
+      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
+      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      getEphemeralSettingMock.mockReturnValue(
+        'https://example.test/backend-api',
+      );
+
+      mockConsumeCodexRateLimitResetCredit.mockResolvedValue({
+        code: 'reset',
+        credit: { id: 'credit-1' },
+      });
+
+      const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
+      await reset!.action!(mockContext, '');
+
+      expect(mockConsumeCodexRateLimitResetCredit).toHaveBeenCalledTimes(1);
+      expect(
+        vi.mocked(mockConsumeCodexRateLimitResetCredit).mock.calls[0][4],
+      ).toBe('https://example.test/backend-api');
+    });
+
+    it('forwards undefined as base-url when the setting is whitespace-only', async () => {
+      const oauthManager = makeCodexResetOauthManager();
+      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
+      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      getEphemeralSettingMock.mockReturnValue('   ');
+
+      mockConsumeCodexRateLimitResetCredit.mockResolvedValue({
+        code: 'reset',
+        credit: { id: 'credit-1' },
+      });
+
+      const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
+      await reset!.action!(mockContext, '');
+
+      expect(mockConsumeCodexRateLimitResetCredit).toHaveBeenCalledTimes(1);
+      expect(
+        vi.mocked(mockConsumeCodexRateLimitResetCredit).mock.calls[0][4],
+      ).toBeUndefined();
+    });
   });
 });
