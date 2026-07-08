@@ -668,6 +668,10 @@ describe('getAllCodexRateLimitResetCredits', () => {
   });
 
   it('continues processing remaining buckets when one fetch fails', async () => {
+    // NOTE: the mockRejectedValueOnce/mockResolvedValueOnce below are ordered
+    // assuming getAllCodexRateLimitResetCredits iterates buckets sequentially
+    // (for...of with await). If that ever changes to parallel iteration, key
+    // the mock by access_token instead of relying on call order.
     const tokenA = {
       access_token: 'codex-token-a',
       token_type: 'Bearer',

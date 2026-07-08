@@ -121,10 +121,6 @@ export {
   formatCodexUsage,
 } from './openai/codexUsageInfo.js';
 export * from './openai/codexRateLimitReset.js';
-export {
-  CodexRateLimitResetCreditsResponseSchema,
-  formatCodexResetCredits,
-} from './openai/codexRateLimitReset.js';
 export * from './zai/usageInfo.js';
 export * from './synthetic/usageInfo.js';
 export * from './chutes/usageInfo.js';

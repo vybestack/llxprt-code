@@ -4,8 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { SlashCommand, CommandContext } from './types.js';
-import { CommandKind } from './types.js';
+import {
+  CommandKind,
+  type SlashCommand,
+  type CommandContext,
+  type SlashCommandActionReturn,
+  type ConfirmActionReturn,
+} from './types.js';
 import { MessageType } from '../types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { fetchAllQuotaInfo } from './statsQuota.js';
@@ -283,87 +288,142 @@ async function resolveBucketToken(
   };
 }
 
+const RESET_CONFIRMATION_PROMPT =
+  'Redeem a Codex rate-limit-reset credit to reset your rate-limit window? This consumes one earned/purchased reset credit.';
+
+/**
+ * Build the confirm_action return value for /quota reset, deriving the
+ * original raw invocation (falling back to a canonical form when the
+ * invocation context is absent or blank).
+ */
+function buildResetConfirmation(context: CommandContext): ConfirmActionReturn {
+  const rawInvocation =
+    context.invocation?.raw && context.invocation.raw.trim() !== ''
+      ? context.invocation.raw
+      : '/quota reset codex';
+  return {
+    type: 'confirm_action',
+    prompt: RESET_CONFIRMATION_PROMPT,
+    originalInvocation: { raw: rawInvocation },
+  };
+}
+
+/**
+ * Consume the redeemable credit and render the result (success / already
+ * redeemed / failure) plus a refreshed quota snapshot. Returns void — all
+ * user feedback flows through addInfo/addError.
+ */
+async function redeemResetCredit(
+  context: CommandContext,
+  accessToken: string,
+  accountId: string,
+  creditId: string,
+): Promise<void> {
+  // Both the credit listing (getAllCodexRateLimitResetCredits) and this
+  // consume call resolve base-url from the same runtime settings source, so
+  // list and consume always target the same backend host.
+  const baseUrl = resolveBaseUrl();
+  const redeemRequestId = randomUUID();
+  const consumeResult = await consumeCodexRateLimitResetCredit(
+    accessToken,
+    accountId,
+    creditId,
+    redeemRequestId,
+    baseUrl,
+  );
+
+  if (consumeResult === null) {
+    addError(
+      context,
+      'Failed to reset rate-limit window. Please try again later.',
+    );
+    return;
+  }
+
+  if (consumeResult.code === 'reset') {
+    addInfo(context, 'Rate-limit window reset successfully.');
+  } else {
+    addInfo(context, 'Credit already redeemed.');
+  }
+
+  // fetchAllQuotaInfo has its own internal error handling and returns [] on
+  // failure, so it never throws — no extra guard is needed here.
+  const runtimeApi = getRuntimeApi();
+  const quotaLines = await fetchAllQuotaInfo(runtimeApi);
+  if (quotaLines.length > 0) {
+    addInfo(context, quotaLines.join('\n'));
+  }
+}
+
 /**
  * Reset subcommand action: redeem a Codex rate-limit-reset credit.
  */
 async function resetAction(
   context: CommandContext,
   args: string,
-): Promise<void> {
-  const provider = args.trim();
+): Promise<SlashCommandActionReturn | void> {
+  const tokens = args
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t !== '');
+  const provider = tokens[0] ?? '';
 
-  if (provider.length > 0 && provider !== 'codex') {
+  if (provider !== '' && provider !== 'codex') {
     addError(context, "Only 'codex' supports reset.");
-    return;
+    return undefined;
+  }
+  if (tokens.length > 1) {
+    addError(context, 'Too many arguments. Usage: /quota reset [codex]');
+    return undefined;
   }
 
   const oauthManager = resolveOAuthManager();
   if (!oauthManager) {
     addInfo(context, NOT_AUTHED_CODEX_MSG);
-    return;
+    return undefined;
   }
 
   try {
     const authed = await isCodexAuthed(oauthManager);
     if (!authed) {
       addInfo(context, NOT_AUTHED_CODEX_MSG);
-      return;
+      return undefined;
     }
 
     const redeemable = await findRedeemableCredit(oauthManager);
     if (redeemable === null) {
       addInfo(context, NO_REDEEMABLE_CREDITS_MSG);
-      return;
+      return undefined;
     }
-    const creditId = redeemable.firstCreditId;
-    const bucket = redeemable.bucket;
 
-    const tokenInfo = await resolveBucketToken(oauthManager, bucket);
+    const tokenInfo = await resolveBucketToken(oauthManager, redeemable.bucket);
     if (tokenInfo.accessToken === null || tokenInfo.accountId === null) {
       addError(
         context,
         'Codex credentials for the selected bucket are unavailable or expired. Run /auth codex to re-authenticate.',
       );
-      return;
+      return undefined;
     }
 
-    // Both the credit listing (getAllCodexRateLimitResetCredits) and this
-    // consume call resolve base-url from the same runtime settings source, so
-    // list and consume always target the same backend host.
-    const baseUrl = resolveBaseUrl();
-    const redeemRequestId = randomUUID();
-    const consumeResult = await consumeCodexRateLimitResetCredit(
+    // Confirmation gate: redeeming consumes a paid/referral-earned resource,
+    // so — like other mutating commands — prompt before performing the
+    // mutation. The confirmed re-invocation arrives with
+    // overwriteConfirmed === true and skips this gate to actually consume.
+    if (context.overwriteConfirmed !== true) {
+      return buildResetConfirmation(context);
+    }
+
+    await redeemResetCredit(
+      context,
       tokenInfo.accessToken,
       tokenInfo.accountId,
-      creditId,
-      redeemRequestId,
-      baseUrl,
+      redeemable.firstCreditId,
     );
-
-    if (consumeResult === null) {
-      addError(
-        context,
-        'Failed to reset rate-limit window. Please try again later.',
-      );
-      return;
-    }
-
-    if (consumeResult.code === 'reset') {
-      addInfo(context, 'Rate-limit window reset successfully.');
-    } else {
-      addInfo(context, 'Credit already redeemed.');
-    }
-
-    // fetchAllQuotaInfo has its own internal error handling and returns [] on
-    // failure, so it never throws — no extra guard is needed here.
-    const runtimeApi = getRuntimeApi();
-    const quotaLines = await fetchAllQuotaInfo(runtimeApi);
-    if (quotaLines.length > 0) {
-      addInfo(context, quotaLines.join('\n'));
-    }
+    return undefined;
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     addError(context, `Failed to reset rate-limit window: ${msg}`);
+    return undefined;
   }
 }
 

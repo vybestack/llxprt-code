@@ -144,12 +144,12 @@ export async function fetchCodexRateLimitResetCredits(
   accountId: string,
   baseUrl?: string,
 ): Promise<CodexRateLimitResetCreditsResponse | null> {
-  if (!accessToken || typeof accessToken !== 'string') {
+  if (typeof accessToken !== 'string' || accessToken.trim() === '') {
     logger.debug(() => 'Invalid access token provided');
     return null;
   }
 
-  if (!accountId || typeof accountId !== 'string') {
+  if (typeof accountId !== 'string' || accountId.trim() === '') {
     logger.debug(() => 'Invalid account ID provided');
     return null;
   }
@@ -223,12 +223,12 @@ export async function consumeCodexRateLimitResetCredit(
   redeemRequestId: string,
   baseUrl?: string,
 ): Promise<CodexConsumeResetCreditResponse | null> {
-  if (!accessToken || typeof accessToken !== 'string') {
+  if (typeof accessToken !== 'string' || accessToken.trim() === '') {
     logger.debug(() => 'Invalid access token provided');
     return null;
   }
 
-  if (!accountId || typeof accountId !== 'string') {
+  if (typeof accountId !== 'string' || accountId.trim() === '') {
     logger.debug(() => 'Invalid account ID provided');
     return null;
   }

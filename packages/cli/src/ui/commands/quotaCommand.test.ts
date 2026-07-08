@@ -450,7 +450,7 @@ describe('quotaCommand', () => {
       const oauthManager = makeCodexResetOauthManager();
       maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
       getCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getEphemeralSettingMock.mockReturnValue(undefined);
+      mockContext = createMockCommandContext({ overwriteConfirmed: true });
 
       mockConsumeCodexRateLimitResetCredit.mockResolvedValue({
         code: 'reset',
@@ -492,6 +492,7 @@ describe('quotaCommand', () => {
       const oauthManager = makeCodexResetOauthManager();
       maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
       getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      mockContext = createMockCommandContext({ overwriteConfirmed: true });
 
       mockConsumeCodexRateLimitResetCredit.mockResolvedValue({
         code: 'already_redeemed',
@@ -499,6 +500,8 @@ describe('quotaCommand', () => {
 
       const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
       await reset!.action!(mockContext, '');
+
+      expect(mockConsumeCodexRateLimitResetCredit).toHaveBeenCalledTimes(1);
 
       const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
       const alreadyItem = calls.find((call) => {
@@ -524,6 +527,7 @@ describe('quotaCommand', () => {
       const oauthManager = makeCodexResetOauthManager();
       maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
       getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      mockContext = createMockCommandContext({ overwriteConfirmed: true });
 
       mockConsumeCodexRateLimitResetCredit.mockResolvedValue(null);
 
@@ -539,6 +543,7 @@ describe('quotaCommand', () => {
       const oauthManager = makeCodexResetOauthManager();
       maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
       getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      mockContext = createMockCommandContext({ overwriteConfirmed: true });
 
       mockConsumeCodexRateLimitResetCredit.mockRejectedValue(
         new Error('Network timeout'),
@@ -601,10 +606,44 @@ describe('quotaCommand', () => {
       expect(lastItem.text).toContain('Not authenticated with Codex');
     });
 
+    it('prompts for confirmation before redeeming when not yet confirmed', async () => {
+      const oauthManager = makeCodexResetOauthManager();
+      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
+      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      // mockContext has NO overwriteConfirmed — first invocation.
+
+      const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
+      const result = await reset!.action!(mockContext, '');
+
+      expect(result).toBeDefined();
+      expect(result).not.toBeNull();
+      const confirmResult = result as {
+        type: string;
+        prompt: string;
+        originalInvocation: { raw: string };
+      };
+      expect(confirmResult.type).toBe('confirm_action');
+      expect(typeof confirmResult.prompt).toBe('string');
+      expect(confirmResult.prompt.length).toBeGreaterThan(0);
+      expect(confirmResult.originalInvocation.raw).toContain('quota reset');
+      expect(mockConsumeCodexRateLimitResetCredit).not.toHaveBeenCalled();
+    });
+
+    it('shows too-many-arguments error for /quota reset codex extra and does not consume', async () => {
+      const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
+      await reset!.action!(mockContext, 'codex extra');
+
+      const lastItem = getLastUiItem(mockContext);
+      expect(lastItem.type).toBe(MessageType.ERROR);
+      expect(lastItem.text).toContain('Too many arguments');
+      expect(mockConsumeCodexRateLimitResetCredit).not.toHaveBeenCalled();
+    });
+
     it('succeeds when provider arg is explicitly codex', async () => {
       const oauthManager = makeCodexResetOauthManager();
       maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
       getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      mockContext = createMockCommandContext({ overwriteConfirmed: true });
 
       mockConsumeCodexRateLimitResetCredit.mockResolvedValue({
         code: 'reset',
@@ -634,6 +673,7 @@ describe('quotaCommand', () => {
       getEphemeralSettingMock.mockReturnValue(
         'https://example.test/backend-api',
       );
+      mockContext = createMockCommandContext({ overwriteConfirmed: true });
 
       mockConsumeCodexRateLimitResetCredit.mockResolvedValue({
         code: 'reset',
@@ -654,6 +694,7 @@ describe('quotaCommand', () => {
       maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
       getCliOAuthManagerMock.mockReturnValue(oauthManager);
       getEphemeralSettingMock.mockReturnValue('   ');
+      mockContext = createMockCommandContext({ overwriteConfirmed: true });
 
       mockConsumeCodexRateLimitResetCredit.mockResolvedValue({
         code: 'reset',

@@ -275,26 +275,18 @@ describe('codexRateLimitReset', () => {
       expect(result).toBeNull();
     });
 
-    it('should attempt a fetch for a whitespace-only access token (current behavior)', async () => {
-      // The guard checks `!accessToken` which treats '   ' as truthy, so a
-      // whitespace-only token passes validation and a fetch IS attempted.
-      // This documents the actual current behavior; tightening to reject
-      // whitespace would be a behavior change out of scope here.
-      const mockResponse = {
-        rate_limit_reset_credits: {
-          available_count: 0,
-          credits: [],
-        },
-      };
+    it('should return null for a whitespace-only access token without fetching', async () => {
+      // A whitespace-only token must be rejected by the input guard so no
+      // pointless network call is made.
+      const result = await fetchCodexRateLimitResetCredits('   ', 'account123');
+      expect(result).toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
 
-      fetchMock.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockResponse,
-      } as Response);
-
-      await fetchCodexRateLimitResetCredits('   ', 'account123');
-
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+    it('should return null for a whitespace-only account ID without fetching', async () => {
+      const result = await fetchCodexRateLimitResetCredits('token123', '   ');
+      expect(result).toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 
@@ -352,6 +344,17 @@ describe('codexRateLimitReset', () => {
         'account123',
         'credit-1',
         '',
+      );
+      expect(result).toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('should return null for a whitespace-only access token without fetching', async () => {
+      const result = await consumeCodexRateLimitResetCredit(
+        '   ',
+        'account123',
+        'credit-1',
+        'redeem-1',
       );
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
