@@ -312,6 +312,49 @@ jobs:
             exit 0
           fi
 
+      - name: Validate OCR LLM connectivity
+        shell: bash
+        env:
+          OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
+          OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL }}
+          OCR_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC }}
+        run: |
+          set -euo pipefail
+          if [ -s ocr-exit-code.txt ]; then
+            echo "::warning::Skipping OCR LLM connectivity check because an earlier OCR setup/configuration failure was recorded."
+            exit 0
+          fi
+          echo "llm-preflight" > ocr-phase.txt
+          if ! . ./ocr-workflow-helpers.sh; then
+            echo "::warning::Could not load OCR workflow helper script."
+            echo "127" > ocr-exit-code.txt
+            echo "phase=llm-preflight; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            exit 0
+          fi
+          if ! command -v ocr >/dev/null 2>&1; then
+            echo "::warning::OpenCodeReview command is unavailable before LLM connectivity check."
+            echo "OpenCodeReview command is unavailable before LLM connectivity check." >> ocr-stderr.log
+            echo "127" > ocr-exit-code.txt
+            mark_infrastructure_failure "llm-preflight" "OpenCodeReview command is unavailable before LLM connectivity check"
+            exit 0
+          fi
+          set +e
+          timeout 120s ocr llm test >> ocr-stderr.log 2>&1
+          preflight_status=$?
+          set -e
+          if [ "$preflight_status" -ne 0 ]; then
+            if [ "$preflight_status" -eq 124 ]; then
+              echo "::warning::OCR LLM connectivity check timed out after 120s. Verify provider availability and network latency."
+              mark_infrastructure_failure "llm-preflight" "OCR LLM connectivity check timed out"
+            else
+              echo "::warning::OCR LLM connectivity check failed. Verify OCR_LLM_URL, OCR_LLM_AUTH_TOKEN, OCR_LLM_MODEL, and provider availability."
+              mark_infrastructure_failure "llm-preflight" "OCR LLM connectivity check failed"
+            fi
+            echo "$preflight_status" > ocr-exit-code.txt
+            exit 0
+          fi
+
       - name: Verify review scope includes changed tests
         shell: bash
         env:
@@ -473,7 +516,11 @@ jobs:
           fi
           echo "$status" > ocr-exit-code.txt
           if [ "$status" -ne 0 ]; then
-            mark_infrastructure_failure "review" "OCR review command failed"
+            if grep -Eqi "all [0-9]+ file review(\(s\)|s)? failed" ocr-stderr.log; then
+              mark_infrastructure_failure "review" "all OCR per-file reviews failed; likely LLM provider/config/auth failure"
+            else
+              mark_infrastructure_failure "review" "OCR review command failed"
+            fi
           fi
           exit 0
 

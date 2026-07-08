@@ -247,6 +247,9 @@ describe('.github/workflows/ocr-review.yml', () => {
     const validateRun = commandText(
       stepNamed(codeReviewJob, 'Validate OCR configuration'),
     );
+    const preflightRun = commandText(
+      stepNamed(codeReviewJob, 'Validate OCR LLM connectivity'),
+    );
     const previewRun = commandText(
       stepNamed(codeReviewJob, 'Verify review scope includes changed tests'),
     );
@@ -257,7 +260,13 @@ describe('.github/workflows/ocr-review.yml', () => {
     expect(
       workflowYml.match(/mark_infrastructure_failure\(\)/g) ?? [],
     ).toHaveLength(1);
-    for (const run of [installRun, validateRun, previewRun, reviewRun]) {
+    for (const run of [
+      installRun,
+      validateRun,
+      preflightRun,
+      previewRun,
+      reviewRun,
+    ]) {
       expect(run).toContain('. ./ocr-workflow-helpers.sh');
     }
 
@@ -274,6 +283,16 @@ describe('.github/workflows/ocr-review.yml', () => {
       'echo "78" > ocr-exit-code.txt',
       'mark_infrastructure_failure "validate" "OCR configuration is missing required variables or secrets"',
       'exit 0',
+    ]);
+    expectContainsAll(preflightRun, [
+      'if [ -s ocr-exit-code.txt ]; then',
+      'Skipping OCR LLM connectivity check because an earlier OCR setup/configuration failure was recorded.',
+      'echo "llm-preflight" > ocr-phase.txt',
+      'timeout 120s ocr llm test >> ocr-stderr.log 2>&1',
+      'if [ "$preflight_status" -eq 124 ]; then',
+      'mark_infrastructure_failure "llm-preflight" "OCR LLM connectivity check timed out"',
+      'mark_infrastructure_failure "llm-preflight" "OCR LLM connectivity check failed"',
+      'echo "$preflight_status" > ocr-exit-code.txt',
     ]);
     expectContainsAll(previewRun, [
       'if [ -s ocr-exit-code.txt ]; then',
@@ -296,6 +315,9 @@ describe('.github/workflows/ocr-review.yml', () => {
       'if ! cp ocr-stdout.raw ocr-result.json; then',
       ': > ocr-result.json',
       'echo "$status" > ocr-exit-code.txt',
+      'if grep -Eqi "all [0-9]+ file review(\\(s\\)|s)? failed" ocr-stderr.log; then',
+      'mark_infrastructure_failure "review" "all OCR per-file reviews failed; likely LLM provider/config/auth failure"',
+      'else',
       'mark_infrastructure_failure "review" "OCR review command failed"',
       'exit 0',
     ]);
