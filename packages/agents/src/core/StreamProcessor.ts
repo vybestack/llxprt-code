@@ -460,7 +460,9 @@ export class StreamProcessor {
           abortSignal: params.config?.abortSignal,
         },
         userMemory,
-        systemInstruction: this._resolveSystemInstruction(),
+        systemInstruction: extractSystemInstructionText(
+          this.generationConfig.systemInstruction,
+        ),
       } as GenerateChatOptions);
 
       return await this._consumeFirstChunkAndReturn(
@@ -515,20 +517,6 @@ export class StreamProcessor {
     params: SendMessageParameters,
   ): GenerateContentConfig['tools'] {
     return selectRequestTools(params, this.generationConfig.tools);
-  }
-
-  /**
-   * Extracts the system instruction string from generationConfig.
-   *
-   * Issue #2410: subagent personas are built into generationConfig
-   * .systemInstruction by subagentRuntimeSetup.createChatObject(). Without
-   * forwarding this to the provider, the subagent's task directives never
-   * reach the model.
-   */
-  private _resolveSystemInstruction(): string | undefined {
-    return extractSystemInstructionText(
-      this.generationConfig.systemInstruction,
-    );
   }
 
   private async _applyToolSelectionHook(

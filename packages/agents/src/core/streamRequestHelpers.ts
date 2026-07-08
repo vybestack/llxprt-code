@@ -332,7 +332,6 @@ export function extractSystemInstructionText(
 }
 
 function extractPartsText(parts: unknown[]): string {
-  const SEPARATOR = String.fromCharCode(10); // newline
   return parts
     .map((part) => {
       if (typeof part === 'string') return part;
@@ -347,6 +346,6 @@ function extractPartsText(parts: unknown[]): string {
       return '';
     })
     .filter((text) => text.length > 0)
-    .join(SEPARATOR)
+    .join('\n')
     .trim();
 }

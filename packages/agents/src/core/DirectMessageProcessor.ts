@@ -505,7 +505,9 @@ export class DirectMessageProcessor {
         runtimeContext.settingsService as GenerateChatOptions['settings'],
       metadata: runtimeContext.metadata,
       userMemory: resolveUserMemory(runtimeContext.config),
-      systemInstruction: this._resolveSystemInstruction(),
+      systemInstruction: extractSystemInstructionText(
+        this.generationConfig.systemInstruction,
+      ),
     });
   }
 
@@ -513,20 +515,6 @@ export class DirectMessageProcessor {
     params: SendMessageParameters,
   ): GenerateContentConfig['tools'] {
     return params.config?.tools ?? this.generationConfig.tools;
-  }
-
-  /**
-   * Extracts the system instruction string from generationConfig.
-   *
-   * Issue #2410: subagent personas are built into generationConfig
-   * .systemInstruction by subagentRuntimeSetup.createChatObject(). Without
-   * forwarding this to the provider, the subagent's task directives never
-   * reach the model.
-   */
-  private _resolveSystemInstruction(): string | undefined {
-    return extractSystemInstructionText(
-      this.generationConfig.systemInstruction,
-    );
   }
 
   /**

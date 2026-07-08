@@ -5,7 +5,7 @@
  * The instruction is appended after the core prompt, separated by a blank
  * line, so the model sees both the base behavior directives and the
  * agent-specific task. Returns:
- *  - the core prompt unchanged when the instruction is absent or empty;
+ *  - the trimmed core prompt when the instruction is absent or empty;
  *  - the instruction alone when the core prompt is empty;
  *  - both joined by a blank line when both are present.
  *
