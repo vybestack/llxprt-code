@@ -442,23 +442,14 @@ export async function dispatchNonInteractiveTurnResult(
 // ---------------------------------------------------------------------------
 
 /**
- * Determines whether the non-interactive loop should stop based on the
- * next-messages result from `dispatchNonInteractiveTurnResult`.
+ * Type guard: returns true when nextMessages is non-null AND non-empty.
  *
  * Issue #2410: `processFunctionCalls` can return `[]` (an empty, truthy
  * array) when all tool calls are hook-restricted. The old guard
  * `!nextMessages` only caught `null`/`undefined` — an empty array slipped
  * through (`![] === false`) and propagated a zero-part user message into
- * provider history. This helper centralizes the corrected guard so it can
- * be unit-tested in isolation.
- */
-/**
- * Type guard: returns true when nextMessages is non-null AND non-empty.
- * Issue #2410: `processFunctionCalls` can return `[]` (an empty, truthy
- * array) when all tool calls are hook-restricted. The old guard
- * `!nextMessages` only caught `null`/`undefined` — an empty array slipped
- * through (`![] === false`) and propagated a zero-part user message into
- * provider history. This type guard centralizes the corrected check.
+ * provider history. This type guard centralizes the corrected check so it
+ * can be unit-tested in isolation.
  */
 export function hasNonInteractiveMessages(
   nextMessages: Content[] | null,
