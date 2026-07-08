@@ -16,10 +16,7 @@ import {
 } from '@vybestack/llxprt-code-providers';
 import type { CodexRateLimitResetCreditsResponse } from '@vybestack/llxprt-code-providers';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import {
-  CodexOAuthTokenSchema,
-  type CodexOAuthToken,
-} from '@vybestack/llxprt-code-auth';
+import { CodexOAuthTokenSchema } from '@vybestack/llxprt-code-auth';
 import type { CommandArgumentSchema } from './schema/types.js';
 import { randomUUID } from 'node:crypto';
 
@@ -274,14 +271,16 @@ async function resolveBucketToken(
   if (!parsed.success) {
     return { accessToken: null, accountId: null };
   }
-  const codexToken: CodexOAuthToken = parsed.data;
-  const accessToken =
-    typeof codexToken.access_token === 'string'
-      ? codexToken.access_token
-      : null;
-  const accountId =
-    typeof codexToken.account_id === 'string' ? codexToken.account_id : null;
-  return { accessToken, accountId };
+  // Guard against a token that expired between the credit-listing call and
+  // this resolve — sending an expired token to consume would yield a 401 and
+  // a misleading generic error.
+  if (parsed.data.expiry <= Math.floor(Date.now() / 1000)) {
+    return { accessToken: null, accountId: null };
+  }
+  return {
+    accessToken: parsed.data.access_token,
+    accountId: parsed.data.account_id,
+  };
 }
 
 /**
@@ -323,11 +322,14 @@ async function resetAction(
     if (tokenInfo.accessToken === null || tokenInfo.accountId === null) {
       addError(
         context,
-        'Failed to resolve Codex credentials for the selected bucket.',
+        'Codex credentials for the selected bucket are unavailable or expired. Run /auth codex to re-authenticate.',
       );
       return;
     }
 
+    // Both the credit listing (getAllCodexRateLimitResetCredits) and this
+    // consume call resolve base-url from the same runtime settings source, so
+    // list and consume always target the same backend host.
     const baseUrl = resolveBaseUrl();
     const redeemRequestId = randomUUID();
     const consumeResult = await consumeCodexRateLimitResetCredit(

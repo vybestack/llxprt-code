@@ -421,6 +421,31 @@ describe('quotaCommand', () => {
       expect(lastItem.text).toContain('No reset credits available');
     });
 
+    it('shows no-redeemable message when map non-empty but all buckets have zero available', async () => {
+      const oauthManager = {
+        getAllCodexRateLimitResetCredits: vi.fn().mockResolvedValue(
+          makeCodexCreditsMap([
+            {
+              bucket: 'default',
+              availableCount: 0,
+              credits: [],
+            },
+          ]),
+        ),
+        getToken: vi.fn().mockResolvedValue('codex-token'),
+        listBuckets: vi.fn().mockResolvedValue(['default']),
+      };
+      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
+      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+
+      const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
+      await reset!.action!(mockContext, '');
+
+      const lastItem = getLastUiItem(mockContext);
+      expect(lastItem.type).toBe(MessageType.INFO);
+      expect(lastItem.text).toContain('No reset credits available to redeem');
+    });
+
     it('successfully redeems a credit and shows success + refreshed quota', async () => {
       const oauthManager = makeCodexResetOauthManager();
       maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
@@ -484,6 +509,15 @@ describe('quotaCommand', () => {
         );
       });
       expect(alreadyItem).toBeDefined();
+
+      const quotaItem = calls.find((call) => {
+        const item = call[0] as { text: string; type: MessageType };
+        return (
+          item.text.includes('Codex Quota Information') &&
+          item.type === MessageType.INFO
+        );
+      });
+      expect(quotaItem).toBeDefined();
     });
 
     it('shows error when consume returns null', async () => {
@@ -532,7 +566,7 @@ describe('quotaCommand', () => {
 
       const lastItem = getLastUiItem(mockContext);
       expect(lastItem.type).toBe(MessageType.ERROR);
-      expect(lastItem.text).toContain('Failed to resolve Codex credentials');
+      expect(lastItem.text).toContain('unavailable or expired');
     });
 
     it('shows error when getAllCodexRateLimitResetCredits rejects during reset flow', async () => {

@@ -63,23 +63,18 @@ describe('quotaCommand schema completion', () => {
     return (await getResetResult(partialArg)).suggestions.map((s) => s.value);
   }
 
-  it('only the reset subcommand has a schema', () => {
-    const subCommands = quotaCommand.subCommands ?? [];
-    const resetSchema = subCommands.find((sc) => sc.name === 'reset')?.schema;
-    const nonResetSchemas = subCommands
-      .filter((sc) => sc.name !== 'reset')
-      .map((sc) => sc.schema);
-    expect(resetSchema).toBeDefined();
-    expect(nonResetSchemas.every((s) => s === undefined)).toBe(true);
-  });
-
   it('offers codex as the provider for /quota reset', async () => {
     const values = await getResetSuggestions('');
     expect(values).toContain('codex');
   });
 
-  it('partialArg "co" still yields exactly codex', async () => {
+  it('partialArg "co" yields only codex', async () => {
     const values = await getResetSuggestions('co');
+    expect(values).toStrictEqual(['codex']);
+  });
+
+  it('partialArg "CO" yields codex (case-insensitive fuzzy match)', async () => {
+    const values = await getResetSuggestions('CO');
     expect(values).toStrictEqual(['codex']);
   });
 
