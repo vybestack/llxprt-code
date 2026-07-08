@@ -90,9 +90,11 @@ describe('.github/workflows/ocr-review.yml', () => {
       '${{ steps.ocr-classification.outputs.policy_failure }}',
     );
     expect(codeReviewJob.concurrency?.['cancel-in-progress']).toBe(true);
+    expect(normalizedGroup).toContain(normalize('${{ github.workflow }}'));
     expect(group).toContain(
       'github.event.pull_request.number || github.event.issue.number || inputs.pr_number',
     );
+    expect(group).not.toContain('ocr-review-');
     expect(group).not.toContain("github.event_name == 'issue_comment'");
     expect(group).not.toContain("'command'");
     expect(group).not.toContain("'automatic'");
@@ -112,7 +114,7 @@ describe('.github/workflows/ocr-review.yml', () => {
       'Job-level concurrency is evaluated only for runs that pass this job if filter',
     );
     expect(workflowYml).toContain(
-      'All authorized OCR triggers for the same PR share one group',
+      'All authorized OCR triggers for the same PR share one workflow-scoped group',
     );
     expect(workflowYml).toContain(
       'run owns the sticky summary and inline-comment posting',
