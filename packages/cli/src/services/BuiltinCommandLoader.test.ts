@@ -86,6 +86,13 @@ vi.mock('../ui/commands/modelCommand.js', () => ({
 }));
 vi.mock('../ui/commands/privacyCommand.js', () => ({ privacyCommand: {} }));
 vi.mock('../ui/commands/quitCommand.js', () => ({ quitCommand: {} }));
+vi.mock('../ui/commands/quotaCommand.js', () => ({
+  quotaCommand: {
+    name: 'quota',
+    description: 'Quota command',
+    kind: 'built-in',
+  },
+}));
 vi.mock('../ui/commands/resumeCommand.js', () => ({ resumeCommand: {} }));
 vi.mock('../ui/commands/statsCommand.js', () => ({ statsCommand: {} }));
 vi.mock('../ui/commands/themeCommand.js', () => ({ themeCommand: {} }));
@@ -177,6 +184,14 @@ describe('BuiltinCommandLoader', () => {
     const commands = await loader.loadCommands(new AbortController().signal);
     const permissionsCmd = commands.find((c) => c.name === 'permissions');
     expect(permissionsCmd).toBeDefined();
+  });
+
+  it('should include quota command', async () => {
+    const loader = new BuiltinCommandLoader(mockConfig);
+    const commands = await loader.loadCommands(new AbortController().signal);
+    const quotaCmd = commands.find((c) => c.name === 'quota');
+    expect(quotaCmd).toBeDefined();
+    expect(quotaCmd?.kind).toBe(CommandKind.BUILT_IN);
   });
 
   it('should include policies command when message bus integration is enabled', async () => {

@@ -51,6 +51,7 @@ export {
   getAnthropicUsageInfo,
   getAllAnthropicUsageInfo,
   getAllCodexUsageInfo,
+  getAllCodexRateLimitResetCredits,
   getHigherPriorityAuth,
 } from './provider-usage-info.js';
 

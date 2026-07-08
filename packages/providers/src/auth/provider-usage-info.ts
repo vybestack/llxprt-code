@@ -201,6 +201,87 @@ export async function getAllCodexUsageInfo(
   return result;
 }
 
+async function fetchAndStoreCodexResetCredits(
+  bucket: string,
+  accessToken: string,
+  accountId: string,
+  codexBaseUrl: string | undefined,
+  fetchFn: (
+    token: string,
+    accountId: string,
+    baseUrl?: string,
+  ) => Promise<Record<string, unknown> | null | undefined>,
+  result: Map<string, Record<string, unknown>>,
+  logger: DebugLogger,
+): Promise<void> {
+  try {
+    const creditsInfo = await fetchFn(accessToken, accountId, codexBaseUrl);
+    if (creditsInfo) {
+      result.set(bucket, creditsInfo);
+    }
+  } catch (error) {
+    logger.debug(
+      `Error fetching Codex reset credits for bucket ${bucket}:`,
+      error,
+    );
+  }
+}
+
+/**
+ * Get Codex rate-limit-reset credits for all authenticated buckets.
+ * Returns a map of bucket name to reset-credits info for all buckets that
+ * have valid, non-expired OAuth tokens with an account_id field.
+ *
+ * @param tokenStore - Token store to read from
+ * @param config - Optional Config for base-url resolution
+ */
+export async function getAllCodexRateLimitResetCredits(
+  tokenStore: TokenStore,
+  config?: Config,
+): Promise<Map<string, Record<string, unknown>>> {
+  const result = new Map<string, Record<string, unknown>>();
+
+  const buckets = await tokenStore.listBuckets('codex');
+  const bucketsToCheck = buckets.length > 0 ? buckets : ['default'];
+
+  const { fetchCodexRateLimitResetCredits } = await import(
+    '@vybestack/llxprt-code-providers'
+  );
+
+  for (const bucket of bucketsToCheck) {
+    const token = await tokenStore.getToken('codex', bucket);
+    if (!token) {
+      continue;
+    }
+
+    const nowInSeconds = Math.floor(Date.now() / 1000);
+    const tokenObj = token as Record<string, unknown>;
+    const accountId =
+      typeof tokenObj['account_id'] === 'string'
+        ? tokenObj['account_id']
+        : undefined;
+
+    if (token.expiry > nowInSeconds && accountId) {
+      const runtimeBaseUrl = config?.getEphemeralSetting('base-url');
+      const codexBaseUrl =
+        typeof runtimeBaseUrl === 'string' && runtimeBaseUrl.trim() !== ''
+          ? runtimeBaseUrl
+          : undefined;
+      await fetchAndStoreCodexResetCredits(
+        bucket,
+        token.access_token,
+        accountId,
+        codexBaseUrl,
+        fetchCodexRateLimitResetCredits,
+        result,
+        logger,
+      );
+    }
+  }
+
+  return result;
+}
+
 /**
  * Check for higher priority authentication methods for a provider.
  * Returns a string describing the higher-priority auth if one exists,
