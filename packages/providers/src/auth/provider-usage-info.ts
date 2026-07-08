@@ -249,6 +249,14 @@ export async function getAllCodexRateLimitResetCredits(
     '@vybestack/llxprt-code-providers'
   );
 
+  // The base-url does not depend on the bucket, so resolve it once before the
+  // loop instead of recomputing it per iteration.
+  const runtimeBaseUrl = config?.getEphemeralSetting('base-url');
+  const codexBaseUrl =
+    typeof runtimeBaseUrl === 'string' && runtimeBaseUrl.trim() !== ''
+      ? runtimeBaseUrl
+      : undefined;
+
   for (const bucket of bucketsToCheck) {
     const token = await tokenStore.getToken('codex', bucket);
     if (!token) {
@@ -263,11 +271,6 @@ export async function getAllCodexRateLimitResetCredits(
         : undefined;
 
     if (token.expiry > nowInSeconds && accountId) {
-      const runtimeBaseUrl = config?.getEphemeralSetting('base-url');
-      const codexBaseUrl =
-        typeof runtimeBaseUrl === 'string' && runtimeBaseUrl.trim() !== ''
-          ? runtimeBaseUrl
-          : undefined;
       await fetchAndStoreCodexResetCredits(
         bucket,
         token.access_token,

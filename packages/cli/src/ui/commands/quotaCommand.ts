@@ -34,6 +34,8 @@ const NO_RESET_CREDITS_MSG =
   'No Codex reset credits available. Reset credits are earned via referrals or purchased.';
 const NOT_AUTHED_CODEX_MSG =
   'Not authenticated with Codex. Run /auth codex to login.';
+const NO_REDEEMABLE_CREDITS_MSG =
+  'No reset credits available to redeem. Reset credits are earned via referrals or purchased.';
 
 interface BucketCredits {
   readonly bucket: string;
@@ -292,20 +294,17 @@ async function resetAction(
 
     const redeemable = await findRedeemableCredit(oauthManager);
     if (redeemable === null) {
-      addInfo(
-        context,
-        'No reset credits available to redeem. Reset credits are earned via referrals or purchased.',
-      );
+      addInfo(context, NO_REDEEMABLE_CREDITS_MSG);
       return;
     }
-    if (redeemable.firstCreditId === null) {
-      addInfo(
-        context,
-        'No reset credits available to redeem. Reset credits are earned via referrals or purchased.',
-      );
-      return;
-    }
+    // Type-narrowing guard: BucketCredits.firstCreditId is typed string | null,
+    // so this local check narrows creditId to string for the consume call below
+    // without a non-null assertion.
     const creditId = redeemable.firstCreditId;
+    if (creditId === null) {
+      addInfo(context, NO_REDEEMABLE_CREDITS_MSG);
+      return;
+    }
     const bucket = redeemable.bucket;
 
     const tokenInfo = await resolveBucketToken(oauthManager, bucket);
@@ -342,10 +341,15 @@ async function resetAction(
     }
 
     // Refresh and display updated quota after a successful reset.
-    const runtimeApi = getRuntimeApi();
-    const quotaLines = await fetchAllQuotaInfo(runtimeApi);
-    if (quotaLines.length > 0) {
-      addInfo(context, quotaLines.join('\n'));
+    // A refresh failure is non-fatal: the reset itself already succeeded.
+    try {
+      const runtimeApi = getRuntimeApi();
+      const quotaLines = await fetchAllQuotaInfo(runtimeApi);
+      if (quotaLines.length > 0) {
+        addInfo(context, quotaLines.join('\n'));
+      }
+    } catch {
+      // Intentionally ignored — reset succeeded; only the refresh view failed.
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';

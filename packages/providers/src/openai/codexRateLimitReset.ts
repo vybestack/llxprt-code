@@ -6,6 +6,7 @@
 
 import { z } from 'zod';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { normalizeBaseUrl } from './codexBaseUrl.js';
 
 const logger = new DebugLogger('llxprt:openai:codex:reset');
 
@@ -68,23 +69,6 @@ export type CodexConsumeResetCreditResponse = z.infer<
 >;
 
 const DEFAULT_BACKEND_API_ROOT = 'https://chatgpt.com/backend-api';
-
-/**
- * Normalize a base URL by trimming and removing trailing slashes.
- * Mirrors the behavior of normalizeBaseUrl in codexUsageInfo.ts so that
- * base-url resolution stays consistent across both modules.
- */
-function normalizeBaseUrl(baseUrl?: string): string {
-  if (typeof baseUrl !== 'string') {
-    return '';
-  }
-
-  let normalized = baseUrl.trim();
-  while (normalized.endsWith('/')) {
-    normalized = normalized.slice(0, -1);
-  }
-  return normalized;
-}
 
 /**
  * Derive the backend-api root for the reset-credits endpoints.

@@ -219,6 +219,27 @@ describe('codexRateLimitReset', () => {
       expect(result?.rate_limit_reset_credits.credits).toStrictEqual([]);
     });
 
+    it('should return null when rate_limit_reset_credits is present but schema-invalid', async () => {
+      // available_count: -1 violates the .nonnegative() constraint.
+      const mockResponse = {
+        rate_limit_reset_credits: {
+          available_count: -1,
+          credits: [],
+        },
+      };
+
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+
+      const result = await fetchCodexRateLimitResetCredits(
+        'token123',
+        'account123',
+      );
+      expect(result).toBeNull();
+    });
+
     it('should include fetch timeout signal in request options', async () => {
       const mockResponse = {
         rate_limit_reset_credits: {
@@ -408,6 +429,23 @@ describe('codexRateLimitReset', () => {
       expect(result).toBeNull();
     });
 
+    it('should handle malformed JSON', async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => {
+          throw new SyntaxError('Unexpected token');
+        },
+      } as Response);
+
+      const result = await consumeCodexRateLimitResetCredit(
+        'token123',
+        'account123',
+        'credit-1',
+        'redeem-1',
+      );
+      expect(result).toBeNull();
+    });
+
     it('should use custom base URL when provided', async () => {
       const mockResponse = {
         code: 'reset',
@@ -495,12 +533,12 @@ describe('codexRateLimitReset', () => {
     });
 
     it('should format credits with available count and credit ids', () => {
-      const data = {
+      const data = CodexRateLimitResetCreditsResponseSchema.parse({
         rate_limit_reset_credits: {
           available_count: 2,
           credits: [{ id: 'credit-1' }, { id: 'credit-2', source: 'referral' }],
         },
-      };
+      });
 
       const result = formatCodexResetCredits(data);
       expect(result.length).toBe(3);
@@ -510,36 +548,36 @@ describe('codexRateLimitReset', () => {
     });
 
     it('should return empty array when available_count is 0', () => {
-      const data = {
+      const data = CodexRateLimitResetCreditsResponseSchema.parse({
         rate_limit_reset_credits: {
           available_count: 0,
           credits: [],
         },
-      };
+      });
 
       const result = formatCodexResetCredits(data);
       expect(result).toStrictEqual([]);
     });
 
     it('should return empty array when credits is empty despite available_count > 0', () => {
-      const data = {
+      const data = CodexRateLimitResetCreditsResponseSchema.parse({
         rate_limit_reset_credits: {
           available_count: 2,
           credits: [],
         },
-      };
+      });
 
       const result = formatCodexResetCredits(data);
       expect(result).toStrictEqual([]);
     });
 
     it('should format single credit', () => {
-      const data = {
+      const data = CodexRateLimitResetCreditsResponseSchema.parse({
         rate_limit_reset_credits: {
           available_count: 1,
           credits: [{ id: 'credit-only' }],
         },
-      };
+      });
 
       const result = formatCodexResetCredits(data);
       expect(result.length).toBe(2);

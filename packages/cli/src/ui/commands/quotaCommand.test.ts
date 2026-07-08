@@ -77,18 +77,38 @@ function makeCodexToken(
 function makeCodexResetOauthManager(
   overrides: Record<string, unknown> = {},
 ): Record<string, ReturnType<typeof vi.fn>> {
+  const futureResetAt = Math.floor(Date.now() / 1000) + 3600;
   return {
-    getAllCodexRateLimitResetCredits: vi
-      .fn()
-      .mockResolvedValue(
-        makeCodexCreditsMap([
+    getAllCodexRateLimitResetCredits: vi.fn().mockResolvedValue(
+      makeCodexCreditsMap([
+        {
+          bucket: 'default',
+          availableCount: 1,
+          credits: [{ id: 'credit-1' }],
+        },
+      ]),
+    ),
+    getAllAnthropicUsageInfo: vi.fn().mockResolvedValue(new Map()),
+    getAllCodexUsageInfo: vi.fn().mockResolvedValue(
+      new Map([
+        [
+          'default',
           {
-            bucket: 'default',
-            availableCount: 1,
-            credits: [{ id: 'credit-1' }],
+            plan_type: 'plus',
+            rate_limit: {
+              allowed: true,
+              limit_reached: false,
+              primary_window: {
+                used_percent: 10,
+                limit_window_seconds: 18000,
+                reset_after_seconds: 3600,
+                reset_at: futureResetAt,
+              },
+            },
           },
-        ]),
-      ),
+        ],
+      ]),
+    ),
     getToken: vi.fn().mockResolvedValue('codex-access'),
     listBuckets: vi.fn().mockResolvedValue(['default']),
     getTokenStore: vi.fn().mockReturnValue({
@@ -395,6 +415,15 @@ describe('quotaCommand', () => {
         );
       });
       expect(successItem).toBeDefined();
+
+      const quotaItem = calls.find((call) => {
+        const item = call[0] as { text: string; type: MessageType };
+        return (
+          item.text.includes('Codex Quota Information') &&
+          item.type === MessageType.INFO
+        );
+      });
+      expect(quotaItem).toBeDefined();
     });
 
     it('shows already_redeemed message', async () => {
@@ -410,12 +439,14 @@ describe('quotaCommand', () => {
       await reset!.action!(mockContext, '');
 
       const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
-      const lastItem = calls[calls.length - 1]?.[0] as {
-        type: MessageType;
-        text?: string;
-      };
-      expect(lastItem.type).toBe(MessageType.INFO);
-      expect(lastItem.text).toContain('already redeemed');
+      const alreadyItem = calls.find((call) => {
+        const item = call[0] as { text: string; type: MessageType };
+        return (
+          item.text.includes('already redeemed') &&
+          item.type === MessageType.INFO
+        );
+      });
+      expect(alreadyItem).toBeDefined();
     });
 
     it('shows error when consume returns null', async () => {

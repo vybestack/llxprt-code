@@ -560,6 +560,23 @@ describe('getAllCodexRateLimitResetCredits', () => {
     expect(mockFetchCodexRateLimitResetCredits).not.toHaveBeenCalled();
   });
 
+  it('omits the bucket when fetch resolves to null', async () => {
+    const token = {
+      access_token: 'codex-access-token',
+      token_type: 'Bearer',
+      expiry: futureExpiry(),
+      account_id: 'acct-abc123',
+    };
+    const store = makeTokenStore({
+      listBuckets: vi.fn().mockResolvedValue(['default']),
+      getToken: vi.fn().mockResolvedValue(token),
+    });
+    mockFetchCodexRateLimitResetCredits.mockResolvedValue(null);
+
+    const result = await getAllCodexRateLimitResetCredits(store);
+    expect(result.size).toBe(0);
+  });
+
   it('calls fetchCodexRateLimitResetCredits with access_token and account_id', async () => {
     const token = {
       access_token: 'codex-access-token',
