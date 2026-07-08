@@ -67,10 +67,20 @@ function createGenAIClientViaProvider(
   );
 }
 
+function createProviderWithRuntimeSettings(): GeminiProvider {
+  const provider = new GeminiProvider();
+  provider.setRuntimeSettingsService(
+    mockSettingsService as unknown as SettingsService,
+  );
+  return provider;
+}
+
 describe('GeminiProvider Authentication', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSettingsService.get.mockReset();
+    mockSettingsService.getProviderSettings.mockReturnValue({});
+    mockSettingsService.getAllGlobalSettings.mockReturnValue({});
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
     delete process.env.GOOGLE_API_KEY;
@@ -93,10 +103,7 @@ describe('GeminiProvider Authentication', () => {
       resolveAuthentication: vi.fn().mockResolvedValue('test-key'),
     };
 
-    const provider = new GeminiProvider();
-    provider.setRuntimeSettingsService(
-      mockSettingsService as unknown as SettingsService,
-    );
+    const provider = createProviderWithRuntimeSettings();
     (provider as unknown as { authResolver: unknown }).authResolver =
       mockAuthResolver;
 
@@ -123,7 +130,7 @@ describe('GeminiProvider Authentication', () => {
     };
     process.env.GOOGLE_APPLICATION_CREDENTIALS = '/path/to/credentials.json';
 
-    const provider = new GeminiProvider();
+    const provider = createProviderWithRuntimeSettings();
     (provider as unknown as { authResolver: unknown }).authResolver =
       mockAuthResolver;
 
@@ -145,10 +152,7 @@ describe('GeminiProvider Authentication', () => {
     };
     mockVertexAISettings();
 
-    const provider = new GeminiProvider();
-    provider.setRuntimeSettingsService(
-      mockSettingsService as unknown as SettingsService,
-    );
+    const provider = createProviderWithRuntimeSettings();
     (provider as unknown as { authResolver: unknown }).authResolver =
       mockAuthResolver;
 
@@ -170,10 +174,7 @@ describe('GeminiProvider Authentication', () => {
   it('passes runtime Vertex AI project and location to GoogleGenAI', async () => {
     mockVertexAISettings();
 
-    const provider = new GeminiProvider();
-    provider.setRuntimeSettingsService(
-      mockSettingsService as unknown as SettingsService,
-    );
+    const provider = createProviderWithRuntimeSettings();
 
     await createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai');
 
@@ -190,10 +191,7 @@ describe('GeminiProvider Authentication', () => {
     process.env.GOOGLE_CLOUD_PROJECT = 'env-project';
     process.env.GOOGLE_CLOUD_LOCATION = 'env-location';
     mockVertexAISettings('settings-project', 'settings-location');
-    const provider = new GeminiProvider();
-    provider.setRuntimeSettingsService(
-      mockSettingsService as unknown as SettingsService,
-    );
+    const provider = createProviderWithRuntimeSettings();
 
     await createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai');
 
@@ -209,7 +207,7 @@ describe('GeminiProvider Authentication', () => {
   it('falls back to env vars when settings service returns no Vertex AI config', async () => {
     process.env.GOOGLE_CLOUD_PROJECT = 'env-project';
     process.env.GOOGLE_CLOUD_LOCATION = 'us-central1';
-    const provider = new GeminiProvider();
+    const provider = createProviderWithRuntimeSettings();
 
     await createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai');
 
@@ -223,7 +221,7 @@ describe('GeminiProvider Authentication', () => {
   });
 
   it('throws a clear error when Vertex AI project or location is missing', async () => {
-    const provider = new GeminiProvider();
+    const provider = createProviderWithRuntimeSettings();
 
     await expect(
       createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
@@ -234,7 +232,7 @@ describe('GeminiProvider Authentication', () => {
 
   it('throws when only a Vertex AI project is configured', async () => {
     process.env.GOOGLE_CLOUD_PROJECT = 'env-project';
-    const provider = new GeminiProvider();
+    const provider = createProviderWithRuntimeSettings();
 
     await expect(
       createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
@@ -245,7 +243,7 @@ describe('GeminiProvider Authentication', () => {
 
   it('throws when only a Vertex AI location is configured', async () => {
     process.env.GOOGLE_CLOUD_LOCATION = 'us-central1';
-    const provider = new GeminiProvider();
+    const provider = createProviderWithRuntimeSettings();
 
     await expect(
       createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
@@ -256,7 +254,7 @@ describe('GeminiProvider Authentication', () => {
 
   it('does not require project and location when application credentials are configured', async () => {
     process.env.GOOGLE_APPLICATION_CREDENTIALS = '/path/to/credentials.json';
-    const provider = new GeminiProvider();
+    const provider = createProviderWithRuntimeSettings();
 
     await createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai');
 
@@ -269,7 +267,7 @@ describe('GeminiProvider Authentication', () => {
 
   it('does not require project and location when GOOGLE_API_KEY is configured for Vertex AI', async () => {
     process.env.GOOGLE_API_KEY = 'vertex-api-key';
-    const provider = new GeminiProvider();
+    const provider = createProviderWithRuntimeSettings();
 
     await createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai');
 
@@ -283,7 +281,7 @@ describe('GeminiProvider Authentication', () => {
   it('does not pass Vertex AI project and location for API key auth', async () => {
     process.env.GOOGLE_CLOUD_PROJECT = 'env-project';
     process.env.GOOGLE_CLOUD_LOCATION = 'us-central1';
-    const provider = new GeminiProvider();
+    const provider = createProviderWithRuntimeSettings();
 
     await createGenAIClientViaProvider(provider, 'api-key', 'gemini-api-key');
 
@@ -296,11 +294,22 @@ describe('GeminiProvider Authentication', () => {
 
   it('should respect auth precedence (SettingsService over env var)', async () => {
     process.env.GEMINI_API_KEY = 'env-key';
+    mockSettingsService.get.mockImplementation((key: string) => {
+      if (key === 'GEMINI_API_KEY') {
+        return 'settings-key';
+      }
+      return undefined;
+    });
     const mockAuthResolver = {
-      resolveAuthentication: vi.fn().mockResolvedValue('settings-key'),
+      resolveAuthentication: vi.fn(
+        ({ settingsService }: { settingsService: SettingsService }) =>
+          Promise.resolve(
+            settingsService.get('GEMINI_API_KEY') ?? process.env.GEMINI_API_KEY,
+          ),
+      ),
     };
 
-    const provider = new GeminiProvider();
+    const provider = createProviderWithRuntimeSettings();
     (provider as unknown as { authResolver: unknown }).authResolver =
       mockAuthResolver;
 
@@ -314,6 +323,9 @@ describe('GeminiProvider Authentication', () => {
     ).determineBestAuth();
 
     expect(auth.token).toBe('settings-key');
-    expect(mockAuthResolver.resolveAuthentication).toHaveBeenCalled();
+    expect(mockAuthResolver.resolveAuthentication).toHaveBeenCalledWith({
+      settingsService: mockSettingsService,
+      includeOAuth: false,
+    });
   });
 });

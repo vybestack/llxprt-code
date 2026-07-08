@@ -65,9 +65,7 @@ describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
       while (handles.length > 0) {
         const handle = handles.pop();
         if (handle) {
-          await Promise.resolve()
-            .then(() => handle.cleanup())
-            .catch(() => undefined);
+          await handle.cleanup().catch(() => undefined);
         }
       }
     } finally {
@@ -111,8 +109,10 @@ describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
     const provider = handle.providerManager.getProviderByName('anthropic') as
       | ProviderLike
       | undefined;
-    expect(provider).toBeDefined();
-    return provider as ProviderLike;
+    if (!provider) {
+      throw new Error('Anthropic provider was not registered onto the manager');
+    }
+    return provider;
   }
 
   it('wires oauthSettings so an OAuth-enabled Anthropic provider resolves OAuth (returns the OAuth model list)', async () => {

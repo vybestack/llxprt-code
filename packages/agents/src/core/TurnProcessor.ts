@@ -728,25 +728,29 @@ export class TurnProcessor {
     _params: SendMessageParameters,
     _prompt_id: string,
   ): Promise<void> {
-    const currentModel = this.runtimeContext.state.model;
-    const afcHistory = response.automaticFunctionCallingHistory;
+    try {
+      const currentModel = this.runtimeContext.state.model;
+      const afcHistory = response.automaticFunctionCallingHistory;
 
-    const allowedTools = getHookRestrictedAllowedTools(response);
-    const filteredAfcHistory =
-      afcHistory && afcHistory.length > 0
-        ? filterHookRestrictedContents(afcHistory, allowedTools).filter(
-            (content) => (content.parts?.length ?? 0) > 0,
-          )
-        : undefined;
-    if (filteredAfcHistory && filteredAfcHistory.length > 0) {
-      this._recordAfcHistory(filteredAfcHistory, currentModel);
-    } else {
-      this._recordUserContent(userContent, currentModel);
+      const allowedTools = getHookRestrictedAllowedTools(response);
+      const filteredAfcHistory =
+        afcHistory && afcHistory.length > 0
+          ? filterHookRestrictedContents(afcHistory, allowedTools).filter(
+              (content) => (content.parts?.length ?? 0) > 0,
+            )
+          : undefined;
+      if (filteredAfcHistory && filteredAfcHistory.length > 0) {
+        this._recordAfcHistory(filteredAfcHistory, currentModel);
+      } else {
+        this._recordUserContent(userContent, currentModel);
+      }
+
+      this._recordOutputContent(response, currentModel, filteredAfcHistory);
+
+      await this._syncTokenCounts(response);
+    } finally {
+      this.eagerlyRecordedToolResponseCallIds.clear();
     }
-
-    this._recordOutputContent(response, currentModel, filteredAfcHistory);
-
-    await this._syncTokenCounts(response);
   }
 
   private _recordAfcHistory(

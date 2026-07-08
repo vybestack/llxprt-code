@@ -4,20 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { homedir } from 'node:os';
+import { expandTildePath } from '@vybestack/llxprt-code-core/utils/paths.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 
 type EphemeralSettings = Profile['ephemeralSettings'];
 
 /** Reads a raw ephemeral setting value by key. */
 export function getSetting(settings: EphemeralSettings, key: string): unknown {
-  return (settings as Record<string, unknown>)[key];
+  const values = settings as unknown as Record<string, unknown>;
+  return values[key];
 }
 
-/** Expands a leading home-directory marker in a path-like ephemeral setting. */
-export function expandTilde(pathValue: string): string {
-  return pathValue.replace(/^~(?=$|[/\\])/, homedir());
-}
+export { expandTildePath as expandTilde };
 
 /**
  * Returns the first finite numeric ephemeral setting among the given keys,

@@ -19,9 +19,11 @@ function getNonEmptySetting(
   key: string,
 ): string | undefined {
   const value = settingsService?.get(key);
-  return typeof value === 'string' && value.trim().length > 0
-    ? value
-    : undefined;
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 export function getSettingOrEnv(
