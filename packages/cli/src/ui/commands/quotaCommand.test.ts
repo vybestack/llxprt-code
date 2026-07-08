@@ -92,7 +92,7 @@ function makeCodexToken(
 }
 
 function makeCodexResetOauthManager(
-  overrides: Record<string, unknown> = {},
+  overrides: Record<string, ReturnType<typeof vi.fn>> = {},
 ): Record<string, ReturnType<typeof vi.fn>> {
   const futureResetAt = Math.floor(Date.now() / 1000) + 3600;
   return {

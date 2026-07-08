@@ -416,6 +416,30 @@ describe('codexRateLimitReset', () => {
       expect(result?.code).toBe('already_redeemed');
     });
 
+    it('should parse reset code even when the credit field is omitted', async () => {
+      // The consume schema marks `credit` optional for ALL codes, so a
+      // `reset` response without a `credit` object is valid and must parse to
+      // `{ code: 'reset', credit: undefined }` rather than being rejected.
+      const mockResponse = {
+        code: 'reset',
+      };
+
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+
+      const result = await consumeCodexRateLimitResetCredit(
+        'token123',
+        'account123',
+        'credit-1',
+        'redeem-1',
+      );
+
+      expect(result?.code).toBe('reset');
+      expect(result?.credit).toBeUndefined();
+    });
+
     it('should handle HTTP errors gracefully', async () => {
       fetchMock.mockResolvedValueOnce({
         ok: false,

@@ -260,13 +260,16 @@ export async function getAllCodexRateLimitResetCredits(
       ? runtimeBaseUrl
       : undefined;
 
+  // Neither the base-url nor the current time depends on the bucket, so both
+  // are resolved once before the loop instead of recomputing them per bucket.
+  const nowInSeconds = Math.floor(Date.now() / 1000);
+
   for (const bucket of bucketsToCheck) {
     const token = await tokenStore.getToken('codex', bucket);
     if (!token) {
       continue;
     }
 
-    const nowInSeconds = Math.floor(Date.now() / 1000);
     const parsedToken = CodexOAuthTokenSchema.safeParse(token);
     const accountId = parsedToken.success
       ? parsedToken.data.account_id
