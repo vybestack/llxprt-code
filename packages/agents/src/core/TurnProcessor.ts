@@ -36,6 +36,7 @@ import {
   normalizeToolInteractionInput,
   convertIContentToResponse,
 } from './MessageConverter.js';
+import { filterEagerlyRecordedToolResponses } from './agenticLoop/loopHelpers.js';
 import {
   StreamEventType,
   type StreamEvent,
@@ -103,6 +104,7 @@ export class TurnProcessor {
   private logger = new DebugLogger('llxprt:turn-processor');
   private sendPromise: Promise<void> = Promise.resolve();
   private lastPromptTokenCount: number | null = null;
+  private eagerlyRecordedToolResponseCallIds = new Set<string>();
 
   constructor(
     private readonly runtimeContext: AgentRuntimeContext,
@@ -331,6 +333,14 @@ export class TurnProcessor {
     } catch {
       // If a previous send failed, sendPromise can reject; callers that just need
       // a "best effort" flush should not fail provider switching.
+    }
+  }
+
+  markToolResponsesRecorded(callIds: readonly string[]): void {
+    for (const callId of callIds) {
+      if (typeof callId === 'string' && callId.length > 0) {
+        this.eagerlyRecordedToolResponseCallIds.add(callId);
+      }
     }
   }
 
@@ -769,12 +779,26 @@ export class TurnProcessor {
     const contents = Array.isArray(userContent) ? userContent : [userContent];
     const matcher = this.makePositionMatcher();
     for (const content of contents) {
-      const turnKey = this.historyService.generateTurnKey();
-      const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-      this.historyService.add(
-        ContentConverters.toIContent(content, idGen, matcher, turnKey),
-        currentModel,
+      const filtered = filterEagerlyRecordedToolResponses(
+        content,
+        this.eagerlyRecordedToolResponseCallIds,
       );
+      if (filtered.content !== null) {
+        const turnKey = this.historyService.generateTurnKey();
+        const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+        this.historyService.add(
+          ContentConverters.toIContent(
+            filtered.content,
+            idGen,
+            matcher,
+            turnKey,
+          ),
+          currentModel,
+        );
+      }
+      for (const callId of filtered.matchedCallIds) {
+        this.eagerlyRecordedToolResponseCallIds.delete(callId);
+      }
     }
   }
 

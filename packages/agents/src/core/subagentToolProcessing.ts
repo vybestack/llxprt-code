@@ -182,12 +182,17 @@ export function resolveToolName(
 // ---------------------------------------------------------------------------
 
 /**
- * Codex/GPT-5.5 sometimes returns the literal string "Null" as the
- * final_message. Treat it as a placeholder so the proper completion
- * message is used instead (Issue #2410, Mode 2).
+ * Codex/GPT-5.5 sometimes returns a literal placeholder string such as "Null"
+ * as the final_message. Treat these as empty so the proper completion message
+ * is used instead (Issue #2410, Mode 2).
  */
+const NULLISH_FINAL_MESSAGE_TOKENS: ReadonlySet<string> = new Set([
+  'null',
+  'undefined',
+]);
+
 function isNullishFinalMessageText(value: string): boolean {
-  return value.trim().toLowerCase() === 'null';
+  return NULLISH_FINAL_MESSAGE_TOKENS.has(value.trim().toLowerCase());
 }
 
 export function finalizeOutput(output: OutputObject): void {

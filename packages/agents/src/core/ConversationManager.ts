@@ -144,19 +144,34 @@ export class ConversationManager {
    * @param modelOutput - Model's output Content array
    * @param automaticFunctionCallingHistory - Optional AFC history from Gemini SDK
    * @param usageMetadata - Optional usage statistics
+   * @param options - Optional overrides for user-input characteristics when the
+   *   recorded `userInput` has been filtered/transformed and no longer reflects
+   *   the original input shape (for example after eagerly recorded tool
+   *   responses are removed before history finalization).
    */
   recordHistory(
     userInput: Content | Content[],
     modelOutput: Content[],
     automaticFunctionCallingHistory?: Content[],
     usageMetadata?: UsageStats | null,
+    options?: {
+      userInputWasArray?: boolean;
+      userInputWasFunctionResponse?: boolean;
+    },
   ): void {
     const newHistoryEntries: IContent[] = [];
 
     // Capture user input characteristics for model turn logic
-    const userInputWasArray = Array.isArray(userInput);
-    const userInputWasFunctionResponse =
-      !userInputWasArray && isFunctionResponse(userInput);
+    const userInputWasArray =
+      options?.userInputWasArray ?? Array.isArray(userInput);
+    let userInputWasFunctionResponse: boolean;
+    if (options?.userInputWasFunctionResponse !== undefined) {
+      userInputWasFunctionResponse = options.userInputWasFunctionResponse;
+    } else if (Array.isArray(userInput)) {
+      userInputWasFunctionResponse = false;
+    } else {
+      userInputWasFunctionResponse = isFunctionResponse(userInput);
+    }
     const hasAfc = !!(
       automaticFunctionCallingHistory &&
       automaticFunctionCallingHistory.length > 0

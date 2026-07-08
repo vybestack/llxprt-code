@@ -297,7 +297,7 @@ describe('AgenticLoop with caller display callbacks', () => {
     expect(completedEvents[0].completed[0].status).toBe('success');
   });
 
-  it('forwards onAllToolCallsComplete with the SAME batch as the tools_complete event, AFTER history recording', async () => {
+  it('forwards onAllToolCallsComplete with the SAME batch as the tools_complete event, BEFORE next-turn history finalization', async () => {
     const tool = new MockTool({ name: 'complete_cb_tool' });
     tool.executeFn.mockResolvedValue({
       llmContent: 'ok',
@@ -325,7 +325,8 @@ describe('AgenticLoop with caller display callbacks', () => {
     const displayCompletions: CompletedToolCall[][] = [];
     let onCompleteCallCount = 0;
     // Capture how many recorded-tool-call batches exist WHEN the callback fires,
-    // so we can assert the callback fires AFTER history recording.
+    // so we can assert parent-loop callbacks fire before next-turn history
+    // finalization.
     let recordedCountAtCallback = -1;
 
     const loop = new AgenticLoop({
@@ -349,9 +350,10 @@ describe('AgenticLoop with caller display callbacks', () => {
 
     // The callback fired exactly once (one turn with completed tools).
     expect(onCompleteCallCount).toBe(1);
-    // History was recorded BEFORE the callback (best-effort recordCompletedToolCalls
-    // ran before the callback).
-    expect(recordedCountAtCallback).toBe(1);
+    // Completed-tool callbacks fire before any next-turn history finalization in
+    // the parent loop; eager durability is scoped to subagents, so no completed
+    // tool batch is pre-recorded here.
+    expect(recordedCountAtCallback).toBe(0);
 
     // The callback received the SAME batch as the tools_complete event.
     const completedEvents = events.filter(isToolsComplete);

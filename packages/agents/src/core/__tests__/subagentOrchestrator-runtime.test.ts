@@ -17,6 +17,8 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubAgentScope } from '../subagent.js';
 import { type SubAgentScope as SubAgentScopeInstance } from '../subagent.js';
 import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import * as runtimeModule from '@vybestack/llxprt-code-providers/runtime.js';
+import * as activationExecutor from '../../api/providerActivationExecutor.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import {
   makeForegroundConfig,
@@ -140,6 +142,60 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     expect(
       loaderArgs.profile.contentGeneratorConfig.contentGeneratorFactory,
     ).toBeUndefined();
+  });
+
+  it('cleans up the isolated runtime when launch fails after runtime assembly', async () => {
+    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
+    const loadProfile = vi.fn().mockResolvedValue(profile);
+    const cleanup = vi.fn().mockResolvedValue(undefined);
+    const activate = vi.fn().mockResolvedValue(undefined);
+    const createIsolatedRuntimeContextSpy = vi
+      .spyOn(runtimeModule, 'createIsolatedRuntimeContext')
+      .mockReturnValue({
+        runtimeId: 'isolated-runtime',
+        metadata: { source: 'test' },
+        settingsService: undefined,
+        config: makeForegroundConfig(),
+        providerManager: {},
+        oauthManager: {},
+        activate,
+        cleanup,
+      } as unknown as ReturnType<
+        typeof runtimeModule.createIsolatedRuntimeContext
+      >);
+    const executeProviderActivationSpy = vi
+      .spyOn(activationExecutor, 'executeProviderActivation')
+      .mockResolvedValue({ authFailed: false, infoMessages: [] });
+
+    const runtimeBundle = createRuntimeBundle('post-bundle-failure');
+    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+    const scopeFactory = vi
+      .fn<typeof SubAgentScope.create>()
+      .mockRejectedValue(new Error('scope creation failed'));
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager: { loadSubagent } as unknown as SubagentManager,
+      profileManager: { loadProfile } as unknown as ProfileManager,
+      foregroundConfig: makeForegroundConfig(),
+      scopeFactory,
+      runtimeLoader,
+    });
+
+    try {
+      await expect(
+        orchestrator.launch({
+          name: subagentConfig.name,
+          runConfig,
+        }),
+      ).rejects.toThrow('scope creation failed');
+
+      expect(cleanup).toHaveBeenCalledTimes(1);
+      expect(activate).toHaveBeenCalledTimes(1);
+      expect(executeProviderActivationSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      createIsolatedRuntimeContextSpy.mockRestore();
+      executeProviderActivationSpy.mockRestore();
+    }
   });
 
   it('seeds default disabled tools into subagent runtime settings when profile omits disabled tools', async () => {

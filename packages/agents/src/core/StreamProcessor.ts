@@ -76,6 +76,8 @@ import {
   extractResponseText,
   validateStreamCompletion,
   recordHistoryWithUsage,
+  prepareHistoryUserInput,
+  clearMatchedEagerToolResponseCallIds,
   trackPromptTokens,
   isMissingFinishReason,
   type StreamAccumulator,
@@ -108,6 +110,7 @@ interface BeforeModelHookFireResult {
 
 export class StreamProcessor {
   private logger = new DebugLogger('llxprt:gemini:stream-processor');
+  private eagerlyRecordedToolResponseCallIds = new Set<string>();
 
   constructor(
     private readonly runtimeContext: AgentRuntimeContext,
@@ -121,6 +124,14 @@ export class StreamProcessor {
     private readonly historyService: HistoryService,
     private readonly generationConfig: GenerateContentConfig,
   ) {}
+
+  markToolResponsesRecorded(callIds: readonly string[]): void {
+    for (const callId of callIds) {
+      if (typeof callId === 'string' && callId.length > 0) {
+        this.eagerlyRecordedToolResponseCallIds.add(callId);
+      }
+    }
+  }
 
   /** Resolves the provider, sends the request with retry, and returns a response stream. */
   async makeApiCallAndProcessStream(
@@ -874,15 +885,28 @@ export class StreamProcessor {
     consolidatedParts: Part[],
     allChunks: GenerateContentResponse[],
   ): Promise<void> {
-    await recordHistoryWithUsage({
+    const preparedHistoryUserInput = prepareHistoryUserInput(
       userInput,
-      consolidatedParts,
-      allChunks,
-      conversationManager: this.conversationManager,
-      historyService: this.historyService,
-      compressionHandler: this.compressionHandler,
-      logger: this.logger,
-    });
+      this.eagerlyRecordedToolResponseCallIds,
+    );
+
+    try {
+      await recordHistoryWithUsage({
+        userInput: preparedHistoryUserInput.historyUserInput,
+        consolidatedParts,
+        allChunks,
+        conversationManager: this.conversationManager,
+        historyService: this.historyService,
+        compressionHandler: this.compressionHandler,
+        logger: this.logger,
+        userInputFlags: preparedHistoryUserInput.userInputFlags,
+      });
+    } finally {
+      clearMatchedEagerToolResponseCallIds(
+        preparedHistoryUserInput.filteredResults,
+        this.eagerlyRecordedToolResponseCallIds,
+      );
+    }
   }
 
   /**

@@ -466,3 +466,57 @@ function ensureNoTrailingAssistant(
   }
   return messages;
 }
+
+/**
+ * Removes empty / whitespace-only text blocks from message content arrays.
+ *
+ * Strict Anthropic-compatible endpoints (e.g. z.ai) reject a request when a
+ * message content array contains a zero-length text block — z.ai returns 400
+ * code 1213 "The prompt parameter was not received normally" (Issue #2410).
+ * Empty text blocks can appear alongside a tool_result block in a user turn
+ * (an assistant tool-call turn with no accompanying prose still yields a text
+ * part downstream). They carry no information, so dropping them is safe.
+ *
+ * If removing empty text blocks would leave a message with no content blocks,
+ * the empty content array is replaced with the same placeholder strings used by
+ * sanitizeEmptyMessages so strict endpoints never receive a zero-length text
+ * payload in the final message. String content is left untouched.
+ */
+export function stripEmptyTextBlocks(
+  messages: AnthropicMessage[],
+  logger: { debug: (fn: () => string) => void },
+): AnthropicMessage[] {
+  let strippedCount = 0;
+  const result = messages.map((message) => {
+    if (!Array.isArray(message.content)) {
+      return message;
+    }
+    const filtered = message.content.filter((block: AnthropicMessageBlock) => {
+      if (block.type === 'text') {
+        return block.text.trim() !== '';
+      }
+      return true;
+    });
+    if (filtered.length === message.content.length) {
+      return message;
+    }
+    if (filtered.length === 0) {
+      return {
+        ...message,
+        content:
+          message.role === 'assistant'
+            ? '[No content generated]'
+            : '[Empty message]',
+      };
+    }
+    strippedCount += message.content.length - filtered.length;
+    return { ...message, content: filtered };
+  });
+  if (strippedCount > 0) {
+    logger.debug(
+      () =>
+        `[AnthropicProvider] Stripped ${strippedCount} empty text block(s) from request messages`,
+    );
+  }
+  return result;
+}

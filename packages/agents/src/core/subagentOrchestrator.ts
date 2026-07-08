@@ -8,12 +8,24 @@ import { randomUUID } from 'node:crypto';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import {
-  isLoadBalancerProfile,
+  isInternalSettingKey,
   type Profile,
   type ProfileManager,
 } from '@vybestack/llxprt-code-settings';
+import {
+  resolveRuntimeProfile,
+  buildActivationCliOverrides,
+  type RuntimeProfileResolution,
+} from './subagentProfileResolution.js';
+import {
+  expandTilde,
+  getNumberSetting,
+  getStringSetting,
+  getStringArraySetting,
+} from './subagentSettingsAccess.js';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import { SubAgentScope } from './subagent.js';
+import type { SubAgentScope as SubAgentScopeInstance } from './subagent.js';
 import type {
   ModelConfig,
   PromptConfig,
@@ -23,7 +35,7 @@ import type {
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import fs from 'node:fs';
 import path from 'node:path';
-import { homedir } from 'node:os';
+
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
@@ -47,6 +59,7 @@ import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environ
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import {
   createIsolatedRuntimeContext,
+  runWithRuntimeScope,
   type IsolatedRuntimeContextHandle,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import { registerProvidersOntoManager } from '../api/createAgent.js';
@@ -58,10 +71,6 @@ type RuntimeLoader = (
 ) => Promise<AgentRuntimeLoaderResult>;
 
 type ScopeFactory = typeof SubAgentScope.create;
-
-type RuntimeProfileResolution = {
-  effectiveProfile: Profile;
-};
 
 const createAbortError = (message: string): Error => {
   const error = new Error(message);
@@ -200,7 +209,10 @@ export class SubagentOrchestrator {
       signal,
       'Subagent launch aborted while loading profile.',
     );
-    const runtimeProfile = await this.resolveRuntimeProfile(profile);
+    const runtimeProfile = await resolveRuntimeProfile(
+      profile,
+      this.options.profileManager,
+    );
     this.throwIfAborted(
       signal,
       'Subagent launch aborted while resolving runtime profile.',
@@ -210,7 +222,7 @@ export class SubagentOrchestrator {
       subagent.systemPrompt,
       request.behaviourPrompts,
     );
-    const modelConfig = this.buildModelConfig(runtimeProfile.effectiveProfile);
+    const modelConfig = this.buildModelConfig(runtimeProfile.primaryProfile);
     const runConfig = this.buildRunConfig(profile, request.runConfig);
     this.throwIfAborted(
       signal,
@@ -222,36 +234,48 @@ export class SubagentOrchestrator {
       { subagent, runtimeProfile, modelConfig, agentRuntimeId },
       signal,
     );
-    this.throwIfAborted(
-      signal,
-      'Subagent launch aborted after runtime assembly completed.',
-    );
 
-    const scope = await this.createScopeWithEnvironment(
-      subagent,
-      promptConfig,
-      modelConfig,
-      runConfig,
-      request,
-      runtimeResult,
-      signal,
-    );
-    this.throwIfAborted(signal, 'Subagent launch aborted before completion.');
+    let scope: SubAgentScopeInstance | undefined;
+    try {
+      this.throwIfAborted(
+        signal,
+        'Subagent launch aborted after runtime assembly completed.',
+      );
 
-    const agentId =
-      typeof scope.getAgentId === 'function'
-        ? scope.getAgentId()
-        : `${subagent.name}-${agentRuntimeId}`;
+      scope = await this.createScopeWithEnvironment(
+        subagent,
+        promptConfig,
+        modelConfig,
+        runConfig,
+        request,
+        runtimeResult,
+        signal,
+      );
+      this.throwIfAborted(signal, 'Subagent launch aborted before completion.');
 
-    return {
-      agentId,
-      scope,
-      prompt: promptConfig,
-      profile,
-      config: subagent,
-      runtime: runtimeResult,
-      dispose: this.buildScopeDispose(scope, runtimeResult, isolatedHandle),
-    };
+      const agentId =
+        typeof scope.getAgentId === 'function'
+          ? scope.getAgentId()
+          : `${subagent.name}-${agentRuntimeId}`;
+
+      return {
+        agentId,
+        scope,
+        prompt: promptConfig,
+        profile,
+        config: subagent,
+        runtime: runtimeResult,
+        dispose: this.buildScopeDispose(scope, runtimeResult, isolatedHandle),
+      };
+    } catch (error) {
+      if (scope !== undefined) {
+        await this.buildScopeDispose(scope, runtimeResult, isolatedHandle)();
+      } else {
+        disposeHistoryLike(runtimeResult.history);
+        await isolatedHandle.cleanup();
+      }
+      throw error;
+    }
   }
 
   private throwIfAborted(signal: AbortSignal | undefined, message: string) {
@@ -324,7 +348,7 @@ export class SubagentOrchestrator {
   }
 
   private buildRunConfig(profile: Profile, custom?: RunConfig): RunConfig {
-    const profileMaxTime = this.getNumberSetting(profile.ephemeralSettings, [
+    const profileMaxTime = getNumberSetting(profile.ephemeralSettings, [
       'subagent.max_time_minutes',
       'max_time_minutes',
     ]);
@@ -334,7 +358,7 @@ export class SubagentOrchestrator {
         custom?.max_time_minutes ?? profileMaxTime ?? Number.POSITIVE_INFINITY,
     };
 
-    const profileMaxTurns = this.getNumberSetting(profile.ephemeralSettings, [
+    const profileMaxTurns = getNumberSetting(profile.ephemeralSettings, [
       'maxTurnsPerPrompt',
     ]);
 
@@ -373,39 +397,6 @@ export class SubagentOrchestrator {
     return undefined;
   }
 
-  private async resolveRuntimeProfile(
-    profile: Profile,
-  ): Promise<RuntimeProfileResolution> {
-    if (!isLoadBalancerProfile(profile)) {
-      return { effectiveProfile: profile };
-    }
-
-    if (profile.profiles.length === 0) {
-      throw new Error(
-        'Load balancer subagent profile must reference at least one profile.',
-      );
-    }
-
-    // Validate that referenced sub-profiles exist and are not nested
-    // load balancers, but preserve the load-balancer profile as the
-    // effective profile so its failover/round-robin logic is used.
-    const subProfiles = await Promise.all(
-      profile.profiles.map(async (name) => ({
-        name,
-        profile: await this.options.profileManager.loadProfile(name),
-      })),
-    );
-    for (const { name, profile: subProfile } of subProfiles) {
-      if (isLoadBalancerProfile(subProfile)) {
-        throw new Error(
-          `Load balancer subagent profile cannot use nested load balancer profile '${name}'.`,
-        );
-      }
-    }
-
-    return { effectiveProfile: profile };
-  }
-
   private baseSessionId(): string {
     const { foregroundConfig } = this.options;
     if (typeof foregroundConfig.getSessionId === 'function') {
@@ -426,10 +417,8 @@ export class SubagentOrchestrator {
     profile: Profile,
     modelConfig: ModelConfig,
   ): ContentGeneratorConfig {
-    const authKey = this.getStringSetting(profile.ephemeralSettings, [
-      'auth-key',
-    ]);
-    const proxy = this.getStringSetting(profile.ephemeralSettings, [
+    const authKey = getStringSetting(profile.ephemeralSettings, ['auth-key']);
+    const proxy = getStringSetting(profile.ephemeralSettings, [
       'proxy',
       'proxy-url',
     ]);
@@ -442,12 +431,12 @@ export class SubagentOrchestrator {
   }
 
   private createSettingsSnapshot(profile: Profile): ReadonlySettingsSnapshot {
-    const allowed = this.getStringArraySetting(profile.ephemeralSettings, [
+    const allowed = getStringArraySetting(profile.ephemeralSettings, [
       'tools.allowed',
       'tools_allowed',
     ]);
     const disabled = this.mergeDefaultDisabledTools(
-      this.getStringArraySetting(profile.ephemeralSettings, [
+      getStringArraySetting(profile.ephemeralSettings, [
         'tools.disabled',
         'disabled-tools',
       ]),
@@ -455,16 +444,16 @@ export class SubagentOrchestrator {
     );
 
     return {
-      compressionThreshold: this.getNumberSetting(profile.ephemeralSettings, [
+      compressionThreshold: getNumberSetting(profile.ephemeralSettings, [
         'compression-threshold',
       ]),
-      contextLimit: this.getNumberSetting(profile.ephemeralSettings, [
+      contextLimit: getNumberSetting(profile.ephemeralSettings, [
         'context-limit',
       ]),
-      preserveThreshold: this.getNumberSetting(profile.ephemeralSettings, [
+      preserveThreshold: getNumberSetting(profile.ephemeralSettings, [
         'compression-preserve-threshold',
       ]),
-      toolFormatOverride: this.getStringSetting(profile.ephemeralSettings, [
+      toolFormatOverride: getStringSetting(profile.ephemeralSettings, [
         'tool-format',
       ]),
       tools: {
@@ -489,9 +478,7 @@ export class SubagentOrchestrator {
       service.set(`providers.${provider}.maxTokens`, maxTokens);
     }
 
-    const baseUrl = this.getStringSetting(profile.ephemeralSettings, [
-      'base-url',
-    ]);
+    const baseUrl = getStringSetting(profile.ephemeralSettings, ['base-url']);
     if (baseUrl) {
       service.set(`providers.${provider}.base-url`, baseUrl);
     } else {
@@ -504,25 +491,23 @@ export class SubagentOrchestrator {
     provider: string,
     profile: Profile,
   ): void {
-    const authKey = this.getStringSetting(profile.ephemeralSettings, [
-      'auth-key',
-    ]);
+    const authKey = getStringSetting(profile.ephemeralSettings, ['auth-key']);
     if (authKey) {
       service.set('auth-key', authKey);
       service.set(`providers.${provider}.auth-key`, authKey);
     }
-    const authKeyName = this.getStringSetting(profile.ephemeralSettings, [
+    const authKeyName = getStringSetting(profile.ephemeralSettings, [
       'auth-key-name',
     ]);
     if (authKeyName) {
       service.set('auth-key-name', authKeyName);
     }
 
-    const authKeyfile = this.getStringSetting(profile.ephemeralSettings, [
+    const authKeyfile = getStringSetting(profile.ephemeralSettings, [
       'auth-keyfile',
     ]);
     if (authKeyfile) {
-      const expandedKeyfile = authKeyfile.replace(/^~(?=$|[\\/])/, homedir());
+      const expandedKeyfile = expandTilde(authKeyfile);
       service.set('auth-keyfile', expandedKeyfile);
       service.set(`providers.${provider}.auth-keyfile`, expandedKeyfile);
       const authKey = service.get(`providers.${provider}.auth-key`);
@@ -564,22 +549,21 @@ export class SubagentOrchestrator {
     service: SettingsService,
     profile: Profile,
   ): void {
-    const contextLimit = this.getNumberSetting(profile.ephemeralSettings, [
+    const contextLimit = getNumberSetting(profile.ephemeralSettings, [
       'context-limit',
     ]);
     if (contextLimit !== undefined) {
       service.set('context-limit', contextLimit);
     }
 
-    const compressionThreshold = this.getNumberSetting(
-      profile.ephemeralSettings,
-      ['compression-threshold'],
-    );
+    const compressionThreshold = getNumberSetting(profile.ephemeralSettings, [
+      'compression-threshold',
+    ]);
     if (compressionThreshold !== undefined) {
       service.set('compression-threshold', compressionThreshold);
     }
 
-    const preserveThreshold = this.getNumberSetting(profile.ephemeralSettings, [
+    const preserveThreshold = getNumberSetting(profile.ephemeralSettings, [
       'compression-preserve-threshold',
     ]);
     if (preserveThreshold !== undefined) {
@@ -591,14 +575,14 @@ export class SubagentOrchestrator {
     service: SettingsService,
     profile: Profile,
   ): void {
-    const toolFormat = this.getStringSetting(profile.ephemeralSettings, [
+    const toolFormat = getStringSetting(profile.ephemeralSettings, [
       'tool-format',
     ]);
     if (toolFormat) {
       service.set('tool-format-override', toolFormat);
     }
 
-    const allowed = this.getStringArraySetting(profile.ephemeralSettings, [
+    const allowed = getStringArraySetting(profile.ephemeralSettings, [
       'tools.allowed',
       'tools_allowed',
     ]);
@@ -607,7 +591,7 @@ export class SubagentOrchestrator {
     }
 
     const disabled = this.mergeDefaultDisabledTools(
-      this.getStringArraySetting(profile.ephemeralSettings, [
+      getStringArraySetting(profile.ephemeralSettings, [
         'tools.disabled',
         'disabled-tools',
       ]),
@@ -617,11 +601,66 @@ export class SubagentOrchestrator {
       service.set('tools.disabled', disabled);
     }
 
-    const userAgent = this.getStringSetting(profile.ephemeralSettings, [
+    const userAgent = getStringSetting(profile.ephemeralSettings, [
       'user-agent',
     ]);
     if (userAgent) {
       service.set('user-agent', userAgent);
+    }
+  }
+
+  /**
+   * Ephemeral keys that are applied through dedicated, provider-scoped or
+   * transformed paths (auth, base-url, model params, tool governance). These
+   * are skipped by {@link populateGeneralEphemerals} so it does not clobber the
+   * specialized handling with a raw global copy.
+   */
+  private static readonly SPECIALLY_HANDLED_EPHEMERAL_KEYS: ReadonlySet<string> =
+    new Set([
+      'auth-key',
+      'auth-keyfile',
+      'auth-key-name',
+      'base-url',
+      'tool-format',
+      'tools.allowed',
+      'tools_allowed',
+      'tools.disabled',
+      'disabled-tools',
+    ]);
+
+  /**
+   * Copies all remaining profile ephemeral settings onto the subagent's
+   * settings service as GLOBAL settings, mirroring the foreground profile-load
+   * path (providers/runtime/profileApplication.ts `applyNonAuthEphemerals`).
+   *
+   * Without this, only a hand-picked subset (compression, tool governance,
+   * auth) reached the subagent runtime, so settings such as `reasoning.*`,
+   * `streaming`, `emojifilter`, etc. were silently dropped. Those ephemerals
+   * feed `buildEphemeralsSnapshot` → the provider invocation's
+   * modelBehavior/cliSettings, so dropping them produced malformed provider
+   * requests (e.g. the z.ai endpoint rejected reasoning-less/wrong-shaped GLM
+   * requests with error 1213). Keys handled by dedicated paths (auth, base-url,
+   * tool governance) and internal-only keys are skipped.
+   */
+  private populateGeneralEphemerals(
+    service: SettingsService,
+    profile: Profile,
+  ): void {
+    const ephemerals = profile.ephemeralSettings as
+      | Record<string, unknown>
+      | undefined;
+    if (ephemerals === undefined) {
+      return;
+    }
+    for (const [key, value] of Object.entries(ephemerals)) {
+      if (
+        SubagentOrchestrator.SPECIALLY_HANDLED_EPHEMERAL_KEYS.has(key) ||
+        isInternalSettingKey(key)
+      ) {
+        continue;
+      }
+      // null means "explicitly unset" — clear the key rather than storing null.
+      service.set(key, value === null ? undefined : value);
     }
   }
 
@@ -634,62 +673,13 @@ export class SubagentOrchestrator {
     service.setCurrentProfileName(profileName);
     service.set('activeProvider', provider);
     service.set(`providers.${provider}.model`, profile.model);
+    // Copy the general ephemerals FIRST so the dedicated populate* helpers below
+    // (which apply provider-scoped / transformed values) take precedence.
+    this.populateGeneralEphemerals(service, profile);
     this.populateProviderSettings(service, provider, profile);
     this.populateAuthSettings(service, provider, profile);
     this.populateCompressionSettings(service, profile);
     this.populateToolAndMiscSettings(service, profile);
-  }
-
-  private getNumberSetting(
-    settings: Profile['ephemeralSettings'],
-    keys: string[],
-  ): number | undefined {
-    for (const key of keys) {
-      const value = this.getSetting(settings, key);
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        return value;
-      }
-      if (typeof value === 'string' && value.trim().length > 0) {
-        const parsed = Number(value);
-        if (Number.isFinite(parsed)) {
-          return parsed;
-        }
-      }
-    }
-    return undefined;
-  }
-
-  private getStringSetting(
-    settings: Profile['ephemeralSettings'],
-    keys: string[],
-  ): string | undefined {
-    for (const key of keys) {
-      const value = this.getSetting(settings, key);
-      if (typeof value === 'string' && value.trim().length > 0) {
-        return value;
-      }
-    }
-    return undefined;
-  }
-
-  private getStringArraySetting(
-    settings: Profile['ephemeralSettings'],
-    keys: string[],
-  ): string[] | undefined {
-    for (const key of keys) {
-      const value = this.getSetting(settings, key);
-      if (Array.isArray(value)) {
-        return value.map(String);
-      }
-    }
-    return undefined;
-  }
-
-  private getSetting(
-    settings: Profile['ephemeralSettings'],
-    key: string,
-  ): unknown {
-    return (settings as Record<string, unknown>)[key];
   }
 
   private mergeDefaultDisabledTools(
@@ -735,16 +725,14 @@ export class SubagentOrchestrator {
     agentRuntimeId: string,
   ): AgentRuntimeState {
     const sessionId = `${this.baseSessionId()}::${agentRuntimeId}`;
-    const baseUrl = this.getStringSetting(profile.ephemeralSettings, [
-      'base-url',
-    ]);
+    const baseUrl = getStringSetting(profile.ephemeralSettings, ['base-url']);
 
     return createAgentRuntimeState({
       runtimeId: agentRuntimeId,
       provider: profile.provider,
       model: modelConfig.model,
       baseUrl,
-      proxyUrl: this.getStringSetting(profile.ephemeralSettings, [
+      proxyUrl: getStringSetting(profile.ephemeralSettings, [
         'proxy',
         'proxy-url',
       ]),
@@ -770,27 +758,33 @@ export class SubagentOrchestrator {
     isolatedHandle: IsolatedRuntimeContextHandle;
   }> {
     const { runtimeProfile, modelConfig, agentRuntimeId, subagent } = params;
-    const { effectiveProfile } = runtimeProfile;
+    const { effectiveProfile, primaryProfile } = runtimeProfile;
 
     this.throwIfAborted(
       signal,
       'Subagent launch aborted before runtime state.',
     );
+    // Runtime-state, settings-service population, and provider activation are
+    // derived from the concrete primary profile so a load-balancer profile
+    // (provider:'' / model:'') never reaches createAgentRuntimeState, which
+    // rejects an empty provider/model. The load-balancer routing itself is
+    // preserved via the effectiveProfile passed to the behaviour-scoped
+    // settings snapshot below.
     const runtimeState = this.createRuntimeState(
-      effectiveProfile,
+      primaryProfile,
       modelConfig,
       agentRuntimeId,
     );
     const settingsService = createRuntimeSettingsService();
     this.populateSettingsService(
       settingsService,
-      effectiveProfile,
+      primaryProfile,
       subagent.profile,
     );
 
     const isolatedHandle = await this.createIsolatedRuntime(
       settingsService,
-      effectiveProfile,
+      primaryProfile,
       subagent.name,
       agentRuntimeId,
     );
@@ -807,37 +801,76 @@ export class SubagentOrchestrator {
           },
         });
 
+      // Behaviour-scoped settings (tool governance, compression) honour the
+      // effective profile so a load-balancer profile's own ephemerals win.
       const settingsSnapshot = this.createSettingsSnapshot(effectiveProfile);
+      // Credentials/model resolve from the concrete primary profile: a
+      // load-balancer profile carries no auth-key of its own (each referenced
+      // member does).
       const contentGeneratorConfig = this.buildContentGeneratorConfig(
-        effectiveProfile,
+        primaryProfile,
         modelConfig,
       );
       contentGeneratorConfig.providerManager = isolatedHandle.providerManager;
 
-      const toolRegistry: ToolRegistry | undefined =
-        typeof this.options.foregroundConfig.getToolRegistry === 'function'
-          ? this.options.foregroundConfig.getToolRegistry()
-          : undefined;
-
-      const loaderOptions: AgentRuntimeLoaderOptions = {
-        profile: {
-          config: isolatedHandle.config,
-          state: runtimeState,
-          settings: settingsSnapshot,
-          providerRuntime,
-          contentGeneratorConfig,
-          toolRegistry,
-          providerManager: isolatedHandle.providerManager,
-        },
+      const loaderOptions = this.buildRuntimeLoaderOptions({
+        isolatedHandle,
+        runtimeState,
+        settingsSnapshot,
+        providerRuntime,
+        contentGeneratorConfig,
         signal,
-      };
+      });
 
-      const runtimeResult = await this.runtimeLoader(loaderOptions);
+      // Build the runtime (incl. the content generator, which resolves
+      // provider/auth state) INSIDE the isolated runtime's async scope. Like
+      // executeProviderActivation, the loader can consult the ambient
+      // AsyncLocalStorage runtime scope, which handle.activate() leaks via
+      // enterWith. For parallel subagents (the task tool runs tool calls with
+      // Promise.all) the last activation's leaked scope would otherwise win, so
+      // an earlier subagent's content generator could bind to a sibling's
+      // runtime and its requests would never resolve (5-min first-response
+      // timeout). runWithRuntimeScope pins the build to THIS runtime
+      // (Issue #2410 — parallel subagents).
+      const runtimeResult = await runWithRuntimeScope(
+        {
+          runtimeId: isolatedHandle.runtimeId,
+          metadata: isolatedHandle.metadata,
+        },
+        () => this.runtimeLoader(loaderOptions),
+      );
       return { runtimeResult, isolatedHandle };
     } catch (error) {
       await isolatedHandle.cleanup();
       throw error;
     }
+  }
+
+  private buildRuntimeLoaderOptions(params: {
+    isolatedHandle: IsolatedRuntimeContextHandle;
+    runtimeState: AgentRuntimeState;
+    settingsSnapshot: ReadonlySettingsSnapshot;
+    providerRuntime: ProviderRuntimeContext;
+    contentGeneratorConfig: ContentGeneratorConfig;
+    signal?: AbortSignal;
+  }): AgentRuntimeLoaderOptions {
+    const toolRegistry: ToolRegistry | undefined =
+      typeof this.options.foregroundConfig.getToolRegistry === 'function'
+        ? this.options.foregroundConfig.getToolRegistry()
+        : undefined;
+
+    return {
+      profile: {
+        config: params.isolatedHandle.config,
+        state: params.runtimeState,
+        settings: params.settingsSnapshot,
+        providerRuntime: params.providerRuntime,
+        contentGeneratorConfig: params.contentGeneratorConfig,
+        toolRegistry,
+        providerManager: params.isolatedHandle.providerManager,
+      },
+      signal: params.signal,
+    };
   }
 
   /**
@@ -847,18 +880,20 @@ export class SubagentOrchestrator {
    */
   private async createIsolatedRuntime(
     settingsService: SettingsService,
-    effectiveProfile: Profile,
+    primaryProfile: Profile,
     subagentName: string,
     agentRuntimeId: string,
   ): Promise<IsolatedRuntimeContextHandle> {
     // Do NOT pass the foreground config — the isolated runtime must get its
     // own Config so executeProviderActivation operates on the subagent's
-    // provider, not the parent's (Issue #2410).
+    // provider, not the parent's (Issue #2410). The primary profile always
+    // carries a concrete provider/model (a load-balancer profile resolves to
+    // its first referenced member).
     const handle = createIsolatedRuntimeContext({
       runtimeId: agentRuntimeId,
       settingsService,
       messageBus: this.options.messageBus,
-      model: effectiveProfile.model,
+      model: primaryProfile.model,
       metadata: {
         source: 'SubagentOrchestrator',
         subagent: subagentName,
@@ -879,11 +914,35 @@ export class SubagentOrchestrator {
     try {
       await handle.activate();
 
-      await executeProviderActivation(handle.config, {
-        provider: effectiveProfile.provider,
-        model: effectiveProfile.model,
-        modelParams: effectiveProfile.modelParams,
-      });
+      // Run provider activation INSIDE the isolated runtime's async scope.
+      // executeProviderActivation -> switchActiveProvider resolves the active
+      // runtime from AsyncLocalStorage (resolveActiveRuntimeIdentity). Because
+      // handle.activate() binds the scope via enterWith (a persistent, NOT
+      // callback-scoped mutation), two subagents launched in parallel (the task
+      // tool runs tool calls via Promise.all) would clobber each other's
+      // ambient scope, so one subagent would activate against the other's
+      // runtime and hang. Wrapping the activation in runWithRuntimeScope pins it
+      // to THIS subagent's runtime deterministically, regardless of interleaving
+      // (Issue #2410 — parallel subagents).
+      await runWithRuntimeScope(
+        { runtimeId: handle.runtimeId, metadata: handle.metadata },
+        () =>
+          executeProviderActivation(handle.config, {
+            provider: primaryProfile.provider,
+            model: primaryProfile.model,
+            modelParams: primaryProfile.modelParams,
+            // Carry the profile's credential/endpoint ephemerals into the
+            // activation so the isolated provider talks to the RIGHT endpoint
+            // with the RIGHT key. Without base-url, a profile like zai
+            // (provider 'anthropic', base-url https://api.z.ai/api/anthropic)
+            // would fall back to the provider default (api.anthropic.com) and
+            // its z.ai key would never authenticate — the request stalls until
+            // the 5-minute first-response timeout and the subagent returns an
+            // empty result. auth-key-name/auth-keyfile are resolved the same
+            // way the CLI bootstrap applies them (Issue #2410).
+            cliOverrides: buildActivationCliOverrides(primaryProfile),
+          }),
+      );
     } catch (error) {
       await handle.cleanup();
       throw error;

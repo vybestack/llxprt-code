@@ -255,6 +255,16 @@ describe('subagentToolProcessing', () => {
       finalizeOutput(output);
       expect(output.final_message).toContain('Task completed successfully');
     });
+
+    it('should preserve a legitimate "none" final_message', () => {
+      const output: OutputObject = {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+        final_message: 'none',
+      };
+      finalizeOutput(output);
+      expect(output.final_message).toBe('none');
+    });
   });
 
   // --- handleEmitValueCall ---

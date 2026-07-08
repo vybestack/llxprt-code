@@ -325,11 +325,18 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   override getCurrentModel(): string {
-    // Always return from getDefaultModel - providers must not cache model state
-    // @plan PLAN-20251023-STATELESS-HARDENING.P08 @requirement REQ-SP4-002
-    const defaultModel = this.getDefaultModel();
-    this.getLogger().debug(() => `Using default model: ${defaultModel}`);
-    return defaultModel;
+    // Resolve the model from the active call context / settings (via getModel),
+    // NOT a hard-coded default. Model-sensitive logic such as detectToolFormat()
+    // depends on the REAL per-call model: e.g. a GLM model (glm-*) served over
+    // this Anthropic-compatible provider must map to the 'qwen' tool format.
+    // Returning the default here made detectToolFormat() always see
+    // 'claude-opus-4-8', so GLM requests were serialized with 'anthropic' tool
+    // format and rejected by the z.ai endpoint with error 1213 (Issue #2410).
+    // getModel() prefers activeCallContext.resolved.model and falls back through
+    // settings to getDefaultModel(), so this stays stateless (no cached model).
+    const model = this.getModel();
+    this.getLogger().debug(() => `Resolved current model: ${model}`);
+    return model;
   }
 
   override getDefaultModel(): string {
