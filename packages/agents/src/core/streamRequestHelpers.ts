@@ -341,14 +341,14 @@ const systemInstructionLogger = new DebugLogger(
 function extractPartsText(parts: unknown[]): string {
   return parts
     .map((part) => {
-      if (typeof part === 'string') return part;
+      if (typeof part === 'string') return part.trim();
       if (
         part !== null &&
         typeof part === 'object' &&
         'text' in part &&
         typeof part.text === 'string'
       ) {
-        return part.text;
+        return part.text.trim();
       }
       // Unrecognized part type — warn so malformed parts in a systemInstruction
       // (which carries the subagent persona, issue #2410) are not silently lost.
