@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,9 +9,17 @@
  *
  * Issue #2443: Permanently remove google_web_search and google_web_fetch.
  * These broken client tools are superseded by exa_web_search and
- * direct_web_fetch. This test uses the `in` operator (no type assertions,
- * per dev-docs/RULES.md) to assert the removed symbols no longer exist
- * on the tools package public surface.
+ * direct_web_fetch.
+ *
+ * Two kinds of guard are used:
+ *  - `in` operator checks for symbols that previously existed as *runtime*
+ *    values on the public surface (classes and constants). Type-only exports
+ *    and internal symbols are erased at compile time, so the `in` operator is
+ *    meaningless for them and is intentionally not used.
+ *  - dynamic-import rejection for the source modules themselves. If the module
+ *    no longer resolves, none of its symbols (value, type, or internal) can be
+ *    re-exported, so this is the effective guard for the removed
+ *    GoogleWebFetchToolParams type and GoogleWebSearchToolInvocation class.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -27,14 +35,6 @@ describe('Removed Google client tools', () => {
     expect('GoogleWebFetchTool' in ToolsNamespace).toBe(false);
   });
 
-  it('does not export GoogleWebFetchToolParams', () => {
-    expect('GoogleWebFetchToolParams' in ToolsNamespace).toBe(false);
-  });
-
-  it('does not export GoogleWebSearchToolInvocation', () => {
-    expect('GoogleWebSearchToolInvocation' in ToolsNamespace).toBe(false);
-  });
-
   it('does not export GOOGLE_WEB_SEARCH_TOOL constant', () => {
     expect('GOOGLE_WEB_SEARCH_TOOL' in TypesNamespace).toBe(false);
   });
@@ -43,12 +43,31 @@ describe('Removed Google client tools', () => {
     expect('GOOGLE_WEB_FETCH_TOOL' in TypesNamespace).toBe(false);
   });
 
-  it('does not re-export GOOGLE_WEB_SEARCH_TOOL from package root', () => {
+  it('does not re-export the constants from the package root', () => {
     expect('GOOGLE_WEB_SEARCH_TOOL' in ToolsNamespace).toBe(false);
+    expect('GOOGLE_WEB_FETCH_TOOL' in ToolsNamespace).toBe(false);
   });
 
-  it('does not re-export GOOGLE_WEB_FETCH_TOOL from package root', () => {
-    expect('GOOGLE_WEB_FETCH_TOOL' in ToolsNamespace).toBe(false);
+  // The source modules must no longer resolve. This is the effective guard
+  // for the removed type-only export (GoogleWebFetchToolParams) and the
+  // internal invocation class (GoogleWebSearchToolInvocation): neither
+  // existed as a runtime property, so the modules' absence is the real check.
+  it('does not ship the google-web-search module', async () => {
+    await expect(import('../tools/google-web-search.js')).rejects.toThrow(
+      /Cannot find module|Failed to (?:resolve|load)/i,
+    );
+  });
+
+  it('does not ship the google-web-fetch module', async () => {
+    await expect(import('../tools/google-web-fetch.js')).rejects.toThrow(
+      /Cannot find module|Failed to (?:resolve|load)/i,
+    );
+  });
+
+  it('does not ship the google-web-search-invocation module', async () => {
+    await expect(
+      import('../tools/google-web-search-invocation.js'),
+    ).rejects.toThrow(/Cannot find module|Failed to (?:resolve|load)/i);
   });
 });
 
