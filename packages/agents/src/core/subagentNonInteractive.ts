@@ -452,16 +452,13 @@ export async function dispatchNonInteractiveTurnResult(
  * provider history. This helper centralizes the corrected guard so it can
  * be unit-tested in isolation.
  */
-export function shouldStopNonInteractiveLoop(
-  nextMessages: Content[] | null,
-): boolean {
-  return nextMessages === null || nextMessages.length === 0;
-}
-
 /**
  * Type guard: returns true when nextMessages is non-null AND non-empty.
- * Issue #2410: the inverse of shouldStopNonInteractiveLoop, but as a proper
- * type guard so the caller gets TS narrowing to Content[] without a cast.
+ * Issue #2410: `processFunctionCalls` can return `[]` (an empty, truthy
+ * array) when all tool calls are hook-restricted. The old guard
+ * `!nextMessages` only caught `null`/`undefined` — an empty array slipped
+ * through (`![] === false`) and propagated a zero-part user message into
+ * provider history. This type guard centralizes the corrected check.
  */
 export function hasNonInteractiveMessages(
   nextMessages: Content[] | null,
