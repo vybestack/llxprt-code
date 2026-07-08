@@ -20,6 +20,17 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+// Replace the frozen `node:fs` ESM namespace with a spread copy so individual
+// methods can be spied on. `import * as fs` yields a non-configurable module
+// namespace whose properties `vi.spyOn` cannot redefine; the spread preserves
+// real behavior for every method while making them mockable. Both this file
+// and credential-proxy-server.ts resolve the same mocked module, so a spy here
+// intercepts the server's own fs calls.
+vi.mock('node:fs', async (importActual) => {
+  const actual = await importActual<typeof import('node:fs')>();
+  return { ...actual };
+});
+
 import type { OAuthToken } from '@vybestack/llxprt-code-core';
 import type { ProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 import { ProxySocketClient } from '@vybestack/llxprt-code-core';
@@ -719,6 +730,13 @@ describe('Platform Matrix Tests (Phase 38)', () => {
         const mkdirSpy = vi.spyOn(fs, 'mkdirSync');
         const chmodSpy = vi.spyOn(fs, 'chmodSync');
         const unlinkSpy = vi.spyOn(fs, 'unlinkSync');
+
+        // Confirm the spies were actually installed before relying on
+        // not.toHaveBeenCalled(); otherwise a silently failed spy would make
+        // the guard assertions meaningless.
+        expect(vi.isMockFunction(fs.mkdirSync)).toBe(true);
+        expect(vi.isMockFunction(fs.chmodSync)).toBe(true);
+        expect(vi.isMockFunction(fs.unlinkSync)).toBe(true);
 
         try {
           const pipePath = await server.start();
