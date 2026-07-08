@@ -284,6 +284,10 @@ export function logOutgoingRequest(
   );
 }
 
+const systemInstructionLogger = new DebugLogger(
+  'llxprt:agents:system-instruction',
+);
+
 /**
  * Extracts a plain-text system instruction string from a Gemini
  * `ContentUnion` value (string, Content, Part[], or Part).
@@ -339,10 +343,6 @@ export function extractSystemInstructionText(
   );
   return undefined;
 }
-
-const systemInstructionLogger = new DebugLogger(
-  'llxprt:agents:system-instruction',
-);
 
 function extractPartsText(parts: unknown[]): string {
   return parts
