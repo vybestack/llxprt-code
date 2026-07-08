@@ -134,6 +134,12 @@ function pushMixedContentParts(
 /**
  * Custom createUserContent that properly handles function response arrays.
  * Each response must be a separate Part in the same Content, not nested arrays.
+ *
+ * Issue #2410: When `message` is an empty array, this returns a zero-part
+ * `{ role: 'user', parts: [] }`. Callers MUST check `result.parts.length`
+ * before forwarding to a provider — a zero-part Content will be rejected by
+ * strict endpoints (e.g. z.ai error 1213). `HistoryService.addInternal`
+ * already drops zero-block turns derived from this.
  */
 export function createUserContentWithFunctionResponseFix(
   message: PartListUnion,
@@ -149,9 +155,9 @@ export function createUserContentWithFunctionResponseFix(
   if (Array.isArray(message)) {
     // An empty message array must not produce a fabricated user turn with
     // function-response semantics — `[].every(...)` is vacuously true and
-    // would create `{role:'user', parts:[]}`, which providers like z.ai
-    // reject with HTTP 400 error 1213 (issue #2410). Return a zero-part
-    // user Content so callers can detect and drop it.
+    // would create spurious function-response parts. Return a zero-part
+    // user Content so callers (and HistoryService) can detect and drop it
+    // (issue #2410).
     if (message.length === 0) {
       return { role: 'user' as const, parts };
     }
@@ -371,6 +377,12 @@ export function convertPartListUnionToIContent(input: PartListUnion): IContent {
 
 /**
  * Converts mixed Parts (function calls, responses, text, thoughts) to IContent.
+ *
+ * Issue #2410: When `parts` is empty, this returns a zero-block
+ * `{ speaker: 'human', blocks: [] }`. Callers MUST check `result.blocks.length`
+ * before forwarding to a provider. `HistoryService.addInternal` already drops
+ * zero-block turns, and `ContentConverters.toIContent` logs a warning when it
+ * encounters one.
  */
 export function convertMixedPartsToIContent(parts: Part[]): IContent {
   // An empty parts array would make `[].every(isFunctionResponsePart)`

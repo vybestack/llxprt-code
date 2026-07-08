@@ -40,13 +40,11 @@ describe('issue #2410 – shouldStopNonInteractiveLoop guard', () => {
     expect(shouldStopNonInteractiveLoop(messages)).toBe(false);
   });
 
-  it('returns true for an array with multiple empty-content items', () => {
-    // Edge case: array exists but all items are empty Content objects.
-    // While unlikely in practice, the guard should still stop.
+  it('returns false for a non-empty array even if individual parts are empty', () => {
+    // The guard only checks whether there are ANY messages at all (array
+    // length). It does NOT inspect individual Content.parts — empty-parts
+    // filtering is handled downstream by ContentConverters/HistoryService.
     const messages: Content[] = [{ role: 'user', parts: [] }];
-    // This array has length 1, so the guard says "continue" — the empty-parts
-    // filtering happens downstream in ContentConverters/HistoryService.
-    // The guard only checks whether there are ANY messages at all.
     expect(shouldStopNonInteractiveLoop(messages)).toBe(false);
   });
 });

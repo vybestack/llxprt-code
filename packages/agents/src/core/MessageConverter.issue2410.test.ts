@@ -36,6 +36,22 @@ describe('issue #2410 – empty message arrays must not create zero-part Content
       expect(result.role).toBe('user');
       expect(result.parts).toHaveLength(0);
     });
+
+    it('converts a non-empty function-response array into a user Content with parts', () => {
+      const parts = [
+        {
+          functionResponse: {
+            id: 'call_1',
+            name: 'read_file',
+            response: { output: 'hello' },
+          },
+        },
+      ];
+      const result = createUserContentWithFunctionResponseFix(parts);
+      expect(result.role).toBe('user');
+      expect(result.parts).toHaveLength(1);
+      expect(result.parts[0]).toHaveProperty('functionResponse');
+    });
   });
 
   describe('normalizeToolInteractionInput', () => {
