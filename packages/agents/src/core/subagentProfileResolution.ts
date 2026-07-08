@@ -20,8 +20,9 @@ import { expandTilde, getStringSetting } from './subagentSettingsAccess.js';
  *   load-balancer-scoped ephemerals are preserved downstream).
  * - `primaryProfile` — a CONCRETE profile that always carries a non-empty
  *   `provider`/`model` (for a load balancer this is the first referenced member
- *   profile). Runtime-state and provider-activation, which reject empty
- *   provider/model, are derived from this profile.
+ *   profile). This is used for upfront member validation only; the actual
+ *   load-balancer runtime activates the effective profile so failover is
+ *   preserved.
  *
  * For a standard profile both fields reference the same profile.
  */
@@ -38,8 +39,8 @@ export interface RuntimeProfileResolution {
  * member profiles. This loads and validates every referenced member (rejecting
  * an empty list and nested load balancers), preserves the load-balancer profile
  * as the effective profile so its failover routing survives, and promotes the
- * first concrete member to the primary profile so runtime-state construction
- * (which rejects an empty provider/model) succeeds.
+ * first concrete member to the primary profile for concrete provider/model
+ * validation.
  */
 export async function resolveRuntimeProfile(
   profile: Profile,
@@ -55,32 +56,45 @@ export async function resolveRuntimeProfile(
     );
   }
 
-  let subProfiles: Array<{ name: string; profile: Profile }>;
-  try {
-    subProfiles = await Promise.all(
-      profile.profiles.map(async (name) => ({
-        name,
-        profile: await profileManager.loadProfile(name),
-      })),
-    );
-  } catch (error) {
-    throw new Error(
-      `Failed to resolve load balancer subagent profile member: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  }
+  const subProfiles = await Promise.all(
+    profile.profiles.map(async (name) => {
+      try {
+        return {
+          name,
+          profile: await profileManager.loadProfile(name),
+        };
+      } catch (error) {
+        throw new Error(
+          `Failed to resolve load balancer subagent profile member '${name}': ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }),
+  );
   for (const { name, profile: subProfile } of subProfiles) {
     if (isLoadBalancerProfile(subProfile)) {
       throw new Error(
         `Load balancer subagent profile cannot use nested load balancer profile '${name}'.`,
       );
     }
+    if (subProfile.provider.trim().length === 0) {
+      throw new Error(
+        `Load balancer subagent profile member '${name}' must define a non-empty provider.`,
+      );
+    }
+    if (subProfile.model.trim().length === 0) {
+      throw new Error(
+        `Load balancer subagent profile member '${name}' must define a non-empty model.`,
+      );
+    }
   }
+
+  const { profile: primaryProfile } = subProfiles[0];
 
   return {
     effectiveProfile: profile,
-    primaryProfile: subProfiles[0].profile,
+    primaryProfile,
   };
 }
 

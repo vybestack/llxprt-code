@@ -171,6 +171,7 @@ const runtimeSettingsState = vi.hoisted(() => ({
 }));
 
 vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js', () => ({
+  resetCliProviderInfrastructure: vi.fn(),
   setCliRuntimeContext: vi.fn(
     (
       svc: SettingsService,
@@ -183,6 +184,20 @@ vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js', () => ({
         runtimeId: opts.runtimeId ?? 'mock-runtime',
         metadata: opts.metadata ?? {},
       };
+    },
+  ),
+  registerCliProviderInfrastructure: vi.fn(
+    (
+      mgr: ProviderManager,
+      oauth: unknown,
+      _options?: {
+        messageBus?: unknown;
+        runtimeId?: string;
+        metadata?: Record<string, unknown>;
+      },
+    ) => {
+      runtimeSettingsState.providerManager = mgr;
+      runtimeSettingsState.oauthManager = oauth ?? null;
     },
   ),
 }));
@@ -209,7 +224,10 @@ vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeAccessors.js', () => ({
   })),
   getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
   getCliOAuthManager: vi.fn(() => {
-    throw new Error('OAuthManager missing from runtime registration');
+    if (runtimeSettingsState.oauthManager === null) {
+      throw new Error('OAuthManager missing from runtime registration');
+    }
+    return runtimeSettingsState.oauthManager;
   }),
   getActiveProviderStatus: vi.fn(() => ({ name: null })),
   listProviders: vi.fn(() => []),
@@ -281,7 +299,15 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
       };
     }),
     registerCliProviderInfrastructure: vi.fn(
-      (mgr: ProviderManager, oauth: unknown) => {
+      (
+        mgr: ProviderManager,
+        oauth: unknown,
+        _options?: {
+          messageBus?: unknown;
+          runtimeId?: string;
+          metadata?: Record<string, unknown>;
+        },
+      ) => {
         runtimeSettingsState.providerManager = mgr;
         runtimeSettingsState.oauthManager = oauth ?? null;
       },

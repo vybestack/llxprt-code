@@ -334,9 +334,84 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     });
 
     const loaderArgs = runtimeLoader.mock.calls[0][0];
-    // The subagent's base-url is injected into the runtime state for
-    // provider normalization (this always worked and continues to work).
+    const settingsService = loaderArgs.profile.providerRuntime.settingsService;
+
     expect(loaderArgs.profile.state.baseUrl).toBe(qwenBaseUrl);
+    expect(settingsService.getProviderSettings('qwen')['base-url']).toBe(
+      qwenBaseUrl,
+    );
+  });
+
+  it('keeps GCP profile ephemerals scoped to the subagent settings service', async () => {
+    const previousProject = process.env.GOOGLE_CLOUD_PROJECT;
+    const previousLocation = process.env.GOOGLE_CLOUD_LOCATION;
+
+    try {
+      delete process.env.GOOGLE_CLOUD_PROJECT;
+      delete process.env.GOOGLE_CLOUD_LOCATION;
+
+      const vertexProfile: Profile = {
+        version: 1,
+        provider: 'gemini',
+        model: 'gemini-2.5-pro',
+        modelParams: {},
+        ephemeralSettings: {
+          GOOGLE_CLOUD_PROJECT: 'subagent-project',
+          GOOGLE_CLOUD_LOCATION: 'us-central1',
+        },
+      };
+      const vertexSubagent: SubagentConfig = {
+        name: 'vertex-helper',
+        profile: 'vertex-profile',
+        systemPrompt: 'Use Vertex AI.',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const loadSubagent = vi.fn().mockResolvedValue(vertexSubagent);
+      const loadProfile = vi.fn().mockResolvedValue(vertexProfile);
+      const runtimeBundle = createRuntimeBundle('vertex');
+      const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+      const scope = {
+        runtimeContext: runtimeBundle.runtimeContext,
+        getAgentId: () => 'vertex-helper-1',
+      } as unknown as SubAgentScopeInstance;
+      const scopeFactory = vi
+        .fn<typeof SubAgentScope.create>()
+        .mockResolvedValue(scope);
+
+      const orchestrator = new SubagentOrchestrator({
+        subagentManager: { loadSubagent } as unknown as SubagentManager,
+        profileManager: { loadProfile } as unknown as ProfileManager,
+        foregroundConfig: makeForegroundConfig(),
+        scopeFactory,
+        runtimeLoader,
+      });
+
+      await orchestrator.launch({ name: vertexSubagent.name });
+
+      const settingsService =
+        runtimeLoader.mock.calls[0][0].profile.providerRuntime.settingsService;
+      // This mocked runtime-loader boundary verifies settings population itself:
+      // GCP ephemerals are scoped to SettingsService and never written globally.
+      expect(settingsService.get('GOOGLE_CLOUD_PROJECT')).toBe(
+        'subagent-project',
+      );
+      expect(settingsService.get('GOOGLE_CLOUD_LOCATION')).toBe('us-central1');
+      expect(process.env.GOOGLE_CLOUD_PROJECT).toBeUndefined();
+      expect(process.env.GOOGLE_CLOUD_LOCATION).toBeUndefined();
+    } finally {
+      if (previousProject === undefined) {
+        delete process.env.GOOGLE_CLOUD_PROJECT;
+      } else {
+        process.env.GOOGLE_CLOUD_PROJECT = previousProject;
+      }
+      if (previousLocation === undefined) {
+        delete process.env.GOOGLE_CLOUD_LOCATION;
+      } else {
+        process.env.GOOGLE_CLOUD_LOCATION = previousLocation;
+      }
+    }
   });
 
   it('injects base-url into runtime state for provider normalization', async () => {
@@ -435,11 +510,9 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     });
 
     const loaderArgs = runtimeLoader.mock.calls[0][0];
-    // The isolated runtime's settings service should have the subagent's
-    // user-agent. After executeProviderActivation switches the active
-    // provider, populateSettingsService values may be cleared by
-    // switchActiveProvider, so read from the snapshot instead.
-    expect(loaderArgs.profile.settings).toBeDefined();
+    const settingsService = loaderArgs.profile.providerRuntime.settingsService;
+
+    expect(settingsService.get('user-agent')).toBe('RooCode/1.0');
   });
 
   it('preserves subagent profile identity and auth-key-name in runtime settings', async () => {
@@ -495,6 +568,9 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     );
 
     expect(settingsService.get('auth-key-name')).toBe('chutesminimax');
+    expect(settingsService.getProviderSettings('openai')['auth-key-name']).toBe(
+      'chutesminimax',
+    );
   });
 
   it('provides a dispose hook that clears runtime history and returns unique agent ids per launch', async () => {
@@ -606,7 +682,10 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       provider: 'load-balancer',
       model: 'claude-sonnet-4',
       modelParams: {},
-      ephemeralSettings: {},
+      ephemeralSettings: {
+        'tools.allowed': ['read_file'],
+        'compression-threshold': 0.9,
+      },
     };
 
     const anthropicProfile: Profile = {
@@ -669,14 +748,46 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       name: loadBalancerSubagent.name,
     });
 
-    // The load-balancer profile is preserved as the effective profile so
-    // its failover/round-robin logic is used, not collapsed to profiles[0].
+    const loaderArgs = runtimeLoader.mock.calls[0][0];
+    const settingsService = loaderArgs.profile.providerRuntime.settingsService;
+
+    // The load-balancer profile is preserved and activated as a real
+    // load-balancer provider, not collapsed to profiles[0].
     expect(result.profile).toBe(loadBalancerProfile);
 
-    // All referenced sub-profiles are validated (both are loaded).
+    // All referenced sub-profiles are validated and resolved by the isolated
+    // runtime's profile manager while registering the load-balancer provider.
     expect(loadProfile).toHaveBeenCalledWith('typescript-lb');
     expect(loadProfile).toHaveBeenCalledWith('anthropic-fast');
     expect(loadProfile).toHaveBeenCalledWith('openai-fallback');
+
+    expect(loaderArgs.profile.state.provider).toBe('load-balancer');
+    expect(loaderArgs.profile.state.model).toBe('load-balancer');
+    // loadBalancerProfile.modelParams is {}, so the orchestrator applies its
+    // standard runtime defaults for temperature (0.7) and top_p (1).
+    expect(loaderArgs.profile.state.modelParams).toMatchObject({
+      temperature: 0.7,
+      topP: 1,
+    });
+    expect(loaderArgs.profile.settings.compressionThreshold).toBe(0.9);
+    expect(loaderArgs.profile.settings.tools?.allowed).toStrictEqual([
+      'read_file',
+    ]);
+    expect(loaderArgs.profile.contentGeneratorConfig.model).toBe(
+      'load-balancer',
+    );
+    expect(loaderArgs.profile.contentGeneratorConfig.apiKey).toBeUndefined();
+    expect(loaderArgs.profile.contentGeneratorConfig.providerManager).toBe(
+      loaderArgs.profile.providerManager,
+    );
+    expect(loaderArgs.profile.providerManager).toBeDefined();
+    expect(settingsService.getCurrentProfileName()).toBe(
+      loadBalancerSubagent.profile,
+    );
+    expect(settingsService.get('activeProvider')).toBe('load-balancer');
+    expect(settingsService.get('providers.load-balancer.model')).toBe(
+      'load-balancer',
+    );
   });
 
   it('rejects load balancer subagent profiles without referenced profiles', async () => {

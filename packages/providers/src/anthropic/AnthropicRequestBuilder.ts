@@ -45,8 +45,8 @@ const ANTHROPIC_PASSTHROUGH_MODEL_PARAMS: ReadonlySet<string> = new Set([
 /**
  * Filters caller-supplied model params to the Anthropic-API-permitted
  * passthrough set (see {@link ANTHROPIC_PASSTHROUGH_MODEL_PARAMS}). Drops
- * undefined values and any key the Anthropic Messages API does not accept as a
- * top-level field.
+ * nullish (undefined and null) values and any key the Anthropic Messages API
+ * does not accept as a top-level field.
  */
 function sanitizeAnthropicModelParams(
   modelParams: Record<string, unknown>,

@@ -3,7 +3,11 @@ import {
   isInternalSettingKey,
   isLoadBalancerProfile,
 } from '@vybestack/llxprt-code-settings';
-import type { Profile, ModelParams } from '@vybestack/llxprt-code-settings';
+import type {
+  Profile,
+  ModelParams,
+  ProfileManager,
+} from '@vybestack/llxprt-code-settings';
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -41,6 +45,7 @@ export interface ProviderSelectionResult {
 
 export interface ProfileApplicationOptions {
   profileName?: string;
+  profileManager?: ProfileManager;
 }
 
 export interface ProfileApplicationResult {
@@ -785,17 +790,24 @@ async function applyProviderAuthUpdates(
  */
 export async function applyProfileWithGuards(
   profileInput: Profile,
-  _options: ProfileApplicationOptions = {},
+  options: ProfileApplicationOptions = {},
 ): Promise<ProfileApplicationResult> {
   const runtimeServices = getCliRuntimeServices();
-  const { config, providerManager } = runtimeServices;
+  const servicesForProfileApplication = {
+    ...runtimeServices,
+    profileManager: options.profileManager ?? runtimeServices.profileManager,
+  };
+  const { config, providerManager } = servicesForProfileApplication;
   await maybeRegisterLoadBalancerProfile(
     profileInput,
-    _options,
-    runtimeServices,
+    options,
+    servicesForProfileApplication,
     lbLogger,
   );
-  const context = buildProfileApplicationContext(profileInput, runtimeServices);
+  const context = buildProfileApplicationContext(
+    profileInput,
+    servicesForProfileApplication,
+  );
   const {
     actualProfile,
     sanitizedProfile,

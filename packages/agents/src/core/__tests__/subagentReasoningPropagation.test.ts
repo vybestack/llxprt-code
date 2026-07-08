@@ -24,34 +24,19 @@
 
 import { describe, expect, it } from 'vitest';
 import { createRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
-import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import { separateSettings } from '@vybestack/llxprt-code-settings';
-import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
-import { SubagentOrchestrator } from '../subagentOrchestrator.js';
-import { makeForegroundConfig } from './subagentOrchestrator-test-helpers.js';
+import type { Profile } from '@vybestack/llxprt-code-settings';
+import { DEFAULT_DISABLED_TOOLS } from '../subagentOrchestrator.js';
+import {
+  normalizeDefaultToolSet,
+  populateSettingsService,
+} from '../subagentSettingsPopulation.js';
 
-/**
- * Test seam: invokes the orchestrator's real private populateSettingsService on
- * a real SubagentOrchestrator instance wired with minimal stub collaborators.
- * This avoids a brittle prototype-only `this` while still exercising the exact
- * production population path the subagent launch flow uses.
- */
+const defaultDisabledTools = normalizeDefaultToolSet(DEFAULT_DISABLED_TOOLS);
+
 function populate(profile: Profile, profileName: string) {
   const service = createRuntimeSettingsService();
-  const orchestrator = new SubagentOrchestrator({
-    subagentManager: {} as SubagentManager,
-    profileManager: {} as ProfileManager,
-    foregroundConfig: makeForegroundConfig(),
-  });
-  (
-    orchestrator as unknown as {
-      populateSettingsService: (
-        s: ReturnType<typeof createRuntimeSettingsService>,
-        p: Profile,
-        n: string,
-      ) => void;
-    }
-  ).populateSettingsService(service, profile, profileName);
+  populateSettingsService(service, profile, profileName, defaultDisabledTools);
   return service;
 }
 

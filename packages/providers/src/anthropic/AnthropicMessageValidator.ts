@@ -413,6 +413,15 @@ function ensureNotEmpty(messages: AnthropicMessage[]): AnthropicMessage[] {
   return messages;
 }
 
+const ASSISTANT_EMPTY_PLACEHOLDER = '[No content generated]';
+const USER_EMPTY_PLACEHOLDER = '[Empty message]';
+
+function getEmptyMessagePlaceholder(role: AnthropicMessage['role']): string {
+  return role === 'assistant'
+    ? ASSISTANT_EMPTY_PLACEHOLDER
+    : USER_EMPTY_PLACEHOLDER;
+}
+
 function sanitizeEmptyMessages(
   messages: AnthropicMessage[],
 ): AnthropicMessage[] {
@@ -437,11 +446,10 @@ function sanitizeEmptyMessages(
     if (isLast || !isEmpty) {
       return message;
     }
-    const placeholder =
-      message.role === 'assistant'
-        ? '[No content generated]'
-        : '[Empty message]';
-    return { ...message, content: placeholder };
+    return {
+      ...message,
+      content: getEmptyMessagePlaceholder(message.role),
+    };
   });
 }
 
@@ -500,16 +508,13 @@ export function stripEmptyTextBlocks(
     if (filtered.length === message.content.length) {
       return message;
     }
+    strippedCount += message.content.length - filtered.length;
     if (filtered.length === 0) {
       return {
         ...message,
-        content:
-          message.role === 'assistant'
-            ? '[No content generated]'
-            : '[Empty message]',
+        content: getEmptyMessagePlaceholder(message.role),
       };
     }
-    strippedCount += message.content.length - filtered.length;
     return { ...message, content: filtered };
   });
   if (strippedCount > 0) {

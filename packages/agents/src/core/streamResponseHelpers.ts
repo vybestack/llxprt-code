@@ -281,15 +281,15 @@ export function validateStreamCompletion(
   }
 }
 
+interface UserInputFlags {
+  readonly userInputWasArray?: boolean;
+  readonly userInputWasFunctionResponse?: boolean;
+}
+
 export interface PreparedHistoryUserInput {
   readonly historyUserInput: Content | Content[];
   readonly filteredResults: readonly FilteredEagerToolResponses[];
-  readonly userInputFlags:
-    | {
-        userInputWasArray?: boolean;
-        userInputWasFunctionResponse?: boolean;
-      }
-    | undefined;
+  readonly userInputFlags: UserInputFlags | undefined;
 }
 
 export function prepareHistoryUserInput(
@@ -345,10 +345,7 @@ interface RecordHistoryParams {
   historyService: HistoryService;
   compressionHandler: CompressionHandler;
   logger: DebugLogger;
-  userInputFlags?: {
-    userInputWasArray?: boolean;
-    userInputWasFunctionResponse?: boolean;
-  };
+  userInputFlags?: UserInputFlags;
 }
 
 /**

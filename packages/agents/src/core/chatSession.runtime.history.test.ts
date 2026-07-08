@@ -172,23 +172,11 @@ describe('ChatSession runtime history and tool-call behavior', () => {
     const view = createAgentRuntimeContext({
       state: runtimeState,
       history: historyService,
-      ephemerals: {
-        baseUrl: () => undefined,
-        apiKey: () => undefined,
-        proxy: () => undefined,
-        telemetry: {
-          enabled: () => false,
-          target: () => null,
-        },
-        reasoning: {
-          enabled: () => false,
-          effort: () => 'none',
-          adaptiveThinking: () => false,
-          summary: () => 'auto',
-          includeInContext: () => true,
-          includeInResponse: () => false,
-          stripFromContext: () => 'none',
-        },
+      settings: {
+        'reasoning.enabled': false,
+        'reasoning.includeInContext': true,
+        'reasoning.includeInResponse': false,
+        'reasoning.adaptiveThinking': false,
       },
       provider: createProviderAdapterFromManager(config.getProviderManager()),
       telemetry: createTelemetryAdapterFromConfig(config),

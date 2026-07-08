@@ -15,7 +15,7 @@
  *
  *   (a) launching a real load-balancer profile no longer throws
  *       `RuntimeStateError: provider.missing`, and the resulting runtime state
- *       carries the first concrete member's provider/model; and
+ *       carries the real `load-balancer` provider/model; and
  *   (b) the load-balancer profile is still preserved as the launch result's
  *       profile so failover/round-robin routing downstream is not lost.
  */
@@ -104,7 +104,24 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     });
   }
 
-  it('launches without provider.missing and derives runtime state from the first concrete member', async () => {
+  function createValidationOrchestrator(
+    subagent: SubagentConfig,
+    loadProfile: (profileName: string) => Promise<Profile>,
+  ) {
+    const loadSubagent = vi.fn().mockResolvedValue(subagent);
+    const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
+    const scopeFactory = vi.fn<typeof SubAgentScope.create>();
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager: { loadSubagent } as unknown as SubagentManager,
+      profileManager: { loadProfile } as unknown as ProfileManager,
+      foregroundConfig: makeForegroundConfig(),
+      scopeFactory,
+      runtimeLoader,
+    });
+    return { orchestrator, runtimeLoader };
+  }
+
+  it('launches without provider.missing and binds runtime state to the load-balancer provider', async () => {
     const loadSubagent = vi.fn().mockResolvedValue(loadBalancerSubagent);
     const loadProfile = makeLoadProfile();
 
@@ -133,12 +150,12 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
 
     expect(runtimeLoader).toHaveBeenCalledTimes(1);
     const loaderArgs = runtimeLoader.mock.calls[0][0];
-    // Runtime state must be CONCRETE — taken from the first referenced member.
-    expect(loaderArgs.profile.state.provider).toBe(zaiProfile.provider);
-    expect(loaderArgs.profile.state.model).toBe(zaiProfile.model);
-    expect(loaderArgs.profile.state.provider).not.toBe('');
-    expect(loaderArgs.profile.state.model).not.toBe('');
-
+    expect(loaderArgs.profile.state.provider).toBe('load-balancer');
+    expect(loaderArgs.profile.state.model).toBe('load-balancer');
+    expect(loaderArgs.profile.contentGeneratorConfig?.model).toBe(
+      'load-balancer',
+    );
+    expect(loaderArgs.profile.contentGeneratorConfig?.apiKey).toBeUndefined();
     expect(result.agentId).toBe('lb-helper-1');
   });
 
@@ -238,7 +255,6 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       modelParams: {},
       ephemeralSettings: {},
     };
-    const loadSubagent = vi.fn().mockResolvedValue(nestedSubagent);
     const loadProfile = vi.fn(async (profileName: string) => {
       if (profileName === 'outer-lb') {
         return outerProfile;
@@ -248,20 +264,88 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       }
       throw new Error(`unexpected profile ${profileName}`);
     });
-    const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
-    const scopeFactory = vi.fn<typeof SubAgentScope.create>();
-
-    const orchestrator = new SubagentOrchestrator({
-      subagentManager: { loadSubagent } as unknown as SubagentManager,
-      profileManager: { loadProfile } as unknown as ProfileManager,
-      foregroundConfig: makeForegroundConfig(),
-      scopeFactory,
-      runtimeLoader,
-    });
+    const { orchestrator, runtimeLoader } = createValidationOrchestrator(
+      nestedSubagent,
+      loadProfile,
+    );
 
     await expect(
       orchestrator.launch({ name: nestedSubagent.name }),
     ).rejects.toThrow(/cannot use nested load balancer profile 'inner-lb'/);
+    expect(runtimeLoader).not.toHaveBeenCalled();
+  });
+
+  it('rejects a load-balancer member with an empty provider', async () => {
+    const invalidSubagent: SubagentConfig = {
+      ...loadBalancerSubagent,
+      name: 'invalid-provider-lb',
+      profile: 'invalid-provider-lb',
+    };
+    const invalidProfile: Profile = {
+      ...loadBalancerProfile,
+      profiles: ['zai-fast', 'empty-provider'],
+    };
+    const emptyProviderProfile: Profile = {
+      ...zaiProfile,
+      provider: '   ',
+    };
+    const loadProfile = vi.fn(async (profileName: string) => {
+      if (profileName === 'invalid-provider-lb') {
+        return invalidProfile;
+      }
+      if (profileName === 'zai-fast') {
+        return zaiProfile;
+      }
+      if (profileName === 'empty-provider') {
+        return emptyProviderProfile;
+      }
+      throw new Error(`unexpected profile ${profileName}`);
+    });
+    const { orchestrator, runtimeLoader } = createValidationOrchestrator(
+      invalidSubagent,
+      loadProfile,
+    );
+
+    await expect(
+      orchestrator.launch({ name: invalidSubagent.name }),
+    ).rejects.toThrow(/must define a non-empty provider/);
+    expect(runtimeLoader).not.toHaveBeenCalled();
+  });
+
+  it('rejects a load-balancer member with an empty model', async () => {
+    const invalidSubagent: SubagentConfig = {
+      ...loadBalancerSubagent,
+      name: 'invalid-model-lb',
+      profile: 'invalid-model-lb',
+    };
+    const invalidProfile: Profile = {
+      ...loadBalancerProfile,
+      profiles: ['zai-fast', 'empty-model'],
+    };
+    const emptyModelProfile: Profile = {
+      ...zaiProfile,
+      model: '',
+    };
+    const loadProfile = vi.fn(async (profileName: string) => {
+      if (profileName === 'invalid-model-lb') {
+        return invalidProfile;
+      }
+      if (profileName === 'zai-fast') {
+        return zaiProfile;
+      }
+      if (profileName === 'empty-model') {
+        return emptyModelProfile;
+      }
+      throw new Error(`unexpected profile ${profileName}`);
+    });
+    const { orchestrator, runtimeLoader } = createValidationOrchestrator(
+      invalidSubagent,
+      loadProfile,
+    );
+
+    await expect(
+      orchestrator.launch({ name: invalidSubagent.name }),
+    ).rejects.toThrow(/must define a non-empty model/);
     expect(runtimeLoader).not.toHaveBeenCalled();
   });
 });

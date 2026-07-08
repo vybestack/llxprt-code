@@ -73,12 +73,15 @@ export function getStringArraySetting(
 ): string[] | undefined {
   for (const key of keys) {
     const value = getSetting(settings, key);
-    if (Array.isArray(value)) {
-      const filtered = value.filter(
-        (item): item is string =>
-          typeof item === 'string' && item.trim().length > 0,
-      );
-      return filtered.length > 0 ? filtered : undefined;
+    if (!Array.isArray(value)) {
+      continue;
+    }
+    const filtered = value.filter(
+      (item): item is string =>
+        typeof item === 'string' && item.trim().length > 0,
+    );
+    if (filtered.length > 0) {
+      return filtered;
     }
   }
   return undefined;

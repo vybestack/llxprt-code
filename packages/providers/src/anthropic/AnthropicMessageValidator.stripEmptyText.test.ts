@@ -16,7 +16,10 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { AnthropicMessage } from './AnthropicMessageNormalizer.js';
+import type {
+  AnthropicMessage,
+  AnthropicMessageBlock,
+} from './AnthropicMessageNormalizer.js';
 import { stripEmptyTextBlocks } from './AnthropicMessageValidator.js';
 
 const noopLogger = { debug: (_fn: () => string) => {} };
@@ -40,9 +43,13 @@ describe('stripEmptyTextBlocks (Issue #2410)', () => {
     const result = stripEmptyTextBlocks(messages, noopLogger);
 
     expect(Array.isArray(result[0].content)).toBe(true);
-    const content = result[0].content as Array<{ type: string }>;
+    const content = result[0].content as AnthropicMessageBlock[];
     expect(content).toHaveLength(1);
-    expect(content[0].type).toBe('tool_result');
+    expect(content[0]).toMatchObject({
+      type: 'tool_result',
+      tool_use_id: 'toolu_1',
+      content: 'file contents here',
+    });
   });
 
   it('removes whitespace-only text blocks', () => {
@@ -57,9 +64,9 @@ describe('stripEmptyTextBlocks (Issue #2410)', () => {
     ];
 
     const result = stripEmptyTextBlocks(messages, noopLogger);
-    const content = result[0].content as Array<{ type: string; text: string }>;
+    const content = result[0].content as AnthropicMessageBlock[];
     expect(content).toHaveLength(1);
-    expect(content[0].text).toBe('real question');
+    expect(content[0]).toMatchObject({ type: 'text', text: 'real question' });
   });
 
   it('preserves non-empty text blocks unchanged', () => {
@@ -111,7 +118,7 @@ describe('stripEmptyTextBlocks (Issue #2410)', () => {
     ];
 
     const result = stripEmptyTextBlocks(messages, noopLogger);
-    expect((result[0].content as unknown[]).length).toBe(1);
-    expect((result[1].content as unknown[]).length).toBe(1);
+    expect((result[0].content as AnthropicMessageBlock[]).length).toBe(1);
+    expect((result[1].content as AnthropicMessageBlock[]).length).toBe(1);
   });
 });

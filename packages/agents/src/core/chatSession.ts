@@ -551,9 +551,22 @@ export class ChatSession {
     _model: string,
     toolCalls: CompletedToolCall[],
   ): void {
-    const allParts = toolCalls.flatMap((toolCall) =>
-      convertBlocksToParts(toolCall.response.responseParts),
-    );
+    const allParts = toolCalls.flatMap((toolCall) => {
+      // Defensive for deserialized/test-cast tool responses that bypass the
+      // static ToolCallResponseInfo contract.
+      const response = toolCall.response as
+        | { responseParts?: unknown }
+        | undefined;
+      const responseParts = response?.responseParts;
+      if (!Array.isArray(responseParts)) {
+        this.logger.warn(
+          () =>
+            `recordCompletedToolCalls: skipping tool call '${toolCall.request.callId}' because responseParts is not an array`,
+        );
+        return [];
+      }
+      return convertBlocksToParts(responseParts);
+    });
     const { functionResponses } = splitPartsByRole(allParts);
 
     // Only persist the tool-response side eagerly. The assistant tool_call is

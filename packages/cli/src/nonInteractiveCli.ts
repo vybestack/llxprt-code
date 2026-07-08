@@ -306,7 +306,6 @@ function buildActivationCliOverrides(
 
 function collectActivationModelParams(
   config: Config,
-  bootstrapArgs: BootstrapProfileArgs | undefined,
 ): ProviderActivationIntent['modelParams'] | undefined {
   const configWithParams = config as ConfigWithBootstrapArgs;
   const mergedModelParams: Record<string, unknown> = {};
@@ -320,10 +319,6 @@ function collectActivationModelParams(
   if (configWithParams._cliModelParams) {
     Object.assign(mergedModelParams, configWithParams._cliModelParams);
   }
-
-  // Keep bootstrapArgs threaded through the call so the activation builder can
-  // compute CLI overrides and model params from a single resolved snapshot.
-  void bootstrapArgs;
 
   return Object.keys(mergedModelParams).length > 0
     ? mergedModelParams
@@ -374,10 +369,7 @@ function buildNonInteractiveActivationIntent(
   const useExternalAuth = params.settings.merged.useExternalAuth === true;
   const cliOverrides = buildActivationCliOverrides(params.config);
   const bootstrapArgs = readBootstrapArgs(params.config);
-  const modelParams = collectActivationModelParams(
-    params.config,
-    bootstrapArgs,
-  );
+  const modelParams = collectActivationModelParams(params.config);
   const configModel = params.config.getModel();
   const resolvedModel =
     bootstrapArgs?.modelOverride ??
