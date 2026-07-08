@@ -147,6 +147,15 @@ export function createUserContentWithFunctionResponseFix(
 
   // If the message is an array, process each element
   if (Array.isArray(message)) {
+    // An empty message array must not produce a fabricated user turn with
+    // function-response semantics — `[].every(...)` is vacuously true and
+    // would create `{role:'user', parts:[]}`, which providers like z.ai
+    // reject with HTTP 400 error 1213 (issue #2410). Return a zero-part
+    // user Content so callers can detect and drop it.
+    if (message.length === 0) {
+      return { role: 'user' as const, parts };
+    }
+
     // First check if this is an array of functionResponse Parts
     // This happens when multiple tool responses are sent together
     const allFunctionResponses = message.every((item) =>
@@ -188,6 +197,15 @@ export function normalizeToolInteractionInput(
   // Handle single Part (not an array)
   if (!Array.isArray(message)) {
     return createUserContentWithFunctionResponseFix(message);
+  }
+
+  // An empty array must not be normalized into a fake user message —
+  // `[].every(...)` is vacuously true, producing `{role:'user', parts:[]}`
+  // which providers like z.ai reject with HTTP 400 error 1213 (issue #2410).
+  // Return an empty Content array so callers can skip it without inventing
+  // a zero-block turn.
+  if (message.length === 0) {
+    return [];
   }
 
   // Now we have an array of parts - check if it contains tool interactions
@@ -355,6 +373,14 @@ export function convertPartListUnionToIContent(input: PartListUnion): IContent {
  * Converts mixed Parts (function calls, responses, text, thoughts) to IContent.
  */
 export function convertMixedPartsToIContent(parts: Part[]): IContent {
+  // An empty parts array would make `[].every(isFunctionResponsePart)`
+  // vacuously true, producing a fabricated tool message from no content
+  // (issue #2410). Return a zero-block human turn so callers (and
+  // HistoryService) can detect and drop it.
+  if (parts.length === 0) {
+    return { speaker: 'human', blocks: [] };
+  }
+
   // Fast path: all function responses → tool message
   const allFunctionResponses = parts.every((part) =>
     isFunctionResponsePart(part),

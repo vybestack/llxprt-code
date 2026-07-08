@@ -499,7 +499,14 @@ async function runNonInteractiveLoopIteration(
     execCtx,
     ctx,
   );
-  if (!nextMessages) return { action: 'stop' };
+  // `processFunctionCalls` returns `[]` (an empty, truthy array) when no
+  // tool calls were executed. `!nextMessages` only catches null/undefined,
+  // so an empty array would slip through and propagate a zero-part user
+  // message into provider history (issue #2410). Treat an empty array the
+  // same as "no further messages" and stop the loop.
+  if (nextMessages === null || nextMessages.length === 0) {
+    return { action: 'stop' };
+  }
   return { action: 'continue', messages: nextMessages };
 }
 

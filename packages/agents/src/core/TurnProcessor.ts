@@ -54,6 +54,7 @@ import {
 } from './hookToolRestrictions.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import { shouldRetryStreamAttempt } from './turnAbortHelpers.js';
+import { extractSystemInstructionText } from './streamRequestHelpers.js';
 
 import {
   AgentExecutionStoppedError,
@@ -551,6 +552,7 @@ export class TurnProcessor {
         runtimeContext.settingsService as GenerateChatOptions['settings'],
       metadata: runtimeContext.metadata,
       userMemory: resolveUserMemory(runtimeContext.config),
+      systemInstruction: this._resolveSystemInstruction(),
     });
   }
 
@@ -627,6 +629,20 @@ export class TurnProcessor {
     params: SendMessageParameters,
   ): GenerateContentConfig['tools'] {
     return params.config?.tools ?? this.generationConfig.tools;
+  }
+
+  /**
+   * Extracts the system instruction string from generationConfig.
+   *
+   * Issue #2410: subagent personas are built into generationConfig
+   * .systemInstruction by subagentRuntimeSetup.createChatObject(). Without
+   * forwarding this to the provider, the subagent's task directives never
+   * reach the model.
+   */
+  private _resolveSystemInstruction(): string | undefined {
+    return extractSystemInstructionText(
+      this.generationConfig.systemInstruction,
+    );
   }
 
   private async _applyToolSelectionHook(

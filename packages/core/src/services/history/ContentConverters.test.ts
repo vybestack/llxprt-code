@@ -562,3 +562,41 @@ describe('ContentConverters - neutral type I/O (#2397)', () => {
     expect(block.thought).toBe('reasoning here');
   });
 });
+
+describe('issue #2410 – toIContent zero-block guard', () => {
+  it('produces zero blocks when input has no parts (not a fabricated turn)', () => {
+    const emptyContent: TestContent = {
+      role: 'user',
+      parts: [],
+    };
+
+    const result = ContentConverters.toIContent(
+      emptyContent,
+      undefined,
+      undefined,
+      'turn-empty',
+    );
+
+    // The converter does not fabricate content — it produces zero blocks
+    // so downstream history services can detect and drop the empty turn.
+    expect(result.blocks).toHaveLength(0);
+    expect(result.speaker).toBe('human');
+  });
+
+  it('produces zero blocks when input parts is undefined', () => {
+    const noPartsContent: TestContent = {
+      role: 'model',
+      parts: undefined as unknown as TestContent['parts'],
+    };
+
+    const result = ContentConverters.toIContent(
+      noPartsContent,
+      undefined,
+      undefined,
+      'turn-noparts',
+    );
+
+    expect(result.blocks).toHaveLength(0);
+    expect(result.speaker).toBe('ai');
+  });
+});

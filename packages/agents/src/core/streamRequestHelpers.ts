@@ -283,3 +283,68 @@ export function logOutgoingRequest(
     promptId,
   );
 }
+
+/**
+ * Extracts a plain-text system instruction string from a Gemini
+ * `ContentUnion` value (string, Content, Part[], or Part).
+ *
+ * Issue #2410: subagent personas are built into
+ * generationConfig.systemInstruction by subagentRuntimeSetup.createChatObject().
+ * This helper normalizes the various shapes the SDK allows so the instruction
+ * can be forwarded to providers as a simple string. Returns undefined when the
+ * value is absent or contains no text.
+ */
+export function extractSystemInstructionText(
+  raw: GenerateContentConfig['systemInstruction'],
+): string | undefined {
+  // The SDK types declare systemInstruction as ContentUnion | undefined, but
+  // defensive null-safety is needed because 'parts' in null / 'text' in null
+  // would throw at runtime. Broadening to unknown | undefined lets the null
+  // guard pass lint without a suppression directive.
+  const value = raw as unknown;
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === 'string') {
+    return value.trim().length > 0 ? value : undefined;
+  }
+  // Content shape: { role, parts: Part[] }
+  if (
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    'parts' in value &&
+    Array.isArray(value.parts)
+  ) {
+    const text = extractPartsText(value.parts);
+    return text.length > 0 ? text : undefined;
+  }
+  // Part[] shape
+  if (Array.isArray(value)) {
+    const text = extractPartsText(value);
+    return text.length > 0 ? text : undefined;
+  }
+  // Single Part shape: { text: string }
+  if (typeof value === 'object' && 'text' in value) {
+    const text = typeof value.text === 'string' ? value.text.trim() : '';
+    return text.length > 0 ? text : undefined;
+  }
+  return undefined;
+}
+
+function extractPartsText(parts: unknown[]): string {
+  return parts
+    .map((part) => {
+      if (typeof part === 'string') return part;
+      if (
+        part !== null &&
+        typeof part === 'object' &&
+        'text' in part &&
+        typeof part.text === 'string'
+      ) {
+        return part.text;
+      }
+      return '';
+    })
+    .join('')
+    .trim();
+}

@@ -32,6 +32,7 @@ import {
 import {
   resolveUserMemory,
   applyRequestModifications,
+  extractSystemInstructionText,
 } from './streamRequestHelpers.js';
 import { isSchemaDepthError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import {
@@ -504,6 +505,7 @@ export class DirectMessageProcessor {
         runtimeContext.settingsService as GenerateChatOptions['settings'],
       metadata: runtimeContext.metadata,
       userMemory: resolveUserMemory(runtimeContext.config),
+      systemInstruction: this._resolveSystemInstruction(),
     });
   }
 
@@ -511,6 +513,20 @@ export class DirectMessageProcessor {
     params: SendMessageParameters,
   ): GenerateContentConfig['tools'] {
     return params.config?.tools ?? this.generationConfig.tools;
+  }
+
+  /**
+   * Extracts the system instruction string from generationConfig.
+   *
+   * Issue #2410: subagent personas are built into generationConfig
+   * .systemInstruction by subagentRuntimeSetup.createChatObject(). Without
+   * forwarding this to the provider, the subagent's task directives never
+   * reach the model.
+   */
+  private _resolveSystemInstruction(): string | undefined {
+    return extractSystemInstructionText(
+      this.generationConfig.systemInstruction,
+    );
   }
 
   /**
