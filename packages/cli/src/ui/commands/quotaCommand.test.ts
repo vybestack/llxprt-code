@@ -346,11 +346,15 @@ describe('quotaCommand', () => {
       expect(callArgs[1]).toBe('acct-123');
       expect(callArgs[2]).toBe('credit-1');
       expect(callArgs[3]).toMatch(UUID_REGEX);
+      expect(callArgs[4]).toBeUndefined();
 
       const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
       const successItem = calls.find((call) => {
         const item = call[0] as { text: string; type: MessageType };
-        return item.text.includes('reset') && item.type === MessageType.INFO;
+        return (
+          item.text.includes('reset successfully') &&
+          item.type === MessageType.INFO
+        );
       });
       expect(successItem).toBeDefined();
     });
@@ -435,6 +439,80 @@ describe('quotaCommand', () => {
       };
       expect(lastItem.type).toBe(MessageType.ERROR);
       expect(lastItem.text).toContain('Failed to reset');
+    });
+
+    it('shows error when consume throws an exception', async () => {
+      const codexToken = {
+        access_token: 'codex-access',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        account_id: 'acct-123',
+      };
+      const oauthManager = {
+        getAllCodexRateLimitResetCredits: vi.fn().mockResolvedValue(
+          makeCodexCreditsMap([
+            {
+              bucket: 'default',
+              availableCount: 1,
+              credits: [{ id: 'credit-1' }],
+            },
+          ]),
+        ),
+        getToken: vi.fn().mockResolvedValue('codex-access'),
+        listBuckets: vi.fn().mockResolvedValue(['default']),
+        getTokenStore: vi.fn().mockReturnValue({
+          getToken: vi.fn().mockResolvedValue(codexToken),
+        }),
+      };
+      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
+      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+
+      mockConsumeCodexRateLimitResetCredit.mockRejectedValue(
+        new Error('Network timeout'),
+      );
+
+      const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
+      await reset!.action!(mockContext, '');
+
+      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const lastItem = calls[calls.length - 1]?.[0] as {
+        type: MessageType;
+        text?: string;
+      };
+      expect(lastItem.type).toBe(MessageType.ERROR);
+      expect(lastItem.text).toContain('Failed to reset rate-limit window');
+    });
+
+    it('shows error when token store returns token without access_token', async () => {
+      const oauthManager = {
+        getAllCodexRateLimitResetCredits: vi.fn().mockResolvedValue(
+          makeCodexCreditsMap([
+            {
+              bucket: 'default',
+              availableCount: 1,
+              credits: [{ id: 'credit-1' }],
+            },
+          ]),
+        ),
+        getToken: vi.fn().mockResolvedValue('codex-access'),
+        listBuckets: vi.fn().mockResolvedValue(['default']),
+        getTokenStore: vi.fn().mockReturnValue({
+          getToken: vi.fn().mockResolvedValue({ account_id: 'acct-123' }),
+        }),
+      };
+      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
+      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+
+      const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
+      await reset!.action!(mockContext, '');
+
+      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const lastItem = calls[calls.length - 1]?.[0] as {
+        type: MessageType;
+        text?: string;
+      };
+      expect(lastItem.type).toBe(MessageType.ERROR);
+      expect(lastItem.text).toContain('Failed to resolve Codex credentials');
     });
   });
 });

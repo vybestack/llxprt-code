@@ -14,13 +14,16 @@ import {
 describe('codexRateLimitReset', () => {
   describe('fetchCodexRateLimitResetCredits', () => {
     let fetchMock: ReturnType<typeof vi.fn>;
+    let originalFetch: typeof global.fetch;
 
     beforeEach(() => {
+      originalFetch = global.fetch;
       fetchMock = vi.fn();
       global.fetch = fetchMock;
     });
 
     afterEach(() => {
+      global.fetch = originalFetch;
       vi.restoreAllMocks();
     });
 
@@ -123,6 +126,38 @@ describe('codexRateLimitReset', () => {
       );
     });
 
+    it('should fall back to the ChatGPT backend-api root when the base URL has no /backend-api segment', async () => {
+      // The wham reset-credit endpoints only exist on the ChatGPT backend-api
+      // surface (unlike /api/codex/usage). A base URL that does not target
+      // /backend-api must therefore fall back to the ChatGPT root rather than
+      // fabricate a /wham path against an unrelated origin. This matches the
+      // issue contract: "fall back to https://chatgpt.com/backend-api".
+      const mockResponse = {
+        rate_limit_reset_credits: {
+          available_count: 0,
+          credits: [],
+        },
+      };
+
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+
+      await fetchCodexRateLimitResetCredits(
+        'token123',
+        'account123',
+        'https://proxy.example.com/v1',
+      );
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits',
+        expect.objectContaining({
+          method: 'GET',
+        }),
+      );
+    });
+
     it('should handle HTTP errors gracefully', async () => {
       fetchMock.mockResolvedValueOnce({
         ok: false,
@@ -208,13 +243,16 @@ describe('codexRateLimitReset', () => {
 
   describe('consumeCodexRateLimitResetCredit', () => {
     let fetchMock: ReturnType<typeof vi.fn>;
+    let originalFetch: typeof global.fetch;
 
     beforeEach(() => {
+      originalFetch = global.fetch;
       fetchMock = vi.fn();
       global.fetch = fetchMock;
     });
 
     afterEach(() => {
+      global.fetch = originalFetch;
       vi.restoreAllMocks();
     });
 
@@ -416,6 +454,18 @@ describe('codexRateLimitReset', () => {
       const data = {
         rate_limit_reset_credits: {
           available_count: 0,
+          credits: [],
+        },
+      };
+
+      const result = formatCodexResetCredits(data);
+      expect(result).toStrictEqual([]);
+    });
+
+    it('should return empty array when credits is empty despite available_count > 0', () => {
+      const data = {
+        rate_limit_reset_credits: {
+          available_count: 2,
           credits: [],
         },
       };

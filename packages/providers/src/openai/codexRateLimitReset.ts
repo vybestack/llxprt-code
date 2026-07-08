@@ -102,6 +102,10 @@ function resolveBackendApiRoot(baseUrl?: string): string {
     if (normalizedBaseUrl.includes('/backend-api')) {
       return normalizedBaseUrl;
     }
+    logger.debug(
+      () =>
+        `Base URL "${normalizedBaseUrl}" does not contain /backend-api; falling back to ${DEFAULT_BACKEND_API_ROOT}`,
+    );
   }
 
   return DEFAULT_BACKEND_API_ROOT;

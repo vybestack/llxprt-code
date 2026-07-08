@@ -14,6 +14,11 @@ import {
   consumeCodexRateLimitResetCredit,
   formatCodexResetCredits,
 } from '@vybestack/llxprt-code-providers';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  CodexOAuthTokenSchema,
+  type CodexOAuthToken,
+} from '@vybestack/llxprt-code-auth';
 import type { CommandArgumentSchema } from './schema/types.js';
 import { randomUUID } from 'node:crypto';
 
@@ -35,48 +40,14 @@ interface BucketTokenInfo {
   readonly accountId: string | null;
 }
 
-interface CodexResetCreditsProvider {
-  getAllCodexRateLimitResetCredits(): Promise<
-    Map<string, Record<string, unknown>>
-  >;
-}
-
-interface CodexAuthProbe {
-  getToken?(provider: string): Promise<string | null>;
-  listBuckets?(provider: string): Promise<string[]>;
-}
-
-interface CodexTokenStoreProvider {
-  getTokenStore?(): CodexTokenStoreAccessor;
-}
-
-interface CodexTokenStoreAccessor {
-  getToken(
-    provider: string,
-    bucket: string,
-  ): Promise<Record<string, unknown> | null>;
-}
-
-/**
- * Combined shape the reset flow needs from the OAuthManager.
- */
-interface CodexQuotaManager
-  extends CodexResetCreditsProvider,
-    CodexAuthProbe,
-    CodexTokenStoreProvider {}
-
 /**
  * Resolve the OAuthManager via the runtime API, returning null when the
  * runtime infrastructure is not registered (mirrors authCommand.getOAuthManager
  * but degrades to null instead of throwing).
  */
-function resolveOAuthManager(): CodexQuotaManager | null {
+function resolveOAuthManager(): OAuthManager | null {
   try {
-    const mgr = getRuntimeApi().getCliOAuthManager() as unknown;
-    if (mgr === null || mgr === undefined) {
-      return null;
-    }
-    return mgr as CodexQuotaManager;
+    return getRuntimeApi().getCliOAuthManager();
   } catch {
     return null;
   }
@@ -236,25 +207,20 @@ async function creditsAction(context: CommandContext): Promise<void> {
 /**
  * Determine whether the user is authenticated with Codex.
  */
-async function isCodexAuthed(oauthManager: CodexAuthProbe): Promise<boolean> {
-  if (oauthManager.getToken !== undefined) {
-    const token = await oauthManager.getToken('codex');
-    if (token !== null) {
-      return true;
-    }
+async function isCodexAuthed(oauthManager: OAuthManager): Promise<boolean> {
+  const token = await oauthManager.getToken('codex');
+  if (token !== null) {
+    return true;
   }
-  if (oauthManager.listBuckets !== undefined) {
-    const buckets = await oauthManager.listBuckets('codex');
-    return buckets.length > 0;
-  }
-  return false;
+  const buckets = await oauthManager.listBuckets('codex');
+  return buckets.length > 0;
 }
 
 /**
  * Find the first bucket+credit that can be redeemed.
  */
 async function findRedeemableCredit(
-  oauthManager: CodexResetCreditsProvider,
+  oauthManager: OAuthManager,
 ): Promise<BucketCredits | null> {
   const creditsMap = await oauthManager.getAllCodexRateLimitResetCredits();
 
@@ -275,22 +241,25 @@ async function findRedeemableCredit(
  * Resolve the access token + account_id for a Codex bucket.
  */
 async function resolveBucketToken(
-  oauthManager: CodexTokenStoreProvider,
+  oauthManager: OAuthManager,
   bucket: string,
 ): Promise<BucketTokenInfo> {
-  const tokenStore = oauthManager.getTokenStore?.();
-  if (tokenStore === undefined) {
-    return { accessToken: null, accountId: null };
-  }
+  const tokenStore = oauthManager.getTokenStore();
   const token = await tokenStore.getToken('codex', bucket);
   if (token === null) {
     return { accessToken: null, accountId: null };
   }
-  const accessTokenRaw = token['access_token'];
-  const accountIdRaw = token['account_id'];
+  const parsed = CodexOAuthTokenSchema.safeParse(token);
+  if (!parsed.success) {
+    return { accessToken: null, accountId: null };
+  }
+  const codexToken: CodexOAuthToken = parsed.data;
   const accessToken =
-    typeof accessTokenRaw === 'string' ? accessTokenRaw : null;
-  const accountId = typeof accountIdRaw === 'string' ? accountIdRaw : null;
+    typeof codexToken.access_token === 'string'
+      ? codexToken.access_token
+      : null;
+  const accountId =
+    typeof codexToken.account_id === 'string' ? codexToken.account_id : null;
   return { accessToken, accountId };
 }
 
