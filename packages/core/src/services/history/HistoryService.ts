@@ -316,13 +316,13 @@ export class HistoryService
 
       // Update token count asynchronously but atomically
       void this.updateTokenCount(content, modelName);
-    } else if (!hasBlocks) {
+    } else if (!hasValidSpeaker) {
+      this.logger.debug('Content rejected - invalid speaker:', content.speaker);
+    } else {
       this.logger.debug(
         'Content rejected - zero blocks (issue #2410):',
         content.speaker,
       );
-    } else {
-      this.logger.debug('Content rejected - invalid speaker:', content.speaker);
     }
   }
 

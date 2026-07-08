@@ -97,6 +97,7 @@ describe('issue #2410 – empty message arrays must not create zero-part Content
     it('still converts text parts to an AI message', () => {
       const parts = [{ text: 'hello world' }];
       const result = convertMixedPartsToIContent(parts);
+      expect(result.speaker).toBe('ai');
       expect(result.blocks).toHaveLength(1);
       expect(result.blocks[0].type).toBe('text');
     });
