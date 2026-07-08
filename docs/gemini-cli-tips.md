@@ -4,12 +4,12 @@ If you're coming from Gemini CLI, this guide highlights the key differences and 
 
 ## Command Name Differences
 
-| Gemini CLI            | LLxprt Code       | Notes                                        |
-| --------------------- | ----------------- | -------------------------------------------- |
-| `gemini`              | `llxprt`          | CLI binary name                              |
-| `@resume`             | `/continue`       | Resume a previous session                    |
-| `%` (shell escape)    | `!` or shell tool | Run shell commands                           |
-| `/auth` (Google-only) | `/auth`           | Multiple providers: gemini, anthropic, codex |
+| Gemini CLI            | LLxprt Code       | Notes                                |
+| --------------------- | ----------------- | ------------------------------------ |
+| `gemini`              | `llxprt`          | CLI binary name                      |
+| `@resume`             | `/continue`       | Resume a previous session            |
+| `%` (shell escape)    | `!` or shell tool | Run shell commands                   |
+| `/auth` (Google-only) | `/auth`           | Multiple providers: anthropic, codex |
 
 ## Authentication: Use the Keyring
 
@@ -35,17 +35,16 @@ Or use a keyfile for CI/automation:
 llxprt --provider xai --keyfile ~/.llxprt/keys/.xai_key
 ```
 
-For OAuth providers (Gemini, Anthropic, Codex), enable any of them:
+For OAuth providers (Anthropic, Codex), enable any of them:
 
 ```
-/auth gemini enable
 /auth anthropic enable
 /auth codex enable
 ```
 
 With `/auth <provider> enable`, authentication is lazy — a browser opens automatically when you make your first request. Use `/auth <provider> login` to open the browser immediately.
 
-> **Note on Gemini "Login with Google":** In mid-2026 Google moved free consumer "Login with Google" access for Gemini CLI toward [Antigravity](https://antigravity.google). LLxprt's `/auth gemini` OAuth continues to work for **paid Gemini API keys** and **Gemini Code Assist Standard/Enterprise** accounts; if a free Google login no longer authorizes, use a Gemini API key with `/keyfile` instead. See [Authentication](./cli/authentication.md) and [Google Cloud auth](./cli/google-cloud-auth.md).
+> **Gemini is now API-key-only.** Google removed the free consumer "Login with Google" access for Gemini CLI in mid-2026. Use a Gemini API key (`GEMINI_API_KEY` or `/keyfile`) or Vertex AI credentials instead.
 
 See [Authentication](./cli/authentication.md) for full details.
 

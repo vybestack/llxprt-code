@@ -2,13 +2,19 @@
  * Shared AST-grep utilities for all tools that use @ast-grep/napi.
  * Single source of truth for language mapping, parsing, and error normalization.
  *
+ * Native grammar addons load LAZILY on first real parse/search use (issue #2399).
+ * Importing this module performs no native dlopen, so credential-proxy / startup
+ * paths that only need a constant are never forced to load @ast-grep native code.
+ * A native load failure (e.g. Windows Smart App Control OS error 4551) degrades
+ * gracefully instead of crashing.
+ *
  * @plan PLAN-20260211-ASTGREP.P03
  */
 
 import {
   Lang,
-  parse,
-  findInFiles,
+  parse as napiParse,
+  findInFiles as napiFindInFiles,
   registerDynamicLanguage,
   type DynamicLangRegistrations,
 } from '@ast-grep/napi';
@@ -25,24 +31,34 @@ import ruby from '@ast-grep/lang-ruby';
 import * as path from 'node:path';
 
 let dynamicLanguagesRegistered = false;
+let dynamicLanguagesAvailable = false;
 
+/**
+ * Register the dynamic grammar addons (python, go, rust, ...) on first use.
+ *
+ * Lazy and fault-tolerant: a native load failure (e.g. Windows Smart App
+ * Control blocking the unsigned .node grammar DLLs) is caught and recorded so
+ * AST tooling can degrade to "unavailable" instead of panicking the process.
+ */
 function ensureDynamicLanguages(): void {
   if (dynamicLanguagesRegistered) return;
-  registerDynamicLanguage({
-    python,
-    go,
-    rust,
-    java,
-    cpp,
-    c,
-    json,
-    ruby,
-  } as unknown as DynamicLangRegistrations);
+  try {
+    registerDynamicLanguage({
+      python,
+      go,
+      rust,
+      java,
+      cpp,
+      c,
+      json,
+      ruby,
+    } as unknown as DynamicLangRegistrations);
+    dynamicLanguagesAvailable = true;
+  } catch {
+    dynamicLanguagesAvailable = false;
+  }
   dynamicLanguagesRegistered = true;
 }
-
-// Register on module load
-ensureDynamicLanguages();
 
 /**
  * File extension to ast-grep language mapping.
@@ -128,12 +144,34 @@ export function resolveLanguageFromPath(
 }
 
 /**
+ * Languages built into @ast-grep/napi that do NOT require dynamic registration.
+ * Dynamic addons (python, go, rust, …) need `registerDynamicLanguage` first.
+ */
+const BUILTIN_LANG_VALUES = new Set<string | Lang>([
+  Lang.TypeScript,
+  Lang.JavaScript,
+  Lang.Tsx,
+  Lang.Html,
+  Lang.Css,
+]);
+
+function isBuiltinLang(language: string | Lang): boolean {
+  return BUILTIN_LANG_VALUES.has(language);
+}
+
+/**
  * Check if @ast-grep/napi is available and usable.
+ *
+ * Reports whether the core napi binding loaded successfully (parse / findInFiles
+ * are callable). Does NOT conflate this with dynamic grammar registration:
+ * built-in languages (TypeScript, JavaScript, …) work regardless of addon load
+ * outcome, so a dynamic registration failure must not hide core capability.
  */
 export function isAstGrepAvailable(): boolean {
   try {
-    // If we got this far, the import succeeded
-    return typeof parse === 'function' && typeof findInFiles === 'function';
+    return (
+      typeof napiParse === 'function' && typeof napiFindInFiles === 'function'
+    );
   } catch {
     return false;
   }
@@ -142,15 +180,21 @@ export function isAstGrepAvailable(): boolean {
 /**
  * Parse source code with error normalization.
  * Returns { root } on success or { error } on failure.
- * Does not throw.
+ * Does not throw. Triggers lazy grammar registration on first call.
  */
 export function parseSource(
   language: string | Lang,
   content: string,
-): { root: ReturnType<typeof parse> } | { error: string } {
+): { root: ReturnType<typeof napiParse> } | { error: string } {
   try {
     ensureDynamicLanguages();
-    const result = parse(language as Lang, content);
+    if (!dynamicLanguagesAvailable && !isBuiltinLang(language)) {
+      return {
+        error:
+          'ast-grep dynamic grammars are unavailable (native addon load failed)',
+      };
+    }
+    const result = napiParse(language as Lang, content);
     return { root: result };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -158,5 +202,42 @@ export function parseSource(
   }
 }
 
-// Re-export ast-grep APIs for convenience
-export { parse, Lang, findInFiles } from '@ast-grep/napi';
+/**
+ * Wrapped `parse` that ensures dynamic grammars are registered before parsing.
+ * Routes through the lazy registration path so direct callers benefit from the
+ * same lazy-init + graceful-degradation behavior as `parseSource`.
+ *
+ * Built-in languages (TypeScript, JavaScript, …) always work; a dynamic
+ * language throws a clear error when addon registration failed rather than
+ * an opaque napi binding error.
+ */
+export function parse(
+  language: string | Lang,
+  content: string,
+): ReturnType<typeof napiParse> {
+  ensureDynamicLanguages();
+  if (!dynamicLanguagesAvailable && !isBuiltinLang(language)) {
+    throw new Error(
+      'ast-grep dynamic grammars are unavailable (native addon load failed)',
+    );
+  }
+  return napiParse(language as Lang, content);
+}
+
+/**
+ * Wrapped `findInFiles` that ensures dynamic grammars are registered first.
+ *
+ * Callers (e.g. cross-file-analyzer.ts) catch errors from findInFiles and
+ * degrade to empty results, so a dynamic-language napi error is already
+ * handled gracefully. The explicit guard in `parse` / `parseSource` covers
+ * the primary parse path where a clearer message is most valuable.
+ */
+export function findInFiles(
+  ...args: Parameters<typeof napiFindInFiles>
+): ReturnType<typeof napiFindInFiles> {
+  ensureDynamicLanguages();
+  return napiFindInFiles(...args);
+}
+
+// Re-export the Lang enum directly (enum, no native side effects).
+export { Lang } from '@ast-grep/napi';

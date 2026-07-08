@@ -9,48 +9,43 @@ import {
   createContentGenerator,
   createContentGeneratorConfig,
 } from './contentGenerator.js';
-import { createCodeAssistContentGenerator } from '../code_assist/codeAssist.js';
-import { GoogleGenAIWrapper } from '../code_assist/googleGenAIWrapper.js';
 import type { Config } from '../config/config.js';
 
-vi.mock('../code_assist/codeAssist.js');
-
-// Mock the @google/genai module so the code_assist enclave's
-// GoogleGenAIWrapper can construct its GoogleGenAI without a real SDK.
-// The mock path is the module specifier, which vitest intercepts globally;
-// no direct import of @google/genai is needed in this non-enclave test file.
-vi.mock('@google/genai', () => ({
-  GoogleGenAI: vi.fn().mockImplementation(() => ({
-    models: {},
-  })),
+const mockGoogleGenAIWrapperConstructor = vi.hoisted(() => vi.fn());
+const mockGoogleGenAIWrapperInstance = vi.hoisted(() => ({
+  generateContent: async (): Promise<unknown> => ({}),
+  generateContentStream: async (): Promise<AsyncGenerator<unknown>> => {
+    async function* emptyStream(): AsyncGenerator<unknown> {
+      yield* [];
+    }
+    return emptyStream();
+  },
+  countTokens: async (): Promise<unknown> => ({}),
+  embedContent: async (): Promise<unknown> => ({}),
 }));
 
-// The GoogleGenAIWrapper (in the code_assist enclave) internally constructs a
-// GoogleGenAI from @google/genai. Rather than importing @google/genai in this
-// non-enclave test file, we verify the wrapper path at the behavioral level:
-// the generator must expose the enclave wrapper's content-generation surface.
-// The @google/genai module is explicitly mocked above so the wrapper can
-// construct its GoogleGenAI dependency without a direct reference here.
+vi.mock('../code_assist/googleGenAIWrapper.js', () => ({
+  GoogleGenAIWrapper: vi
+    .fn()
+    .mockImplementation((config: unknown, requestOptions: unknown) => {
+      mockGoogleGenAIWrapperConstructor(config, requestOptions);
+      return mockGoogleGenAIWrapperInstance;
+    }),
+}));
+
+vi.mock('../utils/installationManager.js', () => ({
+  InstallationManager: vi.fn().mockImplementation(() => ({
+    getInstallationId: () => 'test-installation-id',
+  })),
+}));
 
 const mockConfig = {
   getUsageStatisticsEnabled: vi.fn().mockReturnValue(false),
 } as unknown as Config;
 
 describe('createContentGenerator', () => {
-  it('should create a CodeAssistContentGenerator', async () => {
-    const mockGenerator = {} as unknown;
-    vi.mocked(createCodeAssistContentGenerator).mockResolvedValue(
-      mockGenerator as never,
-    );
-    const generator = await createContentGenerator(
-      {
-        model: 'test-model',
-        vertexai: true,
-      },
-      mockConfig,
-    );
-    expect(createCodeAssistContentGenerator).toHaveBeenCalled();
-    expect(generator).toBe(mockGenerator);
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
   it('should create a GoogleGenAIWrapper content generator', async () => {
@@ -61,30 +56,60 @@ describe('createContentGenerator', () => {
       },
       mockConfig,
     );
-    // We expect a GoogleGenAIWrapper instance wrapping the mocked GoogleGenAI
-    // from the code_assist enclave.
-    expect(generator).toBeInstanceOf(GoogleGenAIWrapper);
-    expect(generator).toHaveProperty('generateContent');
-    expect(generator).toHaveProperty('generateContentStream');
-    expect(generator).toHaveProperty('countTokens');
-    expect(generator).toHaveProperty('embedContent');
+    expect(generator).toBe(mockGoogleGenAIWrapperInstance);
+    expect(mockGoogleGenAIWrapperConstructor).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'test-model', apiKey: 'test-api-key' }),
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
   });
 
-  it('should fall back to CodeAssist when no API key is provided', async () => {
-    const mockGenerator = {} as unknown;
-    vi.mocked(createCodeAssistContentGenerator).mockResolvedValue(
-      mockGenerator as never,
+  it('should add usage-statistics header when enabled', async () => {
+    const statsConfig = {
+      getUsageStatisticsEnabled: vi.fn().mockReturnValue(true),
+    } as unknown as Config;
+
+    await createContentGenerator(
+      {
+        model: 'test-model',
+        apiKey: 'test-api-key',
+      },
+      statsConfig,
     );
 
+    expect(mockGoogleGenAIWrapperConstructor).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'test-model', apiKey: 'test-api-key' }),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'x-gemini-api-privileged-user-id': 'test-installation-id',
+        }),
+      }),
+    );
+  });
+
+  it('should create a GoogleGenAIWrapper content generator with Vertex AI', async () => {
     const generator = await createContentGenerator(
       {
         model: 'test-model',
+        vertexai: true,
       },
       mockConfig,
     );
+    expect(generator).toBe(mockGoogleGenAIWrapperInstance);
+    expect(mockGoogleGenAIWrapperConstructor).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'test-model', vertexai: true }),
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
+  });
 
-    expect(createCodeAssistContentGenerator).toHaveBeenCalled();
-    expect(generator).toBe(mockGenerator);
+  it('should throw an error when no authentication is provided', async () => {
+    await expect(
+      createContentGenerator(
+        {
+          model: 'test-model',
+        },
+        mockConfig,
+      ),
+    ).rejects.toThrow('No Gemini authentication configured');
   });
 });
 

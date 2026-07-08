@@ -193,7 +193,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 91 | `packages/core/src/providers/gemini/GeminiProvider.e2e.test.ts` | `packages/providers/src/gemini/GeminiProvider.e2e.test.ts` | Rule 4 | B |
 | 92 | `packages/core/src/providers/gemini/GeminiProvider.mediaBlock.test.ts` | `packages/providers/src/gemini/GeminiProvider.mediaBlock.test.ts` | Rule 4 | B |
 | 93 | `packages/core/src/providers/gemini/thoughtSignatures.ts` | `packages/providers/src/gemini/thoughtSignatures.ts` | Rule 4 | B |
-| 94 | `packages/core/src/providers/gemini/usageInfo.ts` | `packages/providers/src/gemini/usageInfo.ts` | Rule 4 | B |
+| 94 | `packages/core/src/providers/gemini/usageInfo.ts` | `packages/providers/src/gemini/geminiModels.ts` | Rule 4 + #2398 deletion override | B |
 | 95 | `packages/core/src/providers/gemini/__tests__/gemini.stateless.test.ts` | `packages/providers/src/gemini/__tests__/gemini.stateless.test.ts` | Rule 1 | B |
 | 96 | `packages/core/src/providers/gemini/__tests__/gemini.thinkingLevel.test.ts` | `packages/providers/src/gemini/__tests__/gemini.thinkingLevel.test.ts` | Rule 1 | B |
 | 97 | `packages/core/src/providers/gemini/__tests__/gemini.thoughtSignature.test.ts` | `packages/providers/src/gemini/__tests__/gemini.thoughtSignature.test.ts` | Rule 1 | B |

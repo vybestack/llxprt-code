@@ -27,6 +27,7 @@ import { convertToolsToOpenAIResponses } from './schemaConverter.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
+import { mergeSystemInstruction } from '../utils/systemInstructionMerge.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
@@ -172,7 +173,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       toolNames ?? [],
       () => configWithManagers?.getSubagentManager?.(),
     );
-    return getCoreSystemPromptAsync({
+    const corePrompt = await getCoreSystemPromptAsync({
       userMemory,
       mcpInstructions,
       model: options.resolved.model || this.getDefaultModel(),
@@ -183,6 +184,10 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
           ? 'interactive'
           : 'non-interactive',
     });
+    // Issue #2410: Merge the caller-supplied system instruction (e.g. a
+    // subagent persona/task prompt) with the core system prompt so the
+    // instruction reaches the Responses/Codex API via request.instructions.
+    return mergeSystemInstruction(corePrompt, options.systemInstruction);
   }
 
   private getToolNamesForPrompt(

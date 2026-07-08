@@ -13,4 +13,3 @@ export { CoreTodoServiceAdapter } from './CoreTodoServiceAdapter.js';
 export { CoreToolHostAdapter } from './CoreToolHostAdapter.js';
 export { CoreToolKeyStorageAdapter } from './CoreToolKeyStorageAdapter.js';
 export { CoreToolRegistryHostAdapter } from './CoreToolRegistryHostAdapter.js';
-export { CoreWebSearchServiceAdapter } from './CoreWebSearchServiceAdapter.js';

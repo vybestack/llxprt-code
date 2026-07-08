@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { parse } from '@ast-grep/napi';
 import {
+  parse,
   LANGUAGE_MAP,
   JAVASCRIPT_FAMILY_EXTENSIONS,
 } from '../../utils/ast-grep-utils.js';

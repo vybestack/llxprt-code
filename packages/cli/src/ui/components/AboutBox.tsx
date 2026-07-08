@@ -7,7 +7,11 @@
 import type React from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
-import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
+import { getGitCommitInfo } from '../../utils/gitCommitInfo.js';
+
+// Resolve once at module load (the loader is cached and does synchronous file
+// I/O on first call), keeping the React render path free of side effects.
+const GIT_COMMIT_INFO = getGitCommitInfo();
 
 interface AboutBoxProps {
   cliVersion: string;

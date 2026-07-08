@@ -115,7 +115,6 @@ export {
 // --- Usage info ---
 export * from './anthropic/usageInfo.js';
 export { formatAllUsagePeriods } from './anthropic/usageInfo.js';
-export * from './gemini/usageInfo.js';
 export * from './openai/codexUsageInfo.js';
 export {
   CodexUsageInfoSchema,

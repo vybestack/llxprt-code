@@ -382,11 +382,16 @@ export abstract class BaseProvider implements IProvider {
 
     const settingsService = this.resolveSettingsService();
 
-    // includeOAuth: true - OAuth is allowed during prompt send
+    // OAuth is only eligible for the effective base URL of this call. Providers
+    // whose OAuth is host-specific (e.g. Anthropic) override isOAuthEligible so
+    // a third-party gateway base URL never triggers an OAuth handshake against
+    // the wrong endpoint.
+    const effectiveBaseURL =
+      activeOptions?.resolved.baseURL ?? this.computeBaseURL(settingsService);
     const token =
       (await this.authResolver.resolveAuthentication({
         settingsService,
-        includeOAuth: true,
+        includeOAuth: this.isOAuthEligible(effectiveBaseURL),
       })) ?? '';
 
     return token;
@@ -423,6 +428,16 @@ export abstract class BaseProvider implements IProvider {
    * Must be implemented by concrete providers
    */
   protected abstract supportsOAuth(): boolean;
+
+  /**
+   * Determines whether OAuth is eligible given the resolved base URL for this
+   * call. Providers whose OAuth is tied to a specific host (e.g. Anthropic)
+   * override this to disable OAuth when a third-party gateway base URL is set.
+   * Default: always eligible (preserves behaviour for all other providers).
+   */
+  protected isOAuthEligible(_baseURL?: string): boolean {
+    return true;
+  }
 
   /**
    * Classify whether a given auth token is an OAuth token.
@@ -744,10 +759,13 @@ export abstract class BaseProvider implements IProvider {
       (settings.getProviderSettings(this.name) as
         | ProviderSettings
         | undefined) ?? ({} as ProviderSettings);
+    const resolvedBaseURL = this.computeBaseURL(settings);
     const resolvedAuth =
       (await this.authResolver.resolveAuthentication({
         settingsService: settings,
-        includeOAuth: true,
+        includeOAuth: this.isOAuthEligible(
+          providedOptions.resolved?.baseURL ?? resolvedBaseURL,
+        ),
       })) ?? '';
 
     return normalizeProviderGenerateChatOptions(this, providedOptions, {
@@ -757,7 +775,7 @@ export abstract class BaseProvider implements IProvider {
       maybeTools,
       authToken: resolvedAuth,
       resolvedModel: this.computeModel(settings),
-      resolvedBaseURL: this.computeBaseURL(settings),
+      resolvedBaseURL,
       providerSettings,
       buildEphemeralsSnapshot: (snapshotSettings) =>
         this.buildEphemeralsSnapshot(snapshotSettings),

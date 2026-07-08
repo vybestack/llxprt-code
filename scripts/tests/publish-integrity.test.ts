@@ -430,11 +430,11 @@ describe('published package no-compile runtime contract (S6)', () => {
     expect(packed.has('packages/cli/src/cli.tsx')).toBe(true);
     expect(packed.has('packages/core/index.ts')).toBe(true);
     expect(packed.has('packages/core/src/index.ts')).toBe(true);
-    // git-commit.ts is gitignored (regenerated per build) but imported by
-    // shipped source (AboutBox, bugCommand). The root prepack hook must
-    // generate it so `npm pack` always includes it — without it the installed
-    // CLI dies at startup with a module-resolution error.
-    expect(packed.has('packages/cli/src/generated/git-commit.ts')).toBe(true);
+    // git-commit.json is gitignored (regenerated per build) but loaded at
+    // runtime by shipped source (AboutBox, bugCommand) via the resilient
+    // gitCommitInfo loader. The root prepack hook must generate it so
+    // `npm pack` always includes it.
+    expect(packed.has('packages/cli/src/generated/git-commit.json')).toBe(true);
   });
 
   it('declares runtime dependencies needed by shipped workspace source', () => {
@@ -509,14 +509,15 @@ describe('release build self-contained generate contract (issue #2392)', () => {
   // Regression guard for the release failure in
   // https://github.com/vybestack/llxprt-code/actions/runs/28798881603
   //
-  // packages/cli/src/generated/git-commit.ts is gitignored and only exists once
-  // `npm run generate` has run. The CLI workspace `build` script invokes tsc
-  // directly and imports GIT_COMMIT_INFO from that generated module, so tsc
-  // fails with TS2307 if the file was never generated. The release workflow
-  // builds via `npm run build:packages`, and it must NOT rely on an earlier
-  // step (e.g. Preflight) having generated the file as a side effect — when a
-  // dispatch sets force_skip_tests=true, Preflight is skipped and the build
-  // breaks. `build:packages` must therefore generate its own prerequisites.
+  // packages/cli/src/generated/git-commit.json is gitignored and only exists
+  // once `npm run generate` has run. The gitCommitInfo loader reads it at
+  // runtime (falling back to 'N/A' when absent), so a missing artifact no
+  // longer breaks the CLI build or startup. The release workflow builds via
+  // `npm run build:packages`, and it must NOT rely on an earlier step (e.g.
+  // Preflight) having generated the file as a side effect — when a dispatch
+  // sets force_skip_tests=true, Preflight is skipped. `build:packages` must
+  // therefore generate its own prerequisites so the shipped tarball includes
+  // the real commit hash rather than an 'N/A' fallback.
   it('runs generate before building workspaces in build:packages', () => {
     const rootPackage = JSON.parse(
       readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
@@ -537,7 +538,7 @@ describe('release build self-contained generate contract (issue #2392)', () => {
     expect(
       generateIndex,
       '"build:packages" must run "npm run generate" so it produces its own ' +
-        'gitignored prerequisites (packages/cli/src/generated/git-commit.ts) ' +
+        'gitignored prerequisites (packages/cli/src/generated/git-commit.json) ' +
         'instead of depending on an earlier workflow step. See issue #2392.',
     ).toBeGreaterThanOrEqual(0);
 
@@ -550,8 +551,8 @@ describe('release build self-contained generate contract (issue #2392)', () => {
     expect(
       generateIndex,
       '"build:packages" must run "npm run generate" BEFORE ' +
-        '"npm run build --workspaces", otherwise the CLI workspace tsc build ' +
-        'fails with TS2307 on the not-yet-generated git-commit module.',
+        '"npm run build --workspaces", otherwise the bundled CLI ships without ' +
+        'the generated git-commit.json artifact.',
     ).toBeLessThan(buildWorkspacesIndex);
   });
 
@@ -563,8 +564,8 @@ describe('release build self-contained generate contract (issue #2392)', () => {
     const generate = scripts['generate'] ?? '';
 
     // The whole point of running generate in build:packages is to create
-    // git-commit.ts. If the generate script stops invoking that generator,
-    // build:packages no longer satisfies the CLI build's import.
+    // git-commit.json. If the generate script stops invoking that generator,
+    // build:packages no longer produces the artifact the loader reads.
     expect(generate).toContain('scripts/generate-git-commit-info.ts');
   });
 });

@@ -63,6 +63,14 @@ export interface GenerateChatOptions {
     streaming?: boolean;
   };
   userMemory?: UserMemoryInput;
+  /**
+   * Caller-supplied system instruction (e.g. a subagent persona/task prompt).
+   * When present, providers SHOULD merge this into their system prompt so the
+   * agent's directives reach the model. Issue #2410: without this field the
+   * subagent persona built in generationConfig.systemInstruction never reaches
+   * the provider, because the provider rebuilds its own generic core prompt.
+   */
+  systemInstruction?: string;
 }
 
 /**

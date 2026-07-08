@@ -107,7 +107,7 @@ llxprt-code ships with built-in policies:
 These tools auto-approve by default:
 
 - glob, grep, ls, read_file, read_many_files, ripgrep
-- web_search, task, write_todos, list_subagents
+- exa_web_search, task, write_todos, list_subagents
 - notebook_edit, slash_command, skill
 
 ### Write Tools (Priority 1.01)
@@ -115,7 +115,7 @@ These tools auto-approve by default:
 These tools require confirmation by default:
 
 - edit, write_file
-- shell, memory, web_fetch
+- shell, memory, direct_web_fetch
 - mcp_tool
 
 ### Dangerous Shell Commands (Priority 2.0)

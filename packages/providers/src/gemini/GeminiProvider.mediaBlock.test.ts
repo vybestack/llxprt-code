@@ -38,10 +38,6 @@ vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
 }));
 
-vi.mock('@vybestack/llxprt-code-core/code_assist/codeAssist.js', () => ({
-  createCodeAssistContentGenerator: vi.fn(),
-}));
-
 const mockSettingsService = vi.hoisted(() => ({
   set: vi.fn(),
   get: vi.fn(),

@@ -14,7 +14,7 @@
  *   G1 – isAuthenticated uses optional provider.isAuthenticated() override when
  *        OAuth is enabled; falls back to token-store validity check.
  *   G2 – logout no longer performs manager-layer Gemini filesystem cleanup;
- *        GeminiOAuthProvider.logout() already handles that.
+ *        the provider's own logout() handles provider-specific cleanup.
  *   G3 – clearProviderAuthCaches uses generic duck-typed optional calls with
  *        independent try/catch per call (no provider-name branching).
  */

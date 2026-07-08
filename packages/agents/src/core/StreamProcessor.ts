@@ -34,13 +34,8 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import { convertIContentToResponse } from './MessageConverter.js';
 import { logApiResponse, logApiError } from './turnLogging.js';
-import {
-  EmptyStreamError,
-  isSchemaDepthError,
-} from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { ResponseOutcome } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
-import { hasCycleInSchema } from '@vybestack/llxprt-code-tools';
-import { isStructuredError } from '@vybestack/llxprt-code-core/utils/quotaErrorDetection.js';
 import {
   AgentExecutionStoppedError,
   AgentExecutionBlockedError,
@@ -60,6 +55,7 @@ import {
   applyRequestModifications,
   resolveUserMemory,
   logOutgoingRequest,
+  extractSystemInstructionText,
   type ToolGroupArray,
   type ToolSelectionHookResult,
 } from './streamRequestHelpers.js';
@@ -470,6 +466,9 @@ export class StreamProcessor {
           abortSignal: params.config?.abortSignal,
         },
         userMemory,
+        systemInstruction: extractSystemInstructionText(
+          this.generationConfig.systemInstruction,
+        ),
       } as GenerateChatOptions);
 
       return await this._consumeFirstChunkAndReturn(
@@ -906,38 +905,6 @@ export class StreamProcessor {
         preparedHistoryUserInput.filteredResults,
         this.eagerlyRecordedToolResponseCallIds,
       );
-    }
-  }
-
-  /**
-   * Enrich schema depth errors with diagnostic information.
-   * Adapted from maybeIncludeSchemaDepthContext in chatSession.ts.
-   */
-  _enrichSchemaDepthError(error: unknown): void {
-    // Check for potentially problematic cyclic tools with cyclic schemas
-    // and include a recommendation to remove potentially problematic tools.
-    if (isStructuredError(error) && isSchemaDepthError(error.message)) {
-      const toolNames = this.runtimeContext.tools.listToolNames();
-      const cyclicSchemaTools: string[] = [];
-
-      // Check each tool's metadata for cyclic schemas
-      for (const toolName of toolNames) {
-        const metadata = this.runtimeContext.tools.getToolMetadata(toolName);
-        if (
-          metadata?.parameterSchema &&
-          hasCycleInSchema(metadata.parameterSchema)
-        ) {
-          cyclicSchemaTools.push(toolName);
-        }
-      }
-
-      if (cyclicSchemaTools.length > 0) {
-        const extraDetails =
-          `\n\nThis error was probably caused by cyclic schema references in one of the following tools, try disabling them:\n\n - ` +
-          cyclicSchemaTools.join(`\n - `) +
-          `\n`;
-        error.message += extraDetails;
-      }
     }
   }
 }

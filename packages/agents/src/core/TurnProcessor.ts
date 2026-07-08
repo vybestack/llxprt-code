@@ -55,6 +55,7 @@ import {
 } from './hookToolRestrictions.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import { shouldRetryStreamAttempt } from './turnAbortHelpers.js';
+import { extractSystemInstructionText } from './streamRequestHelpers.js';
 
 import {
   AgentExecutionStoppedError,
@@ -561,6 +562,9 @@ export class TurnProcessor {
         runtimeContext.settingsService as GenerateChatOptions['settings'],
       metadata: runtimeContext.metadata,
       userMemory: resolveUserMemory(runtimeContext.config),
+      systemInstruction: extractSystemInstructionText(
+        this.generationConfig.systemInstruction,
+      ),
     });
   }
 

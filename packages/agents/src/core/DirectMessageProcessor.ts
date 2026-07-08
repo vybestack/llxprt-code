@@ -32,6 +32,7 @@ import {
 import {
   resolveUserMemory,
   applyRequestModifications,
+  extractSystemInstructionText,
 } from './streamRequestHelpers.js';
 import { isSchemaDepthError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import {
@@ -504,6 +505,9 @@ export class DirectMessageProcessor {
         runtimeContext.settingsService as GenerateChatOptions['settings'],
       metadata: runtimeContext.metadata,
       userMemory: resolveUserMemory(runtimeContext.config),
+      systemInstruction: extractSystemInstructionText(
+        this.generationConfig.systemInstruction,
+      ),
     });
   }
 

@@ -122,6 +122,15 @@ if (existsSync(promptManifestPath)) {
   copyFileSync(promptManifestPath, join(bundleDir, 'default-prompts.json'));
 }
 
+// Copy generated git-commit info into the bundle root for runtime loading
+const gitCommitInfoPath = join(
+  root,
+  'packages/cli/src/generated/git-commit.json',
+);
+if (existsSync(gitCommitInfoPath)) {
+  copyFileSync(gitCommitInfoPath, join(bundleDir, 'git-commit.json'));
+}
+
 // Copy provider alias config files preserving directory structure
 const aliasFiles = glob.sync(
   'packages/providers/src/composition/aliases/*.config',

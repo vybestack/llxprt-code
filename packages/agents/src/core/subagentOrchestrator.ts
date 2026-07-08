@@ -82,10 +82,7 @@ const createAbortError = (message: string): Error => {
   return error;
 };
 
-export const DEFAULT_DISABLED_TOOLS = [
-  'google_web_fetch',
-  'google_web_search',
-] as const;
+export const DEFAULT_DISABLED_TOOLS = [] as const;
 
 export interface SubagentLaunchRequest {
   name: string;

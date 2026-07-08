@@ -50,6 +50,16 @@
       "types": "./dist/src/utils/fetch.d.ts",
       "bun": "./src/utils/fetch.ts",
       "import": "./dist/src/utils/fetch.js"
+    },
+    "./activate-skill.js": {
+      "types": "./dist/src/tools/activate-skill.d.ts",
+      "bun": "./src/tools/activate-skill.ts",
+      "import": "./dist/src/tools/activate-skill.js"
+    },
+    "./tools/activate-skill.js": {
+      "types": "./dist/src/tools/activate-skill.d.ts",
+      "bun": "./src/tools/activate-skill.ts",
+      "import": "./dist/src/tools/activate-skill.js"
     }
   },
   "scripts": {

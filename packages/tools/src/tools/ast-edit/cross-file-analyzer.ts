@@ -9,10 +9,9 @@
 import { promises as fsPromises, accessSync } from 'fs';
 import * as path from 'path';
 import type { Lang } from '@ast-grep/napi';
-import { findInFiles } from '@ast-grep/napi';
 import FastGlob from 'fast-glob';
 import { debugLogger } from '../../utils/debugLogger.js';
-import { LANGUAGE_MAP } from '../../utils/ast-grep-utils.js';
+import { findInFiles, LANGUAGE_MAP } from '../../utils/ast-grep-utils.js';
 import type { SymbolReference, EnhancedDeclaration, Import } from './types.js';
 import { ASTConfig } from './ast-config.js';
 import { ASTQueryExtractor } from './ast-query-extractor.js';

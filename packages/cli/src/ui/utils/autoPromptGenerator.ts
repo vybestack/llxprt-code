@@ -93,7 +93,7 @@ function resolveClient(runtime: AutoPromptRuntime): {
 
   if (client == null) {
     throw new Error(
-      'Unable to access Gemini client. Run /auth login or try manual mode.',
+      'Unable to access the AI client. Please configure authentication.',
     );
   }
 

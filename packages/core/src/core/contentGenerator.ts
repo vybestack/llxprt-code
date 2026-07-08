@@ -19,7 +19,6 @@ import type {
   EmbedContentRequest,
   EmbedContentResult,
 } from '../llm-types/index.js';
-import { createCodeAssistContentGenerator } from '../code_assist/codeAssist.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
 import type { Config } from '../config/config.js';
 /**
@@ -130,14 +129,8 @@ export function createContentGeneratorConfig(
 export async function createContentGenerator(
   config: ContentGeneratorConfig,
   gcConfig: Config,
-  sessionId?: string,
+  _sessionId?: string,
 ): Promise<ContentGenerator> {
-  const version = process.env.CLI_VERSION ?? process.version;
-  const httpOptions = {
-    headers: {
-      'User-Agent': `LLxprt-Code/${version} (${process.platform}; ${process.arch})`,
-    },
-  };
   // @plan:PLAN-20260603-ISSUE1584.P05
   // @requirement:REQ-DEP-001
   // Prefer factory injection when available — eliminates core→providers construction
@@ -159,24 +152,6 @@ export async function createContentGenerator(
     );
   }
 
-  if (config.vertexai === true) {
-    return createCodeAssistContentGenerator(
-      httpOptions,
-      gcConfig,
-      undefined,
-      sessionId,
-    );
-  }
-
-  if (!config.apiKey) {
-    return createCodeAssistContentGenerator(
-      httpOptions,
-      gcConfig,
-      undefined,
-      sessionId,
-    );
-  }
-
   const requestOptions = { headers: {} as Record<string, string> };
   if (gcConfig.getUsageStatisticsEnabled()) {
     const installationManager = new InstallationManager();
@@ -184,5 +159,16 @@ export async function createContentGenerator(
     requestOptions.headers['x-gemini-api-privileged-user-id'] =
       `${installationId}`;
   }
+
+  if (config.vertexai === true) {
+    return new GoogleGenAIWrapper(config, requestOptions);
+  }
+
+  if (!config.apiKey) {
+    throw new Error(
+      'No Gemini authentication configured. Set GEMINI_API_KEY environment variable, use --keyfile, or configure Vertex AI credentials.',
+    );
+  }
+
   return new GoogleGenAIWrapper(config, requestOptions);
 }

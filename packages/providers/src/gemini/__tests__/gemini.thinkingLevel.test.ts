@@ -14,7 +14,6 @@ import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IProviderConfig } from '../types/IProviderConfig.js';
 import { GeminiProvider } from '../GeminiProvider.js';
-import { createCodeAssistContentGenerator } from '@vybestack/llxprt-code-core/code_assist/codeAssist.js';
 import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
@@ -28,14 +27,6 @@ const googleGenAIState = {
   instances: [] as Array<{ options: Record<string, unknown> }>,
   streamCalls: [] as Array<{ request: Record<string, unknown> }>,
   nonStreamCalls: [] as Array<{ request: Record<string, unknown> }>,
-  streamPlans: [] as Array<Array<Record<string, unknown>>>,
-};
-
-const codeAssistState = {
-  streamCalls: [] as Array<{
-    request: Record<string, unknown>;
-    sessionId: string | undefined;
-  }>,
   streamPlans: [] as Array<Array<Record<string, unknown>>>,
 };
 
@@ -72,27 +63,6 @@ vi.mock('@google/genai', () => {
   return { GoogleGenAI: FakeGoogleGenAI, Type };
 });
 
-vi.mock('@vybestack/llxprt-code-core/code_assist/codeAssist.js', () => ({
-  createCodeAssistContentGenerator: vi.fn(async () => ({
-    generateContentStream: vi.fn(
-      (request: Record<string, unknown>, sessionId?: string) => {
-        codeAssistState.streamCalls.push({
-          request,
-          sessionId,
-        });
-        const plan = codeAssistState.streamPlans.shift() ?? [];
-        return {
-          async *[Symbol.asyncIterator]() {
-            for (const response of plan) {
-              yield response;
-            }
-          },
-        };
-      },
-    ),
-  })),
-}));
-
 const queueGoogleStream = (responses: Array<Record<string, unknown>>): void => {
   googleGenAIState.streamPlans.push(responses);
 };
@@ -119,22 +89,10 @@ class TestGeminiProvider extends GeminiProvider {
       getEphemeralSettings: () => settings,
     };
   }
-
-  protected override async createOAuthContentGenerator(
-    httpOptions: Record<string, unknown>,
-    config: unknown,
-    baseURL?: string,
-  ) {
-    return createCodeAssistContentGenerator(
-      httpOptions,
-      config as never,
-      baseURL,
-    );
-  }
 }
 
 const mockDetermineBestAuth = (
-  modes: Array<{ authMode: 'gemini-api-key' | 'oauth'; token: string }>,
+  modes: Array<{ authMode: 'gemini-api-key' | 'vertex-ai'; token: string }>,
 ) => {
   let activeIndex = 0;
   const spy = vi.spyOn(
@@ -181,9 +139,6 @@ describe('Gemini provider thinkingLevel tests', () => {
     googleGenAIState.streamCalls.length = 0;
     googleGenAIState.nonStreamCalls.length = 0;
     googleGenAIState.streamPlans.length = 0;
-    codeAssistState.streamCalls.length = 0;
-    codeAssistState.streamPlans.length = 0;
-    vi.mocked(createCodeAssistContentGenerator).mockClear();
     setActiveProviderRuntimeContext(
       createProviderRuntimeContext({
         settingsService: new SettingsService(),

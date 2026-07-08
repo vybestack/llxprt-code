@@ -35,7 +35,6 @@ These tests validate that the LLM **makes correct decisions**. Mocking these def
 | `file-system.test.ts`           | LLM chooses appropriate read/write/edit tools         |
 | `save_memory.test.ts`           | LLM decides to use memory tool when asked to remember |
 | `replace.test.ts`               | LLM performs context-aware text replacement           |
-| `google_web_search.test.ts`     | LLM uses search tool for current information          |
 | `todo-continuation.e2e.test.js` | Complex multi-turn flows with state persistence       |
 | `list_directory.test.ts`        | LLM navigates filesystem structure                    |
 | `read_many_files.test.ts`       | LLM reads multiple files efficiently                  |
@@ -244,7 +243,6 @@ To catch LLM behavior regressions, maintain **at least one real LLM test per too
 | Shell execution   | `run_shell_command.test.ts`     | Validates LLM can execute commands      |
 | File operations   | `file-system.test.ts`           | Validates LLM can read/write/edit files |
 | Memory            | `save_memory.test.ts`           | Validates LLM can store/recall memories |
-| Search            | `google_web_search.test.ts`     | Validates LLM uses web search           |
 | Multi-turn        | `todo-continuation.e2e.test.js` | Validates LLM maintains context         |
 | Text manipulation | `replace.test.ts`               | Validates context-aware edits           |
 

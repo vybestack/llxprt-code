@@ -8,7 +8,7 @@ Ready-to-use configuration recipes for common LLxprt Code setups. Each recipe in
 
 Get started with LLxprt Code at low cost using Gemini and Qwen (API key).
 
-- Gemini setup (OAuth or API key)
+- Gemini setup (API key)
 - Qwen setup (DashScope API key)
 - Complete profile JSON examples
 - Note on changing free-tier availability (see the recipe)

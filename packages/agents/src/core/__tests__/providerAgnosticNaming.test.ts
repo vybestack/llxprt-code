@@ -41,9 +41,6 @@ const ALLOWED_GEMINI_PATTERNS: ReadonlyArray<{
   pattern: string;
   reason: string;
 }> = [
-  // Provider-specific auth and config
-  { pattern: 'gemini-oauth-provider', reason: 'Gemini OAuth provider' },
-  { pattern: 'gemini.config', reason: 'Gemini provider config alias' },
   // Provider implementation and request handling (real Gemini provider module)
   {
     pattern: 'geminiRequestBuilding',

@@ -9,7 +9,7 @@ import path from 'node:path';
 import { PromptRegistry } from '../prompts/prompt-registry.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { ActivateSkillTool } from '@vybestack/llxprt-code-tools';
+import { ActivateSkillTool } from '@vybestack/llxprt-code-tools/tools/activate-skill.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { CoreSkillServiceAdapter } from '../tools-adapters/CoreSkillServiceAdapter.js';
 import { DebugLogger } from '../debug/DebugLogger.js';

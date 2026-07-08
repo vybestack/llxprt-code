@@ -12,7 +12,7 @@ llxprt
 Once inside the REPL, authenticate with a provider and start coding:
 
 ```text
-/auth gemini enable
+/key save gemini your-gemini-api-key
 /provider gemini
 /model gemini-2.5-flash
 ```
