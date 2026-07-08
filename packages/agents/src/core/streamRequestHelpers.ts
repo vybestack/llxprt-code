@@ -27,7 +27,7 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 export type ToolGroupArray = Array<{
   functionDeclarations?: Array<{
@@ -334,6 +334,10 @@ export function extractSystemInstructionText(
   return undefined;
 }
 
+const systemInstructionLogger = new DebugLogger(
+  'llxprt:agents:system-instruction',
+);
+
 function extractPartsText(parts: unknown[]): string {
   return parts
     .map((part) => {
@@ -346,6 +350,12 @@ function extractPartsText(parts: unknown[]): string {
       ) {
         return part.text;
       }
+      // Unrecognized part type — warn so malformed parts in a systemInstruction
+      // (which carries the subagent persona, issue #2410) are not silently lost.
+      systemInstructionLogger.warn(
+        () =>
+          `extractPartsText: dropping unrecognized systemInstruction part (type=${part === null ? 'null' : typeof part})`,
+      );
       return '';
     })
     .filter((text) => text.length > 0)
