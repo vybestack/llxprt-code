@@ -13,8 +13,8 @@
  * that z.ai rejected with HTTP 400 error 1213.
  *
  * The loop guard was extracted into `shouldStopNonInteractiveLoop` so it can
- * be tested directly. These tests verify the guard catches all three cases:
- * null, undefined-coerced-to-null, and the critical empty-array case.
+ * be tested directly. These tests verify the guard catches null and the
+ * critical empty-array case, and allows continuation for non-empty arrays.
  */
 
 import { describe, it, expect } from 'vitest';

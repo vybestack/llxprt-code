@@ -299,8 +299,8 @@ export function extractSystemInstructionText(
 ): string | undefined {
   // The SDK types declare systemInstruction as ContentUnion | undefined, but
   // defensive null-safety is needed because 'parts' in null / 'text' in null
-  // would throw at runtime. Broadening to unknown | undefined lets the null
-  // guard pass lint without a suppression directive.
+  // would throw at runtime. Broadening to unknown lets the null guard pass
+  // lint without a suppression directive.
   const value = raw as unknown;
   if (value === undefined || value === null) {
     return undefined;
