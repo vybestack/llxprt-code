@@ -90,6 +90,18 @@ describe('issue #2410 – HistoryService rejects zero-block turns', () => {
     expect(emitted).toBe(false);
   });
 
+  it('emits contentAdded for valid content', () => {
+    let emitted = false;
+    service.on('contentAdded', () => {
+      emitted = true;
+    });
+    service.add({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'hello' }],
+    });
+    expect(emitted).toBe(true);
+  });
+
   it('still rejects invalid speaker (pre-existing behavior)', () => {
     const badSpeaker: IContent = {
       speaker: 'invalid' as IContent['speaker'],

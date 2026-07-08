@@ -454,7 +454,7 @@ export async function dispatchNonInteractiveTurnResult(
  */
 export function shouldStopNonInteractiveLoop(
   nextMessages: Content[] | null,
-): boolean {
+): nextMessages is null {
   return nextMessages === null || nextMessages.length === 0;
 }
 
@@ -521,7 +521,7 @@ async function runNonInteractiveLoopIteration(
   // so an empty array would slip through and propagate a zero-part user
   // message into provider history (issue #2410). Treat an empty array the
   // same as "no further messages" and stop the loop.
-  if (shouldStopNonInteractiveLoop(nextMessages) || nextMessages === null) {
+  if (shouldStopNonInteractiveLoop(nextMessages)) {
     return { action: 'stop' };
   }
   return { action: 'continue', messages: nextMessages };
