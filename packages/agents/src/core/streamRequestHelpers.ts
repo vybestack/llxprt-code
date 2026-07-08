@@ -331,6 +331,12 @@ export function extractSystemInstructionText(
     const text = typeof value.text === 'string' ? value.text.trim() : '';
     return text.length > 0 ? text : undefined;
   }
+  // Unrecognized top-level shape — warn so a malformed systemInstruction
+  // (which carries the subagent persona, issue #2410) is not silently lost.
+  systemInstructionLogger.warn(
+    () =>
+      `extractSystemInstructionText: unrecognized systemInstruction shape (keys=${Object.keys(value).join(',')})`,
+  );
   return undefined;
 }
 

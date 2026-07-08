@@ -51,7 +51,7 @@ describe('issue #2410 – extractSystemInstructionText', () => {
   it('extracts text from a Part[] shape', () => {
     const parts = [{ text: 'part one' }, { text: 'part two' }];
     expect(extractSystemInstructionText(parts as never)).toBe(
-      'part one\npart two',
+      ['part one', 'part two'].join('\n'),
     );
   });
 
@@ -82,5 +82,20 @@ describe('issue #2410 – extractSystemInstructionText', () => {
     expect(
       extractSystemInstructionText({ foo: 'bar' } as never),
     ).toBeUndefined();
+  });
+
+  it('drops non-text parts and joins only text parts in a Part[]', () => {
+    const parts = [{ inlineData: { data: 'binary' } }, { text: 'hello' }];
+    expect(extractSystemInstructionText(parts as never)).toBe('hello');
+  });
+
+  it('joins multiple text parts in a Content shape the same as Part[]', () => {
+    const content = {
+      role: 'system',
+      parts: [{ text: 'a' }, { text: 'b' }],
+    };
+    expect(extractSystemInstructionText(content as never)).toBe(
+      ['a', 'b'].join('\n'),
+    );
   });
 });
