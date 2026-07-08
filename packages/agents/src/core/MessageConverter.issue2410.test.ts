@@ -15,21 +15,14 @@
  * the boundary guards in MessageConverter prevent that.
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
-
-let normalizeToolInteractionInput: typeof import('./MessageConverter.js').normalizeToolInteractionInput;
-let createUserContentWithFunctionResponseFix: typeof import('./MessageConverter.js').createUserContentWithFunctionResponseFix;
-let convertMixedPartsToIContent: typeof import('./MessageConverter.js').convertMixedPartsToIContent;
+import { describe, it, expect } from 'vitest';
+import {
+  normalizeToolInteractionInput,
+  createUserContentWithFunctionResponseFix,
+  convertMixedPartsToIContent,
+} from './MessageConverter.js';
 
 describe('issue #2410 – empty message arrays must not create zero-part Content', () => {
-  beforeAll(async () => {
-    const mod = await import('./MessageConverter.js');
-    normalizeToolInteractionInput = mod.normalizeToolInteractionInput;
-    createUserContentWithFunctionResponseFix =
-      mod.createUserContentWithFunctionResponseFix;
-    convertMixedPartsToIContent = mod.convertMixedPartsToIContent;
-  });
-
   describe('createUserContentWithFunctionResponseFix', () => {
     it('returns a Content with zero parts for an empty array (not a fabricated user turn)', () => {
       const result = createUserContentWithFunctionResponseFix([]);

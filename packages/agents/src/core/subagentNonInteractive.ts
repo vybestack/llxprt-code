@@ -521,13 +521,15 @@ async function runNonInteractiveLoopIteration(
   // so an empty array would slip through and propagate a zero-part user
   // message into provider history (issue #2410). Treat null and empty
   // array the same as "no further messages" and stop the loop.
-  if (nextMessages === null) {
-    return { action: 'stop' };
-  }
   if (shouldStopNonInteractiveLoop(nextMessages)) {
     return { action: 'stop' };
   }
-  return { action: 'continue', messages: nextMessages };
+  // shouldStopNonInteractiveLoop returned false, so nextMessages is
+  // non-null and non-empty — safe to forward.
+  return {
+    action: 'continue',
+    messages: nextMessages as Content[],
+  };
 }
 
 /**
