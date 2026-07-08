@@ -77,11 +77,11 @@ jobs:
         startsWith(toJSON(github.event.comment.body), '"/open-code-review\t')))
     # Job-level concurrency is evaluated only for runs that pass this job if filter,
     # so ordinary, unauthorized, and non-PR issue comments cannot cancel OCR.
-    # All authorized OCR triggers for the same PR share one group so the latest
-    # run owns the sticky summary and inline-comment posting.
+    # All authorized OCR triggers for the same PR share one workflow-scoped group
+    # so the latest run owns the sticky summary and inline-comment posting.
     concurrency:
       group: >-
-        ocr-review-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+        ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
       cancel-in-progress: true
     steps:
       - name: Resolve PR context

@@ -15,6 +15,10 @@ on:
   workflow_dispatch:
     # Manual trigger - no inputs needed, uses repository variables
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   checks: 'write'
   contents: 'read'

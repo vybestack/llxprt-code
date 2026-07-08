@@ -124,6 +124,10 @@ jobs:
     needs:
       - e2e_doc_change_filter
       - skip_check
+    concurrency:
+      group: >-
+        ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.branch_ref || github.ref }}-${{ matrix.sandbox }}
+      cancel-in-progress: true
     if: |
       (
         github.event_name == 'push' ||
@@ -246,6 +250,10 @@ jobs:
     needs:
       - e2e_doc_change_filter
       - skip_check
+    concurrency:
+      group: >-
+        ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.branch_ref || github.ref }}-macos
+      cancel-in-progress: true
     if: |
       (
         github.event_name == 'merge_group' ||
