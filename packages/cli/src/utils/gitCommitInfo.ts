@@ -48,9 +48,14 @@ function candidatePaths(): string[] {
     candidates.add(path.resolve(candidate));
   };
 
+  // Sibling generated/ dir. This single candidate covers BOTH runtime layouts:
+  // source (src/utils -> src/generated) and tsc dist output
+  // (dist/src/utils -> dist/src/generated, since copy_files.ts mirrors the JSON
+  // into dist). No separate dist candidate is needed.
   add(path.join(loaderDir, '..', 'generated', INFO_FILENAME));
+  // Bundled runtime: the JSON is copied to the bundle root (parity with the
+  // bundle candidate in core's manifest-loader.ts).
   add(path.join(process.cwd(), 'bundle', INFO_FILENAME));
-  add(path.join(loaderDir, '..', '..', 'dist', INFO_FILENAME));
 
   return Array.from(candidates);
 }
