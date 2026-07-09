@@ -391,6 +391,12 @@ function finalizeStream(
   }
 }
 
+/**
+ * Applies the emoji filter to the fully accumulated quiet-mode text buffer.
+ * Uses filterText (not filterStreamChunk) because the buffer is complete text,
+ * not a partial streaming chunk — filterText handles full-string matching which
+ * is correct for finalized content.
+ */
 function filterQuietText(text: string, context: StreamConsumerContext): string {
   if (!context.emojiFilter) {
     return text;
@@ -404,7 +410,7 @@ function filterQuietText(text: string, context: StreamConsumerContext): string {
 
 interface StreamState {
   thoughtBuffer: string;
-  jsonResponseText: string;
+  streamedText: string;
   quietTextBuffer: string;
   pendingDone: Extract<AgentEvent, { type: 'done' }> | null;
 }
@@ -412,16 +418,23 @@ interface StreamState {
 function handleQuietEvent(event: AgentEvent, state: StreamState): boolean {
   switch (event.type) {
     case 'text':
+      // Buffer text instead of writing immediately; only the final turn's
+      // text (after the last tool call) is emitted at stream completion.
       handleQuietText(event.text, state);
       return true;
     case 'tool-call':
+      // Discard intermediate talk before tool calls so only the final
+      // response remains in the buffer (issue #728).
       state.quietTextBuffer = '';
       return true;
     case 'tool-result':
+      // Suppress all tool result display in quiet mode.
       return true;
     case 'loop-detected':
+      // Suppress non-essential stream warnings/errors in quiet mode.
       return true;
     case 'hook-blocked':
+      // Suppress hook-blocked stderr messages in quiet mode.
       return true;
     default:
       return false;
@@ -453,11 +466,11 @@ function dispatchAgentEvent(
         state.thoughtBuffer,
         includeThinking,
       );
-      state.jsonResponseText = handleText(
+      state.streamedText = handleText(
         event.text,
         context,
         writeProfileName,
-        state.jsonResponseText,
+        state.streamedText,
       );
       return;
     case 'tool-call':
@@ -536,7 +549,7 @@ export async function processAgentStream(
     context.config.getEphemeralSetting('reasoning.includeInResponse') !== false;
   const state: StreamState = {
     thoughtBuffer: '',
-    jsonResponseText: '',
+    streamedText: '',
     quietTextBuffer: '',
     pendingDone: null,
   };
@@ -551,7 +564,7 @@ export async function processAgentStream(
   }
   finalizeStream(
     state.thoughtBuffer,
-    state.jsonResponseText,
+    state.streamedText,
     state.quietTextBuffer,
     state.pendingDone,
     context,
