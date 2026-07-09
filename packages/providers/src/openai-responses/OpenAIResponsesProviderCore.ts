@@ -139,7 +139,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       'store' in requestOverrides
         ? (requestOverrides['store'] as boolean | undefined)
         : undefined;
-    this.applyStatefulConversation(
+    const appliedStore = this.applyStatefulConversation(
       request,
       stateful,
       parentId,
@@ -151,7 +151,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       isCodex,
       request,
       includeThinkingInResponse: reasoning.includeThinkingInResponse,
-      responsesStored: stateful && parentId !== undefined,
+      responsesStored: appliedStore,
     };
   }
 
@@ -633,8 +633,8 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     stateful: boolean,
     parentId: string | undefined,
     explicitUserStore: boolean | undefined,
-  ): void {
-    if (!stateful || parentId === undefined) return;
+  ): boolean {
+    if (!stateful || parentId === undefined) return false;
     if (explicitUserStore === false) {
       this.logger.debug(
         () =>
@@ -642,7 +642,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       );
       request.store = false;
       delete request.previous_response_id;
-      return;
+      return false;
     }
     request.previous_response_id = parentId;
     request.store = true;
@@ -650,6 +650,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       () =>
         `responses-stateful activated: previous_response_id=${parentId}, store=true.`,
     );
+    return true;
   }
 
   private async buildHeaders(

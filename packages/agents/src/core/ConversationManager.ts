@@ -55,8 +55,7 @@ function mergeTurnMetadata(
   responsesStored: boolean | null | undefined,
 ): void {
   const hasUsage = usageMetadata !== undefined && usageMetadata !== null;
-  const hasResponseId =
-    responseId !== undefined && responseId !== null && responseId !== '';
+  const hasResponseId = Boolean(responseId);
   const hasStoredFlag = responsesStored === true;
   if (hasUsage || hasResponseId || hasStoredFlag) {
     iContent.metadata = {
