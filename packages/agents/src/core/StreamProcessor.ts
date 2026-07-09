@@ -45,6 +45,7 @@ import {
   AgentExecutionStoppedError,
   AgentExecutionBlockedError,
 } from './chatSession.js';
+import { type UsageMetadataWithCache } from './googlePartHelpers.js';
 import {
   attachHookRestrictedAllowedTools,
   filterHookRestrictedContent,
@@ -755,6 +756,22 @@ export class StreamProcessor {
         lastConvertedChunk.usageMetadata,
         JSON.stringify(lastConvertedChunk),
       );
+
+      const logger = this.compressionHandler.tokenUsageLogger;
+      if (logger?.isEnabled() === true) {
+        const usage = lastConvertedChunk.usageMetadata as
+          | UsageMetadataWithCache
+          | undefined;
+        if (usage?.promptTokenCount !== undefined) {
+          logger.recordActual(telemetryContext.promptId, {
+            actualPromptTokens: usage.promptTokenCount,
+            cachedTokens:
+              usage.cachedContentTokenCount ??
+              usage.cache_read_input_tokens ??
+              0,
+          });
+        }
+      }
     }
   }
 

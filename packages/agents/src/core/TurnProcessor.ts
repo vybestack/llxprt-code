@@ -720,7 +720,7 @@ export class TurnProcessor {
     response: GenerateContentResponse,
     userContent: Content | Content[],
     _params: SendMessageParameters,
-    _prompt_id: string,
+    prompt_id: string,
   ): Promise<void> {
     const currentModel = this.runtimeContext.state.model;
     const afcHistory = response.automaticFunctionCallingHistory;
@@ -740,7 +740,7 @@ export class TurnProcessor {
 
     this._recordOutputContent(response, currentModel, filteredAfcHistory);
 
-    await this._syncTokenCounts(response);
+    await this._syncTokenCounts(response, prompt_id);
   }
 
   private _recordAfcHistory(
@@ -843,6 +843,7 @@ export class TurnProcessor {
 
   private async _syncTokenCounts(
     response: GenerateContentResponse,
+    promptId: string,
   ): Promise<void> {
     await this.historyService.waitForTokenUpdates();
     const usageMetadata = response.usageMetadata as
@@ -861,6 +862,20 @@ export class TurnProcessor {
     ) {
       this.historyService.syncTotalTokens(this.lastPromptTokenCount);
       await this.historyService.waitForTokenUpdates();
+    }
+
+    const logger = this.compressionHandler.tokenUsageLogger;
+    if (
+      logger?.isEnabled() === true &&
+      usageMetadata?.promptTokenCount !== undefined
+    ) {
+      logger.recordActual(promptId, {
+        actualPromptTokens: usageMetadata.promptTokenCount,
+        cachedTokens:
+          usageMetadata.cachedContentTokenCount ??
+          usageMetadata.cache_read_input_tokens ??
+          0,
+      });
     }
   }
 }

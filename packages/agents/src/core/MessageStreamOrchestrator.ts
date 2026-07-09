@@ -27,6 +27,12 @@ import {
 } from './clientHelpers.js';
 import { getTokenLimitForConfiguredContext } from './contextLimitResolver.js';
 import { resolvePreflightOverflow } from './preflightRecovery.js';
+import {
+  recordTokenEstimate,
+  estimateRequestTokens,
+} from './tokenUsageEstimateLogger.js';
+import type { TokenUsageLogger } from './TokenUsageLogger.js';
+import { buildModelInfo, modelIdentityKey } from './messageStreamModelInfo.js';
 import type { Todo } from '@vybestack/llxprt-code-tools';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
 import { handleTerminalEvent } from './MessageStreamTerminalHandler.js';
@@ -89,10 +95,6 @@ interface PostTurnResult {
   newBaseRequest: PartListUnion | undefined;
 }
 
-/**
- * Normalizes a runtime task-list entry for snapshot storage. Provider/tool-call
- * payloads can omit or null out fields despite the declared type.
- */
 function normalizeTodoSnapshotEntry(todo: Todo): Todo {
   const raw = todo as Partial<Todo>;
   return {
@@ -221,9 +223,6 @@ export class MessageStreamOrchestrator {
         request = [...requestArray, { text: additionalContext }];
       }
     } else {
-      // Continuation / retry of the same prompt — emit ModelInfo only when
-      // the composite provider/profile/model identity has changed since the
-      // last emission. Duplicates for the same identity are suppressed.
       yield* this._emitModelInfoIfChanged();
     }
 
@@ -271,38 +270,28 @@ export class MessageStreamOrchestrator {
       getTokenLimitForConfiguredContext(getEffectiveModel(), config) -
       chat.getLastPromptTokenCount();
 
-    // When history already exceeds the current model's limit (e.g. after a
-    // provider/profile switch to a smaller context window), remaining capacity
-    // is zero or negative. The preflight guard must NOT short-circuit: even a
-    // 0-token tool-response continuation would otherwise trip it
-    // (0 > negative * 0.95), emitting a bogus ContextWindowWillOverflow before
-    // the downstream compression path can resolve the overflow with the
-    // switched model's tokenizer. Defer to the normal send path.
+    const fallback = estimateRequestTokensStructured(initialRequest);
+    const estimatedRequestTokenCount = await estimateRequestTokens(
+      chat,
+      initialRequest,
+      fallback,
+    );
+
+    recordTokenEstimate(
+      chat as unknown as {
+        getTokenUsageLogger?: () => TokenUsageLogger | undefined;
+      },
+      ctx.prompt_id,
+      initialRequest,
+      estimatedRequestTokenCount,
+      this._getProviderName(),
+      this.deps.getEffectiveModel(),
+    );
+
     if (remainingTokenCount <= 0) {
       return undefined;
     }
 
-    // Use the model-aware tokenizer for request sizing rather than a naive
-    // text-only estimate, which under-counts functionResponse-only
-    // continuations as 0 tokens. When the chat session does not expose the
-    // tokenizer-backed methods (e.g. a minimal test double), or the tokenizer
-    // throws (e.g. uninitialized internals during early preflight), fall back
-    // to the structured payload-aware estimate so the guard still functions
-    // while counting functionResponse/functionCall JSON payloads.
-    const { estimatePendingTokens: est, convertPartListUnionToIContent: conv } =
-      chat;
-    const fallback = estimateRequestTokensStructured(initialRequest);
-    const estimatedRequestTokenCount =
-      typeof est === 'function' && typeof conv === 'function'
-        ? await Promise.resolve()
-            .then(() => conv.call(chat, initialRequest))
-            .then((content) => est.call(chat, [content]))
-            .catch(() => fallback)
-        : fallback;
-
-    // Overflow guard: attempt automatic compression before bailing (issue
-    // #2402), matching manual /compress, the load-balancer guard (#2207),
-    // and the provider content enforcer (#2299).
     const proceed = await resolvePreflightOverflow(this.deps, {
       promptId: ctx.prompt_id,
       estimatedRequestTokenCount,
@@ -538,7 +527,6 @@ export class MessageStreamOrchestrator {
       return yield* this._finishWithToolCalls(iter.deferredEvents, ctx);
     }
 
-    // Prefer authoritative Finished outcome when available, fallback to event-inferred flags
     const hadVisible = iter.outcome?.hadVisibleOutput ?? iter.hadContent;
     const hadThinking = iter.outcome?.hadThinking ?? iter.hadThinking;
 
@@ -809,59 +797,16 @@ export class MessageStreamOrchestrator {
     return activeName && activeName.length > 0 ? activeName : 'backend';
   }
 
-  /**
-   * Resolves the effective model for ModelInfo, preferring the provider
-   * manager's active provider model where available. Falls back to the active
-   * provider's default model before the config-level model so providers that
-   * own a meaningful default (e.g. load-balancer pools) are not masked by a
-   * generic config default.
-   */
-  private _resolveModelForInfo(): string {
-    const contentGenConfig = this.deps.config.getContentGeneratorConfig();
-    const providerManager = contentGenConfig?.providerManager;
-    const activeProvider = providerManager?.getActiveProvider();
-
-    if (activeProvider !== undefined) {
-      const activeModel: unknown = activeProvider.getCurrentModel?.();
-      if (typeof activeModel === 'string' && activeModel.trim() !== '') {
-        return activeModel;
-      }
-
-      // getDefaultModel is optional on the core RuntimeProvider contract; the
-      // optional-call operator short-circuits when it is absent. Some wider
-      // structural provider shapes type the return as `string | null |
-      // undefined`, so verify it is a non-empty string before trimming rather
-      // than assuming a bare `string`.
-      const defaultModel: unknown = activeProvider.getDefaultModel?.();
-      if (typeof defaultModel === 'string' && defaultModel.trim() !== '') {
-        return defaultModel;
-      }
-    }
-
-    return this.deps.getEffectiveModel();
-  }
-
   private _buildModelInfo(): ModelInfo {
-    const model = this._resolveModelForInfo();
-    const providerName = this._getProviderName();
-    const profileName = this._getProfileName();
-    const hasProfile = typeof profileName === 'string' && profileName !== '';
-    const displayLabel = hasProfile ? profileName : model;
-    return { model, providerName, profileName, displayLabel };
+    return buildModelInfo({
+      config: this.deps.config,
+      getProviderName: () => this._getProviderName(),
+      getEffectiveModel: this.deps.getEffectiveModel,
+    });
   }
 
-  /**
-   * Computes a collision-safe composite identity key from provider, profile,
-   * and model. Uses JSON.stringify to guarantee unambiguous delimiting — a
-   * null-byte-joined approach can still collide when a field value itself
-   * contains a null byte.
-   */
   private _modelIdentityKey(info: ModelInfo): string {
-    return JSON.stringify([
-      info.providerName ?? '',
-      info.profileName ?? '',
-      info.model,
-    ]);
+    return modelIdentityKey(info);
   }
 
   private async *_emitModelInfoForNewSequence(): AsyncGenerator<
@@ -873,11 +818,6 @@ export class MessageStreamOrchestrator {
     yield { type: AgentEventType.ModelInfo, value: info };
   }
 
-  /**
-   * Emits a ModelInfo event only when the current composite identity
-   * (model/provider/profile) differs from the last emission.
-   * Suppresses duplicates for the same identity.
-   */
   private async *_emitModelInfoIfChanged(): AsyncGenerator<
     ServerAgentStreamEvent,
     void
@@ -887,29 +827,6 @@ export class MessageStreamOrchestrator {
     if (key === this.#lastModelIdentity) return;
     this.#lastModelIdentity = key;
     yield { type: AgentEventType.ModelInfo, value: info };
-  }
-
-  private _getProfileName(): string | null {
-    try {
-      const settingsService = (
-        this.deps.config as unknown as {
-          getSettingsService?: () => {
-            getCurrentProfileName?: () => string | null;
-            get?: (key: string) => unknown;
-          };
-        }
-      ).getSettingsService?.();
-      if (settingsService?.getCurrentProfileName) {
-        return settingsService.getCurrentProfileName();
-      }
-      if (settingsService?.get) {
-        const profile = settingsService.get('currentProfile');
-        return typeof profile === 'string' ? profile : null;
-      }
-    } catch {
-      // Settings service unavailable — no profile info
-    }
-    return null;
   }
 
   private _resetTodoState(
@@ -933,11 +850,6 @@ export class MessageStreamOrchestrator {
     );
   }
 
-  /**
-   * If the AfterAgent hook requested context clearing, emit an
-   * AgentExecutionStopped event with contextCleared=true so the UI
-   * can react. Returns the hook output for further caller checks.
-   */
   private async *_fireAfterHookAndEmitClearContext(
     ctx: StreamContext,
   ): AsyncGenerator<ServerAgentStreamEvent, AfterAgentHookOutput | undefined> {

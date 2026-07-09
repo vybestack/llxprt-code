@@ -36,6 +36,8 @@ import { ConversationManager } from './ConversationManager.js';
 import { TurnProcessor } from './TurnProcessor.js';
 import { StreamProcessor } from './StreamProcessor.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
+import { TokenUsageLogger } from './TokenUsageLogger.js';
+import * as nodePath from 'node:path';
 import {
   convertPartListUnionToIContent,
   convertIContentToResponse,
@@ -139,6 +141,7 @@ export class ChatSession {
   private readonly turnProcessor: TurnProcessor;
   private readonly streamProcessor: StreamProcessor;
   private readonly directMessageProcessor: DirectMessageProcessor;
+  private readonly tokenUsageLogger: TokenUsageLogger;
   private readonly compressionLoadBalancerRoundRobinIndexes = new Map<
     string,
     number
@@ -194,6 +197,9 @@ export class ChatSession {
         }
       },
     );
+
+    this.tokenUsageLogger = this._createTokenUsageLogger(view);
+    this.compressionHandler.tokenUsageLogger = this.tokenUsageLogger;
 
     this.conversationManager = new ConversationManager(
       this.historyService,
@@ -532,6 +538,37 @@ export class ChatSession {
 
   getLastPromptTokenCount(): number {
     return this.compressionHandler.lastPromptTokenCount ?? 0;
+  }
+
+  getTokenUsageLogger(): TokenUsageLogger {
+    return this.tokenUsageLogger;
+  }
+
+  private _createTokenUsageLogger(view: AgentRuntimeContext): TokenUsageLogger {
+    const settingsService = view.providerRuntime.settingsService;
+    const tokenUsageEnabled = settingsService.get('token-usage-log') !== false;
+    const config = view.providerRuntime.config;
+    const sessionId = view.state.sessionId;
+    let logFilePath: string | undefined;
+    if (tokenUsageEnabled) {
+      try {
+        const tempDir = (
+          config as unknown as {
+            storage?: { getProjectTempDir?: () => string | undefined } | null;
+          } | null
+        )?.storage?.getProjectTempDir?.();
+        if (tempDir) {
+          logFilePath = nodePath.join(
+            tempDir,
+            'token-usage',
+            `${sessionId}.jsonl`,
+          );
+        }
+      } catch {
+        // Storage unavailable — logging disabled
+      }
+    }
+    return new TokenUsageLogger(tokenUsageEnabled, logFilePath);
   }
 
   /**
