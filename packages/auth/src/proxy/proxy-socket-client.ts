@@ -223,12 +223,10 @@ export class ProxySocketClient {
 
   private resolveHandshake(frame: Record<string, unknown>): void {
     const resolver = this.handshakeResolver;
-    this.handshakeResolver = null;
     if (resolver === null) {
-      // A frame arrived after the handshake was already resolved or rejected
-      // (e.g. duplicate response, or frame arrived after timeout).
       return;
     }
+    this.handshakeResolver = null;
     if (typeof frame.ok === 'boolean') {
       resolver.resolve(frame as ProxyResponse);
     } else {

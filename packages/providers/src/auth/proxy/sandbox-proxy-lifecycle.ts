@@ -199,6 +199,7 @@ export async function createAndStartProxy(
   } catch (err) {
     serverInstance = undefined;
     actualCapabilityToken = undefined;
+    actualSocketPath = undefined;
     throw err;
   }
 

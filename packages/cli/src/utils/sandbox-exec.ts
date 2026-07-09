@@ -280,6 +280,7 @@ async function executeContainerSandbox(
     sshResult,
     portForwardingResult,
     credentialProxyBridgeResult,
+    credentialProxyBridgeCleanup,
     (c) => {
       credentialProxyBridgeCleanup = c;
     },

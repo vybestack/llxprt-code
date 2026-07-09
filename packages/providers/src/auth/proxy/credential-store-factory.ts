@@ -38,10 +38,12 @@ import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 
 let proxyTokenStore: ProxyTokenStore | undefined;
 let proxyTokenStoreCapabilityToken: string | undefined;
+let proxyTokenStoreSocketPath: string | undefined;
 let directTokenStore: KeyringTokenStore | undefined;
 let proxyKeyStorage: ProxyProviderKeyStorage | undefined;
 let proxyKeyStorageClient: ProxySocketClient | undefined;
 let proxyKeyStorageCapabilityToken: string | undefined;
+let proxyKeyStorageSocketPath: string | undefined;
 let directKeyStorage: ProviderKeyStorage | undefined;
 
 /**
@@ -76,13 +78,22 @@ export function createTokenStore(): TokenStore {
     const capabilityToken = readCapabilityToken();
     if (
       proxyTokenStore === undefined ||
-      proxyTokenStoreCapabilityToken !== capabilityToken
+      proxyTokenStoreCapabilityToken !== capabilityToken ||
+      proxyTokenStoreSocketPath !== socketPath
     ) {
       proxyTokenStore?.getClient().close();
       proxyTokenStore = new ProxyTokenStore(socketPath, capabilityToken);
       proxyTokenStoreCapabilityToken = capabilityToken;
+      proxyTokenStoreSocketPath = socketPath;
     }
     return proxyTokenStore;
+  }
+  // Clean up stale proxy singletons when switching to direct mode
+  if (proxyTokenStore !== undefined) {
+    proxyTokenStore.getClient().close();
+    proxyTokenStore = undefined;
+    proxyTokenStoreCapabilityToken = undefined;
+    proxyTokenStoreSocketPath = undefined;
   }
   directTokenStore ??= createKeyringTokenStore();
   return directTokenStore;
@@ -105,7 +116,8 @@ export function createProviderKeyStorage(): ProviderKeyStorageLike {
     const capabilityToken = readCapabilityToken();
     if (
       proxyKeyStorage === undefined ||
-      proxyKeyStorageCapabilityToken !== capabilityToken
+      proxyKeyStorageCapabilityToken !== capabilityToken ||
+      proxyKeyStorageSocketPath !== socketPath
     ) {
       proxyKeyStorageClient?.close();
       proxyKeyStorageClient = new ProxySocketClient(
@@ -114,8 +126,17 @@ export function createProviderKeyStorage(): ProviderKeyStorageLike {
       );
       proxyKeyStorage = new ProxyProviderKeyStorage(proxyKeyStorageClient);
       proxyKeyStorageCapabilityToken = capabilityToken;
+      proxyKeyStorageSocketPath = socketPath;
     }
     return proxyKeyStorage;
+  }
+  // Clean up stale proxy singletons when switching to direct mode
+  if (proxyKeyStorage !== undefined) {
+    proxyKeyStorageClient?.close();
+    proxyKeyStorageClient = undefined;
+    proxyKeyStorage = undefined;
+    proxyKeyStorageCapabilityToken = undefined;
+    proxyKeyStorageSocketPath = undefined;
   }
   directKeyStorage ??= getProviderKeyStorage();
   return directKeyStorage;
@@ -129,9 +150,11 @@ export function resetFactorySingletons(): void {
   proxyKeyStorageClient?.close();
   proxyTokenStore = undefined;
   proxyTokenStoreCapabilityToken = undefined;
+  proxyTokenStoreSocketPath = undefined;
   directTokenStore = undefined;
   proxyKeyStorage = undefined;
   proxyKeyStorageClient = undefined;
   proxyKeyStorageCapabilityToken = undefined;
+  proxyKeyStorageSocketPath = undefined;
   directKeyStorage = undefined;
 }

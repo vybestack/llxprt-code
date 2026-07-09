@@ -329,18 +329,22 @@ describe('CredentialProxyServer', () => {
           socket.write(encodeFrame(handshake));
         });
         const decoder = new FrameDecoder();
+        const timer = setTimeout(() => {
+          socket.destroy();
+          reject(new Error('Timeout waiting for handshake response'));
+        }, 5000);
         socket.on('data', (chunk: Buffer) => {
           const frames = decoder.feed(chunk);
           for (const frame of frames) {
+            clearTimeout(timer);
             socket.destroy();
             resolve(frame);
           }
         });
-        socket.on('error', reject);
-        setTimeout(() => {
-          socket.destroy();
-          reject(new Error('Timeout waiting for handshake response'));
-        }, 5000);
+        socket.on('error', (err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
       },
     );
 
@@ -986,10 +990,14 @@ describe('CredentialProxyServer', () => {
   });
 
   /**
-   * @scenario get_token returns FORBIDDEN (not NOT_FOUND) for unknown provider in sandbox
+   * @scenario get_token returns FORBIDDEN for unknown provider in sandbox
    * @given A server with capability token, no token for "unknown" provider
    * @when A sandbox client requests get_token for a non-existent provider
-   * @then Response is FORBIDDEN (not NOT_FOUND) to prevent provider enumeration
+   * @then Response is FORBIDDEN. Note: this does NOT fully prevent provider
+   *      enumeration — a sandbox client can still distinguish existing
+   *      providers (ok: true) from non-existing ones (FORBIDDEN). True
+   *      enumeration prevention is only provided by list_* operations.
+   *      The FORBIDDEN code avoids revealing the NOT_FOUND code specifically.
    */
   it('get_token returns FORBIDDEN for unknown provider in sandbox', async () => {
     server = createServer({ capabilityToken: CAPABILITY_TOKEN });
@@ -1004,10 +1012,14 @@ describe('CredentialProxyServer', () => {
   });
 
   /**
-   * @scenario get_api_key returns FORBIDDEN (not NOT_FOUND) for unknown key in sandbox
+   * @scenario get_api_key returns FORBIDDEN for unknown key in sandbox
    * @given A server with capability token, no key for "unknown"
    * @when A sandbox client requests get_api_key for a non-existent key
-   * @then Response is FORBIDDEN (not NOT_FOUND) to prevent key enumeration
+   * @then Response is FORBIDDEN. Note: this does NOT fully prevent key
+   *      enumeration — a sandbox client can still distinguish existing keys
+   *      (ok: true) from non-existing ones (FORBIDDEN). True enumeration
+   *      prevention is only provided by list_* operations. The FORBIDDEN
+   *      code avoids revealing the NOT_FOUND code specifically.
    */
   it('get_api_key returns FORBIDDEN for unknown key in sandbox', async () => {
     server = createServer({ capabilityToken: CAPABILITY_TOKEN });
@@ -1255,18 +1267,22 @@ describe('CredentialProxyServer', () => {
           );
         });
         const decoder = new FrameDecoder();
+        const timer = setTimeout(() => {
+          socket.destroy();
+          reject(new Error('Timeout waiting for handshake response'));
+        }, 5000);
         socket.on('data', (chunk: Buffer) => {
           const frames = decoder.feed(chunk);
           for (const frame of frames) {
+            clearTimeout(timer);
             socket.destroy();
             resolve(frame);
           }
         });
-        socket.on('error', reject);
-        setTimeout(() => {
-          socket.destroy();
-          reject(new Error('Timeout waiting for handshake response'));
-        }, 5000);
+        socket.on('error', (err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
       },
     );
 
@@ -1288,8 +1304,9 @@ describe('CredentialProxyServer', () => {
       provider: 'anthropic',
     });
 
-    // OAuth initiate may fail due to missing flow config, but it should NOT
-    // return FORBIDDEN — it should proceed to attempt the OAuth flow.
+    // OAuth initiate will fail due to missing flow config, but it should
+    // reach the OAuth handler rather than being blocked at the sandbox gate.
+    expect(response.ok).toBe(false);
     expect(response.code).not.toBe('FORBIDDEN');
   });
 });

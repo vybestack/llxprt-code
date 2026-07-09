@@ -625,6 +625,11 @@ export class CredentialProxyServer {
     );
 
     await this.options.tokenStore.saveToken(provider, mergedToken, bucket);
+    this.auditLog('INFO', state.id, 'save_token', {
+      provider,
+      bucket: bucket ?? 'default',
+      status: 'ok',
+    });
     this.sendOk(socket, id, {});
   }
 
@@ -652,6 +657,11 @@ export class CredentialProxyServer {
     const bucket = payload.bucket as string | undefined;
 
     await this.options.tokenStore.removeToken(provider, bucket);
+    this.auditLog('INFO', state.id, 'remove_token', {
+      provider,
+      bucket: bucket ?? 'default',
+      status: 'ok',
+    });
     this.sendOk(socket, id, {});
   }
 
@@ -807,6 +817,11 @@ export class CredentialProxyServer {
       bucket ?? 'default',
     );
     if (stats === null) {
+      this.auditLog('INFO', state.id, 'get_bucket_stats', {
+        provider,
+        bucket: bucket ?? 'default',
+        status: 'not_found',
+      });
       this.sendError(
         socket,
         id,
@@ -815,6 +830,11 @@ export class CredentialProxyServer {
       );
       return;
     }
+    this.auditLog('INFO', state.id, 'get_bucket_stats', {
+      provider,
+      bucket: bucket ?? 'default',
+      status: 'ok',
+    });
     this.sendOk(socket, id, stats as unknown as Record<string, unknown>);
   }
 

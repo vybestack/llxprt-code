@@ -35,6 +35,16 @@ const sandboxSources = {
 
 const sandboxSource = Object.values(sandboxSources).join('\n');
 
+/** Extracts a function's body from source code by finding the next function
+ *  declaration boundary (handles both `function` and `async function`). */
+function extractFunctionBody(source: string, fnName: string): string {
+  const start = source.indexOf(`function ${fnName}`);
+  if (start === -1) return '';
+  const nextFn = source.slice(start + 1).search(/\n(?:async )?function /);
+  const end = nextFn === -1 ? undefined : start + 1 + nextFn;
+  return source.substring(start, end);
+}
+
 describe('Credential Proxy Integration - sandbox.ts', () => {
   describe('R25.1: Proxy Server Created Before Container', () => {
     it('imports createAndStartProxy from sandbox-proxy-lifecycle', () => {
@@ -153,7 +163,7 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
   describe('R3.6: Env Var Passed to Container', () => {
     it('passes LLXPRT_CREDENTIAL_SOCKET via --env', () => {
       expect(sandboxSource).toContain(
-        "args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${socketPath}`)",
+        "args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${effectiveSocketPath}`)",
       );
     });
 
@@ -168,30 +178,22 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     });
 
     it('does NOT pass LLXPRT_CAPABILITY_TOKEN via --env (avoids exposing in process args)', () => {
-      const fnStart = sandboxSource.indexOf('function pushCapabilityEnvFile');
-      expect(fnStart).toBeGreaterThan(-1);
-      const nextFnMatch = sandboxSource
-        .slice(fnStart + 1)
-        .search(/\n(?:async )?function /);
-      const fnEnd = nextFnMatch === -1 ? -1 : fnStart + 1 + nextFnMatch;
-      const fnSection = sandboxSource.substring(
-        fnStart,
-        fnEnd === -1 ? undefined : fnEnd,
+      const fnSection = extractFunctionBody(
+        sandboxSource,
+        'pushCapabilityEnvFile',
       );
+      expect(fnSection.length).toBeGreaterThan(0);
+      // Guard against both --env and -e which would expose the token
       expect(fnSection).not.toMatch(/--env[^-]/);
+      expect(fnSection).not.toMatch(/(?<!-)-e\s+LLXPRT_CAPABILITY_TOKEN/);
     });
 
     it('writes capability token to a temp env file with restrictive permissions', () => {
-      const fnStart = sandboxSource.indexOf('function pushCapabilityEnvFile');
-      expect(fnStart).toBeGreaterThan(-1);
-      const nextFnMatch = sandboxSource
-        .slice(fnStart + 1)
-        .search(/\n(?:async )?function /);
-      const fnEnd = nextFnMatch === -1 ? -1 : fnStart + 1 + nextFnMatch;
-      const fnSection = sandboxSource.substring(
-        fnStart,
-        fnEnd === -1 ? undefined : fnEnd,
+      const fnSection = extractFunctionBody(
+        sandboxSource,
+        'pushCapabilityEnvFile',
       );
+      expect(fnSection.length).toBeGreaterThan(0);
       expect(fnSection).toContain('fs.openSync');
       expect(fnSection).toContain('0o600');
       expect(fnSection).toContain('LLXPRT_CAPABILITY_TOKEN');
@@ -205,18 +207,11 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     });
 
     it('registers cleanup to unlink the env file on process signals', () => {
-      const fnStart = sandboxSource.indexOf(
-        'function registerCapabilityEnvCleanup',
+      const fnSection = extractFunctionBody(
+        sandboxSource,
+        'registerCapabilityEnvCleanup',
       );
-      expect(fnStart).toBeGreaterThan(-1);
-      const nextFnMatch = sandboxSource
-        .slice(fnStart + 1)
-        .search(/\n(?:async )?function /);
-      const fnEnd = nextFnMatch === -1 ? -1 : fnStart + 1 + nextFnMatch;
-      const fnSection = sandboxSource.substring(
-        fnStart,
-        fnEnd === -1 ? undefined : fnEnd,
-      );
+      expect(fnSection.length).toBeGreaterThan(0);
       expect(fnSection).toContain('cleanup');
       expect(fnSection).toContain("process.on('exit'");
       expect(fnSection).toContain("process.on('SIGINT'");
@@ -229,13 +224,13 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       );
     });
 
-    it('registers env file cleanup in all setupCredentialProxy branches', () => {
-      // Count actual call sites (not the function definition):
-      // Calls use the pattern "= registerCapabilityEnvCleanup(args"
+    it('registers env file cleanup in setupCredentialProxy', () => {
+      // The refactored setupCredentialProxy has a single unified
+      // registerCapabilityEnvCleanup call after platform-specific setup.
       const callCount = (
         sandboxSource.match(/=\s*registerCapabilityEnvCleanup\(args/g) ?? []
       ).length;
-      expect(callCount).toBe(3);
+      expect(callCount).toBe(1);
     });
   });
 
@@ -260,6 +255,17 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       expect(cleanupSection).toContain(
         "process.on('SIGTERM', stopCredentialProxy)",
       );
+    });
+
+    it('calls composed cleanup before nullifying on sandbox close', () => {
+      const fnSection = extractFunctionBody(
+        sandboxSource,
+        'wireCleanupHandlers',
+      );
+      expect(fnSection.length).toBeGreaterThan(0);
+      // The composed cleanup (env file + bridge) must be called on close
+      // before being nullified, so the temp env file is removed.
+      expect(fnSection).toContain('credentialProxyBridgeCleanup?.()');
     });
 
     it('adds cleanup on sandbox process close', () => {

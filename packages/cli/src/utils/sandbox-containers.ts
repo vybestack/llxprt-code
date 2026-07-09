@@ -498,7 +498,9 @@ function registerCapabilityEnvCleanup(
 
   const signalHandler = (signal: NodeJS.Signals): void => {
     cleanup();
-    process.exit(signal === 'SIGINT' ? 130 : 143);
+    // Defer exit so other SIGINT/SIGTERM handlers (SSH tunnel, bridge, proxy
+    // stop) get to run before the process terminates.
+    setImmediate(() => process.exit(signal === 'SIGINT' ? 130 : 143));
   };
   process.on('exit', cleanup);
   process.on('SIGINT', signalHandler);
@@ -535,6 +537,7 @@ async function setupMacOSCredProxyBridge(
     case 'docker':
       return setupCredentialProxyDockerMacOS(args, socketPath);
     case 'sandbox-exec':
+    default:
       return undefined;
   }
 }
@@ -556,8 +559,7 @@ export async function setupCredentialProxy(
 
   // @plan:PLAN-20250214-CREDPROXY.P34 R25.1: Start credential proxy BEFORE spawning container
   try {
-    const handle = await createAndStartProxy({ socketPath: resolvedTmpdir });
-    void handle;
+    await createAndStartProxy({ socketPath: resolvedTmpdir });
   } catch (err) {
     throw new FatalSandboxError(
       `Failed to start credential proxy: ${err instanceof Error ? err.message : String(err)}`,
@@ -569,30 +571,32 @@ export async function setupCredentialProxy(
   }
 
   // @plan:PLAN-20250214-CREDPROXY.P34 R3.6: Pass socket path to container via env var
-  if (os.platform() === 'darwin') {
-    credentialProxyBridgeResult = await setupMacOSCredProxyBridge(
-      args,
-      config,
-      socketPath,
-      reservedTunnelPorts,
-    );
-    if (credentialProxyBridgeResult === undefined) {
-      args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${socketPath}`);
-      envFileCleanup = registerCapabilityEnvCleanup(args, resolvedTmpdir);
-    } else {
-      credentialProxyBridgeCleanup = credentialProxyBridgeResult.cleanup;
-      if (credentialProxyBridgeResult.entrypointPrefix !== undefined) {
-        entrypointPrefixes.push(credentialProxyBridgeResult.entrypointPrefix);
-      }
-      args.push(
-        '--env',
-        `LLXPRT_CREDENTIAL_SOCKET=${credentialProxyBridgeResult.containerSocketPath}`,
+  const isDarwin = os.platform() === 'darwin';
+  try {
+    if (isDarwin) {
+      credentialProxyBridgeResult = await setupMacOSCredProxyBridge(
+        args,
+        config,
+        socketPath,
+        reservedTunnelPorts,
       );
-      envFileCleanup = registerCapabilityEnvCleanup(args, resolvedTmpdir);
     }
-  } else {
-    args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${socketPath}`);
+
+    const effectiveSocketPath =
+      credentialProxyBridgeResult?.containerSocketPath ?? socketPath;
+    args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${effectiveSocketPath}`);
+
+    if (credentialProxyBridgeResult !== undefined && isDarwin) {
+      credentialProxyBridgeCleanup = credentialProxyBridgeResult.cleanup;
+      const prefix = credentialProxyBridgeResult.entrypointPrefix;
+      if (prefix !== undefined) {
+        entrypointPrefixes.push(prefix);
+      }
+    }
     envFileCleanup = registerCapabilityEnvCleanup(args, resolvedTmpdir);
+  } catch (err) {
+    envFileCleanup?.();
+    throw err;
   }
 
   // Compose env file cleanup with any existing bridge cleanup so the temp
@@ -696,6 +700,7 @@ export function wireCleanupHandlers(
   sshResult: SshAgentResult,
   portForwardingResult: PortForwardingResult | undefined,
   credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined,
+  credentialProxyBridgeCleanup: (() => void) | undefined,
   setCredentialProxyBridgeCleanup: (c: (() => void) | undefined) => void,
 ): void {
   sandboxProcess.on('error', (err) => {
@@ -720,6 +725,9 @@ export function wireCleanupHandlers(
     process.on('SIGINT', stopCredentialBridgeTunnel);
     process.on('SIGTERM', stopCredentialBridgeTunnel);
     sandboxProcess.on('close', () => {
+      // Call the composed cleanup (env file + bridge tunnel) before
+      // nullifying, so the temp env file is removed on sandbox close.
+      credentialProxyBridgeCleanup?.();
       setCredentialProxyBridgeCleanup(undefined);
       stopCredentialBridgeTunnel();
     });
