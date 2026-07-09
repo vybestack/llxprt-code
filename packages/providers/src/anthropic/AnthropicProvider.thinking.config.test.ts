@@ -684,6 +684,88 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       expect(thinkingBlock.thought).toContain('third part');
     });
 
+    it('should emit thinking deltas during streaming, not just at content_block_stop (issue #1723)', async () => {
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'content_block_start',
+            index: 0,
+            content_block: {
+              type: 'thinking',
+              thinking: '',
+            },
+          };
+          yield {
+            type: 'content_block_delta',
+            index: 0,
+            delta: { type: 'thinking_delta', thinking: 'First' },
+          };
+          yield {
+            type: 'content_block_delta',
+            index: 0,
+            delta: { type: 'thinking_delta', thinking: ' part' },
+          };
+          yield {
+            type: 'content_block_delta',
+            index: 0,
+            delta: { type: 'thinking_delta', thinking: ' here' },
+          };
+          yield {
+            type: 'content_block_stop',
+            index: 0,
+          };
+        },
+      };
+
+      mockMessagesCreate.mockResolvedValue(mockStream);
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Think deeply' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+
+      const chunks: IContent[] = [];
+      for await (const chunk of generator) {
+        chunks.push(chunk);
+      }
+
+      const thinkingChunks = chunks.filter((c) =>
+        c.blocks.some((b) => b.type === 'thinking'),
+      );
+
+      // Should have emitted multiple thinking chunks during streaming:
+      // 3 deltas + 1 content_block_stop = 4 thinking chunks
+      expect(thinkingChunks.length).toBe(4);
+
+      // Each delta chunk should carry the accumulated text so far
+      const delta1 = thinkingChunks[0].blocks.find(
+        (b) => b.type === 'thinking',
+      ) as ThinkingBlock;
+      expect(delta1.thought).toBe('First');
+
+      const delta2 = thinkingChunks[1].blocks.find(
+        (b) => b.type === 'thinking',
+      ) as ThinkingBlock;
+      expect(delta2.thought).toBe('First part');
+
+      const delta3 = thinkingChunks[2].blocks.find(
+        (b) => b.type === 'thinking',
+      ) as ThinkingBlock;
+      expect(delta3.thought).toBe('First part here');
+
+      // content_block_stop should also have the complete text
+      const final = thinkingChunks[3].blocks.find(
+        (b) => b.type === 'thinking',
+      ) as ThinkingBlock;
+      expect(final.thought).toBe('First part here');
+    });
+
     it('should capture signature on content_block_stop for thinking blocks', async () => {
       const mockSignature = 'abc123signature';
       const mockStream = {
@@ -736,7 +818,9 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       );
       expect(thinkingChunks.length).toBeGreaterThan(0);
 
-      const thinkingBlock = thinkingChunks[0].blocks.find(
+      // #1723: signature is on the last thinking chunk (from content_block_stop)
+      const lastThinkingChunk = thinkingChunks[thinkingChunks.length - 1];
+      const thinkingBlock = lastThinkingChunk.blocks.find(
         (b) => b.type === 'thinking',
       ) as ThinkingBlock;
       expect(thinkingBlock.signature).toBe(mockSignature);

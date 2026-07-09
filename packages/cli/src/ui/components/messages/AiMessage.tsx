@@ -46,10 +46,10 @@ export const AiMessage: React.FC<AiMessageProps> = ({
   const prefix = ' ';
   const prefixWidth = prefix.length;
 
-  // Don't show thinkingBlocks in pending items - LoadingIndicator shows the
-  // thought subject/description as spinner text during streaming. Only show
-  // thinkingBlocks in committed history items to avoid duplication (fixes #922).
-  const shouldShowThinkingBlocks = showThinking && !isPending;
+  // #1723: Show thinking blocks in BOTH pending and committed items so thinking
+  // content streams in real-time. The LoadingIndicator still shows the transient
+  // thought subject, but the growing thinking block is now visible below it.
+  const shouldShowThinkingBlocks = showThinking;
 
   return (
     <Box flexDirection="column">

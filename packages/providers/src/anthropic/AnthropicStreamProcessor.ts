@@ -51,6 +51,35 @@ type StreamState = { hasYieldedContent: boolean };
 // API call (e.g. Kimi on Fireworks) never produce duplicates across turns.
 let toolCallSequence = 0;
 
+/**
+ * #1723: Builds incremental IContent chunks for text and thinking deltas.
+ */
+function buildDeltaContents(deltaResult: {
+  textDelta?: string;
+  thinkingDelta?: string;
+}): IContent[] {
+  const contents: IContent[] = [];
+  if (deltaResult.textDelta) {
+    contents.push({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: deltaResult.textDelta }],
+    } as IContent);
+  }
+  if (deltaResult.thinkingDelta) {
+    contents.push({
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'thinking',
+          thought: deltaResult.thinkingDelta,
+          sourceField: 'thinking',
+        } as ThinkingBlock,
+      ],
+    } as IContent);
+  }
+  return contents;
+}
+
 async function* processStreamEvents(
   stream: AsyncIterable<Anthropic.MessageStreamEvent>,
   options: StreamProcessorOptions,
@@ -97,12 +126,10 @@ async function* processStreamEvents(
         currentThinkingBlock,
         logger,
       );
-      if (deltaResult.textDelta) {
+      const deltaContents = buildDeltaContents(deltaResult);
+      if (deltaContents.length > 0) {
         state.hasYieldedContent = true;
-        yield {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: deltaResult.textDelta }],
-        } as IContent;
+        yield* deltaContents;
       }
     } else if (chunk.type === 'content_block_stop') {
       const stopResult = handleContentBlockStop(
@@ -304,7 +331,7 @@ function handleContentBlockDelta(
   currentToolCall: { id: string; name: string; input: string } | undefined,
   currentThinkingBlock: { thinking: string; signature?: string } | undefined,
   logger: { debug: (fn: () => string) => void },
-): { textDelta?: string } {
+): { textDelta?: string; thinkingDelta?: string } {
   if (chunk.delta.type === 'text_delta') {
     const textDelta = chunk.delta as TextDelta;
     logger.debug(() => `Received text delta: ${textDelta.text.length} chars`);
@@ -327,6 +354,7 @@ function handleContentBlockDelta(
     logger.debug(
       () => `Thinking delta chunk (${thinkingDelta.thinking.length} chars)`,
     );
+    return { thinkingDelta: currentThinkingBlock.thinking };
   } else if (chunk.delta.type === 'signature_delta' && currentThinkingBlock) {
     const signatureDelta = chunk.delta as {
       type: 'signature_delta';
