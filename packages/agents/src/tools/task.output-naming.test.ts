@@ -32,6 +32,8 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
 
   function createMockLaunch() {
     const dispose = vi.fn().mockResolvedValue(undefined);
+    // SubAgentScope requires runNonInteractive/onMessage even though the
+    // interactive-path tests only exercise runInteractive.
     const scope = {
       output: {
         emitted_vars: {},
@@ -41,6 +43,8 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
       runNonInteractive: vi.fn(),
       onMessage: undefined,
     };
+    // SubagentLaunchResult requires all fields; prompt/profile/config/runtime
+    // are unused by these tests but must be present to satisfy the type.
     const launch = vi.fn().mockResolvedValue({
       agentId: 'agent-2255',
       scope,

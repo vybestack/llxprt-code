@@ -720,6 +720,10 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
 }
 
+// Model-facing schema: only snake_case properties are exposed to the LLM.
+// camelCase aliases (subagentName, expectedOutputs, etc.) exist in
+// TaskToolParams for programmatic callers but are intentionally excluded
+// from the schema — additionalProperties: false enforces this.
 const taskToolSchema = {
   type: 'object',
   additionalProperties: false,
