@@ -284,12 +284,12 @@ export class ProxySocketClient {
       this.pendingRequests.delete(id);
       if (isProxyResponseFrame(frame)) {
         pending.resolve(frame);
-        } else {
-          pending.reject(
-            new Error(`Malformed response for request ${id}`),
-          );
-          this.destroy('Malformed response from proxy — connection reset');
-          return;
+      } else {
+        pending.reject(
+          new Error(`Malformed response for request ${id}`),
+        );
+        this.destroy('Malformed response from proxy — connection reset');
+        return;
       }
     }
   }

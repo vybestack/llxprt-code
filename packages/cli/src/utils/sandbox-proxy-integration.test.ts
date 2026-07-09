@@ -39,16 +39,15 @@ const sandboxSource = Object.values(sandboxSources).join('\n');
  *  next function declaration boundary (handles both `function` and `async
  *  function`). NOTE: This assumes no nested function declarations exist
  *  within the target body — currently true for all callers. */
-  function extractFunctionBody(source: string, fnName: string): string {
-    const start = source.indexOf(`function ${fnName}(`);
-    if (start === -1) return '';
-    const nextFn = source
-      .slice(start)
-      .search(/\n(?:export )?(?:async )?function /);
-    const end = nextFn === -1 ? undefined : start + nextFn;
-    const result = source.substring(start, end);
-    return result;
-  }
+function extractFunctionBody(source: string, fnName: string): string {
+  const start = source.indexOf(`function ${fnName}(`);
+  if (start === -1) return '';
+  const nextFn = source
+    .slice(start)
+    .search(/\n(?:export )?(?:async )?function /);
+  const end = nextFn === -1 ? undefined : start + nextFn;
+  return source.substring(start, end);
+}
 
 describe('Credential Proxy Integration - sandbox.ts', () => {
   describe('R25.1: Proxy Server Created Before Container', () => {

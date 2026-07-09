@@ -489,8 +489,14 @@ function pushCapabilityEnvFile(
     throw writeErr;
   }
   // closeSync may fail if the fd is already closed or invalid; the file was
-  // written successfully, so let the cleanup function handle removal.
-  fs.closeSync(fd);
+  // written successfully, so swallow the error and still return the cleanup
+  // closure to ensure the temp env file (containing the capability token)
+  // is eventually removed.
+  try {
+    fs.closeSync(fd);
+  } catch {
+    // fd may already be closed; file content is still valid
+  }
   args.push('--env-file', envFile);
   return () => {
     try {
@@ -554,6 +560,11 @@ export async function setupCredentialProxy(
   }
   const socketPath = getProxySocketPath();
   if (socketPath === undefined) {
+    try {
+      await stopProxy();
+    } catch {
+      // best-effort cleanup
+    }
     return { credentialProxyBridgeResult, credentialProxyBridgeCleanup };
   }
 
@@ -736,7 +747,9 @@ export function wireCleanupHandlers(
 
   // @plan:PLAN-20250214-CREDPROXY.P34 R25.2, R25.3: Clean up credential proxy on sandbox exit
   const stopCredentialProxy = () => {
-    void stopProxy();
+    void stopProxy().catch(() => {
+      // best-effort cleanup during shutdown
+    });
   };
   process.on('exit', stopCredentialProxy);
   process.on('SIGINT', stopCredentialProxy);

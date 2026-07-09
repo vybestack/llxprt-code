@@ -249,6 +249,7 @@ export async function stopProxy(): Promise<void> {
     } catch {
       // stderr unavailable — nothing more we can do
     }
+    throw err;
   }
 }
 

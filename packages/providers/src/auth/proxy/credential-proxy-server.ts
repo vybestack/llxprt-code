@@ -265,11 +265,17 @@ export class CredentialProxyServer {
     // Cap frames per chunk to prevent unbounded promise-chain growth from
     // a malicious client sending thousands of tiny frames in one TCP segment.
     const MAX_FRAMES_PER_CHUNK = 100;
-    const limit = Math.min(frames.length, MAX_FRAMES_PER_CHUNK);
-    for (let i = 0; i < limit; i++) {
+    if (frames.length > MAX_FRAMES_PER_CHUNK) {
+      this.auditLog('WARN', state.id, 'frame_flood', {
+        count: frames.length,
+      });
+      socket.destroy();
+      return;
+    }
+    for (const frame of frames) {
       if (
         socket.destroyed ||
-        !this.shouldContinueProcessing(socket, frames[i], state, handshakeState)
+        !this.shouldContinueProcessing(socket, frame, state, handshakeState)
       )
         break;
     }
@@ -591,11 +597,8 @@ export class CredentialProxyServer {
         status: 'error',
         id,
       });
-      // Re-check writability — socket may have been destroyed during await
-      const sock = socket as net.Socket & { destroyed: boolean; writable: boolean };
-      if (!sock.destroyed && sock.writable) {
-        this.sendError(socket, id, 'INTERNAL_ERROR', message);
-      }
+      // sendError internally guards against destroyed/unwritable sockets
+      this.sendError(socket, id, 'INTERNAL_ERROR', message);
     }
   }
 
