@@ -55,8 +55,7 @@ function functionCallOutputs(
 
 describe('OpenAIResponsesInputBuilder stateful tool output preservation @issue:207', () => {
   it('preserves function_call_output when a server-side parent is active without matching function_call in input', () => {
-    const debugFn = vi.fn();
-    const ctx = buildContext({ debug: debugFn, serverSideParentActive: true });
+    const ctx = buildContext({ serverSideParentActive: true });
     const input = buildOpenAIResponsesInput(
       [
         {
@@ -74,7 +73,10 @@ describe('OpenAIResponsesInputBuilder stateful tool output preservation @issue:2
       ctx,
     );
 
-    expect(functionCallOutputs(input)).toHaveLength(1);
+    const outputs = functionCallOutputs(input);
+    expect(outputs).toHaveLength(1);
+    expect(outputs[0]?.call_id).toBe('call_server_side');
+    expect(outputs[0]?.output).toContain('result from server-side call');
   });
 
   it('preserves all function_call_outputs when serverSideParentActive even with mixed matching/orphan outputs', () => {
@@ -89,7 +91,7 @@ describe('OpenAIResponsesInputBuilder stateful tool output preservation @issue:2
               id: 'call_local',
               name: 'test',
               parameters: {},
-            } as never,
+            },
           ],
         },
         {
@@ -113,7 +115,11 @@ describe('OpenAIResponsesInputBuilder stateful tool output preservation @issue:2
       ctx,
     );
 
-    expect(functionCallOutputs(input)).toHaveLength(2);
+    const outputs = functionCallOutputs(input);
+    expect(outputs).toHaveLength(2);
+    const callIds = outputs.map((o) => o.call_id);
+    expect(callIds).toContain('call_local');
+    expect(callIds).toContain('call_server_side');
   });
 
   it('drops orphan function_call_output in stateless mode (no matching function_call)', () => {
