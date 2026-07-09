@@ -126,6 +126,32 @@ export function bindProviderAliasIdentity(
   });
 }
 
+/**
+ * Surface a declared {@link ProviderMediaSupport} block onto a provider config's
+ * `providerSpecific` map so it is reachable at request time via
+ * `providerConfig.providerSpecific.mediaSupport`.
+ */
+function withMediaSupport(
+  config: IProviderConfig,
+  entry: ProviderAliasEntry,
+): IProviderConfig {
+  const mediaSupport = entry.config.mediaSupport;
+  if (!mediaSupport) {
+    return config;
+  }
+  return {
+    ...config,
+    providerSpecific: {
+      ...(config.providerSpecific ?? {}),
+      mediaSupport: {
+        inlineImages: mediaSupport.inlineImages,
+        fileUpload: mediaSupport.fileUpload,
+        videoSupport: mediaSupport.videoSupport,
+      },
+    },
+  };
+}
+
 function mapStaticModels(entry: ProviderAliasEntry): IModel[] {
   return (entry.config.staticModels ?? []).map((model) => ({
     id: model.id,
@@ -191,7 +217,7 @@ export function createOpenAIAliasProvider(
   const provider = new OpenAIProvider(
     aliasApiKey ?? undefined,
     resolvedBaseUrl,
-    aliasProviderConfig,
+    withMediaSupport(aliasProviderConfig, entry),
   );
 
   overrideAliasDefaultModel(provider, entry);

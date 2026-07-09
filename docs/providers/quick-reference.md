@@ -289,6 +289,35 @@ Kimi offers the K2-family models with deep reasoning and multi-step tool orchest
 }
 ```
 
+#### Multimodal support (Kimi)
+
+Kimi K2 is a native multimodal model. The `kimi` alias declares the following
+media capabilities via its `mediaSupport` config:
+
+| Capability          | Status                        | Notes                                                                                                                                                       |
+| ------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Inline images       | Enabled                       | Images in user messages and tool responses flow as `image_url` content parts.                                                                               |
+| PDF/document upload | Enabled                       | PDFs are uploaded via the Files API (`POST /v1/files`, `purpose: file-extract`) and referenced by file id, keeping large documents out of the token budget. |
+| Video               | Experimental (off by default) | Native video understanding via MoonViT-3D. Only available on the official Moonshot endpoint.                                                                |
+
+**PDF handling:** When a PDF media block (base64-encoded) is present in a user
+message or tool response, it is uploaded to Kimi's Files API before the chat
+request. The uploaded file id is injected into the system message and the
+inline PDF is replaced with a short text reference. Uploads are de-duplicated
+across turns via an in-memory content-hash cache. If an upload fails, the PDF
+falls back to inline `file_data` so the request still proceeds.
+
+**Experimental video:** To enable native video forwarding (official Moonshot
+endpoint only), set:
+
+```bash
+/set kimi.experimental-video true
+```
+
+This is gated behind both the `kimi.experimental-video` setting and the
+`mediaSupport.videoSupport` capability flag. Third-party deployments (Chutes,
+Synthetic) do not support video and will keep the default placeholder behavior.
+
 #### Kimi K2 via Synthetic/Chutes
 
 Kimi K2 is also available through third-party providers:

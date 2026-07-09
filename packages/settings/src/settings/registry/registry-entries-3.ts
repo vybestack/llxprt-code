@@ -407,4 +407,13 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
       };
     },
   },
+  {
+    key: 'kimi.experimental-video',
+    category: 'cli-behavior',
+    description:
+      'Enable Kimi experimental native video understanding. Only works with the official Moonshot API endpoint and is gated behind the kimi mediaSupport.videoSupport capability. Default: false.',
+    type: 'boolean',
+    default: false,
+    persistToProfile: true,
+  },
 ];

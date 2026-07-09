@@ -40,6 +40,21 @@ export interface ModelDefaultRule {
   ephemeralSettings: Record<string, unknown>;
 }
 
+/**
+ * Declares which media modes a provider alias supports at request time.
+ * Used by the OpenAI request pipeline to decide whether to route PDF
+ * content through a provider's Files API (e.g. Kimi) instead of inlining
+ * base64 data, and whether experimental video forwarding is available.
+ */
+export interface ProviderMediaSupport {
+  /** Inline images via image_url content parts (default true). */
+  inlineImages?: boolean;
+  /** Upload PDFs/documents via the provider Files API before chat. */
+  fileUpload?: boolean;
+  /** Forward video content to the provider (experimental). */
+  videoSupport?: boolean;
+}
+
 export interface ProviderAliasConfig {
   name?: string;
   baseProvider: string;
@@ -68,6 +83,12 @@ export interface ProviderAliasConfig {
    * ones for the same key. Invalid patterns are stripped at parse time.
    */
   modelDefaults?: ModelDefaultRule[];
+  /**
+   * Declares which media modes (inline images, PDF file upload, experimental
+   * video) this provider alias supports. Missing/invalid fields default to
+   * the existing inline-image-only behavior.
+   */
+  mediaSupport?: ProviderMediaSupport;
 }
 
 export interface ProviderAliasEntry {
@@ -199,6 +220,48 @@ function sanitizeAliasConfigFields(
   }
 }
 
+/**
+ * Coerces the optional mediaSupport block into a clean {@link ProviderMediaSupport}
+ * object. Non-boolean fields are dropped defensively so request-time consumers
+ * only ever see true/false values (or the property is removed entirely).
+ */
+function sanitizeMediaSupport(
+  aliasConfig: ProviderAliasConfig,
+  filePath: string,
+): void {
+  if (!Object.prototype.hasOwnProperty.call(aliasConfig, 'mediaSupport')) {
+    return;
+  }
+  const raw = aliasConfig.mediaSupport as unknown;
+  if (
+    raw === null ||
+    raw === undefined ||
+    typeof raw !== 'object' ||
+    Array.isArray(raw)
+  ) {
+    debugLogger.warn(
+      `[ProviderAliases] Ignoring non-object mediaSupport in ${filePath}`,
+    );
+    aliasConfig.mediaSupport = undefined;
+    return;
+  }
+
+  const rawRecord = raw as Record<string, unknown>;
+  const coerced: ProviderMediaSupport = {};
+  for (const key of ['inlineImages', 'fileUpload', 'videoSupport'] as const) {
+    const value = rawRecord[key];
+    if (typeof value === 'boolean') {
+      coerced[key] = value;
+    } else if (value !== undefined && value !== null) {
+      debugLogger.warn(
+        `[ProviderAliases] Ignoring non-boolean mediaSupport.${key} in ${filePath}`,
+      );
+    }
+  }
+  aliasConfig.mediaSupport =
+    Object.keys(coerced).length > 0 ? coerced : undefined;
+}
+
 function readAliasFile(
   filePath: string,
   source: ProviderAliasSource,
@@ -235,6 +298,7 @@ function readAliasFile(
 
     sanitizeAliasConfigFields(aliasConfig, filePath);
     sanitizeModelDefaults(aliasConfig, filePath);
+    sanitizeMediaSupport(aliasConfig, filePath);
 
     return {
       alias,
