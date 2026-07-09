@@ -62,25 +62,34 @@ function createAutoReplyServer(_socketPath: string): net.Server {
 
 /**
  * Helper: starts a server that captures the handshake frame and auto-replies.
+ * Returns both the server and a per-instance handshake promise so each test
+ * owns its own state (no module-level mutable singleton).
  */
-let handshakeCaptured: Promise<Record<string, unknown>>;
-function createHandshakeCapturingServer(socketPath: string): net.Server {
+function createHandshakeCapturingServer(
+  socketPath: string,
+): Promise<{
+  server: net.Server;
+  handshake: Promise<Record<string, unknown>>;
+}> {
+  let resolveHandshake!: (frame: Record<string, unknown>) => void;
+  const handshake = new Promise<Record<string, unknown>>((resolve) => {
+    resolveHandshake = resolve;
+  });
   const srv = net.createServer((socket) => {
     const decoder = new FrameDecoder();
     socket.on('data', (chunk) => {
       const frames = decoder.feed(chunk);
       for (const frame of frames) {
         if (frame.op === 'handshake') {
-          handshakeCaptured = Promise.resolve(frame);
+          resolveHandshake(frame);
           socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
         }
       }
     });
   });
-  handshakeCaptured = new Promise<Record<string, unknown>>((resolve) => {
-    srv.listen(socketPath, () => resolve({}));
-  });
-  return srv;
+  return new Promise((resolve) =>
+    srv.listen(socketPath, () => resolve({ server: srv, handshake })),
+  );
 }
 
 describe('ProxySocketClient', () => {
@@ -488,12 +497,13 @@ describe('ProxySocketClient', () => {
    */
   it('includes capability token in handshake payload when provided', async () => {
     const capabilityToken = 'deadbeef'.repeat(8);
-    server = createHandshakeCapturingServer(socketPath);
+    const result = await createHandshakeCapturingServer(socketPath);
+    server = result.server;
 
     client = new ProxySocketClient(socketPath, capabilityToken);
     await client.ensureConnected();
 
-    const handshake = await handshakeCaptured;
+    const handshake = await result.handshake;
     const payload = handshake.payload as Record<string, unknown>;
     expect(payload.capabilityToken).toBe(capabilityToken);
     expect(payload.minVersion).toBe(1);
@@ -507,12 +517,13 @@ describe('ProxySocketClient', () => {
    * @then The handshake payload does NOT contain a capabilityToken field
    */
   it('omits capability token in handshake when not provided', async () => {
-    server = createHandshakeCapturingServer(socketPath);
+    const result = await createHandshakeCapturingServer(socketPath);
+    server = result.server;
 
     client = new ProxySocketClient(socketPath);
     await client.ensureConnected();
 
-    const handshake = await handshakeCaptured;
+    const handshake = await result.handshake;
     const payload = handshake.payload as Record<string, unknown>;
     expect(payload.capabilityToken).toBeUndefined();
   });

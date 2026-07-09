@@ -78,11 +78,18 @@ class InMemoryTokenStore implements TokenStore {
     return buckets;
   }
 
+  private bucketStats: Map<string, BucketStats> = new Map();
+
   async getBucketStats(
-    _provider: string,
-    _bucket: string,
+    provider: string,
+    bucket: string,
   ): Promise<BucketStats | null> {
-    return null;
+    return this.bucketStats.get(this.key(provider, bucket)) ?? null;
+  }
+
+  /** Test helper: populate bucket stats to prove sandbox path suppresses real data. */
+  setBucketStats(provider: string, bucket: string, stats: BucketStats): void {
+    this.bucketStats.set(this.key(provider, bucket), stats);
   }
 
   async acquireRefreshLock(
@@ -1047,6 +1054,15 @@ describe('CredentialProxyServer', () => {
    * @then Response is ok: true but with empty data (no stats leaked)
    */
   it('returns empty stats for sandbox connections', async () => {
+    // Populate real stats so the test proves the sandbox path suppresses
+    // actual data rather than returning zeros from an empty store.
+    tokenStore.setBucketStats('anthropic', 'default', {
+      bucket: 'default',
+      requestCount: 42,
+      percentage: 75,
+      lastUsed: 1234567890,
+    });
+
     server = createServer({ capabilityToken: 'a'.repeat(64) });
     client = await startAndConnect(server, 'a'.repeat(64));
 

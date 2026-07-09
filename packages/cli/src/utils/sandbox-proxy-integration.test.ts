@@ -164,6 +164,18 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
         'const socketPath = getProxySocketPath()',
       );
     });
+
+    it('passes LLXPRT_CAPABILITY_TOKEN via --env', () => {
+      expect(sandboxSource).toContain(
+        '`LLXPRT_CAPABILITY_TOKEN=${capabilityToken}`',
+      );
+    });
+
+    it('uses getProxyCapabilityToken to get the capability token', () => {
+      expect(sandboxSource).toContain(
+        'const capabilityToken = getProxyCapabilityToken()',
+      );
+    });
   });
 
   describe('R25.2-R25.3: Cleanup on Exit', () => {

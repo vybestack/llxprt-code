@@ -157,7 +157,7 @@ export class ProxySocketClient {
 
   private async handshake(): Promise<void> {
     const payload: Record<string, unknown> = { minVersion: 1, maxVersion: 1 };
-    if (this.capabilityToken !== undefined) {
+    if (this.capabilityToken) {
       payload.capabilityToken = this.capabilityToken;
     }
     const request = {
@@ -206,9 +206,7 @@ export class ProxySocketClient {
       const frames = this.decoder.feed(chunk);
       for (const frame of frames) {
         if (this.handshakeResolver) {
-          const resolver = this.handshakeResolver;
-          this.handshakeResolver = null;
-          resolver.resolve(frame as unknown as ProxyResponse);
+          this.resolveHandshake(frame);
           continue;
         }
 
@@ -216,6 +214,16 @@ export class ProxySocketClient {
       }
     } catch {
       this.destroy('Frame decode error');
+    }
+  }
+
+  private resolveHandshake(frame: Record<string, unknown>): void {
+    const resolver = this.handshakeResolver;
+    this.handshakeResolver = null;
+    if (typeof frame.ok === 'boolean') {
+      resolver!.resolve(frame as ProxyResponse);
+    } else {
+      resolver!.reject(new Error('Malformed handshake response from proxy'));
     }
   }
 
