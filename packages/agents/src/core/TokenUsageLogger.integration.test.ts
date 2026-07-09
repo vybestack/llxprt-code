@@ -46,8 +46,10 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     const dir = path.dirname(logFile);
     try {
       fs.rmSync(dir, { recursive: true, force: true });
-    } catch {
-      // ignore cleanup errors
+    } catch (error) {
+      // Temp dir cleanup is best-effort; failure here does not affect test outcomes
+      process.stderr.write(`Failed to clean up temp dir: ${String(error)}
+`);
     }
   });
 
