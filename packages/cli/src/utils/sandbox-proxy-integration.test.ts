@@ -174,6 +174,17 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       expect(sandboxSource).toContain('mode: 0o600');
     });
 
+    it('returns early when capability token is undefined', () => {
+      expect(sandboxSource).toContain(
+        'if (capabilityToken === undefined) return',
+      );
+    });
+
+    it('registers cleanup to unlink the env file on process exit', () => {
+      expect(sandboxSource).toContain('fs.unlinkSync(envFile)');
+      expect(sandboxSource).toContain("process.on('exit', cleanup)");
+    });
+
     it('uses getProxyCapabilityToken to get the capability token', () => {
       expect(sandboxSource).toContain(
         'const capabilityToken = getProxyCapabilityToken()',

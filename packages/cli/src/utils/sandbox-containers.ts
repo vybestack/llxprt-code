@@ -426,20 +426,32 @@ export async function setupContainerUser(
  * Writes the capability token to a temp env file and pushes --env-file to args.
  * Uses --env-file instead of --env to avoid exposing the token in the process
  * argument list (visible via ps aux / docker inspect).
+ *
+ * Returns a cleanup function that removes the temp file. The caller should
+ * register it on process exit / sandbox close to avoid leaving the token
+ * file on disk.
  */
-function pushCapabilityEnvFile(args: string[], resolvedTmpdir: string): void {
+function pushCapabilityEnvFile(
+  args: string[],
+  resolvedTmpdir: string,
+): (() => void) | undefined {
   const capabilityToken = getProxyCapabilityToken();
-  if (capabilityToken === undefined) return;
+  if (capabilityToken === undefined) return undefined;
   const envFile = path.join(resolvedTmpdir, `.capability-env-${process.pid}`);
   fs.writeFileSync(
     envFile,
     `LLXPRT_CAPABILITY_TOKEN=${capabilityToken}
 `,
-    {
-      mode: 0o600,
-    },
+    { mode: 0o600 },
   );
   args.push('--env-file', envFile);
+  return () => {
+    try {
+      fs.unlinkSync(envFile);
+    } catch {
+      // file may already be removed
+    }
+  };
 }
 
 /** Starts credential proxy and sets up bridge for Podman/Docker macOS. */
@@ -476,6 +488,15 @@ export async function setupCredentialProxy(
   }
 
   // @plan:PLAN-20250214-CREDPROXY.P34 R3.6: Pass socket path to container via env var
+  const registerEnvFileCleanup = (): void => {
+    const cleanup = pushCapabilityEnvFile(args, resolvedTmpdir);
+    if (cleanup) {
+      process.on('exit', cleanup);
+      process.on('SIGINT', cleanup);
+      process.on('SIGTERM', cleanup);
+    }
+  };
+
   if (os.platform() === 'darwin') {
     const sandboxCommand: string = config.command;
     switch (sandboxCommand) {
@@ -500,7 +521,7 @@ export async function setupCredentialProxy(
         break;
       default:
         args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${socketPath}`);
-        pushCapabilityEnvFile(args, resolvedTmpdir);
+        registerEnvFileCleanup();
         break;
     }
 
@@ -513,11 +534,11 @@ export async function setupCredentialProxy(
         '--env',
         `LLXPRT_CREDENTIAL_SOCKET=${credentialProxyBridgeResult.containerSocketPath}`,
       );
-      pushCapabilityEnvFile(args, resolvedTmpdir);
+      registerEnvFileCleanup();
     }
   } else {
     args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${socketPath}`);
-    pushCapabilityEnvFile(args, resolvedTmpdir);
+    registerEnvFileCleanup();
   }
 
   return { credentialProxyBridgeResult, credentialProxyBridgeCleanup };

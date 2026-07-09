@@ -90,6 +90,7 @@ export class CredentialProxyServer {
   private nextConnectionId: number = 1;
   private readonly connectionStates: Map<net.Socket, ConnectionState> =
     new Map();
+  private readonly expectedTokenHash: Buffer | null;
 
   constructor(options: CredentialProxyServerOptions) {
     if (
@@ -102,6 +103,9 @@ export class CredentialProxyServer {
     }
     this.options = options;
     this.oauthHandler = new CredentialProxyOAuthHandler(options);
+    this.expectedTokenHash = options.capabilityToken
+      ? crypto.createHash('sha256').update(options.capabilityToken).digest()
+      : null;
   }
 
   async start(): Promise<string> {
@@ -314,7 +318,12 @@ export class CredentialProxyServer {
       return false;
     }
 
-    // Validate capability token if the server is configured with one
+    // Validate capability token if the server is configured with one.
+    // Note: there is no rate limiting on failed handshake attempts — a
+    // malicious local process could repeatedly reconnect to attempt brute
+    // force. This is mitigated by the 256-bit token entropy (infeasible to
+    // brute-force) and audit logging of every unauthorized attempt. Rate
+    // limiting could be added in a future enhancement if needed.
     if (this.options.capabilityToken) {
       const payload = this.asRecord(frame.payload);
       const presentedToken = payload.capabilityToken;
@@ -361,14 +370,12 @@ export class CredentialProxyServer {
    * could leak the token length.
    */
   private validateCapabilityToken(presentedToken: string): boolean {
-    const expected = this.options.capabilityToken;
-    if (!expected) return true;
+    if (!this.expectedTokenHash) return true;
     const presentedHash = crypto
       .createHash('sha256')
       .update(presentedToken)
       .digest();
-    const expectedHash = crypto.createHash('sha256').update(expected).digest();
-    return crypto.timingSafeEqual(presentedHash, expectedHash);
+    return crypto.timingSafeEqual(presentedHash, this.expectedTokenHash);
   }
 
   /**
@@ -489,6 +496,12 @@ export class CredentialProxyServer {
    * FORBIDDEN error response with an audit-log entry. Centralizes the
    * sandbox restriction check so logging stays consistent across handlers.
    */
+  // Sandbox restriction design:
+  // - list_* and get_bucket_stats return empty/zeroed data (ok: true) to avoid
+  //   breaking client code that iterates the result. This prevents enumeration
+  //   while maintaining API compatibility.
+  // - save_token and remove_token return FORBIDDEN (ok: false) since mutations
+  //   from sandbox connections are never valid and the caller should know.
   private rejectIfSandbox(
     socket: net.Socket,
     id: string,

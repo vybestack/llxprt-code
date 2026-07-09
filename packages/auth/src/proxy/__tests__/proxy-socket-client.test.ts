@@ -70,8 +70,10 @@ function createHandshakeCapturingServer(socketPath: string): Promise<{
   handshake: Promise<Record<string, unknown>>;
 }> {
   let resolveHandshake!: (frame: Record<string, unknown>) => void;
-  const handshake = new Promise<Record<string, unknown>>((resolve) => {
+  let rejectHandshake!: (err: Error) => void;
+  const handshake = new Promise<Record<string, unknown>>((resolve, reject) => {
     resolveHandshake = resolve;
+    rejectHandshake = reject;
   });
   const srv = net.createServer((socket) => {
     const decoder = new FrameDecoder();
@@ -83,6 +85,12 @@ function createHandshakeCapturingServer(socketPath: string): Promise<{
           socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
         }
       }
+    });
+    socket.on('close', () => {
+      rejectHandshake(new Error('Socket closed before handshake'));
+    });
+    socket.on('error', (err) => {
+      rejectHandshake(err);
     });
   });
   return new Promise((resolve, reject) => {
@@ -537,7 +545,7 @@ describe('ProxySocketClient', () => {
    * @then ensureConnected rejects with an authentication failure message
    */
   it('surfaces authentication error on UNAUTHORIZED handshake', async () => {
-    server = net.createServer((socket) => {
+    const srv = net.createServer((socket) => {
       const decoder = new FrameDecoder();
       socket.on('data', (chunk) => {
         const frames = decoder.feed(chunk);
@@ -554,11 +562,12 @@ describe('ProxySocketClient', () => {
         }
       });
     });
+    server = srv;
 
     await new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(socketPath, () => {
-        server.removeListener('error', reject);
+      srv.once('error', reject);
+      srv.listen(socketPath, () => {
+        srv.removeListener('error', reject);
         resolve();
       });
     });

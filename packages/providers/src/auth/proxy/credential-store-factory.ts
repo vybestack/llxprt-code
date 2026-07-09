@@ -37,9 +37,23 @@ import type {
 import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 
 let proxyTokenStore: ProxyTokenStore | undefined;
+let proxyTokenStoreCapabilityToken: string | undefined;
 let directTokenStore: KeyringTokenStore | undefined;
 let proxyKeyStorage: ProxyProviderKeyStorage | undefined;
+let proxyKeyStorageCapabilityToken: string | undefined;
 let directKeyStorage: ProviderKeyStorage | undefined;
+
+/**
+ * Reads and validates the LLXPRT_CAPABILITY_TOKEN env var.
+ * Returns undefined if unset or empty so the client omits it from
+ * the handshake (matching the "no token" behavior).
+ */
+function readCapabilityToken(): string | undefined {
+  const raw = process.env.LLXPRT_CAPABILITY_TOKEN;
+  if (raw === undefined) return undefined;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
 
 /**
  * Creates or returns a singleton TokenStore appropriate for the current environment.
@@ -58,8 +72,14 @@ let directKeyStorage: ProviderKeyStorage | undefined;
 export function createTokenStore(): TokenStore {
   const socketPath = process.env.LLXPRT_CREDENTIAL_SOCKET;
   if (socketPath) {
-    const capabilityToken = process.env.LLXPRT_CAPABILITY_TOKEN;
-    proxyTokenStore ??= new ProxyTokenStore(socketPath, capabilityToken);
+    const capabilityToken = readCapabilityToken();
+    if (
+      proxyTokenStore === undefined ||
+      proxyTokenStoreCapabilityToken !== capabilityToken
+    ) {
+      proxyTokenStore = new ProxyTokenStore(socketPath, capabilityToken);
+      proxyTokenStoreCapabilityToken = capabilityToken;
+    }
     return proxyTokenStore;
   }
   directTokenStore ??= createKeyringTokenStore();
@@ -80,10 +100,14 @@ export function createTokenStore(): TokenStore {
 export function createProviderKeyStorage(): ProviderKeyStorageLike {
   const socketPath = process.env.LLXPRT_CREDENTIAL_SOCKET;
   if (socketPath) {
-    if (!proxyKeyStorage) {
-      const capabilityToken = process.env.LLXPRT_CAPABILITY_TOKEN;
+    const capabilityToken = readCapabilityToken();
+    if (
+      proxyKeyStorage === undefined ||
+      proxyKeyStorageCapabilityToken !== capabilityToken
+    ) {
       const client = new ProxySocketClient(socketPath, capabilityToken);
       proxyKeyStorage = new ProxyProviderKeyStorage(client);
+      proxyKeyStorageCapabilityToken = capabilityToken;
     }
     return proxyKeyStorage;
   }
@@ -96,7 +120,9 @@ export function createProviderKeyStorage(): ProviderKeyStorageLike {
  */
 export function resetFactorySingletons(): void {
   proxyTokenStore = undefined;
+  proxyTokenStoreCapabilityToken = undefined;
   directTokenStore = undefined;
   proxyKeyStorage = undefined;
+  proxyKeyStorageCapabilityToken = undefined;
   directKeyStorage = undefined;
 }

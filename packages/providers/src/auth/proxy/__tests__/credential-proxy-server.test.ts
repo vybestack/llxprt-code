@@ -1133,6 +1133,30 @@ describe('CredentialProxyServer', () => {
     const stored = await tokenStore.getToken('anthropic');
     expect(stored?.access_token).toBe('new-at');
   });
+
+  /**
+   * @scenario remove_token works for non-sandbox connections
+   * @given A server WITHOUT capability token and an existing token
+   * @when A non-sandbox client removes a token
+   * @then Response is ok: true and the token is actually removed
+   */
+  it('remove_token works for non-sandbox connections', async () => {
+    await tokenStore.saveToken('anthropic', makeToken());
+
+    server = createServer();
+    client = await startAndConnect(server);
+
+    const response = await client.request('remove_token', {
+      provider: 'anthropic',
+    });
+
+    expect(response.ok).toBe(true);
+
+    // Verify the token was actually removed
+    const stored = await tokenStore.getToken('anthropic');
+    expect(stored).toBeNull();
+  });
+
   /**
    * @scenario Empty capability token is rejected at construction time
    * @given A server configured with an empty string capability token
