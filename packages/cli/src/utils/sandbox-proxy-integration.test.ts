@@ -35,19 +35,27 @@ const sandboxSources = {
 
 const sandboxSource = Object.values(sandboxSources).join('\n');
 
-/** Extracts a function's body from source code by finding the next function
- *  declaration boundary (handles both `function` and `async function`). */
+/** Extracts a function's source text (including declaration) by finding the
+ *  next function declaration boundary (handles both `function` and `async
+ *  function`). NOTE: This assumes no nested function declarations exist
+ *  within the target body — currently true for all callers. */
   function extractFunctionBody(source: string, fnName: string): string {
     const start = source.indexOf(`function ${fnName}(`);
     if (start === -1) return '';
-    // NOTE: This finds the next top-level `function`/`async function` at a
-    // line boundary. It assumes no nested function declarations exist within
-    // the target body — currently true for all callers.
     const nextFn = source
       .slice(start + 1)
       .search(/\n(?:export )?(?:async )?function /);
     const end = nextFn === -1 ? undefined : start + 1 + nextFn;
-    return source.substring(start, end);
+    const result = source.substring(start, end);
+    // Sanity check: detect premature truncation from nested function declarations
+    const openBraces = (result.match(/{/g) ?? []).length;
+    const closeBraces = (result.match(/}/g) ?? []).length;
+    if (openBraces !== closeBraces) {
+      throw new Error(
+        `extractFunctionBody: unbalanced braces for '${fnName}' — possible nested function declaration truncation`,
+      );
+    }
+    return result;
   }
 
 describe('Credential Proxy Integration - sandbox.ts', () => {
@@ -270,6 +278,8 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     });
 
     it('calls composed cleanup before nullifying on sandbox close', () => {
+      // Structural assertion: verifies lexical ordering in source, not
+      // runtime behavior. A separate E2E test would be needed for that.
       const fnSection = extractFunctionBody(
         sandboxSource,
         'wireCleanupHandlers',

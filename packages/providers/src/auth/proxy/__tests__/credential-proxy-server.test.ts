@@ -1312,6 +1312,10 @@ describe('CredentialProxyServer', () => {
         payload: { provider: 'anthropic', code: 'x', state: 'y' },
       },
       { op: 'oauth_poll', payload: { provider: 'anthropic', deviceCode: 'x' } },
+      {
+        op: 'oauth_cancel',
+        payload: { provider: 'anthropic', sessionId: 'x' },
+      },
       { op: 'refresh_token', payload: { provider: 'anthropic' } },
     ];
 

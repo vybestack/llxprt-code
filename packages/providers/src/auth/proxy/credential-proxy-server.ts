@@ -77,6 +77,8 @@ export interface ConnectionState {
    * to prevent credential discovery.
    */
   isSandboxConnection: boolean;
+  /** Promise chain for serializing async dispatch on this connection. */
+  inFlight?: Promise<void>;
 }
 
 // ─── Server ──────────────────────────────────────────────────────────────────
@@ -240,17 +242,18 @@ export class CredentialProxyServer {
       }
     });
 
-    socket.on('close', () => {
+    let connectionCleanedUp = false;
+    const cleanupConnection = (op: string): void => {
+      if (connectionCleanedUp) return;
+      connectionCleanedUp = true;
       this.connections.delete(socket);
       this.connectionStates.delete(socket);
-      this.auditLog('INFO', connectionId, 'disconnect');
-    });
+      this.auditLog('INFO', connectionId, op);
+    };
 
-    socket.on('error', () => {
-      this.connections.delete(socket);
-      this.connectionStates.delete(socket);
-      this.auditLog('WARN', connectionId, 'socket_error');
-    });
+    socket.on('close', () => cleanupConnection('disconnect'));
+
+    socket.on('error', () => cleanupConnection('socket_error'));
   }
 
   private processFrames(
@@ -284,12 +287,16 @@ export class CredentialProxyServer {
       handshakeState.completed = true;
       return true;
     }
-    this.dispatchRequest(socket, frame, state).catch((err) => {
-      this.auditLog('ERROR', state.id, 'unhandled_dispatch', {
-        error: String(err),
+    // Serialize dispatch per-connection to prevent overlapping socket.write()
+    // calls when multiple frames arrive in a single TCP chunk.
+    state.inFlight = (state.inFlight ?? Promise.resolve())
+      .then(() => this.dispatchRequest(socket, frame, state))
+      .catch((err) => {
+        this.auditLog('ERROR', state.id, 'unhandled_dispatch', {
+          error: String(err),
+        });
+        if (!socket.destroyed) socket.destroy();
       });
-      if (!socket.destroyed) socket.destroy();
-    });
     return true;
   }
 

@@ -142,10 +142,8 @@ function getSessionTimeoutMs(options: CredentialProxyOAuthOptions): number {
  *
  * Sandbox connection restrictions are enforced by the credential proxy
  * server's dispatch table before any handler in this class is invoked.
- * OAuth initiation, exchange, polling, and token refresh are blocked
- * for sandbox connections (FORBIDDEN). Only `oauth_cancel` is
- * unrestricted. Enumeration (list_*) returns empty data and mutation
- * (save_token/remove_token) is blocked for sandbox connections.
+ * All OAuth operations (initiate, exchange, poll, cancel, refresh)
+ * are blocked for sandbox connections via `rejectIfSandbox`.
  *
  * The `_state` parameter is accepted by each handler for signature
  * consistency with the dispatch contract but is not used here because

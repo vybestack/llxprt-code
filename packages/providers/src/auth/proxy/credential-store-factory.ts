@@ -59,6 +59,31 @@ function readCapabilityToken(): string | undefined {
 }
 
 /**
+ * Constructs a new instance, closing the old one on construction failure.
+ * Centralises the construct-then-close-old pattern to reduce nesting depth.
+ */
+function constructWithCleanup<T>(
+  construct: () => T,
+  closeOld: (() => void) | undefined,
+): T {
+  try {
+    return construct();
+  } catch (err) {
+    safeClose(closeOld);
+    throw err;
+  }
+}
+
+function safeClose(closeFn: (() => void) | undefined): void {
+  if (!closeFn) return;
+  try {
+    closeFn();
+  } catch {
+    // best-effort cleanup
+  }
+}
+
+/**
  * Creates or returns a singleton TokenStore appropriate for the current environment.
  *
  * **This is the ONLY sanctioned way to obtain a TokenStore instance.**
@@ -82,13 +107,12 @@ export function createTokenStore(): TokenStore {
       proxyTokenStoreSocketPath !== socketPath
     ) {
       const oldStore = proxyTokenStore;
-      const newStore = new ProxyTokenStore(socketPath, capabilityToken);
+      const newStore = constructWithCleanup(
+        () => new ProxyTokenStore(socketPath, capabilityToken),
+        () => oldStore?.getClient().close(),
+      );
       // Close old connection best-effort, then mutate singletons
-      try {
-        oldStore?.getClient().close();
-      } catch {
-        // best-effort cleanup
-      }
+      safeClose(() => oldStore?.getClient().close());
       proxyTokenStore = newStore;
       proxyTokenStoreCapabilityToken = capabilityToken;
       proxyTokenStoreSocketPath = socketPath;
@@ -131,14 +155,13 @@ export function createProviderKeyStorage(): ProviderKeyStorageLike {
       proxyKeyStorageSocketPath !== socketPath
     ) {
       const oldClient = proxyKeyStorageClient;
-      const newClient = new ProxySocketClient(socketPath, capabilityToken);
+      const newClient = constructWithCleanup(
+        () => new ProxySocketClient(socketPath, capabilityToken),
+        () => oldClient?.close(),
+      );
       const newStorage = new ProxyProviderKeyStorage(newClient);
       // Close old connection best-effort, then mutate singletons
-      try {
-        oldClient?.close();
-      } catch {
-        // best-effort cleanup
-      }
+      safeClose(() => oldClient?.close());
       proxyKeyStorageClient = newClient;
       proxyKeyStorage = newStorage;
       proxyKeyStorageCapabilityToken = capabilityToken;

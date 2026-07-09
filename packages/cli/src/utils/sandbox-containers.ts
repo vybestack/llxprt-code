@@ -491,6 +491,12 @@ function pushCapabilityEnvFile(
   try {
     fs.closeSync(fd);
   } catch (closeErr) {
+    // fd may or may not be closed; attempt a best-effort close then unlink
+    try {
+      fs.closeSync(fd);
+    } catch {
+      // fd already closed or invalid — nothing more we can do
+    }
     try {
       fs.unlinkSync(envFile);
     } catch {
@@ -591,6 +597,11 @@ export async function setupCredentialProxy(
   } catch (err) {
     envFileCleanup?.();
     credentialProxyBridgeCleanup?.();
+    try {
+      await stopProxy();
+    } catch {
+      // best-effort cleanup; the original error is the one we want to throw
+    }
     throw err;
   }
 
