@@ -193,8 +193,12 @@ export class ProxySocketClient {
             (response.error ?? 'invalid or missing capability token'),
         );
       }
+      const codeInfo = response.code ? ` [${response.code}]` : '';
       throw new Error(
-        'Handshake failed: ' + (response.error ?? 'unknown error'),
+        'Handshake failed' +
+          codeInfo +
+          ': ' +
+          (response.error ?? 'unknown error'),
       );
     }
     this.handshakeComplete = true;
@@ -220,7 +224,11 @@ export class ProxySocketClient {
   private resolveHandshake(frame: Record<string, unknown>): void {
     const resolver = this.handshakeResolver;
     this.handshakeResolver = null;
-    if (resolver === null) return;
+    if (resolver === null) {
+      // A frame arrived after the handshake was already resolved or rejected
+      // (e.g. duplicate response, or frame arrived after timeout).
+      return;
+    }
     if (typeof frame.ok === 'boolean') {
       resolver.resolve(frame as ProxyResponse);
     } else {

@@ -184,9 +184,8 @@ export async function createAndStartProxy(
       ? path.dirname(config.socketPath)
       : config.socketPath;
 
-  actualCapabilityToken = crypto.randomBytes(32).toString('hex');
-
   try {
+    actualCapabilityToken = crypto.randomBytes(32).toString('hex');
     serverInstance = new CredentialProxyServer({
       tokenStore,
       providerKeyStorage,

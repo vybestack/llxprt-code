@@ -230,7 +230,7 @@ describe('ProxySocketClient', () => {
     await new Promise<void>((resolve) => server.listen(socketPath, resolve));
 
     client = new ProxySocketClient(socketPath);
-    await expect(client.ensureConnected()).rejects.toThrow(/handshake failed/i);
+    await expect(client.ensureConnected()).rejects.toThrow(/version/i);
   });
 
   /**

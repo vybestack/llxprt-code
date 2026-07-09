@@ -1076,6 +1076,7 @@ describe('CredentialProxyServer', () => {
       provider: 'anthropic',
       token: {
         access_token: 'new-token',
+        refresh_token: 'new-rt',
         expiry: 8888888888,
         token_type: 'Bearer',
       },
@@ -1225,5 +1226,70 @@ describe('CredentialProxyServer', () => {
     expect(() => createServer({ capabilityToken: '' })).toThrow(
       /non-empty string/,
     );
+  });
+
+  /**
+   * @scenario Version mismatch is rejected before capability token check
+   * @given A server configured with a capability token
+   * @when A client sends a handshake with an incompatible protocol version
+   * @then The handshake fails with a version mismatch error (not UNAUTHORIZED)
+   */
+  it('rejects version mismatch before capability token check', async () => {
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    const socketPath = await server.start();
+
+    const net = await import('node:net');
+    const { encodeFrame, FrameDecoder } = await import(
+      '@vybestack/llxprt-code-auth'
+    );
+
+    const response = await new Promise<Record<string, unknown>>(
+      (resolve, reject) => {
+        const socket = net.createConnection(socketPath, () => {
+          socket.write(
+            encodeFrame({
+              v: 999,
+              op: 'handshake',
+              payload: { minVersion: 999, maxVersion: 999 },
+            }),
+          );
+        });
+        const decoder = new FrameDecoder();
+        socket.on('data', (chunk: Buffer) => {
+          const frames = decoder.feed(chunk);
+          for (const frame of frames) {
+            socket.destroy();
+            resolve(frame);
+          }
+        });
+        socket.on('error', reject);
+        setTimeout(() => {
+          socket.destroy();
+          reject(new Error('Timeout waiting for handshake response'));
+        }, 5000);
+      },
+    );
+
+    expect(response.ok).toBe(false);
+    expect(response.code).not.toBe('UNAUTHORIZED');
+  });
+
+  /**
+   * @scenario OAuth operations are allowed for sandbox connections
+   * @given A server configured with a capability token and OAuth flows
+   * @when A sandbox client requests an OAuth operation
+   * @then The operation is allowed (OAuth requires interactive user consent)
+   */
+  it('allows oauth operations for sandbox connections', async () => {
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
+
+    const response = await client.request('oauth_initiate', {
+      provider: 'anthropic',
+    });
+
+    // OAuth initiate may fail due to missing flow config, but it should NOT
+    // return FORBIDDEN — it should proceed to attempt the OAuth flow.
+    expect(response.code).not.toBe('FORBIDDEN');
   });
 });

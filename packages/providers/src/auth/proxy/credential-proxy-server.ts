@@ -370,7 +370,7 @@ export class CredentialProxyServer {
    * could leak the token length.
    */
   private validateCapabilityToken(presentedToken: string): boolean {
-    if (!this.expectedTokenHash) return true;
+    if (!this.expectedTokenHash) return false;
     const presentedHash = crypto
       .createHash('sha256')
       .update(presentedToken)
@@ -402,8 +402,8 @@ export class CredentialProxyServer {
     }
     try {
       if (!process.stderr.destroyed) {
-        // If write returns false, the buffer is full — skip to avoid blocking
-        // the event loop under brute-force attack scenarios.
+        // write() returns false when the internal buffer is full.
+        // We still write — backpressure is accepted over dropping audit entries.
         process.stderr.write(JSON.stringify(entry) + '\n');
       }
     } catch {

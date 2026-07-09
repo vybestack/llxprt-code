@@ -496,15 +496,19 @@ function registerCapabilityEnvCleanup(
   const cleanup = pushCapabilityEnvFile(args, resolvedTmpdir);
   if (!cleanup) return undefined;
 
+  const signalHandler = (signal: NodeJS.Signals): void => {
+    cleanup();
+    process.exit(signal === 'SIGINT' ? 130 : 143);
+  };
   process.on('exit', cleanup);
-  process.on('SIGINT', cleanup);
-  process.on('SIGTERM', cleanup);
+  process.on('SIGINT', signalHandler);
+  process.on('SIGTERM', signalHandler);
 
   return () => {
     cleanup();
     process.off('exit', cleanup);
-    process.off('SIGINT', cleanup);
-    process.off('SIGTERM', cleanup);
+    process.off('SIGINT', signalHandler);
+    process.off('SIGTERM', signalHandler);
   };
 }
 
@@ -530,7 +534,7 @@ async function setupMacOSCredProxyBridge(
       );
     case 'docker':
       return setupCredentialProxyDockerMacOS(args, socketPath);
-    default:
+    case 'sandbox-exec':
       return undefined;
   }
 }

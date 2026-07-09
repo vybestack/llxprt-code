@@ -258,7 +258,7 @@ describe('proxy integration (phase 31)', () => {
     });
     const token = getProxyCapabilityToken();
     expect(typeof token).toBe('string');
-    expect(token!.length).toBe(64); // 32 bytes hex = 64 chars
+    expect(token).toHaveLength(64); // 32 bytes hex = 64 chars
     expect(getProxySocketPath()).toBeDefined();
     await stopProxy();
   });

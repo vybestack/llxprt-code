@@ -107,7 +107,7 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
 
     it('wraps createAndStartProxy in try-catch', () => {
       expect(sandboxSource).toMatch(
-        /try\s*\{\s*(?:\S[\s\S]*?)?await\s+createAndStartProxy[\s\S]*?\}\s*catch/,
+        /try\s*\{[\s\S]{0,100}?await\s+createAndStartProxy[\s\S]*?\}\s*catch/,
       );
     });
   });
@@ -170,7 +170,10 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     it('does NOT pass LLXPRT_CAPABILITY_TOKEN via --env (avoids exposing in process args)', () => {
       const fnStart = sandboxSource.indexOf('function pushCapabilityEnvFile');
       expect(fnStart).toBeGreaterThan(-1);
-      const fnEnd = sandboxSource.indexOf('\nfunction ', fnStart + 1);
+      const nextFnMatch = sandboxSource
+        .slice(fnStart + 1)
+        .search(/\n(?:async )?function /);
+      const fnEnd = nextFnMatch === -1 ? -1 : fnStart + 1 + nextFnMatch;
       const fnSection = sandboxSource.substring(
         fnStart,
         fnEnd === -1 ? undefined : fnEnd,
@@ -181,7 +184,10 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     it('writes capability token to a temp env file with restrictive permissions', () => {
       const fnStart = sandboxSource.indexOf('function pushCapabilityEnvFile');
       expect(fnStart).toBeGreaterThan(-1);
-      const fnEnd = sandboxSource.indexOf('\nfunction ', fnStart + 1);
+      const nextFnMatch = sandboxSource
+        .slice(fnStart + 1)
+        .search(/\n(?:async )?function /);
+      const fnEnd = nextFnMatch === -1 ? -1 : fnStart + 1 + nextFnMatch;
       const fnSection = sandboxSource.substring(
         fnStart,
         fnEnd === -1 ? undefined : fnEnd,
@@ -203,7 +209,10 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
         'function registerCapabilityEnvCleanup',
       );
       expect(fnStart).toBeGreaterThan(-1);
-      const fnEnd = sandboxSource.indexOf('\nfunction ', fnStart + 1);
+      const nextFnMatch = sandboxSource
+        .slice(fnStart + 1)
+        .search(/\n(?:async )?function /);
+      const fnEnd = nextFnMatch === -1 ? -1 : fnStart + 1 + nextFnMatch;
       const fnSection = sandboxSource.substring(
         fnStart,
         fnEnd === -1 ? undefined : fnEnd,
@@ -218,6 +227,15 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       expect(sandboxSource).toContain(
         'const capabilityToken = getProxyCapabilityToken()',
       );
+    });
+
+    it('registers env file cleanup in all setupCredentialProxy branches', () => {
+      // Count actual call sites (not the function definition):
+      // Calls use the pattern "= registerCapabilityEnvCleanup(args"
+      const callCount = (
+        sandboxSource.match(/=\s*registerCapabilityEnvCleanup\(args/g) ?? []
+      ).length;
+      expect(callCount).toBe(3);
     });
   });
 
