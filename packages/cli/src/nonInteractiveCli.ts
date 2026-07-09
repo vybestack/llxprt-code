@@ -325,6 +325,7 @@ async function processQuery(
       config: params.config,
       jsonOutput: options.jsonOutput,
       streamJsonOutput: options.streamJsonOutput,
+      quiet: params.config.getQuiet(),
       streamFormatter: options.streamFormatter,
       emojiFilter: options.emojiFilter,
       createProfileNameWriter: () =>

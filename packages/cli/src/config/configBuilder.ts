@@ -71,6 +71,7 @@ export interface ConfigBuildInput {
   readonly extensionsEnabled: boolean;
   readonly adminSkillsEnabled: boolean;
   readonly outputFormat: OutputFormat;
+  readonly quiet: boolean;
   readonly allowedTools: readonly string[];
 }
 
@@ -193,6 +194,7 @@ function buildSessionBaseArgs(
     filePaths,
     screenReader,
     outputFormat,
+    quiet,
     question,
     extensionsEnabled,
     adminSkillsEnabled,
@@ -208,6 +210,7 @@ function buildSessionBaseArgs(
       context.resolvedLoadMemoryFromIncludeDirectories,
     debugMode: context.debugMode,
     outputFormat,
+    quiet,
     question,
     ...toolConfig,
     extensionsEnabled,

@@ -355,6 +355,7 @@ export interface ConfigParameters {
   debugMode: boolean;
   outputFormat?: OutputFormat;
   question?: string;
+  quiet?: boolean;
 
   coreTools?: string[];
   allowedTools?: string[];

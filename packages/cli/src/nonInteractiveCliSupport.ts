@@ -26,6 +26,7 @@ type StreamConsumerContext = {
   config: Config;
   jsonOutput: boolean;
   streamJsonOutput: boolean;
+  quiet: boolean;
   streamFormatter: StreamJsonFormatter | null;
   emojiFilter: EmojiFilter | undefined;
   createProfileNameWriter: () => () => void;
@@ -160,6 +161,10 @@ function handleText(
   return jsonResponseText;
 }
 
+function handleQuietText(text: string, state: StreamState): void {
+  state.quietTextBuffer += text;
+}
+
 function emitToolUse(
   call: { id: string; name: string; args: Readonly<Record<string, unknown>> },
   formatter: StreamJsonFormatter | null,
@@ -234,12 +239,20 @@ function displayToolResult(
 
 function emitFinalResult(
   context: StreamConsumerContext,
-  jsonResponseText: string,
+  responseText: string,
   startTime: number,
   metrics: SessionMetrics,
   finishReason?: 'refusal',
 ): void {
   if (context.streamFormatter) {
+    if (context.quiet && responseText.length > 0) {
+      context.streamFormatter.emitEvent({
+        type: JsonStreamEventType.MESSAGE,
+        timestamp: new Date().toISOString(),
+        role: 'assistant',
+        content: responseText,
+      });
+    }
     context.streamFormatter.emitEvent({
       type: JsonStreamEventType.RESULT,
       timestamp: new Date().toISOString(),
@@ -252,7 +265,7 @@ function emitFinalResult(
   } else if (context.jsonOutput) {
     const payload: JsonOutput = {
       session_id: context.config.getSessionId(),
-      response: jsonResponseText.trimEnd(),
+      response: responseText.trimEnd(),
       stats: metrics,
     };
     if (finishReason !== undefined) {
@@ -260,7 +273,7 @@ function emitFinalResult(
     }
     process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
   } else {
-    process.stdout.write('\n');
+    process.stdout.write(`${responseText}\n`);
   }
 }
 
@@ -347,6 +360,7 @@ function handleDone(
 function finalizeStream(
   thoughtBuffer: string,
   jsonResponseText: string,
+  quietTextBuffer: string,
   pendingDone: Extract<AgentEvent, { type: 'done' }> | null,
   context: StreamConsumerContext,
   includeThinking: boolean,
@@ -355,17 +369,47 @@ function finalizeStream(
 ): void {
   flushThoughtBuffer(thoughtBuffer, includeThinking);
   const finalText = flushEmojiBuffer(context, jsonResponseText);
+  const responseText = context.quiet
+    ? filterQuietText(quietTextBuffer, context)
+    : finalText;
   if (pendingDone !== null) {
-    handleDone(pendingDone, context, finalText, startTime, getMetrics);
+    handleDone(pendingDone, context, responseText, startTime, getMetrics);
   } else {
-    emitFinalResult(context, finalText, startTime, getMetrics());
+    emitFinalResult(context, responseText, startTime, getMetrics());
   }
+}
+
+function filterQuietText(text: string, context: StreamConsumerContext): string {
+  if (!context.emojiFilter) {
+    return text;
+  }
+  const result = context.emojiFilter.filterText(text);
+  if (result.blocked) {
+    return '';
+  }
+  return typeof result.filtered === 'string' ? result.filtered : text;
 }
 
 interface StreamState {
   thoughtBuffer: string;
   jsonResponseText: string;
+  quietTextBuffer: string;
   pendingDone: Extract<AgentEvent, { type: 'done' }> | null;
+}
+
+function handleQuietEvent(event: AgentEvent, state: StreamState): boolean {
+  switch (event.type) {
+    case 'text':
+      handleQuietText(event.text, state);
+      return true;
+    case 'tool-call':
+      state.quietTextBuffer = '';
+      return true;
+    case 'tool-result':
+      return true;
+    default:
+      return false;
+  }
 }
 
 function dispatchAgentEvent(
@@ -375,6 +419,9 @@ function dispatchAgentEvent(
   writeProfileName: () => void,
   includeThinking: boolean,
 ): void {
+  if (context.quiet && handleQuietEvent(event, state)) {
+    return;
+  }
   switch (event.type) {
     case 'thinking':
       state.thoughtBuffer = handleThinking(
@@ -461,14 +508,18 @@ export async function processAgentStream(
   startTime: number,
   getMetrics: () => SessionMetrics,
 ): Promise<void> {
-  const writeProfileName = context.createProfileNameWriter();
+  const writeProfileName = context.quiet
+    ? (): void => {}
+    : context.createProfileNameWriter();
   const includeThinking =
+    !context.quiet &&
     !context.jsonOutput &&
     !context.streamJsonOutput &&
     context.config.getEphemeralSetting('reasoning.includeInResponse') !== false;
   const state: StreamState = {
     thoughtBuffer: '',
     jsonResponseText: '',
+    quietTextBuffer: '',
     pendingDone: null,
   };
   for await (const event of events) {
@@ -483,6 +534,7 @@ export async function processAgentStream(
   finalizeStream(
     state.thoughtBuffer,
     state.jsonResponseText,
+    state.quietTextBuffer,
     state.pendingDone,
     context,
     includeThinking,
