@@ -73,6 +73,11 @@ function safeClose(closeFn: (() => void) | undefined): void {
 /**
  * Creates or returns a singleton TokenStore appropriate for the current environment.
  *
+ * NOTE: This function is fully synchronous — no awaits — so concurrent
+ * interleaving is impossible in Node.js's single-threaded model. The
+ * read-check-create-assign sequence is atomic with respect to the event loop.
+ * If async operations are ever added, a serialization lock will be needed.
+ *
  * **This is the ONLY sanctioned way to obtain a TokenStore instance.**
  * Do not instantiate `KeyringTokenStore` or `ProxyTokenStore` directly.
  *

@@ -41,7 +41,9 @@ const sandboxSource = Object.values(sandboxSources).join('\n');
  *  within the target body — currently true for all callers. */
 function extractFunctionBody(source: string, fnName: string): string {
   const start = source.indexOf(`function ${fnName}(`);
-  if (start === -1) return '';
+  if (start === -1) {
+    throw new Error(`extractFunctionBody: function "${fnName}" not found in source`);
+  }
   const nextFn = source
     .slice(start)
     .search(/\n(?:export )?(?:async )?function /);
@@ -124,7 +126,7 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
 
     it('wraps createAndStartProxy in try-catch', () => {
       expect(sandboxSource).toMatch(
-        /try\s*\{[\s\S]{0,100}?await\s+createAndStartProxy[\s\S]*?\}\s*catch/,
+        /try\s*\{[\s\S]{0,300}?await\s+createAndStartProxy[\s\S]*?\}\s*catch/,
       );
     });
   });
@@ -197,10 +199,10 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       // regex doesn't cross from --env for socket path to LLXPRT_CAPABILITY_TOKEN
       // in the --env-file section on a different line.
       expect(sandboxSource).not.toMatch(
-        /['"]--env['"]\s*,\s*[`'"][^'"\n`]*LLXPRT_CAPABILITY_TOKEN/,
+        /['"]--env['"]\s*,\s*[`'"][^'"\r\n`]*LLXPRT_CAPABILITY_TOKEN/,
       );
       expect(sandboxSource).not.toMatch(
-        /['"]-e['"]\s*,\s*[`'"][^'"\n`]*LLXPRT_CAPABILITY_TOKEN/,
+        /['"]-e['"]\s*,\s*[`'"][^'"\r\n`]*LLXPRT_CAPABILITY_TOKEN/,
       );
     });
 

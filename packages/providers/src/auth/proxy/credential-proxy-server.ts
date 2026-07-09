@@ -41,6 +41,12 @@ export type { OAuthFlowInterface } from './credential-proxy-oauth-handler.js';
 
 const PROTOCOL_VERSION = 1;
 
+/** Max frames per chunk before a connection is considered flooding and destroyed. */
+const MAX_FRAMES_PER_CHUNK = 100;
+
+/** Grace period (ms) for a client to read a rejected-handshake frame before force-destroy. */
+const HANDSHAKE_DESTROY_TIMEOUT_MS = 3000;
+
 const isWindows = process.platform === 'win32';
 
 // ─── Options ─────────────────────────────────────────────────────────────────
@@ -264,7 +270,6 @@ export class CredentialProxyServer {
   ): void {
     // Cap frames per chunk to prevent unbounded promise-chain growth from
     // a malicious client sending thousands of tiny frames in one TCP segment.
-    const MAX_FRAMES_PER_CHUNK = 100;
     if (frames.length > MAX_FRAMES_PER_CHUNK) {
       this.auditLog('WARN', state.id, 'frame_flood', {
         count: frames.length,
@@ -340,7 +345,8 @@ export class CredentialProxyServer {
       // Use end() instead of write()+destroy() so the error frame is flushed
       // to the OS before the socket is torn down, preventing ECONNRESET on the
       // client side which would mask the specific UNKNOWN_VERSION error code.
-      socket.end(
+      this.endAndDestroyAfter(
+        socket,
         encodeFrame({
           v: PROTOCOL_VERSION,
           op: 'handshake',
@@ -349,9 +355,6 @@ export class CredentialProxyServer {
           error: 'Unsupported protocol version',
         }),
       );
-      // Force-destroy if graceful close doesn't complete within 3s to
-      // prevent slowloris-style resource exhaustion.
-      setTimeout(() => socket.destroy(), 3000).unref();
       return false;
     }
 
@@ -374,7 +377,8 @@ export class CredentialProxyServer {
         // Use end() instead of write()+destroy() so the error frame is flushed
         // to the OS before the socket is torn down, preventing ECONNRESET on the
         // client side which would mask the specific UNAUTHORIZED error code.
-        socket.end(
+        this.endAndDestroyAfter(
+          socket,
           encodeFrame({
             v: PROTOCOL_VERSION,
             op: 'handshake',
@@ -383,7 +387,6 @@ export class CredentialProxyServer {
             error: 'Invalid or missing capability token',
           }),
         );
-        setTimeout(() => socket.destroy(), 3000).unref();
         return false;
       }
       state.isSandboxConnection = true;
@@ -960,6 +963,21 @@ export class CredentialProxyServer {
       status: 'ok',
     });
     this.sendOk(socket, id, stats as unknown as Record<string, unknown>);
+  }
+
+  /**
+   * Sends a frame via socket.end() for graceful close, then schedules a
+   * force-destroy timer to prevent slowloris-style resource exhaustion from
+   * clients that never read the error frame. The timer is cleared on
+   * graceful close to avoid dangling references.
+   */
+  private endAndDestroyAfter(socket: net.Socket, frame: Buffer): void {
+    socket.end(frame);
+    const timer = setTimeout(
+      () => socket.destroy(),
+      HANDSHAKE_DESTROY_TIMEOUT_MS,
+    ).unref();
+    socket.once('close', () => clearTimeout(timer));
   }
 
   private sendOk(

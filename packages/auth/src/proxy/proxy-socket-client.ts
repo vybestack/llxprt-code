@@ -241,18 +241,22 @@ export class ProxySocketClient {
     try {
       const frames = this.decoder.feed(chunk);
       for (const frame of frames) {
-        if (this.handshakeResolver) {
-          this.resolveHandshake(frame);
-        } else if (this.processResponseFrame(frame)) {
-          return; // socket destroyed mid-loop
-        }
+        if (this.processFrame(frame)) return;
       }
     } catch {
       this.destroy('Frame decode error');
     }
   }
 
-  private processResponseFrame(frame: Record<string, unknown>): boolean {
+  /**
+   * Processes a single decoded frame. Returns true if the socket was
+   * destroyed and the caller should stop iterating.
+   */
+  private processFrame(frame: Record<string, unknown>): boolean {
+    if (this.handshakeResolver) {
+      this.resolveHandshake(frame);
+      return this.socket === null;
+    }
     this.resolvePendingRequest(frame);
     return this.socket === null;
   }

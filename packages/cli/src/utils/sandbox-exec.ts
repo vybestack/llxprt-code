@@ -248,7 +248,6 @@ async function executeContainerSandbox(
     image,
     workdir,
     portForwardingResult,
-    credentialProxyBridgeResult,
     sshResult,
   } = prepared;
   let credentialProxyBridgeCleanup = prepared.credentialProxyBridgeCleanup;
@@ -285,7 +284,6 @@ async function executeContainerSandbox(
     cliConfig,
     sshResult,
     portForwardingResult,
-    credentialProxyBridgeResult,
     credentialProxyBridgeCleanup,
     (c) => {
       credentialProxyBridgeCleanup = c;

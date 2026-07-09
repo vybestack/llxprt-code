@@ -703,7 +703,6 @@ export function wireCleanupHandlers(
   _cliConfig: Config | undefined,
   sshResult: SshAgentResult,
   portForwardingResult: PortForwardingResult | undefined,
-  credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined,
   credentialProxyBridgeCleanup: (() => void) | undefined,
   setCredentialProxyBridgeCleanup: (c: (() => void) | undefined) => void,
 ): void {
@@ -750,6 +749,10 @@ export function wireCleanupHandlers(
   const stopCredentialProxy = (): void => {
     if (proxyStopped) return;
     proxyStopped = true;
+    process.off('exit', stopCredentialProxy);
+    process.off('SIGINT', stopCredentialProxy);
+    process.off('SIGTERM', stopCredentialProxy);
+    sandboxProcess.off('close', stopCredentialProxy);
     void stopProxy().catch(() => {
       // best-effort cleanup during shutdown
     });
