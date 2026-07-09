@@ -60,7 +60,7 @@ function mergeTurnMetadata(
       ...iContent.metadata,
       ...(responseId ? { id: responseId } : {}),
       ...(usageMetadata ? { usage: usageMetadata } : {}),
-      ...(responsesStored === true ? { responsesStored: true } : {}),
+      ...(hasStoredFlag ? { responsesStored: true } : {}),
     };
   }
 }
