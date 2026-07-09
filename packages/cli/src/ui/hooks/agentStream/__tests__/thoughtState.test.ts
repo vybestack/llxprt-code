@@ -230,6 +230,80 @@ describe('applyThoughtToState incremental thinking streaming (issue #1723)', () 
 
     expect(args.thinkingBlocksRef.current).toHaveLength(1);
     expect(args.thinkingBlocksRef.current[0].thought).toBe('Same thought');
+    // Dedup should prevent a second pending item update.
+    expect(args.setPendingHistoryItem).toHaveBeenCalledTimes(1);
+  });
+
+  it('merges when a new thought extends the last block text (incremental) @issue:1723', () => {
+    // With streaming thinking deltas, the agent emits Thought events whose
+    // text grows incrementally. The UI should merge prefix-extensions into
+    // the same block. A genuinely new thought that merely starts with the
+    // same prefix but is much longer is a separate concern (see the
+    // "completely different" test above) — the startsWith heuristic is the
+    // documented behavior and the trade-off is explained in thoughtState.ts.
+    const args = createArgs({
+      getContentPrefixIdentity: () => null,
+    });
+
+    applyThoughtToState(
+      { subject: 'I think', description: '' },
+      args.sanitizeContent,
+      args.getContentPrefixIdentity,
+      args.thinkingBlocksRef,
+      args.setLastAgentActivityTime,
+      args.setThought,
+      args.setPendingHistoryItem,
+    );
+
+    // An incremental extension (prefix + small delta) merges into the block.
+    applyThoughtToState(
+      { subject: 'I think about', description: '' },
+      args.sanitizeContent,
+      args.getContentPrefixIdentity,
+      args.thinkingBlocksRef,
+      args.setLastAgentActivityTime,
+      args.setThought,
+      args.setPendingHistoryItem,
+    );
+
+    expect(args.thinkingBlocksRef.current).toHaveLength(1);
+    expect(args.thinkingBlocksRef.current[0].thought).toBe('I think about');
+  });
+
+  it('threads profileName through incremental thinking updates @issue:1723', () => {
+    const args = createArgs({
+      getContentPrefixIdentity: () => 'my-profile',
+    });
+
+    applyThoughtToState(
+      { subject: '', description: 'Start' },
+      args.sanitizeContent,
+      args.getContentPrefixIdentity,
+      args.thinkingBlocksRef,
+      args.setLastAgentActivityTime,
+      args.setThought,
+      args.setPendingHistoryItem,
+    );
+
+    applyThoughtToState(
+      { subject: '', description: 'Start thinking' },
+      args.sanitizeContent,
+      args.getContentPrefixIdentity,
+      args.thinkingBlocksRef,
+      args.setLastAgentActivityTime,
+      args.setThought,
+      args.setPendingHistoryItem,
+    );
+
+    expect(args.setPendingHistoryItem).toHaveBeenCalledTimes(2);
+
+    const lastUpdater = args.setPendingHistoryItem.mock.calls[1][0] as (
+      item: HistoryItemWithoutId | null,
+    ) => HistoryItemWithoutId | null;
+    const result = lastUpdater(null) as HistoryItemAi | null;
+    expect(result?.profileName).toBe('my-profile');
+    expect(result?.thinkingBlocks).toHaveLength(1);
+    expect(result?.thinkingBlocks?.[0].thought).toBe('Start thinking');
   });
 
   it('accumulates multiple deltas into a single growing block', () => {

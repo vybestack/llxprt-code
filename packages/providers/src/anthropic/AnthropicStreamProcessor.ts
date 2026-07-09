@@ -62,7 +62,7 @@ let toolCallSequence = 0;
  */
 function buildDeltaContents(deltaResult: {
   textDelta?: string;
-  thinkingDelta?: string;
+  accumulatedThinking?: string;
 }): IContent[] {
   const contents: IContent[] = [];
   if (deltaResult.textDelta) {
@@ -71,13 +71,13 @@ function buildDeltaContents(deltaResult: {
       blocks: [{ type: 'text', text: deltaResult.textDelta }],
     } as IContent);
   }
-  if (deltaResult.thinkingDelta) {
+  if (deltaResult.accumulatedThinking) {
     contents.push({
       speaker: 'ai',
       blocks: [
         {
           type: 'thinking',
-          thought: deltaResult.thinkingDelta,
+          thought: deltaResult.accumulatedThinking,
           sourceField: 'thinking',
         } as ThinkingBlock,
       ],
@@ -337,7 +337,7 @@ function handleContentBlockDelta(
   currentToolCall: { id: string; name: string; input: string } | undefined,
   currentThinkingBlock: { thinking: string; signature?: string } | undefined,
   logger: { debug: (fn: () => string) => void },
-): { textDelta?: string; thinkingDelta?: string } {
+): { textDelta?: string; accumulatedThinking?: string } {
   if (chunk.delta.type === 'text_delta') {
     const textDelta = chunk.delta as TextDelta;
     logger.debug(() => `Received text delta: ${textDelta.text.length} chars`);
@@ -364,7 +364,7 @@ function handleContentBlockDelta(
     // (e.g. keep-alive) must not re-emit the previously accumulated text as a
     // duplicate.
     if (thinkingDelta.thinking) {
-      return { thinkingDelta: currentThinkingBlock.thinking };
+      return { accumulatedThinking: currentThinkingBlock.thinking };
     }
   } else if (chunk.delta.type === 'signature_delta' && currentThinkingBlock) {
     const signatureDelta = chunk.delta as {

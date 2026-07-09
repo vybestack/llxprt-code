@@ -20,12 +20,20 @@
         "regex": "Profile '${profile}' loaded",
         "timeoutMs": 30000
       },
-      { "type": "line", "text": "/set reasoning.includeInResponse true", "submitKeys": [] },
+      {
+        "type": "line",
+        "text": "/set reasoning.includeInResponse true",
+        "submitKeys": []
+      },
       { "type": "key", "key": "Enter" },
       { "type": "wait", "ms": 250 },
       { "type": "key", "key": "Enter" },
       { "type": "wait", "ms": 500 },
-      { "type": "line", "text": "/set reasoning.effort xhigh", "submitKeys": [] },
+      {
+        "type": "line",
+        "text": "/set reasoning.effort xhigh",
+        "submitKeys": []
+      },
       { "type": "key", "key": "Enter" },
       { "type": "wait", "ms": 250 },
       { "type": "key", "key": "Enter" },
@@ -98,22 +106,6 @@
     {
       "type": "macro",
       "name": "loadProfile",
-      "args": { "profile": "zai" }
-    },
-    {
-      "type": "macro",
-      "name": "askThinkingQuestion",
-      "args": {
-        "question": "Analyze the architecture of this codebase. What are the main packages, how do they depend on each other, and what architectural improvements would make it more maintainable? Think step by step and explain your reasoning before answering.",
-        "label": "zai-arch",
-        "streamingProbeMs": 8000,
-        "completionTimeoutMs": 180000
-      }
-    },
-
-    {
-      "type": "macro",
-      "name": "loadProfile",
       "args": { "profile": "opusthinking" }
     },
     {
@@ -122,22 +114,6 @@
       "args": {
         "question": "Analyze the architecture of this codebase. What are the main packages, how do they depend on each other, and what architectural improvements would make it more maintainable? Think step by step and explain your reasoning before answering.",
         "label": "opusthinking-arch",
-        "streamingProbeMs": 8000,
-        "completionTimeoutMs": 180000
-      }
-    },
-
-    {
-      "type": "macro",
-      "name": "loadProfile",
-      "args": { "profile": "gpt55medium" }
-    },
-    {
-      "type": "macro",
-      "name": "askThinkingQuestion",
-      "args": {
-        "question": "Analyze the architecture of this codebase. What are the main packages, how do they depend on each other, and what architectural improvements would make it more maintainable? Think step by step and explain your reasoning before answering.",
-        "label": "gpt55medium-arch",
         "streamingProbeMs": 8000,
         "completionTimeoutMs": 180000
       }

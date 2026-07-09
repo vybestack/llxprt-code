@@ -320,6 +320,40 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       expect(request.thinking?.display).toBe('omitted');
     });
 
+    it('should set display:summarized for Sonnet 5 when reasoning.includeInResponse is true @issue:1723', async () => {
+      settingsService.set('reasoning.enabled', true);
+      settingsService.set('reasoning.includeInResponse', true);
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-sonnet-5',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+      expect(request.thinking).toBeDefined();
+      expect(request.thinking?.type).toBe('adaptive');
+      expect(request.thinking?.display).toBe('summarized');
+    });
+
     it('should use manual mode when adaptiveThinking is explicitly false @issue:1307', async () => {
       settingsService.set('reasoning.enabled', true);
       settingsService.set('reasoning.adaptiveThinking', false);
