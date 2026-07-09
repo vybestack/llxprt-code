@@ -468,15 +468,23 @@ function pushCapabilityEnvFile(
   // guarantees the restrictive permissions regardless of umask.
   const fd = fs.openSync(envFile, 'w', 0o600);
   try {
-    fs.writeSync(
-      fd,
-      `LLXPRT_CAPABILITY_TOKEN=${capabilityToken}
-`,
-    );
+    fs.writeSync(fd, `LLXPRT_CAPABILITY_TOKEN=${capabilityToken}
+`);
     fs.fchmodSync(fd, 0o600);
-  } finally {
-    fs.closeSync(fd);
+  } catch (writeErr) {
+    try {
+      fs.closeSync(fd);
+    } catch {
+      // fd may already be closed
+    }
+    try {
+      fs.unlinkSync(envFile);
+    } catch {
+      // file may not exist or already removed
+    }
+    throw writeErr;
   }
+  fs.closeSync(fd);
   args.push('--env-file', envFile);
   return () => {
     try {
@@ -496,11 +504,11 @@ function registerCapabilityEnvCleanup(
   const cleanup = pushCapabilityEnvFile(args, resolvedTmpdir);
   if (!cleanup) return undefined;
 
-  const signalHandler = (signal: NodeJS.Signals): void => {
+  const signalHandler = (_signal: NodeJS.Signals): void => {
     cleanup();
-    // Defer exit so other SIGINT/SIGTERM handlers (SSH tunnel, bridge, proxy
-    // stop) get to run before the process terminates.
-    setImmediate(() => process.exit(signal === 'SIGINT' ? 130 : 143));
+    // Do not call process.exit() here — let other signal handlers and the
+    // existing exit/SIGINT/SIGTERM lifecycle manage termination. Calling
+    // process.exit prematurely can abort async cleanup work (stopProxy, etc.).
   };
   process.on('exit', cleanup);
   process.on('SIGINT', signalHandler);
@@ -596,6 +604,7 @@ export async function setupCredentialProxy(
     envFileCleanup = registerCapabilityEnvCleanup(args, resolvedTmpdir);
   } catch (err) {
     envFileCleanup?.();
+    credentialProxyBridgeCleanup?.();
     throw err;
   }
 
@@ -725,11 +734,10 @@ export function wireCleanupHandlers(
     process.on('SIGINT', stopCredentialBridgeTunnel);
     process.on('SIGTERM', stopCredentialBridgeTunnel);
     sandboxProcess.on('close', () => {
-      // Call the composed cleanup (env file + bridge tunnel) before
-      // nullifying, so the temp env file is removed on sandbox close.
+      // The composed cleanup already includes the bridge tunnel cleanup,
+      // so only call it here and null out the reference.
       credentialProxyBridgeCleanup?.();
       setCredentialProxyBridgeCleanup(undefined);
-      stopCredentialBridgeTunnel();
     });
   }
 

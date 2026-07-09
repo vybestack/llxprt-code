@@ -36,6 +36,7 @@ import {
   restoreStdinAfterSandbox,
   LOCAL_DEV_SANDBOX_IMAGE_NAME,
 } from './sandbox-containers.js';
+import { stopProxy } from '@vybestack/llxprt-code-providers/auth.js';
 import { entrypoint } from './sandbox-entrypoint.js';
 import { ensureSandboxImageIsPresent } from './sandbox-image.js';
 import {
@@ -198,6 +199,7 @@ async function prepareContainerSandbox(
     credentialProxyBridgeCleanup = cpResult.credentialProxyBridgeCleanup;
   } catch (err) {
     credentialProxyBridgeResult?.cleanup?.();
+    void stopProxy();
     if (err instanceof FatalSandboxError) {
       throw err;
     }

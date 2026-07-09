@@ -146,8 +146,11 @@ export function createProviderKeyStorage(): ProviderKeyStorageLike {
  * Resets factory singletons. Used for test isolation.
  */
 export function resetFactorySingletons(): void {
-  proxyTokenStore?.getClient().close();
-  proxyKeyStorageClient?.close();
+  // Reset module-level singletons first, then close old connections.
+  // This ensures that even if close() throws, the singletons are cleared
+  // and subsequent calls create fresh instances (test isolation safety).
+  const oldProxyTokenStore = proxyTokenStore;
+  const oldProxyKeyStorageClient = proxyKeyStorageClient;
   proxyTokenStore = undefined;
   proxyTokenStoreCapabilityToken = undefined;
   proxyTokenStoreSocketPath = undefined;
@@ -157,4 +160,14 @@ export function resetFactorySingletons(): void {
   proxyKeyStorageCapabilityToken = undefined;
   proxyKeyStorageSocketPath = undefined;
   directKeyStorage = undefined;
+  try {
+    oldProxyTokenStore?.getClient().close();
+  } catch {
+    // best-effort cleanup
+  }
+  try {
+    oldProxyKeyStorageClient?.close();
+  } catch {
+    // best-effort cleanup
+  }
 }

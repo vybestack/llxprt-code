@@ -137,7 +137,12 @@ export class ProxySocketClient {
 
   private async connectAndHandshake(): Promise<void> {
     await this.connect();
-    await this.handshake();
+    try {
+      await this.handshake();
+    } catch (err) {
+      this.destroy(err instanceof Error ? err.message : 'Handshake failed');
+      throw err;
+    }
   }
 
   private async connect(): Promise<void> {

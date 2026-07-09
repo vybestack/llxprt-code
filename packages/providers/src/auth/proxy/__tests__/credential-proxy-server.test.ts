@@ -343,6 +343,7 @@ describe('CredentialProxyServer', () => {
         });
         socket.on('error', (err) => {
           clearTimeout(timer);
+          socket.destroy();
           reject(err);
         });
       },
@@ -1281,6 +1282,7 @@ describe('CredentialProxyServer', () => {
         });
         socket.on('error', (err) => {
           clearTimeout(timer);
+          socket.destroy();
           reject(err);
         });
       },
