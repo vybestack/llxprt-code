@@ -2,7 +2,7 @@
 
 This recipe guides you through setting up LLxprt Code with low-cost AI providers. Both Gemini and Qwen can be a great way to get started.
 
-> **Important — tier availability changes:** Free OAuth access for these providers has shifted over time. In mid-2026 Google moved free consumer "Login with Google" Gemini-CLI access toward [Antigravity](https://antigravity.google); OAuth via `/auth gemini` continues to work for **paid Gemini API keys** and **Gemini Code Assist Standard/Enterprise** accounts. **Qwen's free OAuth tier ended 2026-04-15** and the OAuth provider has been removed — use a DashScope API key (`DASHSCOPE_API_KEY`) or an OpenRouter API key with the `qwen` alias. See [authentication](../cli/authentication.md) for current details.
+> **Important — tier availability changes:** Google removed free consumer "Login with Google" Gemini-CLI access entirely in mid-2026; use a Gemini API key or Vertex AI instead. **Qwen's free OAuth tier ended 2026-04-15** and the OAuth provider has been removed — use a DashScope API key (`DASHSCOPE_API_KEY`) or an OpenRouter API key with the `qwen` alias. See [authentication](../cli/authentication.md) for current details.
 
 ## When to Use This Setup
 
@@ -13,10 +13,10 @@ This recipe guides you through setting up LLxprt Code with low-cost AI providers
 
 ## Provider Overview
 
-| Provider | Context Limit       | Auth                                     |
-| -------- | ------------------- | ---------------------------------------- |
-| Gemini   | 1,048,576 (API key) | Google account (OAuth) or Gemini API key |
-| Qwen     | 200,000             | DashScope API key                        |
+| Provider | Context Limit       | Auth                        |
+| -------- | ------------------- | --------------------------- |
+| Gemini   | 1,048,576 (API key) | Gemini API key or Vertex AI |
+| Qwen     | 200,000             | DashScope API key           |
 
 > Context windows can differ between API-key and OAuth/subscription access; the figures above reflect API-key access.
 
@@ -24,13 +24,13 @@ This recipe guides you through setting up LLxprt Code with low-cost AI providers
 
 Gemini offers the largest context window (1M tokens over API key).
 
-### Step 1: Enable OAuth
+### Step 1: Set Your API Key
+
+Set a Gemini API key:
 
 ```bash
-/auth gemini enable
+/keyfile ~/.gemini_key
 ```
-
-If the Google login no longer authorizes a free tier (see the note above), set a Gemini API key instead with `/keyfile ~/.gemini_key`.
 
 ### Step 2: Set Your Model
 
@@ -47,13 +47,11 @@ If the Google login no longer authorizes a free tier (see the note above), set a
 
 ### Step 4: Authenticate
 
-Make any request to trigger OAuth:
+Make any request to verify your API key is working:
 
 ```bash
 Hello, can you help me with a coding task?
 ```
-
-Your browser will open for Google authentication. Grant permissions and you're set!
 
 ### Step 5: Save Profile
 
@@ -201,14 +199,12 @@ Save this to `~/.llxprt/profiles/free-tier-lb.json`:
 
 ## Troubleshooting
 
-### OAuth Token Expired
+### API Key Issues
 
-If you get authentication errors:
+If you get authentication errors, verify your Gemini API key is set correctly:
 
 ```bash
-# Re-authenticate Gemini
-/auth gemini logout
-/auth gemini enable
+/keyfile ~/.gemini_key
 ```
 
 Qwen no longer supports OAuth — if you see Qwen auth errors, verify your DashScope API key is set correctly with `/keyfile ~/.qwen_key`.

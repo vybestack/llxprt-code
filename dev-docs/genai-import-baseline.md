@@ -4,13 +4,12 @@
 
 Every tracked TypeScript file under `packages/**` that imports `@google/genai`, classified to the downstream issue that removes the import (or to the permanent Gemini `enclave`). This file is the baseline the #2352 enforcement ratchet compares against — the count may only ever decrease as migration issues land.
 
-**Total importers:** 152
+**Total importers:** 151
 
 **Per-owner breakdown:**
 
 - `enclave`: 25
-- `#2348`: 2
-- `#2349`: 100
+- `#2349`: 101
 - `#2351`: 25
 
 | File                                                                             | Owner   |
@@ -76,6 +75,7 @@ Every tracked TypeScript file under `packages/**` that imports `@google/genai`, 
 | `packages/agents/src/core/client.methods.test.ts`                                | #2349   |
 | `packages/agents/src/core/client.model-profile.test.ts`                          | #2349   |
 | `packages/agents/src/core/client.sendMessageStream-errors.test.ts`               | #2349   |
+| `packages/agents/src/core/client.sendMessageStream-overflow-compression.test.ts` | #2349   |
 | `packages/agents/src/core/client.sendMessageStream-overflow.test.ts`             | #2349   |
 | `packages/agents/src/core/client.sendMessageStream-thinking.test.ts`             | #2349   |
 | `packages/agents/src/core/client.sendMessageStream.test.ts`                      | #2349   |
@@ -123,8 +123,6 @@ Every tracked TypeScript file under `packages/**` that imports `@google/genai`, 
 | `packages/core/src/code_assist/googleGenAIWrapper.test.ts`                       | enclave |
 | `packages/core/src/code_assist/googleGenAIWrapper.ts`                            | enclave |
 | `packages/core/src/code_assist/server.ts`                                        | enclave |
-| `packages/core/src/core/contentGenerator.test.ts`                                | #2348   |
-| `packages/core/src/services/history/ContentConverters.ts`                        | #2348   |
 | `packages/mcp/src/client/mcp-callable-tool.ts`                                   | #2351   |
 | `packages/mcp/src/client/mcp-client.discovery.test.ts`                           | #2351   |
 | `packages/mcp/src/client/mcp-client.lifecycle.test.ts`                           | #2351   |

@@ -84,10 +84,22 @@ describe('stripEmptyTextBlocks (Issue #2410)', () => {
     expect(result[0]).toBe(messages[0]);
   });
 
-  it('leaves string content untouched', () => {
-    const messages: AnthropicMessage[] = [{ role: 'user', content: '' }];
+  it('replaces empty string content with a role placeholder', () => {
+    const messages: AnthropicMessage[] = [
+      { role: 'user', content: '' },
+      { role: 'assistant', content: '  \n ' },
+    ];
+
     const result = stripEmptyTextBlocks(messages, noopLogger);
-    expect(result[0].content).toBe('');
+
+    expect(result[0].content).toBe('[Empty message]');
+    expect(result[1].content).toBe('[No content generated]');
+  });
+
+  it('preserves non-empty string content unchanged', () => {
+    const messages: AnthropicMessage[] = [{ role: 'user', content: 'hello' }];
+    const result = stripEmptyTextBlocks(messages, noopLogger);
+    expect(result[0]).toBe(messages[0]);
   });
 
   it('replaces fully empty text-only content arrays with a placeholder message', () => {

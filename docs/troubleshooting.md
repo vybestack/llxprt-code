@@ -164,7 +164,7 @@ export NODE_EXTRA_CA_CERTS=/path/to/your/corporate-ca.crt
 
 OAuth tokens are stored in the OS keyring (same as named keys). If authentication fails:
 
-1. Try logging out and re-authenticating: `/auth gemini logout` then `/auth gemini enable`
+1. Try logging out and re-authenticating: `/auth anthropic logout` then `/auth anthropic enable`
 2. If on a headless machine, use `--nobrowser` for manual code entry
 3. Check `LLXPRT_DEBUG='*'` output for token refresh errors
 

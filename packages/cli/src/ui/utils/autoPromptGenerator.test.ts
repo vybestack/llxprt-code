@@ -190,7 +190,7 @@ describe('generateAutoPrompt', () => {
 
     await expect(
       generateAutoPrompt(makeRuntime('gemini', null), 'No clients'),
-    ).rejects.toThrow('Unable to access Gemini client');
+    ).rejects.toThrow('Unable to access the AI client');
   });
 
   it('propagates detached client creation failures', async () => {

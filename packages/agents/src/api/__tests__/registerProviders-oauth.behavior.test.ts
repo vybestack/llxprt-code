@@ -49,6 +49,32 @@ interface ProviderLike {
  */
 const OAUTH_ONLY_MODEL_ID = 'claude-fable-5';
 
+function formatCleanupError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function cleanupHandle(
+  handle: IsolatedRuntimeContextHandle | undefined,
+  cleanupErrors: unknown[],
+): Promise<void> {
+  if (!handle) {
+    return;
+  }
+  try {
+    await handle.cleanup();
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
+}
+
+function restoreConfigHome(previousConfigHome: string | undefined): void {
+  if (previousConfigHome === undefined) {
+    delete process.env.LLXPRT_CONFIG_HOME;
+    return;
+  }
+  process.env.LLXPRT_CONFIG_HOME = previousConfigHome;
+}
+
 describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
   let tmpConfigHome: string;
   let previousConfigHome: string | undefined;
@@ -61,20 +87,21 @@ describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
   });
 
   afterEach(async () => {
+    const cleanupErrors: unknown[] = [];
     try {
       while (handles.length > 0) {
-        const handle = handles.pop();
-        if (handle) {
-          await handle.cleanup().catch(() => undefined);
-        }
+        await cleanupHandle(handles.pop(), cleanupErrors);
       }
     } finally {
-      if (previousConfigHome === undefined) {
-        delete process.env.LLXPRT_CONFIG_HOME;
-      } else {
-        process.env.LLXPRT_CONFIG_HOME = previousConfigHome;
+      restoreConfigHome(previousConfigHome);
+      try {
+        fs.rmSync(tmpConfigHome, { recursive: true, force: true });
+      } catch (error) {
+        cleanupErrors.push(error);
       }
-      fs.rmSync(tmpConfigHome, { recursive: true, force: true });
+    }
+    if (cleanupErrors.length > 0) {
+      throw new Error(cleanupErrors.map(formatCleanupError).join('; '));
     }
   });
 

@@ -105,27 +105,6 @@ async function fetchAndStoreCodexUsage(
   }
 }
 
-function isUsageRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-async function fetchAndStoreGeminiQuota(
-  bucket: string,
-  accessToken: string,
-  fetchFn: (token: string) => Promise<unknown>,
-  result: Map<string, Record<string, unknown>>,
-  logger: DebugLogger,
-): Promise<void> {
-  try {
-    const quotaInfo = await fetchFn(accessToken);
-    if (isUsageRecord(quotaInfo)) {
-      result.set(bucket, quotaInfo);
-    }
-  } catch (error) {
-    logger.debug(`Error fetching Gemini quota for bucket ${bucket}:`, error);
-  }
-}
-
 /**
  * Get Anthropic usage information for all authenticated buckets.
  * Returns a map of bucket name to usage info for all buckets that have
@@ -213,44 +192,6 @@ export async function getAllCodexUsageInfo(
         accountId,
         codexBaseUrl,
         fetchCodexUsage,
-        result,
-        logger,
-      );
-    }
-  }
-
-  return result;
-}
-
-/**
- * Get Gemini quota information for all authenticated buckets.
- * Uses the CodeAssist retrieveUserQuota API via direct HTTP calls.
- * Returns a map of bucket name to quota response.
- *
- * @param tokenStore - Token store to read from
- */
-export async function getAllGeminiUsageInfo(
-  tokenStore: TokenStore,
-): Promise<Map<string, Record<string, unknown>>> {
-  const result = new Map<string, Record<string, unknown>>();
-
-  const buckets = await tokenStore.listBuckets('gemini');
-  const bucketsToCheck = buckets.length > 0 ? buckets : ['default'];
-
-  const { fetchGeminiQuota } = await import('@vybestack/llxprt-code-providers');
-
-  for (const bucket of bucketsToCheck) {
-    const token = await tokenStore.getToken('gemini', bucket);
-    if (!token) {
-      continue;
-    }
-
-    const nowInSeconds = Math.floor(Date.now() / 1000);
-    if (token.expiry > nowInSeconds) {
-      await fetchAndStoreGeminiQuota(
-        bucket,
-        token.access_token,
-        fetchGeminiQuota,
         result,
         logger,
       );

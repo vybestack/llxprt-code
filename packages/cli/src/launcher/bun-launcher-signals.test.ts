@@ -42,7 +42,6 @@ describe('relaunchUnderBunIfNeeded signal handling', () => {
       resolveBun: vi.fn(async () => '/resolved/path/to/bun'),
       resolveEntry: vi.fn(async () => '/entry.ts'),
       spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
-      createCredentialProxy: vi.fn(async () => null),
     });
 
     await vi.waitFor(() => expect(capturedChild).not.toBeNull());
@@ -75,7 +74,6 @@ describe('relaunchUnderBunIfNeeded signal handling', () => {
       resolveBun: vi.fn(async () => '/path/to/bun'),
       resolveEntry: vi.fn(async () => '/entry.ts'),
       spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
-      createCredentialProxy: vi.fn(async () => null),
     });
 
     await vi.waitFor(() => expect(capturedChild).not.toBeNull());

@@ -242,8 +242,8 @@ describe('OAuth Timing Integration Tests', () => {
           envKeyNames: ['GEMINI_API_KEY'],
           isOAuthEnabled: true,
           supportsOAuth: true,
-          oauthProvider: 'gemini',
-          providerId: 'gemini',
+          oauthProvider: 'anthropic',
+          providerId: 'anthropic',
         },
         {
           oauthManager: oauthManager as CoreOAuthManager,
@@ -276,8 +276,8 @@ describe('OAuth Timing Integration Tests', () => {
           envKeyNames: ['GEMINI_API_KEY'],
           isOAuthEnabled: true,
           supportsOAuth: true,
-          oauthProvider: 'gemini',
-          providerId: 'gemini',
+          oauthProvider: 'anthropic',
+          providerId: 'anthropic',
         },
         {
           oauthManager: oauthManager as CoreOAuthManager,
@@ -303,9 +303,9 @@ describe('OAuth Timing Integration Tests', () => {
       expect(token).toBe('oauth-token-123');
       expect(oauthSpies.getToken).toHaveBeenCalledTimes(1);
       expect(oauthSpies.getToken).toHaveBeenCalledWith(
-        'gemini',
+        'anthropic',
         expect.objectContaining({
-          providerId: 'gemini',
+          providerId: 'anthropic',
         }),
       );
     });
@@ -326,6 +326,7 @@ describe('OAuth Timing Integration Tests', () => {
           isOAuthEnabled: true,
           supportsOAuth: true,
           oauthProvider: 'anthropic',
+          providerId: 'anthropic',
         },
         {
           oauthManager: oauthManager as CoreOAuthManager,
@@ -358,7 +359,8 @@ describe('OAuth Timing Integration Tests', () => {
           envKeyNames: ['GEMINI_API_KEY'],
           isOAuthEnabled: true,
           supportsOAuth: true,
-          oauthProvider: 'gemini',
+          oauthProvider: 'anthropic',
+          providerId: 'anthropic',
         },
         {
           oauthManager: oauthManager as CoreOAuthManager,
@@ -397,6 +399,7 @@ describe('OAuth Timing Integration Tests', () => {
             isOAuthEnabled: true,
             supportsOAuth: true,
             oauthProvider: 'anthropic',
+            providerId: 'anthropic',
           },
           {
             oauthManager: oauthManager as CoreOAuthManager,
@@ -428,7 +431,8 @@ describe('OAuth Timing Integration Tests', () => {
           envKeyNames: ['GEMINI_API_KEY'],
           isOAuthEnabled: false, // OAuth disabled
           supportsOAuth: true,
-          oauthProvider: 'gemini',
+          oauthProvider: 'anthropic',
+          providerId: 'anthropic',
         },
         {
           oauthManager: oauthManager as CoreOAuthManager,
@@ -468,8 +472,8 @@ describe('OAuth Timing Integration Tests', () => {
           envKeyNames: ['GEMINI_API_KEY'],
           isOAuthEnabled: true,
           supportsOAuth: true,
-          oauthProvider: 'gemini',
-          providerId: 'gemini',
+          oauthProvider: 'anthropic',
+          providerId: 'anthropic',
         },
         {
           oauthManager: oauthManager as CoreOAuthManager,
@@ -491,7 +495,7 @@ describe('OAuth Timing Integration Tests', () => {
   describe('Configuration Commands - Should NOT Trigger OAuth', () => {
     it('should NOT trigger OAuth when setting provider OAuth enabled flag', () => {
       // Simulate /auth enable command - this is configuration only
-      settingsService.setProviderSetting('gemini', 'oauth-enabled', true);
+      settingsService.setProviderSetting('anthropic', 'oauth-enabled', true);
 
       // Verify OAuth was NOT triggered
       expect(oauthSpies.authenticate).not.toHaveBeenCalled();
@@ -500,12 +504,12 @@ describe('OAuth Timing Integration Tests', () => {
 
     it('should NOT trigger OAuth when setting provider OAuth disabled flag', () => {
       // Set up initial state
-      settingsService.setProviderSetting('gemini', 'oauth-enabled', true);
+      settingsService.setProviderSetting('anthropic', 'oauth-enabled', true);
 
       vi.clearAllMocks();
 
       // Simulate /auth disable command
-      settingsService.setProviderSetting('gemini', 'oauth-enabled', false);
+      settingsService.setProviderSetting('anthropic', 'oauth-enabled', false);
 
       // Verify OAuth was NOT triggered
       expect(oauthSpies.authenticate).not.toHaveBeenCalled();
@@ -537,21 +541,21 @@ describe('OAuth Timing Integration Tests', () => {
     it('should maintain separate OAuth state per provider', async () => {
       // Mock different tokens for different providers
       oauthSpies.getToken.mockImplementation(async (provider: string) => {
-        if (provider === 'gemini') return 'gemini-oauth-token';
+        if (provider === 'codex') return 'codex-oauth-token';
         if (provider === 'anthropic') return 'anthropic-oauth-token';
         return null;
       });
 
-      // Test Gemini provider
+      // Test Codex provider
       // @plan:PLAN-20260608-ISSUE1586.P15 — options-object constructor
-      const geminiResolver = new AuthPrecedenceResolver(
+      const codexResolver = new AuthPrecedenceResolver(
         {
           apiKey: undefined,
-          envKeyNames: ['GEMINI_API_KEY'],
+          envKeyNames: ['OPENAI_API_KEY'],
           isOAuthEnabled: true,
           supportsOAuth: true,
-          oauthProvider: 'gemini',
-          providerId: 'gemini',
+          oauthProvider: 'codex',
+          providerId: 'codex',
         },
         {
           oauthManager: oauthManager as CoreOAuthManager,
@@ -559,12 +563,12 @@ describe('OAuth Timing Integration Tests', () => {
         },
       );
 
-      const geminiToken = await geminiResolver.resolveAuthentication({
+      const codexToken = await codexResolver.resolveAuthentication({
         settingsService,
         includeOAuth: true,
       });
 
-      expect(geminiToken).toBe('gemini-oauth-token');
+      expect(codexToken).toBe('codex-oauth-token');
 
       vi.clearAllMocks();
 
@@ -602,7 +606,8 @@ describe('OAuth Timing Integration Tests', () => {
           envKeyNames: ['GEMINI_API_KEY'],
           isOAuthEnabled: true,
           supportsOAuth: true,
-          oauthProvider: 'gemini',
+          oauthProvider: 'anthropic',
+          providerId: 'anthropic',
         },
         {
           oauthManager: oauthManager as CoreOAuthManager,
@@ -628,8 +633,8 @@ describe('OAuth Timing Integration Tests', () => {
           envKeyNames: ['GEMINI_API_KEY'],
           isOAuthEnabled: true,
           supportsOAuth: true,
-          oauthProvider: 'gemini',
-          providerId: 'gemini',
+          oauthProvider: 'anthropic',
+          providerId: 'anthropic',
         },
         {
           oauthManager: oauthManager as CoreOAuthManager,

@@ -15,7 +15,10 @@
  */
 
 import { randomUUID } from 'crypto';
-import { type Content, type Part } from '@google/genai';
+import type {
+  GeminiContent,
+  GeminiContentPart,
+} from '../../llm-types/geminiContent.js';
 import type { IContent, ContentBlock, ThinkingBlock } from './IContent.js';
 import { DebugLogger } from '../../debug/index.js';
 import {
@@ -25,6 +28,20 @@ import {
 
 function generateTurnKey(): string {
   return `turn_${randomUUID()}`;
+}
+
+/**
+ * Maps a Gemini Content part to a human-readable type label for logging.
+ * Used by both `logToIContentInput` and the zero-block warning so they
+ * produce consistent output for cross-referencing during debugging.
+ */
+function classifyPartType(part: GeminiContentPart): string {
+  if ('text' in part) return 'text';
+  if ('functionCall' in part) return 'functionCall';
+  if ('functionResponse' in part) return 'functionResponse';
+  if ('inlineData' in part) return 'inlineData';
+  if ('thought' in part) return 'thought';
+  return 'other';
 }
 
 /**
@@ -57,7 +74,7 @@ export class ContentConverters {
   }
 
   /** Convert a single IContent block to a Gemini Part. */
-  private static blockToPart(block: ContentBlock): Part | null {
+  private static blockToPart(block: ContentBlock): GeminiContentPart | null {
     switch (block.type) {
       case 'text': {
         const textBlock = block;
@@ -105,7 +122,7 @@ export class ContentConverters {
       }
       case 'thinking': {
         const thinkingBlock = block;
-        const thinkingPart: Part = {
+        const thinkingPart: GeminiContentPart = {
           thought: true,
           text: thinkingBlock.thought,
         };
@@ -113,11 +130,7 @@ export class ContentConverters {
           thinkingPart.thoughtSignature = thinkingBlock.signature;
         }
         if (ContentConverters.hasLegacyTruthyValue(thinkingBlock.sourceField)) {
-          (
-            thinkingPart as Part & {
-              llxprtSourceField?: ThinkingBlock['sourceField'];
-            }
-          ).llxprtSourceField = thinkingBlock.sourceField;
+          thinkingPart.llxprtSourceField = thinkingBlock.sourceField;
         }
         return thinkingPart;
       }
@@ -139,7 +152,7 @@ export class ContentConverters {
   /**
    * Convert IContent to Gemini Content format
    */
-  static toGeminiContent(iContent: IContent): Content {
+  static toGeminiContent(iContent: IContent): GeminiContent {
     const blocksForDebug = ContentConverters.blocksOrEmpty(iContent);
     this.logger.debug('Converting IContent to Gemini Content:', {
       speaker: iContent.speaker,
@@ -154,7 +167,7 @@ export class ContentConverters {
     });
 
     const role = this.resolveRole(iContent.speaker);
-    const parts: Part[] = [];
+    const parts: GeminiContentPart[] = [];
 
     for (const block of iContent.blocks) {
       const part = this.blockToPart(block);
@@ -167,13 +180,7 @@ export class ContentConverters {
     this.logger.debug('Converted to Gemini Content:', {
       role,
       partCount: parts.length,
-      partTypes: parts.map((p) => {
-        if ('text' in p) return 'text';
-        if ('functionCall' in p) return 'functionCall';
-        if ('functionResponse' in p) return 'functionResponse';
-        if ('thought' in p) return 'thought';
-        return 'other';
-      }),
+      partTypes: parts.map(classifyPartType),
       functionCallIds: parts
         .filter((p) => 'functionCall' in p)
         .map((p) => (p as { functionCall?: { id?: string } }).functionCall?.id),
@@ -189,11 +196,8 @@ export class ContentConverters {
   }
 
   /** Convert a thinking/thought Part into a ThinkingBlock. */
-  private static partToThinkingBlock(part: Part): ThinkingBlock {
-    const partWithMetadata = part as Part & {
-      llxprtSourceField?: ThinkingBlock['sourceField'];
-    };
-    const sourceField = partWithMetadata.llxprtSourceField ?? 'thought';
+  private static partToThinkingBlock(part: GeminiContentPart): ThinkingBlock {
+    const sourceField = part.llxprtSourceField ?? 'thought';
     const thinkingBlock: ThinkingBlock = {
       type: 'thinking',
       thought: part.text ?? '',
@@ -284,7 +288,7 @@ export class ContentConverters {
 
   /** Convert a functionCall Part into tool_call ContentBlock(s). */
   private static processFunctionCallPart(
-    part: Part,
+    part: GeminiContentPart,
     context: {
       turnKey: string;
       providerName: string;
@@ -327,7 +331,7 @@ export class ContentConverters {
 
   /** Convert a functionResponse Part into tool_response ContentBlock(s). */
   private static processFunctionResponsePart(
-    part: Part,
+    part: GeminiContentPart,
     context: {
       turnKey: string;
       providerName: string;
@@ -381,7 +385,7 @@ export class ContentConverters {
   }
 
   /** Convert a text-or-thought Part into a ContentBlock. */
-  private static textPartToBlock(part: Part): ContentBlock {
+  private static textPartToBlock(part: GeminiContentPart): ContentBlock {
     if (
       'thought' in part &&
       ContentConverters.hasLegacyTruthyValue(part.thought)
@@ -393,7 +397,7 @@ export class ContentConverters {
 
   /** Convert a single Gemini Part into ContentBlocks, returning any tool-call index counters. */
   private static processPartToBlocks(
-    part: Part,
+    part: GeminiContentPart,
     context: {
       turnKey: string;
       providerName: string;
@@ -435,37 +439,12 @@ export class ContentConverters {
    * Convert Gemini Content to IContent format
    */
   static toIContent(
-    content: Content,
+    content: GeminiContent,
     generateIdCb?: () => string,
     getNextUnmatchedToolCall?: () => { historyId: string; toolName?: string },
     turnKeyOverride?: string,
   ): IContent {
-    this.logger.debug('Converting Gemini Content to IContent:', {
-      role: content.role,
-      partCount: content.parts?.length ?? 0,
-      partTypes:
-        content.parts?.map((p) => {
-          if ('text' in p) return 'text';
-          if ('functionCall' in p) return 'functionCall';
-          if ('functionResponse' in p) return 'functionResponse';
-          if ('thought' in p) return 'thought';
-          return 'other';
-        }) ?? [],
-      functionCallIds:
-        content.parts
-          ?.filter((p) => 'functionCall' in p)
-          .map(
-            (p) => (p as { functionCall?: { id?: string } }).functionCall?.id,
-          ) ?? [],
-      functionResponseIds:
-        content.parts
-          ?.filter((p) => 'functionResponse' in p)
-          .map(
-            (p) =>
-              (p as { functionResponse?: { id?: string } }).functionResponse
-                ?.id,
-          ) ?? [],
-    });
+    this.logToIContentInput(content);
 
     const speaker = content.role === 'user' ? 'human' : 'ai';
     const blocks: ContentBlock[] = [];
@@ -506,6 +485,19 @@ export class ContentConverters {
       metadata,
     };
 
+    if (blocks.length === 0) {
+      this.logger.warn(
+        () =>
+          `[ContentConverters] toIContent produced zero blocks (issue #2410) — this turn will be dropped by history`,
+        {
+          turnKey,
+          role: content.role,
+          partCount: content.parts?.length ?? 0,
+          partTypes: content.parts?.map(classifyPartType) ?? [],
+        },
+      );
+    }
+
     this.logger.debug('Converted to IContent:', {
       originalRole: content.role,
       finalSpeaker,
@@ -523,9 +515,35 @@ export class ContentConverters {
   }
 
   /**
+   * Log raw Gemini Content details before conversion to IContent.
+   * Extracted from toIContent to keep that method within complexity limits.
+   */
+  private static logToIContentInput(content: GeminiContent): void {
+    this.logger.debug('Converting Gemini Content to IContent:', {
+      role: content.role,
+      partCount: content.parts?.length ?? 0,
+      partTypes: content.parts?.map(classifyPartType) ?? [],
+      functionCallIds:
+        content.parts
+          ?.filter((p) => 'functionCall' in p)
+          .map(
+            (p) => (p as { functionCall?: { id?: string } }).functionCall?.id,
+          ) ?? [],
+      functionResponseIds:
+        content.parts
+          ?.filter((p) => 'functionResponse' in p)
+          .map(
+            (p) =>
+              (p as { functionResponse?: { id?: string } }).functionResponse
+                ?.id,
+          ) ?? [],
+    });
+  }
+
+  /**
    * Convert array of IContent to array of Gemini Content
    */
-  static toGeminiContents(iContents: IContent[]): Content[] {
+  static toGeminiContents(iContents: IContent[]): GeminiContent[] {
     this.logger.debug('Converting IContent array to Gemini Contents:', {
       count: iContents.length,
       speakers: iContents.map((ic) => ic.speaker),
@@ -554,7 +572,7 @@ export class ContentConverters {
   /**
    * Convert array of Gemini Content to array of IContent
    */
-  static toIContents(contents: Content[]): IContent[] {
+  static toIContents(contents: GeminiContent[]): IContent[] {
     this.logger.debug('Converting Gemini Contents array to IContent:', {
       count: contents.length,
       roles: contents.map((c) => c.role),

@@ -265,17 +265,15 @@ describe('GeminiProvider Authentication', () => {
     });
   });
 
-  it('does not require project and location when GOOGLE_API_KEY is configured for Vertex AI', async () => {
+  it('requires project and location when only GOOGLE_API_KEY is configured for Vertex AI', async () => {
     process.env.GOOGLE_API_KEY = 'vertex-api-key';
     const provider = createProviderWithRuntimeSettings();
 
-    await createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai');
-
-    expect(googleGenAIConstructor).toHaveBeenCalledWith({
-      apiKey: 'USE_VERTEX_AI',
-      vertexai: true,
-      httpOptions: { headers: {} },
-    });
+    await expect(
+      createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
+    ).rejects.toThrow(
+      'Vertex AI mode is active but project/location are not configured',
+    );
   });
 
   it('does not pass Vertex AI project and location for API key auth', async () => {

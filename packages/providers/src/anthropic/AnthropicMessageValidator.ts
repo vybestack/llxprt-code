@@ -486,9 +486,9 @@ function ensureNoTrailingAssistant(
  * part downstream). They carry no information, so dropping them is safe.
  *
  * If removing empty text blocks would leave a message with no content blocks,
- * the empty content array is replaced with the same placeholder strings used by
+ * the empty content is replaced with the same placeholder strings used by
  * sanitizeEmptyMessages so strict endpoints never receive a zero-length text
- * payload in the final message. String content is left untouched.
+ * payload in the final message.
  */
 export function stripEmptyTextBlocks(
   messages: AnthropicMessage[],
@@ -496,8 +496,15 @@ export function stripEmptyTextBlocks(
 ): AnthropicMessage[] {
   let strippedCount = 0;
   const result = messages.map((message) => {
-    if (!Array.isArray(message.content)) {
-      return message;
+    if (typeof message.content === 'string') {
+      if (message.content.trim() !== '') {
+        return message;
+      }
+      strippedCount += 1;
+      return {
+        ...message,
+        content: getEmptyMessagePlaceholder(message.role),
+      };
     }
     const filtered = message.content.filter((block: AnthropicMessageBlock) => {
       if (block.type === 'text') {

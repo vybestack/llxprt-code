@@ -27,7 +27,7 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 export type ToolGroupArray = Array<{
   functionDeclarations?: Array<{
@@ -282,4 +282,102 @@ export function logOutgoingRequest(
     modelName,
     promptId,
   );
+}
+
+const systemInstructionLogger = new DebugLogger(
+  'llxprt:agents:system-instruction',
+);
+
+/**
+ * Extracts a plain-text system instruction string from a Gemini
+ * `ContentUnion` value (string, Content, Part[], or Part).
+ *
+ * Issue #2410: subagent personas are built into
+ * generationConfig.systemInstruction by subagentRuntimeSetup.createChatObject().
+ * This helper normalizes the various shapes the SDK allows so the instruction
+ * can be forwarded to providers as a simple string. Returns undefined when the
+ * value is absent or contains no text.
+ */
+export function extractSystemInstructionText(
+  raw: GenerateContentConfig['systemInstruction'],
+): string | undefined {
+  // The SDK types declare systemInstruction as ContentUnion | undefined, but
+  // defensive null-safety is needed because 'parts' in null / 'text' in null
+  // would throw at runtime. Broadening to unknown lets the null guard pass
+  // lint without a suppression directive.
+  const value = raw as unknown;
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  // Content shape: { role, parts: Part[] }
+  if (
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    'parts' in value &&
+    Array.isArray(value.parts)
+  ) {
+    const text = extractPartsText(value.parts);
+    return text.length > 0 ? text : undefined;
+  }
+  // Part[] shape
+  if (Array.isArray(value)) {
+    const text = extractPartsText(value);
+    return text.length > 0 ? text : undefined;
+  }
+  // Single Part shape: { text: string } — exclude Content objects that
+  // happen to have a text property alongside parts (makes this check
+  // self-contained and order-independent).
+  if (typeof value === 'object' && 'text' in value && !('parts' in value)) {
+    const text = typeof value.text === 'string' ? value.text.trim() : '';
+    return text.length > 0 ? text : undefined;
+  }
+  // Unrecognized top-level shape — warn so a malformed systemInstruction
+  // (which carries the subagent persona, issue #2410) is not silently lost.
+  const shapeDesc =
+    typeof value === 'object'
+      ? `object(keys=${Object.keys(value).join(',')})`
+      : typeof value;
+  systemInstructionLogger.warn(
+    () =>
+      `extractSystemInstructionText: unrecognized systemInstruction shape (type=${shapeDesc})`,
+  );
+  return undefined;
+}
+
+function extractPartsText(parts: unknown[]): string {
+  return parts
+    .map((part) => {
+      if (typeof part === 'string') return part.trim();
+      if (
+        part !== null &&
+        typeof part === 'object' &&
+        'text' in part &&
+        typeof part.text === 'string'
+      ) {
+        return part.text.trim();
+      }
+      // Unrecognized part type — warn so malformed parts in a systemInstruction
+      // (which carries the subagent persona, issue #2410) are not silently lost.
+      const partDesc = describeUnrecognizedPart(part);
+      systemInstructionLogger.warn(
+        () =>
+          `extractPartsText: dropping unrecognized systemInstruction part (type=${partDesc})`,
+      );
+      return '';
+    })
+    .filter((text) => text.length > 0)
+    .join('\n')
+    .trim();
+}
+
+function describeUnrecognizedPart(part: unknown): string {
+  if (part === null) return 'null';
+  if (typeof part === 'object') {
+    return `object(keys=${Object.keys(part).join(',')})`;
+  }
+  return typeof part;
 }

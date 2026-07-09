@@ -29,14 +29,21 @@ import type { Profile } from '@vybestack/llxprt-code-settings';
 import { DEFAULT_DISABLED_TOOLS } from '../subagentOrchestrator.js';
 import {
   normalizeDefaultToolSet,
-  populateSettingsService,
+  populatePreActivationSettings,
+  populatePostActivationSettings,
 } from '../subagentSettingsPopulation.js';
 
 const defaultDisabledTools = normalizeDefaultToolSet(DEFAULT_DISABLED_TOOLS);
 
 function populate(profile: Profile, profileName: string) {
   const service = createRuntimeSettingsService();
-  populateSettingsService(service, profile, profileName, defaultDisabledTools);
+  populatePreActivationSettings(service, profile, profileName);
+  populatePostActivationSettings(
+    service,
+    profile,
+    profileName,
+    defaultDisabledTools,
+  );
   return service;
 }
 
@@ -74,11 +81,15 @@ describe('Subagent reasoning/ephemeral propagation (Issue #2410)', () => {
     const strip =
       globals['reasoning.stripFromContext'] ??
       nestedReasoning?.['stripFromContext'];
+    const includeInResponse =
+      globals['reasoning.includeInResponse'] ??
+      nestedReasoning?.['includeInResponse'];
     const summary =
       globals['reasoning.summary'] ?? nestedReasoning?.['summary'];
 
     expect(effort).toBe('xhigh');
     expect(strip).toBe('none');
+    expect(includeInResponse).toBe(true);
     expect(summary).toBe('auto');
     // Non-reasoning general ephemerals must also propagate.
     expect(globals['streaming']).toBe('enabled');
@@ -104,8 +115,12 @@ describe('Subagent reasoning/ephemeral propagation (Issue #2410)', () => {
       | undefined;
 
     expect(globals['reasoning.effort']).toBeUndefined();
+    expect(globals['reasoning.includeInResponse']).toBeUndefined();
+    expect(globals['reasoning.stripFromContext']).toBeUndefined();
     expect(globals['reasoning.summary']).toBeUndefined();
     expect(nestedReasoning?.['effort']).toBeUndefined();
+    expect(nestedReasoning?.['includeInResponse']).toBeUndefined();
+    expect(nestedReasoning?.['stripFromContext']).toBeUndefined();
     expect(nestedReasoning?.['summary']).toBeUndefined();
   });
 
@@ -123,6 +138,7 @@ describe('Subagent reasoning/ephemeral propagation (Issue #2410)', () => {
     );
 
     expect(separated.modelBehavior['reasoning.effort']).toBe('xhigh');
+    expect(separated.cliSettings['reasoning.includeInResponse']).toBe(true);
     expect(separated.cliSettings['reasoning.stripFromContext']).toBe('none');
   });
 });

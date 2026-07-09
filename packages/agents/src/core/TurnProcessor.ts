@@ -55,6 +55,7 @@ import {
 } from './hookToolRestrictions.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import { shouldRetryStreamAttempt } from './turnAbortHelpers.js';
+import { extractSystemInstructionText } from './streamRequestHelpers.js';
 
 import {
   AgentExecutionStoppedError,
@@ -336,6 +337,7 @@ export class TurnProcessor {
     }
   }
 
+  /** Tracks tool responses already recorded during eager client streaming. */
   markToolResponsesRecorded(callIds: readonly string[]): void {
     for (const callId of callIds) {
       if (typeof callId === 'string' && callId.length > 0) {
@@ -561,6 +563,9 @@ export class TurnProcessor {
         runtimeContext.settingsService as GenerateChatOptions['settings'],
       metadata: runtimeContext.metadata,
       userMemory: resolveUserMemory(runtimeContext.config),
+      systemInstruction: extractSystemInstructionText(
+        this.generationConfig.systemInstruction,
+      ),
     });
   }
 

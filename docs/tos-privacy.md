@@ -38,7 +38,7 @@ When using local providers (LM Studio, llama.cpp, Ollama), no data leaves your m
 
 Google's terms differ significantly by tier:
 
-- **Free tier (OAuth or unpaid API key):** Your prompts, responses, and code **may be collected** and used for model training. See [unpaid data use](https://ai.google.dev/gemini-api/terms#data-use-unpaid).
+- **Free tier (unpaid API key):** Your prompts, responses, and code **may be collected** and used for model training. See [unpaid data use](https://ai.google.dev/gemini-api/terms#data-use-unpaid).
 - **Paid API key:** Your data is treated as confidential and is **not used for training**. See [paid terms](https://ai.google.dev/gemini-api/terms#paid-services).
 - **Vertex AI:** Your data is governed by [Google Cloud Privacy Notice](https://cloud.google.com/terms/cloud-privacy-notice) — not collected for training.
 

@@ -102,7 +102,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       runtimeMocks.getEphemeralSettings.mockReturnValue({
         activeProvider: 'gemini',
         currentProfile: 'glm',
-        tools: { disabled: ['google_web_fetch'] },
+        tools: { disabled: ['read_file'] },
         'context-limit': 190000,
         streaming: true,
       });

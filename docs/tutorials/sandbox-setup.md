@@ -162,7 +162,7 @@ Then inside session:
 /auth anthropic login
 ```
 
-(Use another provider if preferred, e.g. `/auth gemini enable` then `/auth gemini login`.)
+(Use another provider if preferred, e.g. `/auth codex enable` then `/auth codex login`.)
 
 What to expect:
 

@@ -142,7 +142,7 @@ export function filterEagerlyRecordedToolResponses(
  * Awaits both writes so callers that continue or exit the loop immediately
  * afterwards can guarantee the tool history is durable before the next turn.
  */
-export async function recordCompletedToolHistory(
+async function recordCompletedToolHistory(
   tools: CompletedToolCall[],
   agentClient: AgentClientContract,
 ): Promise<void> {

@@ -13,7 +13,7 @@
  * Package-local tool key storage types and pure-utility helpers.
  *
  * Provides the registry metadata types and display helpers needed by
- * tool-key-storage, codesearch, exa-web-search, and google-web-search.
+ * tool-key-storage, codesearch, and exa-web-search.
  * The actual ToolKeyStorage class with SecureStore integration remains
  * in core. Self-contained with zero core imports.
  */

@@ -120,6 +120,11 @@ describe('AnthropicProvider Fable 5 Extended Thinking @issue:2328', () => {
     expect(request.max_tokens).toBe(40000);
   });
 
+  it('should ignore zero maxOutputTokens overrides for Claude Fable 5 @issue:2410', async () => {
+    const request = await generateFable5Request([['maxOutputTokens', 0]]);
+    expect(request.max_tokens).toBe(40000);
+  });
+
   it('should omit the thinking field for Claude Fable 5 when reasoning is disabled @issue:2328', async () => {
     const request = await generateFable5Request([['reasoning.enabled', false]]);
     // Fable 5 cannot disable adaptive thinking. With reasoning disabled we

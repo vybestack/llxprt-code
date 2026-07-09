@@ -67,6 +67,7 @@ import {
 import { applyProfileWithGuards } from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
 import { registerProvidersOntoManager } from '../api/createAgent.js';
 import { executeProviderActivation } from '../api/providerActivationExecutor.js';
+import { AggregateDisposeError } from '../api/disposeErrors.js';
 
 const LOAD_BALANCER_PROVIDER_NAME = 'load-balancer';
 
@@ -82,10 +83,7 @@ const createAbortError = (message: string): Error => {
   return error;
 };
 
-export const DEFAULT_DISABLED_TOOLS = [
-  'google_web_fetch',
-  'google_web_search',
-] as const;
+export const DEFAULT_DISABLED_TOOLS = [] as const;
 
 export interface SubagentLaunchRequest {
   name: string;
@@ -148,17 +146,19 @@ export class SubagentOrchestrator {
     isolatedHandle: IsolatedRuntimeContextHandle,
   ): () => Promise<void> {
     return async () => {
-      if (typeof scope.dispose === 'function') {
-        scope.dispose();
-      }
-
       const history = firstDefinedHistory(
         runtimeResult.history,
         scope.runtimeContext.history,
       );
-      disposeHistoryLike(history);
-
-      await isolatedHandle.cleanup();
+      await runCleanupSteps([
+        () => {
+          if (typeof scope.dispose === 'function') {
+            scope.dispose();
+          }
+        },
+        () => disposeHistoryLike(history),
+        () => isolatedHandle.cleanup(),
+      ]);
     };
   }
 
@@ -224,7 +224,7 @@ export class SubagentOrchestrator {
       request.behaviourPrompts,
     );
     const modelConfig = this.buildModelConfig(
-      this.getRuntimeStateProfile(runtimeProfile),
+      SubagentOrchestrator.getRuntimeStateProfile(runtimeProfile),
     );
     const runConfig = this.buildRunConfig(profile, request.runConfig);
     this.throwIfAborted(
@@ -289,8 +289,7 @@ export class SubagentOrchestrator {
       if (scope !== undefined) {
         await this.buildScopeDispose(scope, runtimeResult, isolatedHandle)();
       } else {
-        disposeHistoryLike(runtimeResult.history);
-        await isolatedHandle.cleanup();
+        await this.cleanupRuntimeArtifacts(runtimeResult, isolatedHandle);
       }
     } catch (disposeError) {
       debugLogger.warn(
@@ -298,6 +297,32 @@ export class SubagentOrchestrator {
           disposeError instanceof Error
             ? disposeError.message
             : String(disposeError)
+        }`,
+      );
+    }
+  }
+
+  private async cleanupRuntimeArtifacts(
+    runtimeResult: AgentRuntimeLoaderResult,
+    isolatedHandle: IsolatedRuntimeContextHandle,
+  ): Promise<void> {
+    await runCleanupSteps([
+      () => disposeHistoryLike(runtimeResult.history),
+      () => isolatedHandle.cleanup(),
+    ]);
+  }
+
+  private async cleanupIsolatedHandleAfterFailure(
+    isolatedHandle: IsolatedRuntimeContextHandle,
+  ): Promise<void> {
+    try {
+      await isolatedHandle.cleanup();
+    } catch (cleanupError) {
+      debugLogger.warn(
+        `SubagentOrchestrator: isolated runtime cleanup failed: ${
+          cleanupError instanceof Error
+            ? cleanupError.message
+            : String(cleanupError)
         }`,
       );
     }
@@ -372,7 +397,7 @@ export class SubagentOrchestrator {
     };
   }
 
-  private getActivationProfile(
+  private static getActivationProfile(
     runtimeProfile: RuntimeProfileResolution,
   ): Profile {
     return isLoadBalancerProfile(runtimeProfile.effectiveProfile)
@@ -380,7 +405,7 @@ export class SubagentOrchestrator {
       : runtimeProfile.primaryProfile;
   }
 
-  private getRuntimeStateProfile(
+  private static getRuntimeStateProfile(
     runtimeProfile: RuntimeProfileResolution,
   ): Profile {
     if (!isLoadBalancerProfile(runtimeProfile.effectiveProfile)) {
@@ -522,8 +547,10 @@ export class SubagentOrchestrator {
   }> {
     const { runtimeProfile, modelConfig, agentRuntimeId, subagent } = params;
     const { effectiveProfile } = runtimeProfile;
-    const activationProfile = this.getActivationProfile(runtimeProfile);
-    const runtimeStateProfile = this.getRuntimeStateProfile(runtimeProfile);
+    const activationProfile =
+      SubagentOrchestrator.getActivationProfile(runtimeProfile);
+    const runtimeStateProfile =
+      SubagentOrchestrator.getRuntimeStateProfile(runtimeProfile);
     const isLoadBalancerActivation = isLoadBalancerProfile(activationProfile);
 
     this.throwIfAborted(
@@ -573,7 +600,7 @@ export class SubagentOrchestrator {
       });
       return { runtimeResult, isolatedHandle };
     } catch (error) {
-      await isolatedHandle.cleanup();
+      await this.cleanupIsolatedHandleAfterFailure(isolatedHandle);
       throw error;
     }
   }
@@ -746,6 +773,22 @@ export class SubagentOrchestrator {
     }
 
     return handle;
+  }
+}
+
+async function runCleanupSteps(
+  steps: ReadonlyArray<() => unknown | Promise<unknown>>,
+): Promise<void> {
+  const errors: unknown[] = [];
+  for (const step of steps) {
+    try {
+      await step();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) {
+    throw new AggregateDisposeError(errors);
   }
 }
 

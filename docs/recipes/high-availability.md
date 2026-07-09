@@ -42,7 +42,7 @@ First, set up and save profiles for each provider you want in your failover chai
 /profile save model openai-backup
 
 # Gemini profile
-/auth gemini enable
+/key save gemini your-gemini-api-key
 /provider gemini
 /model gemini-2.5-flash
 /set context-limit 200000
@@ -97,7 +97,7 @@ Prioritize free/cheap providers, falling back to premium only when needed:
 
 ```bash
 # Low-cost tier first
-/auth gemini enable
+/key save gemini your-gemini-api-key
 /provider gemini
 /model gemini-2.5-flash
 /profile save model free-gemini
@@ -175,8 +175,9 @@ Use your existing subscriptions:
 ```bash
 /auth anthropic enable   # Claude Pro/Max
 /auth codex enable       # ChatGPT Plus/Pro
-/auth gemini enable      # Gemini (Google account or API key)
 ```
+
+Gemini is now API-key-only (the free "Login with Google" flow was removed in mid-2026) — use a Gemini API key with `/key save gemini <key>` or `/keyfile`.
 
 Qwen is now API-key-only (OAuth tier ended 2026-04-15) — use a DashScope API key with `/keyfile`.
 

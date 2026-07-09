@@ -9,12 +9,17 @@ import open from 'open';
 import { bugCommand } from './bugCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { getCliVersion } from '../../utils/version.js';
-import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
 
 vi.mock('open');
 vi.mock('../../utils/version.js');
 vi.mock('../utils/formatters.js');
+// Mock the git-commit loader to a deterministic value so the assertion below
+// verifies bugCommand embeds the loader's return value, rather than comparing
+// the real loader's output against itself (a tautology).
+vi.mock('../../utils/gitCommitInfo.js', () => ({
+  getGitCommitInfo: vi.fn().mockReturnValue('test-commit-hash'),
+}));
 vi.mock('node:process', () => ({
   default: {
     platform: 'test-platform',
@@ -63,7 +68,7 @@ describe('bugCommand', () => {
 
     const expectedInfo = `
 * **CLI Version:** 0.1.0
-* **Git Commit:** ${GIT_COMMIT_INFO}
+* **Git Commit:** test-commit-hash
 * **Operating System:** test-platform v20.0.0
 * **Sandbox Environment:** test
 * **Model Version:** gemini-pro
@@ -99,7 +104,7 @@ describe('bugCommand', () => {
 
     const expectedInfo = `
 * **CLI Version:** 0.1.0
-* **Git Commit:** ${GIT_COMMIT_INFO}
+* **Git Commit:** test-commit-hash
 * **Operating System:** test-platform v20.0.0
 * **Sandbox Environment:** test
 * **Model Version:** gemini-pro

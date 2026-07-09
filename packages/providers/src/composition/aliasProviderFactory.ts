@@ -316,7 +316,6 @@ export function createOpenAIVercelAliasProvider(
 
 export function createGeminiAliasProvider(
   entry: ProviderAliasEntry,
-  oauthManager: OAuthManager,
   config?: Config,
 ): GeminiProvider | null {
   let aliasApiKey: string | undefined;
@@ -333,7 +332,6 @@ export function createGeminiAliasProvider(
     aliasApiKey ?? undefined,
     resolvedBaseUrl,
     config,
-    oauthManager,
   );
 
   if (config && typeof provider.setConfig === 'function') {
@@ -433,7 +431,7 @@ export function registerAliasProviders(
         break;
       }
       case 'gemini': {
-        const provider = createGeminiAliasProvider(entry, oauthManager, config);
+        const provider = createGeminiAliasProvider(entry, config);
         if (provider) {
           providerManagerInstance.registerProvider(provider as never);
         }

@@ -198,7 +198,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     }
   });
 
-  it('seeds default disabled tools into subagent runtime settings when profile omits disabled tools', async () => {
+  it('does not seed default disabled tools when profile omits disabled tools', async () => {
     const profileWithoutDisabled: Profile = {
       ...profile,
       ephemeralSettings: {
@@ -235,10 +235,8 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     });
 
     const loaderArgs = runtimeLoader.mock.calls[0][0];
-    expect(loaderArgs.profile.settings.tools?.disabled).toStrictEqual([
-      'google_web_fetch',
-      'google_web_search',
-    ]);
+    // With default-disabled tools removed, no defaults are seeded.
+    expect(loaderArgs.profile.settings.tools?.disabled).toBeUndefined();
   });
 
   it('preserves profile disabled tools even when they are present in tools.allowed', async () => {
@@ -246,7 +244,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       ...profile,
       ephemeralSettings: {
         'auth-key': 'test-api-key',
-        'tools.allowed': ['read_file', 'write_file', 'google_web_fetch'],
+        'tools.allowed': ['read_file', 'write_file', 'glob'],
         'tools.disabled': ['write_file'],
       },
     };
@@ -283,7 +281,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const loaderArgs = runtimeLoader.mock.calls[0][0];
     expect(loaderArgs.profile.settings.tools?.disabled).toStrictEqual([
       'write_file',
-      'google_web_search',
     ]);
   });
 
@@ -343,13 +340,12 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
   });
 
   it('keeps GCP profile ephemerals scoped to the subagent settings service', async () => {
-    const previousProject = process.env.GOOGLE_CLOUD_PROJECT;
-    const previousLocation = process.env.GOOGLE_CLOUD_LOCATION;
+    const originalProject = process.env.GOOGLE_CLOUD_PROJECT;
+    const originalLocation = process.env.GOOGLE_CLOUD_LOCATION;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+    delete process.env.GOOGLE_CLOUD_LOCATION;
 
     try {
-      delete process.env.GOOGLE_CLOUD_PROJECT;
-      delete process.env.GOOGLE_CLOUD_LOCATION;
-
       const vertexProfile: Profile = {
         version: 1,
         provider: 'gemini',
@@ -401,15 +397,15 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       expect(process.env.GOOGLE_CLOUD_PROJECT).toBeUndefined();
       expect(process.env.GOOGLE_CLOUD_LOCATION).toBeUndefined();
     } finally {
-      if (previousProject === undefined) {
+      if (originalProject === undefined) {
         delete process.env.GOOGLE_CLOUD_PROJECT;
       } else {
-        process.env.GOOGLE_CLOUD_PROJECT = previousProject;
+        process.env.GOOGLE_CLOUD_PROJECT = originalProject;
       }
-      if (previousLocation === undefined) {
+      if (originalLocation === undefined) {
         delete process.env.GOOGLE_CLOUD_LOCATION;
       } else {
-        process.env.GOOGLE_CLOUD_LOCATION = previousLocation;
+        process.env.GOOGLE_CLOUD_LOCATION = originalLocation;
       }
     }
   });

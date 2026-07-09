@@ -273,9 +273,10 @@ export class HistoryService
   }
 
   /**
-   * Add content to the history
-   * Note: We accept all content including empty responses for comprehensive history.
-   * Filtering happens only when getting curated history.
+   * Add content to the history.
+   * Zero-block turns are rejected at insertion (issue #2410): they corrupt
+   * provider-facing history (z.ai rejects empty human turns with HTTP 400
+   * error 1213). All other content with a valid speaker is accepted.
    */
   add(content: IContent, modelName?: string): void {
     // If compression is active, queue this operation
@@ -295,8 +296,15 @@ export class HistoryService
   private addInternal(content: IContent, modelName?: string): void {
     logContentAdded(this.logger, content, modelName);
 
-    // Only do basic validation - must have valid speaker
-    if (['human', 'ai', 'tool'].includes(content.speaker)) {
+    // Reject zero-block turns: a Content with no blocks corrupts provider-
+    // facing history (notably z.ai rejects empty human turns with HTTP 400
+    // error 1213, issue #2410). This is a systemic safety net — earlier
+    // layers should prevent these from reaching history, but we enforce the
+    // invariant here as the last line of defense.
+    const hasValidSpeaker = ['human', 'ai', 'tool'].includes(content.speaker);
+    const hasBlocks =
+      Array.isArray(content.blocks) && content.blocks.length > 0;
+    if (hasValidSpeaker && hasBlocks) {
       this.history.push(content);
 
       this.logger.debug(
@@ -308,8 +316,13 @@ export class HistoryService
 
       // Update token count asynchronously but atomically
       void this.updateTokenCount(content, modelName);
-    } else {
+    } else if (!hasValidSpeaker) {
       this.logger.debug('Content rejected - invalid speaker:', content.speaker);
+    } else {
+      this.logger.debug(
+        'Content rejected - zero blocks (issue #2410):',
+        content.speaker,
+      );
     }
   }
 

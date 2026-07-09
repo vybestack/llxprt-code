@@ -5,7 +5,7 @@
  */
 
 import {
-  clearCachedCredentialFile,
+  type Config,
   getErrorStatus,
   todoEvents,
   DEFAULT_AGENT_ID,
@@ -13,7 +13,6 @@ import {
   debugLogger,
   createInkStdio,
   type ContractPart,
-  type Config,
   DebugLogger,
   EmojiFilter,
   type FilterConfiguration,
@@ -35,7 +34,6 @@ import * as path from 'node:path';
 import { type LoadedSettings } from '../config/settings.js';
 import { randomUUID } from 'crypto';
 import {
-  getActiveProfileName,
   loadProfileByName,
   setCliRuntimeContext,
 } from '@vybestack/llxprt-code-providers/runtime.js';
@@ -198,11 +196,6 @@ export class ZedAgent {
       ? await profileManager.listProfiles()
       : [];
     const profileName = parseZedAuthMethodId(methodId, availableProfiles);
-
-    const currentProfile = getActiveProfileName();
-    if (!currentProfile || currentProfile !== profileName) {
-      await clearCachedCredentialFile();
-    }
 
     await loadProfileByName(profileName);
   }

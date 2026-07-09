@@ -4,18 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expandTildePath } from '@vybestack/llxprt-code-core/utils/paths.js';
+import { expandTildePath } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 
 type EphemeralSettings = Profile['ephemeralSettings'];
 
 /** Reads a raw ephemeral setting value by key. */
-export function getSetting(settings: EphemeralSettings, key: string): unknown {
+function getSetting(settings: EphemeralSettings, key: string): unknown {
   const values = settings as unknown as Record<string, unknown>;
   return values[key];
 }
 
-export { expandTildePath as expandTilde };
+export function expandTilde(pathValue: string): string {
+  // expandTildePath handles `~` and `~/`; normalize Windows-style `~\` first.
+  return expandTildePath(pathValue.replace(/^~\\/, '~/'));
+}
 
 /**
  * Returns the first finite numeric ephemeral setting among the given keys,

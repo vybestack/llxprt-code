@@ -28,6 +28,8 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import { ProxySocketClient } from '@vybestack/llxprt-code-core';
 
+const isWindows = process.platform === 'win32';
+
 // ─── In-Memory Test Double: TokenStore ───────────────────────────────────────
 
 class InMemoryTokenStore implements TokenStore {
@@ -205,15 +207,18 @@ describe('CredentialProxyServer', () => {
    * @when start() is called
    * @then A Unix socket file exists at the returned path
    */
-  it('start creates a Unix socket and returns the socket path', async () => {
-    server = createServer();
-    const socketPath = await server.start();
+  it.skipIf(isWindows)(
+    'start creates a Unix socket and returns the socket path',
+    async () => {
+      server = createServer();
+      const socketPath = await server.start();
 
-    expect(socketPath).toStrictEqual(expect.any(String));
-    expect(socketPath.endsWith('.sock')).toBe(true);
-    const stat = fs.statSync(socketPath);
-    expect(stat.isSocket()).toBe(true);
-  });
+      expect(socketPath).toStrictEqual(expect.any(String));
+      expect(socketPath.endsWith('.sock')).toBe(true);
+      const stat = fs.statSync(socketPath);
+      expect(stat.isSocket()).toBe(true);
+    },
+  );
 
   /**
    * @requirement R25.2
@@ -222,16 +227,19 @@ describe('CredentialProxyServer', () => {
    * @when stop() is called
    * @then The socket file is removed from disk
    */
-  it('stop removes the socket file and rejects new connections', async () => {
-    server = createServer();
-    const socketPath = await server.start();
+  it.skipIf(isWindows)(
+    'stop removes the socket file and rejects new connections',
+    async () => {
+      server = createServer();
+      const socketPath = await server.start();
 
-    expect(fs.existsSync(socketPath)).toBe(true);
+      expect(fs.existsSync(socketPath)).toBe(true);
 
-    await server.stop();
+      await server.stop();
 
-    expect(fs.existsSync(socketPath)).toBe(false);
-  });
+      expect(fs.existsSync(socketPath)).toBe(false);
+    },
+  );
 
   /**
    * @requirement R25.3

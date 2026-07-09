@@ -442,6 +442,22 @@ export async function dispatchNonInteractiveTurnResult(
 // ---------------------------------------------------------------------------
 
 /**
+ * Type guard: returns true when nextMessages is non-null AND non-empty.
+ *
+ * Issue #2410: `processFunctionCalls` can return `[]` (an empty, truthy
+ * array) when all tool calls are hook-restricted. The old guard
+ * `!nextMessages` only caught `null`/`undefined` — an empty array slipped
+ * through (`![] === false`) and propagated a zero-part user message into
+ * provider history. This type guard centralizes the corrected check so it
+ * can be unit-tested in isolation.
+ */
+export function hasNonInteractiveMessages(
+  nextMessages: Content[] | null,
+): nextMessages is Content[] {
+  return nextMessages !== null && nextMessages.length > 0;
+}
+
+/**
  * Run one iteration of the non-interactive loop body. Returns a
  * discriminated result so the caller loop has a single control branch.
  */
@@ -499,7 +515,14 @@ async function runNonInteractiveLoopIteration(
     execCtx,
     ctx,
   );
-  if (!nextMessages) return { action: 'stop' };
+  // `processFunctionCalls` returns `[]` (an empty, truthy array) when no
+  // tool calls were executed. `!nextMessages` only catches null/undefined,
+  // so an empty array would slip through and propagate a zero-part user
+  // message into provider history (issue #2410). Treat null and empty
+  // array the same as "no further messages" and stop the loop.
+  if (!hasNonInteractiveMessages(nextMessages)) {
+    return { action: 'stop' };
+  }
   return { action: 'continue', messages: nextMessages };
 }
 

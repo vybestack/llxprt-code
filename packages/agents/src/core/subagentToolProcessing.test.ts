@@ -256,14 +256,37 @@ describe('subagentToolProcessing', () => {
       expect(output.final_message).toContain('Task completed successfully');
     });
 
-    it('should preserve a legitimate "none" final_message', () => {
+    it('should treat literal "None" as a placeholder when emitted vars carry the payload (Issue #2410)', () => {
+      const output: OutputObject = {
+        emitted_vars: { result: 'ready' },
+        terminate_reason: SubagentTerminateMode.GOAL,
+        final_message: '  None  ',
+      };
+      finalizeOutput(output);
+      expect(output.final_message).toContain('Completed');
+      expect(output.final_message).toContain('result=ready');
+      expect(output.final_message.trim().toLowerCase()).not.toBe('none');
+    });
+
+    it('should preserve literal "None" as a meaningful goal answer without emitted vars', () => {
       const output: OutputObject = {
         emitted_vars: {},
         terminate_reason: SubagentTerminateMode.GOAL,
-        final_message: 'none',
+        final_message: '  None  ',
       };
       finalizeOutput(output);
-      expect(output.final_message).toBe('none');
+      expect(output.final_message).toBe('None');
+    });
+
+    it('should treat literal "None" as a placeholder for non-GOAL termination without emitted vars', () => {
+      const output: OutputObject = {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.TIMEOUT,
+        final_message: '  None  ',
+      };
+      finalizeOutput(output);
+      expect(output.final_message).toContain('time limit');
+      expect(output.final_message.trim().toLowerCase()).not.toBe('none');
     });
   });
 

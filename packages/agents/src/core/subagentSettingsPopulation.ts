@@ -206,6 +206,7 @@ function tryLoadApiKeyFromKeyfile(
     // is built.
     const content = fs.readFileSync(resolvedPath, 'utf8').trim();
     if (content !== '') {
+      service.set('auth-key', content);
       service.set(`providers.${provider}.auth-key`, content);
     } else {
       debugLogger.warn(
@@ -328,11 +329,20 @@ function populateGcpSettings(service: SettingsService, profile: Profile): void {
   }
 }
 
-function cloneEphemeralValue(value: unknown): unknown {
-  if (value !== null && typeof value === 'object') {
-    return structuredClone(value);
+function cloneEphemeralValue(key: string, value: unknown): unknown {
+  if (value === null || typeof value !== 'object') {
+    return value;
   }
-  return value;
+  try {
+    return structuredClone(value);
+  } catch (error) {
+    debugLogger.warn(
+      `SubagentOrchestrator: skipping non-cloneable ephemeral setting '${key}': ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return undefined;
+  }
 }
 
 function populateGeneralEphemerals(
@@ -352,8 +362,10 @@ function populateGeneralEphemerals(
       value !== null &&
       value !== undefined
     ) {
-      // Preserve SettingsService path semantics for custom dotted ephemerals.
-      service.set(key, cloneEphemeralValue(value));
+      const clonedValue = cloneEphemeralValue(key, value);
+      if (clonedValue !== undefined) {
+        service.set(key, clonedValue);
+      }
     }
   }
 }
@@ -382,19 +394,4 @@ export function populatePostActivationSettings(
   populateGcpSettings(service, profile);
   populateCompressionSettings(service, profile);
   populateToolAndMiscSettings(service, profile, defaultDisabledTools);
-}
-
-export function populateSettingsService(
-  service: SettingsService,
-  profile: Profile,
-  profileName: string,
-  defaultDisabledTools: ReadonlySet<string>,
-): void {
-  populatePreActivationSettings(service, profile, profileName);
-  populatePostActivationSettings(
-    service,
-    profile,
-    profileName,
-    defaultDisabledTools,
-  );
 }

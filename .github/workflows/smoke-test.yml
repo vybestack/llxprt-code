@@ -30,6 +30,17 @@ jobs:
         with:
           ref: '${{ github.event.inputs.ref || github.sha }}'
           fetch-depth: 1
+      - name: 'Set up Node.js'
+        # The runner's default Node 22 ships npm 10.x, which resolves
+        # nested lockfile entries (e.g. yaml@2.9.0 under
+        # @opentelemetry/configuration) differently than the npm 11.6.2
+        # that generated package-lock.json, causing `npm ci` to fail with
+        # "Missing: yaml@2.9.0 from lock file". Pinning Node 24 (from
+        # .nvmrc) brings npm 11.x and matches every other workflow.
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
       - name: 'Setup Bun'
         # Must run BEFORE `npm ci`: in a fresh checkout without bundle/llxprt.js,
         # scripts/postinstall.cjs can run `npm run build` and `npm run bundle`,

@@ -12,7 +12,6 @@ import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 const {
   mockFetchAnthropicUsage,
   mockFetchCodexUsage,
-  mockFetchGeminiQuota,
   mockGetSettingsService,
   mockSettingsServiceRef,
 } = vi.hoisted(() => {
@@ -20,7 +19,6 @@ const {
   return {
     mockFetchAnthropicUsage: vi.fn(),
     mockFetchCodexUsage: vi.fn(),
-    mockFetchGeminiQuota: vi.fn(),
     mockGetSettingsService: vi.fn(() => settingsServiceRef.current),
     mockSettingsServiceRef: settingsServiceRef,
   };
@@ -34,7 +32,6 @@ vi.mock('@vybestack/llxprt-code-providers', async () => {
     ...actual,
     fetchAnthropicUsage: mockFetchAnthropicUsage,
     fetchCodexUsage: mockFetchCodexUsage,
-    fetchGeminiQuota: mockFetchGeminiQuota,
   };
 });
 
@@ -52,7 +49,6 @@ import {
   getAnthropicUsageInfo,
   getAllAnthropicUsageInfo,
   getAllCodexUsageInfo,
-  getAllGeminiUsageInfo,
   getHigherPriorityAuth,
 } from '../provider-usage-info.js';
 import type { TokenStore, OAuthToken } from '@vybestack/llxprt-code-core';
@@ -494,168 +490,6 @@ describe('getAllCodexUsageInfo', () => {
     const result = await getAllCodexUsageInfo(store);
     expect(result.size).toBe(1);
     expect(result.get('bucket-b')).toStrictEqual({ quota: 999 });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// getAllGeminiUsageInfo
-// ---------------------------------------------------------------------------
-
-describe('getAllGeminiUsageInfo', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('returns an empty map when no tokens exist', async () => {
-    const store = makeTokenStore({
-      listBuckets: vi.fn().mockResolvedValue(['default']),
-      getToken: vi.fn().mockResolvedValue(null),
-    });
-
-    const result = await getAllGeminiUsageInfo(store);
-    expect(result.size).toBe(0);
-  });
-
-  it('falls back to ["default"] when listBuckets returns empty', async () => {
-    const store = makeTokenStore({
-      listBuckets: vi.fn().mockResolvedValue([]),
-      getToken: vi.fn().mockResolvedValue(null),
-    });
-
-    await getAllGeminiUsageInfo(store);
-
-    expect(store.getToken).toHaveBeenCalledWith('gemini', 'default');
-  });
-
-  it('skips expired tokens', async () => {
-    const expiredToken: OAuthToken = {
-      access_token: 'gemini-token',
-      token_type: 'Bearer',
-      expiry: pastExpiry(),
-    };
-    const store = makeTokenStore({
-      listBuckets: vi.fn().mockResolvedValue(['default']),
-      getToken: vi.fn().mockResolvedValue(expiredToken),
-    });
-
-    const result = await getAllGeminiUsageInfo(store);
-    expect(result.size).toBe(0);
-    expect(mockFetchGeminiQuota).not.toHaveBeenCalled();
-  });
-
-  it('calls fetchGeminiQuota with the token access_token', async () => {
-    const token: OAuthToken = {
-      access_token: 'gemini-valid-token',
-      token_type: 'Bearer',
-      expiry: futureExpiry(),
-    };
-    const store = makeTokenStore({
-      listBuckets: vi.fn().mockResolvedValue(['default']),
-      getToken: vi.fn().mockResolvedValue(token),
-    });
-    mockFetchGeminiQuota.mockResolvedValue({ remainingUnits: 42 });
-
-    const result = await getAllGeminiUsageInfo(store);
-
-    expect(mockFetchGeminiQuota).toHaveBeenCalledWith('gemini-valid-token');
-    expect(result.size).toBe(1);
-    expect(result.get('default')).toStrictEqual({ remainingUnits: 42 });
-  });
-
-  it('collects quota for multiple valid buckets', async () => {
-    const tokenA: OAuthToken = {
-      access_token: 'gemini-token-a',
-      token_type: 'Bearer',
-      expiry: futureExpiry(),
-    };
-    const tokenB: OAuthToken = {
-      access_token: 'gemini-token-b',
-      token_type: 'Bearer',
-      expiry: futureExpiry(),
-    };
-    const store = makeTokenStore({
-      listBuckets: vi.fn().mockResolvedValue(['bucket-a', 'bucket-b']),
-      getToken: vi
-        .fn()
-        .mockImplementation((_provider: string, bucket: string) => {
-          if (bucket === 'bucket-a') return Promise.resolve(tokenA);
-          if (bucket === 'bucket-b') return Promise.resolve(tokenB);
-          return Promise.resolve(null);
-        }),
-    });
-    mockFetchGeminiQuota
-      .mockResolvedValueOnce({ remaining: 100 })
-      .mockResolvedValueOnce({ remaining: 200 });
-
-    const result = await getAllGeminiUsageInfo(store);
-
-    expect(result.size).toBe(2);
-    expect(result.get('bucket-a')).toStrictEqual({ remaining: 100 });
-    expect(result.get('bucket-b')).toStrictEqual({ remaining: 200 });
-  });
-
-  it('continues processing remaining buckets when one fetch fails', async () => {
-    const tokenA: OAuthToken = {
-      access_token: 'gemini-token-a',
-      token_type: 'Bearer',
-      expiry: futureExpiry(),
-    };
-    const tokenB: OAuthToken = {
-      access_token: 'gemini-token-b',
-      token_type: 'Bearer',
-      expiry: futureExpiry(),
-    };
-    const store = makeTokenStore({
-      listBuckets: vi.fn().mockResolvedValue(['bucket-a', 'bucket-b']),
-      getToken: vi
-        .fn()
-        .mockImplementation((_provider: string, bucket: string) => {
-          if (bucket === 'bucket-a') return Promise.resolve(tokenA);
-          if (bucket === 'bucket-b') return Promise.resolve(tokenB);
-          return Promise.resolve(null);
-        }),
-    });
-    mockFetchGeminiQuota
-      .mockRejectedValueOnce(new Error('quota api down'))
-      .mockResolvedValueOnce({ remaining: 50 });
-
-    const result = await getAllGeminiUsageInfo(store);
-    expect(result.size).toBe(1);
-    expect(result.get('bucket-b')).toStrictEqual({ remaining: 50 });
-  });
-
-  it('skips null quota results', async () => {
-    const token: OAuthToken = {
-      access_token: 'gemini-token',
-      token_type: 'Bearer',
-      expiry: futureExpiry(),
-    };
-    const store = makeTokenStore({
-      listBuckets: vi.fn().mockResolvedValue(['default']),
-      getToken: vi.fn().mockResolvedValue(token),
-    });
-    mockFetchGeminiQuota.mockResolvedValue(null);
-
-    const result = await getAllGeminiUsageInfo(store);
-    expect(result.size).toBe(0);
-  });
-
-  it('skips non-record quota results', async () => {
-    const token: OAuthToken = {
-      access_token: 'gemini-token',
-      token_type: 'Bearer',
-      expiry: futureExpiry(),
-    };
-    const store = makeTokenStore({
-      listBuckets: vi.fn().mockResolvedValue(['primitive', 'array']),
-      getToken: vi.fn().mockResolvedValue(token),
-    });
-    mockFetchGeminiQuota.mockResolvedValueOnce('not-a-record');
-    mockFetchGeminiQuota.mockResolvedValueOnce(['not-a-record']);
-
-    const result = await getAllGeminiUsageInfo(store);
-
-    expect(result.size).toBe(0);
   });
 });
 

@@ -6,27 +6,27 @@ LLxprt Code works with multiple AI providers. You can switch between them mid-se
 
 LLxprt Code ships with aliases for these providers — just use `/provider <name>` to switch:
 
-| Provider                      | Alias           | Default Model              | Auth             |
-| ----------------------------- | --------------- | -------------------------- | ---------------- |
-| Anthropic                     | `anthropic`     | claude-opus-4-8            | OAuth or API key |
-| Google Gemini                 | `gemini`        | gemini-2.5-pro             | OAuth or API key |
-| OpenAI (API)                  | `openai`        | gpt-5.5                    | API key          |
-| OpenAI (ChatGPT subscription) | `codex`         | gpt-5.5                    | OAuth            |
-| Qwen                          | `qwen`          | qwen3-coder-plus           | API key          |
-| xAI                           | `xai`           | grok-4                     | API key          |
-| Kimi                          | `kimi`          | kimi-for-coding            | API key          |
-| DeepSeek                      | `deepseek`      | deepseek-v4-flash          | API key          |
-| Z.AI                          | `zai`           | glm-5                      | API key          |
-| Synthetic                     | `Synthetic`     | hf:zai-org/GLM-4.7         | API key          |
-| Chutes.ai                     | `chutes-ai`     | zai-org/GLM-5-TEE          | API key          |
-| Mistral                       | `mistral`       | mistral-large-latest       | API key          |
-| Cerebras Code                 | `cerebras-code` | qwen-3-coder-480b          | API key          |
-| OpenRouter                    | `openrouter`    | nvidia/nemotron-nano-9b-v2 | API key          |
-| Fireworks                     | `fireworks`     | fireworks/minimax-m3       | API key          |
-| Makora                        | `makora`        | nvidia/Kimi-K2.6-NVFP4     | API key          |
-| Ollama Cloud                  | `ollama-cloud`  | kimi-k2.6                  | API key          |
-| LM Studio                     | `lm-studio`     | gemma-3b-it                | None (local)     |
-| llama.cpp                     | `llama-cpp`     | local-model                | None (local)     |
+| Provider                      | Alias           | Default Model              | Auth                 |
+| ----------------------------- | --------------- | -------------------------- | -------------------- |
+| Anthropic                     | `anthropic`     | claude-opus-4-8            | OAuth or API key     |
+| Google Gemini                 | `gemini`        | gemini-2.5-pro             | API key or Vertex AI |
+| OpenAI (API)                  | `openai`        | gpt-5.5                    | API key              |
+| OpenAI (ChatGPT subscription) | `codex`         | gpt-5.5                    | OAuth                |
+| Qwen                          | `qwen`          | qwen3-coder-plus           | API key              |
+| xAI                           | `xai`           | grok-4                     | API key              |
+| Kimi                          | `kimi`          | kimi-for-coding            | API key              |
+| DeepSeek                      | `deepseek`      | deepseek-v4-flash          | API key              |
+| Z.AI                          | `zai`           | glm-5                      | API key              |
+| Synthetic                     | `Synthetic`     | hf:zai-org/GLM-4.7         | API key              |
+| Chutes.ai                     | `chutes-ai`     | zai-org/GLM-5-TEE          | API key              |
+| Mistral                       | `mistral`       | mistral-large-latest       | API key              |
+| Cerebras Code                 | `cerebras-code` | qwen-3-coder-480b          | API key              |
+| OpenRouter                    | `openrouter`    | nvidia/nemotron-nano-9b-v2 | API key              |
+| Fireworks                     | `fireworks`     | fireworks/minimax-m3       | API key              |
+| Makora                        | `makora`        | nvidia/Kimi-K2.6-NVFP4     | API key              |
+| Ollama Cloud                  | `ollama-cloud`  | kimi-k2.6                  | API key              |
+| LM Studio                     | `lm-studio`     | gemma-3b-it                | None (local)         |
+| llama.cpp                     | `llama-cpp`     | local-model                | None (local)         |
 
 ## Switching Providers
 
@@ -47,12 +47,11 @@ llxprt --provider Synthetic
 
 ### OAuth (Recommended for Subscriptions)
 
-If you have an existing subscription with Anthropic, OpenAI (via Codex), or Google, use OAuth — no API key needed:
+If you have an existing subscription with Anthropic or OpenAI (via Codex), use OAuth — no API key needed:
 
 ```text
 /auth anthropic enable
 /auth codex enable
-/auth gemini enable
 ```
 
 From the command line:

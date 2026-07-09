@@ -88,7 +88,7 @@ describe('filterToolsAgainstRuntime', () => {
       listToolNames: () => ['other_tool'],
       getToolMetadata: () => undefined,
     };
-    const toolConfig = { tools: ['google_web_fetch'] };
+    const toolConfig = { tools: ['glob'] };
     const result = await filterToolsAgainstRuntime({
       toolConfig,
       toolsView,
@@ -98,15 +98,15 @@ describe('filterToolsAgainstRuntime', () => {
 
   it('should preserve tools that are present in toolsView', async () => {
     const toolsView: ToolRegistryView = {
-      listToolNames: () => ['google_web_fetch', 'read_file'],
+      listToolNames: () => ['glob', 'read_file'],
       getToolMetadata: (name: string) => ({ name, description: '' }),
     };
-    const toolConfig = { tools: ['google_web_fetch', 'read_file'] };
+    const toolConfig = { tools: ['glob', 'read_file'] };
     const result = await filterToolsAgainstRuntime({
       toolConfig,
       toolsView,
     });
-    expect(result.tools).toStrictEqual(['google_web_fetch', 'read_file']);
+    expect(result.tools).toStrictEqual(['glob', 'read_file']);
   });
 
   it('should handle mixed allowed and disallowed tools', async () => {
@@ -115,13 +115,13 @@ describe('filterToolsAgainstRuntime', () => {
       getToolMetadata: (name: string) => ({ name, description: '' }),
     };
     const toolConfig = {
-      tools: ['read_file', 'google_web_fetch', 'write_file'],
+      tools: ['read_file', 'glob', 'write_file'],
     };
     const result = await filterToolsAgainstRuntime({
       toolConfig,
       toolsView,
     });
-    // google_web_fetch should be filtered out
+    // glob should be filtered out
     expect(result.tools).toStrictEqual(['read_file', 'write_file']);
   });
 

@@ -265,7 +265,8 @@ describe('E2E Credential Flow (Phase 37)', () => {
         );
         expect(hostAfterRemove).toBeNull();
 
-        // 6. Stop proxy → verify socket removed
+        // 6. Stop proxy → verify socket removed. On Windows the pipe path is
+        //    not a filesystem entry, so existsSync is also false there.
         await server.stop();
         expect(fs.existsSync(socketPath)).toBe(false);
       } finally {

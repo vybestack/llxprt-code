@@ -35,6 +35,7 @@ export * from './modelRequest.js';
 export * from './providerApiError.js';
 export * from './tokensAndEmbeddings.js';
 export * from './grounding.js';
+export * from './geminiContent.js';
 
 /**
  * Neutral tool-call/tool-response ID canonicalization contract.

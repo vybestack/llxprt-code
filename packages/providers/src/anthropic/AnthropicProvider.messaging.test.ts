@@ -337,7 +337,7 @@ describe('AnthropicProvider', () => {
       ]);
     });
 
-    it('should allow empty final assistant messages', async () => {
+    it('should replace empty final assistant messages with a placeholder', async () => {
       settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
 
       const mockStream = {
@@ -378,7 +378,7 @@ describe('AnthropicProvider', () => {
 
       expect(anthropicMessages).toStrictEqual([
         { role: 'user', content: 'hello' },
-        { role: 'assistant', content: '' },
+        { role: 'assistant', content: '[No content generated]' },
       ]);
     });
 

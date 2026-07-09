@@ -79,8 +79,7 @@ export function extractToolDetail(
   ) {
     return (resultDisplay as { message: string }).message;
   }
-  const missingResultDisplay: string | undefined = void 0;
-  return missingResultDisplay;
+  return undefined;
 }
 
 export function buildToolUnavailableMessage(
@@ -182,17 +181,30 @@ export function resolveToolName(
 // ---------------------------------------------------------------------------
 
 /**
- * Codex/GPT-5.5 sometimes returns a literal placeholder string such as "Null"
- * as the final_message. Treat these as empty so the proper completion message
- * is used instead (Issue #2410, Mode 2).
+ * Codex/GPT-5.5 sometimes returns literal placeholder strings as
+ * final_message. Treat programming nullish literals as empty everywhere, and
+ * treat "None" as empty only when it cannot be the user's entire successful
+ * answer: non-goal termination, or a variable-emitting result that already
+ * carries the real payload separately (Issue #2410, Mode 2).
  */
 const NULLISH_FINAL_MESSAGE_TOKENS: ReadonlySet<string> = new Set([
   'null',
   'undefined',
 ]);
 
-function isNullishFinalMessageText(value: string): boolean {
-  return NULLISH_FINAL_MESSAGE_TOKENS.has(value.trim().toLowerCase());
+function isNullishFinalMessageText(
+  value: string,
+  terminateReason: SubagentTerminateMode,
+  hasEmittedValues: boolean,
+): boolean {
+  const normalizedValue = value.trim().toLowerCase();
+  if (NULLISH_FINAL_MESSAGE_TOKENS.has(normalizedValue)) {
+    return true;
+  }
+  return (
+    normalizedValue === 'none' &&
+    (terminateReason !== SubagentTerminateMode.GOAL || hasEmittedValues)
+  );
 }
 
 export function finalizeOutput(output: OutputObject): void {
@@ -215,7 +227,11 @@ export function finalizeOutput(output: OutputObject): void {
   if (
     typeof existing === 'string' &&
     existing.trim().length > 0 &&
-    !isNullishFinalMessageText(existing)
+    !isNullishFinalMessageText(
+      existing,
+      output.terminate_reason,
+      emittedEntries.length > 0,
+    )
   ) {
     // Preserve model-emitted text, but still surface emitted variables so
     // callers can introspect what the subagent produced.

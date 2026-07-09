@@ -47,13 +47,13 @@ LLxprt Code works with multiple AI providers. Pick the option that works for you
 
 ### Option A: Free & Low-Cost Tiers
 
-> **Note:** The free Gemini OAuth tier changed in mid-2026 (Google moved free consumer Gemini-CLI access toward [Antigravity](https://antigravity.google)). If a free login no longer authorizes, use an API key instead. Qwen's free OAuth tier ended 2026-04-15 — use a DashScope API key instead. See [authentication](./cli/authentication.md) for current details.
+> **Note:** Google removed the free "Login with Google" flow for Gemini CLI in mid-2026; use a Gemini API key or Vertex AI instead. Qwen's free OAuth tier ended 2026-04-15 — use a DashScope API key instead. See [authentication](./cli/authentication.md) for current details.
 
-**Gemini (Google)** — Google account (OAuth) or API key:
+**Gemini (Google)** — API key or Vertex AI:
 
 ```
 llxprt
-/auth gemini enable
+/key save gemini your-gemini-api-key
 /provider gemini
 /model gemini-2.5-flash
 ```

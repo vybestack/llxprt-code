@@ -74,7 +74,7 @@ async function quotaSubcommandAction(context: CommandContext): Promise<void> {
       context.ui.addItem(
         {
           type: MessageType.INFO,
-          text: 'No quota information available. Supported providers: Anthropic (OAuth), Codex (OAuth), Gemini (Google OAuth), Z.ai, Synthetic, Chutes, Kimi.',
+          text: 'No quota information available. Supported providers: Anthropic (OAuth), Codex (OAuth), Z.ai, Synthetic, Chutes, Kimi.',
         },
         Date.now(),
       );

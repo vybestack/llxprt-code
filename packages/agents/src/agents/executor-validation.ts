@@ -13,7 +13,6 @@ import {
   ReadManyFilesTool,
   RipGrepTool,
   MemoryTool,
-  GoogleWebSearchTool,
 } from '@vybestack/llxprt-code-tools';
 
 /**
@@ -28,7 +27,6 @@ export const NON_INTERACTIVE_TOOL_ALLOWLIST = new Set([
   GlobTool.Name,
   ReadManyFilesTool.Name,
   MemoryTool.Name,
-  GoogleWebSearchTool.Name,
 ]);
 
 /**

@@ -164,9 +164,11 @@ export class ConversationManager {
     // Capture user input characteristics for model turn logic
     const userInputWasArray =
       options?.userInputWasArray ?? Array.isArray(userInput);
+    const singleUserInput =
+      !userInputWasArray && !Array.isArray(userInput) ? userInput : undefined;
     const userInputWasFunctionResponse =
       options?.userInputWasFunctionResponse ??
-      (!Array.isArray(userInput) && isFunctionResponse(userInput));
+      (singleUserInput !== undefined && isFunctionResponse(singleUserInput));
     const hasAfc = !!(
       automaticFunctionCallingHistory &&
       automaticFunctionCallingHistory.length > 0
