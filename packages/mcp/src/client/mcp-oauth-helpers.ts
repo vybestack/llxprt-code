@@ -36,10 +36,18 @@ const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 const inFlightAuthentications = new Map<string, Promise<boolean>>();
 
 /**
- * Server-side message signalling that the SSE transport has been deprecated
- * in favour of Streamable HTTP (e.g. Webflow's `/sse` -> `/mcp` migration).
+ * Server-side message fragments signalling that the SSE transport has been
+ * deprecated in favour of Streamable HTTP (e.g. Webflow's `/sse` -> `/mcp`
+ * migration). Multiple variants are matched to be robust across different
+ * server implementations.
  */
-const SSE_DEPRECATION_SIGNAL = 'sse is no longer supported';
+const SSE_DEPRECATION_SIGNALS = [
+  'sse is no longer supported',
+  'sse endpoint is no longer supported',
+  'the sse transport has been deprecated',
+  'sse transport is no longer supported',
+  'sse is deprecated',
+];
 
 /**
  * Returns a non-empty array of scopes, treating empty/missing as no scopes.
@@ -104,7 +112,10 @@ export function detectDeprecatedSSEEndpoint(
   errorString: string,
 ): string | null {
   const lower = errorString.toLowerCase();
-  if (!lower.includes(SSE_DEPRECATION_SIGNAL)) return null;
+  const isDeprecated = SSE_DEPRECATION_SIGNALS.some((signal) =>
+    lower.includes(signal),
+  );
+  if (!isDeprecated) return null;
 
   // Extract a URL from the error message using string search to avoid
   // regex backtracking concerns (sonarjs/slow-regex)
@@ -128,9 +139,19 @@ export function detectDeprecatedSSEEndpoint(
 }
 
 /**
+ * Timeout for in-flight OAuth flows. If the user never completes the browser
+ * authentication, the guard entry is cleaned up after this period so that
+ * subsequent attempts can start a fresh flow rather than awaiting a promise
+ * that will never settle.
+ */
+const OAUTH_FLOW_TIMEOUT_MS = 10 * 60 * 1000;
+
+/**
  * Handle automatic OAuth discovery and authentication for a server.
  * Concurrent calls for the same server name reuse a single in-progress
- * authentication flow to avoid opening multiple browser tabs.
+ * authentication flow to avoid opening multiple browser tabs. If the flow
+ * does not settle within {@link OAUTH_FLOW_TIMEOUT_MS}, the guard entry is
+ * evicted so subsequent attempts can start a fresh flow.
  */
 export async function handleAutomaticOAuth(
   mcpServerName: string,
@@ -145,16 +166,28 @@ export async function handleAutomaticOAuth(
     return existing;
   }
 
-  const promise = doHandleAutomaticOAuth(
+  const authPromise = doHandleAutomaticOAuth(
     mcpServerName,
     mcpServerConfig,
     wwwAuthenticate,
-  ).finally(() => {
+  );
+
+  const timeoutPromise = new Promise<boolean>((resolve) => {
+    setTimeout(() => {
+      debugLogger.warn(
+        `OAuth flow for '${mcpServerName}' timed out after ${OAUTH_FLOW_TIMEOUT_MS}ms, clearing in-flight guard`,
+      );
+      inFlightAuthentications.delete(mcpServerName);
+      resolve(false);
+    }, OAUTH_FLOW_TIMEOUT_MS);
+  });
+
+  const raced = Promise.race([authPromise, timeoutPromise]).finally(() => {
     inFlightAuthentications.delete(mcpServerName);
   });
 
-  inFlightAuthentications.set(mcpServerName, promise);
-  return promise;
+  inFlightAuthentications.set(mcpServerName, raced);
+  return raced;
 }
 
 async function doHandleAutomaticOAuth(

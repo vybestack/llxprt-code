@@ -103,10 +103,15 @@ function initializeMcpClient(
 function throwConnectionError(mcpServerName: string, error: unknown): never {
   const errorMessage = (error as Error).message || String(error);
 
-  // Check for deprecated SSE endpoint rejection before generic handling
+  // Check for deprecated SSE endpoint rejection before generic handling.
+  // detectDeprecatedSSEEndpoint returns:
+  //   null  → no deprecation signal found
+  //   ''    → deprecation signal found, but no replacement URL embedded
+  //   URL   → deprecation signal found with a replacement URL
   const deprecatedUrl = detectDeprecatedSSEEndpoint(errorMessage);
   if (deprecatedUrl !== null) {
-    const suggestedUrl = deprecatedUrl || '(check your MCP provider docs)';
+    const suggestedUrl =
+      deprecatedUrl !== '' ? deprecatedUrl : '(check your MCP provider docs)';
     throw new Error(
       `MCP server '${mcpServerName}' is configured with an SSE endpoint that is no longer supported by the server.
 ` +

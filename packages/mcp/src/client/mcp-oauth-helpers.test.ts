@@ -4,14 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { detectDeprecatedSSEEndpoint } from './mcp-oauth-helpers.js';
 
 describe('detectDeprecatedSSEEndpoint', () => {
-  beforeEach(() => {
-    // No mocks needed — detectDeprecatedSSEEndpoint is a pure string function
-  });
-
   it('should detect "SSE is no longer supported" message', () => {
     const result = detectDeprecatedSSEEndpoint(
       'SSE is no longer supported. use https://mcp.webflow.com/mcp',
@@ -46,6 +42,34 @@ describe('detectDeprecatedSSEEndpoint', () => {
   it('should extract the first URL when multiple are present', () => {
     const result = detectDeprecatedSSEEndpoint(
       'SSE is no longer supported. use https://mcp.example.com/mcp not https://mcp.example.com/sse',
+    );
+    expect(result).toBe('https://mcp.example.com/mcp');
+  });
+
+  it('should detect variant "SSE endpoint is no longer supported"', () => {
+    const result = detectDeprecatedSSEEndpoint(
+      'SSE endpoint is no longer supported. Use https://mcp.example.com/mcp',
+    );
+    expect(result).toBe('https://mcp.example.com/mcp');
+  });
+
+  it('should detect variant "The SSE transport has been deprecated"', () => {
+    const result = detectDeprecatedSSEEndpoint(
+      'The SSE transport has been deprecated. Please use https://mcp.example.com/mcp',
+    );
+    expect(result).toBe('https://mcp.example.com/mcp');
+  });
+
+  it('should detect variant "SSE transport is no longer supported"', () => {
+    const result = detectDeprecatedSSEEndpoint(
+      'SSE transport is no longer supported. Switch to https://mcp.example.com/mcp',
+    );
+    expect(result).toBe('https://mcp.example.com/mcp');
+  });
+
+  it('should detect variant "SSE is deprecated"', () => {
+    const result = detectDeprecatedSSEEndpoint(
+      'SSE is deprecated. Use https://mcp.example.com/mcp',
     );
     expect(result).toBe('https://mcp.example.com/mcp');
   });
