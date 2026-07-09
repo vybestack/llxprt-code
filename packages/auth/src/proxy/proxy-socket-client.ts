@@ -243,14 +243,18 @@ export class ProxySocketClient {
       for (const frame of frames) {
         if (this.handshakeResolver) {
           this.resolveHandshake(frame);
-          continue;
+        } else if (this.processRequestFrame(frame)) {
+          return; // socket destroyed mid-loop
         }
-
-        this.resolvePendingRequest(frame);
       }
     } catch {
       this.destroy('Frame decode error');
     }
+  }
+
+  private processRequestFrame(frame: Record<string, unknown>): boolean {
+    this.resolvePendingRequest(frame);
+    return this.socket === null;
   }
 
   private resolveHandshake(frame: Record<string, unknown>): void {

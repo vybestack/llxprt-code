@@ -77,7 +77,7 @@ function createHandshakeCapturingServer(
 }> {
   let resolveHandshake!: (frame: Record<string, unknown>) => void;
   let rejectHandshake!: (err: Error) => void;
-  let timeoutHandle: ReturnType<typeof setTimeout>;
+  let timeoutHandle!: ReturnType<typeof setTimeout>;
   const handshake = Promise.race([
     new Promise<Record<string, unknown>>((resolve, reject) => {
       resolveHandshake = (frame) => {
@@ -94,6 +94,7 @@ function createHandshakeCapturingServer(
         () => reject(new Error('Handshake capture timed out')),
         5000,
       );
+      timeoutHandle.unref?.();
     }),
   ]);
   const srv = net.createServer((socket) => {
@@ -593,9 +594,9 @@ describe('ProxySocketClient', () => {
 
     client = new ProxySocketClient(socketPath, 'some-token');
     // Suppress potential unhandled rejection from the server-side handshake promise
-    result.handshake.catch(() => {});
-    await expect(client.ensureConnected()).rejects.toThrow(
-      /authentication failed/i,
-    );
+      result.handshake.catch(() => {});
+      await expect(client.ensureConnected()).rejects.toThrow(
+        /Credential proxy authentication failed/i,
+      );
   });
 });

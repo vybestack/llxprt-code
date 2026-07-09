@@ -522,27 +522,43 @@ export class CredentialProxyServer {
     frame: Record<string, unknown>,
     state: ConnectionState,
   ): Promise<void> {
-    const id =
-      typeof frame.id === 'string' ? frame.id : String(frame.id ?? 'unknown');
-    const op = frame.op;
-    const payload = this.asRecord(frame.payload);
-
-    if (Boolean(frame.id) === false || !this.hasStringValue(op)) {
-      this.sendError(socket, id, 'INVALID_REQUEST', 'Missing request id or op');
-      return;
-    }
-
-    const handler = this.requestHandlers[op];
-    if (!handler) {
-      this.sendError(socket, id, 'INVALID_REQUEST', `Unknown operation: ${op}`);
-      return;
-    }
+    let id = 'unknown';
+    let op: unknown;
 
     try {
+      id =
+        typeof frame.id === 'string' ? frame.id : String(frame.id ?? 'unknown');
+      op = frame.op;
+      const payload = this.asRecord(frame.payload);
+
+      if (Boolean(frame.id) === false || !this.hasStringValue(op)) {
+        this.sendError(
+          socket,
+          id,
+          'INVALID_REQUEST',
+          'Missing request id or op',
+        );
+        return;
+      }
+
+      const handler = this.requestHandlers[op];
+      if (!handler) {
+        this.sendError(
+          socket,
+          id,
+          'INVALID_REQUEST',
+          `Unknown operation: ${op}`,
+        );
+        return;
+      }
+
       await handler(socket, id, payload, state);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.auditLog('ERROR', state.id, op, { status: 'error', id });
+      this.auditLog('ERROR', state.id, String(op ?? 'unknown'), {
+        status: 'error',
+        id,
+      });
       if (!socket.destroyed && socket.writable) {
         this.sendError(socket, id, 'INTERNAL_ERROR', message);
       }
@@ -610,17 +626,17 @@ export class CredentialProxyServer {
 
     const token = await this.options.tokenStore.getToken(provider, bucket);
     if (token === null) {
-      this.auditLog('INFO', state.id, 'get_token', {
-        provider,
-        bucket: bucket ?? 'default',
-        status: 'not_found',
-      });
-      // For sandbox connections, use a generic FORBIDDEN error instead of
-      // NOT_FOUND to avoid revealing whether a provider exists (prevents
-      // brute-force provider enumeration).
       if (state.isSandboxConnection) {
+        this.auditLog('INFO', state.id, 'get_token', {
+          status: 'blocked_sandbox',
+        });
         this.sendError(socket, id, 'FORBIDDEN', 'Access denied');
       } else {
+        this.auditLog('INFO', state.id, 'get_token', {
+          provider,
+          bucket: bucket ?? 'default',
+          status: 'not_found',
+        });
         this.sendError(
           socket,
           id,
@@ -782,13 +798,16 @@ export class CredentialProxyServer {
 
     const key = await this.options.providerKeyStorage.getKey(name);
     if (key === null) {
-      this.auditLog('INFO', state.id, 'get_api_key', {
-        name,
-        status: 'not_found',
-      });
       if (state.isSandboxConnection) {
+        this.auditLog('INFO', state.id, 'get_api_key', {
+          status: 'blocked_sandbox',
+        });
         this.sendError(socket, id, 'FORBIDDEN', 'Access denied');
       } else {
+        this.auditLog('INFO', state.id, 'get_api_key', {
+          name,
+          status: 'not_found',
+        });
         this.sendError(
           socket,
           id,

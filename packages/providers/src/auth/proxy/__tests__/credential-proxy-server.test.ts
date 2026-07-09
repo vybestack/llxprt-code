@@ -248,6 +248,7 @@ describe('CredentialProxyServer', () => {
           clearTimeout(timer);
           socket.destroy();
           resolve(frame);
+          break;
         }
       });
       socket.on('error', (err) => {

@@ -591,13 +591,6 @@ export async function setupCredentialProxy(
   } catch (err) {
     envFileCleanup?.();
     credentialProxyBridgeCleanup?.();
-    // Also clean up bridge resources if assignment hasn't happened yet
-    if (
-      credentialProxyBridgeCleanup === undefined &&
-      credentialProxyBridgeResult?.cleanup
-    ) {
-      credentialProxyBridgeResult.cleanup();
-    }
     throw err;
   }
 
@@ -729,13 +722,17 @@ export function wireCleanupHandlers(
     process.on('exit', credentialProxyBridgeCleanup);
     process.on('SIGINT', credentialProxyBridgeCleanup);
     process.on('SIGTERM', credentialProxyBridgeCleanup);
-    sandboxProcess.on('close', () => {
+    let bridgeCleanedUp = false;
+    const runBridgeCleanup = (): void => {
+      if (bridgeCleanedUp) return;
+      bridgeCleanedUp = true;
       credentialProxyBridgeCleanup();
       process.off('exit', credentialProxyBridgeCleanup);
       process.off('SIGINT', credentialProxyBridgeCleanup);
       process.off('SIGTERM', credentialProxyBridgeCleanup);
       setCredentialProxyBridgeCleanup(undefined);
-    });
+    };
+    sandboxProcess.on('close', runBridgeCleanup);
   }
 
   // @plan:PLAN-20250214-CREDPROXY.P34 R25.2, R25.3: Clean up credential proxy on sandbox exit

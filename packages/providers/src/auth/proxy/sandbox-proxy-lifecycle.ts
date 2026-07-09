@@ -209,6 +209,7 @@ export async function createAndStartProxy(
     serverInstance = undefined;
     actualCapabilityToken = undefined;
     actualSocketPath = undefined;
+    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
     throw err;
   }
 
@@ -238,8 +239,17 @@ export async function stopProxy(): Promise<void> {
 
   try {
     await instance.stop();
-  } catch {
-    // best-effort cleanup during shutdown
+  } catch (err) {
+    try {
+      if (!process.stderr.destroyed) {
+        process.stderr.write(
+          `Warning: credential proxy stop() failed: ${err instanceof Error ? err.message : String(err)}
+`,
+        );
+      }
+    } catch {
+      // stderr unavailable — nothing more we can do
+    }
   }
 }
 
