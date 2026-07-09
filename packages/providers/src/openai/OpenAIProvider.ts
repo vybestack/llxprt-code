@@ -541,34 +541,48 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       return options;
     }
 
-    const { processKimiMedia } = await import('../kimi/kimiMediaProcessing.js');
-    const result = await processKimiMedia(
-      client,
-      options.contents,
-      kimiFileUploadCache,
-    );
+    try {
+      const { processKimiMedia } = await import(
+        '../kimi/kimiMediaProcessing.js'
+      );
+      const result = await processKimiMedia(
+        client,
+        options.contents,
+        kimiFileUploadCache,
+      );
 
-    if (result.fileReferenceText === '') {
+      if (result.fileReferenceText === '') {
+        return options;
+      }
+
+      logger.debug(
+        () =>
+          `[OpenAIProvider] Kimi file-upload pre-pass replaced PDF blocks; file reference injected into system instruction`,
+        { fileReferenceText: result.fileReferenceText },
+      );
+
+      const existingInstruction = options.systemInstruction ?? '';
+      const combinedInstruction =
+        existingInstruction.trim().length > 0
+          ? `${existingInstruction}\n\n${result.fileReferenceText}`
+          : result.fileReferenceText;
+
+      return {
+        ...options,
+        contents: result.contents,
+        systemInstruction: combinedInstruction,
+      };
+    } catch (mediaError) {
+      logger.warn(
+        () =>
+          `[OpenAIProvider] Kimi media pre-pass failed, falling back to inline behavior: ${
+            mediaError instanceof Error
+              ? mediaError.message
+              : String(mediaError)
+          }`,
+      );
       return options;
     }
-
-    logger.debug(
-      () =>
-        `[OpenAIProvider] Kimi file-upload pre-pass replaced PDF blocks; file reference injected into system instruction`,
-      { fileReferenceText: result.fileReferenceText },
-    );
-
-    const existingInstruction = options.systemInstruction ?? '';
-    const combinedInstruction =
-      existingInstruction.trim().length > 0
-        ? `${existingInstruction}\n\n${result.fileReferenceText}`
-        : result.fileReferenceText;
-
-    return {
-      ...options,
-      contents: result.contents,
-      systemInstruction: combinedInstruction,
-    };
   }
 
   /**

@@ -100,6 +100,9 @@ describe('providerAliases mediaSupport sanitization', () => {
       inlineImages: true,
       videoSupport: false,
     });
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('non-boolean mediaSupport.fileUpload'),
+    );
   });
 
   it('removes mediaSupport when it is not an object', async () => {
@@ -111,6 +114,9 @@ describe('providerAliases mediaSupport sanitization', () => {
 
     const entry = entries.find((e) => e.alias === 'testalias');
     expect(entry?.config.mediaSupport).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('non-object mediaSupport'),
+    );
   });
 
   it('removes mediaSupport when all fields are invalid', async () => {
@@ -161,6 +167,9 @@ describe('providerAliases mediaSupport sanitization', () => {
 
     const entry = entries.find((e) => e.alias === 'testalias');
     expect(entry?.config.mediaSupport).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('non-object mediaSupport'),
+    );
   });
 });
 
