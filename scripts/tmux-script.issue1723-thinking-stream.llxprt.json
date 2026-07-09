@@ -119,6 +119,24 @@
       }
     },
 
+    { "type": "line", "text": "yes", "submitKeys": ["Enter"] },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "macro",
+      "name": "askThinkingQuestion",
+      "args": {
+        "question": "What is 17 times 23? Think step by step and show your reasoning.",
+        "label": "opusthinking-math",
+        "streamingProbeMs": 8000,
+        "completionTimeoutMs": 120000
+      }
+    },
+
     { "type": "line", "text": "/quit", "submitKeys": ["Enter"] },
     { "type": "waitForExit", "timeoutMs": 15000 }
   ]

@@ -37,7 +37,10 @@ import type { ResponseOutcome } from '@vybestack/llxprt-code-core/utils/generate
 import { analyzeResponseOutcomeFromParts } from './googlePartHelpers.js';
 import { isFunctionResponse } from '@vybestack/llxprt-code-core/utils/messageInspectors.js';
 import { InvalidStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
-import { isThoughtPart } from './googlePartHelpers.js';
+import {
+  isThoughtPart,
+  type ThoughtPart,
+} from './googlePartHelpers.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 /** Whether a finish reason is missing (null, undefined, or empty string). */
@@ -154,7 +157,38 @@ export function accumulateChunkMetadata(
 }
 
 /**
- * Consolidate adjacent text parts.
+ * #1723: Detect whether an incoming thought part is an incremental update
+ * of the last consolidated thought — i.e. same thought lineage with the
+ * incoming text being a prefix-extending accumulation of the last. This
+ * drives merging of streaming thinking deltas so only the final signed
+ * block reaches history.
+ */
+function isIncrementalThought(lastPart: Part | undefined, part: Part): boolean {
+  if (!isThoughtPart(lastPart) || !isThoughtPart(part)) {
+    return false;
+  }
+  const lastText = lastPart.text;
+  const incomingText = part.text;
+  if (lastText === undefined || incomingText === undefined) {
+    return false;
+  }
+  return incomingText.startsWith(lastText);
+}
+
+/**
+ * Consolidate adjacent text parts and incremental thinking parts.
+ *
+ * #1723: Streaming thinking deltas are now emitted during streaming (each
+ * delta carries the accumulated thinking text, not a fragment). These
+ * accumulate as incremental thought parts in modelResponseParts. Without
+ * consolidation, the final block at content_block_stop (which carries the
+ * signature) would be appended as a SECOND thought part, duplicating the
+ * text and leaving an unsigned intermediate in history — causing 400
+ * "thinking.signature: Field required" on the next turn. The fix: when the
+ * last consolidated part is a thought whose text is a prefix of the
+ * incoming thought's text, merge them — the incoming part supersedes the
+ * last (it may carry a signature the last lacked). This mirrors the
+ * incremental accumulation already used by the UI's thoughtState.
  *
  * The array index access can return `undefined` at runtime when the array
  * is empty (length-1 == -1), so `lastPart` is annotated `Part | undefined`.
@@ -171,6 +205,19 @@ export function consolidateTextParts(modelResponseParts: Part[]): Part[] {
       isValidNonThoughtTextPart(part)
     ) {
       lastPart.text += part.text;
+    } else if (isIncrementalThought(lastPart, part)) {
+      // #1723: Merge incremental thinking — the incoming part supersedes
+      // the last accumulated part (it may carry the signature the deltas
+      // lacked). Replace text and copy signature if the incoming part has one.
+      const lastThought = lastPart as ThoughtPart;
+      const incomingThought = part as ThoughtPart;
+      lastThought.text = incomingThought.text;
+      if (incomingThought.thoughtSignature !== undefined) {
+        lastThought.thoughtSignature = incomingThought.thoughtSignature;
+      }
+      if (incomingThought.llxprtSourceField !== undefined) {
+        lastThought.llxprtSourceField = incomingThought.llxprtSourceField;
+      }
     } else {
       consolidatedParts.push(part);
     }
