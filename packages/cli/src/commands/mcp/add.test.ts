@@ -183,6 +183,24 @@ describe('mcp add command', () => {
     );
   });
 
+  it('should add a streamable-http server with type field in config', async () => {
+    await parser.parseAsync(
+      'add streamable-http-server https://example.com/mcp --transport streamable-http -H "Authorization: Bearer your-token"',
+    );
+
+    expect(mockSetValue).toHaveBeenCalledWith(
+      SettingScope.Workspace,
+      'mcpServers',
+      {
+        'streamable-http-server': {
+          url: 'https://example.com/mcp',
+          type: 'streamable-http',
+          headers: { Authorization: 'Bearer your-token' },
+        },
+      },
+    );
+  });
+
   it('should handle MCP server args with -- separator', async () => {
     await parser.parseAsync(
       'add my-server npx -- -y http://example.com/some-package',

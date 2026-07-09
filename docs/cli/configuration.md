@@ -1284,8 +1284,9 @@ The following settings remain at the top level of the `settings.json` file.
       - `args` (array of strings, optional): Arguments to pass to the command.
       - `env` (object, optional): Environment variables to set for the server process.
       - `cwd` (string, optional): The working directory in which to start the server.
-      - `url` (string, optional): The URL of an MCP server that uses Server-Sent Events (SSE) for communication.
-      - `httpUrl` (string, optional): The URL of an MCP server that uses streamable HTTP for communication.
+      - `url` (string, optional): The URL of an MCP server that uses Server-Sent Events (SSE) or Streamable HTTP for communication. Use with the `type` field to specify the transport type (`"sse"`, `"http"`, or `"streamable-http"` as an alias for `"http"`).
+      - `httpUrl` (string, optional): The URL of an MCP server that uses streamable HTTP for communication. (Deprecated; use `url` with `type: "http"` instead.)
+      - `type` (string, optional): Transport type. Use `"stdio"` for local command, `"sse"` for Server-Sent Events, `"http"` for Streamable HTTP, or `"streamable-http"` as an alias for `"http"`. When set, disables automatic HTTP→SSE fallback.
       - `headers` (object, optional): A map of HTTP headers to send with requests to `url` or `httpUrl`.
       - `timeout` (number, optional): Timeout in milliseconds for requests to this MCP server.
       - `trust` (boolean, optional): Trust this server and bypass all tool call confirmations.

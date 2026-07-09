@@ -211,6 +211,7 @@ export class MCPServerConfig {
      * Transport type for URL-based servers.
      * When set, disables automatic HTTP→SSE fallback.
      * - 'http' → StreamableHTTPClientTransport
+     * - 'streamable-http' → alias for 'http' (StreamableHTTPClientTransport)
      * - 'sse'  → SSEClientTransport
      * - omitted → defaults to HTTP with SSE fallback (deprecated; add type explicitly)
      *
@@ -218,7 +219,7 @@ export class MCPServerConfig {
      * @plan PLAN-20250219-GMERGE021.R3.P03
      * @requirement REQ-GMERGE021-R3-001
      */
-    readonly type?: 'sse' | 'http',
+    readonly type?: 'sse' | 'http' | 'streamable-http',
     // Common
     readonly timeout?: number,
     readonly trust?: boolean,

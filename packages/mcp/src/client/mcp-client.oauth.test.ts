@@ -246,6 +246,33 @@ describe('connectToMcpServer with OAuth', () => {
       expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
     });
 
+    // EXPECTED TO PASS: type:streamable-http should also use HTTP transport
+    it('should use HTTP transport for url + type:streamable-http (alias)', async () => {
+      const serverUrl = 'http://test-server.com/mcp';
+
+      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+        new Error('401 Unauthorized'),
+      );
+
+      let capturedTransport: TransportWithInternals | undefined;
+      vi.mocked(mockedClient.connect).mockImplementationOnce(
+        async (transport) => {
+          capturedTransport = transport;
+          return Promise.resolve();
+        },
+      );
+
+      await connectToMcpServer(
+        '0.0.1',
+        'test-server',
+        { url: serverUrl, type: 'streamable-http' },
+        false,
+        workspaceContext,
+      );
+
+      expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
+    });
+
     // EXPECTED TO FAIL: type:sse not respected in createTransportWithOAuth
     it('should use SSE transport for url + type:sse', async () => {
       const serverUrl = 'http://test-server.com/sse';
@@ -601,6 +628,64 @@ describe('connectToMcpServer with OAuth', () => {
       ).rejects.toThrow(/status 404/);
 
       expect(mockedClient.connect).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('deprecated SSE endpoint detection', () => {
+    it('should surface actionable error when SSE is no longer supported', async () => {
+      const serverUrl = 'http://test-server.com/sse';
+
+      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+        new Error(
+          'SSE is no longer supported. use https://mcp.test-server.com/mcp',
+        ),
+      );
+
+      await expect(
+        connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          { url: serverUrl, type: 'sse' },
+          false,
+          workspaceContext,
+        ),
+      ).rejects.toThrow(/no longer supported/);
+    });
+
+    it('should include the suggested replacement URL in the error', async () => {
+      const serverUrl = 'http://test-server.com/sse';
+
+      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+        new Error(
+          'SSE is no longer supported. use https://mcp.test-server.com/mcp',
+        ),
+      );
+
+      await expect(
+        connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          { url: serverUrl, type: 'sse' },
+          false,
+          workspaceContext,
+        ),
+      ).rejects.toThrow(/https:\/\/mcp\.test-server\.com\/mcp/);
+    });
+
+    it('should recommend streamable-http type in the error', async () => {
+      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+        new Error('SSE is no longer supported. use http://example.com/mcp'),
+      );
+
+      await expect(
+        connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          { url: 'http://example.com/sse', type: 'sse' },
+          false,
+          workspaceContext,
+        ),
+      ).rejects.toThrow(/streamable-http/);
     });
   });
 

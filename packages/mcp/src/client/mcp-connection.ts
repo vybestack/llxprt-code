@@ -32,6 +32,7 @@ import { LenientJsonSchemaValidator } from './mcp-schema-validator.js';
 import {
   connectWithOAuthToken,
   connectWithSSETransport,
+  detectDeprecatedSSEEndpoint,
   extractWWWAuthenticateHeader,
   fetchWwwAuthenticateHeader,
   handleAutomaticOAuth,
@@ -101,6 +102,26 @@ function initializeMcpClient(
 
 function throwConnectionError(mcpServerName: string, error: unknown): never {
   const errorMessage = (error as Error).message || String(error);
+
+  // Check for deprecated SSE endpoint rejection before generic handling
+  const deprecatedUrl = detectDeprecatedSSEEndpoint(errorMessage);
+  if (deprecatedUrl !== null) {
+    const suggestedUrl = deprecatedUrl || '(check your MCP provider docs)';
+    throw new Error(
+      `MCP server '${mcpServerName}' is configured with an SSE endpoint that is no longer supported by the server.
+` +
+        `The server recommends switching to a Streamable HTTP endpoint.
+` +
+        `Update your configuration to use:
+` +
+        `  "url": "${suggestedUrl}",
+` +
+        `  "type": "streamable-http"
+` +
+        `(or "type": "http") instead of the SSE endpoint.`,
+    );
+  }
+
   const isNetworkError =
     errorMessage.includes('ENOTFOUND') || errorMessage.includes('ECONNREFUSED');
 

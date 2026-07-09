@@ -59,10 +59,13 @@ Add entries under `mcpServers`:
 {
   "my-http": {
     "url": "https://mcp.example.com/mcp",
-    "transport": "streamable-http"
+    "type": "http"
   }
 }
 ```
+
+> `"type": "streamable-http"` is accepted as an alias for `"type": "http"` —
+> both select the Streamable HTTP transport.
 
 ## Managing Servers
 
@@ -574,7 +577,7 @@ llxprt mcp add [options] <name> <commandOrUrl> [args...]
 **Options (Flags):**
 
 - `-s, --scope`: Configuration scope (user or project). [default: "project"]
-- `-t, --transport`: Transport type (stdio, sse, http). [default: "stdio"]
+- `-t, --transport`: Transport type (stdio, sse, http, streamable-http). [default: "stdio"]
 - `-e, --env`: Set environment variables (e.g. -e KEY=value).
 - `-H, --header`: Set HTTP headers for SSE and HTTP transports (e.g. -H "X-Api-Key: abc123" -H "Authorization: Bearer abc123").
 - `--timeout`: Set connection timeout in milliseconds.
@@ -664,25 +667,50 @@ Shows connection states: `connected`, `connecting`, `failed`, `not_started`.
 
 Remote MCP servers that require OAuth are supported. When connecting, LLxprt Code handles the OAuth flow automatically:
 
-1. Server responds with a `401` and OAuth metadata
-2. LLxprt Code opens your browser for authentication
-3. Token is stored and refreshed automatically
+1. Server responds with a `401` and OAuth metadata (or LLxprt Code discovers it via `/.well-known/oauth-authorization-server`)
+2. LLxprt Code performs automatic dynamic client registration (RFC 7591) with PKCE and a loopback redirect
+3. Your browser opens for authorization on first connect
+4. Tokens are stored and refreshed automatically — no `mcp-remote` bridge needed
 
-You can pre-configure OAuth:
+You can pre-configure OAuth explicitly (all fields are optional — if omitted, LLxprt Code discovers them automatically):
 
 ```json
 {
   "my-oauth-server": {
-    "url": "https://mcp.example.com/sse",
-    "oauthClientId": "your-client-id",
-    "oauthAuthorizationUrl": "https://auth.example.com/authorize",
-    "oauthTokenUrl": "https://auth.example.com/token",
-    "oauthScopes": ["read", "write"]
+    "url": "https://mcp.example.com/mcp",
+    "type": "streamable-http",
+    "oauth": {
+      "clientId": "your-client-id",
+      "authorizationUrl": "https://auth.example.com/authorize",
+      "tokenUrl": "https://auth.example.com/token",
+      "scopes": ["read", "write"]
+    }
   }
 }
 ```
 
 If `auth.noBrowser` is set, the flow falls back to a manual code-entry mode.
+
+### Webflow MCP (Streamable HTTP + Browser OAuth)
+
+[Webflow's MCP endpoint](https://mcp.webflow.com/mcp) uses Streamable HTTP
+with browser-based OAuth. LLxprt Code supports it directly — no `mcp-remote`
+wrapper required:
+
+```json
+{
+  "mcpServers": {
+    "webflow": {
+      "url": "https://mcp.webflow.com/mcp",
+      "type": "streamable-http",
+      "trust": true
+    }
+  }
+}
+```
+
+On first connect, LLxprt Code will open your browser for Webflow authorization
+and cache/refresh tokens automatically.
 
 ## MCP Prompts as Slash Commands
 
@@ -705,6 +733,43 @@ When running in a [sandbox](../sandbox.md), MCP servers must be available **insi
 - Check the command path exists and is executable
 - For stdio servers, try running the command manually to see errors
 - Check `LLXPRT_DEBUG=llxprt:mcp:*` for detailed connection logs
+
+**"SSE is no longer supported, use /mcp" error:**
+
+Some MCP providers (e.g. Webflow) have deprecated their SSE endpoint in favor
+of Streamable HTTP. If you see this error, switch your configuration from the
+SSE endpoint (e.g. `https://mcp.example.com/sse`) to the Streamable HTTP
+endpoint (e.g. `https://mcp.example.com/mcp`) with `"type": "streamable-http"`
+or `"type": "http"`:
+
+```json
+{
+  "mcpServers": {
+    "webflow": {
+      "url": "https://mcp.webflow.com/mcp",
+      "type": "streamable-http",
+      "trust": true
+    }
+  }
+}
+```
+
+If your MCP provider's OAuth discovery/registration does not conform to the
+automatic flow, you can fall back to the `mcp-remote` stdio bridge as a
+workaround:
+
+```json
+{
+  "mcpServers": {
+    "webflow": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://mcp.webflow.com/mcp"],
+      "type": "stdio",
+      "trust": true
+    }
+  }
+}
+```
 
 **Tools not appearing:**
 

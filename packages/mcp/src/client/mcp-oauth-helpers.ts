@@ -27,6 +27,15 @@ import { hasNetworkTransport } from './mcp-discovery-helpers.js';
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 
 /**
+ * Per-server in-flight OAuth guard. Prevents duplicate concurrent browser
+ * OAuth flows for the same server name, which would otherwise each open a new
+ * browser tab. The guard is scoped to interactive browser authentication only
+ * (the `handleAutomaticOAuth` path); silent token read/refresh in
+ * `getValidToken()` is unaffected.
+ */
+const inFlightAuthentications = new Map<string, Promise<boolean>>();
+
+/**
  * Returns a non-empty array of scopes, treating empty/missing as no scopes.
  */
 function resolveScopes(scopes: string[] | undefined): string[] {
@@ -77,9 +86,56 @@ export function extractWWWAuthenticateHeader(
 }
 
 /**
+ * Detect deprecated SSE endpoint rejections (e.g. "SSE is no longer
+ * supported, use https://mcp.example.com/mcp") and extract the suggested
+ * replacement URL if present.
+ *
+ * @returns The suggested replacement URL, or an empty string if the
+ * deprecation signal was detected but no URL was embedded, or null if no
+ * deprecation signal was found.
+ */
+export function detectDeprecatedSSEEndpoint(
+  errorString: string,
+): string | null {
+  const lower = errorString.toLowerCase();
+  if (!lower.includes('sse is no longer supported')) return null;
+
+  // Try to extract a URL from the error message
+  const urlMatch = errorString.match(/https?:\/\/[^\s"'<>]+/);
+  return urlMatch ? urlMatch[0] : '';
+}
+
+/**
  * Handle automatic OAuth discovery and authentication for a server.
+ * Concurrent calls for the same server name reuse a single in-progress
+ * authentication flow to avoid opening multiple browser tabs.
  */
 export async function handleAutomaticOAuth(
+  mcpServerName: string,
+  mcpServerConfig: MCPServerConfig,
+  wwwAuthenticate: string,
+): Promise<boolean> {
+  const existing = inFlightAuthentications.get(mcpServerName);
+  if (existing) {
+    debugLogger.log(
+      `'${mcpServerName}' OAuth already in progress, reusing existing flow`,
+    );
+    return existing;
+  }
+
+  const promise = doHandleAutomaticOAuth(
+    mcpServerName,
+    mcpServerConfig,
+    wwwAuthenticate,
+  ).finally(() => {
+    inFlightAuthentications.delete(mcpServerName);
+  });
+
+  inFlightAuthentications.set(mcpServerName, promise);
+  return promise;
+}
+
+async function doHandleAutomaticOAuth(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   wwwAuthenticate: string,
@@ -198,6 +254,7 @@ export async function retryWithOAuth(
     return;
   }
 
+  // 'http' and 'streamable-http' both use StreamableHTTPClientTransport
   try {
     const { StreamableHTTPClientTransport } = await import(
       '@modelcontextprotocol/sdk/client/streamableHttp.js'
