@@ -112,6 +112,87 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
       (b) => b.type === 'thinking',
     ) as ThinkingBlock;
     expect(final.thought).toBe('First part here');
+    // No signature_delta in this stream, so the final chunk carries no signature.
+    expect(final.signature).toBeUndefined();
+  });
+
+  it('should attach signature to accumulated thinking at content_block_stop @issue:1723', async () => {
+    const mockSignature = 'sig-accumulated-123';
+    const mockStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'thinking', thinking: '' },
+        };
+        yield {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'thinking_delta', thinking: 'Analyzing' },
+        };
+        yield {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'thinking_delta', thinking: ' the data' },
+        };
+        yield {
+          type: 'signature_delta',
+          index: 0,
+          delta: { type: 'signature_delta', signature: mockSignature },
+        };
+        yield {
+          type: 'content_block_stop',
+          index: 0,
+          content_block: {
+            type: 'thinking',
+            thinking: '',
+            signature: mockSignature,
+          },
+        };
+      },
+    };
+
+    mockMessagesCreate.mockResolvedValue(mockStream);
+
+    const messages: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Think deeply' }],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(
+      buildCallOptions(messages),
+    );
+
+    const chunks: IContent[] = [];
+    for await (const chunk of generator) {
+      chunks.push(chunk);
+    }
+
+    const thinkingChunks = chunks.filter((c) =>
+      c.blocks.some((b) => b.type === 'thinking'),
+    );
+
+    // 2 deltas + 1 content_block_stop = 3 thinking chunks
+    expect(thinkingChunks.length).toBe(3);
+
+    const delta1 = thinkingChunks[0].blocks.find(
+      (b) => b.type === 'thinking',
+    ) as ThinkingBlock;
+    expect(delta1.thought).toBe('Analyzing');
+
+    const delta2 = thinkingChunks[1].blocks.find(
+      (b) => b.type === 'thinking',
+    ) as ThinkingBlock;
+    expect(delta2.thought).toBe('Analyzing the data');
+
+    const final = thinkingChunks[2].blocks.find(
+      (b) => b.type === 'thinking',
+    ) as ThinkingBlock;
+    // The final chunk carries both the accumulated text AND the signature.
+    expect(final.thought).toBe('Analyzing the data');
+    expect(final.signature).toBe(mockSignature);
   });
 
   it('should emit thinking block at content_block_stop even with zero deltas', async () => {
@@ -236,8 +317,12 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     ) as ThinkingBlock;
     expect(finalThinking.thought).toBe('Thinking part 1');
 
-    // Verify text content
-    expect(textChunks[0].blocks[0]).toMatchObject({ text: 'Hello ' });
-    expect(textChunks[1].blocks[0]).toMatchObject({ text: 'world' });
+    // Verify text content (use find for robustness against future block-packing changes)
+    expect(textChunks[0].blocks.find((b) => b.type === 'text')).toMatchObject({
+      text: 'Hello ',
+    });
+    expect(textChunks[1].blocks.find((b) => b.type === 'text')).toMatchObject({
+      text: 'world',
+    });
   });
 });
