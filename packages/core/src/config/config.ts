@@ -13,6 +13,7 @@ import { ActivateSkillTool } from '@vybestack/llxprt-code-tools/tools/activate-s
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { CoreSkillServiceAdapter } from '../tools-adapters/CoreSkillServiceAdapter.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import { getErrorMessage } from '../utils/errors.js';
 
 import type { AgentClientContract } from '../core/clientContract.js';
 import { HookSystem } from '../hooks/hookSystem.js';
@@ -109,6 +110,8 @@ import type { ShellExecutionConfig } from '../services/shellExecutionService.js'
 import type { ToolSchedulerContract } from '../core/toolSchedulerContract.js';
 
 export class Config extends ConfigBase {
+  private static readonly logger = new DebugLogger('llxprt:config');
+
   constructor(params: ConfigParameters) {
     super();
     applyConfigParams(this as unknown as ConfigConstructorTarget, params);
@@ -782,12 +785,17 @@ export class Config extends ConfigBase {
     if (this.mcpDiscoveryPromise !== undefined) {
       try {
         await this.mcpDiscoveryPromise;
-      } catch {
-        // Discovery may reject due to refreshMcpContext errors; swallow
-        // so that stop() cleanup still runs and no server processes leak.
+      } catch (error) {
+        Config.logger.warn(
+          `MCP discovery rejected during dispose: ${getErrorMessage(error)}`,
+        );
       }
     }
+    // Issue #2325: Extension server discoveries fired by startExtension are
+    // tracked by whenDiscoverySettled(). Await it to avoid tearing down
+    // clients mid-connection.
     if (this.mcpClientManager !== undefined) {
+      await this.mcpClientManager.whenDiscoverySettled();
       await this.mcpClientManager.stop();
     }
   }
