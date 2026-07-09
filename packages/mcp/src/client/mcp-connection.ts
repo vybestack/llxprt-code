@@ -114,16 +114,11 @@ function throwConnectionError(mcpServerName: string, error: unknown): never {
       deprecatedUrl !== '' ? deprecatedUrl : '(check your MCP provider docs)';
     throw new Error(
       `MCP server '${mcpServerName}' is configured with an SSE endpoint that is no longer supported by the server.
-` +
-        `The server recommends switching to a Streamable HTTP endpoint.
-` +
-        `Update your configuration to use:
-` +
-        `  "url": "${suggestedUrl}",
-` +
-        `  "type": "streamable-http"
-` +
-        `(or "type": "http") instead of the SSE endpoint.`,
+The server recommends switching to a Streamable HTTP endpoint.
+Update your configuration to use:
+  "url": "${suggestedUrl}",
+  "type": "streamable-http"
+(or "type": "http") instead of the SSE endpoint.`,
     );
   }
 

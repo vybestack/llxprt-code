@@ -212,7 +212,7 @@ describe('connectToMcpServer with OAuth', () => {
       expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
     });
 
-    it.each(['http', 'streamable-http'])(
+    it.each(['http', 'streamable-http'] as const)(
       'should use HTTP transport for url + type:%s',
       async (type) => {
         const serverUrl = 'http://test-server.com/mcp';
@@ -232,7 +232,7 @@ describe('connectToMcpServer with OAuth', () => {
         await connectToMcpServer(
           '0.0.1',
           'test-server',
-          { url: serverUrl, type: type as 'http' | 'streamable-http' },
+          { url: serverUrl, type },
           false,
           workspaceContext,
         );
@@ -278,7 +278,7 @@ describe('connectToMcpServer with OAuth', () => {
           false,
           workspaceContext,
         ),
-      ).rejects.toThrow('Invalid configuration');
+      ).rejects.toThrow(/Invalid configuration/);
     });
 
     it('should throw error for command-based config when connect fails with 401 (no OAuth retry for stdio)', async () => {
