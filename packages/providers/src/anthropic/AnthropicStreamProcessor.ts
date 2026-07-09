@@ -53,6 +53,12 @@ let toolCallSequence = 0;
 
 /**
  * #1723: Builds incremental IContent chunks for text and thinking deltas.
+ *
+ * Thinking chunks carry the ACCUMULATED thinking text (not just the delta
+ * fragment) so downstream consumers can render progressive thinking content
+ * in real-time. The content_block_stop event still emits a final complete
+ * block with the signature; consumers that dedup by exact text match will
+ * treat the final block as an update rather than a duplicate.
  */
 function buildDeltaContents(deltaResult: {
   textDelta?: string;
