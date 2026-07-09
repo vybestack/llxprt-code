@@ -212,57 +212,34 @@ describe('connectToMcpServer with OAuth', () => {
       expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
     });
 
-    it('should use HTTP transport for url + type:http', async () => {
-      const serverUrl = 'http://test-server.com/http';
+    it.each(['http', 'streamable-http'])(
+      'should use HTTP transport for url + type:%s',
+      async (type) => {
+        const serverUrl = 'http://test-server.com/mcp';
 
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
-        new Error('401 Unauthorized'),
-      );
+        vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+          new Error('401 Unauthorized'),
+        );
 
-      let capturedTransport: TransportWithInternals | undefined;
-      vi.mocked(mockedClient.connect).mockImplementationOnce(
-        async (transport) => {
-          capturedTransport = transport;
-          return Promise.resolve();
-        },
-      );
+        let capturedTransport: TransportWithInternals | undefined;
+        vi.mocked(mockedClient.connect).mockImplementationOnce(
+          async (transport) => {
+            capturedTransport = transport;
+            return Promise.resolve();
+          },
+        );
 
-      await connectToMcpServer(
-        '0.0.1',
-        'test-server',
-        { url: serverUrl, type: 'http' },
-        false,
-        workspaceContext,
-      );
+        await connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          { url: serverUrl, type: type as 'http' | 'streamable-http' },
+          false,
+          workspaceContext,
+        );
 
-      expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
-    });
-
-    it('should use HTTP transport for url + type:streamable-http (alias)', async () => {
-      const serverUrl = 'http://test-server.com/mcp';
-
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
-        new Error('401 Unauthorized'),
-      );
-
-      let capturedTransport: TransportWithInternals | undefined;
-      vi.mocked(mockedClient.connect).mockImplementationOnce(
-        async (transport) => {
-          capturedTransport = transport;
-          return Promise.resolve();
-        },
-      );
-
-      await connectToMcpServer(
-        '0.0.1',
-        'test-server',
-        { url: serverUrl, type: 'streamable-http' },
-        false,
-        workspaceContext,
-      );
-
-      expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
-    });
+        expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
+      },
+    );
 
     it('should use SSE transport for url + type:sse', async () => {
       const serverUrl = 'http://test-server.com/sse';
