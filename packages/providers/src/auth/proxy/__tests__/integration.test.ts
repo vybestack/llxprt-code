@@ -273,7 +273,8 @@ describe('proxy integration (phase 31)', () => {
     expect(getProxyCapabilityToken()).toBeUndefined();
   });
 
-  it('clears capability token when start() fails', async () => {
+  it.skipIf(isWindows)(
+    'clears capability token when start() fails', async () => {
     // @scenario If serverInstance.start() throws (e.g. socket path under a
     // regular file), the capability token must be cleared to prevent a stale
     // token from being reused by a subsequent proxy session.
@@ -285,7 +286,8 @@ describe('proxy integration (phase 31)', () => {
       }),
     ).rejects.toThrow(/ENOTDIR|ENOENT|EACCES|EADDRINUSE|EINVAL/i);
     expect(getProxyCapabilityToken()).toBeUndefined();
-  });
+    },
+  );
 
   it.skipIf(isWindows)(
     'creates socket file on server start and removes it on server stop',

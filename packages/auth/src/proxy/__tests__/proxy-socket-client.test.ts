@@ -112,6 +112,7 @@ function createHandshakeCapturingServer(
           } else {
             socket.end(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
           }
+          break;
         }
       }
     });

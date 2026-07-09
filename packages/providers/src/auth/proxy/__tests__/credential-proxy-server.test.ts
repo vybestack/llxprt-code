@@ -1314,8 +1314,11 @@ describe('CredentialProxyServer', () => {
       { op: 'refresh_token', payload: { provider: 'anthropic' } },
     ];
 
+    const results: Array<Record<string, unknown>> = [];
     for (const { op, payload } of mutatingOps) {
-      const response = await client.request(op, payload);
+      results.push(await client.request(op, payload));
+    }
+    for (const response of results) {
       expect(response.ok).toBe(false);
       expect(response.code).toBe('FORBIDDEN');
     }

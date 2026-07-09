@@ -43,10 +43,12 @@ const sandboxSource = Object.values(sandboxSources).join('\n');
     // NOTE: This finds the next top-level `function`/`async function` at a
     // line boundary. It assumes no nested function declarations exist within
     // the target body — currently true for all callers.
-    const nextFn = source.slice(start + 1).search(/\n(?:async )?function /);
-  const end = nextFn === -1 ? undefined : start + 1 + nextFn;
-  return source.substring(start, end);
-}
+    const nextFn = source
+      .slice(start + 1)
+      .search(/\n(?:export )?(?:async )?function /);
+    const end = nextFn === -1 ? undefined : start + 1 + nextFn;
+    return source.substring(start, end);
+  }
 
 describe('Credential Proxy Integration - sandbox.ts', () => {
   describe('R25.1: Proxy Server Created Before Container', () => {
@@ -215,13 +217,13 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       );
     });
 
-    it('returns cleanup wrapper from registerCapabilityEnvCleanup', () => {
+    it('pushCapabilityEnvFile returns cleanup wrapper', () => {
       const fnSection = extractFunctionBody(
         sandboxSource,
-        'registerCapabilityEnvCleanup',
+        'pushCapabilityEnvFile',
       );
       expect(fnSection.length).toBeGreaterThan(0);
-      expect(fnSection).toContain('cleanup');
+      expect(fnSection).toContain('unlinkSync');
       expect(fnSection).toContain('return');
     });
 
@@ -232,10 +234,10 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     });
 
     it('registers env file cleanup in setupCredentialProxy', () => {
-      // The refactored setupCredentialProxy has a single unified
-      // registerCapabilityEnvCleanup call after platform-specific setup.
+      // The refactored setupCredentialProxy has a single
+      // pushCapabilityEnvFile call after platform-specific setup.
       const callCount = (
-        sandboxSource.match(/=\s*registerCapabilityEnvCleanup\(args/g) ?? []
+        sandboxSource.match(/=\s*pushCapabilityEnvFile\(args/g) ?? []
       ).length;
       expect(callCount).toBe(1);
     });

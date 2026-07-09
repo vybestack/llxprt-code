@@ -473,8 +473,7 @@ function pushCapabilityEnvFile(
   // guarantees the restrictive permissions regardless of umask.
   const fd = fs.openSync(envFile, 'w', 0o600);
   try {
-    fs.writeSync(fd, `LLXPRT_CAPABILITY_TOKEN=${capabilityToken}
-`);
+    fs.writeSync(fd, `LLXPRT_CAPABILITY_TOKEN=${capabilityToken}\n`);
     fs.fchmodSync(fd, 0o600);
   } catch (writeErr) {
     try {
@@ -506,24 +505,6 @@ function pushCapabilityEnvFile(
     } catch {
       // file may already be removed
     }
-  };
-}
-
-/** Creates and registers the env file cleanup, returning a wrapper that also
- *  removes the process-level listeners so they don't accumulate. */
-function registerCapabilityEnvCleanup(
-  args: string[],
-  resolvedTmpdir: string,
-): (() => void) | undefined {
-  const cleanup = pushCapabilityEnvFile(args, resolvedTmpdir);
-  if (!cleanup) return undefined;
-
-  // Process-level listener registration is handled by wireCleanupHandlers
-  // via the composed cleanup function. This wrapper is returned so
-  // wireCleanupHandlers can register it on exit/SIGINT/SIGTERM/close.
-
-  return () => {
-    cleanup();
   };
 }
 
@@ -606,10 +587,17 @@ export async function setupCredentialProxy(
         entrypointPrefixes.push(prefix);
       }
     }
-    envFileCleanup = registerCapabilityEnvCleanup(args, resolvedTmpdir);
+    envFileCleanup = pushCapabilityEnvFile(args, resolvedTmpdir);
   } catch (err) {
     envFileCleanup?.();
     credentialProxyBridgeCleanup?.();
+    // Also clean up bridge resources if assignment hasn't happened yet
+    if (
+      credentialProxyBridgeCleanup === undefined &&
+      credentialProxyBridgeResult?.cleanup
+    ) {
+      credentialProxyBridgeResult.cleanup();
+    }
     throw err;
   }
 

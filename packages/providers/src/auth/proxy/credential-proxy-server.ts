@@ -231,7 +231,12 @@ export class CredentialProxyServer {
         return;
       }
 
-      this.processFrames(socket, frames, state, handshakeState);
+      try {
+        this.processFrames(socket, frames, state, handshakeState);
+      } catch {
+        this.auditLog('ERROR', state.id, 'process_frames_error');
+        socket.destroy();
+      }
     });
 
     socket.on('close', () => {

@@ -37,10 +37,7 @@ function isProxyResponseFrame(
   if (typeof frame.ok !== 'boolean') return false;
   if (frame.code !== undefined && typeof frame.code !== 'string') return false;
   if (frame.error !== undefined && typeof frame.error !== 'string') return false;
-  if (
-    frame.retryAfter !== undefined &&
-    typeof frame.retryAfter !== 'number'
-  )
+  if (frame.retryAfter !== undefined && typeof frame.retryAfter !== 'number')
     return false;
   if (
     frame.data !== undefined &&
@@ -282,6 +279,8 @@ export class ProxySocketClient {
         pending.resolve(frame);
       } else {
         pending.reject(new Error('Malformed response from proxy'));
+        this.destroy('Malformed response from proxy');
+        return;
       }
     }
   }
