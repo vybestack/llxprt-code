@@ -813,7 +813,7 @@ describe('CredentialProxyServer', () => {
 
     const badClient = new ProxySocketClient(socketPath, 'wrong-token');
     await expect(badClient.ensureConnected()).rejects.toThrow(
-      /authentication failed|version mismatch|connection lost/i,
+      /authentication failed/i,
     );
     badClient.close();
   });
@@ -831,7 +831,7 @@ describe('CredentialProxyServer', () => {
 
     const tokenlessClient = new ProxySocketClient(socketPath);
     await expect(tokenlessClient.ensureConnected()).rejects.toThrow(
-      /authentication failed|version mismatch|connection lost/i,
+      /authentication failed/i,
     );
     tokenlessClient.close();
   });
@@ -1056,7 +1056,11 @@ describe('CredentialProxyServer', () => {
     });
 
     expect(response.ok).toBe(true);
-    expect(response.data).toStrictEqual({});
+    expect(response.data!).toStrictEqual({
+      bucket: 'default',
+      requestCount: 0,
+      percentage: 0,
+    });
   });
 
   /**

@@ -72,7 +72,7 @@ describe('ProxySocketClient', () => {
   afterEach(async () => {
     client?.close();
     await new Promise<void>((resolve) => {
-      if (server?.listening === true) {
+      if (server !== undefined) {
         server.close(() => resolve());
       } else {
         resolve();

@@ -340,7 +340,8 @@ export class CredentialProxyServer {
   /**
    * Emits a structured JSON log line to stderr for security audit purposes.
    * Never includes actual secrets — only operation names and non-sensitive
-   * identifiers.
+   * identifiers. Wrapped in try/catch so a full or closed stderr buffer
+   * never crashes the proxy.
    */
   private auditLog(
     level: 'INFO' | 'WARN' | 'ERROR',
@@ -358,7 +359,11 @@ export class CredentialProxyServer {
     if (details) {
       Object.assign(entry, details);
     }
-    process.stderr.write(JSON.stringify(entry) + '\n');
+    try {
+      process.stderr.write(JSON.stringify(entry) + '\n');
+    } catch {
+      // stderr may be closed or full — audit logging must never crash the proxy
+    }
   }
 
   private asRecord(value: unknown): Record<string, unknown> {
@@ -443,6 +448,24 @@ export class CredentialProxyServer {
     }
   }
 
+  /**
+   * Returns true if the connection is a sandbox connection and sends a
+   * FORBIDDEN error response with an audit-log entry. Centralizes the
+   * sandbox restriction check so logging stays consistent across handlers.
+   */
+  private rejectIfSandbox(
+    socket: net.Socket,
+    id: string,
+    state: ConnectionState,
+    operation: string,
+    reason: string,
+  ): boolean {
+    if (!state.isSandboxConnection) return false;
+    this.auditLog('WARN', state.id, operation, { status: 'blocked_sandbox' });
+    this.sendError(socket, id, 'FORBIDDEN', reason);
+    return true;
+  }
+
   private async handleGetToken(
     socket: net.Socket,
     id: string,
@@ -486,18 +509,7 @@ export class CredentialProxyServer {
     payload: Record<string, unknown>,
     state: ConnectionState,
   ): Promise<void> {
-    if (state.isSandboxConnection) {
-      this.auditLog('WARN', state.id, 'save_token', {
-        status: 'blocked_sandbox',
-      });
-      this.sendError(
-        socket,
-        id,
-        'FORBIDDEN',
-        'Sandbox connections cannot modify tokens',
-      );
-      return;
-    }
+    if (this.rejectIfSandbox(socket, id, state, 'save_token', 'Sandbox connections cannot modify tokens')) return;
     const provider = payload.provider as string | undefined;
     const tokenData = payload.token as Record<string, unknown> | undefined;
     const bucket = payload.bucket as string | undefined;
@@ -533,18 +545,7 @@ export class CredentialProxyServer {
     payload: Record<string, unknown>,
     state: ConnectionState,
   ): Promise<void> {
-    if (state.isSandboxConnection) {
-      this.auditLog('WARN', state.id, 'remove_token', {
-        status: 'blocked_sandbox',
-      });
-      this.sendError(
-        socket,
-        id,
-        'FORBIDDEN',
-        'Sandbox connections cannot remove tokens',
-      );
-      return;
-    }
+    if (this.rejectIfSandbox(socket, id, state, 'remove_token', 'Sandbox connections cannot remove tokens')) return;
     const provider = payload.provider as string | undefined;
     if (!provider) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
@@ -684,7 +685,11 @@ export class CredentialProxyServer {
       this.auditLog('WARN', state.id, 'get_bucket_stats', {
         status: 'blocked_sandbox',
       });
-      this.sendOk(socket, id, {});
+      this.sendOk(socket, id, {
+        bucket: bucket ?? 'default',
+        requestCount: 0,
+        percentage: 0,
+      });
       return;
     }
     const stats = await this.options.tokenStore.getBucketStats(
