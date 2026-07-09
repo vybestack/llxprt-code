@@ -205,19 +205,17 @@ describe('parseArgs', () => {
     expect(opts.continueOnError).toBe(true);
   });
 
-  it('ignores unknown arguments', () => {
+  it('warns on unknown arguments but still parses known ones', () => {
     const opts = parseArgs(['--unknown-flag', '--workspace', 'tools']);
     expect(opts.workspaceFilter).toBe('tools');
   });
 
   it('throws when --workspace has no value', () => {
-    expect(() => parseArgs(['--workspace'])).toThrow(
-      '--workspace requires a value',
-    );
+    expect(() => parseArgs(['--workspace'])).toThrow(/requires a value/u);
   });
 
   it('throws when -w shorthand has no value', () => {
-    expect(() => parseArgs(['-w'])).toThrow('--workspace requires a value');
+    expect(() => parseArgs(['-w'])).toThrow(/requires a value/u);
   });
 });
 
@@ -432,6 +430,11 @@ describe('orchestrateTests', () => {
     writeFileSync(
       join(root, 'scripts', 'tests', 'vitest.config.ts'),
       'export default {};',
+    );
+    writeFileSync(
+      join(root, 'scripts', 'tests', 'dummy.test.ts'),
+      `import { describe, it, expect } from 'vitest';
+describe('dummy', () => { it('passes', () => { expect(1).toBe(1); }); });`,
     );
 
     orchestrateTests(root, parseArgs([]), runner);

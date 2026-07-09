@@ -86,6 +86,7 @@ export interface TestSummary {
   passed: number;
   failed: number;
   skipped: number;
+  skippedWorkspaces: string[];
   durationMs: number;
 }
 
@@ -100,8 +101,25 @@ interface PackageJson {
 }
 
 function readPackageJson(filePath: string): PackageJson {
-  const raw = readFileSync(filePath, 'utf8');
-  return JSON.parse(raw) as PackageJson;
+  let raw: string;
+  try {
+    raw = readFileSync(filePath, 'utf8');
+  } catch (error) {
+    throw new Error(
+      `Failed to read package.json at ${filePath}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  try {
+    return JSON.parse(raw) as PackageJson;
+  } catch (error) {
+    throw new Error(
+      `Failed to parse package.json at ${filePath} (invalid JSON): ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
 }
 
 export function discoverWorkspaces(rootDir: string): WorkspaceInfo[] {
@@ -165,8 +183,9 @@ export function parseArgs(argv: readonly string[]): TestOptions {
       options.skipPretest = true;
     } else if (arg === '--continue-on-error' || arg === '-c') {
       options.continueOnError = true;
+    } else {
+      console.warn(`Warning: unknown argument "${arg}" — ignoring`);
     }
-    // Unknown arguments are silently ignored
 
     i++;
   }
@@ -266,11 +285,14 @@ export function orchestrateTests(
     : allWorkspaces;
 
   const failedWorkspaces = new Set<string>();
-  let skippedCount = 0;
+  const skippedWorkspaces: string[] = [];
 
   for (const workspace of workspaces) {
     if (failedWorkspaces.size > 0) {
-      break;
+      // A prior workspace failed in fail-fast mode; record this workspace
+      // as skipped so it appears in the summary output.
+      skippedWorkspaces.push(workspace.name);
+      continue;
     }
 
     const shouldRunPretest = workspace.hasPretest && !options.skipPretest;
@@ -286,7 +308,7 @@ export function orchestrateTests(
 
     if (skipTest && !options.continueOnError) {
       failedWorkspaces.add(workspace.name);
-      skippedCount++;
+      skippedWorkspaces.push(workspace.name);
     }
 
     if (shouldRunTest) {
@@ -313,7 +335,7 @@ export function orchestrateTests(
     results,
     workspaces.length,
     Date.now() - startTime,
-    skippedCount,
+    skippedWorkspaces,
   );
 }
 
@@ -364,7 +386,7 @@ function buildSummary(
   results: TestPhaseResult[],
   totalWorkspaces: number,
   durationMs: number,
-  skipped: number,
+  skippedWorkspaces: string[],
 ): TestSummary {
   const passed = results.filter((r) => r.success).length;
   const failed = results.filter((r) => !r.success).length;
@@ -374,7 +396,8 @@ function buildSummary(
     totalWorkspaces,
     passed,
     failed,
-    skipped,
+    skipped: skippedWorkspaces.length,
+    skippedWorkspaces,
     durationMs,
   };
 }
@@ -401,10 +424,18 @@ export function formatSummary(summary: TestSummary): string {
     );
   }
 
+  if (summary.skippedWorkspaces.length > 0) {
+    lines.push('  Skipped:');
+    for (const name of summary.skippedWorkspaces) {
+      lines.push(`    - ${name}`);
+    }
+  }
+
   lines.push('─────────────────────────────────────────────');
   lines.push(
     `  Workspaces: ${summary.totalWorkspaces}  ` +
       `Passed: ${summary.passed}  Failed: ${summary.failed}  ` +
+      `Skipped: ${summary.skipped}  ` +
       `Duration: ${durationLabel}`,
   );
 
