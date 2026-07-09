@@ -616,6 +616,10 @@ describe('McpClientManager', () => {
         manager.startExtension(makeTestExtension()),
       ).resolves.toBeUndefined();
       await expect(manager.whenDiscoverySettled()).resolves.toBeUndefined();
+      // connect was attempted but discover was never reached
+      expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
+      expect(mockedMcpClient.discover).not.toHaveBeenCalled();
+      expect(manager.getDiscoveryState()).toBe(MCPDiscoveryState.COMPLETED);
     });
   });
 });
