@@ -232,7 +232,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     options: NormalizedGenerateChatOptions,
     patchedContent: IContent[],
     invocationEphemerals: Record<string, unknown>,
-    serverSideParentActive: boolean,
+    serverSideParentActive: boolean = false,
   ): ResponsesInputItem[] {
     const includeReasoningInContextSetting =
       (invocationEphemerals['reasoning.includeInContext'] as

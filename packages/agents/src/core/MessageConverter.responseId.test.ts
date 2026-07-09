@@ -84,7 +84,7 @@ describe('Issue 207: metadata.id carried as responseId @issue:207', () => {
     expect(getResponsesStored(response)).toBe(true);
   });
 
-  it('does not set responsesStored when metadata.responsesStored is absent', () => {
+  it('sets responseId but not responsesStored when only metadata.id is present', () => {
     const icontent: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'Hello.' }],
