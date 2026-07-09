@@ -70,7 +70,7 @@ async function captureRequestBody(
       _input: RequestInfo | URL,
       init?: RequestInit,
     ): Promise<Response> => {
-      if (init?.body != null) {
+      if (init?.body !== null && init?.body !== undefined) {
         capturedBody =
           typeof init.body === 'string'
             ? init.body
