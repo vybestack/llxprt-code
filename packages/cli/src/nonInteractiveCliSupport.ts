@@ -399,7 +399,7 @@ function filterQuietText(text: string, context: StreamConsumerContext): string {
   if (result.blocked) {
     return '';
   }
-  return typeof result.filtered === 'string' ? result.filtered : text;
+  return typeof result.filtered === 'string' ? result.filtered : '';
 }
 
 interface StreamState {
