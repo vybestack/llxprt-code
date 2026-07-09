@@ -10,7 +10,7 @@ import type {
   RuntimeContentGeneratorFactory,
   RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core';
-import { ProviderContentGenerator } from '@vybestack/llxprt-code-providers';
+import { ProviderContentGenerator } from '../ProviderContentGenerator.js';
 import { configureProviderRuntimeFactories } from '../composition/index.js';
 import {
   activateIsolatedRuntimeContext,

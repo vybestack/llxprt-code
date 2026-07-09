@@ -31,7 +31,9 @@ function createStubProvider(name: string): IProvider {
 
 describe('ProviderManager runtime context', () => {
   afterEach(() => {
-    const fallback = createProviderRuntimeContext();
+    const fallback = createProviderRuntimeContext({
+      settingsService: new SettingsService(),
+    });
     setActiveProviderRuntimeContext(fallback);
   });
 
