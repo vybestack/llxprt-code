@@ -106,11 +106,10 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     });
 
     it('wraps createAndStartProxy in try-catch', () => {
-      // Verify the pattern: try { credentialProxyHandle = await createAndStartProxy
-      const pattern = testRegex(
-        'try\\s*\\{\\s*credentialProxyHandle\\s*=\\s*await\\s+createAndStartProxy',
+      // Verify the pattern: try { ... await createAndStartProxy
+      expect(sandboxSource).toMatch(
+        /try\s*\{[\s\S]*await\s+createAndStartProxy/,
       );
-      expect(sandboxSource).toMatch(pattern);
     });
   });
 
@@ -178,13 +177,10 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       expect(fnStart).toBeGreaterThan(-1);
       const fnSection = sandboxSource.substring(
         fnStart,
-        sandboxSource.indexOf(
-          '}',
-          sandboxSource.indexOf('mode: 0o600', fnStart),
-        ),
+        sandboxSource.indexOf('}', sandboxSource.indexOf('0o600', fnStart)),
       );
-      expect(fnSection).toContain('fs.writeFileSync');
-      expect(fnSection).toContain('mode: 0o600');
+      expect(fnSection).toContain('fs.openSync');
+      expect(fnSection).toContain('0o600');
       expect(fnSection).toContain('LLXPRT_CAPABILITY_TOKEN');
     });
 

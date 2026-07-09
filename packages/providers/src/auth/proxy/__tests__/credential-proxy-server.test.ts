@@ -35,6 +35,7 @@ const isWindows = process.platform === 'win32';
 class InMemoryTokenStore implements TokenStore {
   private tokens: Map<string, OAuthToken> = new Map();
   private locks: Set<string> = new Set();
+  private bucketStats: Map<string, BucketStats> = new Map();
 
   private key(provider: string, bucket?: string): string {
     return bucket ? `${provider}:${bucket}` : provider;
@@ -77,8 +78,6 @@ class InMemoryTokenStore implements TokenStore {
     }
     return buckets;
   }
-
-  private bucketStats: Map<string, BucketStats> = new Map();
 
   async getBucketStats(
     provider: string,

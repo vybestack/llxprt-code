@@ -194,7 +194,7 @@ export class ProxySocketClient {
         );
       }
       throw new Error(
-        'Version mismatch: ' + (response.error ?? 'unknown error'),
+        'Handshake failed: ' + (response.error ?? 'unknown error'),
       );
     }
     this.handshakeComplete = true;

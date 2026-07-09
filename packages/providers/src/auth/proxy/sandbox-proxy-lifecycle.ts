@@ -220,12 +220,14 @@ export async function stopProxy(): Promise<void> {
     return;
   }
 
-  await serverInstance.stop();
-  serverInstance = undefined;
-
-  delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-  actualSocketPath = undefined;
-  actualCapabilityToken = undefined;
+  try {
+    await serverInstance.stop();
+  } finally {
+    serverInstance = undefined;
+    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+    actualSocketPath = undefined;
+    actualCapabilityToken = undefined;
+  }
 }
 
 /**

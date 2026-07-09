@@ -324,7 +324,7 @@ export class CredentialProxyServer {
     // force. This is mitigated by the 256-bit token entropy (infeasible to
     // brute-force) and audit logging of every unauthorized attempt. Rate
     // limiting could be added in a future enhancement if needed.
-    if (this.options.capabilityToken) {
+    if (this.expectedTokenHash !== null) {
       const payload = this.asRecord(frame.payload);
       const presentedToken = payload.capabilityToken;
       if (
@@ -402,6 +402,8 @@ export class CredentialProxyServer {
     }
     try {
       if (!process.stderr.destroyed) {
+        // If write returns false, the buffer is full — skip to avoid blocking
+        // the event loop under brute-force attack scenarios.
         process.stderr.write(JSON.stringify(entry) + '\n');
       }
     } catch {

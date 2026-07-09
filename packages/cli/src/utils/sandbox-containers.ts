@@ -459,12 +459,20 @@ function pushCapabilityEnvFile(
   const capabilityToken = getProxyCapabilityToken();
   if (capabilityToken === undefined) return undefined;
   const envFile = path.join(resolvedTmpdir, `.capability-env-${process.pid}`);
-  fs.writeFileSync(
-    envFile,
-    `LLXPRT_CAPABILITY_TOKEN=${capabilityToken}
+  // Use openSync with explicit mode for defense-in-depth: writeFileSync applies
+  // the mode option but is subject to umask masking. openSync + fchmodSync
+  // guarantees the restrictive permissions regardless of umask.
+  const fd = fs.openSync(envFile, 'w', 0o600);
+  try {
+    fs.writeSync(
+      fd,
+      `LLXPRT_CAPABILITY_TOKEN=${capabilityToken}
 `,
-    { mode: 0o600 },
-  );
+    );
+    fs.fchmodSync(fd, 0o600);
+  } finally {
+    fs.closeSync(fd);
+  }
   args.push('--env-file', envFile);
   return () => {
     try {
@@ -475,22 +483,30 @@ function pushCapabilityEnvFile(
   };
 }
 
-/** Creates and registers the env file cleanup, returning the cleanup function. */
+/** Creates and registers the env file cleanup, returning a wrapper that also
+ *  removes the process-level listeners so they don't accumulate. */
 function registerCapabilityEnvCleanup(
   args: string[],
   resolvedTmpdir: string,
 ): (() => void) | undefined {
   const cleanup = pushCapabilityEnvFile(args, resolvedTmpdir);
-  if (cleanup) {
-    process.on('exit', cleanup);
-    process.on('SIGINT', cleanup);
-    process.on('SIGTERM', cleanup);
-  }
-  return cleanup;
+  if (!cleanup) return undefined;
+
+  process.on('exit', cleanup);
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
+
+  return () => {
+    cleanup();
+    process.off('exit', cleanup);
+    process.off('SIGINT', cleanup);
+    process.off('SIGTERM', cleanup);
+  };
 }
 
 /** Sets up the macOS credential proxy bridge based on container command. */
 async function setupMacOSCredProxyBridge(
+  args: string[],
   config: SandboxConfig,
   socketPath: string,
   reservedTunnelPorts: Set<number>,
@@ -498,7 +514,7 @@ async function setupMacOSCredProxyBridge(
   switch (config.command) {
     case 'podman':
       return setupCredentialProxyPodmanMacOS(
-        [],
+        args,
         socketPath,
         SSH_TUNNEL_POLL_TIMEOUT_MS,
         {
@@ -509,7 +525,7 @@ async function setupMacOSCredProxyBridge(
         },
       );
     case 'docker':
-      return setupCredentialProxyDockerMacOS([], socketPath);
+      return setupCredentialProxyDockerMacOS(args, socketPath);
     default:
       return undefined;
   }
@@ -547,6 +563,7 @@ export async function setupCredentialProxy(
   // @plan:PLAN-20250214-CREDPROXY.P34 R3.6: Pass socket path to container via env var
   if (os.platform() === 'darwin') {
     credentialProxyBridgeResult = await setupMacOSCredProxyBridge(
+      args,
       config,
       socketPath,
       reservedTunnelPorts,
