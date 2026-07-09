@@ -108,7 +108,18 @@ export class SkillManager {
 
   /**
    * Discovers skills from built-in, extension, user and workspace locations.
-   * Precedence: Built-in (lowest) -> Extensions -> User -> Workspace (highest).
+   *
+   * Load order (later loads win for same-named skills):
+   * 1. Built-in
+   * 2. Extensions
+   * 3. User `~/.agents/skills/` (cross-tool standard, https://agentskills.io)
+   * 4. User `<OS-standard-config-dir>/skills/` (tool-specific, wins over #3)
+   * 5. Workspace `.agents/skills/` (wins over all user tiers)
+   * 6. Workspace `.llxprt/skills/` (highest precedence)
+   *
+   * Rationale: tool-specific paths are more deliberate than cross-tool
+   * standard paths, so they take precedence within a tier. The overall
+   * Workspace > User > Extension > Built-in precedence is preserved.
    */
   async discoverSkills(
     storage: Storage,
@@ -137,14 +148,36 @@ export class SkillManager {
       }
     }
 
-    // 3. User skills
+    // 3. User skills — .agents/skills first (lower), then .llxprt/skills (wins)
+    // .agents/skills is the cross-tool standard (~/.agents/skills/); .llxprt/skills
+    // is the OS-standard config dir (e.g. ~/.config/llxprt-code/skills on Linux).
+    // The .agents path may throw if os.homedir() is unavailable (fail-closed
+    // security design); we catch and skip so the rest of discovery proceeds.
+    let userAgentSkills: SkillDefinition[] = [];
+    try {
+      userAgentSkills = await loadSkillsFromDir(
+        Storage.getUserAgentSkillsDir(),
+        'user',
+      );
+    } catch (err) {
+      debugLogger.warn(
+        `Skipping user .agents/skills discovery: ${(err as Error).message}`,
+      );
+    }
+    this.addSkillsWithPrecedence(userAgentSkills);
     const userSkills = await loadSkillsFromDir(
       Storage.getUserSkillsDir(),
       'user',
     );
     this.addSkillsWithPrecedence(userSkills);
 
-    // 4. Workspace skills (highest precedence)
+    // 4. Workspace skills (highest precedence) — .agents/skills first (lower),
+    // then .llxprt/skills (wins).
+    const projectAgentSkills = await loadSkillsFromDir(
+      storage.getProjectAgentSkillsDir(),
+      'project',
+    );
+    this.addSkillsWithPrecedence(projectAgentSkills);
     const projectSkills = await loadSkillsFromDir(
       storage.getProjectSkillsDir(),
       'project',
