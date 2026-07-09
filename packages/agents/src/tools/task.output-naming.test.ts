@@ -238,6 +238,10 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
           findings: { type: 'string', description: 'bad' },
         } as unknown as Record<string, string>,
       };
+      // The JSON Schema validator (additionalProperties: { type: "string" })
+      // rejects non-string values before our custom validateOutputSpec runs.
+      // The error message references the param path in the form
+      // "expected_outputs/findings must be string".
       expect(() => tool.build(params)).toThrow(
         /expected_outputs\/findings must be string/,
       );
