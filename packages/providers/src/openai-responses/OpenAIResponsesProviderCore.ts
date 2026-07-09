@@ -148,8 +148,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       isCodex,
       request,
       includeThinkingInResponse: reasoning.includeThinkingInResponse,
-      responsesStored:
-        stateful && parentId !== undefined && request.store !== false,
+      responsesStored: stateful && parentId !== undefined,
     };
   }
 
@@ -633,9 +632,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       return;
     }
     request.previous_response_id = parentId;
-    if (request.store !== false) {
-      request.store = true;
-    }
+    request.store = true;
   }
 
   private async buildHeaders(
