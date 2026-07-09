@@ -224,6 +224,19 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
 
     expect(thinkingChunks.length).toBe(2);
     expect(textChunks.length).toBe(2);
+
+    // Verify thinking content accumulated correctly
+    const thinkingDelta = thinkingChunks[0].blocks.find(
+      (b) => b.type === 'thinking',
+    ) as ThinkingBlock;
+    expect(thinkingDelta.thought).toBe('Thinking part 1');
+
+    const finalThinking = thinkingChunks[1].blocks.find(
+      (b) => b.type === 'thinking',
+    ) as ThinkingBlock;
+    expect(finalThinking.thought).toBe('Thinking part 1');
+
+    // Verify text content
     expect(textChunks[0].blocks[0]).toMatchObject({ text: 'Hello ' });
     expect(textChunks[1].blocks[0]).toMatchObject({ text: 'world' });
   });

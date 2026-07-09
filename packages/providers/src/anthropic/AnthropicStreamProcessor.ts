@@ -360,7 +360,12 @@ function handleContentBlockDelta(
     logger.debug(
       () => `Thinking delta chunk (${thinkingDelta.thinking.length} chars)`,
     );
-    return { thinkingDelta: currentThinkingBlock.thinking };
+    // Only emit when the delta contributed new text. An empty thinking_delta
+    // (e.g. keep-alive) must not re-emit the previously accumulated text as a
+    // duplicate.
+    if (thinkingDelta.thinking) {
+      return { thinkingDelta: currentThinkingBlock.thinking };
+    }
   } else if (chunk.delta.type === 'signature_delta' && currentThinkingBlock) {
     const signatureDelta = chunk.delta as {
       type: 'signature_delta';

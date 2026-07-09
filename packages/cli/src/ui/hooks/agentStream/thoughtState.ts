@@ -22,10 +22,10 @@ import {
  * allows the UI to grow a single thinking block as deltas stream in rather
  * than creating a new block per chunk.
  *
- * A proper-prefix check (not startsWith) avoids merging two distinct blocks
- * that happen to share a textual prefix: if incoming text equals the last
- * block's text, it is treated as a duplicate (handled by buildThinkingBlock's
- * dedup) rather than an incremental update.
+ * A strict-prefix check (startsWith combined with a length inequality) avoids
+ * merging two distinct blocks that happen to share a textual prefix: if
+ * incoming text equals the last block's text, it is treated as a duplicate
+ * (handled by buildThinkingBlock's dedup) rather than an incremental update.
  */
 function isIncrementalUpdate(
   incomingText: string,
