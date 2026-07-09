@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect } from 'vitest';
+import { vi, describe, it, expect, afterEach } from 'vitest';
 import { McpClientManager } from './mcp-client-manager.js';
 import { McpClient } from './mcp-client.js';
 import { MCPDiscoveryState } from './mcp-client.js';
@@ -28,6 +28,9 @@ vi.mock('./mcp-client.js', () => ({
 }));
 
 describe('McpClientManager', () => {
+  afterEach(() => {
+    vi.mocked(McpClient).mockReset();
+  });
   it('should discover tools from all configured servers', async () => {
     const mockedMcpClient = {
       connect: vi.fn(),
@@ -582,10 +585,7 @@ describe('McpClientManager', () => {
       expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
 
       // Now resolve the connect promise — discovery completes in background.
-      // Use a timeout guard so the test doesn't hang if resolveConnect is lost.
-      const timeout = setTimeout(() => resolveConnect(), 5000);
       resolveConnect();
-      clearTimeout(timeout);
       await manager.whenDiscoverySettled();
     });
 
