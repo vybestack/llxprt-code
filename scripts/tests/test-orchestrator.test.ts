@@ -290,7 +290,7 @@ describe('orchestrateTests', () => {
       },
     ]);
 
-    const opts: TestOptions = { skipPretest: true };
+    const opts: TestOptions = { ...parseArgs([]), skipPretest: true };
     orchestrateTests(root, opts, runner);
     expect(commands).toHaveLength(1);
     expect(commands[0].command).toBe('vitest run');
@@ -360,7 +360,7 @@ describe('orchestrateTests', () => {
       },
     ]);
 
-    const opts: TestOptions = { continueOnError: true };
+    const opts: TestOptions = { ...parseArgs([]), continueOnError: true };
     const summary = orchestrateTests(root, opts, failingForA);
     expect(summary.failed).toBe(1);
     expect(summary.passed).toBeGreaterThanOrEqual(1);
@@ -384,7 +384,10 @@ describe('orchestrateTests', () => {
       },
     ]);
 
-    const opts: TestOptions = { workspaceFilter: 'packages/b' };
+    const opts: TestOptions = {
+      ...parseArgs([]),
+      workspaceFilter: 'packages/b',
+    };
     const summary = orchestrateTests(root, opts, runner);
     expect(summary.totalWorkspaces).toBe(1);
     expect(commands).toHaveLength(1);
@@ -407,7 +410,7 @@ describe('orchestrateTests', () => {
       },
     ]);
 
-    const opts: TestOptions = { workspaceFilter: 'pkg-a' };
+    const opts: TestOptions = { ...parseArgs([]), workspaceFilter: 'pkg-a' };
     const summary = orchestrateTests(root, opts, runner);
     expect(summary.totalWorkspaces).toBe(1);
     expect(commands).toHaveLength(1);
@@ -451,7 +454,7 @@ describe('orchestrateTests', () => {
 
     mkdirSync(join(root, 'scripts', 'tests'), { recursive: true });
 
-    const opts: TestOptions = { skipScripts: true };
+    const opts: TestOptions = { ...parseArgs([]), skipScripts: true };
     orchestrateTests(root, opts, runner);
     const scriptTest = commands.find((c) => c.command.includes('scripts'));
     expect(scriptTest).toBeUndefined();

@@ -265,10 +265,11 @@ export function orchestrateTests(
     ? allWorkspaces.filter((ws) => matchesFilter(ws, options.workspaceFilter!))
     : allWorkspaces;
 
-  const stopping = new Set<string>();
+  const failedWorkspaces = new Set<string>();
+  let skippedCount = 0;
 
   for (const workspace of workspaces) {
-    if (stopping.size > 0) {
+    if (failedWorkspaces.size > 0) {
       break;
     }
 
@@ -284,7 +285,8 @@ export function orchestrateTests(
     const shouldRunTest = workspace.hasTest && !skipTest;
 
     if (skipTest && !options.continueOnError) {
-      stopping.add(workspace.name);
+      failedWorkspaces.add(workspace.name);
+      skippedCount++;
     }
 
     if (shouldRunTest) {
@@ -298,16 +300,21 @@ export function orchestrateTests(
       results.push(testResult);
 
       if (!testResult.success && !options.continueOnError) {
-        stopping.add(workspace.name);
+        failedWorkspaces.add(workspace.name);
       }
     }
   }
 
-  if (stopping.size === 0) {
+  if (failedWorkspaces.size === 0) {
     runScriptTests(rootDir, options, runner, results);
   }
 
-  return buildSummary(results, workspaces.length, Date.now() - startTime);
+  return buildSummary(
+    results,
+    workspaces.length,
+    Date.now() - startTime,
+    skippedCount,
+  );
 }
 
 function runPretestPhase(
@@ -357,6 +364,7 @@ function buildSummary(
   results: TestPhaseResult[],
   totalWorkspaces: number,
   durationMs: number,
+  skipped: number,
 ): TestSummary {
   const passed = results.filter((r) => r.success).length;
   const failed = results.filter((r) => !r.success).length;
@@ -366,7 +374,7 @@ function buildSummary(
     totalWorkspaces,
     passed,
     failed,
-    skipped: 0,
+    skipped,
     durationMs,
   };
 }
