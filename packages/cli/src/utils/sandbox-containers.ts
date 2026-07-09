@@ -459,6 +459,11 @@ function pushCapabilityEnvFile(
 ): (() => void) | undefined {
   const capabilityToken = getProxyCapabilityToken();
   if (capabilityToken === undefined) return undefined;
+  if (/[\r\n=]/.test(capabilityToken)) {
+    throw new Error(
+      'Capability token contains invalid characters for env file',
+    );
+  }
   const envFile = path.join(
     resolvedTmpdir,
     `.capability-env-${process.pid}-${crypto.randomUUID()}`,
@@ -513,21 +518,12 @@ function registerCapabilityEnvCleanup(
   const cleanup = pushCapabilityEnvFile(args, resolvedTmpdir);
   if (!cleanup) return undefined;
 
-  const signalHandler = (_signal: NodeJS.Signals): void => {
-    cleanup();
-    // Do not call process.exit() here — let other signal handlers and the
-    // existing exit/SIGINT/SIGTERM lifecycle manage termination. Calling
-    // process.exit prematurely can abort async cleanup work (stopProxy, etc.).
-  };
-  process.on('exit', cleanup);
-  process.on('SIGINT', signalHandler);
-  process.on('SIGTERM', signalHandler);
+  // Process-level listener registration is handled by wireCleanupHandlers
+  // via the composed cleanup function. This wrapper is returned so
+  // wireCleanupHandlers can register it on exit/SIGINT/SIGTERM/close.
 
   return () => {
     cleanup();
-    process.off('exit', cleanup);
-    process.off('SIGINT', signalHandler);
-    process.off('SIGTERM', signalHandler);
   };
 }
 
@@ -747,6 +743,9 @@ export function wireCleanupHandlers(
     process.on('SIGTERM', credentialProxyBridgeCleanup);
     sandboxProcess.on('close', () => {
       credentialProxyBridgeCleanup();
+      process.off('exit', credentialProxyBridgeCleanup);
+      process.off('SIGINT', credentialProxyBridgeCleanup);
+      process.off('SIGTERM', credentialProxyBridgeCleanup);
       setCredentialProxyBridgeCleanup(undefined);
     });
   }

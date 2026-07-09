@@ -42,6 +42,13 @@ function isProxyResponseFrame(
     typeof frame.retryAfter !== 'number'
   )
     return false;
+  if (
+    frame.data !== undefined &&
+    (typeof frame.data !== 'object' ||
+      frame.data === null ||
+      Array.isArray(frame.data))
+  )
+    return false;
   return true;
 }
 

@@ -263,6 +263,7 @@ describe('CredentialProxyServer', () => {
           if (settled) return;
           settled = true;
           clearTimeout(timer);
+          socket.destroy();
           reject(new Error('Connection closed before handshake response'));
         });
       });
@@ -1303,11 +1304,20 @@ describe('CredentialProxyServer', () => {
     server = createServer({ capabilityToken: CAPABILITY_TOKEN });
     client = await startAndConnect(server, CAPABILITY_TOKEN);
 
-    const response = await client.request('oauth_initiate', {
-      provider: 'anthropic',
-    });
+    const mutatingOps = [
+      { op: 'oauth_initiate', payload: { provider: 'anthropic' } },
+      {
+        op: 'oauth_exchange',
+        payload: { provider: 'anthropic', code: 'x', state: 'y' },
+      },
+      { op: 'oauth_poll', payload: { provider: 'anthropic', deviceCode: 'x' } },
+      { op: 'refresh_token', payload: { provider: 'anthropic' } },
+    ];
 
-    expect(response.ok).toBe(false);
-    expect(response.code).toBe('FORBIDDEN');
+    for (const { op, payload } of mutatingOps) {
+      const response = await client.request(op, payload);
+      expect(response.ok).toBe(false);
+      expect(response.code).toBe('FORBIDDEN');
+    }
   });
 });

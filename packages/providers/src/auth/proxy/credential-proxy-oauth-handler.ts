@@ -140,13 +140,16 @@ function getSessionTimeoutMs(options: CredentialProxyOAuthOptions): number {
 /**
  * OAuth handler for the credential proxy server.
  *
- * OAuth operations (initiate, exchange, poll, cancel, refresh) are
- * intentionally exempt from sandbox connection restrictions. These
- * operations are the legitimate purpose of the proxy — the sandbox
- * process needs to authenticate with providers and obtain/refresh
- * tokens to make API calls. Blocking them would defeat the proxy's
- * reason for existing. The security model restricts enumeration
- * (list_*) and mutation (save_token/remove_token) operations instead.
+ * Sandbox connection restrictions are enforced by the credential proxy
+ * server's dispatch table before any handler in this class is invoked.
+ * OAuth initiation, exchange, polling, and token refresh are blocked
+ * for sandbox connections (FORBIDDEN). Only `oauth_cancel` is
+ * unrestricted. Enumeration (list_*) returns empty data and mutation
+ * (save_token/remove_token) is blocked for sandbox connections.
+ *
+ * The `_state` parameter is accepted by each handler for signature
+ * consistency with the dispatch contract but is not used here because
+ * the sandbox gate is applied upstream.
  */
 export class CredentialProxyOAuthHandler {
   private readonly refreshCoordinator: RefreshCoordinator;

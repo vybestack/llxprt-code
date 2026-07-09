@@ -225,17 +225,21 @@ export async function createAndStartProxy(
  * Stops the credential proxy server and cleans up resources.
  */
 export async function stopProxy(): Promise<void> {
-  if (!serverInstance) {
+  // Capture reference synchronously and clear the module-level variable
+  // to prevent concurrent callers from re-entering and calling .stop() twice.
+  const instance = serverInstance;
+  if (!instance) {
     return;
   }
+  serverInstance = undefined;
+  delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+  actualSocketPath = undefined;
+  actualCapabilityToken = undefined;
 
   try {
-    await serverInstance.stop();
-  } finally {
-    serverInstance = undefined;
-    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    actualSocketPath = undefined;
-    actualCapabilityToken = undefined;
+    await instance.stop();
+  } catch {
+    // best-effort cleanup during shutdown
   }
 }
 

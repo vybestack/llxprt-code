@@ -251,7 +251,7 @@ export class CredentialProxyServer {
     socket: net.Socket,
     frames: Array<Record<string, unknown>>,
     state: ConnectionState,
-    handshakeState: { completed: boolean },
+    handshakeState: { completed: boolean; rejected: boolean },
   ): void {
     for (const frame of frames) {
       if (
@@ -538,7 +538,9 @@ export class CredentialProxyServer {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.auditLog('ERROR', state.id, op, { status: 'error', id });
-      this.sendError(socket, id, 'INTERNAL_ERROR', message);
+      if (!socket.destroyed && socket.writable) {
+        this.sendError(socket, id, 'INTERNAL_ERROR', message);
+      }
     }
   }
 
@@ -893,6 +895,7 @@ export class CredentialProxyServer {
     id: string,
     data: Record<string, unknown>,
   ): void {
+    if (socket.destroyed || !socket.writable) return;
     const response = { id, ok: true, data };
     socket.write(encodeFrame(response));
   }
@@ -903,6 +906,7 @@ export class CredentialProxyServer {
     code: string,
     error: string,
   ): void {
+    if (socket.destroyed || !socket.writable) return;
     const response = { id, ok: false, code, error };
     socket.write(encodeFrame(response));
   }
