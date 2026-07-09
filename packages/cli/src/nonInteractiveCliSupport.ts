@@ -245,7 +245,7 @@ function emitFinalResult(
   finishReason?: 'refusal',
 ): void {
   if (context.streamFormatter) {
-    if (context.quiet && responseText.length > 0) {
+    if (context.quiet) {
       context.streamFormatter.emitEvent({
         type: JsonStreamEventType.MESSAGE,
         timestamp: new Date().toISOString(),

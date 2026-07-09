@@ -338,6 +338,46 @@ describe('processAgentStream — quiet mode', () => {
     expect(result).toBeDefined();
   });
 
+  it('always emits a MESSAGE event before RESULT in stream-json even when text is empty', async () => {
+    const streamFormatter = new StreamJsonFormatter();
+    const events: AgentEvent[] = [
+      {
+        type: 'tool-call',
+        call: { id: 'tool-1', name: 'read_file', args: {} },
+      },
+      {
+        type: 'tool-result',
+        result: {
+          id: 'tool-1',
+          name: 'read_file',
+          display: 'data',
+          isError: false,
+        },
+      },
+      { type: 'done', reason: 'stop' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({ quiet: true, streamFormatter }),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
+    const messages = jsonEvents.filter(
+      (event) =>
+        event.type === JsonStreamEventType.MESSAGE &&
+        event.role === 'assistant',
+    );
+    const resultIdx = jsonEvents.findIndex(
+      (event) => event.type === JsonStreamEventType.RESULT,
+    );
+    expect(messages).toHaveLength(1);
+    expect(resultIdx).toBeGreaterThan(-1);
+    expect(messages[0].content).toBe('');
+  });
+
   it('keeps only the final turn when multiple tool calls span turns', async () => {
     const events: AgentEvent[] = [
       { type: 'text', text: 'Working on it.' },
