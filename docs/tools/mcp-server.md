@@ -702,8 +702,7 @@ wrapper required:
   "mcpServers": {
     "webflow": {
       "url": "https://mcp.webflow.com/mcp",
-      "type": "streamable-http",
-      "trust": true
+      "type": "streamable-http"
     }
   }
 }
@@ -711,6 +710,10 @@ wrapper required:
 
 On first connect, LLxprt Code will open your browser for Webflow authorization
 and cache/refresh tokens automatically.
+
+> **Tip:** Add `"trust": true` to skip per-tool-call confirmation prompts for
+> trusted servers. Only do this for servers whose tools you are comfortable
+> running without manual approval.
 
 ## MCP Prompts as Slash Commands
 
@@ -747,8 +750,7 @@ or `"type": "http"`:
   "mcpServers": {
     "webflow": {
       "url": "https://mcp.webflow.com/mcp",
-      "type": "streamable-http",
-      "trust": true
+      "type": "streamable-http"
     }
   }
 }
@@ -764,8 +766,7 @@ workaround:
     "webflow": {
       "command": "npx",
       "args": ["-y", "mcp-remote", "https://mcp.webflow.com/mcp"],
-      "type": "stdio",
-      "trust": true
+      "type": "stdio"
     }
   }
 }

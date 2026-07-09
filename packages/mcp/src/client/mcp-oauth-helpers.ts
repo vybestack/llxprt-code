@@ -28,10 +28,14 @@ const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 
 /**
  * Per-server in-flight OAuth guard. Prevents duplicate concurrent browser
- * OAuth flows for the same server name, which would otherwise each open a new
+ * OAuth flows for the same server, which would otherwise each open a new
  * browser tab. The guard is scoped to interactive browser authentication only
  * (the `handleAutomaticOAuth` path); silent token read/refresh in
  * `getValidToken()` is unaffected.
+ *
+ * The key includes the server URL and www-authenticate header so that
+ * concurrent requests with different configs or auth challenges do not
+ * cross-contaminate each other.
  */
 const inFlightAuthentications = new Map<string, Promise<boolean>>();
 
@@ -112,14 +116,21 @@ export function detectDeprecatedSSEEndpoint(
   errorString: string,
 ): string | null {
   const lower = errorString.toLowerCase();
-  const isDeprecated = SSE_DEPRECATION_SIGNALS.some((signal) =>
-    lower.includes(signal),
-  );
-  if (!isDeprecated) return null;
 
-  // Extract a URL from the error message using case-insensitive string
-  // search to avoid regex backtracking concerns (sonarjs/slow-regex)
-  const lowerHttpIdx = lower.indexOf('http');
+  // Find the latest-ending deprecation signal so we anchor the URL search
+  // after it. This avoids picking up unrelated URLs (e.g. documentation links)
+  // that may appear before the deprecation message.
+  let signalEnd = -1;
+  for (const signal of SSE_DEPRECATION_SIGNALS) {
+    const idx = lower.indexOf(signal);
+    if (idx !== -1) {
+      signalEnd = Math.max(signalEnd, idx + signal.length);
+    }
+  }
+  if (signalEnd === -1) return null;
+
+  // Search for a URL in the text after the deprecation signal.
+  const lowerHttpIdx = lower.indexOf('http', signalEnd);
   if (lowerHttpIdx === -1) return '';
   const rest = errorString.slice(lowerHttpIdx);
   const lowerRest = lower.slice(lowerHttpIdx);
@@ -136,10 +147,21 @@ export function detectDeprecatedSSEEndpoint(
     .slice(lowerHttpIdx, lowerHttpIdx + endIdx)
     .indexOf('://');
   if (schemeEnd === -1) return '';
-  // Trim trailing punctuation that may be part of the sentence, not the URL
+  // Trim trailing punctuation that may be part of the sentence, not the URL.
+  // Comma is only trimmed when the URL has no query string or fragment, since
+  // commas are valid in query parameters and fragments (RFC 3986).
+  const hasQueryOrFragment = url.includes('?') || url.includes('#');
   let trimmedLen = url.length;
-  while (trimmedLen > 0 && '.,;:!?)]"\''.includes(url.charAt(trimmedLen - 1))) {
-    trimmedLen--;
+  while (trimmedLen > 0) {
+    const lastChar = url.charAt(trimmedLen - 1);
+    if (
+      '.;:!?)]"\''.includes(lastChar) ||
+      (!hasQueryOrFragment && lastChar === ',')
+    ) {
+      trimmedLen--;
+    } else {
+      break;
+    }
   }
   return url.slice(0, trimmedLen);
 }
@@ -170,7 +192,8 @@ export async function handleAutomaticOAuth(
   mcpServerConfig: MCPServerConfig,
   wwwAuthenticate: string,
 ): Promise<boolean> {
-  const existing = inFlightAuthentications.get(mcpServerName);
+  const guardKey = `${mcpServerName}\0${mcpServerConfig.httpUrl ?? mcpServerConfig.url ?? ''}`;
+  const existing = inFlightAuthentications.get(guardKey);
   if (existing) {
     debugLogger.log(
       `'${mcpServerName}' OAuth already in progress, reusing existing flow`,
@@ -184,23 +207,34 @@ export async function handleAutomaticOAuth(
     wwwAuthenticate,
   );
 
+  // Mutable holder so the timeout closure (defined below) can check
+  // promise identity without referencing `raced` before it is declared.
+  const promiseRef: { current: Promise<boolean> | undefined } = {
+    current: undefined,
+  };
+
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<boolean>((resolve) => {
     timeoutId = setTimeout(() => {
       debugLogger.warn(
         `OAuth flow for '${mcpServerName}' timed out after ${OAUTH_FLOW_TIMEOUT_MS}ms, clearing in-flight guard`,
       );
-      inFlightAuthentications.delete(mcpServerName);
+      if (inFlightAuthentications.get(guardKey) === promiseRef.current) {
+        inFlightAuthentications.delete(guardKey);
+      }
       resolve(false);
     }, OAUTH_FLOW_TIMEOUT_MS);
   });
 
   const raced = Promise.race([authPromise, timeoutPromise]).finally(() => {
     if (timeoutId !== undefined) clearTimeout(timeoutId);
-    inFlightAuthentications.delete(mcpServerName);
+    if (inFlightAuthentications.get(guardKey) === promiseRef.current) {
+      inFlightAuthentications.delete(guardKey);
+    }
   });
 
-  inFlightAuthentications.set(mcpServerName, raced);
+  promiseRef.current = raced;
+  inFlightAuthentications.set(guardKey, raced);
   return raced;
 }
 

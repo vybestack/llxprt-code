@@ -290,7 +290,21 @@ describe('connectToMcpServer with OAuth', () => {
       expect(capturedTransport).toBeInstanceOf(SSEClientTransport);
     });
 
-    it('should throw error when neither url nor httpUrl configured', async () => {
+    it('should throw error when no transport configuration is provided', async () => {
+      // Empty config causes createTransport to throw "Invalid configuration"
+      // before the client.connect mock is ever reached
+      await expect(
+        connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          {}, // No url, httpUrl, or command
+          false,
+          workspaceContext,
+        ),
+      ).rejects.toThrow('Invalid configuration');
+    });
+
+    it('should throw error for command-based config when connect fails with 401 (no OAuth retry for stdio)', async () => {
       vi.mocked(mockedClient.connect).mockRejectedValueOnce(
         new Error('401 Unauthorized'),
       );

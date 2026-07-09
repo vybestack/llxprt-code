@@ -87,4 +87,25 @@ describe('detectDeprecatedSSEEndpoint', () => {
     );
     expect(result).toBe('');
   });
+
+  it('should ignore URLs that appear before the deprecation signal', () => {
+    const result = detectDeprecatedSSEEndpoint(
+      'Error: see https://docs.example.com/help for details. SSE is no longer supported. Use https://mcp.example.com/mcp',
+    );
+    expect(result).toBe('https://mcp.example.com/mcp');
+  });
+
+  it('should preserve trailing comma in URL query string', () => {
+    const result = detectDeprecatedSSEEndpoint(
+      'SSE is no longer supported. Use https://mcp.example.com/mcp?scopes=a,b,',
+    );
+    expect(result).toBe('https://mcp.example.com/mcp?scopes=a,b,');
+  });
+
+  it('should trim trailing comma that is sentence punctuation (no query string)', () => {
+    const result = detectDeprecatedSSEEndpoint(
+      'SSE is no longer supported. Use https://mcp.example.com/mcp, then reconnect.',
+    );
+    expect(result).toBe('https://mcp.example.com/mcp');
+  });
 });
