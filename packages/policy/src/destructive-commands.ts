@@ -885,18 +885,34 @@ function extractSplitStringPayload(
  * Scans the raw segment for an interpreter `-c` flag (or a clustered short
  * option ending in `c` like `-lc`, `-ec`) and returns the script argument that
  * follows it (with ONE quote layer removed). Uses a quote-aware tokenizer so a
- * quoted script string like `"rm -rf /"` stays intact as one argument. Returns
- * null when no `-c`/cluster or no following argument exists.
+ * quoted script string like `"rm -rf /"` stays intact as one argument. In POSIX
+ * shells, after a bare `--` token all further args are operands, so `-c` after
+ * a bare `--` is NOT the execute flag (e.g. `bash -- -c "rm -rf /"` does NOT
+ * execute the script). A `--` that appears INSIDE a quoted token (e.g. the
+ * script string `"foo -- bar"`) is NOT a bare `--` because the tokenizer keeps
+ * it as a single quoted token. Returns null when no `-c`/cluster exists before
+ * `--`, or no following argument exists.
  */
 function extractScriptArgFromRaw(segment: string): string | null {
   const tokens = tokenizeRespectingQuotes(segment);
-  const cIndex = tokens.findIndex(
+  const limit = indexOfBareDoubleDash(tokens);
+  const effectiveTokens = limit < 0 ? tokens : tokens.slice(0, limit);
+  const cIndex = effectiveTokens.findIndex(
     (token) => token === '-c' || isClusteredCOption(token),
   );
-  if (cIndex < 0 || cIndex + 1 >= tokens.length) {
+  if (cIndex < 0 || cIndex + 1 >= effectiveTokens.length) {
     return null;
   }
-  return unwrapScriptArg(tokens[cIndex + 1]);
+  return unwrapScriptArg(effectiveTokens[cIndex + 1]);
+}
+
+/**
+ * Returns the index of the first bare `--` token (exactly `--`, not inside
+ * quotes) among the tokenized args, or -1 when none exists. A bare `--` is the
+ * POSIX end-of-options terminator: all tokens after it are operands.
+ */
+function indexOfBareDoubleDash(tokens: readonly string[]): number {
+  return tokens.indexOf('--');
 }
 
 /**

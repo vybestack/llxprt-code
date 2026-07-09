@@ -11,6 +11,50 @@ const isWhitespaceChar = (ch: string): boolean =>
 /** True for ASCII digit characters. */
 const isDigitChar = (ch: string): boolean => ch >= '0' && ch <= '9';
 
+/** Backtick character. */
+const BACKTICK = String.fromCharCode(96);
+
+/** Backslash character. */
+const BACKSLASH_CHAR = String.fromCharCode(92);
+
+/** Newline character. */
+const NEWLINE_CHAR = String.fromCharCode(10);
+
+/**
+ * Characters that backslash can escape INSIDE double quotes (POSIX): `$`,
+ * backtick, `"`, `\`, and newline. Before any other char the backslash is
+ * literal inside double quotes.
+ */
+const DOUBLE_QUOTE_ESCAPABLE: ReadonlySet<string> = new Set([
+  '$',
+  BACKTICK,
+  '"',
+  BACKSLASH_CHAR,
+  NEWLINE_CHAR,
+]);
+
+/**
+ * True iff a backslash at index `i` (followed by `next`) should be treated as
+ * an escape that consumes BOTH characters, given the current quote context.
+ * Outside any quotes: backslash always escapes the next char (POSIX). Inside
+ * single quotes: backslash is literal (never escapes). Inside double quotes:
+ * backslash escapes ONLY `$`, backtick, `"`, `\`, and newline; before any other
+ * char the backslash is literal (POSIX double-quote rule).
+ */
+function isEscapingBackslash(
+  next: string | undefined,
+  inSingle: boolean,
+  inDouble: boolean,
+): boolean {
+  if (inSingle) {
+    return false;
+  }
+  if (inDouble) {
+    return next !== undefined && DOUBLE_QUOTE_ESCAPABLE.has(next);
+  }
+  return true;
+}
+
 /**
  * Removes a single surrounding pair of quotes from a token, if present.
  * When stripping DOUBLE quotes, also unescapes `\"` → `"` so that escaped
@@ -109,7 +153,11 @@ const extractRedirectTarget = (after: string): string => {
   let inDouble = false;
   while (end < after.length) {
     const ch = after[end];
-    if (ch === '\\' && end + 1 < after.length && !inSingle) {
+    if (
+      ch === '\\' &&
+      end + 1 < after.length &&
+      isEscapingBackslash(after[end + 1], inSingle, inDouble)
+    ) {
       end += 2;
     } else if (ch === "'" && !inDouble) {
       inSingle = !inSingle;
@@ -148,7 +196,11 @@ export function findCredentialRedirectTargets(
   while (i < rawSegment.length) {
     const ch = rawSegment[i];
     const next = rawSegment[i + 1];
-    if (ch === '\\' && i < rawSegment.length - 1 && !inSingle) {
+    if (
+      ch === '\\' &&
+      i < rawSegment.length - 1 &&
+      isEscapingBackslash(next, inSingle, inDouble)
+    ) {
       i += 2;
     } else if (ch === "'" && !inDouble) {
       inSingle = !inSingle;

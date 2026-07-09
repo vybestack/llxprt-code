@@ -443,3 +443,119 @@ describe('Fix F: quote/escape-aware redirect target extraction (robustness)', ()
     expect(isDestructiveCommand(command)).toBe(expected);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Defect 1 (SECURITY): redirection after the closing brace is not tolerated.
+// In POSIX shell a function definition's closing `}` may be immediately
+// followed by redirections before the command separator. These are VALID fork
+// bombs.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('Defect 1: redirection after closing brace (false negative)', () => {
+  it.each<[string, boolean]>([
+    // Redirection immediately after `}` (no space).
+    [':(){ :|:& }>/dev/null;:', true],
+    // No space at all before `2>&1`.
+    [':(){ :|:&} 2>&1;:', true],
+    // Space, then a bare-file redirect, then fd-dup.
+    [':(){ :|:& } >f 2>&1;:', true],
+    // Non-`:` name with a redirect.
+    ['x(){ x|x& } >/dev/null; x', true],
+    // MUST stay TRUE — no redirect (baseline bombs).
+    [':(){ :|:& };:', true],
+    ['bomb(){ bomb|bomb& }; bomb', true],
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});
+
+// A bare digit after `}` that is NOT a redirect is a bash syntax error
+// (`:(){ :|:& }5;:` is invalid). Such cases must stay FALSE.
+describe('Defect 1 guard: bare digit after brace is syntax error (stay FALSE)', () => {
+  it.each<[string, boolean]>([
+    [':(){ :|:& }5;:', false],
+    ['x(){ x|x& }3; x', false],
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Defect 2 (SECURITY): trailing invocation with an argument or whitespace is
+// not matched. The invocation after the definition may carry arguments or
+// whitespace.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('Defect 2: trailing invocation with arg/whitespace (false negative)', () => {
+  it.each<[string, boolean]>([
+    [':(){ :|:& };: foo', true],
+    ['bomb(){ bomb|bomb& }; bomb arg', true],
+    // Extra whitespace between `;` and the invocation.
+    [':(){ :|:& };   :', true],
+    ['bomb(){ bomb|bomb& };   bomb', true],
+    // MUST stay TRUE — baseline no-arg invocations.
+    [':(){ :|:& };:', true],
+    ['bomb(){ bomb|bomb& }; bomb', true],
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Defect 1+2 combined: redirect after brace AND invocation with arg.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('Defect 1+2 combined: redirect after brace and invocation with arg', () => {
+  it.each<[string, boolean]>([
+    [':(){ :|:& } >/dev/null;: foo', true],
+    ['bomb(){ bomb|bomb& } >f 2>&1; bomb arg', true],
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Defect 3 (false positive): the `--` end-of-options terminator is ignored
+// when locating `-c`. After a bare `--`, all further args are operands, so
+// `-c` after `--` is NOT the execute flag.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('Defect 3: -- terminator neutralizes -c (false positive)', () => {
+  it.each<[string, boolean]>([
+    // `--` before `-c` neutralizes the execute flag → FALSE.
+    ['bash -- -c "rm -rf /"', false],
+    ['sh -- -c "rm -rf /"', false],
+    // MUST stay TRUE — `-c` before any `--`.
+    ['bash -c "rm -rf /"', true],
+    ['bash -lc "rm -rf /"', true],
+    ['sh -c "rm -rf /"', true],
+    // A `--` that is INSIDE a quoted script string is NOT a bare `--`.
+    ['bash -c "echo hi -- -c"', false],
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Defect 4 (precision): double-quote backslash escape set is over-broad.
+// In POSIX double quotes, backslash only escapes `$`, backtick, `"`, `\`, and
+// newline; before any other char the backslash is literal.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('Defect 4: POSIX double-quote backslash escape precision', () => {
+  it.each<[string, boolean]>([
+    // Inside double quotes, backslash before a non-escapable char (e.g. space)
+    // is LITERAL in POSIX — the backslash is retained. The quoted token still
+    // runs to the closing quote, so these extract the full path correctly.
+    ['echo x > "~/.ssh/id_rsa\\ backup"', true],
+    ['echo x > "~/.ssh/id_rsa backup"', true],
+    // Outside quotes, backslash-space escapes the space (unchanged behavior).
+    ['echo x > ~/.ssh/id_rsa\\ backup', true],
+    // Backslash before $ (escapable inside double quotes) — literal $.
+    ['echo x > "~/.ssh/\\$key"', true],
+    // Backslash before a non-escapable char inside double quotes — the
+    // backslash is literal, so the path includes it and must NOT match a
+    // credential prefix.
+    ['echo x > "notes\\.txt"', false],
+    // Benign redirect to a non-credential path with backslash inside double
+    // quotes before a non-escapable char — stays benign.
+    ['echo x > "foo\\bar"', false],
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});

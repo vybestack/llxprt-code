@@ -12,7 +12,12 @@ function isNameChar(ch: string | undefined): boolean {
   return ch !== undefined && ch !== '' && NAME_IDENTIFIER.test(ch);
 }
 
-/** Characters allowed in a function-name identifier token (includes `:`). */
+/**
+ * A NEGATED character class matching a function-name token BOUNDARY: any
+ * character that is NOT part of the function-name identifier set
+ * `[A-Za-z0-9_:]`. Used as a left/right boundary anchor in whole-token
+ * matching so `log` does not match inside `catalog`.
+ */
 const NAME_BOUNDARY = '[^A-Za-z0-9_:]';
 
 /** The newline character, preserved through whitespace collapse as a separator. */
@@ -39,7 +44,13 @@ function isEscapedChar(s: string, i: number, inSingle: boolean): boolean {
 interface FunctionDefinition {
   readonly name: string;
   readonly body: string;
-  readonly tail: string;
+  /**
+   * The invocation tail extracted from the ORIGINAL (pre-collapse) text,
+   * starting at the first token after the `}` that is not a separator or
+   * redirection. Whitespace boundaries are preserved so `: foo` is
+   * distinguishable from `:foo`. Used by `tailStartsWithNameToken`.
+   */
+  readonly originalTail: string;
   /** Index of the closing `}` in the collapsed string (-1 if unbalanced). */
   readonly bodyEnd: number;
 }
@@ -67,7 +78,7 @@ export function isForkBomb(command: string): boolean {
   if (collapsed.length === 0) {
     return false;
   }
-  const posixDefs = scanPosixDefinitions(collapsed);
+  const posixDefs = scanPosixDefinitions(collapsed, command);
   for (const def of posixDefs) {
     if (isBombDefinition(def)) {
       return true;
@@ -97,7 +108,7 @@ function isBombDefinition(def: FunctionDefinition): boolean {
   if (!containsNameToken(def.body, def.name)) {
     return false;
   }
-  return tailStartsWithNameToken(def.tail, def.name);
+  return tailStartsWithNameToken(def.originalTail, def.name);
 }
 
 /**
@@ -221,6 +232,7 @@ function tailStartsWithNameToken(tail: string, name: string): boolean {
  */
 function scanPosixDefinitions(
   collapsed: string,
+  original: string,
 ): readonly FunctionDefinition[] {
   const defs: FunctionDefinition[] = [];
   let inSingle = false;
@@ -237,7 +249,7 @@ function scanPosixDefinitions(
       inDouble = !inDouble;
       i++;
     } else if (isUnquoted(collapsed, i, inSingle, inDouble, isOpenParenBrace)) {
-      const def = parsePosixAt(collapsed, i);
+      const def = parsePosixAt(collapsed, i, original);
       if (def !== null) {
         defs.push(def);
         // Advance past the definition's closing brace so the parsed body is
@@ -297,6 +309,12 @@ function collapsedToOriginalOffset(
       collIdx++;
     }
   }
+  // Skip any remaining whitespace/newline-run so the returned index points at
+  // the original position of the collapsed char at `collapsedOffset`, not at
+  // intervening whitespace that was consumed by the collapse.
+  while (origIdx < original.length && isNonNewlineSpace(original[origIdx])) {
+    origIdx++;
+  }
   return origIdx;
 }
 
@@ -306,21 +324,24 @@ const isNonNewlineSpace = (ch: string): boolean =>
 
 /**
  * Checks whether the original text has a name boundary (whitespace or `(`)
- * at the position corresponding to `collapsedOffset` — i.e. the character
- * immediately following the `function` keyword in the original. Bash requires
- * `function` to be followed by whitespace (or `(` for the hybrid form) to be
- * a keyword; `functionfoo` is a single token, not `function foo`.
+ * immediately before the position corresponding to `collapsedOffset` — i.e.
+ * between the `function` keyword and the following name in the original. Bash
+ * requires `function` to be followed by whitespace (or `(` for the hybrid
+ * form) to be a keyword; `functionfoo` is a single token, not `function foo`.
  */
 function hasKeywordBoundaryAfter(
   original: string,
   collapsedOffset: number,
 ): boolean {
   const origIdx = collapsedToOriginalOffset(original, collapsedOffset);
+  if (origIdx === 0) {
+    return false;
+  }
   if (origIdx >= original.length) {
     return true;
   }
-  const ch = original[origIdx];
-  return /\s/.test(ch) || ch === '(';
+  const prev = original[origIdx - 1];
+  return isNonNewlineSpace(prev) || prev === NEWLINE || prev === '(';
 }
 
 /**
@@ -339,21 +360,145 @@ function isUnquoted(
 }
 
 /**
- * Given the index of a closing `}`, returns the tail AFTER the `}` and the full
- * run of command-separator characters (`;`, `&`, `|`, newline) that follow it.
- * This handles `};tail`, `};;tail`, `}&&tail`, `}||tail`, `}&tail`, and
- * `}
-tail`. The separator run is strictly AFTER the depth-0 `}`, so a bomb
- * body ending in `&` (e.g. `:|:&`) before the `}` is unaffected.
+ * Extracts the trailing invocation from the ORIGINAL (pre-collapse) text,
+ * starting just after the closing `}` at `origBraceEnd`. Repeatedly skips:
+ * (a) whitespace, (b) command separators (`;`, `&`, `|`, newline), and
+ * (c) redirections (optional leading fd digits, a redirect operator such as
+ * `>>`, `>`, `<<<`, `<<`, `<`, `>&`, `<&`, `&>>`, `&>`, then a single target
+ * token up to the next separator/whitespace, honoring single/double quotes
+ * minimally). The first token that is NOT one of those is the invocation
+ * start; the remaining text is returned with whitespace boundaries intact so
+ * `: foo` is distinguishable from `:foo`. Linear-time, single pass.
  */
-function sliceTailAfterBrace(collapsed: string, bodyEnd: number): string {
-  let tailStart = bodyEnd + 1;
-  while (isSeparatorChar(collapsed[tailStart])) {
-    tailStart++;
+function extractInvocationFromOriginal(
+  original: string,
+  origBraceEnd: number,
+): string {
+  let i = origBraceEnd + 1;
+  let progressed = true;
+  while (i < original.length && progressed) {
+    progressed = false;
+    i = skipWhitespaceAndSeparators(original, i, () => {
+      progressed = true;
+    });
+    const redir = redirectLengthInOriginal(original, i);
+    if (redir > 0) {
+      i += redir;
+      progressed = true;
+    }
   }
-  return collapsed.slice(tailStart);
+  return original.slice(i);
 }
 
+/**
+ * Skips runs of whitespace and command-separator characters (`;`, `&`, `|`,
+ * newline) in `original` starting at `start`. Returns the new index. Invokes
+ * `onConsume` whenever at least one character is skipped, so the caller can
+ * detect progress and avoid an infinite loop. Linear-time.
+ */
+function skipWhitespaceAndSeparators(
+  original: string,
+  start: number,
+  onConsume: () => void,
+): number {
+  let i = start;
+  while (i < original.length) {
+    const ch = original[i];
+    if (isWhitespaceChar(ch) || isSeparatorChar(ch)) {
+      i++;
+      onConsume();
+    } else {
+      break;
+    }
+  }
+  return i;
+}
+
+/**
+ * If `original[start]` begins a redirection, returns the total character count
+ * of the redirection (optional fd digits + operator + single target token
+ * consuming up to the next whitespace/separator, honoring quotes). Returns 0
+ * when `original[start]` does not begin a redirection. Recognized operators:
+ * `>>`, `>`, `<<<`, `<<`, `<`, `>&`, `<&`, `&>>`, `&>`, and a digit-run
+ * prefix (`N>`, `N>>`, `N>&`, `N<&`). Linear-time.
+ */
+function redirectLengthInOriginal(original: string, start: number): number {
+  const op = matchRedirectOperator(original, start);
+  if (op === 0) {
+    return 0;
+  }
+  return op + redirectTargetLength(original, start + op);
+}
+
+/**
+ * Returns the character length of the redirect OPERATOR at `start` (including
+ * any leading fd-digit prefix), or 0 if `start` does not begin a redirection
+ * operator. Handles `>>`, `>`, `<<<`, `<<`, `<`, `>&`, `<&`, `&>>`, `&>`,
+ * `N>`, `N>>`, `N>&`, `N<&`. Linear-time.
+ */
+function matchRedirectOperator(s: string, start: number): number {
+  let fdLen = 0;
+  while (isDigit(s[start + fdLen])) {
+    fdLen++;
+  }
+  const p = start + fdLen;
+  if (s[p] === '>') {
+    if (s[p + 1] === '>') return fdLen + 2;
+    if (s[p + 1] === '&') return fdLen + 2;
+    return fdLen + 1;
+  }
+  if (s[p] === '<') {
+    if (s.startsWith('<<<', p)) return fdLen + 3;
+    if (s[p + 1] === '<') return fdLen + 2;
+    if (s[p + 1] === '&') return fdLen + 2;
+    return fdLen + 1;
+  }
+  if (fdLen > 0) {
+    return 0;
+  }
+  if (s[p] === '&' && s[p + 1] === '>') {
+    return s[p + 2] === '>' ? 3 : 2;
+  }
+  return 0;
+}
+
+/**
+ * Returns the length of the single redirect TARGET token starting at `start`,
+ * consuming characters until unquoted whitespace or a command separator is
+ * reached. Single and double quotes are tracked minimally (a quote char toggles
+ * state, no escape processing needed for boundary detection). Returns 0 when
+ * the target is empty (e.g. `> ;tail` — whitespace right after the operator).
+ * Linear-time.
+ */
+function redirectTargetLength(s: string, start: number): number {
+  let end = start;
+  let inSingle = false;
+  let inDouble = false;
+  while (end < s.length) {
+    const ch = s[end];
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+    } else if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+    } else if (!inSingle && !inDouble && isTokenTerminator(ch)) {
+      break;
+    }
+    end++;
+  }
+  return end - start;
+}
+
+/** True if `ch` terminates a redirect target token (whitespace or separator). */
+function isTokenTerminator(ch: string): boolean {
+  return isWhitespaceChar(ch) || isSeparatorChar(ch);
+}
+
+/** Carriage return character. */
+const CARRIAGE_RETURN = String.fromCharCode(13);
+
+/** True if `ch` is a whitespace char (space, tab, carriage-return, newline). */
+const isWhitespaceChar = (ch: string): boolean =>
+  ch === ' ' || ch === '\t' || ch === CARRIAGE_RETURN || ch === NEWLINE;
 /** True iff `ch` is one of the command separators `; & |` or a newline. */
 function isSeparatorChar(ch: string | undefined): boolean {
   if (ch === undefined) {
@@ -375,6 +520,7 @@ function isSeparatorChar(ch: string | undefined): boolean {
 function parsePosixAt(
   collapsed: string,
   parenIndex: number,
+  original: string,
 ): FunctionDefinition | null {
   let nameStart = parenIndex;
   while (nameStart > 0 && isNameChar(collapsed[nameStart - 1])) {
@@ -392,10 +538,11 @@ function parsePosixAt(
   if (bodyEnd < 0) {
     return null;
   }
+  const origBraceEnd = collapsedToOriginalOffset(original, bodyEnd);
   return {
     name,
     body: collapsed.slice(openBrace + 1, bodyEnd),
-    tail: sliceTailAfterBrace(collapsed, bodyEnd),
+    originalTail: extractInvocationFromOriginal(original, origBraceEnd),
     bodyEnd,
   };
 }
@@ -435,7 +582,7 @@ function scanKeywordDefinitions(
       hasKeywordBoundaryAfter(original, i + keyword.length)
     ) {
       const nameStart = i + keyword.length;
-      const def = parseKeywordAt(collapsed, nameStart);
+      const def = parseKeywordAt(collapsed, nameStart, original);
       if (def !== null) {
         defs.push(def);
         // Advance past the definition's closing brace so the parsed body is
@@ -461,6 +608,7 @@ function scanKeywordDefinitions(
 function parseKeywordAt(
   collapsed: string,
   nameStart: number,
+  original: string,
 ): FunctionDefinition | null {
   let nameEnd = nameStart;
   while (nameEnd < collapsed.length && isNameChar(collapsed[nameEnd])) {
@@ -484,10 +632,11 @@ function parseKeywordAt(
   if (bodyEnd < 0) {
     return null;
   }
+  const origBraceEnd = collapsedToOriginalOffset(original, bodyEnd);
   return {
     name,
     body: collapsed.slice(braceOpen + 1, bodyEnd),
-    tail: sliceTailAfterBrace(collapsed, bodyEnd),
+    originalTail: extractInvocationFromOriginal(original, origBraceEnd),
     bodyEnd,
   };
 }
@@ -520,7 +669,7 @@ function findMatchingBraceEnd(s: string, openBraceIndex: number): number {
     } else if (!inSingle && !inDouble && ch === '}') {
       depth--;
       if (depth === 0) {
-        return isDefinitionTerminator(s[i + 1]) ? i : -1;
+        return isDefinitionTerminator(s, i + 1) ? i : -1;
       }
     }
   }
@@ -528,16 +677,51 @@ function findMatchingBraceEnd(s: string, openBraceIndex: number): number {
 }
 
 /**
- * True iff `ch` is a valid command separator that may terminate a function
- * definition: `;`, `&`, `|`, newline, or end-of-string (undefined). This
- * covers `};tail`, `}&&tail`, `}||tail`, `}&tail`, a newline-terminated
- * definition, and the definition-at-end-of-string case. A real bomb body like
- * `:|:&` ends with `&` INSIDE the braces (before the `}`), so this check on the
- * char AFTER the depth-0 `}` is unaffected by body content.
+ * True iff `s[i+1]` (the char immediately after a depth-0 `}`) is a valid
+ * terminator for a function definition. Accepts: (a) a command separator
+ * (`;`, `&`, `|`, newline); (b) end-of-string; (c) a redirect operator
+ * (`>`/`<`) — POSIX allows redirections immediately after `}` before the
+ * separator (e.g. `:(){ :|:& }>/dev/null;:`); (d) an fd-redirect — one or
+ * more digits immediately followed by `>`/`<` (e.g. `}2>&1`); or (e) `&>`/
+ * `&>>` (redirect stdout+stderr). A bare digit NOT followed by `>`/`<` after
+ * `}` is a bash syntax error and is rejected (returns false), so
+ * `:(){ :|:& }5;:` stays non-matching. Linear-time (peeks ahead a bounded
+ * number of chars).
  */
-function isDefinitionTerminator(ch: string | undefined): boolean {
-  if (ch === undefined) {
+function isDefinitionTerminator(s: string, afterBrace: number): boolean {
+  if (afterBrace >= s.length) {
     return true;
   }
-  return ch === ';' || ch === '&' || ch === '|' || ch === NEWLINE;
+  const ch = s[afterBrace];
+  if (ch === ';' || ch === '&' || ch === '|' || ch === NEWLINE) {
+    return true;
+  }
+  if (ch === '>' || ch === '<') {
+    return true;
+  }
+  if (ch === '&' && s[afterBrace + 1] === '>') {
+    return true;
+  }
+  return isFdRedirectPrefix(s, afterBrace);
 }
+
+/**
+ * True iff `s[start]` begins a run of one-or-more digits immediately followed
+ * by a redirect operator (`>`/`<`), e.g. `2>`, `10<`. A bare digit run with no
+ * trailing redirect is NOT an fd-redirect (it is a syntax error after `}`).
+ * Linear-time (scans a digit run, then peeks one char).
+ */
+function isFdRedirectPrefix(s: string, start: number): boolean {
+  if (!isDigit(s[start])) {
+    return false;
+  }
+  let j = start;
+  while (j < s.length && isDigit(s[j])) {
+    j++;
+  }
+  return j < s.length && (s[j] === '>' || s[j] === '<');
+}
+
+/** True for ASCII digit characters `0`-`9`. */
+const isDigit = (ch: string | undefined): boolean =>
+  ch !== undefined && ch >= '0' && ch <= '9';
