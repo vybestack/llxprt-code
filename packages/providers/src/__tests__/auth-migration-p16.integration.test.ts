@@ -66,37 +66,48 @@ function collectTsFiles(dir: string, excludeTests = true): string[] {
 
 /**
  * Check if a line contains a forbidden old core/auth import.
- * A line is forbidden if it imports from core/auth subpath,
- * unless it imports from the allowed deep path core/auth-factories.js.
- * (Note: core/auth-factories.js does NOT contain /auth/ as a subpath,
- * it contains /auth-factories.js as a sibling, so the prefix check below
- * correctly distinguishes them.)
+ * Uses regex matching against the full file content to correctly handle
+ * multi-line import statements (e.g. `import {\n  foo\n} from "..."`).
+ * A specifier is forbidden if it starts with the forbidden prefix,
+ * unless it exactly matches the allowed deep import path.
+ * (Note: auth-factories.js does not match the forbidden prefix because
+ * exact string matching distinguishes "auth-factories.js" from "auth/")
  */
-function isForbiddenAuthImport(line: string): boolean {
-  const trimmed = line.trim();
-  if (
-    trimmed.startsWith('//') ||
-    trimmed.startsWith('*') ||
-    trimmed.startsWith('/*')
-  ) {
-    return false;
-  }
-  if (!trimmed.startsWith('import')) {
-    return false;
-  }
-  // Extract the module specifier from the import line
-  const match = /from\s+['"]([^'"]+)['"]/.exec(trimmed);
-  if (!match) return false;
-  const specifier = match[1];
-  // Allow the new deep import path for auth factories
-  if (specifier === ALLOWED_AUTH_DEEP_IMPORT) return false;
-  // Forbid any import that starts with the forbidden prefix
-  // This matches both core/auth' and core/auth/anything
-  // But does NOT match core/auth-factories.js (different string)
-  return (
-    specifier === FORBIDDEN_OLD_AUTH_PREFIX ||
-    specifier.startsWith(FORBIDDEN_OLD_AUTH_PREFIX + '/')
+function findForbiddenAuthImports(content: string, relPath: string): string[] {
+  const violations: string[] = [];
+  // Match all from-import specifiers that start with the forbidden prefix.
+  // This correctly handles multi-line imports because we match the `from`
+  // clause directly rather than the `import` keyword start.
+  const escapedPrefix = FORBIDDEN_OLD_AUTH_PREFIX.replace(
+    /[.*+?^${}()|[\]\\/]/g,
+    '\\$&',
   );
+  const importRegex = new RegExp(
+    `from\\s+['"](${escapedPrefix}[^'"]*)['"]`,
+    'g',
+  );
+  let match: RegExpExecArray | null;
+  while ((match = importRegex.exec(content)) !== null) {
+    const specifier = match[1];
+    // Allow the new deep import path for auth factories
+    if (specifier === ALLOWED_AUTH_DEEP_IMPORT) continue;
+    // Find the line number for this match
+    const lineNum = content.slice(0, match.index).split('\n').length;
+    violations.push(`${relPath}:${lineNum}: ${specifier}`);
+  }
+  return violations;
+}
+
+/**
+ * Scan a single file for forbidden core/auth imports.
+ */
+function scanFileForForbiddenImports(
+  filePath: string,
+  baseDir: string,
+): string[] {
+  const relPath = path.relative(baseDir, filePath);
+  const content = fs.readFileSync(filePath, 'utf-8');
+  return findForbiddenAuthImports(content, relPath);
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -111,14 +122,9 @@ describe('Providers auth migration: no old core/auth imports', () => {
 
     const violations: string[] = [];
     for (const filePath of prodFiles) {
-      const relPath = path.relative(PROVIDERS_SRC_DIR, filePath);
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const lines = content.split('\n');
-      for (let i = 0; i < lines.length; i++) {
-        if (isForbiddenAuthImport(lines[i])) {
-          violations.push(`${relPath}:${i + 1}: ${lines[i].trim()}`);
-        }
-      }
+      violations.push(
+        ...scanFileForForbiddenImports(filePath, PROVIDERS_SRC_DIR),
+      );
     }
 
     expect(
@@ -134,14 +140,9 @@ describe('Providers auth migration: no old core/auth imports', () => {
 
     const violations: string[] = [];
     for (const filePath of testFiles) {
-      const relPath = path.relative(PROVIDERS_SRC_DIR, filePath);
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const lines = content.split('\n');
-      for (let i = 0; i < lines.length; i++) {
-        if (isForbiddenAuthImport(lines[i])) {
-          violations.push(`${relPath}:${i + 1}: ${lines[i].trim()}`);
-        }
-      }
+      violations.push(
+        ...scanFileForForbiddenImports(filePath, PROVIDERS_SRC_DIR),
+      );
     }
 
     expect(

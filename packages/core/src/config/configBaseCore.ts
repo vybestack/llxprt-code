@@ -775,6 +775,11 @@ export abstract class ConfigBaseCore {
     | undefined {
     return this.postSkillDiscoveryToolRegistrar;
   }
+  setPostSkillDiscoveryToolRegistrar(
+    registrar: PostSkillDiscoveryToolRegistrar | undefined,
+  ): void {
+    this.postSkillDiscoveryToolRegistrar = registrar;
+  }
   getEnableHooksUI(): boolean {
     return this.enableHooksUI;
   }
