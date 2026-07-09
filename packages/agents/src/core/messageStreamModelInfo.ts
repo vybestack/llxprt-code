@@ -17,7 +17,7 @@ export function resolveModelForInfo(deps: ModelInfoDeps): string {
   const providerManager =
     deps.config.getContentGeneratorConfig()?.providerManager;
   const activeProvider = providerManager?.getActiveProvider();
-  if (activeProvider != null) {
+  if (activeProvider !== undefined) {
     const activeModel: unknown = activeProvider.getCurrentModel?.();
     if (typeof activeModel === 'string' && activeModel.trim() !== '')
       return activeModel;
