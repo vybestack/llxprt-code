@@ -581,8 +581,11 @@ describe('McpClientManager', () => {
       // connect was called but the deferred promise hasn't resolved yet
       expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
 
-      // Now resolve the connect promise — discovery completes in background
+      // Now resolve the connect promise — discovery completes in background.
+      // Use a timeout guard so the test doesn't hang if resolveConnect is lost.
+      const timeout = setTimeout(() => resolveConnect(), 5000);
       resolveConnect();
+      clearTimeout(timeout);
       await manager.whenDiscoverySettled();
     });
 
