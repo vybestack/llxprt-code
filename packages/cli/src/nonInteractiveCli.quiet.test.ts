@@ -521,4 +521,54 @@ describe('processAgentStream — quiet mode', () => {
     );
     expect(errorEvents).toHaveLength(0);
   });
+
+  it('suppresses refusal stderr warning in quiet text mode', async () => {
+    const stderrSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
+    const events: AgentEvent[] = [
+      { type: 'text', text: 'Partial.' },
+      { type: 'done', reason: 'refusal' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({ quiet: true }),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    const stderrContent = stderrSpy.mock.calls
+      .map(([value]) => String(value))
+      .join('');
+    expect(stderrContent).not.toContain('WARNING');
+    expect(stderrContent).not.toContain('refusal');
+  });
+
+  it('suppresses hook-stopped stderr message in quiet mode', async () => {
+    const stderrSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
+    const events: AgentEvent[] = [
+      { type: 'text', text: 'Partial.' },
+      {
+        type: 'done',
+        reason: 'hook-stopped',
+        stop: { reason: 'policy', systemMessage: 'stopped by hook' },
+      } as AgentEvent,
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({ quiet: true }),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    const stderrContent = stderrSpy.mock.calls
+      .map(([value]) => String(value))
+      .join('');
+    expect(stderrContent).not.toContain('stopped');
+    expect(stderrContent).not.toContain('hook');
+  });
 });

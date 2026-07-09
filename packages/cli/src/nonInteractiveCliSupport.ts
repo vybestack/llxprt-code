@@ -315,14 +315,22 @@ function handleDone(
       // (no streamFormatter and no jsonOutput). In stream-json mode the
       // structured warning event carries the signal; in plain-JSON mode the
       // finish_reason field carries it.
-      if (!context.jsonOutput && context.streamFormatter === null) {
+      //
+      // In quiet mode all warning emissions are suppressed (issue #728).
+      if (
+        !context.quiet &&
+        !context.jsonOutput &&
+        context.streamFormatter === null
+      ) {
         process.stderr.write(`WARNING: ${REFUSAL_NOTICE_MESSAGE}\n`);
       }
-      emitStreamError(
-        context.streamFormatter,
-        'warning',
-        REFUSAL_NOTICE_MESSAGE,
-      );
+      if (!context.quiet) {
+        emitStreamError(
+          context.streamFormatter,
+          'warning',
+          REFUSAL_NOTICE_MESSAGE,
+        );
+      }
       emitFinalResult(
         context,
         jsonResponseText,
@@ -333,11 +341,13 @@ function handleDone(
       return;
     }
     case 'hook-stopped': {
-      const stop = event.stop;
-      const stopMessage = `Agent execution stopped: ${
-        stop?.systemMessage?.trim() ?? stop?.reason ?? ''
-      }`;
-      process.stderr.write(`${stopMessage}\n`);
+      if (!context.quiet) {
+        const stop = event.stop;
+        const stopMessage = `Agent execution stopped: ${
+          stop?.systemMessage?.trim() ?? stop?.reason ?? ''
+        }`;
+        process.stderr.write(`${stopMessage}\n`);
+      }
       return;
     }
     case 'aborted':
