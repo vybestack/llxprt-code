@@ -199,7 +199,11 @@ async function prepareContainerSandbox(
     credentialProxyBridgeCleanup = cpResult.credentialProxyBridgeCleanup;
   } catch (err) {
     credentialProxyBridgeResult?.cleanup?.();
-    await stopProxy();
+    try {
+      await stopProxy();
+    } catch {
+      // best-effort cleanup; the original error is the one we want to throw
+    }
     if (err instanceof FatalSandboxError) {
       throw err;
     }

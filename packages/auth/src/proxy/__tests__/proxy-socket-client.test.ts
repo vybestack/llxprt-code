@@ -576,6 +576,8 @@ describe('ProxySocketClient', () => {
     server = result.server;
 
     client = new ProxySocketClient(socketPath, 'some-token');
+    // Suppress potential unhandled rejection from the server-side handshake promise
+    result.handshake.catch(() => {});
     await expect(client.ensureConnected()).rejects.toThrow(
       /authentication failed/i,
     );

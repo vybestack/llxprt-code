@@ -226,6 +226,7 @@ export class CredentialProxyServer {
       try {
         frames = decoder.feed(chunk);
       } catch {
+        this.auditLog('WARN', state.id, 'frame_decode_error');
         socket.destroy();
         return;
       }
@@ -272,11 +273,12 @@ export class CredentialProxyServer {
     handshakeState: { completed: boolean },
   ): boolean {
     if (!handshakeState.completed) {
-      // Mark completed immediately so re-entrant data events on a doomed
-      // socket do not trigger duplicate handshake processing.
-      handshakeState.completed = true;
       const ok = this.handleHandshake(socket, frame, state);
       if (!ok) return false;
+      // Only mark completed on success — on failure, socket.end() only
+      // half-closes, so the readable side can still emit data. Leaving
+      // completed=false ensures rejected connections cannot dispatch requests.
+      handshakeState.completed = true;
       return true;
     }
     void this.dispatchRequest(socket, frame, state);
@@ -696,14 +698,14 @@ export class CredentialProxyServer {
     payload: Record<string, unknown>,
     state: ConnectionState,
   ): Promise<void> {
+    if (this.emptyIfSandbox(socket, id, state, 'list_buckets', { buckets: [] }))
+      return;
+
     const provider = payload.provider as string | undefined;
     if (!provider) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
       return;
     }
-
-    if (this.emptyIfSandbox(socket, id, state, 'list_buckets', { buckets: [] }))
-      return;
 
     const buckets = await this.options.tokenStore.listBuckets(provider);
     this.auditLog('INFO', state.id, 'list_buckets', {
@@ -804,12 +806,7 @@ export class CredentialProxyServer {
     payload: Record<string, unknown>,
     state: ConnectionState,
   ): Promise<void> {
-    const provider = payload.provider as string | undefined;
     const bucket = payload.bucket as string | undefined;
-    if (!provider) {
-      this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
-      return;
-    }
     if (
       this.emptyIfSandbox(socket, id, state, 'get_bucket_stats', {
         bucket: bucket ?? 'default',
@@ -818,6 +815,12 @@ export class CredentialProxyServer {
       })
     )
       return;
+
+    const provider = payload.provider as string | undefined;
+    if (!provider) {
+      this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
+      return;
+    }
     const stats = await this.options.tokenStore.getBucketStats(
       provider,
       bucket ?? 'default',

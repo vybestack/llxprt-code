@@ -36,7 +36,11 @@ function isProxyResponseFrame(
 ): frame is ProxyResponse {
   if (typeof frame.ok !== 'boolean') return false;
   if (frame.code !== undefined && typeof frame.code !== 'string') return false;
-  if (frame.error !== undefined && typeof frame.error !== 'string')
+  if (frame.error !== undefined && typeof frame.error !== 'string') return false;
+  if (
+    frame.retryAfter !== undefined &&
+    typeof frame.retryAfter !== 'number'
+  )
     return false;
   return true;
 }
@@ -153,7 +157,13 @@ export class ProxySocketClient {
       await this.connect();
       await this.handshake();
     } catch (err) {
-      this.destroy(err instanceof Error ? err.message : 'Handshake failed');
+      try {
+        this.destroy(
+          err instanceof Error ? err.message : 'Handshake failed',
+        );
+      } catch {
+        // Swallow cleanup errors so the original failure is not masked
+      }
       throw err;
     }
   }

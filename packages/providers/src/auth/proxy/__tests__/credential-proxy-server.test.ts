@@ -240,6 +240,10 @@ describe('CredentialProxyServer', () => {
         socket.destroy();
         reject(err);
       });
+      socket.on('close', () => {
+        clearTimeout(timer);
+        reject(new Error('Connection closed before handshake response'));
+      });
     });
   }
 

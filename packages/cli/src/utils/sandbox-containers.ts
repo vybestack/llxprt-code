@@ -484,7 +484,16 @@ function pushCapabilityEnvFile(
     }
     throw writeErr;
   }
-  fs.closeSync(fd);
+  try {
+    fs.closeSync(fd);
+  } catch (closeErr) {
+    try {
+      fs.unlinkSync(envFile);
+    } catch {
+      // file may not exist or already removed
+    }
+    throw closeErr;
+  }
   args.push('--env-file', envFile);
   return () => {
     try {
@@ -729,13 +738,10 @@ export function wireCleanupHandlers(
   }
 
   if (credentialProxyBridgeResult?.cleanup !== undefined) {
-    const stopCredentialBridgeTunnel = credentialProxyBridgeResult.cleanup;
-    process.on('exit', stopCredentialBridgeTunnel);
-    process.on('SIGINT', stopCredentialBridgeTunnel);
-    process.on('SIGTERM', stopCredentialBridgeTunnel);
+    // The composed credentialProxyBridgeCleanup (which includes the bridge
+    // tunnel cleanup) is already registered on exit/SIGINT/SIGTERM by
+    // registerCapabilityEnvCleanup. Only register the close handler here.
     sandboxProcess.on('close', () => {
-      // The composed cleanup already includes the bridge tunnel cleanup,
-      // so only call it here and null out the reference.
       credentialProxyBridgeCleanup?.();
       setCredentialProxyBridgeCleanup(undefined);
     });

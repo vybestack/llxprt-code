@@ -174,7 +174,13 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     });
 
     it('passes LLXPRT_CAPABILITY_TOKEN via --env-file', () => {
-      expect(sandboxSource).toContain("args.push('--env-file', envFile)");
+      const fnSection = extractFunctionBody(
+        sandboxSource,
+        'pushCapabilityEnvFile',
+      );
+      expect(fnSection.length).toBeGreaterThan(0);
+      expect(fnSection).toContain("args.push('--env-file', envFile)");
+      expect(fnSection).toContain('LLXPRT_CAPABILITY_TOKEN');
     });
 
     it('does NOT pass LLXPRT_CAPABILITY_TOKEN via --env (avoids exposing in process args)', () => {

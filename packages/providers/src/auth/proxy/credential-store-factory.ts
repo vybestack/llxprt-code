@@ -93,7 +93,11 @@ export function createTokenStore(): TokenStore {
   }
   // Clean up stale proxy singletons when switching to direct mode
   if (proxyTokenStore !== undefined) {
-    proxyTokenStore.getClient().close();
+    try {
+      proxyTokenStore.getClient().close();
+    } catch {
+      // best-effort cleanup
+    }
     proxyTokenStore = undefined;
     proxyTokenStoreCapabilityToken = undefined;
     proxyTokenStoreSocketPath = undefined;
@@ -136,7 +140,11 @@ export function createProviderKeyStorage(): ProviderKeyStorageLike {
   }
   // Clean up stale proxy singletons when switching to direct mode
   if (proxyKeyStorage !== undefined) {
-    proxyKeyStorageClient?.close();
+    try {
+      proxyKeyStorageClient?.close();
+    } catch {
+      // best-effort cleanup
+    }
     proxyKeyStorageClient = undefined;
     proxyKeyStorage = undefined;
     proxyKeyStorageCapabilityToken = undefined;

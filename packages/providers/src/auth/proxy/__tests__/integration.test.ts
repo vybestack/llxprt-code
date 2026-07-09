@@ -273,6 +273,19 @@ describe('proxy integration (phase 31)', () => {
     expect(getProxyCapabilityToken()).toBeUndefined();
   });
 
+  it('clears capability token when start() fails', async () => {
+    // @scenario If serverInstance.start() throws (e.g. unwritable socket dir),
+    // the capability token must be cleared to prevent a stale token from
+    // being reused by a subsequent proxy session.
+    const unwritableDir = path.join(tmpDir, 'does-not-exist', 'subdir');
+    await expect(
+      createAndStartProxy({
+        socketPath: path.join(unwritableDir, 'fail.sock'),
+      }),
+    ).rejects.toThrow(/ENOENT|EACCES|EADDRINUSE|EINVAL|fail/i);
+    expect(getProxyCapabilityToken()).toBeUndefined();
+  });
+
   it.skipIf(isWindows)(
     'creates socket file on server start and removes it on server stop',
     async () => {
