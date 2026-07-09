@@ -197,6 +197,15 @@ export async function createAndStartProxy(
 
     actualSocketPath = await serverInstance.start();
   } catch (err) {
+    // start() may have partially initialised the net.Server before failing
+    // (e.g. EADDRINUSE). Clean up to avoid orphaning a listening socket.
+    if (serverInstance) {
+      try {
+        await serverInstance.stop();
+      } catch {
+        // best-effort cleanup; the original error is the one we want to throw
+      }
+    }
     serverInstance = undefined;
     actualCapabilityToken = undefined;
     actualSocketPath = undefined;

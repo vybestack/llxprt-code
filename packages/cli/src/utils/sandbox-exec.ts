@@ -199,7 +199,7 @@ async function prepareContainerSandbox(
     credentialProxyBridgeCleanup = cpResult.credentialProxyBridgeCleanup;
   } catch (err) {
     credentialProxyBridgeResult?.cleanup?.();
-    void stopProxy();
+    await stopProxy();
     if (err instanceof FatalSandboxError) {
       throw err;
     }

@@ -81,8 +81,11 @@ export function createTokenStore(): TokenStore {
       proxyTokenStoreCapabilityToken !== capabilityToken ||
       proxyTokenStoreSocketPath !== socketPath
     ) {
-      proxyTokenStore?.getClient().close();
-      proxyTokenStore = new ProxyTokenStore(socketPath, capabilityToken);
+      const oldStore = proxyTokenStore;
+      const newStore = new ProxyTokenStore(socketPath, capabilityToken);
+      // Only mutate singletons after construction succeeds
+      oldStore?.getClient().close();
+      proxyTokenStore = newStore;
       proxyTokenStoreCapabilityToken = capabilityToken;
       proxyTokenStoreSocketPath = socketPath;
     }
@@ -119,12 +122,13 @@ export function createProviderKeyStorage(): ProviderKeyStorageLike {
       proxyKeyStorageCapabilityToken !== capabilityToken ||
       proxyKeyStorageSocketPath !== socketPath
     ) {
-      proxyKeyStorageClient?.close();
-      proxyKeyStorageClient = new ProxySocketClient(
-        socketPath,
-        capabilityToken,
-      );
-      proxyKeyStorage = new ProxyProviderKeyStorage(proxyKeyStorageClient);
+      const oldClient = proxyKeyStorageClient;
+      const newClient = new ProxySocketClient(socketPath, capabilityToken);
+      const newStorage = new ProxyProviderKeyStorage(newClient);
+      // Only mutate singletons after both constructors succeed
+      oldClient?.close();
+      proxyKeyStorageClient = newClient;
+      proxyKeyStorage = newStorage;
       proxyKeyStorageCapabilityToken = capabilityToken;
       proxyKeyStorageSocketPath = socketPath;
     }

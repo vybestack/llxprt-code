@@ -272,9 +272,11 @@ export class CredentialProxyServer {
     handshakeState: { completed: boolean },
   ): boolean {
     if (!handshakeState.completed) {
+      // Mark completed immediately so re-entrant data events on a doomed
+      // socket do not trigger duplicate handshake processing.
+      handshakeState.completed = true;
       const ok = this.handleHandshake(socket, frame, state);
       if (!ok) return false;
-      handshakeState.completed = true;
       return true;
     }
     void this.dispatchRequest(socket, frame, state);
@@ -305,7 +307,10 @@ export class CredentialProxyServer {
       this.auditLog('WARN', state.id, 'handshake_rejected', {
         reason: 'version_mismatch',
       });
-      socket.write(
+      // Use end() instead of write()+destroy() so the error frame is flushed
+      // to the OS before the socket is torn down, preventing ECONNRESET on the
+      // client side which would mask the specific UNKNOWN_VERSION error code.
+      socket.end(
         encodeFrame({
           v: PROTOCOL_VERSION,
           op: 'handshake',
@@ -314,7 +319,6 @@ export class CredentialProxyServer {
           error: 'Unsupported protocol version',
         }),
       );
-      socket.destroy();
       return false;
     }
 
@@ -334,7 +338,10 @@ export class CredentialProxyServer {
         this.auditLog('ERROR', state.id, 'handshake_unauthorized', {
           reason: 'invalid_capability_token',
         });
-        socket.write(
+        // Use end() instead of write()+destroy() so the error frame is flushed
+        // to the OS before the socket is torn down, preventing ECONNRESET on the
+        // client side which would mask the specific UNAUTHORIZED error code.
+        socket.end(
           encodeFrame({
             v: PROTOCOL_VERSION,
             op: 'handshake',
@@ -343,7 +350,6 @@ export class CredentialProxyServer {
             error: 'Invalid or missing capability token',
           }),
         );
-        socket.destroy();
         return false;
       }
       state.isSandboxConnection = true;

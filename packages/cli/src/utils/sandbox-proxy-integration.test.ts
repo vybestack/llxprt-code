@@ -38,7 +38,7 @@ const sandboxSource = Object.values(sandboxSources).join('\n');
 /** Extracts a function's body from source code by finding the next function
  *  declaration boundary (handles both `function` and `async function`). */
 function extractFunctionBody(source: string, fnName: string): string {
-  const start = source.indexOf(`function ${fnName}`);
+  const start = source.indexOf(`function ${fnName}(`);
   if (start === -1) return '';
   const nextFn = source.slice(start + 1).search(/\n(?:async )?function /);
   const end = nextFn === -1 ? undefined : start + 1 + nextFn;
@@ -184,7 +184,7 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       );
       expect(fnSection.length).toBeGreaterThan(0);
       // Guard against both --env and -e which would expose the token
-      expect(fnSection).not.toMatch(/--env[^-]/);
+      expect(fnSection).not.toMatch(/--env[\s=]+LLXPRT_CAPABILITY_TOKEN/);
       expect(fnSection).not.toMatch(/(?<!-)-e\s+LLXPRT_CAPABILITY_TOKEN/);
     });
 

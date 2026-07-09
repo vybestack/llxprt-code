@@ -207,6 +207,42 @@ describe('CredentialProxyServer', () => {
     return c;
   }
 
+  /** Sends a raw handshake frame over a bare TCP/Unix socket and resolves
+   *  with the decoded response frame. Used to test server-level rejection
+   *  paths (version mismatch, missing token) that bypass the client SDK. */
+  async function sendRawHandshake(
+    socketPath: string,
+    handshakePayload: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const net = await import('node:net');
+    const { encodeFrame, FrameDecoder } = await import(
+      '@vybestack/llxprt-code-auth'
+    );
+    return new Promise<Record<string, unknown>>((resolve, reject) => {
+      const socket = net.createConnection(socketPath, () => {
+        socket.write(encodeFrame(handshakePayload));
+      });
+      const decoder = new FrameDecoder();
+      const timer = setTimeout(() => {
+        socket.destroy();
+        reject(new Error('Timeout waiting for handshake response'));
+      }, 5000);
+      socket.on('data', (chunk: Buffer) => {
+        const frames = decoder.feed(chunk);
+        for (const frame of frames) {
+          clearTimeout(timer);
+          socket.destroy();
+          resolve(frame);
+        }
+      });
+      socket.on('error', (err) => {
+        clearTimeout(timer);
+        socket.destroy();
+        reject(err);
+      });
+    });
+  }
+
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
   /**
@@ -311,43 +347,11 @@ describe('CredentialProxyServer', () => {
     server = createServer();
     const socketPath = await server.start();
 
-    // Manually construct a client-like connection with wrong version
-    // by using the raw socket to send a bad handshake
-    const net = await import('node:net');
-    const { encodeFrame, FrameDecoder } = await import(
-      '@vybestack/llxprt-code-core'
-    );
-
-    const response = await new Promise<Record<string, unknown>>(
-      (resolve, reject) => {
-        const socket = net.createConnection(socketPath, () => {
-          const handshake = {
-            v: 999,
-            op: 'handshake',
-            payload: { minVersion: 999, maxVersion: 999 },
-          };
-          socket.write(encodeFrame(handshake));
-        });
-        const decoder = new FrameDecoder();
-        const timer = setTimeout(() => {
-          socket.destroy();
-          reject(new Error('Timeout waiting for handshake response'));
-        }, 5000);
-        socket.on('data', (chunk: Buffer) => {
-          const frames = decoder.feed(chunk);
-          for (const frame of frames) {
-            clearTimeout(timer);
-            socket.destroy();
-            resolve(frame);
-          }
-        });
-        socket.on('error', (err) => {
-          clearTimeout(timer);
-          socket.destroy();
-          reject(err);
-        });
-      },
-    );
+    const response = await sendRawHandshake(socketPath, {
+      v: 999,
+      op: 'handshake',
+      payload: { minVersion: 999, maxVersion: 999 },
+    });
 
     expect(response.ok).toBe(false);
   });
@@ -1251,42 +1255,11 @@ describe('CredentialProxyServer', () => {
     server = createServer({ capabilityToken: CAPABILITY_TOKEN });
     const socketPath = await server.start();
 
-    const net = await import('node:net');
-    const { encodeFrame, FrameDecoder } = await import(
-      '@vybestack/llxprt-code-auth'
-    );
-
-    const response = await new Promise<Record<string, unknown>>(
-      (resolve, reject) => {
-        const socket = net.createConnection(socketPath, () => {
-          socket.write(
-            encodeFrame({
-              v: 999,
-              op: 'handshake',
-              payload: { minVersion: 999, maxVersion: 999 },
-            }),
-          );
-        });
-        const decoder = new FrameDecoder();
-        const timer = setTimeout(() => {
-          socket.destroy();
-          reject(new Error('Timeout waiting for handshake response'));
-        }, 5000);
-        socket.on('data', (chunk: Buffer) => {
-          const frames = decoder.feed(chunk);
-          for (const frame of frames) {
-            clearTimeout(timer);
-            socket.destroy();
-            resolve(frame);
-          }
-        });
-        socket.on('error', (err) => {
-          clearTimeout(timer);
-          socket.destroy();
-          reject(err);
-        });
-      },
-    );
+    const response = await sendRawHandshake(socketPath, {
+      v: 999,
+      op: 'handshake',
+      payload: { minVersion: 999, maxVersion: 999 },
+    });
 
     expect(response.ok).toBe(false);
     expect(response.code).not.toBe('UNAUTHORIZED');
@@ -1310,5 +1283,9 @@ describe('CredentialProxyServer', () => {
     // reach the OAuth handler rather than being blocked at the sandbox gate.
     expect(response.ok).toBe(false);
     expect(response.code).not.toBe('FORBIDDEN');
+    // Should be a specific handler-level error, not a generic INTERNAL_ERROR.
+    // OAUTH_FLOW_NOT_FOUND or similar indicates the request reached the OAuth
+    // layer and failed due to missing flow config.
+    expect(response.code).not.toBe('INTERNAL_ERROR');
   });
 });

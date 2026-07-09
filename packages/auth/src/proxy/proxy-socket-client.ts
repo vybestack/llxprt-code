@@ -28,6 +28,19 @@ export type ProxyResponse = {
   retryAfter?: number;
 };
 
+/** Validates that a decoded frame has the shape of a ProxyResponse, guarding
+ *  against adversarial or malformed server responses with unexpected types
+ *  for `ok`, `code`, or `error`. */
+function isProxyResponseFrame(
+  frame: Record<string, unknown>,
+): frame is ProxyResponse {
+  if (typeof frame.ok !== 'boolean') return false;
+  if (frame.code !== undefined && typeof frame.code !== 'string') return false;
+  if (frame.error !== undefined && typeof frame.error !== 'string')
+    return false;
+  return true;
+}
+
 interface PendingRequest {
   resolve: (value: ProxyResponse) => void;
   reject: (reason: Error) => void;
@@ -136,8 +149,8 @@ export class ProxySocketClient {
   }
 
   private async connectAndHandshake(): Promise<void> {
-    await this.connect();
     try {
+      await this.connect();
       await this.handshake();
     } catch (err) {
       this.destroy(err instanceof Error ? err.message : 'Handshake failed');
@@ -232,8 +245,8 @@ export class ProxySocketClient {
       return;
     }
     this.handshakeResolver = null;
-    if (typeof frame.ok === 'boolean') {
-      resolver.resolve(frame as ProxyResponse);
+    if (isProxyResponseFrame(frame)) {
+      resolver.resolve(frame);
     } else {
       resolver.reject(new Error('Malformed handshake response from proxy'));
     }
