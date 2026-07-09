@@ -43,47 +43,66 @@ export type StreamProcessorOptions = {
   logger: { debug: (fn: () => string) => void };
   cacheLogger: { debug: (fn: () => string) => void };
   rateLimitLogger: { debug: (fn: () => string) => void };
+  includeThinkingInResponse: boolean;
 };
 
 type StreamState = { hasYieldedContent: boolean };
+
+type CurrentThinkingBlock = {
+  thinking: string;
+  signature?: string;
+  streamId: string;
+};
+
+type ThinkingBlockIdentity = {
+  nextStreamId: (sourceIndex: number) => string;
+};
+
+function createThinkingBlockIdentity(): ThinkingBlockIdentity {
+  let nextLifecycleId = 0;
+  return {
+    nextStreamId: (sourceIndex: number): string =>
+      `anthropic-thinking:${sourceIndex}:block-${nextLifecycleId++}`,
+  };
+}
 
 // Global counter appended to tool call IDs so providers that reset indices per
 // API call (e.g. Kimi on Fireworks) never produce duplicates across turns.
 let toolCallSequence = 0;
 
-/**
- * #1723: Builds incremental IContent chunks for text and thinking deltas.
- *
- * Thinking chunks carry the ACCUMULATED thinking text (not just the delta
- * fragment) so downstream consumers can render progressive thinking content
- * in real-time. The content_block_stop event still emits a final complete
- * block with the signature; consumers that dedup by exact text match will
- * treat the final block as an update rather than a duplicate.
- */
-function buildDeltaContents(deltaResult: {
-  textDelta?: string;
-  accumulatedThinking?: string;
-}): IContent[] {
-  const contents: IContent[] = [];
-  if (deltaResult.textDelta) {
-    contents.push({
-      speaker: 'ai',
-      blocks: [{ type: 'text', text: deltaResult.textDelta }],
-    } as IContent);
+function buildTextDeltaContent(textDelta: string): IContent {
+  return {
+    speaker: 'ai',
+    blocks: [{ type: 'text', text: textDelta }],
+  };
+}
+
+function buildThinkingContent(params: {
+  thinking: string;
+  signature?: string;
+  streamId: string;
+  streamStatus: 'delta' | 'complete';
+  isHidden: boolean;
+}): IContent | undefined {
+  if (!params.thinking && params.signature === undefined) {
+    return undefined;
   }
-  if (deltaResult.accumulatedThinking) {
-    contents.push({
-      speaker: 'ai',
-      blocks: [
-        {
-          type: 'thinking',
-          thought: deltaResult.accumulatedThinking,
-          sourceField: 'thinking',
-        } as ThinkingBlock,
-      ],
-    } as IContent);
-  }
-  return contents;
+  return {
+    speaker: 'ai',
+    blocks: [
+      {
+        type: 'thinking',
+        thought: params.thinking,
+        sourceField: 'thinking',
+        streamId: params.streamId,
+        streamStatus: params.streamStatus,
+        ...(params.signature !== undefined
+          ? { signature: params.signature }
+          : {}),
+        ...(params.isHidden ? { isHidden: true } : {}),
+      },
+    ],
+  };
 }
 
 async function* processStreamEvents(
@@ -101,9 +120,8 @@ async function* processStreamEvents(
   } = options;
 
   let currentToolCall: { id: string; name: string; input: string } | undefined;
-  let currentThinkingBlock:
-    | { thinking: string; signature?: string }
-    | undefined;
+  let currentThinkingBlock: CurrentThinkingBlock | undefined;
+  const thinkingBlockIdentity = createThinkingBlockIdentity();
 
   for await (const chunk of stream) {
     if (chunk.type === 'message_start') {
@@ -113,6 +131,7 @@ async function* processStreamEvents(
         chunk,
         isOAuth,
         unprefixToolName,
+        thinkingBlockIdentity,
         logger,
       );
       if (blockResult.currentToolCall !== undefined) {
@@ -126,16 +145,16 @@ async function* processStreamEvents(
         yield blockResult.content;
       }
     } else if (chunk.type === 'content_block_delta') {
-      const deltaResult = handleContentBlockDelta(
+      const deltaContent = handleContentBlockDelta(
         chunk,
         currentToolCall,
         currentThinkingBlock,
+        options.includeThinkingInResponse,
         logger,
       );
-      const deltaContents = buildDeltaContents(deltaResult);
-      if (deltaContents.length > 0) {
+      if (deltaContent !== undefined) {
         state.hasYieldedContent = true;
-        yield* deltaContents;
+        yield deltaContent;
       }
     } else if (chunk.type === 'content_block_stop') {
       const stopResult = handleContentBlockStop(
@@ -145,6 +164,7 @@ async function* processStreamEvents(
         tools,
         isOAuth,
         findToolSchema,
+        options.includeThinkingInResponse,
         logger,
       );
       if (stopResult.content) {
@@ -285,10 +305,11 @@ function handleContentBlockStartStateful(
   chunk: Anthropic.MessageStreamEvent & { type: 'content_block_start' },
   isOAuth: boolean,
   unprefixToolName: (name: string, isOAuth: boolean) => string,
+  thinkingBlockIdentity: ThinkingBlockIdentity,
   logger: { debug: (fn: () => string) => void },
 ): {
   currentToolCall?: { id: string; name: string; input: string };
-  currentThinkingBlock?: { thinking: string; signature?: string };
+  currentThinkingBlock?: CurrentThinkingBlock;
   content?: IContent;
 } {
   handleContentBlockStart(chunk, logger);
@@ -307,6 +328,7 @@ function handleContentBlockStartStateful(
       currentThinkingBlock: {
         thinking: '',
         signature: chunk.content_block.signature,
+        streamId: thinkingBlockIdentity.nextStreamId(chunk.index),
       },
     };
   }
@@ -335,13 +357,14 @@ function handleContentBlockStartStateful(
 function handleContentBlockDelta(
   chunk: Anthropic.MessageStreamEvent & { type: 'content_block_delta' },
   currentToolCall: { id: string; name: string; input: string } | undefined,
-  currentThinkingBlock: { thinking: string; signature?: string } | undefined,
+  currentThinkingBlock: CurrentThinkingBlock | undefined,
+  includeThinkingInResponse: boolean,
   logger: { debug: (fn: () => string) => void },
-): { textDelta?: string; accumulatedThinking?: string } {
+): IContent | undefined {
   if (chunk.delta.type === 'text_delta') {
     const textDelta = chunk.delta as TextDelta;
     logger.debug(() => `Received text delta: ${textDelta.text.length} chars`);
-    return { textDelta: textDelta.text };
+    return textDelta.text ? buildTextDeltaContent(textDelta.text) : undefined;
   } else if (chunk.delta.type === 'input_json_delta' && currentToolCall) {
     const jsonDelta = chunk.delta as InputJSONDelta;
     currentToolCall.input += jsonDelta.partial_json;
@@ -360,11 +383,13 @@ function handleContentBlockDelta(
     logger.debug(
       () => `Thinking delta chunk (${thinkingDelta.thinking.length} chars)`,
     );
-    // Only emit when the delta contributed new text. An empty thinking_delta
-    // (e.g. keep-alive) must not re-emit the previously accumulated text as a
-    // duplicate.
     if (thinkingDelta.thinking) {
-      return { accumulatedThinking: currentThinkingBlock.thinking };
+      return buildThinkingContent({
+        thinking: currentThinkingBlock.thinking,
+        streamId: currentThinkingBlock.streamId,
+        streamStatus: 'delta',
+        isHidden: !includeThinkingInResponse,
+      });
     }
   } else if (chunk.delta.type === 'signature_delta' && currentThinkingBlock) {
     const signatureDelta = chunk.delta as {
@@ -378,7 +403,7 @@ function handleContentBlockDelta(
     currentThinkingBlock.signature = signatureDelta.signature;
   }
 
-  return {};
+  return undefined;
 }
 
 function isNonArrayRecord(value: unknown): value is Record<string, unknown> {
@@ -458,10 +483,11 @@ function readStopEventContentBlock(
 }
 
 function completeThinkingBlock(
-  currentThinkingBlock: { thinking: string; signature?: string },
+  currentThinkingBlock: CurrentThinkingBlock,
   chunk: Anthropic.MessageStreamEvent & { type: 'content_block_stop' },
+  includeThinkingInResponse: boolean,
   logger: { debug: (fn: () => string) => void },
-): IContent {
+): IContent | undefined {
   logger.debug(
     () =>
       `Completed thinking block: ${currentThinkingBlock.thinking.length} chars`,
@@ -472,23 +498,19 @@ function completeThinkingBlock(
     currentThinkingBlock.signature = contentBlock.signature;
   }
 
-  return {
-    speaker: 'ai',
-    blocks: [
-      {
-        type: 'thinking',
-        thought: currentThinkingBlock.thinking,
-        sourceField: 'thinking',
-        signature: currentThinkingBlock.signature,
-      } as ThinkingBlock,
-    ],
-  } as IContent;
+  return buildThinkingContent({
+    thinking: currentThinkingBlock.thinking,
+    signature: currentThinkingBlock.signature,
+    streamId: currentThinkingBlock.streamId,
+    streamStatus: 'complete',
+    isHidden: !includeThinkingInResponse,
+  });
 }
 
 function handleContentBlockStop(
   chunk: Anthropic.MessageStreamEvent & { type: 'content_block_stop' },
   currentToolCall: { id: string; name: string; input: string } | undefined,
-  currentThinkingBlock: { thinking: string; signature?: string } | undefined,
+  currentThinkingBlock: CurrentThinkingBlock | undefined,
   tools: ProviderToolset | undefined,
   isOAuth: boolean,
   findToolSchema: (
@@ -496,11 +518,12 @@ function handleContentBlockStop(
     name: string,
     isOAuth: boolean,
   ) => unknown,
+  includeThinkingInResponse: boolean,
   logger: { debug: (fn: () => string) => void },
 ): {
   content?: IContent;
   currentToolCall?: { id: string; name: string; input: string };
-  currentThinkingBlock?: { thinking: string; signature?: string };
+  currentThinkingBlock?: CurrentThinkingBlock;
 } {
   if (currentToolCall) {
     return {
@@ -516,7 +539,12 @@ function handleContentBlockStop(
     };
   } else if (currentThinkingBlock) {
     return {
-      content: completeThinkingBlock(currentThinkingBlock, chunk, logger),
+      content: completeThinkingBlock(
+        currentThinkingBlock,
+        chunk,
+        includeThinkingInResponse,
+        logger,
+      ),
       currentToolCall,
       currentThinkingBlock: undefined,
     };

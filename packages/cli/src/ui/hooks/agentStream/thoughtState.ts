@@ -15,27 +15,20 @@ import {
   type HistoryItemWithoutId,
 } from '../../types.js';
 
-/**
- * #1723: Determines whether an incoming thought text is an incremental
- * extension of the last thinking block (i.e. the last block's thought text
- * is a proper prefix of the incoming text — longer, not identical). This
- * allows the UI to grow a single thinking block as deltas stream in rather
- * than creating a new block per chunk.
- *
- * A strict-prefix check (startsWith combined with a length inequality) avoids
- * merging two distinct blocks that happen to share a textual prefix: if
- * incoming text equals the last block's text, it is treated as a duplicate
- * (handled by buildThinkingBlock's dedup) rather than an incremental update.
- */
-function isIncrementalUpdate(
-  incomingText: string,
-  lastBlock: ThinkingBlock | undefined,
-): boolean {
-  if (!lastBlock || lastBlock.thought === '') return false;
-  return (
-    incomingText.startsWith(lastBlock.thought) &&
-    incomingText.length > lastBlock.thought.length
-  );
+function findStreamBlockIndex(
+  blocks: ThinkingBlock[],
+  streamId: string | undefined,
+): number {
+  if (streamId === undefined) {
+    return -1;
+  }
+  return blocks.findIndex((block) => block.streamId === streamId);
+}
+
+function buildThoughtText(thoughtSummary: ThoughtSummary): string {
+  return [thoughtSummary.subject, thoughtSummary.description]
+    .filter(Boolean)
+    .join(': ');
 }
 
 export function applyThoughtToState(
@@ -55,20 +48,26 @@ export function applyThoughtToState(
 ): void {
   setLastAgentActivityTime(Date.now());
   setThought(thoughtSummary);
-  let thoughtText = [thoughtSummary.subject, thoughtSummary.description]
-    .filter(Boolean)
-    .join(': ');
+  let thoughtText = buildThoughtText(thoughtSummary);
   const sanitized = sanitizeContent(thoughtText);
   thoughtText = sanitized.blocked ? '' : sanitized.text;
 
-  const lastBlock =
-    thinkingBlocksRef.current[thinkingBlocksRef.current.length - 1];
+  const streamBlockIndex = findStreamBlockIndex(
+    thinkingBlocksRef.current,
+    thoughtSummary.streamId,
+  );
 
-  if (thoughtText && isIncrementalUpdate(thoughtText, lastBlock)) {
-    thinkingBlocksRef.current = [
-      ...thinkingBlocksRef.current.slice(0, -1),
-      { ...lastBlock, thought: thoughtText },
-    ];
+  if (streamBlockIndex >= 0) {
+    const existingBlock = thinkingBlocksRef.current[streamBlockIndex];
+    thinkingBlocksRef.current = thinkingBlocksRef.current.map((block, index) =>
+      index === streamBlockIndex
+        ? {
+            ...existingBlock,
+            thought: thoughtText,
+            streamStatus: thoughtSummary.streamStatus,
+          }
+        : block,
+    );
     updatePendingWithThinking(
       getContentPrefixIdentity,
       thinkingBlocksRef,
@@ -77,10 +76,7 @@ export function applyThoughtToState(
     return;
   }
 
-  const thinkingBlock = buildThinkingBlock(
-    thoughtText,
-    thinkingBlocksRef.current,
-  );
+  const thinkingBlock = buildThinkingBlock(thoughtText, thoughtSummary);
   if (thinkingBlock) {
     thinkingBlocksRef.current = [...thinkingBlocksRef.current, thinkingBlock];
     updatePendingWithThinking(
@@ -118,20 +114,20 @@ function updatePendingWithThinking(
 
 function buildThinkingBlock(
   thoughtText: string,
-  existingBlocks: ThinkingBlock[],
+  thoughtSummary: ThoughtSummary,
 ): ThinkingBlock | null {
   if (!thoughtText) {
-    return null;
-  }
-  const alreadyHasThought = existingBlocks.some(
-    (tb) => tb.thought === thoughtText,
-  );
-  if (alreadyHasThought) {
     return null;
   }
   return {
     type: 'thinking',
     thought: thoughtText,
     sourceField: 'thought',
+    ...(thoughtSummary.streamId !== undefined
+      ? { streamId: thoughtSummary.streamId }
+      : {}),
+    ...(thoughtSummary.streamStatus !== undefined
+      ? { streamStatus: thoughtSummary.streamStatus }
+      : {}),
   };
 }

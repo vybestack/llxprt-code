@@ -4,12 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Behavioral tests for applyThoughtToState:
- * - content-prefix identity threading (issue #2263)
- * - incremental thinking accumulation for true UI streaming (issue #1723)
- */
-
 import { describe, it, expect, vi } from 'vitest';
 import type React from 'react';
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
@@ -32,29 +26,50 @@ function createArgs(overrides: {
   };
 }
 
-describe('applyThoughtToState content-prefix identity (issue #2263)', () => {
+function applyThought(
+  args: ReturnType<typeof createArgs>,
+  thoughtSummary: {
+    subject: string;
+    description: string;
+    streamId?: string;
+    streamStatus?: 'delta' | 'complete';
+  },
+): void {
+  applyThoughtToState(
+    thoughtSummary,
+    args.sanitizeContent,
+    args.getContentPrefixIdentity,
+    args.thinkingBlocksRef,
+    args.setLastAgentActivityTime,
+    args.setThought,
+    args.setPendingHistoryItem,
+  );
+}
+
+function pendingResult(
+  args: ReturnType<typeof createArgs>,
+  callIndex: number,
+  existing: HistoryItemWithoutId | null,
+): HistoryItemAi | null {
+  const call = args.setPendingHistoryItem.mock.calls[callIndex] as
+    | [(item: HistoryItemWithoutId | null) => HistoryItemWithoutId | null]
+    | undefined;
+  if (call === undefined) {
+    return null;
+  }
+  const updater = call[0];
+  return updater(existing) as HistoryItemAi | null;
+}
+
+describe('applyThoughtToState content-prefix identity', () => {
   it('threads profileName:modelName into the pending AI item', () => {
     const args = createArgs({
       getContentPrefixIdentity: () => 'work:gpt-4',
     });
 
-    applyThoughtToState(
-      args.thoughtSummary,
-      args.sanitizeContent,
-      args.getContentPrefixIdentity,
-      args.thinkingBlocksRef,
-      args.setLastAgentActivityTime,
-      args.setThought,
-      args.setPendingHistoryItem,
-    );
+    applyThought(args, args.thoughtSummary);
 
-    expect(args.setPendingHistoryItem).toHaveBeenCalledTimes(1);
-    const updater = args.setPendingHistoryItem.mock.calls[0][0] as (
-      item: HistoryItemWithoutId | null,
-    ) => HistoryItemWithoutId | null;
-    const result = updater(null) as HistoryItemAi | null;
-    expect(result?.type).toBe('gemini');
-    expect(result?.profileName).toBe('work:gpt-4');
+    expect(pendingResult(args, 0, null)?.profileName).toBe('work:gpt-4');
   });
 
   it('omits profileName when getContentPrefixIdentity returns null', () => {
@@ -62,21 +77,9 @@ describe('applyThoughtToState content-prefix identity (issue #2263)', () => {
       getContentPrefixIdentity: () => null,
     });
 
-    applyThoughtToState(
-      args.thoughtSummary,
-      args.sanitizeContent,
-      args.getContentPrefixIdentity,
-      args.thinkingBlocksRef,
-      args.setLastAgentActivityTime,
-      args.setThought,
-      args.setPendingHistoryItem,
-    );
+    applyThought(args, args.thoughtSummary);
 
-    const updater = args.setPendingHistoryItem.mock.calls[0][0] as (
-      item: HistoryItemWithoutId | null,
-    ) => HistoryItemWithoutId | null;
-    const result = updater(null) as HistoryItemAi | null;
-    expect(result?.profileName).toBeUndefined();
+    expect(pendingResult(args, 0, null)?.profileName).toBeUndefined();
   });
 
   it('preserves an existing identity when getContentPrefixIdentity returns null', () => {
@@ -84,24 +87,14 @@ describe('applyThoughtToState content-prefix identity (issue #2263)', () => {
       getContentPrefixIdentity: () => null,
     });
 
-    applyThoughtToState(
-      args.thoughtSummary,
-      args.sanitizeContent,
-      args.getContentPrefixIdentity,
-      args.thinkingBlocksRef,
-      args.setLastAgentActivityTime,
-      args.setThought,
-      args.setPendingHistoryItem,
-    );
+    applyThought(args, args.thoughtSummary);
 
-    const updater = args.setPendingHistoryItem.mock.calls[0][0] as (
-      item: HistoryItemWithoutId | null,
-    ) => HistoryItemWithoutId | null;
-    const result = updater({
+    const result = pendingResult(args, 0, {
       type: 'gemini',
       text: 'partial',
       profileName: 'work:gpt-4',
-    }) as HistoryItemAi | null;
+    });
+
     expect(result?.profileName).toBe('work:gpt-4');
   });
 
@@ -110,285 +103,133 @@ describe('applyThoughtToState content-prefix identity (issue #2263)', () => {
       getContentPrefixIdentity: () => 'new:claude-3',
     });
 
-    applyThoughtToState(
-      args.thoughtSummary,
-      args.sanitizeContent,
-      args.getContentPrefixIdentity,
-      args.thinkingBlocksRef,
-      args.setLastAgentActivityTime,
-      args.setThought,
-      args.setPendingHistoryItem,
-    );
+    applyThought(args, args.thoughtSummary);
 
-    const updater = args.setPendingHistoryItem.mock.calls[0][0] as (
-      item: HistoryItemWithoutId | null,
-    ) => HistoryItemWithoutId | null;
-    const result = updater({
+    const result = pendingResult(args, 0, {
       type: 'gemini',
       text: 'partial',
       profileName: 'old:gpt-4',
-    }) as HistoryItemAi | null;
+    });
+
     expect(result?.profileName).toBe('new:claude-3');
   });
 });
 
-describe('applyThoughtToState incremental thinking streaming (issue #1723)', () => {
-  it('updates the last block when incoming text extends it', () => {
+describe('applyThoughtToState identity-aware streaming updates', () => {
+  it('replaces real incremental updates for the same stream id immutably', () => {
     const args = createArgs({
       getContentPrefixIdentity: () => null,
     });
 
-    applyThoughtToState(
-      { subject: '', description: 'Let me think' },
-      args.sanitizeContent,
-      args.getContentPrefixIdentity,
-      args.thinkingBlocksRef,
-      args.setLastAgentActivityTime,
-      args.setThought,
-      args.setPendingHistoryItem,
-    );
+    applyThought(args, {
+      subject: '',
+      description: 'Let me think',
+      streamId: 'thinking:0',
+      streamStatus: 'delta',
+    });
+    const firstBlock = args.thinkingBlocksRef.current[0];
 
-    expect(args.thinkingBlocksRef.current).toHaveLength(1);
-    expect(args.thinkingBlocksRef.current[0].thought).toBe('Let me think');
+    applyThought(args, {
+      subject: '',
+      description: 'Let me think about this',
+      streamId: 'thinking:0',
+      streamStatus: 'complete',
+    });
 
-    applyThoughtToState(
-      { subject: '', description: 'Let me think about this' },
-      args.sanitizeContent,
-      args.getContentPrefixIdentity,
-      args.thinkingBlocksRef,
-      args.setLastAgentActivityTime,
-      args.setThought,
-      args.setPendingHistoryItem,
-    );
-
-    expect(args.thinkingBlocksRef.current).toHaveLength(1);
-    expect(args.thinkingBlocksRef.current[0].thought).toBe(
-      'Let me think about this',
-    );
+    expect(args.thinkingBlocksRef.current).toStrictEqual([
+      {
+        type: 'thinking',
+        thought: 'Let me think about this',
+        sourceField: 'thought',
+        streamId: 'thinking:0',
+        streamStatus: 'complete',
+      },
+    ]);
+    expect(args.thinkingBlocksRef.current[0]).not.toBe(firstBlock);
   });
 
-  it('creates a new block when incoming text is completely different', () => {
+  it('renders distinct prefix-sharing blocks separately when stream ids differ', () => {
     const args = createArgs({
       getContentPrefixIdentity: () => null,
     });
 
-    applyThoughtToState(
-      { subject: 'Analyzing', description: 'the request' },
-      args.sanitizeContent,
-      args.getContentPrefixIdentity,
-      args.thinkingBlocksRef,
-      args.setLastAgentActivityTime,
-      args.setThought,
-      args.setPendingHistoryItem,
-    );
+    applyThought(args, {
+      subject: '',
+      description: 'I think',
+      streamId: 'thinking:0',
+      streamStatus: 'complete',
+    });
+    applyThought(args, {
+      subject: '',
+      description: 'I think this belongs to a later block',
+      streamId: 'thinking:1',
+      streamStatus: 'complete',
+    });
 
-    expect(args.thinkingBlocksRef.current).toHaveLength(1);
-
-    applyThoughtToState(
-      { subject: 'Planning', description: 'the response' },
-      args.sanitizeContent,
-      args.getContentPrefixIdentity,
-      args.thinkingBlocksRef,
-      args.setLastAgentActivityTime,
-      args.setThought,
-      args.setPendingHistoryItem,
-    );
-
-    expect(args.thinkingBlocksRef.current).toHaveLength(2);
-    expect(args.thinkingBlocksRef.current[0].thought).toBe(
-      'Analyzing: the request',
-    );
-    expect(args.thinkingBlocksRef.current[1].thought).toBe(
-      'Planning: the response',
-    );
+    expect(
+      args.thinkingBlocksRef.current.map((block) => block.thought),
+    ).toStrictEqual(['I think', 'I think this belongs to a later block']);
   });
 
-  it('does not create a duplicate block when the same text arrives', () => {
+  it('does not collapse prefix-sharing thought text without explicit stream identity', () => {
     const args = createArgs({
       getContentPrefixIdentity: () => null,
     });
 
-    applyThoughtToState(
-      { subject: '', description: 'Same thought' },
-      args.sanitizeContent,
-      args.getContentPrefixIdentity,
-      args.thinkingBlocksRef,
-      args.setLastAgentActivityTime,
-      args.setThought,
-      args.setPendingHistoryItem,
-    );
+    applyThought(args, { subject: '', description: 'Plan' });
+    applyThought(args, { subject: '', description: 'Plan the answer' });
 
-    applyThoughtToState(
-      { subject: '', description: 'Same thought' },
-      args.sanitizeContent,
-      args.getContentPrefixIdentity,
-      args.thinkingBlocksRef,
-      args.setLastAgentActivityTime,
-      args.setThought,
-      args.setPendingHistoryItem,
-    );
-
-    expect(args.thinkingBlocksRef.current).toHaveLength(1);
-    expect(args.thinkingBlocksRef.current[0].thought).toBe('Same thought');
-    // Dedup should prevent a second pending item update.
-    expect(args.setPendingHistoryItem).toHaveBeenCalledTimes(1);
+    expect(
+      args.thinkingBlocksRef.current.map((block) => block.thought),
+    ).toStrictEqual(['Plan', 'Plan the answer']);
   });
 
-  it('merges when a new thought extends the last block text (incremental) @issue:1723', () => {
-    // With streaming thinking deltas, the agent emits Thought events whose
-    // text grows incrementally. The UI merges prefix-extensions into the
-    // same block. The startsWith heuristic is a documented trade-off: a
-    // genuinely distinct thought that happens to start with the same prefix
-    // as the last block would be merged rather than shown separately. This
-    // is acceptable because streaming deltas always extend the same thought
-    // lineage and new distinct thoughts arrive as separate thinking blocks
-    // at the provider level.
+  it('updates pending item with accumulated thinking and current content-prefix identity', () => {
+    const identities = ['profile:old', 'profile:new'];
+    const args = createArgs({
+      getContentPrefixIdentity: () => identities.shift() ?? null,
+    });
+
+    applyThought(args, {
+      subject: '',
+      description: 'Start',
+      streamId: 'thinking:0',
+      streamStatus: 'delta',
+    });
+    applyThought(args, {
+      subject: '',
+      description: 'Start thinking',
+      streamId: 'thinking:0',
+      streamStatus: 'complete',
+    });
+
+    const result = pendingResult(args, 1, null);
+
+    expect(result?.profileName).toBe('profile:new');
+    expect(result?.thinkingBlocks).toStrictEqual([
+      {
+        type: 'thinking',
+        thought: 'Start thinking',
+        sourceField: 'thought',
+        streamId: 'thinking:0',
+        streamStatus: 'complete',
+      },
+    ]);
+  });
+
+  it('does not create a visible thought block for empty thinking text', () => {
     const args = createArgs({
       getContentPrefixIdentity: () => null,
     });
 
-    applyThoughtToState(
-      { subject: 'I think', description: '' },
-      args.sanitizeContent,
-      args.getContentPrefixIdentity,
-      args.thinkingBlocksRef,
-      args.setLastAgentActivityTime,
-      args.setThought,
-      args.setPendingHistoryItem,
-    );
-
-    // An incremental extension (prefix + small delta) merges into the block.
-    applyThoughtToState(
-      { subject: 'I think about', description: '' },
-      args.sanitizeContent,
-      args.getContentPrefixIdentity,
-      args.thinkingBlocksRef,
-      args.setLastAgentActivityTime,
-      args.setThought,
-      args.setPendingHistoryItem,
-    );
-
-    expect(args.thinkingBlocksRef.current).toHaveLength(1);
-    expect(args.thinkingBlocksRef.current[0].thought).toBe('I think about');
-  });
-
-  it('threads profileName through incremental thinking updates @issue:1723', () => {
-    const args = createArgs({
-      getContentPrefixIdentity: () => 'my-profile',
+    applyThought(args, {
+      subject: '',
+      description: '',
+      streamId: 'thinking:0',
+      streamStatus: 'complete',
     });
 
-    applyThoughtToState(
-      { subject: '', description: 'Start' },
-      args.sanitizeContent,
-      args.getContentPrefixIdentity,
-      args.thinkingBlocksRef,
-      args.setLastAgentActivityTime,
-      args.setThought,
-      args.setPendingHistoryItem,
-    );
-
-    applyThoughtToState(
-      { subject: '', description: 'Start thinking' },
-      args.sanitizeContent,
-      args.getContentPrefixIdentity,
-      args.thinkingBlocksRef,
-      args.setLastAgentActivityTime,
-      args.setThought,
-      args.setPendingHistoryItem,
-    );
-
-    expect(args.setPendingHistoryItem).toHaveBeenCalledTimes(2);
-
-    const lastUpdater = args.setPendingHistoryItem.mock.calls[1][0] as (
-      item: HistoryItemWithoutId | null,
-    ) => HistoryItemWithoutId | null;
-    const result = lastUpdater(null) as HistoryItemAi | null;
-    expect(result?.profileName).toBe('my-profile');
-    expect(result?.thinkingBlocks).toHaveLength(1);
-    expect(result?.thinkingBlocks?.[0].thought).toBe('Start thinking');
-  });
-
-  it('accumulates multiple deltas into a single growing block', () => {
-    const args = createArgs({
-      getContentPrefixIdentity: () => null,
-    });
-
-    const deltas = [
-      'I',
-      'I need',
-      'I need to',
-      'I need to think',
-      'I need to think carefully',
-    ];
-
-    for (const delta of deltas) {
-      applyThoughtToState(
-        { subject: '', description: delta },
-        args.sanitizeContent,
-        args.getContentPrefixIdentity,
-        args.thinkingBlocksRef,
-        args.setLastAgentActivityTime,
-        args.setThought,
-        args.setPendingHistoryItem,
-      );
-    }
-
-    expect(args.thinkingBlocksRef.current).toHaveLength(1);
-    expect(args.thinkingBlocksRef.current[0].thought).toBe(
-      'I need to think carefully',
-    );
-  });
-
-  it('updates pending item with accumulated thinking blocks on each delta', () => {
-    const args = createArgs({
-      getContentPrefixIdentity: () => null,
-    });
-
-    applyThoughtToState(
-      { subject: '', description: 'Start' },
-      args.sanitizeContent,
-      args.getContentPrefixIdentity,
-      args.thinkingBlocksRef,
-      args.setLastAgentActivityTime,
-      args.setThought,
-      args.setPendingHistoryItem,
-    );
-
-    applyThoughtToState(
-      { subject: '', description: 'Start thinking' },
-      args.sanitizeContent,
-      args.getContentPrefixIdentity,
-      args.thinkingBlocksRef,
-      args.setLastAgentActivityTime,
-      args.setThought,
-      args.setPendingHistoryItem,
-    );
-
-    expect(args.setPendingHistoryItem).toHaveBeenCalledTimes(2);
-
-    const lastUpdater = args.setPendingHistoryItem.mock.calls[1][0] as (
-      item: HistoryItemWithoutId | null,
-    ) => HistoryItemWithoutId | null;
-    const result = lastUpdater(null) as HistoryItemAi | null;
-    expect(result?.thinkingBlocks).toHaveLength(1);
-    expect(result?.thinkingBlocks?.[0].thought).toBe('Start thinking');
-  });
-  it('does nothing when both subject and description are empty @issue:1723', () => {
-    const args = createArgs({
-      getContentPrefixIdentity: () => null,
-    });
-
-    applyThoughtToState(
-      { subject: '', description: '' },
-      args.sanitizeContent,
-      args.getContentPrefixIdentity,
-      args.thinkingBlocksRef,
-      args.setLastAgentActivityTime,
-      args.setThought,
-      args.setPendingHistoryItem,
-    );
-
-    expect(args.thinkingBlocksRef.current).toHaveLength(0);
+    expect(args.thinkingBlocksRef.current).toStrictEqual([]);
     expect(args.setPendingHistoryItem).not.toHaveBeenCalled();
   });
 });

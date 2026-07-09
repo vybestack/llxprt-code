@@ -25,6 +25,8 @@ export const StructuredErrorSchema = z.object({
 export const ThoughtSummarySchema = z.object({
   subject: z.string(),
   description: z.string(),
+  streamId: z.string().optional(),
+  streamStatus: z.enum(['delta', 'complete']).optional(),
 });
 
 export const UsageMetadataValueSchema = z.object({

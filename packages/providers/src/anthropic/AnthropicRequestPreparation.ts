@@ -42,6 +42,7 @@ export interface AnthropicRequestContext {
   requestBody: Record<string, unknown>;
   anthropicMessages: AnthropicMessage[];
   streamingEnabled: boolean;
+  includeThinkingInResponse: boolean;
   wantCaching: boolean;
   ttl: '5m' | '1h';
   configEphemerals: Record<string, unknown>;
@@ -750,6 +751,7 @@ function buildRequestContext(params: {
     requestBody,
     anthropicMessages: systemContext.messages,
     streamingEnabled: requestSettings.streamingEnabled,
+    includeThinkingInResponse: reasoningSettings.includeInResponse !== false,
     wantCaching,
     ttl: requestSettings.ttl,
     configEphemerals: requestSettings.configEphemerals,

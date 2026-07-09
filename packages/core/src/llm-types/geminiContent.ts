@@ -60,6 +60,9 @@ export interface GeminiPartExtension {
     | 'thinking'
     | 'thought'
     | 'think_tags';
+  llxprtThoughtBlockId?: string;
+  llxprtThoughtBlockStatus?: 'delta' | 'complete';
+  llxprtThoughtIsHidden?: boolean;
 }
 
 /**

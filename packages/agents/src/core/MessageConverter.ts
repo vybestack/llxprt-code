@@ -460,9 +460,11 @@ export function classifyMixedParts(parts: Part[]): {
       const thinkingBlock: ThinkingBlock = {
         type: 'thinking',
         thought: part.text ?? '',
-        isHidden: true,
         sourceField: part.llxprtSourceField ?? 'thought',
       };
+      if (part.llxprtThoughtIsHidden !== undefined) {
+        thinkingBlock.isHidden = part.llxprtThoughtIsHidden;
+      }
       if (part.thoughtSignature) {
         thinkingBlock.signature = part.thoughtSignature;
       }
@@ -538,6 +540,15 @@ export function convertBlocksToParts(blocks: ContentBlock[]): Part[] {
         }
         if (thinkingBlock.sourceField) {
           thoughtPart.llxprtSourceField = thinkingBlock.sourceField;
+        }
+        if (thinkingBlock.streamId) {
+          thoughtPart.llxprtThoughtBlockId = thinkingBlock.streamId;
+        }
+        if (thinkingBlock.streamStatus) {
+          thoughtPart.llxprtThoughtBlockStatus = thinkingBlock.streamStatus;
+        }
+        if (thinkingBlock.isHidden !== undefined) {
+          thoughtPart.llxprtThoughtIsHidden = thinkingBlock.isHidden;
         }
         parts.push(thoughtPart);
         break;

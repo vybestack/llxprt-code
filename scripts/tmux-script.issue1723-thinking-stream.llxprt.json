@@ -6,14 +6,30 @@
     "scrollbackLines": 20000,
     "initialWaitMs": 8000
   },
-  "yolo": false,
+  "yolo": true,
   "macros": {
     "loadProfile": [
-      { "type": "line", "text": "/profile load ${profile}", "submitKeys": [] },
-      { "type": "key", "key": "Enter" },
-      { "type": "wait", "ms": 250 },
-      { "type": "key", "key": "Enter" },
-      { "type": "wait", "ms": 250 },
+      {
+        "type": "line",
+        "text": "/profile load ${profile}",
+        "submitKeys": []
+      },
+      {
+        "type": "key",
+        "key": "Enter"
+      },
+      {
+        "type": "wait",
+        "ms": 250
+      },
+      {
+        "type": "key",
+        "key": "Enter"
+      },
+      {
+        "type": "wait",
+        "ms": 250
+      },
       {
         "type": "waitFor",
         "scope": "screen",
@@ -25,19 +41,43 @@
         "text": "/set reasoning.includeInResponse true",
         "submitKeys": []
       },
-      { "type": "key", "key": "Enter" },
-      { "type": "wait", "ms": 250 },
-      { "type": "key", "key": "Enter" },
-      { "type": "wait", "ms": 500 },
+      {
+        "type": "key",
+        "key": "Enter"
+      },
+      {
+        "type": "wait",
+        "ms": 250
+      },
+      {
+        "type": "key",
+        "key": "Enter"
+      },
+      {
+        "type": "wait",
+        "ms": 500
+      },
       {
         "type": "line",
         "text": "/set reasoning.effort xhigh",
         "submitKeys": []
       },
-      { "type": "key", "key": "Enter" },
-      { "type": "wait", "ms": 250 },
-      { "type": "key", "key": "Enter" },
-      { "type": "wait", "ms": 500 },
+      {
+        "type": "key",
+        "key": "Enter"
+      },
+      {
+        "type": "wait",
+        "ms": 250
+      },
+      {
+        "type": "key",
+        "key": "Enter"
+      },
+      {
+        "type": "wait",
+        "ms": 500
+      },
       {
         "type": "capture",
         "label": "profile-${profile}-loaded",
@@ -63,6 +103,18 @@
         "type": "capture",
         "label": "${label}-during-stream",
         "scope": "scrollback"
+      },
+      {
+        "type": "expectCount",
+        "scope": "screen",
+        "contains": "esc to cancel",
+        "atLeast": 1
+      },
+      {
+        "type": "expectCount",
+        "scope": "screen",
+        "regex": "\\S+ \\(esc to cancel, [0-9]+s\\)",
+        "atLeast": 1
       },
       {
         "type": "waitForNot",
@@ -101,43 +153,36 @@
       "contains": "Type your message",
       "timeoutMs": 60000
     },
-    { "type": "capture", "label": "initial", "scope": "screen" },
-
+    {
+      "type": "capture",
+      "label": "initial",
+      "scope": "screen"
+    },
     {
       "type": "macro",
       "name": "loadProfile",
-      "args": { "profile": "opusthinking" }
-    },
-    {
-      "type": "macro",
-      "name": "askThinkingQuestion",
       "args": {
-        "question": "Analyze the architecture of this codebase. What are the main packages, how do they depend on each other, and what architectural improvements would make it more maintainable? Think step by step and explain your reasoning before answering.",
-        "label": "opusthinking-arch",
-        "streamingProbeMs": 8000,
-        "completionTimeoutMs": 180000
+        "profile": "opusthinking"
       }
     },
-
-    { "type": "line", "text": "yes", "submitKeys": ["Enter"] },
-    {
-      "type": "waitFor",
-      "scope": "screen",
-      "contains": "Type your message",
-      "timeoutMs": 60000
-    },
     {
       "type": "macro",
       "name": "askThinkingQuestion",
       "args": {
-        "question": "What is 17 times 23? Think step by step and show your reasoning.",
-        "label": "opusthinking-math",
+        "question": "Without using tools, explain three tradeoffs between event-driven and request-response architectures. Think step by step before giving a concise answer.",
+        "label": "opusthinking-architecture",
         "streamingProbeMs": 8000,
         "completionTimeoutMs": 120000
       }
     },
-
-    { "type": "line", "text": "/quit", "submitKeys": ["Enter"] },
-    { "type": "waitForExit", "timeoutMs": 15000 }
+    {
+      "type": "line",
+      "text": "/quit",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitForExit",
+      "timeoutMs": 15000
+    }
   ]
 }

@@ -160,16 +160,36 @@ export function accumulateChunkMetadata(
  * drives merging of streaming thinking deltas so only the final signed
  * block reaches history.
  */
-function isIncrementalThought(lastPart: Part | undefined, part: Part): boolean {
+function isIncrementalThought(
+  lastPart: Part | undefined,
+  part: Part,
+): lastPart is ThoughtPart {
   if (!isThoughtPart(lastPart) || !isThoughtPart(part)) {
     return false;
   }
-  const lastText = lastPart.text;
-  const incomingText = part.text;
-  if (lastText === undefined || incomingText === undefined) {
-    return false;
-  }
-  return incomingText.startsWith(lastText);
+  return (
+    lastPart.llxprtThoughtBlockId !== undefined &&
+    lastPart.llxprtThoughtBlockId === part.llxprtThoughtBlockId
+  );
+}
+
+function mergeIncrementalThought(
+  lastThought: ThoughtPart,
+  incomingThought: ThoughtPart,
+): ThoughtPart {
+  return {
+    ...lastThought,
+    ...incomingThought,
+    text: incomingThought.text,
+    thought: true,
+  };
+}
+
+function mergeTextParts(lastPart: Part, part: Part): Part {
+  return {
+    ...lastPart,
+    text: `${lastPart.text ?? ''}${part.text ?? ''}`,
+  };
 }
 
 /**
@@ -191,35 +211,27 @@ function isIncrementalThought(lastPart: Part | undefined, part: Part): boolean {
  * is empty (length-1 == -1), so `lastPart` is annotated `Part | undefined`.
  */
 export function consolidateTextParts(modelResponseParts: Part[]): Part[] {
-  const consolidatedParts: Part[] = [];
-  for (const part of modelResponseParts) {
-    const lastPart = consolidatedParts[consolidatedParts.length - 1] as
-      | Part
-      | undefined;
+  return modelResponseParts.reduce<Part[]>((consolidatedParts, part) => {
+    const lastPart = consolidatedParts[consolidatedParts.length - 1];
     if (
-      lastPart?.text !== undefined &&
+      consolidatedParts.length > 0 &&
+      lastPart.text !== undefined &&
       isValidNonThoughtTextPart(lastPart) &&
       isValidNonThoughtTextPart(part)
     ) {
-      lastPart.text += part.text;
-    } else if (isIncrementalThought(lastPart, part)) {
-      // #1723: Merge incremental thinking — the incoming part supersedes
-      // the last accumulated part (it may carry the signature the deltas
-      // lacked). Replace text and copy signature if the incoming part has one.
-      const lastThought = lastPart as ThoughtPart;
-      const incomingThought = part as ThoughtPart;
-      lastThought.text = incomingThought.text;
-      if (incomingThought.thoughtSignature !== undefined) {
-        lastThought.thoughtSignature = incomingThought.thoughtSignature;
-      }
-      if (incomingThought.llxprtSourceField !== undefined) {
-        lastThought.llxprtSourceField = incomingThought.llxprtSourceField;
-      }
-    } else {
-      consolidatedParts.push(part);
+      return [
+        ...consolidatedParts.slice(0, -1),
+        mergeTextParts(lastPart, part),
+      ];
     }
-  }
-  return consolidatedParts;
+    if (isIncrementalThought(lastPart, part) && isThoughtPart(part)) {
+      return [
+        ...consolidatedParts.slice(0, -1),
+        mergeIncrementalThought(lastPart, part),
+      ];
+    }
+    return [...consolidatedParts, { ...part }];
+  }, []);
 }
 
 /**

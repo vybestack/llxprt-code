@@ -225,6 +225,59 @@ describe('ContentConverters - Tool ID Normalization', () => {
       expect(thinkingBlock?.sourceField).toBe('thought');
     });
 
+
+    it('keeps ordinary thought parts visible when no hidden metadata is present', () => {
+      const geminiContent: TestContent = {
+        role: 'model',
+        parts: [
+          {
+            text: 'Ordinary public thought',
+            thought: true,
+          },
+        ],
+      };
+
+      const iContent = ContentConverters.toIContent(
+        geminiContent,
+        undefined,
+        undefined,
+        'turn-test',
+      );
+
+      const thinkingBlock = iContent.blocks.find(
+        (block) => block.type === 'thinking',
+      );
+
+      expect(thinkingBlock).toBeDefined();
+      expect(thinkingBlock?.isHidden).toBeUndefined();
+    });
+
+    it('preserves explicit hidden thought metadata', () => {
+      const geminiContent: TestContent = {
+        role: 'model',
+        parts: [
+          {
+            text: 'Context-only thought',
+            thought: true,
+            llxprtThoughtIsHidden: true,
+          },
+        ],
+      };
+
+      const iContent = ContentConverters.toIContent(
+        geminiContent,
+        undefined,
+        undefined,
+        'turn-test',
+      );
+
+      const thinkingBlock = iContent.blocks.find(
+        (block) => block.type === 'thinking',
+      );
+
+      expect(thinkingBlock).toBeDefined();
+      expect(thinkingBlock?.isHidden).toBe(true);
+    });
     it('should preserve explicit Anthropic thinking sourceField metadata', () => {
       const geminiContent: TestContent = {
         role: 'model',

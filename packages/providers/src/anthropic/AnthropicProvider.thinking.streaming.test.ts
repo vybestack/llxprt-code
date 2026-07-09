@@ -93,27 +93,31 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     // 3 deltas + 1 content_block_stop = 4 thinking chunks
     expect(thinkingChunks.length).toBe(4);
 
-    const delta1 = thinkingChunks[0].blocks.find(
-      (b) => b.type === 'thinking',
-    ) as ThinkingBlock;
-    expect(delta1.thought).toBe('First');
-
-    const delta2 = thinkingChunks[1].blocks.find(
-      (b) => b.type === 'thinking',
-    ) as ThinkingBlock;
-    expect(delta2.thought).toBe('First part');
-
-    const delta3 = thinkingChunks[2].blocks.find(
-      (b) => b.type === 'thinking',
-    ) as ThinkingBlock;
-    expect(delta3.thought).toBe('First part here');
-
-    const final = thinkingChunks[3].blocks.find(
-      (b) => b.type === 'thinking',
-    ) as ThinkingBlock;
-    expect(final.thought).toBe('First part here');
+    const thinkingBlocks = thinkingChunks.map(
+      (chunk) =>
+        chunk.blocks.find((b) => b.type === 'thinking') as ThinkingBlock,
+    );
+    expect(thinkingBlocks.map((block) => block.thought)).toStrictEqual([
+      'First',
+      'First part',
+      'First part here',
+      'First part here',
+    ]);
+    expect(thinkingBlocks.map((block) => block.streamId)).toStrictEqual([
+      'anthropic-thinking:0:block-0',
+      'anthropic-thinking:0:block-0',
+      'anthropic-thinking:0:block-0',
+      'anthropic-thinking:0:block-0',
+    ]);
+    expect(thinkingBlocks.map((block) => block.streamStatus)).toStrictEqual([
+      'delta',
+      'delta',
+      'delta',
+      'complete',
+    ]);
+    expect(thinkingBlocks.every((block) => block.isHidden !== true)).toBe(true);
     // No signature_delta in this stream, so the final chunk carries no signature.
-    expect(final.signature).toBeUndefined();
+    expect(thinkingBlocks[3].signature).toBeUndefined();
   });
 
   it('should attach signature to accumulated thinking at content_block_stop @issue:1723', async () => {
@@ -193,6 +197,214 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     // The final chunk carries both the accumulated text AND the signature.
     expect(final.thought).toBe('Analyzing the data');
     expect(final.signature).toBe(mockSignature);
+  });
+
+  it('should keep sequential signed thinking blocks distinct when Anthropic reuses a content index', async () => {
+    const firstSignature = 'sig-first-block';
+    const secondSignature = 'sig-second-block';
+    const mockStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'thinking', thinking: '' },
+        };
+        yield {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'thinking_delta', thinking: 'First signed thought' },
+        };
+        yield {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'signature_delta', signature: firstSignature },
+        };
+        yield {
+          type: 'content_block_stop',
+          index: 0,
+          content_block: {
+            type: 'thinking',
+            thinking: '',
+            signature: firstSignature,
+          },
+        };
+        yield {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'thinking', thinking: '' },
+        };
+        yield {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'thinking_delta', thinking: 'Second signed thought' },
+        };
+        yield {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'signature_delta', signature: secondSignature },
+        };
+        yield {
+          type: 'content_block_stop',
+          index: 0,
+          content_block: {
+            type: 'thinking',
+            thinking: '',
+            signature: secondSignature,
+          },
+        };
+      },
+    };
+
+    mockMessagesCreate.mockResolvedValue(mockStream);
+
+    const messages: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Think twice' }],
+      },
+    ];
+
+    const chunks: IContent[] = [];
+    for await (const chunk of provider.generateChatCompletion(
+      buildCallOptions(messages),
+    )) {
+      chunks.push(chunk);
+    }
+
+    const thinkingBlocks: ThinkingBlock[] = chunks.flatMap((chunk) =>
+      chunk.blocks.filter(
+        (block): block is ThinkingBlock => block.type === 'thinking',
+      ),
+    );
+    const completedBlocks = thinkingBlocks.filter(
+      (block) => block.streamStatus === 'complete',
+    );
+
+    expect(thinkingBlocks).toHaveLength(4);
+    expect(completedBlocks).toHaveLength(2);
+    expect(completedBlocks.map((block) => block.thought)).toStrictEqual([
+      'First signed thought',
+      'Second signed thought',
+    ]);
+    expect(completedBlocks.map((block) => block.signature)).toStrictEqual([
+      firstSignature,
+      secondSignature,
+    ]);
+    expect(new Set(completedBlocks.map((block) => block.streamId)).size).toBe(
+      2,
+    );
+    expect(thinkingBlocks.map((block) => block.streamId)).toStrictEqual([
+      completedBlocks[0].streamId,
+      completedBlocks[0].streamId,
+      completedBlocks[1].streamId,
+      completedBlocks[1].streamId,
+    ]);
+    expect(completedBlocks.map((block) => block.streamId)).toStrictEqual([
+      'anthropic-thinking:0:block-0',
+      'anthropic-thinking:0:block-1',
+    ]);
+  });
+  it('should hide streaming thinking chunks when reasoning.includeInResponse is false', async () => {
+    settingsService.set('reasoning.includeInResponse', false);
+    const mockStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'thinking', thinking: '' },
+        };
+        yield {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'thinking_delta', thinking: 'Hidden' },
+        };
+        yield {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'thinking_delta', thinking: ' reasoning' },
+        };
+        yield { type: 'content_block_stop', index: 0 };
+      },
+    };
+
+    mockMessagesCreate.mockResolvedValue(mockStream);
+
+    const messages: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Think privately' }],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(
+      buildCallOptions(messages),
+    );
+
+    const chunks: IContent[] = [];
+    for await (const chunk of generator) {
+      chunks.push(chunk);
+    }
+
+    const thinkingBlocks: ThinkingBlock[] = chunks.flatMap((chunk) =>
+      chunk.blocks.filter(
+        (block): block is ThinkingBlock => block.type === 'thinking',
+      ),
+    );
+
+    expect(thinkingBlocks).toHaveLength(3);
+    expect(thinkingBlocks.map((block) => block.thought)).toStrictEqual([
+      'Hidden',
+      'Hidden reasoning',
+      'Hidden reasoning',
+    ]);
+    expect(thinkingBlocks.every((block) => block.isHidden === true)).toBe(true);
+    expect(thinkingBlocks.map((block) => block.streamStatus)).toStrictEqual([
+      'delta',
+      'delta',
+      'complete',
+    ]);
+  });
+
+  it('should not emit thinking chunks for empty thinking deltas or zero-length final text', async () => {
+    const mockStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'thinking', thinking: '' },
+        };
+        yield {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'thinking_delta', thinking: '' },
+        };
+        yield { type: 'content_block_stop', index: 0 };
+      },
+    };
+
+    mockMessagesCreate.mockResolvedValue(mockStream);
+
+    const messages: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Think if needed' }],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(
+      buildCallOptions(messages),
+    );
+
+    const chunks: IContent[] = [];
+    for await (const chunk of generator) {
+      chunks.push(chunk);
+    }
+
+    expect(
+      chunks.some((chunk) =>
+        chunk.blocks.some((block) => block.type === 'thinking'),
+      ),
+    ).toBe(false);
   });
 
   it('should emit thinking block at content_block_stop even with zero deltas', async () => {
