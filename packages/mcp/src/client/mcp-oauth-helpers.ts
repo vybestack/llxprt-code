@@ -33,9 +33,11 @@ const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
  * (the `handleAutomaticOAuth` path); silent token read/refresh in
  * `getValidToken()` is unaffected.
  *
- * The key includes the server URL and www-authenticate header so that
- * concurrent requests with different configs or auth challenges do not
- * cross-contaminate each other.
+ * The key includes the server URL so that concurrent requests for different
+ * URLs do not cross-contaminate each other. The www-authenticate header is
+ * intentionally excluded because OAuth servers emit dynamic challenge fields
+ * (realm, scope, nonce) that vary between requests for the same server,
+ * which would prevent dedup if included.
  */
 const inFlightAuthentications = new Map<string, Promise<boolean>>();
 
