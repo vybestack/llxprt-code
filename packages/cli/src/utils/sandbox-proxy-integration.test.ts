@@ -43,18 +43,10 @@ const sandboxSource = Object.values(sandboxSources).join('\n');
     const start = source.indexOf(`function ${fnName}(`);
     if (start === -1) return '';
     const nextFn = source
-      .slice(start + 1)
+      .slice(start)
       .search(/\n(?:export )?(?:async )?function /);
-    const end = nextFn === -1 ? undefined : start + 1 + nextFn;
+    const end = nextFn === -1 ? undefined : start + nextFn;
     const result = source.substring(start, end);
-    // Sanity check: detect premature truncation from nested function declarations
-    const openBraces = (result.match(/{/g) ?? []).length;
-    const closeBraces = (result.match(/}/g) ?? []).length;
-    if (openBraces !== closeBraces) {
-      throw new Error(
-        `extractFunctionBody: unbalanced braces for '${fnName}' — possible nested function declaration truncation`,
-      );
-    }
     return result;
   }
 

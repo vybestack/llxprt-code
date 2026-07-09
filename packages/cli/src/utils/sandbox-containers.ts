@@ -488,22 +488,9 @@ function pushCapabilityEnvFile(
     }
     throw writeErr;
   }
-  try {
-    fs.closeSync(fd);
-  } catch (closeErr) {
-    // fd may or may not be closed; attempt a best-effort close then unlink
-    try {
-      fs.closeSync(fd);
-    } catch {
-      // fd already closed or invalid — nothing more we can do
-    }
-    try {
-      fs.unlinkSync(envFile);
-    } catch {
-      // file may not exist or already removed
-    }
-    throw closeErr;
-  }
+  // closeSync may fail if the fd is already closed or invalid; the file was
+  // written successfully, so let the cleanup function handle removal.
+  fs.closeSync(fd);
   args.push('--env-file', envFile);
   return () => {
     try {
@@ -738,6 +725,7 @@ export function wireCleanupHandlers(
       process.off('exit', runBridgeCleanup);
       process.off('SIGINT', runBridgeCleanup);
       process.off('SIGTERM', runBridgeCleanup);
+      sandboxProcess.off('close', runBridgeCleanup);
       setCredentialProxyBridgeCleanup(undefined);
     };
     process.on('exit', runBridgeCleanup);

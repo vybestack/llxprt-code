@@ -262,10 +262,14 @@ export class CredentialProxyServer {
     state: ConnectionState,
     handshakeState: { completed: boolean; rejected: boolean },
   ): void {
-    for (const frame of frames) {
+    // Cap frames per chunk to prevent unbounded promise-chain growth from
+    // a malicious client sending thousands of tiny frames in one TCP segment.
+    const MAX_FRAMES_PER_CHUNK = 100;
+    const limit = Math.min(frames.length, MAX_FRAMES_PER_CHUNK);
+    for (let i = 0; i < limit; i++) {
       if (
         socket.destroyed ||
-        !this.shouldContinueProcessing(socket, frame, state, handshakeState)
+        !this.shouldContinueProcessing(socket, frames[i], state, handshakeState)
       )
         break;
     }
@@ -290,7 +294,10 @@ export class CredentialProxyServer {
     // Serialize dispatch per-connection to prevent overlapping socket.write()
     // calls when multiple frames arrive in a single TCP chunk.
     state.inFlight = (state.inFlight ?? Promise.resolve())
-      .then(() => this.dispatchRequest(socket, frame, state))
+      .then(() => {
+        if (socket.destroyed) return undefined;
+        return this.dispatchRequest(socket, frame, state);
+      })
       .catch((err) => {
         this.auditLog('ERROR', state.id, 'unhandled_dispatch', {
           error: String(err),
@@ -546,6 +553,7 @@ export class CredentialProxyServer {
     frame: Record<string, unknown>,
     state: ConnectionState,
   ): Promise<void> {
+    if (socket.destroyed || !socket.writable) return;
     let id = 'unknown';
     let op: unknown;
 
@@ -583,7 +591,9 @@ export class CredentialProxyServer {
         status: 'error',
         id,
       });
-      if (!socket.destroyed && socket.writable) {
+      // Re-check writability — socket may have been destroyed during await
+      const sock = socket as net.Socket & { destroyed: boolean; writable: boolean };
+      if (!sock.destroyed && sock.writable) {
         this.sendError(socket, id, 'INTERNAL_ERROR', message);
       }
     }

@@ -266,8 +266,10 @@ export class ProxySocketClient {
     if (isProxyResponseFrame(frame)) {
       resolver.resolve(frame);
     } else {
-      this.destroy('Malformed handshake response from proxy');
+      // Reject first, then clean up. destroy() will not double-reject
+      // because handshakeResolver was already nulled above.
       resolver.reject(new Error('Malformed handshake response from proxy'));
+      this.destroy('Malformed handshake response from proxy');
     }
   }
 
@@ -282,10 +284,12 @@ export class ProxySocketClient {
       this.pendingRequests.delete(id);
       if (isProxyResponseFrame(frame)) {
         pending.resolve(frame);
-      } else {
-        pending.reject(new Error('Malformed response from proxy'));
-        this.destroy('Malformed response from proxy');
-        return;
+        } else {
+          pending.reject(
+            new Error(`Malformed response for request ${id}`),
+          );
+          this.destroy('Malformed response from proxy — connection reset');
+          return;
       }
     }
   }

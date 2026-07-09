@@ -97,6 +97,8 @@ function createHandshakeCapturingServer(
       timeoutHandle.unref();
     }),
   ]);
+  // Prevent unhandled rejection if the caller never awaits the handshake promise
+  handshake.catch(() => {});
   const srv = net.createServer((socket) => {
     const decoder = new FrameDecoder();
     let settled = false;
@@ -438,7 +440,6 @@ describe('ProxySocketClient', () => {
       client.request('beta', {}),
       client.request('gamma', {}),
     ]);
-
     // Each response should match its original request despite reverse ordering
     expect(r1.data).toStrictEqual({ echo: 'alpha' });
     expect(r2.data).toStrictEqual({ echo: 'beta' });

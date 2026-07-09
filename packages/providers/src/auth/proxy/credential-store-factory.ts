@@ -59,21 +59,8 @@ function readCapabilityToken(): string | undefined {
 }
 
 /**
- * Constructs a new instance, closing the old one on construction failure.
- * Centralises the construct-then-close-old pattern to reduce nesting depth.
+ * Closes a resource best-effort, swallowing errors.
  */
-function constructWithCleanup<T>(
-  construct: () => T,
-  closeOld: (() => void) | undefined,
-): T {
-  try {
-    return construct();
-  } catch (err) {
-    safeClose(closeOld);
-    throw err;
-  }
-}
-
 function safeClose(closeFn: (() => void) | undefined): void {
   if (!closeFn) return;
   try {
@@ -107,10 +94,7 @@ export function createTokenStore(): TokenStore {
       proxyTokenStoreSocketPath !== socketPath
     ) {
       const oldStore = proxyTokenStore;
-      const newStore = constructWithCleanup(
-        () => new ProxyTokenStore(socketPath, capabilityToken),
-        () => oldStore?.getClient().close(),
-      );
+      const newStore = new ProxyTokenStore(socketPath, capabilityToken);
       // Close old connection best-effort, then mutate singletons
       safeClose(() => oldStore?.getClient().close());
       proxyTokenStore = newStore;
@@ -155,10 +139,7 @@ export function createProviderKeyStorage(): ProviderKeyStorageLike {
       proxyKeyStorageSocketPath !== socketPath
     ) {
       const oldClient = proxyKeyStorageClient;
-      const newClient = constructWithCleanup(
-        () => new ProxySocketClient(socketPath, capabilityToken),
-        () => oldClient?.close(),
-      );
+      const newClient = new ProxySocketClient(socketPath, capabilityToken);
       const newStorage = new ProxyProviderKeyStorage(newClient);
       // Close old connection best-effort, then mutate singletons
       safeClose(() => oldClient?.close());
