@@ -191,9 +191,10 @@ describe('CredentialProxyServer', () => {
 
   async function startAndConnect(
     serverInstance: CredentialProxyServer,
+    capabilityToken?: string,
   ): Promise<ProxySocketClient> {
     const socketPath = await serverInstance.start();
-    const c = new ProxySocketClient(socketPath);
+    const c = new ProxySocketClient(socketPath, capabilityToken);
     await c.ensureConnected();
     return c;
   }
@@ -777,5 +778,306 @@ describe('CredentialProxyServer', () => {
     expect(r2.ok).toBe(true);
     expect(r2.data!.key).toBe('sk-oai-789');
     client2.close();
+  });
+
+  // ─── Capability Token Authentication ──────────────────────────────────────
+
+  /**
+   * @scenario Server with capability token accepts connection with valid token
+   * @given A server configured with a capability token
+   * @when A client connects and sends the correct token in the handshake
+   * @then The handshake succeeds and the client can make requests
+   */
+  it('accepts handshake with valid capability token', async () => {
+    const token = 'a'.repeat(64);
+    server = createServer({ capabilityToken: token });
+    client = await startAndConnect(server, token);
+
+    const response = await client.request('get_token', {
+      provider: 'nonexistent',
+    });
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('NOT_FOUND');
+  });
+
+  /**
+   * @scenario Server with capability token rejects connection with invalid token
+   * @given A server configured with a capability token
+   * @when A client connects with a wrong token
+   * @then The handshake fails with UNAUTHORIZED and the connection is destroyed
+   */
+  it('rejects handshake with invalid capability token', async () => {
+    const token = 'a'.repeat(64);
+    server = createServer({ capabilityToken: token });
+    const socketPath = await server.start();
+
+    const badClient = new ProxySocketClient(socketPath, 'wrong-token');
+    await expect(badClient.ensureConnected()).rejects.toThrow(
+      /authentication failed|version mismatch|connection lost/i,
+    );
+    badClient.close();
+  });
+
+  /**
+   * @scenario Server with capability token rejects connection with missing token
+   * @given A server configured with a capability token
+   * @when A client connects without presenting any token
+   * @then The handshake fails and the connection is destroyed
+   */
+  it('rejects handshake with missing capability token', async () => {
+    const token = 'a'.repeat(64);
+    server = createServer({ capabilityToken: token });
+    const socketPath = await server.start();
+
+    const tokenlessClient = new ProxySocketClient(socketPath);
+    await expect(tokenlessClient.ensureConnected()).rejects.toThrow(
+      /authentication failed|version mismatch|connection lost/i,
+    );
+    tokenlessClient.close();
+  });
+
+  /**
+   * @scenario Server without capability token accepts connections without token
+   * @given A server NOT configured with a capability token (non-sandbox)
+   * @when A client connects without presenting a token
+   * @then The handshake succeeds (backward compatibility)
+   */
+  it('allows connections without token when no capability token configured', async () => {
+    server = createServer();
+    client = await startAndConnect(server);
+
+    const response = await client.request('list_providers', {});
+    expect(response.ok).toBe(true);
+  });
+
+  // ─── Enumeration Restriction for Sandbox Connections ───────────────────────
+
+  /**
+   * @scenario list_api_keys returns empty array for sandbox connection
+   * @given A server with capability token, keys in storage
+   * @when A sandbox client (valid token) requests list_api_keys
+   * @then Response contains an empty keys array
+   */
+  it('list_api_keys returns empty array for sandbox connection', async () => {
+    await keyStorage.saveKey('anthropic', 'sk-ant-123');
+    await keyStorage.saveKey('openai', 'sk-oai-456');
+
+    const token = 'b'.repeat(64);
+    server = createServer({ capabilityToken: token });
+    client = await startAndConnect(server, token);
+
+    const response = await client.request('list_api_keys', {});
+    expect(response.ok).toBe(true);
+    expect(response.data!.keys).toStrictEqual([]);
+  });
+
+  /**
+   * @scenario list_providers returns empty array for sandbox connection
+   * @given A server with capability token, tokens in store
+   * @when A sandbox client requests list_providers
+   * @then Response contains an empty providers array
+   */
+  it('list_providers returns empty array for sandbox connection', async () => {
+    await tokenStore.saveToken('anthropic', makeToken());
+    await tokenStore.saveToken('gemini', makeToken());
+
+    const token = 'c'.repeat(64);
+    server = createServer({ capabilityToken: token });
+    client = await startAndConnect(server, token);
+
+    const response = await client.request('list_providers', {});
+    expect(response.ok).toBe(true);
+    expect(response.data!.providers).toStrictEqual([]);
+  });
+
+  /**
+   * @scenario list_buckets returns empty array for sandbox connection
+   * @given A server with capability token, tokens in multiple buckets
+   * @when A sandbox client requests list_buckets
+   * @then Response contains an empty buckets array
+   */
+  it('list_buckets returns empty array for sandbox connection', async () => {
+    await tokenStore.saveToken('anthropic', makeToken(), 'default');
+    await tokenStore.saveToken('anthropic', makeToken(), 'work');
+
+    const token = 'd'.repeat(64);
+    server = createServer({ capabilityToken: token });
+    client = await startAndConnect(server, token);
+
+    const response = await client.request('list_buckets', {
+      provider: 'anthropic',
+    });
+    expect(response.ok).toBe(true);
+    expect(response.data!.buckets).toStrictEqual([]);
+  });
+
+  /**
+   * @scenario get_token still works for sandbox connection (targeted access)
+   * @given A server with capability token, a token in store
+   * @when A sandbox client requests get_token for a known provider
+   * @then The token is returned (targeted access still works)
+   */
+  it('get_token works for sandbox connection with known provider', async () => {
+    await tokenStore.saveToken('anthropic', makeToken());
+
+    const token = 'e'.repeat(64);
+    server = createServer({ capabilityToken: token });
+    client = await startAndConnect(server, token);
+
+    const response = await client.request('get_token', {
+      provider: 'anthropic',
+    });
+    expect(response.ok).toBe(true);
+    expect(response.data!.access_token).toBe('test-access-token');
+  });
+
+  /**
+   * @scenario get_api_key still works for sandbox connection (targeted access)
+   * @given A server with capability token, a key in storage
+   * @when A sandbox client requests get_api_key for a known name
+   * @then The key is returned (targeted access still works)
+   */
+  it('get_api_key works for sandbox connection with known name', async () => {
+    await keyStorage.saveKey('anthropic', 'sk-ant-123');
+
+    const token = 'f'.repeat(64);
+    server = createServer({ capabilityToken: token });
+    client = await startAndConnect(server, token);
+
+    const response = await client.request('get_api_key', {
+      name: 'anthropic',
+    });
+    expect(response.ok).toBe(true);
+    expect(response.data!.key).toBe('sk-ant-123');
+  });
+
+  /**
+   * @scenario has_api_key works for sandbox connection
+   * @given A server with capability token, a key in storage
+   * @when A sandbox client requests has_api_key for a known name
+   * @then Returns exists: true
+   */
+  it('has_api_key works for sandbox connection', async () => {
+    await keyStorage.saveKey('anthropic', 'sk-ant-123');
+
+    const token = 'g'.repeat(64);
+    server = createServer({ capabilityToken: token });
+    client = await startAndConnect(server, token);
+
+    const response = await client.request('has_api_key', {
+      name: 'anthropic',
+    });
+    expect(response.ok).toBe(true);
+    expect(response.data!.exists).toBe(true);
+  });
+
+  /**
+   * @scenario Enumeration works for non-sandbox (no token) connections
+   * @given A server WITHOUT capability token, keys and tokens in store
+   * @when A non-sandbox client requests enumeration operations
+   * @then Full lists are returned (backward compatibility)
+   */
+  it('list operations return full data for non-sandbox connections', async () => {
+    await keyStorage.saveKey('anthropic', 'sk-ant-123');
+    await tokenStore.saveToken('gemini', makeToken());
+
+    server = createServer();
+    client = await startAndConnect(server);
+
+    const keysResponse = await client.request('list_api_keys', {});
+    expect(keysResponse.ok).toBe(true);
+    expect(keysResponse.data!.keys).toContain('anthropic');
+
+    const providersResponse = await client.request('list_providers', {});
+    expect(providersResponse.ok).toBe(true);
+    expect(providersResponse.data!.providers).toContain('gemini');
+  });
+
+  // ─── Sandbox Mutation Restrictions (OCR Remediation) ──────────────────────
+
+  /**
+   * @scenario save_token is blocked for sandbox connections
+   * @given A server WITH capability token and an existing token
+   * @when A sandbox-authenticated client tries to save a token
+   * @then Response is ok: false with code FORBIDDEN
+   */
+  it('save_token blocked for sandbox connections', async () => {
+    await tokenStore.saveToken('anthropic', makeToken());
+
+    server = createServer({ capabilityToken: 'test-cap-token' });
+    client = await startAndConnect(server, 'test-cap-token');
+
+    const response = await client.request('save_token', {
+      provider: 'anthropic',
+      token: {
+        access_token: 'new-token',
+        expiry: 8888888888,
+        token_type: 'Bearer',
+      },
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('FORBIDDEN');
+  });
+
+  /**
+   * @scenario remove_token is blocked for sandbox connections
+   * @given A server WITH capability token and an existing token
+   * @when A sandbox-authenticated client tries to remove a token
+   * @then Response is ok: false with code FORBIDDEN
+   */
+  it('remove_token blocked for sandbox connections', async () => {
+    await tokenStore.saveToken('anthropic', makeToken());
+
+    server = createServer({ capabilityToken: 'test-cap-token' });
+    client = await startAndConnect(server, 'test-cap-token');
+
+    const response = await client.request('remove_token', {
+      provider: 'anthropic',
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('FORBIDDEN');
+  });
+
+  /**
+   * @scenario get_bucket_stats is blocked for sandbox connections
+   * @given A server WITH capability token
+   * @when A sandbox-authenticated client requests bucket stats
+   * @then Response is ok: true but with empty data (no stats leaked)
+   */
+  it('get_bucket_stats blocked for sandbox connections', async () => {
+    server = createServer({ capabilityToken: 'test-cap-token' });
+    client = await startAndConnect(server, 'test-cap-token');
+
+    const response = await client.request('get_bucket_stats', {
+      provider: 'anthropic',
+      bucket: 'default',
+    });
+
+    expect(response.ok).toBe(true);
+    expect(response.data).toStrictEqual({});
+  });
+
+  /**
+   * @scenario save_token works for non-sandbox connections
+   * @given A server WITHOUT capability token
+   * @when A non-sandbox client saves a token
+   * @then Response is ok: true (backward compatibility)
+   */
+  it('save_token works for non-sandbox connections', async () => {
+    server = createServer();
+    client = await startAndConnect(server);
+
+    const response = await client.request('save_token', {
+      provider: 'anthropic',
+      token: {
+        access_token: 'new-at',
+        expiry: 8888888888,
+        token_type: 'Bearer',
+      },
+    });
+
+    expect(response.ok).toBe(true);
   });
 });

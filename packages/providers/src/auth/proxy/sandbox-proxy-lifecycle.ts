@@ -27,6 +27,7 @@ import {
 import { createKeyringTokenStore } from '@vybestack/llxprt-code-core';
 import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import {
   CredentialProxyServer,
   type OAuthFlowInterface,
@@ -44,6 +45,7 @@ export interface SandboxProxyHandle {
 
 let serverInstance: CredentialProxyServer | undefined;
 let actualSocketPath: string | undefined;
+let actualCapabilityToken: string | undefined;
 
 /**
  * Adapter that wraps CodexDeviceFlow to match OAuthFlowInterface.
@@ -182,12 +184,15 @@ export async function createAndStartProxy(
       ? path.dirname(config.socketPath)
       : config.socketPath;
 
+  actualCapabilityToken = crypto.randomBytes(32).toString('hex');
+
   serverInstance = new CredentialProxyServer({
     tokenStore,
     providerKeyStorage,
     socketDir: requestedSocketDir,
     flowFactories,
     refreshCoordinator,
+    capabilityToken: actualCapabilityToken,
   });
 
   actualSocketPath = await serverInstance.start();
@@ -215,6 +220,7 @@ export async function stopProxy(): Promise<void> {
   if (actualSocketPath) {
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
     actualSocketPath = undefined;
+    actualCapabilityToken = undefined;
   }
 }
 
@@ -223,4 +229,13 @@ export async function stopProxy(): Promise<void> {
  */
 export function getProxySocketPath(): string | undefined {
   return actualSocketPath;
+}
+
+/**
+ * Returns the per-session capability token, if a proxy is running.
+ * This token must be injected into the sandbox so the inner process can
+ * authenticate its handshake with the credential proxy.
+ */
+export function getProxyCapabilityToken(): string | undefined {
+  return actualCapabilityToken;
 }

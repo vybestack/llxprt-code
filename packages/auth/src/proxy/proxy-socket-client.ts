@@ -36,6 +36,7 @@ interface PendingRequest {
 
 export class ProxySocketClient {
   private readonly socketPath: string;
+  private readonly capabilityToken: string | undefined;
   private socket: net.Socket | null = null;
   private decoder: FrameDecoder = new FrameDecoder({
     onPartialFrameTimeout: () => this.handlePartialFrameTimeout(),
@@ -49,8 +50,9 @@ export class ProxySocketClient {
     reject: (reason: Error) => void;
   } | null = null;
 
-  constructor(socketPath: string) {
+  constructor(socketPath: string, capabilityToken?: string) {
     this.socketPath = socketPath;
+    this.capabilityToken = capabilityToken;
   }
 
   async ensureConnected(): Promise<void> {
@@ -154,10 +156,14 @@ export class ProxySocketClient {
   }
 
   private async handshake(): Promise<void> {
+    const payload: Record<string, unknown> = { minVersion: 1, maxVersion: 1 };
+    if (this.capabilityToken !== undefined) {
+      payload.capabilityToken = this.capabilityToken;
+    }
     const request = {
       v: PROTOCOL_VERSION,
       op: 'handshake',
-      payload: { minVersion: 1, maxVersion: 1 },
+      payload,
     };
     this.socket!.write(encodeFrame(request));
 
@@ -185,6 +191,13 @@ export class ProxySocketClient {
     );
 
     if (response.ok !== true) {
+      const code = (response as { code?: string }).code;
+      if (code === 'UNAUTHORIZED') {
+        throw new Error(
+          'Credential proxy authentication failed: ' +
+            (response.error ?? 'invalid or missing capability token'),
+        );
+      }
       throw new Error(
         'Version mismatch: ' + (response.error ?? 'unknown error'),
       );

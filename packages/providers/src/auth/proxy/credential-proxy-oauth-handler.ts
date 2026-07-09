@@ -14,6 +14,7 @@ import {
   sanitizeTokenForProxy,
 } from '@vybestack/llxprt-code-auth';
 import { RefreshCoordinator } from './refresh-coordinator.js';
+import type { ConnectionState } from './credential-proxy-server.js';
 
 export interface OAuthFlowInterface {
   initiateDeviceFlow(redirectUri?: string): Promise<{
@@ -170,6 +171,7 @@ export class CredentialProxyOAuthHandler {
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
+    _state: ConnectionState,
   ): Promise<void> {
     const provider = payload.provider as string | undefined;
     const bucket = payload.bucket as string | undefined;
@@ -222,6 +224,7 @@ export class CredentialProxyOAuthHandler {
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
+    _state: ConnectionState,
   ): Promise<void> {
     const sessionId = payload.session_id as string | undefined;
     const code = payload.code as string | undefined;
@@ -269,6 +272,7 @@ export class CredentialProxyOAuthHandler {
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
+    _state: ConnectionState,
   ): Promise<void> {
     const sessionId = payload.session_id as string | undefined;
     if (!sessionId) {
@@ -292,6 +296,7 @@ export class CredentialProxyOAuthHandler {
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
+    _state: ConnectionState,
   ): void {
     const sessionId = payload.session_id as string | undefined;
     if (!sessionId) {
@@ -307,6 +312,7 @@ export class CredentialProxyOAuthHandler {
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
+    _state: ConnectionState,
   ): Promise<void> {
     const provider = payload.provider as string | undefined;
     const bucket = payload.bucket as string | undefined;

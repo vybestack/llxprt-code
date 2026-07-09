@@ -55,6 +55,28 @@ export interface CredentialProxyServerOptions {
   oauthSessionTimeoutMs?: number;
   /** RefreshCoordinator for rate-limited, deduplicated token refresh */
   refreshCoordinator?: RefreshCoordinator;
+  /**
+   * Per-session capability token. When configured, every connecting client
+   * MUST present this token in the handshake payload or the connection is
+   * rejected with UNAUTHORIZED. Connections that present a valid token are
+   * treated as sandbox connections (enumeration operations return empty
+   * arrays). When omitted, connections are allowed without a token
+   * (non-sandbox / legacy backward compatibility).
+   */
+  capabilityToken?: string;
+}
+
+// ─── Per-Connection State ────────────────────────────────────────────────────
+
+export interface ConnectionState {
+  /** Unique incrementing ID assigned at connect time for audit-log correlation. */
+  id: number;
+  /**
+   * True when the connection presented a valid capability token. Sandbox
+   * connections have enumeration operations restricted (empty arrays returned)
+   * to prevent credential discovery.
+   */
+  isSandboxConnection: boolean;
 }
 
 // ─── Server ──────────────────────────────────────────────────────────────────
@@ -65,6 +87,9 @@ export class CredentialProxyServer {
   private server: net.Server | null = null;
   private readonly connections: Set<net.Socket> = new Set();
   private readonly oauthHandler: CredentialProxyOAuthHandler;
+  private nextConnectionId: number = 1;
+  private readonly connectionStates: Map<net.Socket, ConnectionState> =
+    new Map();
 
   constructor(options: CredentialProxyServerOptions) {
     this.options = options;
@@ -169,6 +194,14 @@ export class CredentialProxyServer {
 
   private handleConnection(socket: net.Socket): void {
     this.connections.add(socket);
+    const connectionId = this.nextConnectionId++;
+    const state: ConnectionState = {
+      id: connectionId,
+      isSandboxConnection: false,
+    };
+    this.connectionStates.set(socket, state);
+    this.auditLog('INFO', connectionId, 'connect');
+
     const decoder = new FrameDecoder({
       onPartialFrameTimeout: () => {
         socket.destroy();
@@ -187,22 +220,26 @@ export class CredentialProxyServer {
 
       for (const frame of frames) {
         if (!handshakeCompleted) {
-          this.handleHandshake(socket, frame);
-          if (frame.v === PROTOCOL_VERSION || this.isVersionCompatible(frame)) {
+          const ok = this.handleHandshake(socket, frame, state);
+          if (ok) {
             handshakeCompleted = true;
           }
           continue;
         }
-        void this.dispatchRequest(socket, frame);
+        void this.dispatchRequest(socket, frame, state);
       }
     });
 
     socket.on('close', () => {
       this.connections.delete(socket);
+      this.connectionStates.delete(socket);
+      this.auditLog('INFO', connectionId, 'disconnect');
     });
 
     socket.on('error', () => {
       this.connections.delete(socket);
+      this.connectionStates.delete(socket);
+      this.auditLog('WARN', connectionId, 'socket_error');
     });
   }
 
@@ -222,19 +259,14 @@ export class CredentialProxyServer {
   private handleHandshake(
     socket: net.Socket,
     frame: Record<string, unknown>,
-  ): void {
+    state: ConnectionState,
+  ): boolean {
     const compatible = this.isVersionCompatible(frame);
 
-    if (compatible) {
-      socket.write(
-        encodeFrame({
-          v: PROTOCOL_VERSION,
-          op: 'handshake',
-          ok: true,
-          data: { version: PROTOCOL_VERSION },
-        }),
-      );
-    } else {
+    if (!compatible) {
+      this.auditLog('WARN', state.id, 'handshake_rejected', {
+        reason: 'version_mismatch',
+      });
       socket.write(
         encodeFrame({
           v: PROTOCOL_VERSION,
@@ -245,7 +277,88 @@ export class CredentialProxyServer {
         }),
       );
       socket.destroy();
+      return false;
     }
+
+    // Validate capability token if the server is configured with one
+    if (this.options.capabilityToken) {
+      const payload = this.asRecord(frame.payload);
+      const presentedToken = payload.capabilityToken;
+      if (
+        typeof presentedToken !== 'string' ||
+        !this.validateCapabilityToken(presentedToken)
+      ) {
+        this.auditLog('ERROR', state.id, 'handshake_unauthorized', {
+          reason: 'invalid_capability_token',
+        });
+        socket.write(
+          encodeFrame({
+            v: PROTOCOL_VERSION,
+            op: 'handshake',
+            ok: false,
+            code: 'UNAUTHORIZED',
+            error: 'Invalid or missing capability token',
+          }),
+        );
+        socket.destroy();
+        return false;
+      }
+      state.isSandboxConnection = true;
+    }
+
+    this.auditLog('INFO', state.id, 'handshake_ok', {
+      sandbox: state.isSandboxConnection,
+    });
+    socket.write(
+      encodeFrame({
+        v: PROTOCOL_VERSION,
+        op: 'handshake',
+        ok: true,
+        data: { version: PROTOCOL_VERSION },
+      }),
+    );
+    return true;
+  }
+
+  /**
+   * Constant-time comparison of the presented capability token against the
+   * expected value. Both values are SHA-256 hashed first so the comparison
+   * buffers are always the same length, eliminating timing side-channels that
+   * could leak the token length.
+   */
+  private validateCapabilityToken(presentedToken: string): boolean {
+    const expected = this.options.capabilityToken;
+    if (!expected) return true;
+    const presentedHash = crypto
+      .createHash('sha256')
+      .update(presentedToken)
+      .digest();
+    const expectedHash = crypto.createHash('sha256').update(expected).digest();
+    return crypto.timingSafeEqual(presentedHash, expectedHash);
+  }
+
+  /**
+   * Emits a structured JSON log line to stderr for security audit purposes.
+   * Never includes actual secrets — only operation names and non-sensitive
+   * identifiers.
+   */
+  private auditLog(
+    level: 'INFO' | 'WARN' | 'ERROR',
+    connectionId: number,
+    operation: string,
+    details?: Record<string, unknown>,
+  ): void {
+    const entry: Record<string, unknown> = {
+      ts: new Date().toISOString(),
+      level,
+      component: 'credential-proxy',
+      conn: connectionId,
+      op: operation,
+    };
+    if (details) {
+      Object.assign(entry, details);
+    }
+    process.stderr.write(JSON.stringify(entry) + '\n');
   }
 
   private asRecord(value: unknown): Record<string, unknown> {
@@ -266,40 +379,44 @@ export class CredentialProxyServer {
         socket: net.Socket,
         id: string,
         payload: Record<string, unknown>,
+        state: ConnectionState,
       ) => Promise<void> | void
     >
   > = {
-    get_token: (socket, id, payload) =>
-      this.handleGetToken(socket, id, payload),
-    save_token: (socket, id, payload) =>
-      this.handleSaveToken(socket, id, payload),
-    remove_token: (socket, id, payload) =>
-      this.handleRemoveToken(socket, id, payload),
-    list_providers: (socket, id) => this.handleListProviders(socket, id),
-    list_buckets: (socket, id, payload) =>
-      this.handleListBuckets(socket, id, payload),
-    get_bucket_stats: (socket, id, payload) =>
-      this.handleGetBucketStats(socket, id, payload),
-    get_api_key: (socket, id, payload) =>
-      this.handleGetApiKey(socket, id, payload),
-    list_api_keys: (socket, id) => this.handleListApiKeys(socket, id),
-    has_api_key: (socket, id, payload) =>
-      this.handleHasApiKey(socket, id, payload),
-    oauth_initiate: (socket, id, payload) =>
-      this.oauthHandler.handleInitiate(socket, id, payload),
-    oauth_exchange: (socket, id, payload) =>
-      this.oauthHandler.handleExchange(socket, id, payload),
-    oauth_poll: (socket, id, payload) =>
-      this.oauthHandler.handlePoll(socket, id, payload),
-    oauth_cancel: (socket, id, payload) =>
-      this.oauthHandler.handleCancel(socket, id, payload),
-    refresh_token: (socket, id, payload) =>
-      this.oauthHandler.handleRefreshToken(socket, id, payload),
+    get_token: (socket, id, payload, state) =>
+      this.handleGetToken(socket, id, payload, state),
+    save_token: (socket, id, payload, state) =>
+      this.handleSaveToken(socket, id, payload, state),
+    remove_token: (socket, id, payload, state) =>
+      this.handleRemoveToken(socket, id, payload, state),
+    list_providers: (socket, id, _payload, state) =>
+      this.handleListProviders(socket, id, state),
+    list_buckets: (socket, id, payload, state) =>
+      this.handleListBuckets(socket, id, payload, state),
+    get_bucket_stats: (socket, id, payload, state) =>
+      this.handleGetBucketStats(socket, id, payload, state),
+    get_api_key: (socket, id, payload, state) =>
+      this.handleGetApiKey(socket, id, payload, state),
+    list_api_keys: (socket, id, _payload, state) =>
+      this.handleListApiKeys(socket, id, state),
+    has_api_key: (socket, id, payload, state) =>
+      this.handleHasApiKey(socket, id, payload, state),
+    oauth_initiate: (socket, id, payload, state) =>
+      this.oauthHandler.handleInitiate(socket, id, payload, state),
+    oauth_exchange: (socket, id, payload, state) =>
+      this.oauthHandler.handleExchange(socket, id, payload, state),
+    oauth_poll: (socket, id, payload, state) =>
+      this.oauthHandler.handlePoll(socket, id, payload, state),
+    oauth_cancel: (socket, id, payload, state) =>
+      this.oauthHandler.handleCancel(socket, id, payload, state),
+    refresh_token: (socket, id, payload, state) =>
+      this.oauthHandler.handleRefreshToken(socket, id, payload, state),
   };
 
   private async dispatchRequest(
     socket: net.Socket,
     frame: Record<string, unknown>,
+    state: ConnectionState,
   ): Promise<void> {
     const id =
       typeof frame.id === 'string' ? frame.id : String(frame.id ?? 'unknown');
@@ -318,9 +435,10 @@ export class CredentialProxyServer {
     }
 
     try {
-      await handler(socket, id, payload);
+      await handler(socket, id, payload, state);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      this.auditLog('ERROR', state.id, op, { status: 'error', id });
       this.sendError(socket, id, 'INTERNAL_ERROR', message);
     }
   }
@@ -329,6 +447,7 @@ export class CredentialProxyServer {
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
+    state: ConnectionState,
   ): Promise<void> {
     const provider = payload.provider as string | undefined;
     if (!provider) {
@@ -339,6 +458,11 @@ export class CredentialProxyServer {
 
     const token = await this.options.tokenStore.getToken(provider, bucket);
     if (token === null) {
+      this.auditLog('INFO', state.id, 'get_token', {
+        provider,
+        bucket: bucket ?? 'default',
+        status: 'not_found',
+      });
       this.sendError(
         socket,
         id,
@@ -347,6 +471,11 @@ export class CredentialProxyServer {
       );
       return;
     }
+    this.auditLog('INFO', state.id, 'get_token', {
+      provider,
+      bucket: bucket ?? 'default',
+      status: 'ok',
+    });
     const sanitized = sanitizeTokenForProxy(token);
     this.sendOk(socket, id, sanitized as unknown as Record<string, unknown>);
   }
@@ -355,7 +484,20 @@ export class CredentialProxyServer {
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
+    state: ConnectionState,
   ): Promise<void> {
+    if (state.isSandboxConnection) {
+      this.auditLog('WARN', state.id, 'save_token', {
+        status: 'blocked_sandbox',
+      });
+      this.sendError(
+        socket,
+        id,
+        'FORBIDDEN',
+        'Sandbox connections cannot modify tokens',
+      );
+      return;
+    }
     const provider = payload.provider as string | undefined;
     const tokenData = payload.token as Record<string, unknown> | undefined;
     const bucket = payload.bucket as string | undefined;
@@ -389,7 +531,20 @@ export class CredentialProxyServer {
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
+    state: ConnectionState,
   ): Promise<void> {
+    if (state.isSandboxConnection) {
+      this.auditLog('WARN', state.id, 'remove_token', {
+        status: 'blocked_sandbox',
+      });
+      this.sendError(
+        socket,
+        id,
+        'FORBIDDEN',
+        'Sandbox connections cannot remove tokens',
+      );
+      return;
+    }
     const provider = payload.provider as string | undefined;
     if (!provider) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
@@ -404,8 +559,20 @@ export class CredentialProxyServer {
   private async handleListProviders(
     socket: net.Socket,
     id: string,
+    state: ConnectionState,
   ): Promise<void> {
+    if (state.isSandboxConnection) {
+      this.auditLog('WARN', state.id, 'list_providers', {
+        status: 'blocked_sandbox',
+      });
+      this.sendOk(socket, id, { providers: [] });
+      return;
+    }
     const providers = await this.options.tokenStore.listProviders();
+    this.auditLog('INFO', state.id, 'list_providers', {
+      status: 'ok',
+      count: providers.length,
+    });
     this.sendOk(socket, id, { providers });
   }
 
@@ -413,6 +580,7 @@ export class CredentialProxyServer {
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
+    state: ConnectionState,
   ): Promise<void> {
     const provider = payload.provider as string | undefined;
     if (!provider) {
@@ -420,7 +588,21 @@ export class CredentialProxyServer {
       return;
     }
 
+    if (state.isSandboxConnection) {
+      this.auditLog('WARN', state.id, 'list_buckets', {
+        provider,
+        status: 'blocked_sandbox',
+      });
+      this.sendOk(socket, id, { buckets: [] });
+      return;
+    }
+
     const buckets = await this.options.tokenStore.listBuckets(provider);
+    this.auditLog('INFO', state.id, 'list_buckets', {
+      provider,
+      status: 'ok',
+      count: buckets.length,
+    });
     this.sendOk(socket, id, { buckets });
   }
 
@@ -428,6 +610,7 @@ export class CredentialProxyServer {
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
+    state: ConnectionState,
   ): Promise<void> {
     const name = payload.name as string | undefined;
     if (!name) {
@@ -437,17 +620,34 @@ export class CredentialProxyServer {
 
     const key = await this.options.providerKeyStorage.getKey(name);
     if (key === null) {
+      this.auditLog('INFO', state.id, 'get_api_key', {
+        name,
+        status: 'not_found',
+      });
       this.sendError(socket, id, 'NOT_FOUND', `No API key found for: ${name}`);
       return;
     }
+    this.auditLog('INFO', state.id, 'get_api_key', { name, status: 'ok' });
     this.sendOk(socket, id, { key });
   }
 
   private async handleListApiKeys(
     socket: net.Socket,
     id: string,
+    state: ConnectionState,
   ): Promise<void> {
+    if (state.isSandboxConnection) {
+      this.auditLog('WARN', state.id, 'list_api_keys', {
+        status: 'blocked_sandbox',
+      });
+      this.sendOk(socket, id, { keys: [] });
+      return;
+    }
     const keys = await this.options.providerKeyStorage.listKeys();
+    this.auditLog('INFO', state.id, 'list_api_keys', {
+      status: 'ok',
+      count: keys.length,
+    });
     this.sendOk(socket, id, { keys });
   }
 
@@ -455,6 +655,7 @@ export class CredentialProxyServer {
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
+    state: ConnectionState,
   ): Promise<void> {
     const name = payload.name as string | undefined;
     if (!name) {
@@ -463,6 +664,7 @@ export class CredentialProxyServer {
     }
 
     const exists = await this.options.providerKeyStorage.hasKey(name);
+    this.auditLog('INFO', state.id, 'has_api_key', { name, exists });
     this.sendOk(socket, id, { exists });
   }
 
@@ -470,11 +672,19 @@ export class CredentialProxyServer {
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
+    state: ConnectionState,
   ): Promise<void> {
     const provider = payload.provider as string | undefined;
     const bucket = payload.bucket as string | undefined;
     if (!provider) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
+      return;
+    }
+    if (state.isSandboxConnection) {
+      this.auditLog('WARN', state.id, 'get_bucket_stats', {
+        status: 'blocked_sandbox',
+      });
+      this.sendOk(socket, id, {});
       return;
     }
     const stats = await this.options.tokenStore.getBucketStats(

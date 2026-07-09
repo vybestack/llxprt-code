@@ -41,6 +41,7 @@ import {
   createAndStartProxy,
   stopProxy,
   getProxySocketPath,
+  getProxyCapabilityToken,
 } from '@vybestack/llxprt-code-providers/auth.js';
 
 const execAsync = promisify(exec);
@@ -454,6 +455,13 @@ export async function setupCredentialProxy(
     return { credentialProxyBridgeResult, credentialProxyBridgeCleanup };
   }
 
+  const capabilityToken = getProxyCapabilityToken();
+  const injectCapabilityEnv = (): void => {
+    if (capabilityToken !== undefined) {
+      args.push('--env', `LLXPRT_CAPABILITY_TOKEN=${capabilityToken}`);
+    }
+  };
+
   // @plan:PLAN-20250214-CREDPROXY.P34 R3.6: Pass socket path to container via env var
   if (os.platform() === 'darwin') {
     const sandboxCommand: string = config.command;
@@ -479,6 +487,7 @@ export async function setupCredentialProxy(
         break;
       default:
         args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${socketPath}`);
+        injectCapabilityEnv();
         break;
     }
 
@@ -491,9 +500,11 @@ export async function setupCredentialProxy(
         '--env',
         `LLXPRT_CREDENTIAL_SOCKET=${credentialProxyBridgeResult.containerSocketPath}`,
       );
+      injectCapabilityEnv();
     }
   } else {
     args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${socketPath}`);
+    injectCapabilityEnv();
   }
 
   return { credentialProxyBridgeResult, credentialProxyBridgeCleanup };

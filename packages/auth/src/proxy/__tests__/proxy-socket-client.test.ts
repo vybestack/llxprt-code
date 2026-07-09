@@ -454,4 +454,114 @@ describe('ProxySocketClient', () => {
     // No pending requests — graceful close should not throw
     expect(() => client.gracefulClose()).not.toThrow();
   });
+
+  // ─── Capability Token ──────────────────────────────────────────────────────
+
+  /**
+   * @scenario Client includes capability token in handshake payload
+   * @given A client constructed with a capability token
+   * @when The client connects and performs a handshake
+   * @then The handshake payload contains the capabilityToken field
+   */
+  it('includes capability token in handshake payload when provided', async () => {
+    const capabilityToken = 'deadbeef'.repeat(8);
+
+    const handshakeReceived = new Promise<Record<string, unknown>>(
+      (resolve) => {
+        server = net.createServer((socket) => {
+          const decoder = new FrameDecoder();
+          socket.on('data', (chunk) => {
+            const frames = decoder.feed(chunk);
+            for (const frame of frames) {
+              const msg = frame;
+              if (msg.op === 'handshake') {
+                resolve(msg);
+                socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+              }
+            }
+          });
+        });
+      },
+    );
+
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+
+    client = new ProxySocketClient(socketPath, capabilityToken);
+    await client.ensureConnected();
+
+    const handshake = await handshakeReceived;
+    const payload = handshake.payload as Record<string, unknown>;
+    expect(payload.capabilityToken).toBe(capabilityToken);
+    expect(payload.minVersion).toBe(1);
+    expect(payload.maxVersion).toBe(1);
+  });
+
+  /**
+   * @scenario Client omits capability token when not provided
+   * @given A client constructed WITHOUT a capability token
+   * @when The client connects and performs a handshake
+   * @then The handshake payload does NOT contain a capabilityToken field
+   */
+  it('omits capability token in handshake when not provided', async () => {
+    const handshakeReceived = new Promise<Record<string, unknown>>(
+      (resolve) => {
+        server = net.createServer((socket) => {
+          const decoder = new FrameDecoder();
+          socket.on('data', (chunk) => {
+            const frames = decoder.feed(chunk);
+            for (const frame of frames) {
+              const msg = frame;
+              if (msg.op === 'handshake') {
+                resolve(msg);
+                socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+              }
+            }
+          });
+        });
+      },
+    );
+
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+
+    client = new ProxySocketClient(socketPath);
+    await client.ensureConnected();
+
+    const handshake = await handshakeReceived;
+    const payload = handshake.payload as Record<string, unknown>;
+    expect(payload.capabilityToken).toBeUndefined();
+  });
+
+  /**
+   * @scenario Client surfaces descriptive error when server rejects token
+   * @given A server that responds to handshake with ok: false and UNAUTHORIZED
+   * @when A client connects
+   * @then ensureConnected rejects with an authentication failure message
+   */
+  it('surfaces authentication error on UNAUTHORIZED handshake', async () => {
+    server = net.createServer((socket) => {
+      const decoder = new FrameDecoder();
+      socket.on('data', (chunk) => {
+        const frames = decoder.feed(chunk);
+        for (const frame of frames) {
+          if (frame.op === 'handshake') {
+            socket.write(
+              encodeFrame({
+                ok: false,
+                code: 'UNAUTHORIZED',
+                error: 'Invalid or missing capability token',
+              }),
+            );
+            socket.destroy();
+          }
+        }
+      });
+    });
+
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+
+    client = new ProxySocketClient(socketPath, 'some-token');
+    await expect(client.ensureConnected()).rejects.toThrow(
+      /authentication failed/i,
+    );
+  });
 });
