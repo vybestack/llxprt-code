@@ -75,8 +75,8 @@ describe('OpenAIResponsesInputBuilder stateful tool output preservation @issue:2
 
     const outputs = functionCallOutputs(input);
     expect(outputs).toHaveLength(1);
-    expect(outputs[0]?.call_id).toBe('call_server_side');
-    expect(outputs[0]?.output).toContain('result from server-side call');
+    expect(outputs[0].call_id).toBe('call_server_side');
+    expect(outputs[0].output).toContain('result from server-side call');
   });
 
   it('preserves all function_call_outputs when serverSideParentActive even with mixed matching/orphan outputs', () => {
