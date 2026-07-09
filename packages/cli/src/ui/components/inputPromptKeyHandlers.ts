@@ -415,6 +415,8 @@ export type InputHandlerDeps = {
   inputHistory: { navigateUp: () => void; navigateDown: () => void };
   handleSubmitAndClear: (value: string) => void;
   handleSubmit: (value: string) => void;
+  /** Optional steer callback: injects the text into the active agent loop at the next tool-call boundary. Returns true if consumed (streaming), false to fall through to newline. */
+  handleSteer?: (text: string) => boolean;
   shellHistory: {
     getPreviousCommand: () => string | null;
     getNextCommand: () => string | null;
@@ -518,6 +520,19 @@ const handleNavigationInputKeys = (key: Key, deps: InputHandlerDeps): boolean =>
 
 const handleSubmitAndEditKeys = (key: Key, deps: InputHandlerDeps): boolean => {
   const { buffer, handleSubmit, resetCompletionState } = deps;
+  // During streaming, Ctrl+Enter (STEER) injects the current buffer as a
+  // mid-turn steer. When not streaming (or when the input is empty),
+  // handleSteer returns false and the key falls through to normal editing
+  // commands. Ctrl+Enter is no longer bound to NEWLINE, so when not streaming
+  // it does nothing (use Cmd+Enter, Shift+Enter, or Ctrl+J for newlines).
+  if (deps.handleSteer && keyMatchers[Command.STEER](key)) {
+    const consumed = deps.handleSteer(buffer.text);
+    if (consumed) {
+      buffer.setText('');
+      resetCompletionState();
+      return true;
+    }
+  }
   if (keyMatchers[Command.SUBMIT](key)) {
     submitBufferInput(buffer, handleSubmit);
     return true;
