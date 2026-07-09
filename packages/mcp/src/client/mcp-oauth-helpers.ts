@@ -117,19 +117,25 @@ export function detectDeprecatedSSEEndpoint(
   );
   if (!isDeprecated) return null;
 
-  // Extract a URL from the error message using string search to avoid
-  // regex backtracking concerns (sonarjs/slow-regex)
-  const httpIdx = errorString.indexOf('http');
-  if (httpIdx === -1) return '';
-  const rest = errorString.slice(httpIdx);
+  // Extract a URL from the error message using case-insensitive string
+  // search to avoid regex backtracking concerns (sonarjs/slow-regex)
+  const lowerHttpIdx = lower.indexOf('http');
+  if (lowerHttpIdx === -1) return '';
+  const rest = errorString.slice(lowerHttpIdx);
+  const lowerRest = lower.slice(lowerHttpIdx);
   let endIdx = rest.length;
-  for (let i = 0; i < rest.length; i++) {
-    if (rest.charCodeAt(i) <= 32) {
+  for (let i = 0; i < lowerRest.length; i++) {
+    if (lowerRest.charCodeAt(i) <= 32) {
       endIdx = i;
       break;
     }
   }
   const url = rest.slice(0, endIdx);
+  // Validate that the extracted text is actually a URL (must contain "://")
+  const schemeEnd = lower
+    .slice(lowerHttpIdx, lowerHttpIdx + endIdx)
+    .indexOf('://');
+  if (schemeEnd === -1) return '';
   // Trim trailing punctuation that may be part of the sentence, not the URL
   let trimmedLen = url.length;
   while (trimmedLen > 0 && '.,;:!?)]"\''.includes(url.charAt(trimmedLen - 1))) {
@@ -152,6 +158,12 @@ const OAUTH_FLOW_TIMEOUT_MS = 10 * 60 * 1000;
  * authentication flow to avoid opening multiple browser tabs. If the flow
  * does not settle within {@link OAUTH_FLOW_TIMEOUT_MS}, the guard entry is
  * evicted so subsequent attempts can start a fresh flow.
+ *
+ * Note: if the timeout wins the race, the underlying browser OAuth flow
+ * (`doHandleAutomaticOAuth`) is not cancelled — browser-based flows cannot
+ * be reliably aborted from the Node.js side. The timed-out flow may still
+ * complete in the background, but the in-flight guard is cleared so a
+ * fresh attempt can proceed.
  */
 export async function handleAutomaticOAuth(
   mcpServerName: string,
@@ -172,8 +184,9 @@ export async function handleAutomaticOAuth(
     wwwAuthenticate,
   );
 
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<boolean>((resolve) => {
-    setTimeout(() => {
+    timeoutId = setTimeout(() => {
       debugLogger.warn(
         `OAuth flow for '${mcpServerName}' timed out after ${OAUTH_FLOW_TIMEOUT_MS}ms, clearing in-flight guard`,
       );
@@ -183,6 +196,7 @@ export async function handleAutomaticOAuth(
   });
 
   const raced = Promise.race([authPromise, timeoutPromise]).finally(() => {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
     inFlightAuthentications.delete(mcpServerName);
   });
 

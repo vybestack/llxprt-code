@@ -73,4 +73,18 @@ describe('detectDeprecatedSSEEndpoint', () => {
     );
     expect(result).toBe('https://mcp.example.com/mcp');
   });
+
+  it('should detect uppercase URL scheme (HTTPS://)', () => {
+    const result = detectDeprecatedSSEEndpoint(
+      'SSE is no longer supported. Use HTTPS://mcp.example.com/mcp',
+    );
+    expect(result).toBe('HTTPS://mcp.example.com/mcp');
+  });
+
+  it('should return empty string when "http" appears but is not a URL (no ://)', () => {
+    const result = detectDeprecatedSSEEndpoint(
+      'SSE is no longer supported. HTTP protocol error occurred.',
+    );
+    expect(result).toBe('');
+  });
 });
