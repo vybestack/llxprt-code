@@ -215,9 +215,10 @@ export class CredentialProxyServer {
     this.auditLog('INFO', connectionId, 'connect');
 
     const decoder = new FrameDecoder({
-      onPartialFrameTimeout: () => {
-        socket.destroy();
-      },
+        onPartialFrameTimeout: () => {
+          this.auditLog('WARN', state.id, 'partial_frame_timeout');
+          socket.destroy();
+        },
     });
     const handshakeState = { completed: false, rejected: false };
 
@@ -283,7 +284,12 @@ export class CredentialProxyServer {
       handshakeState.completed = true;
       return true;
     }
-    void this.dispatchRequest(socket, frame, state);
+    this.dispatchRequest(socket, frame, state).catch((err) => {
+      this.auditLog('ERROR', state.id, 'unhandled_dispatch', {
+        error: String(err),
+      });
+      if (!socket.destroyed) socket.destroy();
+    });
     return true;
   }
 
@@ -500,8 +506,19 @@ export class CredentialProxyServer {
         return undefined;
       return this.oauthHandler.handlePoll(socket, id, payload, state);
     },
-    oauth_cancel: (socket, id, payload, state) =>
-      this.oauthHandler.handleCancel(socket, id, payload, state),
+    oauth_cancel: (socket, id, payload, state) => {
+      if (
+        this.rejectIfSandbox(
+          socket,
+          id,
+          state,
+          'oauth_cancel',
+          'Sandbox connections cannot cancel OAuth sessions',
+        )
+      )
+        return undefined;
+      return this.oauthHandler.handleCancel(socket, id, payload, state);
+    },
     refresh_token: (socket, id, payload, state) => {
       if (
         this.rejectIfSandbox(
@@ -576,6 +593,12 @@ export class CredentialProxyServer {
   //   while maintaining API compatibility.
   // - save_token and remove_token return FORBIDDEN (ok: false) since mutations
   //   from sandbox connections are never valid and the caller should know.
+  // - get_token and get_api_key return FORBIDDEN for not-found to avoid leaking
+  //   provider/key existence via error messages.
+  //   Accepted risk: a successful get_token (ok: true) still reveals that a
+  //   provider exists. This is accepted because the provider namespace is
+  //   small and publicly known (e.g., 'anthropic', 'openai', 'google'), and
+  //   blocking get_token entirely would prevent the sandbox from functioning.
   private rejectIfSandbox(
     socket: net.Socket,
     id: string,
@@ -873,10 +896,9 @@ export class CredentialProxyServer {
     payload: Record<string, unknown>,
     state: ConnectionState,
   ): Promise<void> {
-    const bucket = payload.bucket as string | undefined;
     if (
       this.emptyIfSandbox(socket, id, state, 'get_bucket_stats', {
-        bucket: bucket ?? 'default',
+        bucket: 'default',
         requestCount: 0,
         percentage: 0,
       })
@@ -884,6 +906,7 @@ export class CredentialProxyServer {
       return;
 
     const provider = payload.provider as string | undefined;
+    const bucket = payload.bucket as string | undefined;
     if (!provider) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
       return;

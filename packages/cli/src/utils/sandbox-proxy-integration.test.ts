@@ -191,11 +191,14 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     it('does NOT pass LLXPRT_CAPABILITY_TOKEN via --env (avoids exposing in process args)', () => {
       // Check the ENTIRE source so the invariant holds regardless of
       // which function pushes the token.
+      // Match within a single string literal (exclude quotes/newlines) so the
+      // regex doesn't cross from --env for socket path to LLXPRT_CAPABILITY_TOKEN
+      // in the --env-file section on a different line.
       expect(sandboxSource).not.toMatch(
-        /['"]--env['"]\s*,\s*[`'"].*LLXPRT_CAPABILITY_TOKEN/,
+        /['"]--env['"]\s*,\s*[`'"][^'"\n`]*LLXPRT_CAPABILITY_TOKEN/,
       );
       expect(sandboxSource).not.toMatch(
-        /['"]-e['"]\s*,\s*[`'"].*LLXPRT_CAPABILITY_TOKEN/,
+        /['"]-e['"]\s*,\s*[`'"][^'"\n`]*LLXPRT_CAPABILITY_TOKEN/,
       );
     });
 
@@ -272,9 +275,14 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
         'wireCleanupHandlers',
       );
       expect(fnSection.length).toBeGreaterThan(0);
-      // The composed cleanup (env file + bridge) must be called on close
-      // before being nullified, so the temp env file is removed.
-      expect(fnSection).toContain('credentialProxyBridgeCleanup()');
+      // Verify cleanup is called BEFORE nullifying
+      const cleanupIdx = fnSection.indexOf('credentialProxyBridgeCleanup()');
+      const nullifyIdx = fnSection.indexOf(
+        'setCredentialProxyBridgeCleanup(undefined)',
+      );
+      expect(cleanupIdx).toBeGreaterThan(-1);
+      expect(nullifyIdx).toBeGreaterThan(-1);
+      expect(cleanupIdx).toBeLessThan(nullifyIdx);
     });
 
     it('adds cleanup on sandbox process close', () => {

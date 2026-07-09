@@ -243,8 +243,7 @@ export async function stopProxy(): Promise<void> {
     try {
       if (!process.stderr.destroyed) {
         process.stderr.write(
-          `Warning: credential proxy stop() failed: ${err instanceof Error ? err.message : String(err)}
-`,
+          `Warning: credential proxy stop() failed: ${err instanceof Error ? err.message : String(err)}\n`,
         );
       }
     } catch {

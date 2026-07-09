@@ -719,19 +719,19 @@ export function wireCleanupHandlers(
     // process-level events as well as the sandbox close event. This ensures
     // tunnels are torn down even on abnormal exit where the sandbox close
     // event may not fire.
-    process.on('exit', credentialProxyBridgeCleanup);
-    process.on('SIGINT', credentialProxyBridgeCleanup);
-    process.on('SIGTERM', credentialProxyBridgeCleanup);
     let bridgeCleanedUp = false;
     const runBridgeCleanup = (): void => {
       if (bridgeCleanedUp) return;
       bridgeCleanedUp = true;
       credentialProxyBridgeCleanup();
-      process.off('exit', credentialProxyBridgeCleanup);
-      process.off('SIGINT', credentialProxyBridgeCleanup);
-      process.off('SIGTERM', credentialProxyBridgeCleanup);
+      process.off('exit', runBridgeCleanup);
+      process.off('SIGINT', runBridgeCleanup);
+      process.off('SIGTERM', runBridgeCleanup);
       setCredentialProxyBridgeCleanup(undefined);
     };
+    process.on('exit', runBridgeCleanup);
+    process.on('SIGINT', runBridgeCleanup);
+    process.on('SIGTERM', runBridgeCleanup);
     sandboxProcess.on('close', runBridgeCleanup);
   }
 

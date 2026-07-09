@@ -33,6 +33,8 @@ describe('ProviderManager runtime context', () => {
   afterEach(() => {
     const fallback = createProviderRuntimeContext({
       settingsService: new SettingsService(),
+      runtimeId: 'afterEach-fallback',
+      metadata: { source: 'afterEach-cleanup' },
     });
     setActiveProviderRuntimeContext(fallback);
   });
