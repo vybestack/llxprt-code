@@ -219,7 +219,7 @@ export class CredentialProxyServer {
         socket.destroy();
       },
     });
-    const handshakeState = { completed: false };
+    const handshakeState = { completed: false, rejected: false };
 
     socket.on('data', (chunk: Buffer) => {
       let frames: Array<Record<string, unknown>>;
@@ -235,19 +235,15 @@ export class CredentialProxyServer {
     });
 
     socket.on('close', () => {
-      const wasPresent = this.connections.delete(socket);
+      this.connections.delete(socket);
       this.connectionStates.delete(socket);
-      if (wasPresent) {
-        this.auditLog('INFO', connectionId, 'disconnect');
-      }
+      this.auditLog('INFO', connectionId, 'disconnect');
     });
 
     socket.on('error', () => {
-      const wasPresent = this.connections.delete(socket);
+      this.connections.delete(socket);
       this.connectionStates.delete(socket);
-      if (wasPresent) {
-        this.auditLog('WARN', connectionId, 'socket_error');
-      }
+      this.auditLog('WARN', connectionId, 'socket_error');
     });
   }
 
@@ -270,14 +266,15 @@ export class CredentialProxyServer {
     socket: net.Socket,
     frame: Record<string, unknown>,
     state: ConnectionState,
-    handshakeState: { completed: boolean },
+    handshakeState: { completed: boolean; rejected: boolean },
   ): boolean {
     if (!handshakeState.completed) {
+      if (handshakeState.rejected) return false;
       const ok = this.handleHandshake(socket, frame, state);
-      if (!ok) return false;
-      // Only mark completed on success — on failure, socket.end() only
-      // half-closes, so the readable side can still emit data. Leaving
-      // completed=false ensures rejected connections cannot dispatch requests.
+      if (!ok) {
+        handshakeState.rejected = true;
+        return false;
+      }
       handshakeState.completed = true;
       return true;
     }
@@ -459,16 +456,60 @@ export class CredentialProxyServer {
       this.handleListApiKeys(socket, id, state),
     has_api_key: (socket, id, payload, state) =>
       this.handleHasApiKey(socket, id, payload, state),
-    oauth_initiate: (socket, id, payload, state) =>
-      this.oauthHandler.handleInitiate(socket, id, payload, state),
-    oauth_exchange: (socket, id, payload, state) =>
-      this.oauthHandler.handleExchange(socket, id, payload, state),
-    oauth_poll: (socket, id, payload, state) =>
-      this.oauthHandler.handlePoll(socket, id, payload, state),
+    oauth_initiate: (socket, id, payload, state) => {
+      if (
+        this.rejectIfSandbox(
+          socket,
+          id,
+          state,
+          'oauth_initiate',
+          'Sandbox connections cannot initiate OAuth',
+        )
+      )
+        return undefined;
+      return this.oauthHandler.handleInitiate(socket, id, payload, state);
+    },
+    oauth_exchange: (socket, id, payload, state) => {
+      if (
+        this.rejectIfSandbox(
+          socket,
+          id,
+          state,
+          'oauth_exchange',
+          'Sandbox connections cannot exchange OAuth tokens',
+        )
+      )
+        return undefined;
+      return this.oauthHandler.handleExchange(socket, id, payload, state);
+    },
+    oauth_poll: (socket, id, payload, state) => {
+      if (
+        this.rejectIfSandbox(
+          socket,
+          id,
+          state,
+          'oauth_poll',
+          'Sandbox connections cannot poll OAuth tokens',
+        )
+      )
+        return undefined;
+      return this.oauthHandler.handlePoll(socket, id, payload, state);
+    },
     oauth_cancel: (socket, id, payload, state) =>
       this.oauthHandler.handleCancel(socket, id, payload, state),
-    refresh_token: (socket, id, payload, state) =>
-      this.oauthHandler.handleRefreshToken(socket, id, payload, state),
+    refresh_token: (socket, id, payload, state) => {
+      if (
+        this.rejectIfSandbox(
+          socket,
+          id,
+          state,
+          'refresh_token',
+          'Sandbox connections cannot refresh tokens',
+        )
+      )
+        return undefined;
+      return this.oauthHandler.handleRefreshToken(socket, id, payload, state);
+    },
   };
 
   private async dispatchRequest(

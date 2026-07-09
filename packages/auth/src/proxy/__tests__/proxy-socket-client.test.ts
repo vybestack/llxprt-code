@@ -77,10 +77,18 @@ function createHandshakeCapturingServer(
 }> {
   let resolveHandshake!: (frame: Record<string, unknown>) => void;
   let rejectHandshake!: (err: Error) => void;
-  const handshake = new Promise<Record<string, unknown>>((resolve, reject) => {
-    resolveHandshake = resolve;
-    rejectHandshake = reject;
-  });
+  const handshake = Promise.race([
+    new Promise<Record<string, unknown>>((resolve, reject) => {
+      resolveHandshake = resolve;
+      rejectHandshake = reject;
+    }),
+    new Promise<Record<string, unknown>>((_, reject) =>
+      setTimeout(
+        () => reject(new Error('Handshake capture timed out')),
+        5000,
+      ),
+    ),
+  ]);
   const srv = net.createServer((socket) => {
     const decoder = new FrameDecoder();
     let settled = false;

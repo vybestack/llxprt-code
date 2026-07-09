@@ -190,8 +190,13 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       );
       expect(fnSection.length).toBeGreaterThan(0);
       // Guard against both --env and -e which would expose the token
-      expect(fnSection).not.toMatch(/--env[\s=]+LLXPRT_CAPABILITY_TOKEN/);
-      expect(fnSection).not.toMatch(/(?<!-)-e\s+LLXPRT_CAPABILITY_TOKEN/);
+      // Match the actual array-push syntax: args.push('--env', `VAR=...`)
+      expect(fnSection).not.toMatch(
+        /['"]--env['"]\s*,\s*[`'"].*LLXPRT_CAPABILITY_TOKEN/,
+      );
+      expect(fnSection).not.toMatch(
+        /['"]-e['"]\s*,\s*[`'"].*LLXPRT_CAPABILITY_TOKEN/,
+      );
     });
 
     it('writes capability token to a temp env file with restrictive permissions', () => {
@@ -271,7 +276,7 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       expect(fnSection.length).toBeGreaterThan(0);
       // The composed cleanup (env file + bridge) must be called on close
       // before being nullified, so the temp env file is removed.
-      expect(fnSection).toContain('credentialProxyBridgeCleanup?.()');
+      expect(fnSection).toContain('credentialProxyBridgeCleanup()');
     });
 
     it('adds cleanup on sandbox process close', () => {

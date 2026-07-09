@@ -737,12 +737,16 @@ export function wireCleanupHandlers(
     sandboxProcess.on('close', portForwardingResult.cleanup);
   }
 
-  if (credentialProxyBridgeResult?.cleanup !== undefined) {
-    // The composed credentialProxyBridgeCleanup (which includes the bridge
-    // tunnel cleanup) is already registered on exit/SIGINT/SIGTERM by
-    // registerCapabilityEnvCleanup. Only register the close handler here.
+  if (credentialProxyBridgeCleanup !== undefined) {
+    // Register the composed cleanup (bridge tunnel + env file) on all
+    // process-level events as well as the sandbox close event. This ensures
+    // tunnels are torn down even on abnormal exit where the sandbox close
+    // event may not fire.
+    process.on('exit', credentialProxyBridgeCleanup);
+    process.on('SIGINT', credentialProxyBridgeCleanup);
+    process.on('SIGTERM', credentialProxyBridgeCleanup);
     sandboxProcess.on('close', () => {
-      credentialProxyBridgeCleanup?.();
+      credentialProxyBridgeCleanup();
       setCredentialProxyBridgeCleanup(undefined);
     });
   }

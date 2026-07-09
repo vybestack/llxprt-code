@@ -219,30 +219,52 @@ describe('CredentialProxyServer', () => {
       '@vybestack/llxprt-code-auth'
     );
     return new Promise<Record<string, unknown>>((resolve, reject) => {
+      let settled = false;
       const socket = net.createConnection(socketPath, () => {
         socket.write(encodeFrame(handshakePayload));
       });
       const decoder = new FrameDecoder();
       const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
         socket.destroy();
         reject(new Error('Timeout waiting for handshake response'));
       }, 5000);
       socket.on('data', (chunk: Buffer) => {
-        const frames = decoder.feed(chunk);
+        let frames: Array<Record<string, unknown>>;
+        try {
+          frames = decoder.feed(chunk);
+        } catch (err) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          socket.destroy();
+          reject(err);
+          return;
+        }
         for (const frame of frames) {
+          if (settled) return;
+          settled = true;
           clearTimeout(timer);
           socket.destroy();
           resolve(frame);
         }
       });
       socket.on('error', (err) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
         socket.destroy();
         reject(err);
       });
       socket.on('close', () => {
-        clearTimeout(timer);
-        reject(new Error('Connection closed before handshake response'));
+        // Defer to allow pending 'data' events to fire first
+        process.nextTick(() => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          reject(new Error('Connection closed before handshake response'));
+        });
       });
     });
   }
@@ -1266,16 +1288,18 @@ describe('CredentialProxyServer', () => {
     });
 
     expect(response.ok).toBe(false);
-    expect(response.code).not.toBe('UNAUTHORIZED');
+    expect(response.code).toBe('UNKNOWN_VERSION');
   });
 
   /**
-   * @scenario OAuth operations are allowed for sandbox connections
-   * @given A server configured with a capability token and OAuth flows
-   * @when A sandbox client requests an OAuth operation
-   * @then The operation is allowed (OAuth requires interactive user consent)
+   * @scenario OAuth mutating operations are blocked for sandbox connections
+   * @given A server configured with a capability token (sandbox connections)
+   * @when A sandbox client requests an OAuth operation that would mutate the
+   *       token store (oauth_initiate, oauth_exchange, oauth_poll, refresh_token)
+   * @then The operation is blocked with FORBIDDEN to prevent token store
+   *       mutation bypass via OAuth endpoints
    */
-  it('allows oauth operations for sandbox connections', async () => {
+  it('blocks oauth mutating operations for sandbox connections', async () => {
     server = createServer({ capabilityToken: CAPABILITY_TOKEN });
     client = await startAndConnect(server, CAPABILITY_TOKEN);
 
@@ -1283,13 +1307,7 @@ describe('CredentialProxyServer', () => {
       provider: 'anthropic',
     });
 
-    // OAuth initiate will fail due to missing flow config, but it should
-    // reach the OAuth handler rather than being blocked at the sandbox gate.
     expect(response.ok).toBe(false);
-    expect(response.code).not.toBe('FORBIDDEN');
-    // Should be a specific handler-level error, not a generic INTERNAL_ERROR.
-    // OAUTH_FLOW_NOT_FOUND or similar indicates the request reached the OAuth
-    // layer and failed due to missing flow config.
-    expect(response.code).not.toBe('INTERNAL_ERROR');
+    expect(response.code).toBe('FORBIDDEN');
   });
 });

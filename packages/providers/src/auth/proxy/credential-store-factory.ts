@@ -83,8 +83,12 @@ export function createTokenStore(): TokenStore {
     ) {
       const oldStore = proxyTokenStore;
       const newStore = new ProxyTokenStore(socketPath, capabilityToken);
-      // Only mutate singletons after construction succeeds
-      oldStore?.getClient().close();
+      // Close old connection best-effort, then mutate singletons
+      try {
+        oldStore?.getClient().close();
+      } catch {
+        // best-effort cleanup
+      }
       proxyTokenStore = newStore;
       proxyTokenStoreCapabilityToken = capabilityToken;
       proxyTokenStoreSocketPath = socketPath;
@@ -129,8 +133,12 @@ export function createProviderKeyStorage(): ProviderKeyStorageLike {
       const oldClient = proxyKeyStorageClient;
       const newClient = new ProxySocketClient(socketPath, capabilityToken);
       const newStorage = new ProxyProviderKeyStorage(newClient);
-      // Only mutate singletons after both constructors succeed
-      oldClient?.close();
+      // Close old connection best-effort, then mutate singletons
+      try {
+        oldClient?.close();
+      } catch {
+        // best-effort cleanup
+      }
       proxyKeyStorageClient = newClient;
       proxyKeyStorage = newStorage;
       proxyKeyStorageCapabilityToken = capabilityToken;

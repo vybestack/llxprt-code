@@ -271,7 +271,11 @@ export class ProxySocketClient {
     if (pending) {
       clearTimeout(pending.timer);
       this.pendingRequests.delete(id);
-      pending.resolve(frame as unknown as ProxyResponse);
+      if (isProxyResponseFrame(frame)) {
+        pending.resolve(frame);
+      } else {
+        pending.reject(new Error('Malformed response from proxy'));
+      }
     }
   }
 
