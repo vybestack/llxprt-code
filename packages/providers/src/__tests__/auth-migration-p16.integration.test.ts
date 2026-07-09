@@ -36,10 +36,9 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 const PROVIDERS_SRC_DIR = path.resolve(__dirname, '..');
 
 /** Canonical import specifiers forbidden in providers source. */
-const FORBIDDEN_OLD_AUTH_IMPORTS = [
-  /from\s+['"]@vybestack\/llxprt-code-core\/auth/u,
-  /from\s+['"]@vybestack\/llxprt-code-core\/auth\//u,
-];
+const FORBIDDEN_OLD_AUTH_PREFIX = '@vybestack/llxprt-code-core/auth';
+const ALLOWED_AUTH_DEEP_IMPORT =
+  '@vybestack/llxprt-code-core/auth-factories.js';
 
 /**
  * Recursively collect .ts files, optionally excluding tests.
@@ -66,30 +65,38 @@ function collectTsFiles(dir: string, excludeTests = true): string[] {
 }
 
 /**
- * Find lines matching a pattern, skipping comments.
+ * Check if a line contains a forbidden old core/auth import.
+ * A line is forbidden if it imports from core/auth subpath,
+ * unless it imports from the allowed deep path core/auth-factories.js.
+ * (Note: core/auth-factories.js does NOT contain /auth/ as a subpath,
+ * it contains /auth-factories.js as a sibling, so the prefix check below
+ * correctly distinguishes them.)
  */
-function findViolatingLines(
-  filePath: string,
-  pattern: RegExp,
-  relPath: string,
-): string[] {
-  const content = fs.readFileSync(filePath, 'utf-8');
-  const lines = content.split('\n');
-  const violations: string[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (
-      trimmed.startsWith('//') ||
-      trimmed.startsWith('*') ||
-      trimmed.startsWith('/*')
-    ) {
-      continue;
-    }
-    if (pattern.test(lines[i])) {
-      violations.push(`${relPath}:${i + 1}: ${lines[i].trim()}`);
-    }
+function isForbiddenAuthImport(line: string): boolean {
+  const trimmed = line.trim();
+  if (
+    trimmed.startsWith('//') ||
+    trimmed.startsWith('*') ||
+    trimmed.startsWith('/*')
+  ) {
+    return false;
   }
-  return violations;
+  if (!trimmed.startsWith('import')) {
+    return false;
+  }
+  // Extract the module specifier from the import line
+  const match = /from\s+['"]([^'"]+)['"]/.exec(trimmed);
+  if (!match) return false;
+  const specifier = match[1];
+  // Allow the new deep import path for auth factories
+  if (specifier === ALLOWED_AUTH_DEEP_IMPORT) return false;
+  // Forbid any import that starts with the forbidden prefix
+  // This matches both core/auth' and core/auth/anything
+  // But does NOT match core/auth-factories.js (different string)
+  return (
+    specifier === FORBIDDEN_OLD_AUTH_PREFIX ||
+    specifier.startsWith(FORBIDDEN_OLD_AUTH_PREFIX + '/')
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -105,8 +112,12 @@ describe('Providers auth migration: no old core/auth imports', () => {
     const violations: string[] = [];
     for (const filePath of prodFiles) {
       const relPath = path.relative(PROVIDERS_SRC_DIR, filePath);
-      for (const pattern of FORBIDDEN_OLD_AUTH_IMPORTS) {
-        violations.push(...findViolatingLines(filePath, pattern, relPath));
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const lines = content.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        if (isForbiddenAuthImport(lines[i])) {
+          violations.push(`${relPath}:${i + 1}: ${lines[i].trim()}`);
+        }
       }
     }
 
@@ -124,8 +135,12 @@ describe('Providers auth migration: no old core/auth imports', () => {
     const violations: string[] = [];
     for (const filePath of testFiles) {
       const relPath = path.relative(PROVIDERS_SRC_DIR, filePath);
-      for (const pattern of FORBIDDEN_OLD_AUTH_IMPORTS) {
-        violations.push(...findViolatingLines(filePath, pattern, relPath));
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const lines = content.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        if (isForbiddenAuthImport(lines[i])) {
+          violations.push(`${relPath}:${i + 1}: ${lines[i].trim()}`);
+        }
       }
     }
 

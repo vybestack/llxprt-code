@@ -16,7 +16,8 @@ import {
 } from './types.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import { ProviderRegistry } from './provider-registry.js';
-import { type MessageBus, type Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type {
   OAuthManager as AuthOAuthManagerInterface,
   OAuthTokenRequestMetadata as AuthOAuthTokenRequestMetadata,

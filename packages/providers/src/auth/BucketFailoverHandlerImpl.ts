@@ -11,14 +11,16 @@
  */
 
 import {
-  type BucketFailoverHandler,
-  DebugLogger,
   flushRuntimeAuthScope,
-  type FailoverContext,
-  type BucketFailureReason,
   type OAuthToken,
   type OAuthTokenRequestMetadata,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-auth';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type {
+  BucketFailoverHandler,
+  FailoverContext,
+} from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { BucketFailureReason } from '@vybestack/llxprt-code-core/runtime/contracts/index.js';
 import type { BucketFailoverOAuthManagerLike } from './types.js';
 
 const logger = new DebugLogger('llxprt:bucket:failover:handler');
