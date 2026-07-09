@@ -780,7 +780,12 @@ export class Config extends ConfigBase {
       client.dispose();
     }
     if (this.mcpDiscoveryPromise !== undefined) {
-      await this.mcpDiscoveryPromise;
+      try {
+        await this.mcpDiscoveryPromise;
+      } catch {
+        // Discovery may reject due to refreshMcpContext errors; swallow
+        // so that stop() cleanup still runs and no server processes leak.
+      }
     }
     if (this.mcpClientManager !== undefined) {
       await this.mcpClientManager.stop();

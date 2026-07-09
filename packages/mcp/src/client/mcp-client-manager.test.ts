@@ -548,6 +548,16 @@ describe('McpClientManager', () => {
       return { manager, mockConfig };
     };
 
+    const makeTestExtension = (): LlxprtExtension =>
+      ({
+        name: 'test-ext',
+        version: '1.0.0',
+        isActive: true,
+        path: '/path/to/ext',
+        contextFiles: [],
+        mcpServers: { 'ext-server': {} },
+      }) as unknown as LlxprtExtension;
+
     it('should not block startExtension on MCP server discovery (issue #2325)', async () => {
       let resolveConnect: () => void = () => {};
       const connectPromise = new Promise<void>((resolve) => {
@@ -555,24 +565,15 @@ describe('McpClientManager', () => {
       });
       const mockedMcpClient = {
         connect: vi.fn().mockReturnValue(connectPromise),
-        discover: vi.fn(),
-        disconnect: vi.fn(),
+        discover: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn().mockResolvedValue(undefined),
         getStatus: vi.fn(),
         getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
       };
       const { manager } = createExtensionManager(mockedMcpClient);
 
-      const extension = {
-        name: 'test-ext',
-        version: '1.0.0',
-        isActive: true,
-        path: '/path/to/ext',
-        contextFiles: [],
-        mcpServers: { 'ext-server': {} },
-      } as unknown as LlxprtExtension;
-
       // startExtension should resolve immediately without waiting for connect
-      await manager.startExtension(extension);
+      await manager.startExtension(makeTestExtension());
 
       // connect was called but the deferred promise hasn't resolved yet
       expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
@@ -584,29 +585,34 @@ describe('McpClientManager', () => {
 
     it('whenDiscoverySettled should resolve after background discovery from startExtension', async () => {
       const mockedMcpClient = {
-        connect: vi.fn(),
-        discover: vi.fn(),
-        disconnect: vi.fn(),
+        connect: vi.fn().mockResolvedValue(undefined),
+        discover: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn().mockResolvedValue(undefined),
         getStatus: vi.fn(),
         getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
       };
       const { manager } = createExtensionManager(mockedMcpClient);
 
-      const extension = {
-        name: 'test-ext',
-        version: '1.0.0',
-        isActive: true,
-        path: '/path/to/ext',
-        contextFiles: [],
-        mcpServers: { 'ext-server': {} },
-      } as unknown as LlxprtExtension;
-
-      await manager.startExtension(extension);
-      // Discovery should be in progress or completed
+      await manager.startExtension(makeTestExtension());
       await manager.whenDiscoverySettled();
-      // After settling, the client should be connected
       expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
       expect(mockedMcpClient.discover).toHaveBeenCalledOnce();
+    });
+
+    it('should not throw and whenDiscoverySettled should resolve when connect rejects', async () => {
+      const mockedMcpClient = {
+        connect: vi.fn().mockRejectedValue(new Error('connection refused')),
+        discover: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        getStatus: vi.fn(),
+        getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
+      };
+      const { manager } = createExtensionManager(mockedMcpClient);
+
+      await expect(
+        manager.startExtension(makeTestExtension()),
+      ).resolves.toBeUndefined();
+      await expect(manager.whenDiscoverySettled()).resolves.toBeUndefined();
     });
   });
 });

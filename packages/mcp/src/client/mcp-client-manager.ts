@@ -109,6 +109,9 @@ export class McpClientManager {
     for (const [name, config] of Object.entries(extension.mcpServers ?? {})) {
       void this.maybeDiscoverMcpServer(name, { ...config, extension });
     }
+    // refreshMcpContext here sees pre-discovery tool state, but connectAndDiscover
+    // emits McpClientUpdate + calls scheduleMcpContextRefresh once each server
+    // connects, so the context converges as servers come online.
     await this.cliConfig.refreshMcpContext();
   }
 
