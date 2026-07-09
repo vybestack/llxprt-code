@@ -102,10 +102,17 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       () => options.invocation.userMemory,
     );
     const systemPrompt = await this.buildSystemPrompt(options, userMemory);
+    const { stateful, parentId, trimmedContent } =
+      this.computeStatefulConversation(
+        options,
+        patchedContent,
+        invocationEphemerals,
+      );
     const input = this.buildInput(
       options,
-      patchedContent,
+      trimmedContent,
       invocationEphemerals,
+      parentId !== undefined,
     );
     const requestOverrides = this.buildRequestOverrides(options);
     const requestInput = this.buildRequestInput(
@@ -124,6 +131,16 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     this.applyTextVerbosity(request, options, invocationEphemerals);
     this.applyCodexRequestSettings(request, isCodex);
     this.applyPromptCaching(request, options, invocationEphemerals, isCodex);
+    const explicitUserStore =
+      'store' in requestOverrides
+        ? (requestOverrides['store'] as boolean | undefined)
+        : undefined;
+    this.applyStatefulConversation(
+      request,
+      stateful,
+      parentId,
+      explicitUserStore,
+    );
     return {
       apiKey,
       baseURL,
@@ -210,6 +227,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     options: NormalizedGenerateChatOptions,
     patchedContent: IContent[],
     invocationEphemerals: Record<string, unknown>,
+    serverSideParentActive: boolean,
   ): ResponsesInputItem[] {
     const includeReasoningInContextSetting =
       (invocationEphemerals['reasoning.includeInContext'] as
@@ -232,6 +250,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       includeReasoningInContext: includeReasoningInContextSetting !== false,
       outputLimiterConfig,
       debug: (messageFactory) => this.logger.debug(messageFactory),
+      serverSideParentActive,
     });
   }
 
@@ -518,6 +537,99 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
 
     request.prompt_cache_key = sanitizePromptCacheKey(cacheKey);
     if (!isCodex) request.prompt_cache_retention = '24h';
+  }
+
+  /**
+   * Determines whether stateful conversation mode is active and, if so, which
+   * prior AI turn anchors the server-side conversation. Returns the trimmed
+   * content to send (only the new turn after the parent) or the full content
+   * when stateful mode cannot be applied.
+   */
+  private computeStatefulConversation(
+    options: NormalizedGenerateChatOptions,
+    patchedContent: IContent[],
+    invocationEphemerals: Record<string, unknown>,
+  ): {
+    stateful: boolean;
+    parentId: string | undefined;
+    trimmedContent: IContent[];
+  } {
+    const stateful =
+      (invocationEphemerals['responses-stateful'] as boolean | undefined) ??
+      options.invocation.getModelBehavior<boolean>('responses-stateful') ??
+      false;
+    if (!stateful) {
+      return {
+        stateful: false,
+        parentId: undefined,
+        trimmedContent: patchedContent,
+      };
+    }
+
+    let parentIndex = -1;
+    let parentId: string | undefined;
+    for (let i = patchedContent.length - 1; i >= 0; i -= 1) {
+      const entry = patchedContent[i];
+      if (
+        entry.speaker === 'ai' &&
+        typeof entry.metadata?.id === 'string' &&
+        entry.metadata.id.length > 0
+      ) {
+        parentIndex = i;
+        parentId = entry.metadata.id;
+        break;
+      }
+    }
+
+    if (parentIndex === -1) {
+      return {
+        stateful: false,
+        parentId: undefined,
+        trimmedContent: patchedContent,
+      };
+    }
+
+    const trimmedContent = patchedContent.slice(parentIndex + 1);
+    // No new turn after the parent: fall back to stateless full history for
+    // this request. Sending both previous_response_id and the full history
+    // would duplicate context the server already holds (#207 review).
+    if (trimmedContent.length === 0) {
+      return {
+        stateful: false,
+        parentId: undefined,
+        trimmedContent: patchedContent,
+      };
+    }
+    return {
+      stateful: true,
+      parentId,
+      trimmedContent,
+    };
+  }
+
+  /**
+   * Applies the previous_response_id and store flag for stateful conversations.
+   * This overrides Codex's store=false because the user explicitly opted into
+   * stateful mode — Codex now supports conversations per issue #207. An explicit
+   * user-provided store:false (privacy/compliance) is honored: stateful mode
+   * requires server-side storage, so it is silently disabled in that case.
+   */
+  private applyStatefulConversation(
+    request: OpenAIResponsesRequest,
+    stateful: boolean,
+    parentId: string | undefined,
+    explicitUserStore: boolean | undefined,
+  ): void {
+    if (!stateful || parentId === undefined) return;
+    if (explicitUserStore === false) {
+      this.logger.debug(
+        () =>
+          'responses-stateful requested but user set store=false; staying stateless.',
+      );
+      return;
+    }
+    request.previous_response_id = parentId;
+    request.store = true;
   }
 
   private async buildHeaders(

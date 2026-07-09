@@ -123,6 +123,7 @@ export interface EphemeralSettings {
   'reasoning.includeInContext'?: boolean;
   'reasoning.stripFromContext'?: 'all' | 'allButLast' | 'none';
   'reasoning.format'?: 'native' | 'field';
+  'responses-stateful'?: boolean;
   'compression.strategy'?: string;
   'compression.profile'?: string;
   'compression.density.readWritePruning'?: boolean;

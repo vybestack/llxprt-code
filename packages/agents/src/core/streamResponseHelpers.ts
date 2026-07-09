@@ -38,6 +38,7 @@ import { analyzeResponseOutcomeFromParts } from './googlePartHelpers.js';
 import { isFunctionResponse } from '@vybestack/llxprt-code-core/utils/messageInspectors.js';
 import { InvalidStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { isThoughtPart } from './googlePartHelpers.js';
+import { getResponseId } from './responseIdCarrier.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 /** Whether a finish reason is missing (null, undefined, or empty string). */
@@ -316,11 +317,19 @@ export async function recordHistoryWithUsage(
     actualPromptTokens = streamingUsageMetadata.promptTokens;
   }
 
+  const lastChunkWithResponseId = args.allChunks
+    .slice()
+    .reverse()
+    .find((chunk) => getResponseId(chunk) !== undefined);
+  const streamingResponseId: string | null =
+    (lastChunkWithResponseId && getResponseId(lastChunkWithResponseId)) ?? null;
+
   args.conversationManager.recordHistory(
     args.userInput,
     modelOutput,
     undefined,
     streamingUsageMetadata,
+    streamingResponseId,
   );
 
   await args.historyService.waitForTokenUpdates();

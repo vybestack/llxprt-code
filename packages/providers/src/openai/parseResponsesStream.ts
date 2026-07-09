@@ -374,6 +374,56 @@ function createTerminalStreamError(
 }
 
 /**
+ * Build the terminal metadata chunk (usage + response id) emitted on
+ * response.completed/done/incomplete. Returns null when there is nothing to
+ * emit (no usage and no response id). The response id is threaded back so
+ * stateful conversations can reuse it as previous_response_id (#207).
+ */
+function buildTerminalMetadataChunk(
+  event: ResponsesEvent,
+  terminalReason: string,
+  incompleteReason: string | undefined,
+): IContent | null {
+  const responseId = event.response?.id;
+  const baseMetadata = {
+    stopReason: mapFinishReasonToStopReason(terminalReason),
+    finishReason: terminalReason,
+    ...(incompleteReason ? { incompleteReason } : {}),
+  };
+
+  if (event.response?.usage) {
+    return {
+      speaker: 'ai',
+      blocks: [],
+      metadata: {
+        ...(responseId ? { id: responseId } : {}),
+        usage: {
+          promptTokens: event.response.usage.input_tokens,
+          completionTokens: event.response.usage.output_tokens,
+          totalTokens: event.response.usage.total_tokens,
+          cachedTokens:
+            event.response.usage.input_tokens_details?.cached_tokens ?? 0,
+        },
+        ...baseMetadata,
+      },
+    };
+  }
+
+  if (responseId) {
+    return {
+      speaker: 'ai',
+      blocks: [],
+      metadata: {
+        id: responseId,
+        ...baseMetadata,
+      },
+    };
+  }
+
+  return null;
+}
+
+/**
  * Handle response.completed / response.done / response.incomplete events.
  */
 function* handleResponseCompleted(
@@ -439,23 +489,13 @@ function* handleResponseCompleted(
     );
   }
 
-  if (event.response?.usage) {
-    yield {
-      speaker: 'ai',
-      blocks: [],
-      metadata: {
-        usage: {
-          promptTokens: event.response.usage.input_tokens,
-          completionTokens: event.response.usage.output_tokens,
-          totalTokens: event.response.usage.total_tokens,
-          cachedTokens:
-            event.response.usage.input_tokens_details?.cached_tokens ?? 0,
-        },
-        stopReason: mapFinishReasonToStopReason(terminalReason),
-        finishReason: terminalReason,
-        ...(incompleteReason ? { incompleteReason } : {}),
-      },
-    };
+  const terminalChunk = buildTerminalMetadataChunk(
+    event,
+    terminalReason,
+    incompleteReason,
+  );
+  if (terminalChunk) {
+    yield terminalChunk;
   }
 
   return {

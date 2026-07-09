@@ -41,6 +41,28 @@ function appendTextContentParts(lastContent: Content, content: Content): void {
 }
 
 /**
+ * Merge usage stats and/or the provider response id into an AI turn's
+ * metadata. The response id is stored as `metadata.id` so it can be threaded
+ * back as `previous_response_id` for stateful Responses conversations (#207).
+ */
+function mergeTurnMetadata(
+  iContent: IContent,
+  usageMetadata: UsageStats | null | undefined,
+  responseId: string | null | undefined,
+): void {
+  const hasUsage = usageMetadata !== undefined && usageMetadata !== null;
+  const hasResponseId =
+    responseId !== undefined && responseId !== null && responseId !== '';
+  if (hasUsage || hasResponseId) {
+    iContent.metadata = {
+      ...iContent.metadata,
+      ...(responseId ? { id: responseId } : {}),
+      ...(usageMetadata ? { usage: usageMetadata } : {}),
+    };
+  }
+}
+
+/**
  * ConversationManager handles conversation history management for ChatSession.
  * It provides methods for recording turns, converting Content to IContent,
  * and managing conversation state.
@@ -150,6 +172,7 @@ export class ConversationManager {
     modelOutput: Content[],
     automaticFunctionCallingHistory?: Content[],
     usageMetadata?: UsageStats | null,
+    responseId?: string | null,
   ): void {
     const newHistoryEntries: IContent[] = [];
 
@@ -173,6 +196,7 @@ export class ConversationManager {
     this._recordModelTurn(
       modelOutput,
       usageMetadata,
+      responseId,
       newHistoryEntries,
       userInputWasArray,
       userInputWasFunctionResponse,
@@ -260,6 +284,7 @@ export class ConversationManager {
   private _recordModelTurn(
     modelOutput: Content[],
     usageMetadata: UsageStats | null | undefined,
+    responseId: string | null | undefined,
     newHistoryEntries: IContent[],
     userInputWasArray: boolean,
     userInputWasFunctionResponse: boolean,
@@ -319,6 +344,7 @@ export class ConversationManager {
       consolidatedOutputContents,
       thoughtBlocks,
       usageMetadata,
+      responseId,
       newHistoryEntries,
     );
   }
@@ -353,6 +379,7 @@ export class ConversationManager {
     consolidatedOutputContents: Content[],
     thoughtBlocks: ThinkingBlock[],
     usageMetadata: UsageStats | null | undefined,
+    responseId: string | null | undefined,
     newHistoryEntries: IContent[],
   ): void {
     let didAttachThoughtBlocks = false;
@@ -372,13 +399,8 @@ export class ConversationManager {
         didAttachThoughtBlocks = true;
       }
 
-      // Add usage metadata if available
-      if (usageMetadata !== undefined && usageMetadata !== null) {
-        iContent.metadata = {
-          ...iContent.metadata,
-          usage: usageMetadata,
-        };
-      }
+      // Add usage metadata and/or responseId if available
+      mergeTurnMetadata(iContent, usageMetadata, responseId);
 
       // Stamp the generating model so downstream consumers can detect
       // cross-model turns (issue #2335). this.model is the model that produced
@@ -395,12 +417,7 @@ export class ConversationManager {
         blocks: thoughtBlocks,
         metadata: { turnId: turnKey },
       };
-      if (usageMetadata !== undefined && usageMetadata !== null) {
-        iContent.metadata = {
-          ...iContent.metadata,
-          usage: usageMetadata,
-        };
-      }
+      mergeTurnMetadata(iContent, usageMetadata, responseId);
       newHistoryEntries.push(stampAiTurnModel(iContent, this.model));
     }
   }
