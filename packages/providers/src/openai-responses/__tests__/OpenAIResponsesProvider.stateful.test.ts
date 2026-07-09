@@ -108,18 +108,41 @@ async function captureRequestBody(
   }
 
   expect(capturedBody).toBeDefined();
-  return JSON.parse(capturedBody!) as Record<string, unknown>;
+  if (capturedBody === undefined) {
+    throw new Error('Request body was not captured');
+  }
+  return JSON.parse(capturedBody) as Record<string, unknown>;
 }
 
 function inputItems(body: Record<string, unknown>): ResponsesInputItem[] {
-  return body['input'] as ResponsesInputItem[];
+  const input = body['input'];
+  if (!Array.isArray(input)) {
+    throw new Error('Expected request body to contain an "input" array');
+  }
+  return input as ResponsesInputItem[];
+}
+
+function extractContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part: unknown) => {
+        if (typeof part === 'object' && part !== null && 'text' in part) {
+          return String((part as { text: unknown }).text);
+        }
+        return '';
+      })
+      .join('');
+  }
+  return '';
 }
 
 function userMessages(items: ResponsesInputItem[]): string[] {
   const messages: string[] = [];
   for (const i of items) {
-    if ('role' in i && i.role === 'user' && typeof i.content === 'string') {
-      messages.push(i.content);
+    if ('role' in i && i.role === 'user') {
+      const text = extractContent(i.content);
+      if (text) messages.push(text);
     }
   }
   return messages;
@@ -128,12 +151,9 @@ function userMessages(items: ResponsesInputItem[]): string[] {
 function assistantMessages(items: ResponsesInputItem[]): string[] {
   const messages: string[] = [];
   for (const i of items) {
-    if (
-      'role' in i &&
-      i.role === 'assistant' &&
-      typeof i.content === 'string'
-    ) {
-      messages.push(i.content);
+    if ('role' in i && i.role === 'assistant') {
+      const text = extractContent(i.content);
+      if (text) messages.push(text);
     }
   }
   return messages;

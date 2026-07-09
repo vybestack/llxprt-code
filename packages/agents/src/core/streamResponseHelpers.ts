@@ -341,9 +341,9 @@ export async function recordHistoryWithUsage(
   const streamingResponseId: string | null =
     (lastChunkWithResponseId && getResponseId(lastChunkWithResponseId)) ?? null;
   const streamingResponsesStored: boolean | null =
-    (lastChunkWithResponseId &&
-      getResponsesStored(lastChunkWithResponseId) === true) ??
-    null;
+    (lastChunkWithResponseId
+      ? getResponsesStored(lastChunkWithResponseId)
+      : undefined) ?? null;
 
   args.conversationManager.recordHistory(
     args.userInput,
