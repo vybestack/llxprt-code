@@ -23,6 +23,8 @@ const SENSITIVE_ROOTS: ReadonlySet<string> = new Set([
   '/home',
   '/var',
   '/opt',
+  '/root',
+  '/boot',
 ]);
 
 /**

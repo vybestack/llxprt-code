@@ -73,7 +73,7 @@ export function isForkBomb(command: string): boolean {
       return true;
     }
   }
-  const keywordDefs = scanKeywordDefinitions(collapsed);
+  const keywordDefs = scanKeywordDefinitions(collapsed, command);
   for (const def of keywordDefs) {
     if (isBombDefinition(def)) {
       return true;
@@ -84,12 +84,13 @@ export function isForkBomb(command: string): boolean {
 
 /**
  * Returns true if a parsed function definition is a self-referential fork
- * bomb: body has a pipe and a standalone background `&`, contains the function
- * name as a whole token, and the tail invocation starts with the name.
+ * bomb: body has an UNQUOTED pipe and an UNQUOTED standalone background `&`,
+ * contains the function name as a whole token, and the tail invocation starts
+ * with the name.
  */
 function isBombDefinition(def: FunctionDefinition): boolean {
   const hasPipeAndBg =
-    def.body.includes('|') && hasStandaloneBackground(def.body);
+    hasUnquotedPipe(def.body) && hasStandaloneBackground(def.body);
   if (!hasPipeAndBg) {
     return false;
   }
@@ -100,17 +101,51 @@ function isBombDefinition(def: FunctionDefinition): boolean {
 }
 
 /**
- * True iff `body` contains a standalone background `&` operator — a `&` that is
- * NOT part of `&&` (logical AND), NOT part of `>&` (fd-dup/redirect output),
- * NOT part of `<&` (fd-dup input), and NOT part of `&>`/`&>>` (redirect
- * stdout+stderr, where `&` is not a background operator). In the collapsed
- * fork-bomb body `:|:&` the trailing `&` is standalone; in a body using `&&`
- * (e.g. `f|cat&&echodone`) or a `&>` redirect (e.g. `f|f&>logfile`) the `&`s
- * are not standalone so this returns false. Linear-time, single pass.
+ * True iff `body` contains an unquoted pipe (`|`) operator outside single and
+ * double quotes. A quoted `|` (e.g. inside `echo "a | b"`) is not a pipe.
+ * Linear-time, single pass.
+ */
+function hasUnquotedPipe(body: string): boolean {
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < body.length; i++) {
+    if (isEscapedChar(body, i, inSingle)) {
+      i++;
+    } else if (body[i] === "'" && !inDouble) {
+      inSingle = !inSingle;
+    } else if (body[i] === '"' && !inSingle) {
+      inDouble = !inDouble;
+    } else if (!inSingle && !inDouble && body[i] === '|') {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * True iff `body` contains an UNQUOTED standalone background `&` operator — a
+ * `&` that is NOT part of `&&` (logical AND), NOT part of `>&` (fd-dup/redirect
+ * output), NOT part of `<&` (fd-dup input), NOT part of `|&` (pipe-redirect),
+ * NOT part of `&>`/`&>>` (redirect stdout+stderr), and NOT inside single or
+ * double quotes. In the collapsed fork-bomb body `:|:&` the trailing `&` is
+ * standalone; in a body using `&&` or `&>`, or with a quoted `&` (e.g.
+ * `echo"a&b"`), the `&`s are not standalone so this returns false.
  */
 function hasStandaloneBackground(body: string): boolean {
+  let inSingle = false;
+  let inDouble = false;
   for (let i = 0; i < body.length; i++) {
-    if (isStandaloneBackgroundAmp(body[i], body[i - 1], body[i + 1])) {
+    if (isEscapedChar(body, i, inSingle)) {
+      i++;
+    } else if (body[i] === "'" && !inDouble) {
+      inSingle = !inSingle;
+    } else if (body[i] === '"' && !inSingle) {
+      inDouble = !inDouble;
+    } else if (
+      !inSingle &&
+      !inDouble &&
+      isStandaloneBackgroundAmp(body[i], body[i - 1], body[i + 1])
+    ) {
       return true;
     }
   }
@@ -120,9 +155,9 @@ function hasStandaloneBackground(body: string): boolean {
 /**
  * True iff `ch` is a standalone background `&`: the `&` is not adjacent to
  * another `&` (so not `&&`), not preceded by `>` or `<` (so not `>&`/`<&`
- * fd-duplication), and not followed by `>` (so not `&>`/`&>>` redirect of
- * stdout+stderr). Extracted so the neighbor checks stay within the
- * expression-complexity budget.
+ * fd-duplication), not preceded by `|` (so not `|&` pipe-and-redirect), and
+ * not followed by `>` (so not `&>`/`&>>` redirect of stdout+stderr). Extracted
+ * so the neighbor checks stay within the expression-complexity budget.
  */
 function isStandaloneBackgroundAmp(
   ch: string | undefined,
@@ -135,7 +170,7 @@ function isStandaloneBackgroundAmp(
   if (prev === '&' || next === '&') {
     return false;
   }
-  if (prev === '>' || prev === '<') {
+  if (prev === '>' || prev === '<' || prev === '|') {
     return false;
   }
   return next !== '>';
@@ -231,6 +266,64 @@ function isFunctionKeyword(collapsed: string, i: number): boolean {
 }
 
 /**
+ * Maps a collapsed-text offset to the corresponding original-text offset.
+ * The collapsed string is produced by removing non-newline whitespace and
+ * collapsing newline runs to a single `
+`. This function replays that
+ * transformation, counting consumed whitespace, so the keyword scanner can
+ * verify boundaries in the original (pre-collapse) text. Linear-time.
+ */
+function collapsedToOriginalOffset(
+  original: string,
+  collapsedOffset: number,
+): number {
+  let origIdx = 0;
+  let collIdx = 0;
+  while (origIdx < original.length && collIdx < collapsedOffset) {
+    const ch = original[origIdx];
+    if (ch === NEWLINE) {
+      origIdx++;
+      const nlStart = origIdx;
+      while (origIdx < original.length && original[origIdx] === NEWLINE) {
+        origIdx++;
+      }
+      if (origIdx > nlStart) {
+        collIdx++;
+      }
+    } else if (isNonNewlineSpace(ch)) {
+      origIdx++;
+    } else {
+      origIdx++;
+      collIdx++;
+    }
+  }
+  return origIdx;
+}
+
+/** True iff `ch` is a non-newline whitespace character. */
+const isNonNewlineSpace = (ch: string): boolean =>
+  ch !== NEWLINE && /\s/.test(ch);
+
+/**
+ * Checks whether the original text has a name boundary (whitespace or `(`)
+ * at the position corresponding to `collapsedOffset` — i.e. the character
+ * immediately following the `function` keyword in the original. Bash requires
+ * `function` to be followed by whitespace (or `(` for the hybrid form) to be
+ * a keyword; `functionfoo` is a single token, not `function foo`.
+ */
+function hasKeywordBoundaryAfter(
+  original: string,
+  collapsedOffset: number,
+): boolean {
+  const origIdx = collapsedToOriginalOffset(original, collapsedOffset);
+  if (origIdx >= original.length) {
+    return true;
+  }
+  const ch = original[origIdx];
+  return /\s/.test(ch) || ch === '(';
+}
+
+/**
  * Returns true iff `match(collapsed, i)` holds AND the current position is
  * outside single and double quotes. Extracted so each scanner's condition
  * stays within the expression-complexity budget.
@@ -319,6 +412,7 @@ function parsePosixAt(
  */
 function scanKeywordDefinitions(
   collapsed: string,
+  original: string,
 ): readonly FunctionDefinition[] {
   const defs: FunctionDefinition[] = [];
   const keyword = 'function';
@@ -337,7 +431,8 @@ function scanKeywordDefinitions(
       i++;
     } else if (
       isUnquoted(collapsed, i, inSingle, inDouble, isFunctionKeyword) &&
-      !isNameChar(i > 0 ? collapsed[i - 1] : undefined)
+      !isNameChar(i > 0 ? collapsed[i - 1] : undefined) &&
+      hasKeywordBoundaryAfter(original, i + keyword.length)
     ) {
       const nameStart = i + keyword.length;
       const def = parseKeywordAt(collapsed, nameStart);

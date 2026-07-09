@@ -405,7 +405,7 @@ describe('isDestructiveCommand', () => {
       ["echo '$(rm -rf /)'", 'single-quoted $() stays benign', false],
       ['echo "$(rm -rf /)"', 'double-quoted $() still executes', true],
     ])(
-      'reaffirm "%s" (%s)',
+      'reaffirm "%s" (%s) -> %s',
       (command, description: string, expected: boolean) => {
         expect(isDestructiveCommand(command)).toBe(expected);
       },

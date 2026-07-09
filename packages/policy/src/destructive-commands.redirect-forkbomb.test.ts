@@ -127,14 +127,14 @@ describe('env split-string re-evaluates embedded command (false negative)', () =
   });
 });
 
-describe('~/.aws/config credential scope extension', () => {
+describe('~/.aws/ directory credential scope (prefix match)', () => {
   it.each<[string, boolean]>([
     ['echo x > ~/.aws/config', true],
     ['tee ~/.aws/config', true],
     ['echo x > $HOME/.aws/config', true],
     ['echo x > ~/.aws/credentials', true],
+    ['echo x > ~/.aws/cli/cache', true],
     ['cat ~/.aws/config', false],
-    ['echo x > ~/.aws/cli/cache', false],
   ])('"%s" -> %s', (command, expected) => {
     expect(isDestructiveCommand(command)).toBe(expected);
   });
@@ -332,6 +332,113 @@ describe('escaped quote does not desync quote tracker (false negative)', () => {
     ...FORK_BOMB_REGRESSIONS.filter(([cmd]) =>
       [':(){ :|:& };:', 'foo(){ echo bar | baz & }; foo'].includes(cmd),
     ),
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});
+
+describe('Fix A: function keyword boundary (false positive)', () => {
+  it.each<[string, boolean]>([
+    // `functionfoo` is a single token — `function` keyword NOT followed by a
+    // name boundary (space or `(`), so it is not the keyword form. The POSIX
+    // scanner sees name `functionfoo` but the body references `foo` (not the
+    // same name), so no self-reference — must be FALSE.
+    ['functionfoo(){ foo|foo& }; foo', false],
+    ['myfunction(){ x|x& }; x', false],
+    // MUST STAY TRUE: real `function NAME` with a name boundary after `function`.
+    ['function b { b|b& }; b', true],
+    ['function bomb { bomb|bomb& }; bomb', true],
+    [':(){ :|:& };:', true],
+    ['bomb(){ bomb|bomb& }; bomb', true],
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});
+
+describe('Fix B: |& pipe operator is not a standalone background & (false positive)', () => {
+  it.each<[string, boolean]>([
+    // `|&` is shorthand for `2>&1 |` — the `&` is part of the pipe operator,
+    // NOT a standalone background `&`. A body whose only `&` is part of `|&`
+    // and that does not truly recurse must be FALSE.
+    ['myfunc() { myfunc |& cat; }; myfunc', false],
+    // MUST STAY TRUE: `:(){ :|:& };:` — the `&` in `:|:&` follows the second
+    // `:`, not `|`, so it IS standalone. `bomb(){ bomb|bomb& }; bomb` — `&`
+    // follows `bomb`, standalone.
+    [':(){ :|:& };:', true],
+    ['bomb(){ bomb|bomb& }; bomb', true],
+    ['f(){ f|f& }; f', true],
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});
+
+describe('Fix C: quoted &/| in fork-bomb body do not count (false positive)', () => {
+  it.each<[string, boolean]>([
+    // Body has a quoted `|` AND a quoted `&` — neither is a real operator, so
+    // the bomb requirement (pipe AND background) is not satisfied.
+    ['h() { echo "a | b" "a & b"; h; }; h', false],
+    // Body has a quoted `|` (not a real pipe) and a real background `&` — the
+    // pipe requirement is NOT satisfied because the only `|` is quoted.
+    ['h() { echo "a | b" & echo done; h; }; h', false],
+    // Only a quoted `&`, no real pipe at all.
+    ['h() { echo "a & b"; h; }; h', false],
+    // Only a quoted pipe, no real background.
+    ['note() { echo "a | b"; note; }; note', false],
+    // MUST STAY TRUE: real unquoted pipe+background+self-ref.
+    [':(){ :|:& };:', true],
+    ['bomb(){ bomb|bomb& }; bomb', true],
+    ['f(){ f|f& }; f', true],
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});
+
+describe('Fix D: /root and /boot sensitive roots (coverage gap)', () => {
+  it.each<[string, boolean]>([
+    ['rm -rf /root', true],
+    ['rm -rf /boot', true],
+    ['rm -fr /boot/', true],
+    ['rm -rf /root/..', true],
+    ['rm$IFS-rf$IFS/boot', true],
+    ['rm${IFS}-rf${IFS}/root', true],
+    ['rm -rf /usr/local/x', false],
+    ['rm -rf /root/mystuff/build', false],
+    ['rm -rf /boot/grub', false],
+    ['rm -rf ./root', false],
+    ['rm -rf boot', false],
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});
+
+describe('Fix E: ~/.aws directory prefix (coverage gap)', () => {
+  it.each<[string, boolean]>([
+    ['echo x > ~/.aws/old-config/credentials', true],
+    ['echo x > ~/.aws/backup/config', true],
+    ['tee ~/.aws/sso/cache/x.json', true],
+    ['echo x > ~/.aws/credentials', true],
+    ['echo x > ~/.aws/config', true],
+    ['echo x > $HOME/.aws/credentials', true],
+    ['echo x > ${HOME}/.aws/config', true],
+    ['echo x > ~/.awesome/notes', false],
+    ['echo x > ~/.config/myapp/settings.json', false],
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});
+
+describe('Fix F: quote/escape-aware redirect target extraction (robustness)', () => {
+  it.each<[string, boolean]>([
+    ['echo x > "~/.aws/old config/credentials"', true],
+    ['echo x > "~/.ssh/id_rsa backup"', true],
+    ['echo x > ~/.ssh/id_rsa\\ backup', true],
+    ['echo x > ~/.ssh/authorized_keys', true],
+    ['echo x >> ~/.ssh/id_rsa', true],
+    ['echo x >&~/.ssh/authorized_keys', true],
+    ['echo x > $HOME/.aws/credentials', true],
+    ['echo x > "notes with spaces.txt"', false],
+    ['echo x > ./build/log', false],
+    ['echo x > ~/notes.md', false],
   ])('"%s" -> %s', (command, expected) => {
     expect(isDestructiveCommand(command)).toBe(expected);
   });

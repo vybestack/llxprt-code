@@ -93,12 +93,36 @@ function redirectOpAt(
   return null;
 }
 
-/** Extracts the redirect target path using ASCII-only whitespace. */
+/**
+ * Extracts the redirect target path from the text after a redirect operator.
+ * Consumes a fully single/double-quoted token as one unit (including interior
+ * spaces), treats backslash-escaped whitespace as part of the token (outside
+ * single quotes), and stops at unquoted whitespace. The extracted token is
+ * passed through `stripOneQuoteLayer` by the caller for canonicalization.
+ * Linear-time.
+ */
 const extractRedirectTarget = (after: string): string => {
   let start = 0;
   while (start < after.length && isWhitespaceChar(after[start])) start++;
   let end = start;
-  while (end < after.length && !isWhitespaceChar(after[end])) end++;
+  let inSingle = false;
+  let inDouble = false;
+  while (end < after.length) {
+    const ch = after[end];
+    if (ch === '\\' && end + 1 < after.length && !inSingle) {
+      end += 2;
+    } else if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+      end++;
+    } else if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+      end++;
+    } else if (!inSingle && !inDouble && isWhitespaceChar(ch)) {
+      break;
+    } else {
+      end++;
+    }
+  }
   return stripOneQuoteLayer(after.slice(start, end));
 };
 
@@ -149,20 +173,17 @@ export function findCredentialRedirectTargets(
 /** Re-exports `stripOneQuoteLayer` for callers (interpreter script unwrap). */
 export { stripOneQuoteLayer, isWhitespaceChar };
 
-/** Credential SSH directory prefixes (any file under these is sensitive). */
+/** Credential directory prefixes (any file under these is sensitive). */
 const CREDENTIAL_SSH_PREFIXES: readonly string[] = [
   '~/.ssh/',
   '$HOME/.ssh/',
   '${HOME}/.ssh/',
 ];
 
-const CREDENTIAL_AWS_PATHS: readonly string[] = [
-  '~/.aws/credentials',
-  '$HOME/.aws/credentials',
-  '${HOME}/.aws/credentials',
-  '~/.aws/config',
-  '$HOME/.aws/config',
-  '${HOME}/.aws/config',
+const CREDENTIAL_AWS_PREFIXES: readonly string[] = [
+  '~/.aws/',
+  '$HOME/.aws/',
+  '${HOME}/.aws/',
 ];
 
 /**
@@ -202,8 +223,10 @@ export function isCredentialPath(token: string): boolean {
   if (CREDENTIAL_SSH_PREFIXES.some((prefix) => token.startsWith(prefix))) {
     return true;
   }
-  return (
-    CREDENTIAL_AWS_PATHS.some((base) => matchesExactOrSibling(token, base)) ||
-    CREDENTIAL_CONFIG_PATHS.some((base) => matchesExactOrSibling(token, base))
+  if (CREDENTIAL_AWS_PREFIXES.some((prefix) => token.startsWith(prefix))) {
+    return true;
+  }
+  return CREDENTIAL_CONFIG_PATHS.some((base) =>
+    matchesExactOrSibling(token, base),
   );
 }
