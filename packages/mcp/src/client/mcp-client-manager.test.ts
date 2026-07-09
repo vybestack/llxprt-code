@@ -548,6 +548,9 @@ describe('McpClientManager', () => {
       return { manager, mockConfig };
     };
 
+    // Partial mock — only fields relevant to MCP discovery are populated.
+    // LlxprtExtension has many internal fields (hooks, commands, etc.) that
+    // are not exercised by startExtension, so a full stub is unnecessary.
     const makeTestExtension = (): LlxprtExtension =>
       ({
         name: 'test-ext',
