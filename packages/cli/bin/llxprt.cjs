@@ -256,7 +256,7 @@ async function runCliBin(options = {}) {
 
 function attachChildHandlers(child, bunPath, exit, options = {}) {
   let settled = false;
-  let childExited = false;
+  let childExitInfo = null;
   let hangupExitTimer = null;
   let orphanCheckTimer = null;
 
@@ -283,14 +283,31 @@ function attachChildHandlers(child, bunPath, exit, options = {}) {
     }
   };
 
-  const settle = (exitCode) => {
+  const prepareSettle = () => {
     if (settled) {
-      return;
+      return false;
     }
     settled = true;
     cleanupListeners();
     child.on('error', () => {});
+    return true;
+  };
+
+  const settle = (exitCode) => {
+    if (!prepareSettle()) {
+      return;
+    }
     exit(exitCode);
+  };
+
+  const exitCodeFromChild = (code, signal) => {
+    if (code !== null) {
+      return code;
+    }
+    if (signal !== null) {
+      return SIGNAL_EXIT_CODES[signal] ?? 1;
+    }
+    return 1;
   };
 
   const forwardSignal = (signal) => {
@@ -315,19 +332,11 @@ function attachChildHandlers(child, bunPath, exit, options = {}) {
   };
 
   const onClose = (code, signal) => {
-    let exitCode;
-    if (code !== null) {
-      exitCode = code;
-    } else if (signal !== null) {
-      exitCode = SIGNAL_EXIT_CODES[signal] ?? 1;
-    } else {
-      exitCode = 1;
-    }
-    settle(exitCode);
+    settle(exitCodeFromChild(code, signal));
   };
 
   const onError = (error) => {
-    if (settled) {
+    if (!prepareSettle()) {
       return;
     }
     try {
@@ -337,34 +346,38 @@ function attachChildHandlers(child, bunPath, exit, options = {}) {
     }
     process.stderr.write(`${bunLaunchErrorMessage(bunPath, error)}
 `);
-    settle(43);
+    exit(43);
   };
 
-  const onChildExit = () => {
-    childExited = true;
+  const onChildExit = (code, signal) => {
+    childExitInfo = { code, signal };
   };
 
   const onBeforeExit = () => {
-    if (settled) {
+    if (settled || childExitInfo === null) {
       return;
     }
     // Last-resort guard: if the event loop is draining and the child has
     // already exited (but 'close' never fired, e.g. inherited stdio with
     // a dead terminal), exit now rather than hanging forever.
-    if (childExited) {
-      settle(1);
-    }
+    settle(exitCodeFromChild(childExitInfo.code, childExitInfo.signal));
   };
 
   const checkOrphaned = () => {
-    if (settled) {
+    if (settled || childExitInfo === null) {
       return;
     }
     // If the shim has been reparented to init (ppid === 1) and the child
     // has already exited, the terminal is gone and no signal will arrive.
     // Force exit to avoid becoming an immortal husk.
-    if (getPpid() === 1 && childExited) {
-      settle(1);
+    let orphaned;
+    try {
+      orphaned = getPpid() === 1;
+    } catch {
+      return;
+    }
+    if (orphaned) {
+      settle(exitCodeFromChild(childExitInfo.code, childExitInfo.signal));
     }
   };
 

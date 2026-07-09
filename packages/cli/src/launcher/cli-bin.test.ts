@@ -296,7 +296,7 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
 
     child.emit('exit', null, 'SIGTERM');
 
-    await vi.waitFor(() => expect(exitCalls).toStrictEqual([1]));
+    await vi.waitFor(() => expect(exitCalls).toStrictEqual([143]));
   });
 
   it('does not exit from orphan check when the child is still alive', async () => {
@@ -339,7 +339,7 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
     expect(exitCalls).toStrictEqual([]);
 
     process.emit('beforeExit', 0);
-    expect(exitCalls).toStrictEqual([1]);
+    expect(exitCalls).toStrictEqual([0]);
   });
 
   it('does not exit via beforeExit when the child is still alive', async () => {
