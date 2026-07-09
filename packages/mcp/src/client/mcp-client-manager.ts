@@ -104,14 +104,11 @@ export class McpClientManager {
    */
   async startExtension(extension: LlxprtExtension) {
     logger.log(`Loading extension: ${extension.name}`);
-    await Promise.all(
-      Object.entries(extension.mcpServers ?? {}).map(([name, config]) =>
-        this.maybeDiscoverMcpServer(name, {
-          ...config,
-          extension,
-        }),
-      ),
-    );
+    // Issue #2325: Fire MCP discovery without blocking — discovery completes
+    // in the background and is tracked by whenDiscoverySettled().
+    for (const [name, config] of Object.entries(extension.mcpServers ?? {})) {
+      void this.maybeDiscoverMcpServer(name, { ...config, extension });
+    }
     await this.cliConfig.refreshMcpContext();
   }
 

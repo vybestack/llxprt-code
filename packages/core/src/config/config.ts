@@ -114,6 +114,11 @@ export class Config extends ConfigBase {
     applyConfigParams(this as unknown as ConfigConstructorTarget, params);
   }
 
+  // Issue #2325: Background MCP discovery promise started in initialize() so
+  // startup is not blocked. Awaited in dispose() to avoid tearing down servers
+  // mid-discovery.
+  private mcpDiscoveryPromise: Promise<void> | undefined;
+
   /**
    * Must only be called once, throws if called again.
    */
@@ -143,10 +148,11 @@ export class Config extends ConfigBase {
       this,
       this.eventEmitter,
     );
-    await Promise.all([
-      this.mcpClientManager.startConfiguredMcpServers(),
-      this.getExtensionLoader().start(this),
-    ]);
+    // Issue #2325: Fire MCP discovery in the background — don't block startup.
+    // Tools are gated before model turns via McpClientManager.whenDiscoverySettled().
+    this.mcpDiscoveryPromise =
+      this.mcpClientManager.startConfiguredMcpServers();
+    await this.getExtensionLoader().start(this);
 
     await initializeLsp(this._lspState, this);
 
@@ -772,6 +778,9 @@ export class Config extends ConfigBase {
     const client = this.agentClient as AgentClientContract | undefined;
     if (client !== undefined) {
       client.dispose();
+    }
+    if (this.mcpDiscoveryPromise !== undefined) {
+      await this.mcpDiscoveryPromise;
     }
     if (this.mcpClientManager !== undefined) {
       await this.mcpClientManager.stop();
