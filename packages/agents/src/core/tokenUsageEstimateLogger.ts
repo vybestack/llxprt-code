@@ -6,11 +6,14 @@
 
 import type { PartListUnion } from '@google/genai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { estimateRequestTokensStructured } from './clientHelpers.js';
 import type {
   TokenUsageLogger,
   TokenEstimatorType,
 } from './TokenUsageLogger.js';
+
+const logger = new DebugLogger('llxprt:token-usage-estimate');
 
 export interface ChatTokenEstimator {
   estimatePendingTokens?: (contents: IContent[]) => Promise<number>;
@@ -43,15 +46,15 @@ export function recordTokenEstimate(
   providerName: string,
   model: string,
 ): void {
-  const logger = holder?.getTokenUsageLogger?.();
-  if (logger === undefined) return;
-  if (!logger.isEnabled()) return;
-  logger.recordEstimate(promptId, {
+  const usageLogger = holder?.getTokenUsageLogger?.();
+  if (usageLogger === undefined) return;
+  if (!usageLogger.isEnabled()) return;
+  usageLogger.recordEstimate(promptId, {
     provider: providerName,
     model,
     estimatedTokens,
     estimator: resolveEstimatorType(providerName),
-    tiktokenTokens: estimateRequestTokensStructured(request),
+    tiktokenTokens: safeEstimateStructuredTokens(request),
   });
 }
 
@@ -68,7 +71,17 @@ export async function estimateRequestTokens(
   try {
     const content = conv.call(chat, initialRequest);
     return await est.call(chat, [content]);
-  } catch {
+  } catch (error) {
+    logger.debug('Token estimate failed, using fallback', error);
     return fallback;
+  }
+}
+
+function safeEstimateStructuredTokens(request: PartListUnion): number {
+  try {
+    return estimateRequestTokensStructured(request);
+  } catch (error) {
+    logger.debug('Structured token estimate failed', error);
+    return 0;
   }
 }
