@@ -255,11 +255,16 @@ function buildAdaptiveConfig(
  * @issue #1307: Correct adaptive thinking support for Opus 4.6
  * @issue #2289: Extended to Sonnet 5 (also supports adaptive thinking)
  * @issue #2328: Fable 5 is adaptive-only (never budgeted 'enabled' or 'disabled')
+ * @issue #1723: Pass `display: 'summarized'` for all adaptive-capable models
+ *   when reasoning.includeInResponse is true (or unset, default true), so the
+ *   API returns readable thinking text instead of empty blocks. When
+ *   includeInResponse is explicitly false, pass `display: 'omitted'`.
  */
 export function buildThinkingConfig(options: {
   reasoningEnabled: boolean;
   reasoningBudgetTokens?: number;
   adaptiveThinking?: boolean;
+  includeInResponse?: boolean;
   thinkingEffort?: 'low' | 'medium' | 'high' | 'max';
   model: string;
 }): AnthropicThinkingConfig {
@@ -284,7 +289,9 @@ export function buildThinkingConfig(options: {
     options.reasoningBudgetTokens == null &&
     options.adaptiveThinking !== false
   ) {
-    return buildAdaptiveConfig(options.thinkingEffort);
+    const display =
+      options.includeInResponse === false ? 'omitted' : 'summarized';
+    return buildAdaptiveConfig(options.thinkingEffort, display);
   }
 
   const config: AnthropicThinkingConfig = {

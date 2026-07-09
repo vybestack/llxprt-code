@@ -104,6 +104,7 @@ interface ReasoningSettings {
   reasoningBudgetTokens: number | undefined;
   stripFromContext: 'all' | 'allButLast' | 'none' | undefined;
   includeInContext: boolean | undefined;
+  includeInResponse: boolean | undefined;
   adaptiveThinking: boolean | undefined;
   rawEffort:
     | 'minimal'
@@ -165,6 +166,10 @@ function resolveReasoningSettings(
     options,
     'reasoning.includeInContext',
   );
+  const includeInResponse = resolveCliSetting<boolean>(
+    options,
+    'reasoning.includeInResponse',
+  );
   const adaptiveThinking = resolveModelBehavior<boolean>(
     options,
     'reasoning.adaptiveThinking',
@@ -178,6 +183,7 @@ function resolveReasoningSettings(
     reasoningBudgetTokens,
     stripFromContext,
     includeInContext,
+    includeInResponse,
     adaptiveThinking,
     rawEffort,
   };
@@ -458,6 +464,7 @@ function buildThinkingAndRequestBody(params: {
   shouldIncludeThinking: boolean;
   reasoningBudgetTokens: number | undefined;
   adaptiveThinking: boolean | undefined;
+  includeInResponse: boolean | undefined;
   anthropicMessages: AnthropicMessage[];
   systemField:
     | string
@@ -480,6 +487,7 @@ function buildThinkingAndRequestBody(params: {
     shouldIncludeThinking,
     reasoningBudgetTokens,
     adaptiveThinking,
+    includeInResponse,
     anthropicMessages,
     systemField,
     anthropicTools,
@@ -494,6 +502,7 @@ function buildThinkingAndRequestBody(params: {
     reasoningEnabled: shouldIncludeThinking,
     reasoningBudgetTokens,
     adaptiveThinking,
+    includeInResponse,
     thinkingEffort: mappedEffort,
     model: currentModel,
   });
@@ -716,6 +725,7 @@ function buildRequestContext(params: {
     shouldIncludeThinking,
     reasoningBudgetTokens: reasoningSettings.reasoningBudgetTokens,
     adaptiveThinking: reasoningSettings.adaptiveThinking,
+    includeInResponse: reasoningSettings.includeInResponse,
     anthropicMessages: systemContext.messages,
     systemField: systemContext.systemField,
     anthropicTools,

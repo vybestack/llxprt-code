@@ -1,0 +1,149 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 50,
+    "historyLimit": 100000,
+    "scrollbackLines": 20000,
+    "initialWaitMs": 8000
+  },
+  "yolo": false,
+  "macros": {
+    "loadProfile": [
+      { "type": "line", "text": "/profile load ${profile}", "submitKeys": [] },
+      { "type": "key", "key": "Enter" },
+      { "type": "wait", "ms": 250 },
+      { "type": "key", "key": "Enter" },
+      { "type": "wait", "ms": 250 },
+      {
+        "type": "waitFor",
+        "scope": "screen",
+        "regex": "Profile '${profile}' loaded",
+        "timeoutMs": 30000
+      },
+      { "type": "line", "text": "/set reasoning.includeInResponse true", "submitKeys": [] },
+      { "type": "key", "key": "Enter" },
+      { "type": "wait", "ms": 250 },
+      { "type": "key", "key": "Enter" },
+      { "type": "wait", "ms": 500 },
+      { "type": "line", "text": "/set reasoning.effort xhigh", "submitKeys": [] },
+      { "type": "key", "key": "Enter" },
+      { "type": "wait", "ms": 250 },
+      { "type": "key", "key": "Enter" },
+      { "type": "wait", "ms": 500 },
+      {
+        "type": "capture",
+        "label": "profile-${profile}-loaded",
+        "scope": "screen"
+      }
+    ],
+    "askThinkingQuestion": [
+      {
+        "type": "line",
+        "text": "${question}",
+        "submitKeys": ["Enter"]
+      },
+      {
+        "type": "wait",
+        "ms": "${streamingProbeMs}"
+      },
+      {
+        "type": "capture",
+        "label": "${label}-during-stream",
+        "scope": "screen"
+      },
+      {
+        "type": "capture",
+        "label": "${label}-during-stream",
+        "scope": "scrollback"
+      },
+      {
+        "type": "waitForNot",
+        "scope": "screen",
+        "contains": "esc to cancel",
+        "timeoutMs": "${completionTimeoutMs}"
+      },
+      {
+        "type": "waitFor",
+        "scope": "screen",
+        "contains": "Type your message",
+        "timeoutMs": 60000
+      },
+      {
+        "type": "capture",
+        "label": "${label}-after-complete",
+        "scope": "screen"
+      },
+      {
+        "type": "capture",
+        "label": "${label}-after-complete",
+        "scope": "scrollback"
+      },
+      {
+        "type": "expectCount",
+        "scope": "scrollback",
+        "contains": "[API Error",
+        "equals": 0
+      }
+    ]
+  },
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000
+    },
+    { "type": "capture", "label": "initial", "scope": "screen" },
+
+    {
+      "type": "macro",
+      "name": "loadProfile",
+      "args": { "profile": "zai" }
+    },
+    {
+      "type": "macro",
+      "name": "askThinkingQuestion",
+      "args": {
+        "question": "Analyze the architecture of this codebase. What are the main packages, how do they depend on each other, and what architectural improvements would make it more maintainable? Think step by step and explain your reasoning before answering.",
+        "label": "zai-arch",
+        "streamingProbeMs": 8000,
+        "completionTimeoutMs": 180000
+      }
+    },
+
+    {
+      "type": "macro",
+      "name": "loadProfile",
+      "args": { "profile": "opusthinking" }
+    },
+    {
+      "type": "macro",
+      "name": "askThinkingQuestion",
+      "args": {
+        "question": "Analyze the architecture of this codebase. What are the main packages, how do they depend on each other, and what architectural improvements would make it more maintainable? Think step by step and explain your reasoning before answering.",
+        "label": "opusthinking-arch",
+        "streamingProbeMs": 8000,
+        "completionTimeoutMs": 180000
+      }
+    },
+
+    {
+      "type": "macro",
+      "name": "loadProfile",
+      "args": { "profile": "gpt55medium" }
+    },
+    {
+      "type": "macro",
+      "name": "askThinkingQuestion",
+      "args": {
+        "question": "Analyze the architecture of this codebase. What are the main packages, how do they depend on each other, and what architectural improvements would make it more maintainable? Think step by step and explain your reasoning before answering.",
+        "label": "gpt55medium-arch",
+        "streamingProbeMs": 8000,
+        "completionTimeoutMs": 180000
+      }
+    },
+
+    { "type": "line", "text": "/quit", "submitKeys": ["Enter"] },
+    { "type": "waitForExit", "timeoutMs": 15000 }
+  ]
+}
