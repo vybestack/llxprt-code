@@ -19,27 +19,12 @@ import {
   isToolsComplete,
   isStream,
   partListUnionToParts,
+  hasFunctionResponsePart,
+  textParts,
   toolCallRequestEvent,
   contentEvent,
   finishedEvent,
-  type Part,
 } from './agenticLoop-test-helpers.js';
-
-/**
- * Returns true when a Part[] contains at least one functionResponse part.
- */
-function hasFunctionResponse(parts: Part[]): boolean {
-  return parts.some((p) => 'functionResponse' in p);
-}
-
-/**
- * Extracts the text from any { text: string } part in a Part[].
- */
-function textParts(parts: Part[]): string[] {
-  return parts
-    .filter((p): p is Part & { text: string } => 'text' in p)
-    .map((p) => p.text);
-}
 
 describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
   beforeEach(() => {
@@ -101,7 +86,7 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
 
     // Turn 2 message should contain both functionResponse parts AND the steer text
     const turn2Parts = partListUnionToParts(turnMessages[1]);
-    expect(hasFunctionResponse(turn2Parts)).toBe(true);
+    expect(hasFunctionResponsePart(turn2Parts)).toBe(true);
     expect(textParts(turn2Parts)).toContain('actually, please use x=2 instead');
 
     // The steer text must come AFTER the tool results (it's appended last)
@@ -266,7 +251,7 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
     // Two turns, no extra steer text in turn 2
     expect(turnMessages).toHaveLength(2);
     const turn2Parts = partListUnionToParts(turnMessages[1]);
-    expect(hasFunctionResponse(turn2Parts)).toBe(true);
+    expect(hasFunctionResponsePart(turn2Parts)).toBe(true);
     // No steer text should be present
     expect(textParts(turn2Parts)).toHaveLength(0);
     // Verify tools_complete event fired
