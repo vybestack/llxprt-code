@@ -351,7 +351,9 @@ function handleDone(
       return;
     }
     case 'aborted':
-      debugLogger.error('Operation cancelled.');
+      if (!context.quiet) {
+        debugLogger.error('Operation cancelled.');
+      }
       return;
     case 'max-turns':
       throw new FatalTurnLimitedError(MAX_TURNS_MESSAGE);
