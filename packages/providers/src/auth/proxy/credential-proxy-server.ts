@@ -92,6 +92,14 @@ export class CredentialProxyServer {
     new Map();
 
   constructor(options: CredentialProxyServerOptions) {
+    if (
+      options.capabilityToken !== undefined &&
+      options.capabilityToken.length === 0
+    ) {
+      throw new Error(
+        'capabilityToken must be a non-empty string when provided',
+      );
+    }
     this.options = options;
     this.oauthHandler = new CredentialProxyOAuthHandler(options);
   }
@@ -364,7 +372,9 @@ export class CredentialProxyServer {
       entry.details = details;
     }
     try {
-      process.stderr.write(JSON.stringify(entry) + '\n');
+      if (!process.stderr.destroyed) {
+        process.stderr.write(JSON.stringify(entry) + '\n');
+      }
     } catch {
       // stderr may be closed or full — audit logging must never crash the proxy
     }

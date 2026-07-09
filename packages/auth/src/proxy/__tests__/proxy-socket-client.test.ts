@@ -65,9 +65,7 @@ function createAutoReplyServer(_socketPath: string): net.Server {
  * Returns both the server and a per-instance handshake promise so each test
  * owns its own state (no module-level mutable singleton).
  */
-function createHandshakeCapturingServer(
-  socketPath: string,
-): Promise<{
+function createHandshakeCapturingServer(socketPath: string): Promise<{
   server: net.Server;
   handshake: Promise<Record<string, unknown>>;
 }> {
@@ -87,9 +85,13 @@ function createHandshakeCapturingServer(
       }
     });
   });
-  return new Promise((resolve) =>
-    srv.listen(socketPath, () => resolve({ server: srv, handshake })),
-  );
+  return new Promise((resolve, reject) => {
+    srv.once('error', reject);
+    srv.listen(socketPath, () => {
+      srv.removeListener('error', reject);
+      resolve({ server: srv, handshake });
+    });
+  });
 }
 
 describe('ProxySocketClient', () => {
@@ -541,14 +543,13 @@ describe('ProxySocketClient', () => {
         const frames = decoder.feed(chunk);
         for (const frame of frames) {
           if (frame.op === 'handshake') {
-            socket.write(
+            socket.end(
               encodeFrame({
                 ok: false,
                 code: 'UNAUTHORIZED',
                 error: 'Invalid or missing capability token',
               }),
             );
-            socket.destroy();
           }
         }
       });

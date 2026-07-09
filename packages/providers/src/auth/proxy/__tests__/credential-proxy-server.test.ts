@@ -819,10 +819,13 @@ describe('CredentialProxyServer', () => {
     const socketPath = await server.start();
 
     const badClient = new ProxySocketClient(socketPath, 'wrong-token');
-    await expect(badClient.ensureConnected()).rejects.toThrow(
-      /authentication failed/i,
-    );
-    badClient.close();
+    try {
+      await expect(badClient.ensureConnected()).rejects.toThrow(
+        /authentication failed/i,
+      );
+    } finally {
+      badClient.close();
+    }
   });
 
   /**
@@ -837,10 +840,13 @@ describe('CredentialProxyServer', () => {
     const socketPath = await server.start();
 
     const tokenlessClient = new ProxySocketClient(socketPath);
-    await expect(tokenlessClient.ensureConnected()).rejects.toThrow(
-      /authentication failed/i,
-    );
-    tokenlessClient.close();
+    try {
+      await expect(tokenlessClient.ensureConnected()).rejects.toThrow(
+        /authentication failed/i,
+      );
+    } finally {
+      tokenlessClient.close();
+    }
   });
 
   /**
@@ -998,6 +1004,21 @@ describe('CredentialProxyServer', () => {
     const providersResponse = await client.request('list_providers', {});
     expect(providersResponse.ok).toBe(true);
     expect(providersResponse.data!.providers).toContain('gemini');
+
+    // Verify get_bucket_stats returns real data for non-sandbox connections
+    tokenStore.setBucketStats('gemini', 'default', {
+      bucket: 'default',
+      requestCount: 42,
+      percentage: 75,
+      lastUsed: 1234567890,
+    });
+    const statsResponse = await client.request('get_bucket_stats', {
+      provider: 'gemini',
+      bucket: 'default',
+    });
+    expect(statsResponse.ok).toBe(true);
+    expect(statsResponse.data!.requestCount).toBe(42);
+    expect(statsResponse.data!.percentage).toBe(75);
   });
 
   // ─── Sandbox Mutation Restrictions (OCR Remediation) ──────────────────────
@@ -1011,8 +1032,8 @@ describe('CredentialProxyServer', () => {
   it('save_token blocked for sandbox connections', async () => {
     await tokenStore.saveToken('anthropic', makeToken());
 
-    server = createServer({ capabilityToken: 'test-cap-token' });
-    client = await startAndConnect(server, 'test-cap-token');
+    server = createServer({ capabilityToken: 'h'.repeat(64) });
+    client = await startAndConnect(server, 'h'.repeat(64));
 
     const response = await client.request('save_token', {
       provider: 'anthropic',
@@ -1036,8 +1057,8 @@ describe('CredentialProxyServer', () => {
   it('remove_token blocked for sandbox connections', async () => {
     await tokenStore.saveToken('anthropic', makeToken());
 
-    server = createServer({ capabilityToken: 'test-cap-token' });
-    client = await startAndConnect(server, 'test-cap-token');
+    server = createServer({ capabilityToken: 'i'.repeat(64) });
+    client = await startAndConnect(server, 'i'.repeat(64));
 
     const response = await client.request('remove_token', {
       provider: 'anthropic',
@@ -1101,16 +1122,14 @@ describe('CredentialProxyServer', () => {
     expect(response.ok).toBe(true);
   });
   /**
-   * @scenario Empty capability token is treated as no token configured
+   * @scenario Empty capability token is rejected at construction time
    * @given A server configured with an empty string capability token
-   * @when A client connects without presenting any token
-   * @then The handshake succeeds (empty string is falsy, treated as not configured)
+   * @when The constructor is called
+   * @then It throws to prevent silently disabling authentication
    */
-  it('treats empty capability token as not configured', async () => {
-    server = createServer({ capabilityToken: '' });
-    client = await startAndConnect(server);
-
-    const response = await client.request('list_providers', {});
-    expect(response.ok).toBe(true);
+  it('rejects empty capability token at construction time', () => {
+    expect(() => createServer({ capabilityToken: '' })).toThrow(
+      /non-empty string/,
+    );
   });
 });
