@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   existsSync,
   mkdtempSync,
@@ -110,14 +110,36 @@ describe('discoverWorkspaces', () => {
     expect(workspaces).toHaveLength(expectedCount);
   });
 
-  it('detects the pretest script in the agents package', () => {
-    const workspaces = discoverWorkspaces(repoRoot);
-    const agents = workspaces.find(
-      (w) => w.name === '@vybestack/llxprt-code-agents',
+  it('detects a pretest script via fixture repo', () => {
+    const fixtureRoot = createFixtureRepo([
+      {
+        dir: 'packages/with-pretest',
+        name: 'fixture-pretest-pkg',
+        scripts: {
+          pretest: 'echo running pretest',
+          test: 'vitest run',
+        },
+      },
+      {
+        dir: 'packages/no-pretest',
+        name: 'fixture-no-pretest-pkg',
+        scripts: { test: 'vitest run' },
+      },
+    ]);
+
+    const workspaces = discoverWorkspaces(fixtureRoot);
+    const withPretest = workspaces.find(
+      (w) => w.name === 'fixture-pretest-pkg',
     );
-    expect(agents).toBeDefined();
-    expect(agents!.hasPretest).toBe(true);
-    expect(agents!.pretestScript).toContain('check-agents-api-surface');
+    expect(withPretest).toBeDefined();
+    expect(withPretest!.hasPretest).toBe(true);
+    expect(withPretest!.pretestScript).toContain('pretest');
+
+    const withoutPretest = workspaces.find(
+      (w) => w.name === 'fixture-no-pretest-pkg',
+    );
+    expect(withoutPretest).toBeDefined();
+    expect(withoutPretest!.hasPretest).toBe(false);
   });
 
   it('detects test scripts in all workspaces', () => {
@@ -145,12 +167,24 @@ describe('discoverWorkspaces', () => {
     }
   });
 
-  it('reads workspace names from package.json', () => {
-    const workspaces = discoverWorkspaces(repoRoot);
+  it('reads workspace names from a fixture repo', () => {
+    const fixtureRoot = createFixtureRepo([
+      {
+        dir: 'packages/alpha',
+        name: 'fixture-alpha',
+        scripts: { test: 'vitest run' },
+      },
+      {
+        dir: 'packages/beta',
+        name: 'fixture-beta',
+        scripts: { test: 'vitest run' },
+      },
+    ]);
+
+    const workspaces = discoverWorkspaces(fixtureRoot);
     const names = workspaces.map((w) => w.name);
-    expect(names).toContain('@vybestack/llxprt-code-core');
-    expect(names).toContain('@vybestack/llxprt-code-agents');
-    expect(names).toContain('@vybestack/llxprt-code-tools');
+    expect(names).toContain('fixture-alpha');
+    expect(names).toContain('fixture-beta');
   });
 });
 
@@ -206,8 +240,11 @@ describe('parseArgs', () => {
   });
 
   it('warns on unknown arguments but still parses known ones', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const opts = parseArgs(['--unknown-flag', '--workspace', 'tools']);
     expect(opts.workspaceFilter).toBe('tools');
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
   });
 
   it('throws when --workspace has no value', () => {
