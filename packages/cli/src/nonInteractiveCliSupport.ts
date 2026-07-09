@@ -407,6 +407,10 @@ function handleQuietEvent(event: AgentEvent, state: StreamState): boolean {
       return true;
     case 'tool-result':
       return true;
+    case 'loop-detected':
+      return true;
+    case 'hook-blocked':
+      return true;
     default:
       return false;
   }
@@ -475,11 +479,13 @@ function dispatchAgentEvent(
       return;
     }
     case 'idle-timeout':
-      emitStreamError(
-        context.streamFormatter,
-        'error',
-        'Stream idle timeout: no response received within the allowed time.',
-      );
+      if (!context.quiet) {
+        emitStreamError(
+          context.streamFormatter,
+          'error',
+          'Stream idle timeout: no response received within the allowed time.',
+        );
+      }
       throw reconstructError(event.error);
     case 'error':
       throw reconstructError(event.error);

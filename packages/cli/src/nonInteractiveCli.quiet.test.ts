@@ -429,4 +429,96 @@ describe('processAgentStream — quiet mode', () => {
     expect(stdoutContent).not.toContain('part2');
     expect(stdoutContent).toBe('Final report.\n');
   });
+
+  it('suppresses loop-detected stream error events in quiet mode', async () => {
+    const streamFormatter = new StreamJsonFormatter();
+    const events: AgentEvent[] = [
+      {
+        type: 'tool-call',
+        call: { id: 'tool-1', name: 'read_file', args: {} },
+      },
+      {
+        type: 'tool-result',
+        result: {
+          id: 'tool-1',
+          name: 'read_file',
+          display: 'data',
+          isError: false,
+        },
+      },
+      { type: 'text', text: 'Done anyway.' },
+      {
+        type: 'done',
+        reason: 'loop-detected',
+      } as AgentEvent,
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({ quiet: true, streamFormatter }),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
+    const errorEvents = jsonEvents.filter(
+      (event) => event.type === JsonStreamEventType.ERROR,
+    );
+    expect(errorEvents).toHaveLength(0);
+  });
+
+  it('suppresses hook-blocked stderr writes in quiet mode', async () => {
+    const stderrSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
+    const events: AgentEvent[] = [
+      {
+        type: 'hook-blocked',
+        info: { reason: 'Policy violation', systemMessage: 'blocked' },
+      } as AgentEvent,
+      { type: 'text', text: 'Continued.' },
+      { type: 'done', reason: 'stop' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({ quiet: true }),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    const stderrContent = stderrSpy.mock.calls
+      .map(([value]) => String(value))
+      .join('');
+    expect(stderrContent).not.toContain('blocked');
+    expect(stderrContent).not.toContain('WARNING');
+  });
+
+  it('suppresses idle-timeout stream error in quiet mode but still throws', async () => {
+    const streamFormatter = new StreamJsonFormatter();
+    const events: AgentEvent[] = [
+      {
+        type: 'idle-timeout',
+        error: {
+          message: 'timed out',
+          type: 'timeout',
+        },
+      } as AgentEvent,
+    ];
+
+    await expect(
+      processAgentStream(
+        streamFromEvents(events),
+        createContext({ quiet: true, streamFormatter }),
+        Date.now(),
+        () => uiTelemetryService.getMetrics(),
+      ),
+    ).rejects.toThrow('timed out');
+
+    const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
+    const errorEvents = jsonEvents.filter(
+      (event) => event.type === JsonStreamEventType.ERROR,
+    );
+    expect(errorEvents).toHaveLength(0);
+  });
 });
