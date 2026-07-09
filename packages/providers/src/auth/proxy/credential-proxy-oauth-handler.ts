@@ -16,6 +16,17 @@ import {
 import { RefreshCoordinator } from './refresh-coordinator.js';
 import type { ConnectionState } from './credential-proxy-server.js';
 
+/**
+ * OAuth handler for the credential proxy server.
+ *
+ * OAuth operations (initiate, exchange, poll, cancel, refresh) are
+ * intentionally exempt from sandbox connection restrictions. These
+ * operations are the legitimate purpose of the proxy — the sandbox
+ * process needs to authenticate with providers and obtain/refresh
+ * tokens to make API calls. Blocking them would defeat the proxy's
+ * reason for existing. The security model restricts enumeration
+ * (list_*) and mutation (save_token/remove_token) operations instead.
+ */
 export interface OAuthFlowInterface {
   initiateDeviceFlow(redirectUri?: string): Promise<{
     device_code: string;

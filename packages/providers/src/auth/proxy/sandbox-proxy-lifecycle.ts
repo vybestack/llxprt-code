@@ -195,7 +195,13 @@ export async function createAndStartProxy(
     capabilityToken: actualCapabilityToken,
   });
 
-  actualSocketPath = await serverInstance.start();
+  try {
+    actualSocketPath = await serverInstance.start();
+  } catch (err) {
+    serverInstance = undefined;
+    actualCapabilityToken = undefined;
+    throw err;
+  }
 
   process.env.LLXPRT_CREDENTIAL_SOCKET = actualSocketPath;
 
@@ -217,11 +223,9 @@ export async function stopProxy(): Promise<void> {
   await serverInstance.stop();
   serverInstance = undefined;
 
-  if (actualSocketPath) {
-    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    actualSocketPath = undefined;
-    actualCapabilityToken = undefined;
-  }
+  delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+  actualSocketPath = undefined;
+  actualCapabilityToken = undefined;
 }
 
 /**

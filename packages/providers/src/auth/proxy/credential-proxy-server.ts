@@ -231,15 +231,19 @@ export class CredentialProxyServer {
     });
 
     socket.on('close', () => {
-      this.connections.delete(socket);
+      const wasPresent = this.connections.delete(socket);
       this.connectionStates.delete(socket);
-      this.auditLog('INFO', connectionId, 'disconnect');
+      if (wasPresent) {
+        this.auditLog('INFO', connectionId, 'disconnect');
+      }
     });
 
     socket.on('error', () => {
-      this.connections.delete(socket);
+      const wasPresent = this.connections.delete(socket);
       this.connectionStates.delete(socket);
-      this.auditLog('WARN', connectionId, 'socket_error');
+      if (wasPresent) {
+        this.auditLog('WARN', connectionId, 'socket_error');
+      }
     });
   }
 
@@ -357,7 +361,7 @@ export class CredentialProxyServer {
       op: operation,
     };
     if (details) {
-      Object.assign(entry, details);
+      entry.details = details;
     }
     try {
       process.stderr.write(JSON.stringify(entry) + '\n');
@@ -509,7 +513,16 @@ export class CredentialProxyServer {
     payload: Record<string, unknown>,
     state: ConnectionState,
   ): Promise<void> {
-    if (this.rejectIfSandbox(socket, id, state, 'save_token', 'Sandbox connections cannot modify tokens')) return;
+    if (
+      this.rejectIfSandbox(
+        socket,
+        id,
+        state,
+        'save_token',
+        'Sandbox connections cannot modify tokens',
+      )
+    )
+      return;
     const provider = payload.provider as string | undefined;
     const tokenData = payload.token as Record<string, unknown> | undefined;
     const bucket = payload.bucket as string | undefined;
@@ -545,7 +558,16 @@ export class CredentialProxyServer {
     payload: Record<string, unknown>,
     state: ConnectionState,
   ): Promise<void> {
-    if (this.rejectIfSandbox(socket, id, state, 'remove_token', 'Sandbox connections cannot remove tokens')) return;
+    if (
+      this.rejectIfSandbox(
+        socket,
+        id,
+        state,
+        'remove_token',
+        'Sandbox connections cannot remove tokens',
+      )
+    )
+      return;
     const provider = payload.provider as string | undefined;
     if (!provider) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');

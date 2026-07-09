@@ -1046,9 +1046,9 @@ describe('CredentialProxyServer', () => {
    * @when A sandbox-authenticated client requests bucket stats
    * @then Response is ok: true but with empty data (no stats leaked)
    */
-  it('get_bucket_stats blocked for sandbox connections', async () => {
-    server = createServer({ capabilityToken: 'test-cap-token' });
-    client = await startAndConnect(server, 'test-cap-token');
+  it('returns empty stats for sandbox connections', async () => {
+    server = createServer({ capabilityToken: 'a'.repeat(64) });
+    client = await startAndConnect(server, 'a'.repeat(64));
 
     const response = await client.request('get_bucket_stats', {
       provider: 'anthropic',
@@ -1082,6 +1082,19 @@ describe('CredentialProxyServer', () => {
       },
     });
 
+    expect(response.ok).toBe(true);
+  });
+  /**
+   * @scenario Empty capability token is treated as no token configured
+   * @given A server configured with an empty string capability token
+   * @when A client connects without presenting any token
+   * @then The handshake succeeds (empty string is falsy, treated as not configured)
+   */
+  it('treats empty capability token as not configured', async () => {
+    server = createServer({ capabilityToken: '' });
+    client = await startAndConnect(server);
+
+    const response = await client.request('list_providers', {});
     expect(response.ok).toBe(true);
   });
 });

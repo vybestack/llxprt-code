@@ -46,7 +46,7 @@ export class ProxySocketClient {
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private connectingPromise: Promise<void> | null = null;
   private handshakeResolver: {
-    resolve: (value: Record<string, unknown>) => void;
+    resolve: (value: ProxyResponse) => void;
     reject: (reason: Error) => void;
   } | null = null;
 
@@ -167,32 +167,27 @@ export class ProxySocketClient {
     };
     this.socket!.write(encodeFrame(request));
 
-    const response = await new Promise<Record<string, unknown>>(
-      (resolve, reject) => {
-        this.handshakeResolver = { resolve, reject };
-        const timer = setTimeout(() => {
-          this.handshakeResolver = null;
-          reject(
-            new Error(`Handshake timed out after ${REQUEST_TIMEOUT_MS}ms`),
-          );
-        }, REQUEST_TIMEOUT_MS);
+    const response = await new Promise<ProxyResponse>((resolve, reject) => {
+      this.handshakeResolver = { resolve, reject };
+      const timer = setTimeout(() => {
+        this.handshakeResolver = null;
+        reject(new Error(`Handshake timed out after ${REQUEST_TIMEOUT_MS}ms`));
+      }, REQUEST_TIMEOUT_MS);
 
-        const originalResolve = this.handshakeResolver.resolve;
-        this.handshakeResolver.resolve = (value) => {
-          clearTimeout(timer);
-          originalResolve(value);
-        };
-        const originalReject = this.handshakeResolver.reject;
-        this.handshakeResolver.reject = (reason) => {
-          clearTimeout(timer);
-          originalReject(reason);
-        };
-      },
-    );
+      const originalResolve = this.handshakeResolver.resolve;
+      this.handshakeResolver.resolve = (value) => {
+        clearTimeout(timer);
+        originalResolve(value);
+      };
+      const originalReject = this.handshakeResolver.reject;
+      this.handshakeResolver.reject = (reason) => {
+        clearTimeout(timer);
+        originalReject(reason);
+      };
+    });
 
     if (response.ok !== true) {
-      const code = (response as { code?: string }).code;
-      if (code === 'UNAUTHORIZED') {
+      if (response.code === 'UNAUTHORIZED') {
         throw new Error(
           'Credential proxy authentication failed: ' +
             (response.error ?? 'invalid or missing capability token'),
@@ -213,7 +208,7 @@ export class ProxySocketClient {
         if (this.handshakeResolver) {
           const resolver = this.handshakeResolver;
           this.handshakeResolver = null;
-          resolver.resolve(frame);
+          resolver.resolve(frame as unknown as ProxyResponse);
           continue;
         }
 
