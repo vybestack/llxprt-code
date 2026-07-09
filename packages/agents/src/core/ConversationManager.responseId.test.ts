@@ -156,6 +156,70 @@ describe('ConversationManager records responseId into history @issue:207', () =>
     expect(ai?.metadata?.id).toBeUndefined();
   });
 
+  it('does not set metadata.id when responseId is omitted (undefined)', () => {
+    const userInput: Content = {
+      role: 'user',
+      parts: [{ text: 'Hello' }],
+    };
+    const modelOutput: Content[] = [
+      { role: 'model', parts: [{ text: 'Hi there.' }] },
+    ];
+
+    conversationManager.recordHistory(userInput, modelOutput);
+
+    const all = historyService.getAll();
+    const ai = all.find((c) => c.speaker === 'ai');
+    expect(ai?.metadata?.id).toBeUndefined();
+  });
+
+  it('sets metadata.responsesStored when responsesStored is true', () => {
+    const userInput: Content = {
+      role: 'user',
+      parts: [{ text: 'Hello' }],
+    };
+    const modelOutput: Content[] = [
+      { role: 'model', parts: [{ text: 'Hi there.' }] },
+    ];
+
+    conversationManager.recordHistory(
+      userInput,
+      modelOutput,
+      undefined,
+      null,
+      'resp_stored',
+      true,
+    );
+
+    const all = historyService.getAll();
+    const ai = all.find((c) => c.speaker === 'ai');
+    expect(ai?.metadata?.id).toBe('resp_stored');
+    expect(ai?.metadata?.responsesStored).toBe(true);
+  });
+
+  it('does not set metadata.responsesStored when responsesStored is false', () => {
+    const userInput: Content = {
+      role: 'user',
+      parts: [{ text: 'Hello' }],
+    };
+    const modelOutput: Content[] = [
+      { role: 'model', parts: [{ text: 'Hi there.' }] },
+    ];
+
+    conversationManager.recordHistory(
+      userInput,
+      modelOutput,
+      undefined,
+      null,
+      'resp_unstored',
+      false,
+    );
+
+    const all = historyService.getAll();
+    const ai = all.find((c) => c.speaker === 'ai');
+    expect(ai?.metadata?.id).toBe('resp_unstored');
+    expect(ai?.metadata?.responsesStored).toBeUndefined();
+  });
+
   it('does not set metadata.id when responseId is an empty string', () => {
     const userInput: Content = {
       role: 'user',

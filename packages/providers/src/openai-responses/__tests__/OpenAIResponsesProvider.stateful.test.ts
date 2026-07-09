@@ -211,7 +211,7 @@ describe('OpenAIResponsesProvider stateful conversations @issue:207', () => {
       {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'first answer' }],
-        metadata: { id: 'resp_1' },
+        metadata: { id: 'resp_1', responsesStored: true },
       },
       {
         speaker: 'human',
@@ -292,7 +292,7 @@ describe('OpenAIResponsesProvider stateful conversations @issue:207', () => {
             parameters: { city: 'SF' },
           },
         ],
-        metadata: { id: 'resp_tool' },
+        metadata: { id: 'resp_tool', responsesStored: true },
       },
       {
         speaker: 'tool',
@@ -390,7 +390,7 @@ describe('OpenAIResponsesProvider stateful conversations @issue:207', () => {
       {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'first answer' }],
-        metadata: { id: 'resp_last' },
+        metadata: { id: 'resp_last', responsesStored: true },
       },
     ];
 

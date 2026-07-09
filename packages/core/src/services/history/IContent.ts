@@ -55,6 +55,13 @@ export interface ContentMetadata {
   /** Unique identifier for this content */
   id?: string;
 
+  /**
+   * Whether this AI turn was persisted server-side (e.g. OpenAI Responses
+   * API store=true). When true the id is safe to reference via
+   * previous_response_id for stateful conversations (#207).
+   */
+  responsesStored?: boolean;
+
   /** Provider that generated this content */
   provider?: string;
 

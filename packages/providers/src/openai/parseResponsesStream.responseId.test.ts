@@ -103,4 +103,42 @@ describe('parseResponsesStream captures response.id @issue:207', () => {
     const metadataMessage = messages.find((m) => m.metadata);
     expect(metadataMessage).toBeUndefined();
   });
+
+  it('tags metadata chunk with responsesStored=true when option is set', async () => {
+    const chunks = [
+      'data: {"type":"response.completed","response":{"id":"resp_stored","object":"response","model":"gpt-4o","status":"completed","usage":{"input_tokens":5,"output_tokens":1,"total_tokens":6}}}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    const messages: IContent[] = [];
+
+    for await (const message of parseResponsesStream(stream, {
+      responsesStored: true,
+    })) {
+      messages.push(message);
+    }
+
+    const usageMessage = messages.find((m) => m.metadata?.usage);
+    expect(usageMessage?.metadata?.responsesStored).toBe(true);
+  });
+
+  it('does not tag metadata chunk with responsesStored when option is false', async () => {
+    const chunks = [
+      'data: {"type":"response.completed","response":{"id":"resp_plain","object":"response","model":"gpt-4o","status":"completed","usage":{"input_tokens":5,"output_tokens":1,"total_tokens":6}}}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    const messages: IContent[] = [];
+
+    for await (const message of parseResponsesStream(stream, {
+      responsesStored: false,
+    })) {
+      messages.push(message);
+    }
+
+    const usageMessage = messages.find((m) => m.metadata?.usage);
+    expect(usageMessage?.metadata?.responsesStored).toBeUndefined();
+  });
 });

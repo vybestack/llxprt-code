@@ -701,10 +701,14 @@ export function applyResponseMetadata(
     response.usageMetadata = usageMetadata;
   }
 
-  // Carry the provider response id onto the synthetic response so it
-  // survives the Gemini intermediate and reaches recorded history.
+  // Carry the provider response id and stored flag onto the synthetic response
+  // so they survive the Gemini intermediate and reach recorded history.
   if (input.metadata?.id) {
-    setResponseId(response, input.metadata.id);
+    setResponseId(
+      response,
+      input.metadata.id,
+      input.metadata.responsesStored === true ? true : undefined,
+    );
   }
 
   applyFinishReasonMapping(response, input);

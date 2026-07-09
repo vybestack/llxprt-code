@@ -13,7 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { convertIContentToResponse } from './MessageConverter.js';
-import { getResponseId } from './responseIdCarrier.js';
+import { getResponseId, getResponsesStored } from './responseIdCarrier.js';
 
 describe('Issue 207: metadata.id carried as responseId @issue:207', () => {
   it('sets responseId when metadata.id is present', () => {
@@ -69,5 +69,31 @@ describe('Issue 207: metadata.id carried as responseId @issue:207', () => {
     const response = convertIContentToResponse(icontent);
 
     expect(getResponseId(response)).toBeUndefined();
+  });
+
+  it('carries responsesStored=true onto the synthetic response', () => {
+    const icontent: IContent = {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Hello.' }],
+      metadata: { id: 'resp_stored', responsesStored: true },
+    };
+
+    const response = convertIContentToResponse(icontent);
+
+    expect(getResponseId(response)).toBe('resp_stored');
+    expect(getResponsesStored(response)).toBe(true);
+  });
+
+  it('does not set responsesStored when metadata.responsesStored is absent', () => {
+    const icontent: IContent = {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Hello.' }],
+      metadata: { id: 'resp_plain' },
+    };
+
+    const response = convertIContentToResponse(icontent);
+
+    expect(getResponseId(response)).toBe('resp_plain');
+    expect(getResponsesStored(response)).toBeUndefined();
   });
 });

@@ -44,6 +44,7 @@ interface RequestContext {
   baseURL: string;
   isCodex: boolean;
   includeThinkingInResponse: boolean;
+  responsesStored: boolean;
   request: OpenAIResponsesRequest;
 }
 
@@ -147,6 +148,8 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       isCodex,
       request,
       includeThinkingInResponse: reasoning.includeThinkingInResponse,
+      responsesStored:
+        stateful && parentId !== undefined && request.store !== false,
     };
   }
 
@@ -573,7 +576,8 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       if (
         entry.speaker === 'ai' &&
         typeof entry.metadata?.id === 'string' &&
-        entry.metadata.id.length > 0
+        entry.metadata.id.length > 0 &&
+        entry.metadata.responsesStored === true
       ) {
         parentIndex = i;
         parentId = entry.metadata.id;
@@ -629,7 +633,9 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       return;
     }
     request.previous_response_id = parentId;
-    request.store = true;
+    if (request.store !== false) {
+      request.store = true;
+    }
   }
 
   private async buildHeaders(
@@ -675,6 +681,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     isCodex: boolean;
     request: OpenAIResponsesRequest;
     includeThinkingInResponse: boolean;
+    responsesStored: boolean;
     abortSignal?: AbortSignal;
     maxStreamingAttempts: number;
     streamRetryInitialDelayMs: number;
@@ -710,6 +717,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     bodyBlob: Blob;
     abortSignal?: AbortSignal;
     includeThinkingInResponse: boolean;
+    responsesStored: boolean;
     maxStreamingAttempts: number;
     streamRetryInitialDelayMs: number;
     normalizedOptions: NormalizedGenerateChatOptions;
@@ -755,6 +763,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       bodyBlob: Blob;
       abortSignal?: AbortSignal;
       includeThinkingInResponse: boolean;
+      responsesStored: boolean;
     },
   ): AsyncIterableIterator<IContent> {
     if (!response.ok) await this.throwApiError(response);
@@ -765,6 +774,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
 
     const streamOptions: ParseResponsesStreamOptions = {
       includeThinkingInResponse: options.includeThinkingInResponse,
+      responsesStored: options.responsesStored,
     };
     for await (const message of parseResponsesStream(
       response.body,

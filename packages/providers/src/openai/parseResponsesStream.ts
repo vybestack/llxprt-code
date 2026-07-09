@@ -108,6 +108,14 @@ export interface ParseResponsesStreamOptions {
    * Defaults to true.
    */
   includeThinkingInResponse?: boolean;
+
+  /**
+   * Whether the request was sent with store=true (stateful Responses mode).
+   * When true, the terminal metadata chunk is tagged with responsesStored=true
+   * so downstream history knows the turn is safe to reference via
+   * previous_response_id (#207).
+   */
+  responsesStored?: boolean;
 }
 
 /**
@@ -383,12 +391,14 @@ function buildTerminalMetadataChunk(
   event: ResponsesEvent,
   terminalReason: string,
   incompleteReason: string | undefined,
+  responsesStored: boolean | undefined,
 ): IContent | null {
   const responseId = event.response?.id;
   const baseMetadata = {
     stopReason: mapFinishReasonToStopReason(terminalReason),
     finishReason: terminalReason,
     ...(incompleteReason ? { incompleteReason } : {}),
+    ...(responsesStored === true ? { responsesStored: true } : {}),
   };
 
   if (event.response?.usage) {
@@ -433,6 +443,7 @@ function* handleResponseCompleted(
   includeThinkingInResponse: boolean,
   hasEmittedVisibleThinking: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+  responsesStored: boolean | undefined,
 ): Generator<
   IContent,
   {
@@ -493,6 +504,7 @@ function* handleResponseCompleted(
     event,
     terminalReason,
     incompleteReason,
+    responsesStored,
   );
   if (terminalChunk) {
     yield terminalChunk;
@@ -622,6 +634,7 @@ function* handleCompletedEvent(
   state: DispatchState,
   includeThinkingInResponse: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+  responsesStored: boolean | undefined,
 ): Generator<IContent, DispatchState> {
   const result = yield* handleResponseCompleted(
     event,
@@ -630,6 +643,7 @@ function* handleCompletedEvent(
     includeThinkingInResponse,
     state.hasEmittedVisibleThinking,
     emittedThoughts,
+    responsesStored,
   );
   return {
     hasEmittedVisibleThinking: result.hasEmittedVisibleThinking,
@@ -646,6 +660,7 @@ function* dispatchEventCases(
   includeThinkingInResponse: boolean,
   hasEmittedVisibleThinking: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+  responsesStored: boolean | undefined,
 ): Generator<IContent, DispatchState> {
   let state: DispatchState = {
     hasEmittedVisibleThinking,
@@ -694,6 +709,7 @@ function* dispatchEventCases(
         state,
         includeThinkingInResponse,
         emittedThoughts,
+        responsesStored,
       );
       break;
     case 'response.failed':
@@ -722,6 +738,7 @@ function* dispatchEvent(
   hasEmittedVisibleThinking: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
   lastLoggedType: string | undefined,
+  responsesStored: boolean | undefined,
 ): Generator<IContent, DispatchResult> {
   const newLastLoggedType = logSseEvent(event, lastLoggedType);
 
@@ -733,6 +750,7 @@ function* dispatchEvent(
     includeThinkingInResponse,
     hasEmittedVisibleThinking,
     emittedThoughts,
+    responsesStored,
   );
 
   return {
@@ -755,6 +773,7 @@ async function* tryDispatchEvent(
   hasEmittedVisibleThinking: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
   lastLoggedType: string | undefined,
+  responsesStored: boolean | undefined,
 ): AsyncGenerator<IContent, DispatchResult> {
   let event: ResponsesEvent;
   try {
@@ -778,6 +797,7 @@ async function* tryDispatchEvent(
     hasEmittedVisibleThinking,
     emittedThoughts,
     lastLoggedType,
+    responsesStored,
   );
 }
 
@@ -785,7 +805,7 @@ export async function* parseResponsesStream(
   stream: ReadableStream<Uint8Array>,
   options: ParseResponsesStreamOptions = {},
 ): AsyncIterableIterator<IContent> {
-  const { includeThinkingInResponse = true } = options;
+  const { includeThinkingInResponse = true, responsesStored = false } = options;
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -832,6 +852,7 @@ export async function* parseResponsesStream(
           hasEmittedVisibleThinking,
           emittedThoughts,
           lastLoggedType,
+          responsesStored,
         );
         hasEmittedVisibleThinking = dispatchState.hasEmittedVisibleThinking;
         reasoningText = dispatchState.reasoningText;

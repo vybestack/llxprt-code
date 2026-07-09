@@ -38,7 +38,7 @@ import { analyzeResponseOutcomeFromParts } from './googlePartHelpers.js';
 import { isFunctionResponse } from '@vybestack/llxprt-code-core/utils/messageInspectors.js';
 import { InvalidStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { isThoughtPart } from './googlePartHelpers.js';
-import { getResponseId } from './responseIdCarrier.js';
+import { getResponseId, getResponsesStored } from './responseIdCarrier.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 /** Whether a finish reason is missing (null, undefined, or empty string). */
@@ -289,6 +289,26 @@ interface RecordHistoryParams {
 }
 
 /**
+ * Backward scan for the last chunk carrying a provider response id or the
+ * responsesStored flag — avoids allocating the intermediate array produced
+ * by slice().reverse().find().
+ */
+function findLastChunkWithResponseId(
+  chunks: GenerateContentResponse[],
+): GenerateContentResponse | undefined {
+  for (let i = chunks.length - 1; i >= 0; i -= 1) {
+    const chunk = chunks[i];
+    if (
+      getResponseId(chunk) !== undefined ||
+      getResponsesStored(chunk) !== undefined
+    ) {
+      return chunk;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Record history with usage metadata and sync token counts.
  *
  * `actualPromptTokens` is typed `number | null` (never `undefined`), so only
@@ -317,12 +337,13 @@ export async function recordHistoryWithUsage(
     actualPromptTokens = streamingUsageMetadata.promptTokens;
   }
 
-  const lastChunkWithResponseId = args.allChunks
-    .slice()
-    .reverse()
-    .find((chunk) => getResponseId(chunk) !== undefined);
+  const lastChunkWithResponseId = findLastChunkWithResponseId(args.allChunks);
   const streamingResponseId: string | null =
     (lastChunkWithResponseId && getResponseId(lastChunkWithResponseId)) ?? null;
+  const streamingResponsesStored: boolean | null =
+    (lastChunkWithResponseId &&
+      getResponsesStored(lastChunkWithResponseId) === true) ??
+    null;
 
   args.conversationManager.recordHistory(
     args.userInput,
@@ -330,6 +351,7 @@ export async function recordHistoryWithUsage(
     undefined,
     streamingUsageMetadata,
     streamingResponseId,
+    streamingResponsesStored,
   );
 
   await args.historyService.waitForTokenUpdates();

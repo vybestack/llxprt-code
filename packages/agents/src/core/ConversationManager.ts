@@ -49,15 +49,18 @@ function mergeTurnMetadata(
   iContent: IContent,
   usageMetadata: UsageStats | null | undefined,
   responseId: string | null | undefined,
+  responsesStored: boolean | null | undefined,
 ): void {
   const hasUsage = usageMetadata !== undefined && usageMetadata !== null;
   const hasResponseId =
     responseId !== undefined && responseId !== null && responseId !== '';
-  if (hasUsage || hasResponseId) {
+  const hasStoredFlag = responsesStored === true;
+  if (hasUsage || hasResponseId || hasStoredFlag) {
     iContent.metadata = {
       ...iContent.metadata,
       ...(responseId ? { id: responseId } : {}),
       ...(usageMetadata ? { usage: usageMetadata } : {}),
+      ...(responsesStored === true ? { responsesStored: true } : {}),
     };
   }
 }
@@ -173,6 +176,7 @@ export class ConversationManager {
     automaticFunctionCallingHistory?: Content[],
     usageMetadata?: UsageStats | null,
     responseId?: string | null,
+    responsesStored?: boolean | null,
   ): void {
     const newHistoryEntries: IContent[] = [];
 
@@ -197,6 +201,7 @@ export class ConversationManager {
       modelOutput,
       usageMetadata,
       responseId,
+      responsesStored,
       newHistoryEntries,
       userInputWasArray,
       userInputWasFunctionResponse,
@@ -285,6 +290,7 @@ export class ConversationManager {
     modelOutput: Content[],
     usageMetadata: UsageStats | null | undefined,
     responseId: string | null | undefined,
+    responsesStored: boolean | null | undefined,
     newHistoryEntries: IContent[],
     userInputWasArray: boolean,
     userInputWasFunctionResponse: boolean,
@@ -345,6 +351,7 @@ export class ConversationManager {
       thoughtBlocks,
       usageMetadata,
       responseId,
+      responsesStored,
       newHistoryEntries,
     );
   }
@@ -380,6 +387,7 @@ export class ConversationManager {
     thoughtBlocks: ThinkingBlock[],
     usageMetadata: UsageStats | null | undefined,
     responseId: string | null | undefined,
+    responsesStored: boolean | null | undefined,
     newHistoryEntries: IContent[],
   ): void {
     let didAttachThoughtBlocks = false;
@@ -400,7 +408,7 @@ export class ConversationManager {
       }
 
       // Add usage metadata and/or responseId if available
-      mergeTurnMetadata(iContent, usageMetadata, responseId);
+      mergeTurnMetadata(iContent, usageMetadata, responseId, responsesStored);
 
       // Stamp the generating model so downstream consumers can detect
       // cross-model turns (issue #2335). this.model is the model that produced
@@ -417,7 +425,7 @@ export class ConversationManager {
         blocks: thoughtBlocks,
         metadata: { turnId: turnKey },
       };
-      mergeTurnMetadata(iContent, usageMetadata, responseId);
+      mergeTurnMetadata(iContent, usageMetadata, responseId, responsesStored);
       newHistoryEntries.push(stampAiTurnModel(iContent, this.model));
     }
   }
