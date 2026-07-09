@@ -270,6 +270,19 @@ export class MessageStreamOrchestrator {
       chat.getLastPromptTokenCount();
 
     const fallback = estimateRequestTokensStructured(initialRequest);
+
+    if (remainingTokenCount <= 0) {
+      recordTokenEstimate(
+        chat,
+        ctx.prompt_id,
+        initialRequest,
+        fallback,
+        this._getProviderName(),
+        this.deps.getEffectiveModel(),
+      );
+      return undefined;
+    }
+
     const estimatedRequestTokenCount = await estimateRequestTokens(
       chat,
       initialRequest,
@@ -284,10 +297,6 @@ export class MessageStreamOrchestrator {
       this._getProviderName(),
       this.deps.getEffectiveModel(),
     );
-
-    if (remainingTokenCount <= 0) {
-      return undefined;
-    }
 
     const proceed = await resolvePreflightOverflow(this.deps, {
       promptId: ctx.prompt_id,
