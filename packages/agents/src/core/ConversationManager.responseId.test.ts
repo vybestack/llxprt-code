@@ -9,8 +9,7 @@
  * AI history entry must carry metadata.id so the Responses API provider can
  * thread it as previous_response_id for stateful conversations.
  *
- * This exercises the full recording path: recordHistoryWithUsage →
- * ConversationManager.recordHistory → _addModelOutputToHistory.
+ * This exercises ConversationManager.recordHistory → _addModelOutputToHistory.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -107,23 +106,23 @@ describe('ConversationManager records responseId into history @issue:207', () =>
   let conversationManager: ConversationManager;
   let historyService: HistoryService;
 
+  const USER_INPUT: Content = {
+    role: 'user',
+    parts: [{ text: 'Hello' }],
+  };
+  const MODEL_OUTPUT: Content[] = [
+    { role: 'model', parts: [{ text: 'Hi there.' }] },
+  ];
+
   beforeEach(() => {
     ({ conversationManager, historyService } =
       buildConversationManager(GENERATING_MODEL));
   });
 
   it('records metadata.id when a responseId is passed', () => {
-    const userInput: Content = {
-      role: 'user',
-      parts: [{ text: 'Hello' }],
-    };
-    const modelOutput: Content[] = [
-      { role: 'model', parts: [{ text: 'Hi there.' }] },
-    ];
-
     conversationManager.recordHistory(
-      userInput,
-      modelOutput,
+      USER_INPUT,
+      MODEL_OUTPUT,
       undefined,
       null,
       'resp_abc',
@@ -131,21 +130,14 @@ describe('ConversationManager records responseId into history @issue:207', () =>
 
     const all = historyService.getAll();
     const ai = all.find((c) => c.speaker === 'ai');
+    expect(ai).toBeDefined();
     expect(ai?.metadata?.id).toBe('resp_abc');
   });
 
   it('does not set metadata.id when responseId is null', () => {
-    const userInput: Content = {
-      role: 'user',
-      parts: [{ text: 'Hello' }],
-    };
-    const modelOutput: Content[] = [
-      { role: 'model', parts: [{ text: 'Hi there.' }] },
-    ];
-
     conversationManager.recordHistory(
-      userInput,
-      modelOutput,
+      USER_INPUT,
+      MODEL_OUTPUT,
       undefined,
       null,
       null,
@@ -153,37 +145,23 @@ describe('ConversationManager records responseId into history @issue:207', () =>
 
     const all = historyService.getAll();
     const ai = all.find((c) => c.speaker === 'ai');
+    expect(ai).toBeDefined();
     expect(ai?.metadata?.id).toBeUndefined();
   });
 
   it('does not set metadata.id when responseId is omitted (undefined)', () => {
-    const userInput: Content = {
-      role: 'user',
-      parts: [{ text: 'Hello' }],
-    };
-    const modelOutput: Content[] = [
-      { role: 'model', parts: [{ text: 'Hi there.' }] },
-    ];
-
-    conversationManager.recordHistory(userInput, modelOutput);
+    conversationManager.recordHistory(USER_INPUT, MODEL_OUTPUT);
 
     const all = historyService.getAll();
     const ai = all.find((c) => c.speaker === 'ai');
+    expect(ai).toBeDefined();
     expect(ai?.metadata?.id).toBeUndefined();
   });
 
   it('sets metadata.responsesStored when responsesStored is true', () => {
-    const userInput: Content = {
-      role: 'user',
-      parts: [{ text: 'Hello' }],
-    };
-    const modelOutput: Content[] = [
-      { role: 'model', parts: [{ text: 'Hi there.' }] },
-    ];
-
     conversationManager.recordHistory(
-      userInput,
-      modelOutput,
+      USER_INPUT,
+      MODEL_OUTPUT,
       undefined,
       null,
       'resp_stored',
@@ -192,22 +170,15 @@ describe('ConversationManager records responseId into history @issue:207', () =>
 
     const all = historyService.getAll();
     const ai = all.find((c) => c.speaker === 'ai');
+    expect(ai).toBeDefined();
     expect(ai?.metadata?.id).toBe('resp_stored');
     expect(ai?.metadata?.responsesStored).toBe(true);
   });
 
   it('does not set metadata.responsesStored when responsesStored is false', () => {
-    const userInput: Content = {
-      role: 'user',
-      parts: [{ text: 'Hello' }],
-    };
-    const modelOutput: Content[] = [
-      { role: 'model', parts: [{ text: 'Hi there.' }] },
-    ];
-
     conversationManager.recordHistory(
-      userInput,
-      modelOutput,
+      USER_INPUT,
+      MODEL_OUTPUT,
       undefined,
       null,
       'resp_unstored',
@@ -216,22 +187,15 @@ describe('ConversationManager records responseId into history @issue:207', () =>
 
     const all = historyService.getAll();
     const ai = all.find((c) => c.speaker === 'ai');
+    expect(ai).toBeDefined();
     expect(ai?.metadata?.id).toBe('resp_unstored');
     expect(ai?.metadata?.responsesStored).toBeUndefined();
   });
 
   it('does not set metadata.id when responseId is an empty string', () => {
-    const userInput: Content = {
-      role: 'user',
-      parts: [{ text: 'Hello' }],
-    };
-    const modelOutput: Content[] = [
-      { role: 'model', parts: [{ text: 'Hi there.' }] },
-    ];
-
     conversationManager.recordHistory(
-      userInput,
-      modelOutput,
+      USER_INPUT,
+      MODEL_OUTPUT,
       undefined,
       null,
       '',
@@ -239,6 +203,7 @@ describe('ConversationManager records responseId into history @issue:207', () =>
 
     const all = historyService.getAll();
     const ai = all.find((c) => c.speaker === 'ai');
+    expect(ai).toBeDefined();
     expect(ai?.metadata?.id).toBeUndefined();
   });
 });

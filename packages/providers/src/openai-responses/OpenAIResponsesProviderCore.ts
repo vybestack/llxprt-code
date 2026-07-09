@@ -55,6 +55,9 @@ interface ReasoningOptions {
   includeThinkingInResponse: boolean;
 }
 
+/** Ephemeral key controlling stateful Responses API conversations (#207). */
+const RESPONSES_STATEFUL_KEY = 'responses-stateful';
+
 export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
@@ -557,8 +560,8 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     trimmedContent: IContent[];
   } {
     const stateful =
-      (invocationEphemerals['responses-stateful'] as boolean | undefined) ??
-      options.invocation.getModelBehavior<boolean>('responses-stateful') ??
+      (invocationEphemerals[RESPONSES_STATEFUL_KEY] as boolean | undefined) ??
+      options.invocation.getModelBehavior<boolean>(RESPONSES_STATEFUL_KEY) ??
       false;
     if (!stateful) {
       return {
@@ -585,6 +588,10 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     }
 
     if (parentIndex === -1) {
+      this.logger.debug(
+        () =>
+          'responses-stateful requested but no stored AI turn found in history; falling back to stateless mode.',
+      );
       return {
         stateful: false,
         parentId: undefined,
@@ -597,6 +604,10 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     // this request. Sending both previous_response_id and the full history
     // would duplicate context the server already holds (#207 review).
     if (trimmedContent.length === 0) {
+      this.logger.debug(
+        () =>
+          'responses-stateful: no new messages after parent turn; sending full history instead.',
+      );
       return {
         stateful: false,
         parentId: undefined,
@@ -633,6 +644,10 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     }
     request.previous_response_id = parentId;
     request.store = true;
+    this.logger.debug(
+      () =>
+        `responses-stateful activated: previous_response_id=${parentId}, store=true.`,
+    );
   }
 
   private async buildHeaders(
