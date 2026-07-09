@@ -49,6 +49,7 @@ function parseJsonStdoutEvents(
       } catch (originalError) {
         throw new Error(
           `Failed to parse stdout line as JSON: ${value}: ${originalError instanceof Error ? originalError.message : String(originalError)}`,
+          { cause: originalError },
         );
       }
     });
