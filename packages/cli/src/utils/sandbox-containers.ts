@@ -422,6 +422,26 @@ export async function setupContainerUser(
   return userFlag;
 }
 
+/**
+ * Writes the capability token to a temp env file and pushes --env-file to args.
+ * Uses --env-file instead of --env to avoid exposing the token in the process
+ * argument list (visible via ps aux / docker inspect).
+ */
+function pushCapabilityEnvFile(args: string[], resolvedTmpdir: string): void {
+  const capabilityToken = getProxyCapabilityToken();
+  if (capabilityToken === undefined) return;
+  const envFile = path.join(resolvedTmpdir, `.capability-env-${process.pid}`);
+  fs.writeFileSync(
+    envFile,
+    `LLXPRT_CAPABILITY_TOKEN=${capabilityToken}
+`,
+    {
+      mode: 0o600,
+    },
+  );
+  args.push('--env-file', envFile);
+}
+
 /** Starts credential proxy and sets up bridge for Podman/Docker macOS. */
 export async function setupCredentialProxy(
   args: string[],
@@ -455,13 +475,6 @@ export async function setupCredentialProxy(
     return { credentialProxyBridgeResult, credentialProxyBridgeCleanup };
   }
 
-  const capabilityToken = getProxyCapabilityToken();
-  const injectCapabilityEnv = (): void => {
-    if (capabilityToken !== undefined) {
-      args.push('--env', `LLXPRT_CAPABILITY_TOKEN=${capabilityToken}`);
-    }
-  };
-
   // @plan:PLAN-20250214-CREDPROXY.P34 R3.6: Pass socket path to container via env var
   if (os.platform() === 'darwin') {
     const sandboxCommand: string = config.command;
@@ -487,7 +500,7 @@ export async function setupCredentialProxy(
         break;
       default:
         args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${socketPath}`);
-        injectCapabilityEnv();
+        pushCapabilityEnvFile(args, resolvedTmpdir);
         break;
     }
 
@@ -500,11 +513,11 @@ export async function setupCredentialProxy(
         '--env',
         `LLXPRT_CREDENTIAL_SOCKET=${credentialProxyBridgeResult.containerSocketPath}`,
       );
-      injectCapabilityEnv();
+      pushCapabilityEnvFile(args, resolvedTmpdir);
     }
   } else {
     args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${socketPath}`);
-    injectCapabilityEnv();
+    pushCapabilityEnvFile(args, resolvedTmpdir);
   }
 
   return { credentialProxyBridgeResult, credentialProxyBridgeCleanup };

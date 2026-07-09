@@ -215,7 +215,7 @@ export class CredentialProxyServer {
         socket.destroy();
       },
     });
-    let handshakeCompleted = false;
+    const handshakeState = { completed: false };
 
     socket.on('data', (chunk: Buffer) => {
       let frames: Array<Record<string, unknown>>;
@@ -226,16 +226,7 @@ export class CredentialProxyServer {
         return;
       }
 
-      for (const frame of frames) {
-        if (!handshakeCompleted) {
-          const ok = this.handleHandshake(socket, frame, state);
-          if (ok) {
-            handshakeCompleted = true;
-          }
-          continue;
-        }
-        void this.dispatchRequest(socket, frame, state);
-      }
+      this.processFrames(socket, frames, state, handshakeState);
     });
 
     socket.on('close', () => {
@@ -253,6 +244,37 @@ export class CredentialProxyServer {
         this.auditLog('WARN', connectionId, 'socket_error');
       }
     });
+  }
+
+  private processFrames(
+    socket: net.Socket,
+    frames: Array<Record<string, unknown>>,
+    state: ConnectionState,
+    handshakeState: { completed: boolean },
+  ): void {
+    for (const frame of frames) {
+      if (
+        socket.destroyed ||
+        !this.shouldContinueProcessing(socket, frame, state, handshakeState)
+      )
+        break;
+    }
+  }
+
+  private shouldContinueProcessing(
+    socket: net.Socket,
+    frame: Record<string, unknown>,
+    state: ConnectionState,
+    handshakeState: { completed: boolean },
+  ): boolean {
+    if (!handshakeState.completed) {
+      const ok = this.handleHandshake(socket, frame, state);
+      if (!ok) return false;
+      handshakeState.completed = true;
+      return true;
+    }
+    void this.dispatchRequest(socket, frame, state);
+    return true;
   }
 
   private isVersionCompatible(frame: Record<string, unknown>): boolean {
@@ -480,6 +502,12 @@ export class CredentialProxyServer {
     return true;
   }
 
+  // Intentionally allowed for sandbox connections: the sandbox process needs
+  // to retrieve tokens for specific providers to make API calls. This is the
+  // core purpose of the credential proxy. Enumeration (list_*) is blocked
+  // to prevent discovery, and mutation (save_token/remove_token) is blocked
+  // to prevent tampering. But targeted retrieval by known provider name is
+  // required functionality.
   private async handleGetToken(
     socket: net.Socket,
     id: string,
@@ -639,6 +667,9 @@ export class CredentialProxyServer {
     this.sendOk(socket, id, { buckets });
   }
 
+  // Intentionally allowed for sandbox connections: the sandbox process needs
+  // API keys by known name to configure provider clients. This is the core
+  // purpose of the proxy. Only enumeration (list_api_keys) is blocked.
   private async handleGetApiKey(
     socket: net.Socket,
     id: string,
@@ -684,6 +715,8 @@ export class CredentialProxyServer {
     this.sendOk(socket, id, { keys });
   }
 
+  // Intentionally allowed for sandbox connections: checking key existence by
+  // known name is needed for the sandbox to determine which auth method to use.
   private async handleHasApiKey(
     socket: net.Socket,
     id: string,

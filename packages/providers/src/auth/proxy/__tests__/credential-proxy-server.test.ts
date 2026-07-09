@@ -1046,6 +1046,10 @@ describe('CredentialProxyServer', () => {
 
     expect(response.ok).toBe(false);
     expect(response.code).toBe('FORBIDDEN');
+
+    // Verify the store was not mutated
+    const stored = await tokenStore.getToken('anthropic');
+    expect(stored?.access_token).toBe('test-access-token');
   });
 
   /**
@@ -1066,6 +1070,10 @@ describe('CredentialProxyServer', () => {
 
     expect(response.ok).toBe(false);
     expect(response.code).toBe('FORBIDDEN');
+
+    // Verify the token was not removed
+    const stored = await tokenStore.getToken('anthropic');
+    expect(stored).not.toBeNull();
   });
 
   /**
@@ -1120,6 +1128,10 @@ describe('CredentialProxyServer', () => {
     });
 
     expect(response.ok).toBe(true);
+
+    // Verify the token was actually persisted
+    const stored = await tokenStore.getToken('anthropic');
+    expect(stored?.access_token).toBe('new-at');
   });
   /**
    * @scenario Empty capability token is rejected at construction time

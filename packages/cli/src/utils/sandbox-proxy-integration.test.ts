@@ -165,10 +165,13 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       );
     });
 
-    it('passes LLXPRT_CAPABILITY_TOKEN via --env', () => {
-      expect(sandboxSource).toContain(
-        '`LLXPRT_CAPABILITY_TOKEN=${capabilityToken}`',
-      );
+    it('passes LLXPRT_CAPABILITY_TOKEN via --env-file', () => {
+      expect(sandboxSource).toContain("args.push('--env-file', envFile)");
+    });
+
+    it('writes capability token to a temp env file with restrictive permissions', () => {
+      expect(sandboxSource).toContain('fs.writeFileSync');
+      expect(sandboxSource).toContain('mode: 0o600');
     });
 
     it('uses getProxyCapabilityToken to get the capability token', () => {

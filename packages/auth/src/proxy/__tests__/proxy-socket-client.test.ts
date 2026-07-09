@@ -555,7 +555,13 @@ describe('ProxySocketClient', () => {
       });
     });
 
-    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(socketPath, () => {
+        server.removeListener('error', reject);
+        resolve();
+      });
+    });
 
     client = new ProxySocketClient(socketPath, 'some-token');
     await expect(client.ensureConnected()).rejects.toThrow(
