@@ -15,8 +15,18 @@ import path from 'path';
  * git commands (e.g. `git checkout main && git fetch && git pull`). Without
  * this, each write to `.git/logs/HEAD` spawns an overlapping `exec()`,
  * increasing the chance that a stale result clobbers the latest branch name.
+ *
+ * 200ms was chosen empirically: compound git commands (checkout + fetch +
+ * pull) typically write the reflog 2-3 times within ~50ms. A 200ms window
+ * safely covers the burst while keeping the visible latency below a typical
+ * user's perception threshold. It is also well under the 3000ms fs.watchFile
+ * polling interval, so it never delays a legitimate single-command update
+ * beyond what the polling itself already imposes.
  */
 const FETCH_DEBOUNCE_MS = 200;
+
+/** Exposed for tests so timing assertions track the production constant. */
+export { FETCH_DEBOUNCE_MS };
 
 export function useGitBranchName(cwd: string): string | undefined {
   const [branchName, setBranchName] = useState<string | undefined>(undefined);
@@ -29,13 +39,15 @@ export function useGitBranchName(cwd: string): string | undefined {
   const fetchTokenRef = useRef(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const cancelledRef = useRef(false);
+
   const fetchBranchName = useCallback(() => {
     const token = ++fetchTokenRef.current;
     exec(
       'git rev-parse --abbrev-ref HEAD',
       { cwd },
       (error, stdout, _stderr) => {
-        if (token !== fetchTokenRef.current) return;
+        if (cancelledRef.current || token !== fetchTokenRef.current) return;
         if (error) {
           setBranchName(undefined);
           return;
@@ -48,7 +60,8 @@ export function useGitBranchName(cwd: string): string | undefined {
             'git rev-parse --short HEAD',
             { cwd },
             (error, stdout, _stderr) => {
-              if (token !== fetchTokenRef.current) return;
+              if (cancelledRef.current || token !== fetchTokenRef.current)
+                return;
               if (error) {
                 setBranchName(undefined);
                 return;
@@ -76,6 +89,7 @@ export function useGitBranchName(cwd: string): string | undefined {
 
     const gitLogsHeadPath = path.join(cwd, '.git', 'logs', 'HEAD');
     let cancelled = false;
+    cancelledRef.current = false;
 
     const onGitLogsHeadChange = (curr: fs.Stats, prev: fs.Stats) => {
       if (cancelled) return;
@@ -104,6 +118,7 @@ export function useGitBranchName(cwd: string): string | undefined {
 
     return () => {
       cancelled = true;
+      cancelledRef.current = true;
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
