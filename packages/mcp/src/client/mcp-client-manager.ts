@@ -107,7 +107,13 @@ export class McpClientManager {
     // Issue #2325: Fire MCP discovery without blocking — discovery completes
     // in the background and is tracked by whenDiscoverySettled().
     for (const [name, config] of Object.entries(extension.mcpServers ?? {})) {
-      void this.maybeDiscoverMcpServer(name, { ...config, extension });
+      try {
+        void this.maybeDiscoverMcpServer(name, { ...config, extension });
+      } catch (error) {
+        logger.warn(
+          `Error dispatching MCP discovery for server '${name}': ${getErrorMessage(error)}`,
+        );
+      }
     }
     // refreshMcpContext here sees pre-discovery tool state, but connectAndDiscover
     // emits McpClientUpdate + calls scheduleMcpContextRefresh once each server

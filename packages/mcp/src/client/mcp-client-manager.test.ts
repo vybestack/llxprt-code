@@ -583,10 +583,14 @@ describe('McpClientManager', () => {
 
       // connect was called but the deferred promise hasn't resolved yet
       expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
+      // discover should NOT have been called yet — it runs after connect
+      expect(mockedMcpClient.discover).not.toHaveBeenCalled();
 
       // Now resolve the connect promise — discovery completes in background.
       resolveConnect();
       await manager.whenDiscoverySettled();
+      // After settling, discover should have been called
+      expect(mockedMcpClient.discover).toHaveBeenCalledOnce();
     });
 
     it('whenDiscoverySettled should resolve after background discovery from startExtension', async () => {
