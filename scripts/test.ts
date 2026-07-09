@@ -156,6 +156,8 @@ export function parseArgs(argv: readonly string[]): TestOptions {
       i++;
       if (i < argv.length) {
         options.workspaceFilter = argv[i];
+      } else {
+        throw new Error('--workspace requires a value');
       }
     } else if (arg === '--skip-scripts') {
       options.skipScripts = true;
@@ -221,7 +223,8 @@ function matchesFilter(workspace: WorkspaceInfo, filter: string): boolean {
     return true;
   }
 
-  if (workspace.name.endsWith(filter)) {
+  const nameLastSegment = workspace.name.split('/').pop() ?? workspace.name;
+  if (nameLastSegment === filter) {
     return true;
   }
 

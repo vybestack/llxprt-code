@@ -608,11 +608,13 @@ jobs:
           bun install
           git checkout -- bun.lock
 
-      - name: 'Run test orchestrator behavioral tests'
+      - name: 'Run test orchestrator on a single workspace'
+        # Runs the orchestrator against one workspace with no actual test
+        # execution (--skip-scripts --skip-pretest). The only failure modes
+        # are bugs in the orchestrator itself (discovery, parsing, routing),
+        # which is exactly what this smoke check should surface.
         run: |-
-          bun scripts/test.ts --workspace test-utils --skip-scripts --skip-pretest || true
-        # The above is a smoke that the script runs and discovers workspaces;
-        # it may fail if test-utils has no tests or deps, so || true for now.
+          bun scripts/test.ts --workspace test-utils --skip-scripts --skip-pretest
 
       - name: 'Run script harness tests for the orchestrator'
         run: |-

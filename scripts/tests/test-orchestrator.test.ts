@@ -9,6 +9,7 @@ import {
   existsSync,
   mkdtempSync,
   rmSync,
+  readFileSync,
   writeFileSync,
   mkdirSync,
 } from 'node:fs';
@@ -29,7 +30,11 @@ const fixtures: string[] = [];
 afterEach(() => {
   while (fixtures.length > 0) {
     const dir = fixtures.pop()!;
-    rmSync(dir, { recursive: true, force: true });
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch (err) {
+      console.warn(`Failed to clean up temp dir ${dir}:`, err);
+    }
   }
 });
 
@@ -94,9 +99,15 @@ function createFixtureRepo(
 }
 
 describe('discoverWorkspaces', () => {
-  it('finds all 16 declared workspaces from the real repo root', () => {
+  it('finds all declared workspaces from the real repo root', () => {
     const workspaces = discoverWorkspaces(repoRoot);
-    expect(workspaces).toHaveLength(16);
+    const rootPkg = JSON.parse(
+      readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
+    ) as { workspaces?: string[] };
+    const expectedCount = (rootPkg.workspaces ?? []).filter((g) =>
+      existsSync(join(repoRoot, g, 'package.json')),
+    ).length;
+    expect(workspaces).toHaveLength(expectedCount);
   });
 
   it('detects the pretest script in the agents package', () => {
@@ -197,6 +208,16 @@ describe('parseArgs', () => {
   it('ignores unknown arguments', () => {
     const opts = parseArgs(['--unknown-flag', '--workspace', 'tools']);
     expect(opts.workspaceFilter).toBe('tools');
+  });
+
+  it('throws when --workspace has no value', () => {
+    expect(() => parseArgs(['--workspace'])).toThrow(
+      '--workspace requires a value',
+    );
+  });
+
+  it('throws when -w shorthand has no value', () => {
+    expect(() => parseArgs(['-w'])).toThrow('--workspace requires a value');
   });
 });
 
