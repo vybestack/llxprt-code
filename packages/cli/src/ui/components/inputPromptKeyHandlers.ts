@@ -521,10 +521,9 @@ const handleNavigationInputKeys = (key: Key, deps: InputHandlerDeps): boolean =>
 const handleSubmitAndEditKeys = (key: Key, deps: InputHandlerDeps): boolean => {
   const { buffer, handleSubmit, resetCompletionState } = deps;
   // During streaming, Ctrl+Enter (STEER) injects the current buffer as a
-  // mid-turn steer. When not streaming (or when the input is empty),
-  // handleSteer returns false and the key falls through to normal editing
-  // commands. Ctrl+Enter is no longer bound to NEWLINE, so when not streaming
-  // it does nothing (use Cmd+Enter, Shift+Enter, or Ctrl+J for newlines).
+  // mid-turn steer. When not streaming, handleSteer returns false and the
+  // key falls through to NEWLINE (which also matches Ctrl+Enter) for normal
+  // multi-line input.
   if (deps.handleSteer && keyMatchers[Command.STEER](key)) {
     const consumed = deps.handleSteer(buffer.text);
     if (consumed) {

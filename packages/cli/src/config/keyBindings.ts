@@ -235,9 +235,11 @@ export const defaultKeyBindings: KeyBindingConfig = {
   ],
   // Mid-turn steering: Ctrl+Enter while the agent is streaming injects the
   // typed text at the next tool-call boundary. When not streaming, Ctrl+Enter
-  // does nothing (use Cmd+Enter, Shift+Enter, or Ctrl+J for newlines).
+  // falls through to NEWLINE (both match the same key; the handler checks
+  // STEER first and only consumes it when streaming).
   [Command.STEER]: [{ key: 'return', ctrl: true }],
   [Command.NEWLINE]: [
+    { key: 'return', ctrl: true },
     { key: 'return', command: true },
     { key: 'return', shift: true },
     { key: 'j', ctrl: true },
