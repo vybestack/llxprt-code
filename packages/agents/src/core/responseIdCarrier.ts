@@ -40,6 +40,7 @@ export function setResponseId(
   id: string,
   stored?: boolean,
 ): void {
+  if (typeof id !== 'string' || id.length === 0) return;
   const widened = response as ResponseWithProviderResponseId;
   widened.providerResponseId = id;
   if (stored !== undefined) {

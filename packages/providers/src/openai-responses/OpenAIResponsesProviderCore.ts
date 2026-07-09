@@ -640,6 +640,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
         () =>
           'responses-stateful requested but user set store=false; staying stateless.',
       );
+      request.store = false;
       return;
     }
     request.previous_response_id = parentId;

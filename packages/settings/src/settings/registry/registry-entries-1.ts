@@ -224,7 +224,7 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     key: 'responses-stateful',
     category: 'model-behavior',
     description:
-      'Enable Responses API stateful conversations using previous_response_id (on/off)',
+      'Enable Responses API stateful conversations using previous_response_id (true/false)',
     type: 'boolean',
     persistToProfile: true,
   },

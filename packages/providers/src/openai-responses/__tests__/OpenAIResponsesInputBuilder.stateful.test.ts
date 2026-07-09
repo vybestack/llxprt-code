@@ -123,7 +123,10 @@ describe('OpenAIResponsesInputBuilder stateful tool output preservation @issue:2
   });
 
   it('drops orphan function_call_output in stateless mode (no matching function_call)', () => {
-    const debugFn = vi.fn();
+    const capturedMessages: string[] = [];
+    const debugFn = vi.fn((factory: () => string) => {
+      capturedMessages.push(factory());
+    });
     const ctx = buildContext({ debug: debugFn });
     const input = buildOpenAIResponsesInput(
       [
@@ -144,5 +147,6 @@ describe('OpenAIResponsesInputBuilder stateful tool output preservation @issue:2
 
     expect(functionCallOutputs(input)).toHaveLength(0);
     expect(debugFn).toHaveBeenCalled();
+    expect(capturedMessages.some((m) => m.includes('call_orphan'))).toBe(true);
   });
 });
