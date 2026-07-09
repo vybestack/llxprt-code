@@ -41,9 +41,12 @@ function appendTextContentParts(lastContent: Content, content: Content): void {
 }
 
 /**
- * Merge usage stats and/or the provider response id into an AI turn's
- * metadata. The response id is stored as `metadata.id` so it can be threaded
- * back as `previous_response_id` for stateful Responses conversations (#207).
+ * Merge usage stats, the provider response id, and the responses-stored flag
+ * into an AI turn's metadata. The response id is stored as `metadata.id` so
+ * it can be threaded back as `previous_response_id` for stateful Responses
+ * conversations (#207). The `responsesStored` flag marks turns that were
+ * persisted server-side (store=true), making them eligible as stateful
+ * conversation parents.
  */
 function mergeTurnMetadata(
   iContent: IContent,

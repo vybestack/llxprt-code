@@ -36,10 +36,11 @@ export interface ResponseWithProviderResponseId
  * fields; all writers must go through this helper.
  */
 export function setResponseId(
-  response: GenerateContentResponse,
+  response: GenerateContentResponse | null | undefined,
   id: string,
   stored?: boolean,
 ): void {
+  if (response === undefined || response === null) return;
   if (typeof id !== 'string' || id.length === 0) return;
   const widened = response as ResponseWithProviderResponseId;
   widened.providerResponseId = id;
