@@ -36,6 +36,12 @@ const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 const inFlightAuthentications = new Map<string, Promise<boolean>>();
 
 /**
+ * Server-side message signalling that the SSE transport has been deprecated
+ * in favour of Streamable HTTP (e.g. Webflow's `/sse` -> `/mcp` migration).
+ */
+const SSE_DEPRECATION_SIGNAL = 'sse is no longer supported';
+
+/**
  * Returns a non-empty array of scopes, treating empty/missing as no scopes.
  */
 function resolveScopes(scopes: string[] | undefined): string[] {
@@ -98,11 +104,13 @@ export function detectDeprecatedSSEEndpoint(
   errorString: string,
 ): string | null {
   const lower = errorString.toLowerCase();
-  if (!lower.includes('sse is no longer supported')) return null;
+  if (!lower.includes(SSE_DEPRECATION_SIGNAL)) return null;
 
   // Try to extract a URL from the error message
   const urlMatch = errorString.match(/https?:\/\/[^\s"'<>]+/);
-  return urlMatch ? urlMatch[0] : '';
+  if (!urlMatch) return '';
+  // Trim trailing punctuation that may be part of the sentence, not the URL
+  return urlMatch[0].replace(/[.,;:!?)\]]+$/, '');
 }
 
 /**

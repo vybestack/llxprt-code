@@ -4,26 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { detectDeprecatedSSEEndpoint } from './mcp-oauth-helpers.js';
-
-vi.mock('../auth/oauth-provider.js');
-vi.mock('../auth/oauth-token-storage.js');
-vi.mock('../auth/oauth-utils.js');
-vi.mock('@modelcontextprotocol/sdk/client/index.js');
-vi.mock('@modelcontextprotocol/sdk/client/sse.js');
-vi.mock('@modelcontextprotocol/sdk/client/stdio.js');
-vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js');
-
-vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
-  coreEvents: {
-    emitFeedback: vi.fn(),
-  },
-}));
 
 describe('detectDeprecatedSSEEndpoint', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    // No mocks needed — detectDeprecatedSSEEndpoint is a pure string function
   });
 
   it('should detect "SSE is no longer supported" message', () => {
