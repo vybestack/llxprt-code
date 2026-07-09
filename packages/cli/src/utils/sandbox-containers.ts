@@ -746,7 +746,10 @@ export function wireCleanupHandlers(
   }
 
   // @plan:PLAN-20250214-CREDPROXY.P34 R25.2, R25.3: Clean up credential proxy on sandbox exit
-  const stopCredentialProxy = () => {
+  let proxyStopped = false;
+  const stopCredentialProxy = (): void => {
+    if (proxyStopped) return;
+    proxyStopped = true;
     void stopProxy().catch(() => {
       // best-effort cleanup during shutdown
     });

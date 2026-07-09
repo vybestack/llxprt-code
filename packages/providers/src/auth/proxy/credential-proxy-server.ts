@@ -349,6 +349,9 @@ export class CredentialProxyServer {
           error: 'Unsupported protocol version',
         }),
       );
+      // Force-destroy if graceful close doesn't complete within 3s to
+      // prevent slowloris-style resource exhaustion.
+      setTimeout(() => socket.destroy(), 3000).unref();
       return false;
     }
 
@@ -380,6 +383,7 @@ export class CredentialProxyServer {
             error: 'Invalid or missing capability token',
           }),
         );
+        setTimeout(() => socket.destroy(), 3000).unref();
         return false;
       }
       state.isSandboxConnection = true;
@@ -916,9 +920,10 @@ export class CredentialProxyServer {
     payload: Record<string, unknown>,
     state: ConnectionState,
   ): Promise<void> {
+    const requestedBucket = (payload.bucket as string | undefined) ?? 'default';
     if (
       this.emptyIfSandbox(socket, id, state, 'get_bucket_stats', {
-        bucket: 'default',
+        bucket: requestedBucket,
         requestCount: 0,
         percentage: 0,
       })

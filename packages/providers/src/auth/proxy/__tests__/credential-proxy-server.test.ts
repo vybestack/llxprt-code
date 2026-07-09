@@ -1297,7 +1297,7 @@ describe('CredentialProxyServer', () => {
    * @scenario OAuth mutating operations are blocked for sandbox connections
    * @given A server configured with a capability token (sandbox connections)
    * @when A sandbox client requests an OAuth operation that would mutate the
-   *       token store (oauth_initiate, oauth_exchange, oauth_poll, refresh_token)
+   *       token store (oauth_initiate, oauth_exchange, oauth_poll, oauth_cancel, refresh_token)
    * @then The operation is blocked with FORBIDDEN to prevent token store
    *       mutation bypass via OAuth endpoints
    */

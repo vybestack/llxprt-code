@@ -45,6 +45,9 @@ function extractFunctionBody(source: string, fnName: string): string {
   const nextFn = source
     .slice(start)
     .search(/\n(?:export )?(?:async )?function /);
+  // When no next function is found, return the remainder of the file from
+  // start (substring with undefined end). This is the desired fallback for
+  // the last function in the file.
   const end = nextFn === -1 ? undefined : start + nextFn;
   return source.substring(start, end);
 }
