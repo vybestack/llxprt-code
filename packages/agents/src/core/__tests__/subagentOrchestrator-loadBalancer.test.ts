@@ -25,7 +25,6 @@ import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagen
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import type { SubAgentScope } from '../subagent.js';
-import { type SubAgentScope as SubAgentScopeInstance } from '../subagent.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import {
   makeForegroundConfig,
@@ -130,7 +129,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     const scope = {
       runtimeContext: runtimeBundle.runtimeContext,
       getAgentId: () => 'lb-helper-1',
-    } as unknown as SubAgentScopeInstance;
+    } as unknown as SubAgentScope;
     const scopeFactory = vi
       .fn<typeof SubAgentScope.create>()
       .mockResolvedValue(scope);
@@ -168,7 +167,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     const scope = {
       runtimeContext: runtimeBundle.runtimeContext,
       getAgentId: () => 'lb-helper-2',
-    } as unknown as SubAgentScopeInstance;
+    } as unknown as SubAgentScope;
     const scopeFactory = vi
       .fn<typeof SubAgentScope.create>()
       .mockResolvedValue(scope);
