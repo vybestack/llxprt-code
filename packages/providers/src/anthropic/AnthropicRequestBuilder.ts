@@ -230,8 +230,10 @@ type AnthropicThinkingConfig = {
  * adaptive-capable models. Centralizes the `{ type: 'adaptive' }` literal and
  * the `effort` mapping so future thinking-field changes have one source.
  *
- * `display` is only relevant to Fable 5, which never returns raw
- * chain-of-thought; other adaptive models pass nothing and keep API defaults.
+ * `display` controls whether the API returns thinking text. All adaptive-
+ * capable models pass 'summarized' (default) to get readable thinking
+ * summaries, or 'omitted' when `includeInResponse` is explicitly false.
+ * Fable 5 never returns raw chain-of-thought regardless of this setting.
  */
 function buildAdaptiveConfig(
   thinkingEffort?: 'low' | 'medium' | 'high' | 'max',
@@ -279,7 +281,9 @@ export function buildThinkingConfig(options: {
   // never returns raw thinking, so request `display: 'summarized'` to get
   // readable summaries instead of empty thinking blocks.
   if (isFable5(options.model)) {
-    return buildAdaptiveConfig(options.thinkingEffort, 'summarized');
+    const display =
+      options.includeInResponse === false ? 'omitted' : 'summarized';
+    return buildAdaptiveConfig(options.thinkingEffort, display);
   }
 
   const adaptiveCapable = supportsAdaptiveThinking(options.model);
@@ -298,6 +302,9 @@ export function buildThinkingConfig(options: {
     thinking: {
       type: 'enabled' as const,
       budget_tokens: options.reasoningBudgetTokens ?? 10000,
+      ...(options.includeInResponse === false
+        ? { display: 'omitted' as const }
+        : {}),
     },
   };
 

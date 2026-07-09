@@ -236,11 +236,13 @@ describe('applyThoughtToState incremental thinking streaming (issue #1723)', () 
 
   it('merges when a new thought extends the last block text (incremental) @issue:1723', () => {
     // With streaming thinking deltas, the agent emits Thought events whose
-    // text grows incrementally. The UI should merge prefix-extensions into
-    // the same block. A genuinely new thought that merely starts with the
-    // same prefix but is much longer is a separate concern (see the
-    // "completely different" test above) — the startsWith heuristic is the
-    // documented behavior and the trade-off is explained in thoughtState.ts.
+    // text grows incrementally. The UI merges prefix-extensions into the
+    // same block. The startsWith heuristic is a documented trade-off: a
+    // genuinely distinct thought that happens to start with the same prefix
+    // as the last block would be merged rather than shown separately. This
+    // is acceptable because streaming deltas always extend the same thought
+    // lineage and new distinct thoughts arrive as separate thinking blocks
+    // at the provider level.
     const args = createArgs({
       getContentPrefixIdentity: () => null,
     });
@@ -370,5 +372,23 @@ describe('applyThoughtToState incremental thinking streaming (issue #1723)', () 
     const result = lastUpdater(null) as HistoryItemAi | null;
     expect(result?.thinkingBlocks).toHaveLength(1);
     expect(result?.thinkingBlocks?.[0].thought).toBe('Start thinking');
+  });
+  it('does nothing when both subject and description are empty @issue:1723', () => {
+    const args = createArgs({
+      getContentPrefixIdentity: () => null,
+    });
+
+    applyThoughtToState(
+      { subject: '', description: '' },
+      args.sanitizeContent,
+      args.getContentPrefixIdentity,
+      args.thinkingBlocksRef,
+      args.setLastAgentActivityTime,
+      args.setThought,
+      args.setPendingHistoryItem,
+    );
+
+    expect(args.thinkingBlocksRef.current).toHaveLength(0);
+    expect(args.setPendingHistoryItem).not.toHaveBeenCalled();
   });
 });

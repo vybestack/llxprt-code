@@ -37,10 +37,7 @@ import type { ResponseOutcome } from '@vybestack/llxprt-code-core/utils/generate
 import { analyzeResponseOutcomeFromParts } from './googlePartHelpers.js';
 import { isFunctionResponse } from '@vybestack/llxprt-code-core/utils/messageInspectors.js';
 import { InvalidStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
-import {
-  isThoughtPart,
-  type ThoughtPart,
-} from './googlePartHelpers.js';
+import { isThoughtPart, type ThoughtPart } from './googlePartHelpers.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 /** Whether a finish reason is missing (null, undefined, or empty string). */
