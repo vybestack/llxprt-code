@@ -453,7 +453,7 @@ describe('processAgentStream — quiet mode', () => {
       {
         type: 'done',
         reason: 'loop-detected',
-      } as AgentEvent,
+      },
     ];
 
     await processAgentStream(
@@ -478,7 +478,7 @@ describe('processAgentStream — quiet mode', () => {
       {
         type: 'hook-blocked',
         info: { reason: 'Policy violation', systemMessage: 'blocked' },
-      } as AgentEvent,
+      },
       { type: 'text', text: 'Continued.' },
       { type: 'done', reason: 'stop' },
     ];
@@ -558,7 +558,7 @@ describe('processAgentStream — quiet mode', () => {
         type: 'done',
         reason: 'hook-stopped',
         stop: { reason: 'policy', systemMessage: 'stopped by hook' },
-      } as AgentEvent,
+      },
     ];
 
     await processAgentStream(
