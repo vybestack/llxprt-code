@@ -106,11 +106,25 @@ export function detectDeprecatedSSEEndpoint(
   const lower = errorString.toLowerCase();
   if (!lower.includes(SSE_DEPRECATION_SIGNAL)) return null;
 
-  // Try to extract a URL from the error message
-  const urlMatch = errorString.match(/https?:\/\/[^\s"'<>]+/);
-  if (!urlMatch) return '';
+  // Extract a URL from the error message using string search to avoid
+  // regex backtracking concerns (sonarjs/slow-regex)
+  const httpIdx = errorString.indexOf('http');
+  if (httpIdx === -1) return '';
+  const rest = errorString.slice(httpIdx);
+  let endIdx = rest.length;
+  for (let i = 0; i < rest.length; i++) {
+    if (rest.charCodeAt(i) <= 32) {
+      endIdx = i;
+      break;
+    }
+  }
+  const url = rest.slice(0, endIdx);
   // Trim trailing punctuation that may be part of the sentence, not the URL
-  return urlMatch[0].replace(/[.,;:!?)\]]+$/, '');
+  let trimmedLen = url.length;
+  while (trimmedLen > 0 && '.,;:!?)]"\''.includes(url.charAt(trimmedLen - 1))) {
+    trimmedLen--;
+  }
+  return url.slice(0, trimmedLen);
 }
 
 /**
