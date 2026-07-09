@@ -201,6 +201,18 @@ describe('mcp add command', () => {
     );
   });
 
+  it('should map --transport streamable-http to type field, not a transport field', async () => {
+    await parser.parseAsync(
+      'add streamable-server https://example.com/mcp --transport streamable-http',
+    );
+
+    const callArgs = mockSetValue.mock.calls[0];
+    const serverConfig = callArgs[2]['streamable-server'];
+    expect(serverConfig.type).toBe('streamable-http');
+    expect(serverConfig.transport).toBeUndefined();
+    expect(serverConfig.url).toBe('https://example.com/mcp');
+  });
+
   it('should handle MCP server args with -- separator', async () => {
     await parser.parseAsync(
       'add my-server npx -- -y http://example.com/some-package',

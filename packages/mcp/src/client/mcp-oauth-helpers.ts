@@ -254,7 +254,6 @@ export async function retryWithOAuth(
     return;
   }
 
-  // 'http' and 'streamable-http' both use StreamableHTTPClientTransport
   try {
     const { StreamableHTTPClientTransport } = await import(
       '@modelcontextprotocol/sdk/client/streamableHttp.js'

@@ -90,7 +90,6 @@ function createUrlTransport(
         transportOptions,
       );
     }
-    // 'http' and 'streamable-http' both use StreamableHTTPClientTransport
     return new StreamableHTTPClientTransport(
       new URL(mcpServerConfig.url),
       transportOptions,
@@ -142,7 +141,6 @@ export async function createTransportWithOAuth(
           transportOptions,
         );
       }
-      // 'http' and 'streamable-http' both use StreamableHTTPClientTransport
       return new StreamableHTTPClientTransport(
         new URL(mcpServerConfig.url),
         transportOptions,
