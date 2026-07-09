@@ -517,6 +517,22 @@ export class CredentialProxyServer {
     return true;
   }
 
+  /** Returns true (and sends an empty response) if the connection is from
+   *  a sandbox. Centralises the enumeration-restriction pattern so all
+   *  list-style handlers log and respond consistently. */
+  private emptyIfSandbox(
+    socket: net.Socket,
+    id: string,
+    state: ConnectionState,
+    operation: string,
+    data: Record<string, unknown>,
+  ): boolean {
+    if (!state.isSandboxConnection) return false;
+    this.auditLog('WARN', state.id, operation, { status: 'blocked_sandbox' });
+    this.sendOk(socket, id, data);
+    return true;
+  }
+
   // Intentionally allowed for sandbox connections: the sandbox process needs
   // to retrieve tokens for specific providers to make API calls. This is the
   // core purpose of the credential proxy. Enumeration (list_*) is blocked
@@ -644,13 +660,12 @@ export class CredentialProxyServer {
     id: string,
     state: ConnectionState,
   ): Promise<void> {
-    if (state.isSandboxConnection) {
-      this.auditLog('WARN', state.id, 'list_providers', {
-        status: 'blocked_sandbox',
-      });
-      this.sendOk(socket, id, { providers: [] });
+    if (
+      this.emptyIfSandbox(socket, id, state, 'list_providers', {
+        providers: [],
+      })
+    )
       return;
-    }
     const providers = await this.options.tokenStore.listProviders();
     this.auditLog('INFO', state.id, 'list_providers', {
       status: 'ok',
@@ -671,14 +686,8 @@ export class CredentialProxyServer {
       return;
     }
 
-    if (state.isSandboxConnection) {
-      this.auditLog('WARN', state.id, 'list_buckets', {
-        provider,
-        status: 'blocked_sandbox',
-      });
-      this.sendOk(socket, id, { buckets: [] });
+    if (this.emptyIfSandbox(socket, id, state, 'list_buckets', { buckets: [] }))
       return;
-    }
 
     const buckets = await this.options.tokenStore.listBuckets(provider);
     this.auditLog('INFO', state.id, 'list_buckets', {
@@ -732,13 +741,8 @@ export class CredentialProxyServer {
     id: string,
     state: ConnectionState,
   ): Promise<void> {
-    if (state.isSandboxConnection) {
-      this.auditLog('WARN', state.id, 'list_api_keys', {
-        status: 'blocked_sandbox',
-      });
-      this.sendOk(socket, id, { keys: [] });
+    if (this.emptyIfSandbox(socket, id, state, 'list_api_keys', { keys: [] }))
       return;
-    }
     const keys = await this.options.providerKeyStorage.listKeys();
     this.auditLog('INFO', state.id, 'list_api_keys', {
       status: 'ok',
@@ -790,17 +794,14 @@ export class CredentialProxyServer {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
       return;
     }
-    if (state.isSandboxConnection) {
-      this.auditLog('WARN', state.id, 'get_bucket_stats', {
-        status: 'blocked_sandbox',
-      });
-      this.sendOk(socket, id, {
+    if (
+      this.emptyIfSandbox(socket, id, state, 'get_bucket_stats', {
         bucket: bucket ?? 'default',
         requestCount: 0,
         percentage: 0,
-      });
+      })
+    )
       return;
-    }
     const stats = await this.options.tokenStore.getBucketStats(
       provider,
       bucket ?? 'default',

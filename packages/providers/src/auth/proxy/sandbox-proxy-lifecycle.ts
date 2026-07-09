@@ -186,16 +186,16 @@ export async function createAndStartProxy(
 
   actualCapabilityToken = crypto.randomBytes(32).toString('hex');
 
-  serverInstance = new CredentialProxyServer({
-    tokenStore,
-    providerKeyStorage,
-    socketDir: requestedSocketDir,
-    flowFactories,
-    refreshCoordinator,
-    capabilityToken: actualCapabilityToken,
-  });
-
   try {
+    serverInstance = new CredentialProxyServer({
+      tokenStore,
+      providerKeyStorage,
+      socketDir: requestedSocketDir,
+      flowFactories,
+      refreshCoordinator,
+      capabilityToken: actualCapabilityToken,
+    });
+
     actualSocketPath = await serverInstance.start();
   } catch (err) {
     serverInstance = undefined;

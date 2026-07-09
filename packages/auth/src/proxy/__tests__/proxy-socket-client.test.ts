@@ -95,7 +95,7 @@ function createHandshakeCapturingServer(
           if (onHandshake) {
             socket.end(onHandshake());
           } else {
-            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+            socket.end(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
           }
         }
       }
@@ -536,8 +536,8 @@ describe('ProxySocketClient', () => {
     const handshake = await result.handshake;
     const payload = handshake.payload as Record<string, unknown>;
     expect(payload.capabilityToken).toBe(capabilityToken);
-    expect(payload.minVersion).toBe(1);
-    expect(payload.maxVersion).toBe(1);
+    expect(payload.minVersion).toBe(PROTOCOL_VERSION);
+    expect(payload.maxVersion).toBe(PROTOCOL_VERSION);
   });
 
   /**

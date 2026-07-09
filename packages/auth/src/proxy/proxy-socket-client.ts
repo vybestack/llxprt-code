@@ -220,17 +220,11 @@ export class ProxySocketClient {
   private resolveHandshake(frame: Record<string, unknown>): void {
     const resolver = this.handshakeResolver;
     this.handshakeResolver = null;
-    if (!resolver) {
-      return;
-    }
+    if (resolver === null) return;
     if (typeof frame.ok === 'boolean') {
       resolver.resolve(frame as ProxyResponse);
     } else {
-      resolver.reject(
-        new Error(
-          'Malformed handshake response from proxy: ' + JSON.stringify(frame),
-        ),
-      );
+      resolver.reject(new Error('Malformed handshake response from proxy'));
     }
   }
 

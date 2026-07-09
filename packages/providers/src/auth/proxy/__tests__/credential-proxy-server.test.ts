@@ -1143,6 +1143,7 @@ describe('CredentialProxyServer', () => {
       requestCount: 0,
       percentage: 0,
     });
+    expect(response.data!.lastUsed).toBeUndefined();
   });
 
   /**
@@ -1178,6 +1179,7 @@ describe('CredentialProxyServer', () => {
       provider: 'anthropic',
       token: {
         access_token: 'new-at',
+        refresh_token: 'new-rt',
         expiry: 8888888888,
         token_type: 'Bearer',
       },

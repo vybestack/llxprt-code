@@ -8,6 +8,7 @@ import { execSync, spawn, exec, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import { parse } from 'shell-quote';
 import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
@@ -82,13 +83,13 @@ function composeCleanups(
   return () => {
     try {
       a();
-    } catch {
-      // ignore
+    } catch (err) {
+      debugLogger.error('cleanup step failed:', err);
     }
     try {
       b();
-    } catch {
-      // ignore
+    } catch (err) {
+      debugLogger.error('cleanup step failed:', err);
     }
   };
 }
@@ -458,7 +459,10 @@ function pushCapabilityEnvFile(
 ): (() => void) | undefined {
   const capabilityToken = getProxyCapabilityToken();
   if (capabilityToken === undefined) return undefined;
-  const envFile = path.join(resolvedTmpdir, `.capability-env-${process.pid}`);
+  const envFile = path.join(
+    resolvedTmpdir,
+    `.capability-env-${process.pid}-${crypto.randomUUID()}`,
+  );
   // Use openSync with explicit mode for defense-in-depth: writeFileSync applies
   // the mode option but is subject to umask masking. openSync + fchmodSync
   // guarantees the restrictive permissions regardless of umask.

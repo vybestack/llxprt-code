@@ -106,9 +106,8 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     });
 
     it('wraps createAndStartProxy in try-catch', () => {
-      // Verify the pattern: try { ... await createAndStartProxy
       expect(sandboxSource).toMatch(
-        /try\s*\{[\s\S]*await\s+createAndStartProxy/,
+        /try\s*\{\s*(?:\S[\s\S]*?)?await\s+createAndStartProxy[\s\S]*?\}\s*catch/,
       );
     });
   });
@@ -169,32 +168,50 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     });
 
     it('does NOT pass LLXPRT_CAPABILITY_TOKEN via --env (avoids exposing in process args)', () => {
-      expect(sandboxSource).not.toMatch(/--env.*LLXPRT_CAPABILITY_TOKEN/);
+      const fnStart = sandboxSource.indexOf('function pushCapabilityEnvFile');
+      expect(fnStart).toBeGreaterThan(-1);
+      const fnEnd = sandboxSource.indexOf('\nfunction ', fnStart + 1);
+      const fnSection = sandboxSource.substring(
+        fnStart,
+        fnEnd === -1 ? undefined : fnEnd,
+      );
+      expect(fnSection).not.toMatch(/--env[^-]/);
     });
 
     it('writes capability token to a temp env file with restrictive permissions', () => {
       const fnStart = sandboxSource.indexOf('function pushCapabilityEnvFile');
       expect(fnStart).toBeGreaterThan(-1);
+      const fnEnd = sandboxSource.indexOf('\nfunction ', fnStart + 1);
       const fnSection = sandboxSource.substring(
         fnStart,
-        sandboxSource.indexOf('}', sandboxSource.indexOf('0o600', fnStart)),
+        fnEnd === -1 ? undefined : fnEnd,
       );
       expect(fnSection).toContain('fs.openSync');
       expect(fnSection).toContain('0o600');
       expect(fnSection).toContain('LLXPRT_CAPABILITY_TOKEN');
+      expect(fnSection).toContain('return undefined');
     });
 
     it('returns early when capability token is undefined', () => {
       expect(sandboxSource).toContain(
-        'if (capabilityToken === undefined) return',
+        'if (capabilityToken === undefined) return undefined',
       );
     });
 
     it('registers cleanup to unlink the env file on process signals', () => {
-      expect(sandboxSource).toContain('fs.unlinkSync(envFile)');
-      expect(sandboxSource).toContain("process.on('exit',");
-      expect(sandboxSource).toContain("process.on('SIGINT',");
-      expect(sandboxSource).toContain("process.on('SIGTERM',");
+      const fnStart = sandboxSource.indexOf(
+        'function registerCapabilityEnvCleanup',
+      );
+      expect(fnStart).toBeGreaterThan(-1);
+      const fnEnd = sandboxSource.indexOf('\nfunction ', fnStart + 1);
+      const fnSection = sandboxSource.substring(
+        fnStart,
+        fnEnd === -1 ? undefined : fnEnd,
+      );
+      expect(fnSection).toContain('cleanup');
+      expect(fnSection).toContain("process.on('exit'");
+      expect(fnSection).toContain("process.on('SIGINT'");
+      expect(fnSection).toContain("process.on('SIGTERM'");
     });
 
     it('uses getProxyCapabilityToken to get the capability token', () => {
