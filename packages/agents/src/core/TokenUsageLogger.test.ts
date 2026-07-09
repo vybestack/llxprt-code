@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { TokenUsageLogger } from './TokenUsageLogger.js';
+import { TokenUsageLogger, PENDING_CAP } from './TokenUsageLogger.js';
 
 function makeTempLogPath(): string {
   return path.join(
@@ -205,6 +205,7 @@ describe('TokenUsageLogger', () => {
         cachedTokens: 0,
       });
     }).not.toThrow();
+    expect(fs.existsSync(badPath)).toBe(false);
   });
 
   it('clears pending entry after recordActual completes', () => {
@@ -230,9 +231,9 @@ describe('TokenUsageLogger', () => {
     expect(records).toHaveLength(1);
   });
 
-  it('clears pending map when exceeding 100 entries', () => {
+  it('evicts oldest pending entry when exceeding PENDING_CAP', () => {
     const logger = new TokenUsageLogger(true, logFile);
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < PENDING_CAP; i++) {
       logger.recordEstimate(`prompt-${i}`, {
         provider: 'openai',
         model: 'gpt-4',

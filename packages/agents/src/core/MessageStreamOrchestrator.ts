@@ -31,7 +31,6 @@ import {
   recordTokenEstimate,
   estimateRequestTokens,
 } from './tokenUsageEstimateLogger.js';
-import type { TokenUsageLogger } from './TokenUsageLogger.js';
 import { buildModelInfo, modelIdentityKey } from './messageStreamModelInfo.js';
 import type { Todo } from '@vybestack/llxprt-code-tools';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
@@ -278,9 +277,7 @@ export class MessageStreamOrchestrator {
     );
 
     recordTokenEstimate(
-      chat as unknown as {
-        getTokenUsageLogger?: () => TokenUsageLogger | undefined;
-      },
+      chat,
       ctx.prompt_id,
       initialRequest,
       estimatedRequestTokenCount,

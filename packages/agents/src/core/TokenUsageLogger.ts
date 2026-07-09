@@ -29,11 +29,12 @@ export interface TokenUsageRecord extends PendingTokenEstimate {
   readonly effectiveActualTokens: number;
 }
 
-const PENDING_CAP = 100;
+export const PENDING_CAP = 100;
 
 export class TokenUsageLogger {
   private readonly pending = new Map<string, PendingTokenEstimate>();
   private readonly errorLogger = new DebugLogger('llxprt:token-usage-logger');
+  private dirEnsured = false;
 
   constructor(
     private readonly enabled: boolean,
@@ -50,7 +51,8 @@ export class TokenUsageLogger {
   ): void {
     if (!this.enabled) return;
     if (this.pending.size >= PENDING_CAP) {
-      this.pending.clear();
+      const oldestKey = this.pending.keys().next().value;
+      if (oldestKey !== undefined) this.pending.delete(oldestKey);
     }
     const entry: PendingTokenEstimate = {
       ...data,
@@ -85,8 +87,11 @@ export class TokenUsageLogger {
   private _writeRecord(record: TokenUsageRecord): void {
     if (this.logFilePath === undefined) return;
     try {
-      const dir = path.dirname(this.logFilePath);
-      fs.mkdirSync(dir, { recursive: true });
+      if (!this.dirEnsured) {
+        const dir = path.dirname(this.logFilePath);
+        fs.mkdirSync(dir, { recursive: true });
+        this.dirEnsured = true;
+      }
       const line = JSON.stringify(this._toSerializedRecord(record)) + '\n';
       fs.appendFileSync(this.logFilePath, line);
     } catch (error) {

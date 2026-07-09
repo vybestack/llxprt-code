@@ -550,13 +550,9 @@ export class ChatSession {
     const config = view.providerRuntime.config;
     const sessionId = view.state.sessionId;
     let logFilePath: string | undefined;
-    if (tokenUsageEnabled) {
+    if (tokenUsageEnabled && config) {
       try {
-        const tempDir = (
-          config as unknown as {
-            storage?: { getProjectTempDir?: () => string | undefined } | null;
-          } | null
-        )?.storage?.getProjectTempDir?.();
+        const tempDir = config.getProjectTempDir();
         if (tempDir) {
           logFilePath = nodePath.join(
             tempDir,

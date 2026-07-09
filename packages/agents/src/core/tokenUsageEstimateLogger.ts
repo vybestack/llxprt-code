@@ -5,6 +5,7 @@
  */
 
 import type { PartListUnion } from '@google/genai';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { estimateRequestTokensStructured } from './clientHelpers.js';
 import type {
   TokenUsageLogger,
@@ -12,8 +13,8 @@ import type {
 } from './TokenUsageLogger.js';
 
 export interface ChatTokenEstimator {
-  estimatePendingTokens?: (contents: never[]) => Promise<number>;
-  convertPartListUnionToIContent?: (input: PartListUnion) => unknown;
+  estimatePendingTokens?: (contents: IContent[]) => Promise<number>;
+  convertPartListUnionToIContent?: (input: PartListUnion) => IContent;
 }
 
 const OPENAI_PROVIDERS = new Set([
@@ -65,7 +66,7 @@ export async function estimateRequestTokens(
     return fallback;
   }
   try {
-    const content = conv.call(chat, initialRequest) as never;
+    const content = conv.call(chat, initialRequest);
     return await est.call(chat, [content]);
   } catch {
     return fallback;
