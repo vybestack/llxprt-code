@@ -371,7 +371,7 @@ function handleDone(
 
 function finalizeStream(
   thoughtBuffer: string,
-  jsonResponseText: string,
+  streamedText: string,
   quietTextBuffer: string,
   pendingDone: Extract<AgentEvent, { type: 'done' }> | null,
   context: StreamConsumerContext,
@@ -380,7 +380,7 @@ function finalizeStream(
   getMetrics: () => SessionMetrics,
 ): void {
   flushThoughtBuffer(thoughtBuffer, includeThinking);
-  const finalText = flushEmojiBuffer(context, jsonResponseText);
+  const finalText = flushEmojiBuffer(context, streamedText);
   const responseText = context.quiet
     ? filterQuietText(quietTextBuffer, context)
     : finalText;
