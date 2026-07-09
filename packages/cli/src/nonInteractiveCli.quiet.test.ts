@@ -46,8 +46,10 @@ function parseJsonStdoutEvents(
     .map((value) => {
       try {
         return JSON.parse(value) as ParsedStreamEvent;
-      } catch {
-        throw new Error(`Failed to parse stdout line as JSON: ${value}`);
+      } catch (originalError) {
+        throw new Error(
+          `Failed to parse stdout line as JSON: ${value}: ${originalError instanceof Error ? originalError.message : String(originalError)}`,
+        );
       }
     });
 }
