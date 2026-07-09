@@ -226,7 +226,11 @@ export class ProxySocketClient {
     if (typeof frame.ok === 'boolean') {
       resolver.resolve(frame as ProxyResponse);
     } else {
-      resolver.reject(new Error('Malformed handshake response from proxy'));
+      resolver.reject(
+        new Error(
+          'Malformed handshake response from proxy: ' + JSON.stringify(frame),
+        ),
+      );
     }
   }
 

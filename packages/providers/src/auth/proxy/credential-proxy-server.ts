@@ -519,8 +519,8 @@ export class CredentialProxyServer {
   // to retrieve tokens for specific providers to make API calls. This is the
   // core purpose of the credential proxy. Enumeration (list_*) is blocked
   // to prevent discovery, and mutation (save_token/remove_token) is blocked
-  // to prevent tampering. But targeted retrieval by known provider name is
-  // required functionality.
+  // to prevent tampering. For sandbox connections, NOT_FOUND responses use a
+  // generic FORBIDDEN message to avoid revealing whether a provider exists.
   private async handleGetToken(
     socket: net.Socket,
     id: string,
@@ -541,12 +541,19 @@ export class CredentialProxyServer {
         bucket: bucket ?? 'default',
         status: 'not_found',
       });
-      this.sendError(
-        socket,
-        id,
-        'NOT_FOUND',
-        `No token found for provider: ${provider}`,
-      );
+      // For sandbox connections, use a generic FORBIDDEN error instead of
+      // NOT_FOUND to avoid revealing whether a provider exists (prevents
+      // brute-force provider enumeration).
+      if (state.isSandboxConnection) {
+        this.sendError(socket, id, 'FORBIDDEN', 'Access denied');
+      } else {
+        this.sendError(
+          socket,
+          id,
+          'NOT_FOUND',
+          `No token found for provider: ${provider}`,
+        );
+      }
       return;
     }
     this.auditLog('INFO', state.id, 'get_token', {
@@ -681,8 +688,9 @@ export class CredentialProxyServer {
   }
 
   // Intentionally allowed for sandbox connections: the sandbox process needs
-  // API keys by known name to configure provider clients. This is the core
-  // purpose of the proxy. Only enumeration (list_api_keys) is blocked.
+  // API keys by known name to configure provider clients. For sandbox
+  // connections, NOT_FOUND uses a generic FORBIDDEN message to avoid
+  // revealing whether a key name exists (prevents brute-force enumeration).
   private async handleGetApiKey(
     socket: net.Socket,
     id: string,
@@ -701,7 +709,16 @@ export class CredentialProxyServer {
         name,
         status: 'not_found',
       });
-      this.sendError(socket, id, 'NOT_FOUND', `No API key found for: ${name}`);
+      if (state.isSandboxConnection) {
+        this.sendError(socket, id, 'FORBIDDEN', 'Access denied');
+      } else {
+        this.sendError(
+          socket,
+          id,
+          'NOT_FOUND',
+          `No API key found for: ${name}`,
+        );
+      }
       return;
     }
     this.auditLog('INFO', state.id, 'get_api_key', { name, status: 'ok' });
@@ -728,14 +745,26 @@ export class CredentialProxyServer {
     this.sendOk(socket, id, { keys });
   }
 
-  // Intentionally allowed for sandbox connections: checking key existence by
-  // known name is needed for the sandbox to determine which auth method to use.
+  // Blocked for sandbox connections: returning exists: true/false enables
+  // brute-force enumeration of which API keys are configured. The sandbox
+  // can call get_api_key instead, which returns a generic FORBIDDEN for
+  // unknown keys (not distinguishing found from not found).
   private async handleHasApiKey(
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
     state: ConnectionState,
   ): Promise<void> {
+    if (
+      this.rejectIfSandbox(
+        socket,
+        id,
+        state,
+        'has_api_key',
+        'Sandbox connections cannot check key existence',
+      )
+    )
+      return;
     const name = payload.name as string | undefined;
     if (!name) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing name');

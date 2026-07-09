@@ -159,6 +159,8 @@ function makeToken(overrides: Partial<OAuthToken> = {}): OAuthToken {
   };
 }
 
+const CAPABILITY_TOKEN = 'a'.repeat(64);
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('CredentialProxyServer', () => {
@@ -796,15 +798,16 @@ describe('CredentialProxyServer', () => {
    * @then The handshake succeeds and the client can make requests
    */
   it('accepts handshake with valid capability token', async () => {
-    const token = 'a'.repeat(64);
-    server = createServer({ capabilityToken: token });
-    client = await startAndConnect(server, token);
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
 
+    // Verify the handshake succeeded by making a request — sandbox connections
+    // receive FORBIDDEN (not NOT_FOUND) for missing tokens to prevent enumeration.
     const response = await client.request('get_token', {
       provider: 'nonexistent',
     });
     expect(response.ok).toBe(false);
-    expect(response.code).toBe('NOT_FOUND');
+    expect(response.code).toBe('FORBIDDEN');
   });
 
   /**
@@ -814,7 +817,7 @@ describe('CredentialProxyServer', () => {
    * @then The handshake fails with UNAUTHORIZED and the connection is destroyed
    */
   it('rejects handshake with invalid capability token', async () => {
-    const token = 'a'.repeat(64);
+    const token = CAPABILITY_TOKEN;
     server = createServer({ capabilityToken: token });
     const socketPath = await server.start();
 
@@ -835,7 +838,7 @@ describe('CredentialProxyServer', () => {
    * @then The handshake fails and the connection is destroyed
    */
   it('rejects handshake with missing capability token', async () => {
-    const token = 'a'.repeat(64);
+    const token = CAPABILITY_TOKEN;
     server = createServer({ capabilityToken: token });
     const socketPath = await server.start();
 
@@ -875,7 +878,7 @@ describe('CredentialProxyServer', () => {
     await keyStorage.saveKey('anthropic', 'sk-ant-123');
     await keyStorage.saveKey('openai', 'sk-oai-456');
 
-    const token = 'b'.repeat(64);
+    const token = CAPABILITY_TOKEN;
     server = createServer({ capabilityToken: token });
     client = await startAndConnect(server, token);
 
@@ -894,7 +897,7 @@ describe('CredentialProxyServer', () => {
     await tokenStore.saveToken('anthropic', makeToken());
     await tokenStore.saveToken('gemini', makeToken());
 
-    const token = 'c'.repeat(64);
+    const token = CAPABILITY_TOKEN;
     server = createServer({ capabilityToken: token });
     client = await startAndConnect(server, token);
 
@@ -913,7 +916,7 @@ describe('CredentialProxyServer', () => {
     await tokenStore.saveToken('anthropic', makeToken(), 'default');
     await tokenStore.saveToken('anthropic', makeToken(), 'work');
 
-    const token = 'd'.repeat(64);
+    const token = CAPABILITY_TOKEN;
     server = createServer({ capabilityToken: token });
     client = await startAndConnect(server, token);
 
@@ -933,7 +936,7 @@ describe('CredentialProxyServer', () => {
   it('get_token works for sandbox connection with known provider', async () => {
     await tokenStore.saveToken('anthropic', makeToken());
 
-    const token = 'e'.repeat(64);
+    const token = CAPABILITY_TOKEN;
     server = createServer({ capabilityToken: token });
     client = await startAndConnect(server, token);
 
@@ -953,7 +956,7 @@ describe('CredentialProxyServer', () => {
   it('get_api_key works for sandbox connection with known name', async () => {
     await keyStorage.saveKey('anthropic', 'sk-ant-123');
 
-    const token = 'f'.repeat(64);
+    const token = CAPABILITY_TOKEN;
     server = createServer({ capabilityToken: token });
     client = await startAndConnect(server, token);
 
@@ -965,23 +968,58 @@ describe('CredentialProxyServer', () => {
   });
 
   /**
-   * @scenario has_api_key works for sandbox connection
+   * @scenario has_api_key blocked for sandbox connection (prevents enumeration)
    * @given A server with capability token, a key in storage
-   * @when A sandbox client requests has_api_key for a known name
-   * @then Returns exists: true
+   * @when A sandbox client requests has_api_key
+   * @then Response is ok: false with code FORBIDDEN
    */
-  it('has_api_key works for sandbox connection', async () => {
+  it('has_api_key blocked for sandbox connection', async () => {
     await keyStorage.saveKey('anthropic', 'sk-ant-123');
 
-    const token = 'g'.repeat(64);
-    server = createServer({ capabilityToken: token });
-    client = await startAndConnect(server, token);
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
 
     const response = await client.request('has_api_key', {
       name: 'anthropic',
     });
-    expect(response.ok).toBe(true);
-    expect(response.data!.exists).toBe(true);
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('FORBIDDEN');
+  });
+
+  /**
+   * @scenario get_token returns FORBIDDEN (not NOT_FOUND) for unknown provider in sandbox
+   * @given A server with capability token, no token for "unknown" provider
+   * @when A sandbox client requests get_token for a non-existent provider
+   * @then Response is FORBIDDEN (not NOT_FOUND) to prevent provider enumeration
+   */
+  it('get_token returns FORBIDDEN for unknown provider in sandbox', async () => {
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
+
+    const response = await client.request('get_token', {
+      provider: 'nonexistent',
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('FORBIDDEN');
+  });
+
+  /**
+   * @scenario get_api_key returns FORBIDDEN (not NOT_FOUND) for unknown key in sandbox
+   * @given A server with capability token, no key for "unknown"
+   * @when A sandbox client requests get_api_key for a non-existent key
+   * @then Response is FORBIDDEN (not NOT_FOUND) to prevent key enumeration
+   */
+  it('get_api_key returns FORBIDDEN for unknown key in sandbox', async () => {
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
+
+    const response = await client.request('get_api_key', {
+      name: 'nonexistent',
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('FORBIDDEN');
   });
 
   /**
@@ -1032,8 +1070,8 @@ describe('CredentialProxyServer', () => {
   it('save_token blocked for sandbox connections', async () => {
     await tokenStore.saveToken('anthropic', makeToken());
 
-    server = createServer({ capabilityToken: 'h'.repeat(64) });
-    client = await startAndConnect(server, 'h'.repeat(64));
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
 
     const response = await client.request('save_token', {
       provider: 'anthropic',
@@ -1061,8 +1099,8 @@ describe('CredentialProxyServer', () => {
   it('remove_token blocked for sandbox connections', async () => {
     await tokenStore.saveToken('anthropic', makeToken());
 
-    server = createServer({ capabilityToken: 'i'.repeat(64) });
-    client = await startAndConnect(server, 'i'.repeat(64));
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
 
     const response = await client.request('remove_token', {
       provider: 'anthropic',
@@ -1092,8 +1130,8 @@ describe('CredentialProxyServer', () => {
       lastUsed: 1234567890,
     });
 
-    server = createServer({ capabilityToken: 'a'.repeat(64) });
-    client = await startAndConnect(server, 'a'.repeat(64));
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
 
     const response = await client.request('get_bucket_stats', {
       provider: 'anthropic',
@@ -1106,6 +1144,25 @@ describe('CredentialProxyServer', () => {
       requestCount: 0,
       percentage: 0,
     });
+  });
+
+  /**
+   * @scenario get_bucket_stats returns NOT_FOUND for non-sandbox when no stats
+   * @given A server WITHOUT capability token and no stats for the provider
+   * @when A non-sandbox client requests bucket stats
+   * @then Response is ok: false with code NOT_FOUND
+   */
+  it('get_bucket_stats returns NOT_FOUND for non-sandbox when no stats', async () => {
+    server = createServer();
+    client = await startAndConnect(server);
+
+    const response = await client.request('get_bucket_stats', {
+      provider: 'nonexistent',
+      bucket: 'default',
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('NOT_FOUND');
   });
 
   /**

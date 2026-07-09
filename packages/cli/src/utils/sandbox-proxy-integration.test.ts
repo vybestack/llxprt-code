@@ -169,9 +169,23 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       expect(sandboxSource).toContain("args.push('--env-file', envFile)");
     });
 
+    it('does NOT pass LLXPRT_CAPABILITY_TOKEN via --env (avoids exposing in process args)', () => {
+      expect(sandboxSource).not.toMatch(/--env.*LLXPRT_CAPABILITY_TOKEN/);
+    });
+
     it('writes capability token to a temp env file with restrictive permissions', () => {
-      expect(sandboxSource).toContain('fs.writeFileSync');
-      expect(sandboxSource).toContain('mode: 0o600');
+      const fnStart = sandboxSource.indexOf('function pushCapabilityEnvFile');
+      expect(fnStart).toBeGreaterThan(-1);
+      const fnSection = sandboxSource.substring(
+        fnStart,
+        sandboxSource.indexOf(
+          '}',
+          sandboxSource.indexOf('mode: 0o600', fnStart),
+        ),
+      );
+      expect(fnSection).toContain('fs.writeFileSync');
+      expect(fnSection).toContain('mode: 0o600');
+      expect(fnSection).toContain('LLXPRT_CAPABILITY_TOKEN');
     });
 
     it('returns early when capability token is undefined', () => {
@@ -180,9 +194,11 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       );
     });
 
-    it('registers cleanup to unlink the env file on process exit', () => {
+    it('registers cleanup to unlink the env file on process signals', () => {
       expect(sandboxSource).toContain('fs.unlinkSync(envFile)');
-      expect(sandboxSource).toContain("process.on('exit', cleanup)");
+      expect(sandboxSource).toContain("process.on('exit',");
+      expect(sandboxSource).toContain("process.on('SIGINT',");
+      expect(sandboxSource).toContain("process.on('SIGTERM',");
     });
 
     it('uses getProxyCapabilityToken to get the capability token', () => {

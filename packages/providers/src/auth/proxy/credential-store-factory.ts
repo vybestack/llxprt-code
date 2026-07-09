@@ -40,6 +40,7 @@ let proxyTokenStore: ProxyTokenStore | undefined;
 let proxyTokenStoreCapabilityToken: string | undefined;
 let directTokenStore: KeyringTokenStore | undefined;
 let proxyKeyStorage: ProxyProviderKeyStorage | undefined;
+let proxyKeyStorageClient: ProxySocketClient | undefined;
 let proxyKeyStorageCapabilityToken: string | undefined;
 let directKeyStorage: ProviderKeyStorage | undefined;
 
@@ -77,6 +78,7 @@ export function createTokenStore(): TokenStore {
       proxyTokenStore === undefined ||
       proxyTokenStoreCapabilityToken !== capabilityToken
     ) {
+      proxyTokenStore?.getClient().close();
       proxyTokenStore = new ProxyTokenStore(socketPath, capabilityToken);
       proxyTokenStoreCapabilityToken = capabilityToken;
     }
@@ -105,8 +107,12 @@ export function createProviderKeyStorage(): ProviderKeyStorageLike {
       proxyKeyStorage === undefined ||
       proxyKeyStorageCapabilityToken !== capabilityToken
     ) {
-      const client = new ProxySocketClient(socketPath, capabilityToken);
-      proxyKeyStorage = new ProxyProviderKeyStorage(client);
+      proxyKeyStorageClient?.close();
+      proxyKeyStorageClient = new ProxySocketClient(
+        socketPath,
+        capabilityToken,
+      );
+      proxyKeyStorage = new ProxyProviderKeyStorage(proxyKeyStorageClient);
       proxyKeyStorageCapabilityToken = capabilityToken;
     }
     return proxyKeyStorage;
@@ -119,10 +125,13 @@ export function createProviderKeyStorage(): ProviderKeyStorageLike {
  * Resets factory singletons. Used for test isolation.
  */
 export function resetFactorySingletons(): void {
+  proxyTokenStore?.getClient().close();
+  proxyKeyStorageClient?.close();
   proxyTokenStore = undefined;
   proxyTokenStoreCapabilityToken = undefined;
   directTokenStore = undefined;
   proxyKeyStorage = undefined;
+  proxyKeyStorageClient = undefined;
   proxyKeyStorageCapabilityToken = undefined;
   directKeyStorage = undefined;
 }

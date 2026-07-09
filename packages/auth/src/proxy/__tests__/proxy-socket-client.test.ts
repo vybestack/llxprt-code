@@ -64,8 +64,14 @@ function createAutoReplyServer(_socketPath: string): net.Server {
  * Helper: starts a server that captures the handshake frame and auto-replies.
  * Returns both the server and a per-instance handshake promise so each test
  * owns its own state (no module-level mutable singleton).
+ *
+ * @param onHandshake Optional factory to customize the handshake response.
+ *                    Defaults to ok: true with the current protocol version.
  */
-function createHandshakeCapturingServer(socketPath: string): Promise<{
+function createHandshakeCapturingServer(
+  socketPath: string,
+  onHandshake?: () => Buffer,
+): Promise<{
   server: net.Server;
   handshake: Promise<Record<string, unknown>>;
 }> {
@@ -77,20 +83,34 @@ function createHandshakeCapturingServer(socketPath: string): Promise<{
   });
   const srv = net.createServer((socket) => {
     const decoder = new FrameDecoder();
+    let settled = false;
     socket.on('data', (chunk) => {
       const frames = decoder.feed(chunk);
       for (const frame of frames) {
         if (frame.op === 'handshake') {
-          resolveHandshake(frame);
-          socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+          if (!settled) {
+            settled = true;
+            resolveHandshake(frame);
+          }
+          if (onHandshake) {
+            socket.end(onHandshake());
+          } else {
+            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+          }
         }
       }
     });
     socket.on('close', () => {
-      rejectHandshake(new Error('Socket closed before handshake'));
+      if (!settled) {
+        settled = true;
+        rejectHandshake(new Error('Socket closed before handshake'));
+      }
     });
     socket.on('error', (err) => {
-      rejectHandshake(err);
+      if (!settled) {
+        settled = true;
+        rejectHandshake(err);
+      }
     });
   });
   return new Promise((resolve, reject) => {
@@ -545,32 +565,14 @@ describe('ProxySocketClient', () => {
    * @then ensureConnected rejects with an authentication failure message
    */
   it('surfaces authentication error on UNAUTHORIZED handshake', async () => {
-    const srv = net.createServer((socket) => {
-      const decoder = new FrameDecoder();
-      socket.on('data', (chunk) => {
-        const frames = decoder.feed(chunk);
-        for (const frame of frames) {
-          if (frame.op === 'handshake') {
-            socket.end(
-              encodeFrame({
-                ok: false,
-                code: 'UNAUTHORIZED',
-                error: 'Invalid or missing capability token',
-              }),
-            );
-          }
-        }
-      });
-    });
-    server = srv;
-
-    await new Promise<void>((resolve, reject) => {
-      srv.once('error', reject);
-      srv.listen(socketPath, () => {
-        srv.removeListener('error', reject);
-        resolve();
-      });
-    });
+    const result = await createHandshakeCapturingServer(socketPath, () =>
+      encodeFrame({
+        ok: false,
+        code: 'UNAUTHORIZED',
+        error: 'Invalid or missing capability token',
+      }),
+    );
+    server = result.server;
 
     client = new ProxySocketClient(socketPath, 'some-token');
     await expect(client.ensureConnected()).rejects.toThrow(
