@@ -559,7 +559,7 @@ describe('McpClientManager', () => {
       }) as unknown as LlxprtExtension;
 
     it('should not block startExtension on MCP server discovery (issue #2325)', async () => {
-      let resolveConnect: () => void = () => {};
+      let resolveConnect: () => void;
       const connectPromise = new Promise<void>((resolve) => {
         resolveConnect = resolve;
       });
