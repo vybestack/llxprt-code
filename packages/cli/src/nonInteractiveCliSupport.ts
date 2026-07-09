@@ -68,11 +68,11 @@ function flushThoughtBuffer(
 
 function flushEmojiBuffer(
   context: StreamConsumerContext,
-  jsonResponseText: string,
+  responseText: string,
 ): string {
   const remainingBuffered = context.emojiFilter?.flushBuffer();
   if (!remainingBuffered) {
-    return jsonResponseText;
+    return responseText;
   }
   if (context.streamFormatter) {
     context.streamFormatter.emitEvent({
@@ -82,13 +82,13 @@ function flushEmojiBuffer(
       content: remainingBuffered,
       delta: true,
     });
-    return jsonResponseText;
+    return responseText;
   }
   if (context.jsonOutput) {
-    return jsonResponseText + remainingBuffered;
+    return responseText + remainingBuffered;
   }
   process.stdout.write(remainingBuffered);
-  return jsonResponseText;
+  return responseText;
 }
 
 function handleThinking(
@@ -122,7 +122,7 @@ function handleText(
   text: string,
   context: StreamConsumerContext,
   writeProfileName: () => void,
-  jsonResponseText: string,
+  responseText: string,
 ): string {
   writeProfileName();
   let outputValue = text;
@@ -134,7 +134,7 @@ function handleText(
           '[Error: Response blocked due to emoji detection]\n',
         );
       }
-      return jsonResponseText;
+      return responseText;
     }
     outputValue =
       typeof filterResult.filtered === 'string' ? filterResult.filtered : '';
@@ -152,13 +152,13 @@ function handleText(
         delta: true,
       });
     }
-    return jsonResponseText;
+    return responseText;
   }
   if (context.jsonOutput) {
-    return jsonResponseText + outputValue;
+    return responseText + outputValue;
   }
   process.stdout.write(outputValue);
-  return jsonResponseText;
+  return responseText;
 }
 
 function handleQuietText(text: string, state: StreamState): void {
@@ -294,7 +294,7 @@ function reconstructError(structured: StructuredError): Error {
 function handleDone(
   event: Extract<AgentEvent, { type: 'done' }>,
   context: StreamConsumerContext,
-  jsonResponseText: string,
+  responseText: string,
   startTime: number,
   getMetrics: () => SessionMetrics,
 ): void {
@@ -302,7 +302,7 @@ function handleDone(
     case 'stop':
     case 'loop-detected':
     case 'context-overflow':
-      emitFinalResult(context, jsonResponseText, startTime, getMetrics());
+      emitFinalResult(context, responseText, startTime, getMetrics());
       return;
     case 'refusal': {
       // @issue:2329 — surface the safety-classifier refusal as a user-visible
@@ -333,7 +333,7 @@ function handleDone(
       }
       emitFinalResult(
         context,
-        jsonResponseText,
+        responseText,
         startTime,
         getMetrics(),
         'refusal',
@@ -380,6 +380,9 @@ function finalizeStream(
   getMetrics: () => SessionMetrics,
 ): void {
   flushThoughtBuffer(thoughtBuffer, includeThinking);
+  // In quiet mode, streamedText is empty (text events are buffered into
+  // quietTextBuffer instead), so flushEmojiBuffer's result is intentionally
+  // unused — the quiet response comes from filterQuietText(quietTextBuffer).
   const finalText = flushEmojiBuffer(context, streamedText);
   const responseText = context.quiet
     ? filterQuietText(quietTextBuffer, context)
