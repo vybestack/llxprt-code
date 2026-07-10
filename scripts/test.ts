@@ -267,8 +267,7 @@ function runPhase(
   } catch (error) {
     result = {
       success: false,
-      exitCode:
-        (propertyValue(error, 'status') as number | undefined) ?? 1,
+      exitCode: (propertyValue(error, 'status') as number | undefined) ?? 1,
     };
   }
   const durationMs = Date.now() - start;
