@@ -199,17 +199,20 @@ export async function createAndStartProxy(
   } catch (err) {
     // start() may have partially initialised the net.Server before failing
     // (e.g. EADDRINUSE). Clean up to avoid orphaning a listening socket.
-    if (serverInstance) {
-      try {
-        await serverInstance.stop();
-      } catch {
-        // best-effort cleanup; the original error is the one we want to throw
-      }
-    }
+    // Capture and clear module-level state synchronously BEFORE awaiting
+    // stop() so concurrent callers don't re-enter on the failing instance.
+    const failingInstance = serverInstance;
     serverInstance = undefined;
     actualCapabilityToken = undefined;
     actualSocketPath = undefined;
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+    if (failingInstance) {
+      try {
+        await failingInstance.stop();
+      } catch {
+        // best-effort cleanup; the original error is the one we want to throw
+      }
+    }
     throw err;
   }
 

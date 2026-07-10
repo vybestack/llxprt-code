@@ -36,7 +36,8 @@ function isProxyResponseFrame(
 ): frame is ProxyResponse {
   if (typeof frame.ok !== 'boolean') return false;
   if (frame.code !== undefined && typeof frame.code !== 'string') return false;
-  if (frame.error !== undefined && typeof frame.error !== 'string') return false;
+  if (frame.error !== undefined && typeof frame.error !== 'string')
+    return false;
   if (frame.retryAfter !== undefined && typeof frame.retryAfter !== 'number')
     return false;
   if (
@@ -162,9 +163,7 @@ export class ProxySocketClient {
       await this.handshake();
     } catch (err) {
       try {
-        this.destroy(
-          err instanceof Error ? err.message : 'Handshake failed',
-        );
+        this.destroy(err instanceof Error ? err.message : 'Handshake failed');
       } catch {
         // Swallow cleanup errors so the original failure is not masked
       }
@@ -289,9 +288,7 @@ export class ProxySocketClient {
       if (isProxyResponseFrame(frame)) {
         pending.resolve(frame);
       } else {
-        pending.reject(
-          new Error(`Malformed response for request ${id}`),
-        );
+        pending.reject(new Error(`Malformed response for request ${id}`));
         this.destroy('Malformed response from proxy — connection reset');
         return;
       }

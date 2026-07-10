@@ -42,7 +42,9 @@ const sandboxSource = Object.values(sandboxSources).join('\n');
 function extractFunctionBody(source: string, fnName: string): string {
   const start = source.indexOf(`function ${fnName}(`);
   if (start === -1) {
-    throw new Error(`extractFunctionBody: function "${fnName}" not found in source`);
+    throw new Error(
+      `extractFunctionBody: function "${fnName}" not found in source`,
+    );
   }
   const nextFn = source
     .slice(start)

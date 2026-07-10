@@ -223,10 +223,10 @@ export class CredentialProxyServer {
     this.auditLog('INFO', connectionId, 'connect');
 
     const decoder = new FrameDecoder({
-        onPartialFrameTimeout: () => {
-          this.auditLog('WARN', state.id, 'partial_frame_timeout');
-          socket.destroy();
-        },
+      onPartialFrameTimeout: () => {
+        this.auditLog('WARN', state.id, 'partial_frame_timeout');
+        socket.destroy();
+      },
     });
     const handshakeState = { completed: false, rejected: false };
 
@@ -604,8 +604,14 @@ export class CredentialProxyServer {
         status: 'error',
         id,
       });
-      // sendError internally guards against destroyed/unwritable sockets
-      this.sendError(socket, id, 'INTERNAL_ERROR', message);
+      // sendError internally guards against destroyed/unwritable sockets.
+      // Wrap in try/catch because encodeFrame may throw FrameError if the
+      // error message itself exceeds MAX_FRAME_SIZE.
+      try {
+        this.sendError(socket, id, 'INTERNAL_ERROR', message);
+      } catch {
+        socket.destroy();
+      }
     }
   }
 

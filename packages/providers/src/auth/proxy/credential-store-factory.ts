@@ -71,6 +71,27 @@ function safeClose(closeFn: (() => void) | undefined): void {
 }
 
 /**
+ * Tears down ALL proxy singletons (token store + key storage) and clears
+ * their associated module-level state. Used when switching from proxy mode
+ * to direct mode to ensure neither set of connections is orphaned.
+ */
+function cleanupProxySingletons(): void {
+  if (proxyTokenStore !== undefined) {
+    safeClose(() => proxyTokenStore?.getClient().close());
+    proxyTokenStore = undefined;
+    proxyTokenStoreCapabilityToken = undefined;
+    proxyTokenStoreSocketPath = undefined;
+  }
+  if (proxyKeyStorage !== undefined) {
+    safeClose(() => proxyKeyStorageClient?.close());
+    proxyKeyStorageClient = undefined;
+    proxyKeyStorage = undefined;
+    proxyKeyStorageCapabilityToken = undefined;
+    proxyKeyStorageSocketPath = undefined;
+  }
+}
+
+/**
  * Creates or returns a singleton TokenStore appropriate for the current environment.
  *
  * NOTE: This function is fully synchronous — no awaits — so concurrent
@@ -109,12 +130,7 @@ export function createTokenStore(): TokenStore {
     return proxyTokenStore;
   }
   // Clean up stale proxy singletons when switching to direct mode
-  if (proxyTokenStore !== undefined) {
-    safeClose(() => proxyTokenStore?.getClient().close());
-    proxyTokenStore = undefined;
-    proxyTokenStoreCapabilityToken = undefined;
-    proxyTokenStoreSocketPath = undefined;
-  }
+  cleanupProxySingletons();
   directTokenStore ??= createKeyringTokenStore();
   return directTokenStore;
 }

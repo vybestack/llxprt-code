@@ -274,18 +274,19 @@ describe('proxy integration (phase 31)', () => {
   });
 
   it.skipIf(isWindows)(
-    'clears capability token when start() fails', async () => {
-    // @scenario If serverInstance.start() throws (e.g. socket path under a
-    // regular file), the capability token must be cleared to prevent a stale
-    // token from being reused by a subsequent proxy session.
-    const blockingFile = path.join(tmpDir, 'blocking-file');
-    fs.writeFileSync(blockingFile, '');
-    await expect(
-      createAndStartProxy({
-        socketPath: path.join(blockingFile, 'subdir', 'fail.sock'),
-      }),
-    ).rejects.toThrow(/ENOTDIR|ENOENT|EACCES|EADDRINUSE|EINVAL/i);
-    expect(getProxyCapabilityToken()).toBeUndefined();
+    'clears capability token when start() fails',
+    async () => {
+      // @scenario If serverInstance.start() throws (e.g. socket path under a
+      // regular file), the capability token must be cleared to prevent a stale
+      // token from being reused by a subsequent proxy session.
+      const blockingFile = path.join(tmpDir, 'blocking-file');
+      fs.writeFileSync(blockingFile, '');
+      await expect(
+        createAndStartProxy({
+          socketPath: path.join(blockingFile, 'subdir', 'fail.sock'),
+        }),
+      ).rejects.toThrow(/ENOTDIR|ENOENT|EACCES|EADDRINUSE|EINVAL/i);
+      expect(getProxyCapabilityToken()).toBeUndefined();
     },
   );
 
