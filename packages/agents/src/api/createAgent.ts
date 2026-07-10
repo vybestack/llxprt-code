@@ -28,6 +28,7 @@ import {
   getActiveModelName,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
+import { createFileOAuthSettingsProvider } from '@vybestack/llxprt-code-providers/auth.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { ToolSchedulerFactory } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
@@ -57,6 +58,7 @@ import {
 } from './loop/rebuildLoop.js';
 import { buildAgent } from './agentImpl.js';
 import { executeProviderActivation } from './providerActivationExecutor.js';
+import { PLACEHOLDER_MODEL } from './constants.js';
 import {
   resolveAuthType,
   generateRuntimeId,
@@ -540,12 +542,14 @@ async function applyActivationOrLegacy(
       config.getProviderManager()?.getActiveProviderName() ??
       safeActiveProviderName();
     const postProvider = runtimeProvider || parsed.provider;
-    // Filter out the 'placeholder-model' sentinel — switchActiveProvider sets
-    // it when no real model was activated. Since getModel() always returns a
-    // string (never undefined), use an explicit comparison instead of ?? .
+    // Filter out the placeholder-model sentinel — switchActiveProvider sets the
+    // active model to that placeholder while auth initializes, but the
+    // externally observable provider/model snapshot should reflect the REAL
+    // model once activation resolves (#2374).
     const configModel = config.getModel();
     const resolvedConfigModel =
-      configModel !== 'placeholder-model' ? configModel : '';
+      configModel !== PLACEHOLDER_MODEL ? configModel : '';
+
     const activeModel = safeActiveModelName();
     const runtimeModel = resolvedConfigModel || activeModel;
     const postModel = runtimeModel || parsed.model;
@@ -641,9 +645,18 @@ export function registerProvidersOntoManager(
     runtimeId: source.runtimeId,
     metadata: source.metadata,
   };
+  // Wire the file-backed OAuth settings provider so the provider instances
+  // built here are bound to an OAuthManager that can read oauthEnabledProviders
+  // (and therefore use shared-keychain OAuth tokens). Without it,
+  // createProviderManager's contract leaves the OAuth manager without a
+  // settings provider, so isOAuthEnabled('codex'|'anthropic'|…) always returns
+  // false and OAuth-only providers report "auth required" (Issue #2410). This
+  // mirrors the CLI foreground (createOAuthSettingsAdapter) and the isolated
+  // runtime factory (resolveOAuthManager), staying on the providers layer to
+  // preserve the agents-vs-CLI package boundary.
   const { manager: registered } = createProviderManager(
     context as Parameters<typeof createProviderManager>[0],
-    { config },
+    { config, oauthSettings: createFileOAuthSettingsProvider() },
   );
   for (const name of registered.listProviders()) {
     const provider = registered.getProviderByName(name);

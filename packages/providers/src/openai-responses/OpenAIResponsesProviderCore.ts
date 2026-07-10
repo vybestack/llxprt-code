@@ -288,6 +288,21 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
           () =>
             `Skipping reasoning object in modelParams - handled via model-behavior settings`,
         );
+      } else if (key === 'prompt_cache_key') {
+        // OpenAI rejects prompt_cache_key longer than 64 chars (issue #2135);
+        // clamp at egress so overlong keys injected via modelParams never
+        // reach the API. Non-string or empty values are dropped entirely
+        // rather than forwarded as invalid request fields.
+        const sanitized =
+          typeof value === 'string' ? sanitizePromptCacheKey(value) : '';
+        if (sanitized !== '') {
+          requestOverrides[key] = sanitized;
+        } else {
+          this.logger.debug(
+            () =>
+              `Dropping invalid prompt_cache_key from modelParams (type=${typeof value})`,
+          );
+        }
       } else {
         requestOverrides[key] = value;
       }
@@ -510,6 +525,17 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
         | undefined) ??
       '1h';
     if (promptCachingSetting === 'off') return;
+
+    // An explicit prompt_cache_key from modelParams/request overrides (already
+    // sanitized at translateRequestOverrides) takes precedence over the
+    // runtimeId-derived default.
+    if (
+      typeof request.prompt_cache_key === 'string' &&
+      request.prompt_cache_key.trim() !== ''
+    ) {
+      if (!isCodex) request.prompt_cache_retention = '24h';
+      return;
+    }
 
     const cacheKey =
       (options.invocation as { runtimeId?: string } | undefined)?.runtimeId ??

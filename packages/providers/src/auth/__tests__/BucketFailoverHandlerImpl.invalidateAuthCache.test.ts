@@ -6,19 +6,17 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-auth', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-auth')>();
   return {
     ...actual,
     flushRuntimeAuthScope: vi.fn(),
   };
 });
 
-import {
-  flushRuntimeAuthScope,
-  type OAuthTokenRequestMetadata,
-} from '@vybestack/llxprt-code-core';
+import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';
+import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
 import { BucketFailoverHandlerImpl } from '../BucketFailoverHandlerImpl.js';
 import type { BucketFailoverOAuthManagerLike } from '../types.js';
 

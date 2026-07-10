@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { consolidateTextParts } from './streamResponseHelpers.js';
-import type { Part } from '@google/genai';
+import {
+  consolidateTextParts,
+  prepareHistoryUserInput,
+} from './streamResponseHelpers.js';
+import type { Content, Part } from '@google/genai';
 import { isThoughtPart } from './googlePartHelpers.js';
 
 function thoughtPart(params: {
@@ -277,5 +280,29 @@ describe('consolidateTextParts identity-aware thinking consolidation', () => {
     const result = consolidateTextParts([]);
 
     expect(result).toStrictEqual([]);
+  });
+});
+describe('prepareHistoryUserInput', () => {
+  it('keeps userInputWasArray aligned with filtered empty array history input when a single eager function response is fully removed', () => {
+    const userInput: Content = {
+      role: 'user',
+      parts: [
+        {
+          functionResponse: {
+            name: 'tool',
+            response: { output: 'ok' },
+            id: 'call-1',
+          },
+        },
+      ],
+    };
+
+    const prepared = prepareHistoryUserInput(userInput, new Set(['call-1']));
+
+    expect(prepared.historyUserInput).toStrictEqual([]);
+    expect(prepared.userInputFlags).toStrictEqual({
+      userInputWasArray: true,
+      userInputWasFunctionResponse: true,
+    });
   });
 });

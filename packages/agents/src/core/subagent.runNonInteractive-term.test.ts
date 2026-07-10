@@ -118,6 +118,7 @@ describe('subagent.ts', () => {
       () =>
         ({
           sendMessageStream: mockSendMessageStream,
+          recordCompletedToolCalls: vi.fn(),
           getHistory: vi.fn().mockReturnValue([]),
           getHistoryService: vi.fn().mockReturnValue({
             clear: vi.fn(),
@@ -488,6 +489,104 @@ describe('subagent.ts', () => {
 
       vi.useRealTimers();
     });
+  });
+
+  it('treats eager completed-tool persistence as best-effort during interactive runs', async () => {
+    const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
+    const { config } = await createMockConfig();
+    const runConfig: RunConfig = { ...defaultRunConfig, max_turns: 1 };
+    const recordCompletedToolCalls = vi.fn(() => {
+      throw new Error('history write failed');
+    });
+    vi.mocked(ChatSession).mockImplementationOnce(
+      () =>
+        ({
+          sendMessageStream: mockSendMessageStream,
+          recordCompletedToolCalls,
+          getHistory: vi.fn().mockReturnValue([]),
+          getHistoryService: vi.fn().mockReturnValue({
+            clear: vi.fn(),
+            findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+            getCurated: vi.fn().mockReturnValue([]),
+            getTotalTokens: vi.fn().mockReturnValue(0),
+          }),
+          getConfig: vi.fn().mockReturnValue(undefined),
+        }) as unknown as ChatSession,
+    );
+
+    const runtimeBundle = createStatelessRuntimeBundle({
+      toolsView: {
+        listToolNames: () => ['external_tool'],
+        getToolMetadata: () => ({
+          name: 'external_tool',
+          description: 'External tool',
+          parameterSchema: { type: 'object', properties: {} },
+        }),
+      },
+    });
+    const { overrides } = createRuntimeOverrides({ runtimeBundle });
+
+    const scope = await SubAgentScope.create(
+      'interactive-best-effort-agent',
+      config,
+      promptConfig,
+      defaultModelConfig,
+      runConfig,
+      { tools: ['external_tool'] },
+      undefined,
+      overrides,
+    );
+
+    mockSendMessageStream.mockImplementation(
+      createMockStream([
+        [
+          {
+            id: 'call-best-effort',
+            name: 'external_tool',
+            args: {},
+          },
+        ],
+      ]),
+    );
+
+    const completedCalls = [
+      {
+        status: 'success' as const,
+        request: {
+          callId: 'call-best-effort',
+          name: 'external_tool',
+          args: {},
+        },
+        tool: {
+          name: 'external_tool',
+          description: 'External tool',
+          canUpdateOutput: false,
+          schema: { parameters: { type: 'object', properties: {} } },
+          build: vi.fn(),
+        },
+        response: {
+          callId: 'call-best-effort',
+          responseParts: [{ text: 'tool output' }],
+          resultDisplay: 'tool output',
+        },
+        invocation: { execute: vi.fn() },
+      },
+    ];
+    const schedulerFactory = vi.fn(({ onAllToolCallsComplete }) => ({
+      schedule: vi.fn().mockImplementation(async () => {
+        await onAllToolCallsComplete(completedCalls);
+      }),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    await expect(
+      scope.runInteractive(new ContextState(), { schedulerFactory }),
+    ).resolves.toBeUndefined();
+    expect(recordCompletedToolCalls).toHaveBeenCalledWith(
+      defaultModelConfig.model,
+      completedCalls,
+    );
+    expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.MAX_TURNS);
   });
 
   describe('interactive tool scheduling timeout', () => {

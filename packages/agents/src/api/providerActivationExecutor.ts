@@ -56,6 +56,7 @@ import {
   reapplyProfileAuthEphemerals,
   snapshotProfileAuthEphemerals,
 } from './profileAuthEphemerals.js';
+import { PLACEHOLDER_MODEL } from './constants.js';
 
 /**
  * Outcome of executing a {@link ProviderActivationIntent}. Mirrors the boolean
@@ -82,8 +83,6 @@ export interface ProviderActivationResult {
    */
   readonly authError?: unknown;
 }
-
-const PLACEHOLDER_MODEL = 'placeholder-model';
 
 /**
  * Executes a declarative provider-activation / auth intent against a live

@@ -3,7 +3,11 @@ import {
   isInternalSettingKey,
   isLoadBalancerProfile,
 } from '@vybestack/llxprt-code-settings';
-import type { Profile, ModelParams } from '@vybestack/llxprt-code-settings';
+import type {
+  Profile,
+  ModelParams,
+  ProfileManager,
+} from '@vybestack/llxprt-code-settings';
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -34,6 +38,12 @@ import { maybeRegisterLoadBalancerProfile } from './profile-application/loadBala
 export interface ProviderSelectionResult {
   providerName: string;
   warnings: string[];
+  /**
+   * Always false since issue #2479: a named-but-unavailable provider now
+   * throws instead of silently falling back, so no success path sets this to
+   * true anymore. Retained for API stability (threaded through
+   * ProfileApplicationResult and profileSnapshot consumers).
+   */
   didFallback: boolean;
 
   requestedProvider: string | null;
@@ -41,6 +51,7 @@ export interface ProviderSelectionResult {
 
 export interface ProfileApplicationOptions {
   profileName?: string;
+  profileManager?: ProfileManager;
 }
 
 export interface ProfileApplicationResult {
@@ -124,18 +135,24 @@ export function selectAvailableProvider(
     );
   }
 
-  const fallbackProvider = availableProviders[0];
   if (trimmedRequested) {
-    warnings.push(
-      `Provider '${trimmedRequested}' unavailable, using '${fallbackProvider}'`,
+    // A profile that explicitly names a provider must never be silently
+    // rerouted to a different provider (issue #2479: a corrupt profile
+    // naming an unregistered provider landed the session on gemini with
+    // no error, swallowing all subsequent input). Fail loudly instead.
+    throw new Error(
+      `Provider '${trimmedRequested}' is not available (registered providers: ${availableProviders.join(
+        ', ',
+      )}). Profile not applied.`,
     );
   }
 
+  const fallbackProvider = availableProviders[0];
   return {
     providerName: fallbackProvider,
     warnings,
-    didFallback: Boolean(trimmedRequested),
-    requestedProvider: trimmedRequested || null,
+    didFallback: false,
+    requestedProvider: null,
   };
 }
 
@@ -785,17 +802,24 @@ async function applyProviderAuthUpdates(
  */
 export async function applyProfileWithGuards(
   profileInput: Profile,
-  _options: ProfileApplicationOptions = {},
+  options: ProfileApplicationOptions = {},
 ): Promise<ProfileApplicationResult> {
   const runtimeServices = getCliRuntimeServices();
-  const { config, providerManager } = runtimeServices;
+  const servicesForProfileApplication = {
+    ...runtimeServices,
+    profileManager: options.profileManager ?? runtimeServices.profileManager,
+  };
+  const { config, providerManager } = servicesForProfileApplication;
   await maybeRegisterLoadBalancerProfile(
     profileInput,
-    _options,
-    runtimeServices,
+    options,
+    servicesForProfileApplication,
     lbLogger,
   );
-  const context = buildProfileApplicationContext(profileInput, runtimeServices);
+  const context = buildProfileApplicationContext(
+    profileInput,
+    servicesForProfileApplication,
+  );
   const {
     actualProfile,
     sanitizedProfile,

@@ -78,3 +78,10 @@ export type {
   SandboxProxyConfig,
   SandboxProxyHandle,
 } from './proxy/sandbox-proxy-lifecycle.js';
+
+// ─── File-backed OAuth Settings Provider ─────────────────────────────────────
+// Isolated-runtime OAuth enablement surface: reads the user-scope global
+// settings file so provider instances built outside the CLI (subagents /
+// isolated runtimes) can consult oauthEnabledProviders and shared-keychain
+// tokens.
+export { createFileOAuthSettingsProvider } from './file-oauth-settings.js';

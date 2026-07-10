@@ -130,6 +130,22 @@ interface RequestSettings {
   ttl: '5m' | '1h';
 }
 
+function resolveRequestMaxTokens(
+  defaultMaxTokens: number,
+  requestOverrides: Record<string, unknown>,
+): number {
+  const override = requestOverrides['max_tokens'];
+  if (
+    typeof override === 'number' &&
+    Number.isFinite(override) &&
+    Number.isInteger(override) &&
+    override > 0
+  ) {
+    return override;
+  }
+  return defaultMaxTokens;
+}
+
 /**
  * System context building result
  */
@@ -514,7 +530,10 @@ function buildThinkingAndRequestBody(params: {
     system: systemField,
     tools:
       anthropicTools && anthropicTools.length > 0 ? anthropicTools : undefined,
-    maxTokens: getMaxTokensForModel(currentModel),
+    maxTokens: resolveRequestMaxTokens(
+      getMaxTokensForModel(currentModel),
+      requestOverrides,
+    ),
     streamingEnabled,
     modelParams: requestOverrides,
     thinking: thinkingConfig.thinking,
