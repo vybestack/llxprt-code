@@ -10,8 +10,8 @@ import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import type { Config, ResumeResult } from '@vybestack/llxprt-code-core';
 import { OutputFormat } from '@vybestack/llxprt-code-core';
 
-vi.mock('./config/settings.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./config/settings.js')>();
+vi.mock('./config/settings.js', async () => {
+  const actual = await import('./config/settings.js?__importActual');
   return {
     ...actual,
     loadSettings: vi.fn(() => ({

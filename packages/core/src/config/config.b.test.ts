@@ -52,9 +52,11 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
 
 // Mock individual tools if their constructors are complex or have side effects
 
-vi.mock('../core/contentGenerator.js', async (importOriginal) => {
+vi.mock('../core/contentGenerator.js', async () => {
   const h = await import('./configTestHarness.js');
-  return h.buildContentGeneratorMockBody(await importOriginal());
+  return h.buildContentGeneratorMockBody(
+    await import('../core/contentGenerator.js?__importActual'),
+  );
 });
 
 vi.mock('../telemetry/index.js', async () => {
@@ -86,9 +88,12 @@ vi.mock('../utils/memoryDiscovery.js', async () => {
   return h.buildMemoryDiscoveryMockBody(hoistedConfigMocks);
 });
 
-vi.mock('../utils/events.js', async (importOriginal) => {
+vi.mock('../utils/events.js', async () => {
   const h = await import('./configTestHarness.js');
-  return h.buildEventsMockBody(await importOriginal(), hoistedConfigMocks);
+  return h.buildEventsMockBody(
+    await import('../utils/events.js?__importActual'),
+    hoistedConfigMocks,
+  );
 });
 
 vi.mock('../utils/fetch.js', async () => {

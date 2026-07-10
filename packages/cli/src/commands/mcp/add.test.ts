@@ -29,7 +29,7 @@ vi.mock('os', () => {
 });
 
 vi.mock('../../config/settings.js', async () => {
-  const actual = await vi.importActual('../../config/settings.js');
+  const actual = await import('../../config/settings.js?__importActual');
   return {
     ...actual,
     loadSettings: vi.fn(),

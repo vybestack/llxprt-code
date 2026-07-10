@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { mock } from 'bun:test';
 import {
-  mock,
   expect,
   describe,
   it as bunIt,
@@ -17,33 +17,62 @@ import {
   vi as bunVi,
   setSystemTime,
 } from 'bun:test';
+import { createRequire, isBuiltin } from 'node:module';
+import { relative } from 'node:path';
 import { StubRegistry, waitFor, isMockFunction } from './stub-helpers.js';
+
+const localRequire = createRequire(import.meta.url);
+const shimDir = import.meta.dir;
 
 const envRegistry = new StubRegistry(process.env);
 const globalRegistry = new StubRegistry(globalThis);
 
 /**
- * Bun 1.3.14 does not support the `mock.module(id, importOriginal => ...)`
- * form needed to bypass active mocks, so this is a best-effort dynamic import
- * that may still resolve to a mocked module when a mock is registered for the
- * same specifier.
+ * Returns the real (un-mocked) exports for a module specifier.
+ *
+ * Bun's mock.module intercepts both ESM import and CJS require for local
+ * modules, but there are two bypass mechanisms:
+ *
+ * 1. Node/bun builtins (e.g. "node:fs", "fs", "node:child_process"):
+ *    require() resolves via the built-in CJS path, which mock.module does
+ *    not intercept. isBuiltin() catches both the "node:" prefix form and
+ *    bare names like "fs".
+ * 2. Everything else: append a query string ("?__importActual") to the
+ *    resolved file path. Bun treats specifiers with different query strings
+ *    as distinct modules, so the query-suffixed import is not intercepted by
+ *    a mock registered under the bare/relative specifier.
+ *
+ * Relative specifiers (e.g. "./foo.js") are resolved relative to the shim
+ * module, not the calling test file, so they may not resolve correctly. Test
+ * files that need importActual for relative paths should be migrated to the
+ * Bun-native vi.spyOn pattern instead.
  */
-const importActual = (id: string): Promise<unknown> => import(id);
+const importActual = (id: string): Promise<unknown> => {
+  if (isBuiltin(id)) {
+    return Promise.resolve(localRequire(id));
+  }
+  try {
+    const absPath = localRequire.resolve(id);
+    const relPath = './' + relative(shimDir, absPath);
+    return import(relPath + '?__importActual');
+  } catch {
+    return import(id);
+  }
+};
 
 /**
- * Vitest's vi.mock(path, factory) passes importOriginal as the first argument
- * to the factory so it can spread-override individual exports. Bun 1.3.14's
- * mock.module calls the factory with no arguments, so we wrap the factory to
- * inject our importActual function. This means importOriginal() inside the
- * factory may return a mocked module rather than the real one — documented
- * limitation until Bun supports the importOriginal callback form natively.
+ * Wraps a vi.mock factory so the factory's importOriginal callback resolves
+ * to the real module for the mock's specifier. The id is captured at
+ * registration time so the factory can call importOriginal() with no
+ * arguments (matching Vitest's API).
  */
 const wrapMockFactory =
   (
+    id: string,
     factory: (importOriginal: () => Promise<unknown>) => unknown,
   ): (() => unknown) =>
   (): unknown =>
-    factory(importActual);
+    factory(() => importActual(id));
 
 /**
  * Capture the real setTimeout at module load time, before any test can call
@@ -113,11 +142,11 @@ const polyfilledVi = {
     id: string,
     factory?: (importOriginal: () => Promise<unknown>) => unknown,
   ): unknown =>
-    mock.module(id, factory ? wrapMockFactory(factory) : () => ({})),
+    mock.module(id, factory ? wrapMockFactory(id, factory) : () => ({})),
   doMock: (
     id: string,
     factory: (importOriginal: () => Promise<unknown>) => unknown,
-  ): unknown => mock.module(id, wrapMockFactory(factory)),
+  ): unknown => mock.module(id, wrapMockFactory(id, factory)),
   doUnmock,
   unmock,
   isMockFunction,

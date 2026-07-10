@@ -13,8 +13,8 @@ import { type Settings, createTestMergedSettings } from './settings.js';
 import { ExtensionStorage } from './extension.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
-vi.mock('./trustedFolders.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./trustedFolders.js')>();
+vi.mock('./trustedFolders.js', async () => {
+  const actual = await import('./trustedFolders.js?__importActual');
   return {
     ...actual,
     isWorkspaceTrusted: vi.fn().mockReturnValue(true),

@@ -142,9 +142,8 @@ const MockedAgentClientClass = vi.hoisted(() =>
   }),
 );
 
-vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('./useReactToolScheduler.js')>();
+vi.mock('./useReactToolScheduler.js', async () => {
+  const original = await import('./useReactToolScheduler.js?__importActual');
   const { mapToDisplay } = await import('./toolMapping.js');
   return {
     ...original,

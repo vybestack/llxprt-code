@@ -138,9 +138,8 @@ const sessionStatsMock = vi.hoisted(() => ({
   updateHistoryTokenCount: vi.fn(),
 }));
 
-vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../contexts/SessionContext.js')>();
+vi.mock('../contexts/SessionContext.js', async () => {
+  const actual = await import('../contexts/SessionContext.js?__importActual');
   return {
     ...actual,
     useSessionStats: vi.fn(() => sessionStatsMock),

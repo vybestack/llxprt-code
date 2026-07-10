@@ -23,9 +23,8 @@ const mockLoadUserExtensions: Mock<typeof extensionModule.loadUserExtensions> =
 const mockToOutputString: Mock<typeof extensionModule.toOutputString> =
   vi.hoisted(() => vi.fn());
 
-vi.mock('../../config/extension.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../config/extension.js')>();
+vi.mock('../../config/extension.js', async () => {
+  const actual = await import('../../config/extension.js?__importActual');
   return {
     ...actual,
     loadUserExtensions: mockLoadUserExtensions,

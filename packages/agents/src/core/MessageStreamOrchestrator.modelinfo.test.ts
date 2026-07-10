@@ -36,8 +36,8 @@ vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
   ),
 }));
 
-vi.mock('./turn.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./turn.js')>();
+vi.mock('./turn.js', async () => {
+  const actual = await import('./turn.js?__importActual');
   class MockTurn {
     pendingToolCalls: unknown[] = [];
     run = mockTurnRun;

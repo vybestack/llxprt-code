@@ -42,9 +42,7 @@ import { isWorkspaceTrusted } from '../trustedFolders.js';
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 vi.mock('../trustedFolders.js', async () => {
-  const actual = await vi.importActual<typeof import('../trustedFolders.js')>(
-    '../trustedFolders.js',
-  );
+  const actual = await import('../trustedFolders.js?__importActual');
   return { ...actual, isWorkspaceTrusted: vi.fn() };
 });
 
@@ -87,9 +85,7 @@ vi.mock('read-package-up', () => ({
 }));
 
 vi.mock('../profileBootstrap.js', async () => {
-  const actual = await vi.importActual<typeof import('../profileBootstrap.js')>(
-    '../profileBootstrap.js',
-  );
+  const actual = await import('../profileBootstrap.js?__importActual');
   const { SettingsService: RealSettingsService } = await vi.importActual<
     typeof import('@vybestack/llxprt-code-settings')
   >('@vybestack/llxprt-code-settings');

@@ -22,9 +22,7 @@ import { isWorkspaceTrusted } from './trustedFolders.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
 vi.mock('./trustedFolders.js', async () => {
-  const actual = await vi.importActual<typeof import('./trustedFolders.js')>(
-    './trustedFolders.js',
-  );
+  const actual = await import('./trustedFolders.js?__importActual');
   return {
     ...actual,
     isWorkspaceTrusted: vi.fn().mockReturnValue(true), // Default to trusted

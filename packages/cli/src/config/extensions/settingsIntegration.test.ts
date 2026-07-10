@@ -18,9 +18,8 @@ import type { ExtensionSetting } from './extensionSettings.js';
 import { getWorkspaceIdentity } from '../../utils/gitUtils.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
-vi.mock('../../utils/gitUtils.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../utils/gitUtils.js')>();
+vi.mock('../../utils/gitUtils.js', async () => {
+  const actual = await import('../../utils/gitUtils.js?__importActual');
   return {
     ...actual,
     getWorkspaceIdentity: vi.fn(actual.getWorkspaceIdentity),

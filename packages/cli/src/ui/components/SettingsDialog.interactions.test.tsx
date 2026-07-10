@@ -90,7 +90,7 @@ const createMockSettings = (
 // Tests that need a custom schema can override it by mocking the module
 
 vi.mock('../contexts/VimModeContext.js', async () => {
-  const actual = await vi.importActual('../contexts/VimModeContext.js');
+  const actual = await import('../contexts/VimModeContext.js?__importActual');
   return {
     ...actual,
     useVimMode: () => ({
@@ -103,7 +103,7 @@ vi.mock('../contexts/VimModeContext.js', async () => {
 });
 
 vi.mock('../../utils/settingsUtils.js', async () => {
-  const actual = await vi.importActual('../../utils/settingsUtils.js');
+  const actual = await import('../../utils/settingsUtils.js?__importActual');
   return {
     ...actual,
     saveModifiedSettings: vi.fn(),

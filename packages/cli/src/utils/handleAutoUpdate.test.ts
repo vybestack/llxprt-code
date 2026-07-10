@@ -18,7 +18,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 vi.mock('./installationInfo.js', async () => {
-  const actual = await vi.importActual('./installationInfo.js');
+  const actual = await import('./installationInfo.js?__importActual');
   return {
     ...actual,
     getInstallationInfo: vi.fn(),
@@ -26,7 +26,7 @@ vi.mock('./installationInfo.js', async () => {
 });
 
 vi.mock('./updateEventEmitter.js', async () => {
-  const actual = await vi.importActual('./updateEventEmitter.js');
+  const actual = await import('./updateEventEmitter.js?__importActual');
   return {
     ...actual,
     updateEventEmitter: {

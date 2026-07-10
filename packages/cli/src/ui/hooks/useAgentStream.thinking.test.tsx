@@ -116,7 +116,7 @@ ensureReactSharedInternals();
 
 // --- MOCKS ---
 const mockUseReactToolScheduler = useReactToolScheduler as Mock;
-vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
+vi.mock('./useReactToolScheduler.js', async () => {
   const actualSchedulerModule = await importOriginal<Record<string, unknown>>();
   return {
     ...actualSchedulerModule,

@@ -26,7 +26,7 @@ vi.mock('process', async () => {
 
 // Mock the trustedFolders module
 vi.mock('../../config/trustedFolders.js', async () => {
-  const actual = await vi.importActual('../../config/trustedFolders.js');
+  const actual = await import('../../config/trustedFolders.js?__importActual');
   return {
     ...actual,
     loadTrustedFolders: vi.fn(() => ({

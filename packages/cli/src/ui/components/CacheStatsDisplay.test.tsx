@@ -17,8 +17,8 @@ import { CacheStatsDisplay } from './CacheStatsDisplay.js';
 import * as RuntimeContext from '../contexts/RuntimeContext.js';
 
 // Mock the RuntimeContext to provide controlled data for testing
-vi.mock('../contexts/RuntimeContext.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof RuntimeContext>();
+vi.mock('../contexts/RuntimeContext.js', async () => {
+  const actual = await import('../contexts/RuntimeContext.js?__importActual');
   return {
     ...actual,
     useRuntimeApi: vi.fn(),

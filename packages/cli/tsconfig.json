@@ -43,6 +43,7 @@
     "src/**/*.d.ts",
     "src/**/*.json",
     "./package.json",
+    "../../test-setup/import-actual.d.ts",
     "../providers/index.ts",
     "../providers/src/**/*.ts",
     "../providers/src/**/*.json",

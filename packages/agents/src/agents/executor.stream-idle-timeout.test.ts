@@ -18,9 +18,8 @@ const { mockSendMessageStream, mockExecuteToolCall } = vi.hoisted(() => ({
   mockExecuteToolCall: vi.fn(),
 }));
 
-vi.mock('../core/chatSession.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../core/chatSession.js')>();
+vi.mock('../core/chatSession.js', async () => {
+  const actual = await import('../core/chatSession.js?__importActual');
   return {
     ...actual,
     ChatSession: vi.fn().mockImplementation(() => ({

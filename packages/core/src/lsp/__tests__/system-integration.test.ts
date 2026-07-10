@@ -77,9 +77,8 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
       ),
   };
 });
-vi.mock('../../core/contentGenerator.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../core/contentGenerator.js')>();
+vi.mock('../../core/contentGenerator.js', async () => {
+  const actual = await import('../../core/contentGenerator.js?__importActual');
   return {
     ...actual,
     createContentGeneratorConfig: vi.fn(),
@@ -230,8 +229,8 @@ vi.mock('../../utils/memoryDiscovery.js', () => ({
   getAllLlxprtMdFilenames: vi.fn().mockReturnValue([]),
 }));
 
-vi.mock('../../utils/events.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../utils/events.js')>();
+vi.mock('../../utils/events.js', async () => {
+  const actual = await import('../../utils/events.js?__importActual');
   // Spy on emit rather than replacing the whole object — spreading loses the
   // EventEmitter prototype chain (on, listenerCount, emitFeedback, etc.)
   vi.spyOn(actual.coreEvents, 'emit').mockReturnValue(true);

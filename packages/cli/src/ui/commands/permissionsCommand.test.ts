@@ -15,7 +15,7 @@ const mockIsPathTrusted = vi.fn();
 const mockRules: Array<{ path: string; trustLevel: string }> = [];
 
 vi.mock('../../config/trustedFolders.js', async () => {
-  const actual = await vi.importActual('../../config/trustedFolders.js');
+  const actual = await import('../../config/trustedFolders.js?__importActual');
   return {
     ...actual,
     loadTrustedFolders: vi.fn(() => ({
