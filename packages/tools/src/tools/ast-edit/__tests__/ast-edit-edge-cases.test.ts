@@ -72,7 +72,31 @@ describe('ast_edit edge cases: old_string equals new_string', () => {
 
     expect(result.error).toBeDefined();
     expect(result.error?.type).toBe('edit_no_change');
+    expect(result.llmContent).toBeDefined();
     expect(String(result.llmContent)).not.toContain('LLXPRT EDIT PREVIEW');
+  });
+});
+describe('ast_edit edge cases: empty new_string deletes matched content', () => {
+  const ctx = useTempDir();
+  const NL = '\n';
+
+  it('removes the old_string when new_string is empty', async () => {
+    const filePath = join(ctx.tempDir, 'deletion.ts');
+    const original =
+      ['const keep = 1;', 'const remove = 2;', 'const also = 3;'].join(NL) + NL;
+    writeFileSync(filePath, original, 'utf-8');
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
+
+    const result = await executeApply(tool, {
+      file_path: filePath,
+      old_string: 'const remove = 2;' + NL,
+      new_string: '',
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(readFileSync(filePath, 'utf-8')).toBe(
+      ['const keep = 1;', 'const also = 3;'].join(NL) + NL,
+    );
   });
 });
 

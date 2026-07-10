@@ -195,6 +195,7 @@ describe('ast_edit AST validation: multi-language support', () => {
       old_string: 'const greeting = "hello";',
       new_string: 'const greeting = "world";',
     });
+    expect(validResult.error).toBeUndefined();
     expect(String(validResult.llmContent)).toContain('AST validation: PASSED');
 
     const brokenResult = await executePreview(tool, {
@@ -202,6 +203,7 @@ describe('ast_edit AST validation: multi-language support', () => {
       old_string: 'const greeting = "hello";',
       new_string: 'const greeting = "world',
     });
+    expect(brokenResult.error).toBeUndefined();
     expect(String(brokenResult.llmContent)).toContain('AST validation: FAILED');
   });
 
@@ -219,6 +221,7 @@ describe('ast_edit AST validation: multi-language support', () => {
       old_string: 'return a + b;',
       new_string: 'return a + b + 0;',
     });
+    expect(validResult.error).toBeUndefined();
     expect(String(validResult.llmContent)).toContain('AST validation: PASSED');
 
     const brokenResult = await executePreview(tool, {
@@ -226,6 +229,7 @@ describe('ast_edit AST validation: multi-language support', () => {
       old_string: 'return a + b;',
       new_string: 'return a + b {',
     });
+    expect(brokenResult.error).toBeUndefined();
     expect(String(brokenResult.llmContent)).toContain('AST validation: FAILED');
   });
 
@@ -239,6 +243,7 @@ describe('ast_edit AST validation: multi-language support', () => {
       old_string: 'return a + b',
       new_string: 'return a + b + 0',
     });
+    expect(validResult.error).toBeUndefined();
     expect(String(validResult.llmContent)).toContain('AST validation: PASSED');
 
     const brokenResult = await executePreview(tool, {
@@ -246,6 +251,7 @@ describe('ast_edit AST validation: multi-language support', () => {
       old_string: 'return a + b',
       new_string: 'return a + b(',
     });
+    expect(brokenResult.error).toBeUndefined();
     expect(String(brokenResult.llmContent)).toContain('AST validation: FAILED');
   });
 
@@ -263,6 +269,7 @@ describe('ast_edit AST validation: multi-language support', () => {
       old_string: 'Click',
       new_string: 'Submit',
     });
+    expect(validResult.error).toBeUndefined();
     expect(String(validResult.llmContent)).toContain('AST validation: PASSED');
 
     const brokenResult = await executePreview(tool, {
@@ -270,6 +277,7 @@ describe('ast_edit AST validation: multi-language support', () => {
       old_string: '<button>Click</button>;',
       new_string: '<button>Click</button',
     });
+    expect(brokenResult.error).toBeUndefined();
     expect(String(brokenResult.llmContent)).toContain('AST validation: FAILED');
   });
 
