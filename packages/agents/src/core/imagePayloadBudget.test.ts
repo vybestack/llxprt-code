@@ -47,6 +47,16 @@ describe('getImageInlineDataSize', () => {
     const part: Part = { inlineData: { mimeType: 'image/png', data: '' } };
     expect(getImageInlineDataSize(part)).toBe(0);
   });
+
+  it('returns 0 when inlineData exists but data is undefined', () => {
+    const part: Part = { inlineData: { mimeType: 'image/png' } };
+    expect(getImageInlineDataSize(part)).toBe(0);
+  });
+
+  it('returns 0 when inlineData is undefined', () => {
+    const part: Part = { text: 'not an image' };
+    expect(getImageInlineDataSize(part)).toBe(0);
+  });
 });
 
 describe('enforceImageBudget', () => {
