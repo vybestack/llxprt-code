@@ -94,6 +94,7 @@ describe('ast_edit ambiguous match: 3+ occurrences', () => {
     expect(result.error?.type).toBe(
       ToolErrorType.EDIT_EXPECTED_OCCURRENCE_MISMATCH,
     );
+    expect(String(result.llmContent)).toContain('3 times');
     expect(readFileSync(filePath, 'utf-8')).toBe(content);
   });
 });

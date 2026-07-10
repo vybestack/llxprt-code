@@ -106,7 +106,7 @@ describe('ast_edit preview response structure', () => {
 
     expect(result.error).toBeUndefined();
     const output = String(result.llmContent);
-    expect(output).toContain('Context: typescript file');
+    expect(output).toMatch(/Context: typescript file with \d+ declarations/);
     expect(output).toMatch(/Functions: \d+/);
     expect(output).toMatch(/Classes: \d+/);
   });

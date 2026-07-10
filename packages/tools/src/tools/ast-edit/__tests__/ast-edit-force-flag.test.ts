@@ -145,6 +145,7 @@ describe('ast_edit force flag: applies new file creation', () => {
 
     expect(result.error).toBeUndefined();
     expect(String(result.llmContent)).toContain('Successfully applied edit');
+    expect(String(result.llmContent)).toContain('AST validation: PASSED');
     expect(readFileSync(filePath, 'utf-8')).toBe('export const NEW = 42;\n');
   });
 });
