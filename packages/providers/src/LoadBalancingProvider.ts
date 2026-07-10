@@ -728,6 +728,11 @@ export class LoadBalancingProvider implements IProvider {
     const numProfiles = this.config.subProfiles.length;
     const contextLimitErrors: Array<{ profile: string; error: Error }> = [];
 
+    this.logger.debug(
+      () =>
+        `[LB:failover] Starting failover rotation from index ${this.currentFailoverIndex} (${this.config.subProfiles[this.currentFailoverIndex]?.name ?? 'unknown'}) with ${numProfiles} backends`,
+    );
+
     // Check if all backends are unhealthy (circuit breakers open)
     this.validateNotAllUnhealthy(settings, numProfiles);
 
@@ -745,6 +750,11 @@ export class LoadBalancingProvider implements IProvider {
         continue;
       }
 
+      this.logger.debug(
+        () =>
+          `[LB:failover] Attempting backend at index ${currentIndex}: ${subProfile.name}`,
+      );
+
       const succeeded = yield* this.tryBackendWithRetries(
         subProfile,
         options,
@@ -761,6 +771,8 @@ export class LoadBalancingProvider implements IProvider {
       // Move to next backend (circular iteration)
       currentIndex = (currentIndex + 1) % numProfiles;
     }
+
+    this.currentFailoverIndex = 0;
 
     if (errors.length === 0 && contextLimitErrors.length > 0) {
       throw new LoadBalancerAllContextLimitsExceededError({
