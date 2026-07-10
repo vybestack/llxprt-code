@@ -81,6 +81,10 @@ export function enforceImageBudget(
   parts: Part[],
   budgetBytes: number,
 ): BudgetEnforcementResult {
+  if (!Number.isFinite(budgetBytes) || budgetBytes <= 0) {
+    return { parts, omitted: [], totalImageBytes: 0 };
+  }
+
   const result: Part[] = [];
   const omitted: OmittedImage[] = [];
   let runningTotal = 0;

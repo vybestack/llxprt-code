@@ -198,6 +198,46 @@ describe('enforceImageBudget', () => {
     );
     expect(result.omitted).toHaveLength(0);
   });
+
+  it('returns all parts unchanged when budgetBytes is zero', () => {
+    const parts = [
+      functionResponsePart('read_file', 'a'),
+      inlineDataPart('image/png', 5000),
+    ];
+    const result = enforceImageBudget(parts, 0);
+    expect(result.parts).toStrictEqual(parts);
+    expect(result.omitted).toHaveLength(0);
+  });
+
+  it('returns all parts unchanged when budgetBytes is negative', () => {
+    const parts = [
+      functionResponsePart('read_file', 'a'),
+      inlineDataPart('image/png', 5000),
+    ];
+    const result = enforceImageBudget(parts, -1);
+    expect(result.parts).toStrictEqual(parts);
+    expect(result.omitted).toHaveLength(0);
+  });
+
+  it('returns all parts unchanged when budgetBytes is NaN', () => {
+    const parts = [
+      functionResponsePart('read_file', 'a'),
+      inlineDataPart('image/png', 5000),
+    ];
+    const result = enforceImageBudget(parts, NaN);
+    expect(result.parts).toStrictEqual(parts);
+    expect(result.omitted).toHaveLength(0);
+  });
+
+  it('returns all parts unchanged when budgetBytes is Infinity', () => {
+    const parts = [
+      functionResponsePart('read_file', 'a'),
+      inlineDataPart('image/png', 5000),
+    ];
+    const result = enforceImageBudget(parts, Infinity);
+    expect(result.omitted).toHaveLength(0);
+    expect(result.parts).toStrictEqual(parts);
+  });
 });
 
 describe('buildOmissionFeedback', () => {
@@ -243,5 +283,17 @@ describe('buildOmissionFeedback', () => {
   it('handles empty omitted array gracefully', () => {
     const feedback = buildOmissionFeedback([]);
     expect(feedback).toContain('0 image(s)');
+  });
+
+  it('lists all distinct tool names from a mixed set of tools', () => {
+    const feedback = buildOmissionFeedback([
+      { toolName: 'read_file', mimeType: 'image/png', sizeBytes: 5000 },
+      { toolName: 'screenshot', mimeType: 'image/jpeg', sizeBytes: 5000 },
+      { toolName: 'read_file', mimeType: 'image/png', sizeBytes: 5000 },
+    ]);
+    expect(feedback).toContain('read_file');
+    expect(feedback).toContain('screenshot');
+    const readCount = feedback.split('read_file').length - 1;
+    expect(readCount).toBe(1);
   });
 });

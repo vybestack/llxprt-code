@@ -529,6 +529,9 @@ export function convertBlocksToParts(blocks: ContentBlock[]): Part[] {
       }
       case 'media': {
         const mediaBlock = block;
+        if (!mediaBlock.data || !mediaBlock.mimeType) {
+          break;
+        }
         if (mediaBlock.encoding === 'url') {
           parts.push({
             fileData: {
