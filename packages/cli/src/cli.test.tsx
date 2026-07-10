@@ -97,8 +97,8 @@ vi.mock('update-notifier', () => ({
   })),
 }));
 
-vi.mock('./utils/events.js', async () => {
-  const actual = await import('./utils/events.js?__importActual');
+vi.mock('./utils/events.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./utils/events.js')>();
   return {
     ...actual,
     appEvents: {
@@ -113,8 +113,8 @@ vi.mock('./utils/sandbox.js', () => ({
 }));
 
 // Mock bootstrap utilities for deferred init tests
-vi.mock('./utils/bootstrap.js', async () => {
-  const actual = await import('./utils/bootstrap.js?__importActual');
+vi.mock('./utils/bootstrap.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./utils/bootstrap.js')>();
   return {
     ...actual,
     shouldRelaunchForMemory: vi.fn(() => []),

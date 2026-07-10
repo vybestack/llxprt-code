@@ -19,8 +19,8 @@ import {
 import { coreEvents } from '../utils/events.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
-vi.mock('./skillLoader.js', async () => {
-  const actual = await import('./skillLoader.js?__importActual');
+vi.mock('./skillLoader.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./skillLoader.js')>();
   return {
     ...actual,
     loadSkillsFromDir: vi.fn(actual.loadSkillsFromDir),

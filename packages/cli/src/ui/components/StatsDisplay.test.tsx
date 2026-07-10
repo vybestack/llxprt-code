@@ -12,8 +12,8 @@ import type { SessionMetrics } from '../contexts/SessionContext.js';
 import * as RuntimeContext from '../contexts/RuntimeContext.js';
 
 // Mock the SessionContext to provide controlled data for testing
-vi.mock('../contexts/SessionContext.js', async () => {
-  const actual = await import('../contexts/SessionContext.js?__importActual');
+vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof SessionContext>();
   return {
     ...actual,
     useSessionStats: vi.fn(),
@@ -21,8 +21,8 @@ vi.mock('../contexts/SessionContext.js', async () => {
 });
 
 // Mock the RuntimeContext to provide controlled data for testing
-vi.mock('../contexts/RuntimeContext.js', async () => {
-  const actual = await import('../contexts/RuntimeContext.js?__importActual');
+vi.mock('../contexts/RuntimeContext.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof RuntimeContext>();
   return {
     ...actual,
     useRuntimeApi: vi.fn(),

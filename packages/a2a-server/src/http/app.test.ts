@@ -81,7 +81,7 @@ const getApprovalModeSpy = vi.fn();
 const getExtensionsSpy = vi.fn();
 
 vi.mock('../config/config.js', async () => {
-  const actual = await import('../config/config.js?__importActual');
+  const actual = await vi.importActual('../config/config.js');
   return {
     ...actual,
     loadConfig: vi.fn().mockImplementation(async () => {

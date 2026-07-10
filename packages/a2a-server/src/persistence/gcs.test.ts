@@ -86,8 +86,8 @@ vi.mock('../config/config.js', () => ({
 vi.mock('node:stream/promises', () => ({
   pipeline: vi.fn(),
 }));
-vi.mock('../types.js', async () => {
-  const actual = await import('../types.js?__importActual');
+vi.mock('../types.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../types.js')>();
   return {
     ...actual,
     getPersistedState: vi.fn(),

@@ -40,7 +40,7 @@ import type { LoadedSettings } from '../../config/settings.js';
 
 // --- MOCKS ---
 const mockUseReactToolScheduler = useReactToolScheduler as Mock;
-vi.mock('./useReactToolScheduler.js', async () => {
+vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
   const actualSchedulerModule = await importOriginal<Record<string, unknown>>();
   return {
     ...actualSchedulerModule,

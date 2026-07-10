@@ -25,7 +25,7 @@ import { generateDynamicToolSettings } from './utils/dynamicSettings.js';
 
 // Mock the settings utilities
 vi.mock('./utils/settingsUtils.js', async () => {
-  const actual = await import('./utils/settingsUtils.js?__importActual');
+  const actual = await vi.importActual('./utils/settingsUtils.js');
   return {
     ...actual,
     saveSingleSetting: vi.fn(),
@@ -35,7 +35,7 @@ vi.mock('./utils/settingsUtils.js', async () => {
 });
 
 vi.mock('./utils/singleSettingSaver.js', async () => {
-  const actual = await import('./utils/singleSettingSaver.js?__importActual');
+  const actual = await vi.importActual('./utils/singleSettingSaver.js');
   return {
     ...actual,
     saveSingleSetting: vi.fn(),

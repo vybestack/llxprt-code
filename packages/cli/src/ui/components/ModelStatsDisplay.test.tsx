@@ -12,8 +12,8 @@ import type { SessionMetrics } from '../contexts/SessionContext.js';
 import { ToolCallDecision } from '@vybestack/llxprt-code-core';
 
 // Mock the context to provide controlled data for testing
-vi.mock('../contexts/SessionContext.js', async () => {
-  const actual = await import('../contexts/SessionContext.js?__importActual');
+vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof SessionContext>();
   return {
     ...actual,
     useSessionStats: vi.fn(),

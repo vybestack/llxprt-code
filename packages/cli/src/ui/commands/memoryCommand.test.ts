@@ -41,10 +41,9 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
-vi.mock('../../config/environmentLoader.js', async () => {
-  const original = await import(
-    '../../config/environmentLoader.js?__importActual'
-  );
+vi.mock('../../config/environmentLoader.js', async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import('../../config/environmentLoader.js')>();
   return {
     ...original,
     loadHierarchicalLlxprtMemory: vi.fn(),

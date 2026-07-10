@@ -24,8 +24,7 @@
     "src/**/*.ts",
     "src/**/*.json",
     "../mcp/index.ts",
-    "../mcp/src/**/*.ts",
-    "../../test-setup/import-actual.d.ts"
+    "../mcp/src/**/*.ts"
   ],
   "exclude": [
     "node_modules",

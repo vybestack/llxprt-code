@@ -84,8 +84,8 @@ function buildRuntimeContext(
 }
 
 // Mock content generator to avoid real API calls
-vi.mock('../core/contentGenerator.js', async () => {
-  const actual = await import('../core/contentGenerator.js?__importActual');
+vi.mock('../core/contentGenerator.js', async (importOriginal) => {
+  const actual = await importOriginal();
   return {
     ...actual,
     createContentGenerator: vi.fn().mockResolvedValue({

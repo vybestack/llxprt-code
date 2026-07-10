@@ -57,8 +57,8 @@ vi.mock('os', async (importOriginal) => {
   };
 });
 
-vi.mock('./trustedFolders.js', async () => {
-  const actual = await import('./trustedFolders.js?__importActual');
+vi.mock('./trustedFolders.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./trustedFolders.js')>();
   return {
     ...actual,
     isWorkspaceTrusted: vi.fn(),

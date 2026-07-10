@@ -10,8 +10,8 @@ import { SessionSummaryDisplay } from './SessionSummaryDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import type { SessionMetrics } from '../contexts/SessionContext.js';
 
-vi.mock('../contexts/SessionContext.js', async () => {
-  const actual = await import('../contexts/SessionContext.js?__importActual');
+vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof SessionContext>();
   return {
     ...actual,
     useSessionStats: vi.fn(),

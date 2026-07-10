@@ -15,8 +15,9 @@ import type { Config } from '../config/config.js';
 import { coreEvents, CoreEvent } from '../utils/events.js';
 
 // Mock memoryDiscovery module
-vi.mock('../utils/memoryDiscovery.js', async () => {
-  const actual = await import('../utils/memoryDiscovery.js?__importActual');
+vi.mock('../utils/memoryDiscovery.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../utils/memoryDiscovery.js')>();
   return {
     ...actual,
     loadGlobalMemory: vi.fn(),

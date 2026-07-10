@@ -35,7 +35,7 @@ vi.mock('./prompt-processors/shellProcessor.js', () => ({
   },
 }));
 
-vi.mock('./prompt-processors/argumentProcessor.js', async () => {
+vi.mock('./prompt-processors/argumentProcessor.js', async (importOriginal) => {
   const original =
     await importOriginal<
       typeof import('./prompt-processors/argumentProcessor.js')

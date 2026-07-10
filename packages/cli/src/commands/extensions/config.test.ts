@@ -63,9 +63,9 @@ function resolvePromptType(prompt: string): string {
 }
 
 vi.mock('../../config/extensions/settingsIntegration.js', async () => {
-  const actual = (await import(
-    '../../config/extensions/settingsIntegration.js?__importActual'
-  )) as unknown as typeof import('../../config/extensions/settingsIntegration.js');
+  const actual = await vi.importActual<typeof settingsIntegrationModule>(
+    '../../config/extensions/settingsIntegration.js',
+  );
   return {
     updateSetting: mockUpdateSetting,
     getScopedEnvContents: mockGetScopedEnvContents,
@@ -79,7 +79,9 @@ vi.mock('./utils.js', () => ({
 }));
 
 vi.mock('../../config/extension.js', async () => {
-  const actual = await import('../../config/extension.js?__importActual');
+  const actual = await vi.importActual<typeof extensionModule>(
+    '../../config/extension.js',
+  );
   return {
     ...actual,
     loadUserExtensions: mockLoadUserExtensions,
@@ -100,7 +102,9 @@ vi.mock('./utils.js', () => ({
 }));
 
 vi.mock('../../config/extension.js', async () => {
-  const actual = await import('../../config/extension.js?__importActual');
+  const actual = await vi.importActual<typeof extensionModule>(
+    '../../config/extension.js',
+  );
   return {
     ...actual,
     loadUserExtensions: mockLoadUserExtensions,
@@ -122,7 +126,7 @@ vi.mock('../../config/settings.js', () => ({
 
 // Mock confirmOverwrite in the config module
 vi.mock('./config.js', async () => {
-  const actual = await import('./config.js?__importActual');
+  const actual = await vi.importActual('./config.js');
   return {
     ...actual,
     confirmOverwrite: mockConfirmOverwrite,

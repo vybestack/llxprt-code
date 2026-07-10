@@ -99,8 +99,9 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   };
 });
 
-vi.mock('../core/contentGenerator.js', async () => {
-  const actual = await import('../core/contentGenerator.js?__importActual');
+vi.mock('../core/contentGenerator.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../core/contentGenerator.js')>();
   return {
     ...actual,
     createContentGeneratorConfig: vi.fn(),
@@ -245,8 +246,8 @@ vi.mock('../utils/memoryDiscovery.js', () => ({
   getAllLlxprtMdFilenames: vi.fn().mockReturnValue([]),
 }));
 
-vi.mock('../utils/events.js', async () => {
-  const actual = await import('../utils/events.js?__importActual');
+vi.mock('../utils/events.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/events.js')>();
   vi.spyOn(actual.coreEvents, 'emit').mockReturnValue(true);
   return actual;
 });

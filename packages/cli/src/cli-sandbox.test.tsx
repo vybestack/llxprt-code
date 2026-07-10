@@ -65,8 +65,8 @@ vi.mock('update-notifier', () => ({
   default: vi.fn(() => ({ notify: vi.fn() })),
 }));
 
-vi.mock('./utils/events.js', async () => {
-  const actual = await import('./utils/events.js?__importActual');
+vi.mock('./utils/events.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./utils/events.js')>();
   return { ...actual, appEvents: { emit: vi.fn() } };
 });
 
@@ -75,10 +75,8 @@ vi.mock('./utils/sandbox.js', () => ({
   start_sandbox: vi.fn(() => Promise.resolve(0)),
 }));
 
-vi.mock('./utils/bootstrap.js', async () => {
-  const actual = (await import(
-    './utils/bootstrap.js?__importActual'
-  )) as unknown as typeof import('./utils/bootstrap.js');
+vi.mock('./utils/bootstrap.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./utils/bootstrap.js')>();
   return {
     ...actual,
     shouldRelaunchForMemory: vi.fn(() => []),

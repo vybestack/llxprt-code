@@ -19,10 +19,9 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
 
 let generateAutoPromptOverride: ((...args: unknown[]) => unknown) | null = null;
 
-vi.mock('../../utils/autoPromptGenerator.js', async () => {
-  const actual = (await import(
-    '../../utils/autoPromptGenerator.js?__importActual'
-  )) as unknown as typeof import('../../utils/autoPromptGenerator.js');
+vi.mock('../../utils/autoPromptGenerator.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../utils/autoPromptGenerator.js')>();
   return {
     ...actual,
     generateAutoPrompt: (...args: unknown[]) => {

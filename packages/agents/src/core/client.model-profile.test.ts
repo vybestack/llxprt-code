@@ -115,8 +115,8 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
     LocalTodoStore: mockTodoStoreConstructor,
   };
 });
-vi.mock('./turn', async () => {
-  const actual = await import('./turn?__importActual');
+vi.mock('./turn', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./turn.js')>();
   class MockTurn {
     pendingToolCalls = [];
     run = mockTurnRunFn;

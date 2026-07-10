@@ -6,8 +6,8 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('../index.js', async () => {
-  const actual = await import('../index.js?__importActual');
+vi.mock('../index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../index.js')>();
   return {
     ...actual,
     logToolCall: vi.fn(),
