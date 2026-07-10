@@ -129,18 +129,24 @@ export function selectAvailableProvider(
     );
   }
 
-  const fallbackProvider = availableProviders[0];
   if (trimmedRequested) {
-    warnings.push(
-      `Provider '${trimmedRequested}' unavailable, using '${fallbackProvider}'`,
+    // A profile that explicitly names a provider must never be silently
+    // rerouted to a different provider (issue #2479: a corrupt profile
+    // naming an unregistered provider landed the session on gemini with
+    // no error, swallowing all subsequent input). Fail loudly instead.
+    throw new Error(
+      `Provider '${trimmedRequested}' is not available (registered providers: ${availableProviders.join(
+        ', ',
+      )}). Profile not applied.`,
     );
   }
 
+  const fallbackProvider = availableProviders[0];
   return {
     providerName: fallbackProvider,
     warnings,
-    didFallback: Boolean(trimmedRequested),
-    requestedProvider: trimmedRequested || null,
+    didFallback: false,
+    requestedProvider: null,
   };
 }
 

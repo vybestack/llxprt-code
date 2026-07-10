@@ -288,6 +288,11 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
           () =>
             `Skipping reasoning object in modelParams - handled via model-behavior settings`,
         );
+      } else if (key === 'prompt_cache_key' && typeof value === 'string') {
+        // OpenAI rejects prompt_cache_key longer than 64 chars (issue #2135);
+        // clamp at egress so overlong keys injected via modelParams never
+        // reach the API.
+        requestOverrides[key] = sanitizePromptCacheKey(value);
       } else {
         requestOverrides[key] = value;
       }

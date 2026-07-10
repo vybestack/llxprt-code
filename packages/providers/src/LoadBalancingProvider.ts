@@ -528,6 +528,19 @@ export class LoadBalancingProvider implements IProvider {
     );
   }
 
+  /**
+   * Exposes the load-balancer configuration so profile persistence can
+   * serialize the ACTIVE load balancer back into a genuine
+   * type:'loadbalancer' profile. Without this, saving a profile while a
+   * load balancer is active snapshots the virtual provider name
+   * ('load-balancer') into a standard profile — a corrupt file that can
+   * never be re-applied because 'load-balancer' is not a registered
+   * provider at load time (issue #2479).
+   */
+  getLoadBalancerConfig(): Readonly<LoadBalancingProviderConfig> {
+    return this.config;
+  }
+
   resetStats(): void {
     this.stats.clear();
     this.lastSelected = null;
