@@ -51,13 +51,18 @@ const importActual = (id: string): Promise<unknown> => {
   if (isBuiltin(id)) {
     return Promise.resolve(localRequire(id));
   }
+  let absPath: string;
   try {
-    const absPath = localRequire.resolve(id);
-    const relPath = './' + relative(shimDir, absPath);
-    return import(relPath + '?__importActual');
-  } catch {
-    return import(id);
+    absPath = localRequire.resolve(id);
+  } catch (error: unknown) {
+    return Promise.reject(
+      error instanceof Error
+        ? error
+        : new Error(`importActual: cannot resolve "${id}"`),
+    );
   }
+  const relPath = './' + relative(shimDir, absPath);
+  return import(relPath + '?__importActual');
 };
 
 /**
@@ -83,6 +88,13 @@ const wrapMockFactory =
 const realSetTimeout = setTimeout;
 
 /**
+ * Capture real Date.now at module load time, before any test can call
+ * vi.useFakeTimers() or vi.setSystemTime(). flushPendingTasks uses this to
+ * enforce a wall-clock guard that is immune to fake-timer manipulation.
+ */
+const realDateNow = Date.now;
+
+/**
  * Vitest's async timer methods drain all pending microtasks and macrotasks
  * recursively. A single `await Promise.resolve()` only flushes one microtask
  * level. This bounded loop alternates macrotask boundaries so timer callbacks
@@ -93,9 +105,9 @@ const MAX_TASK_ITERATIONS = 100;
 const FLUSH_TIMEOUT_MS = 5_000;
 
 const flushPendingTasks = async (): Promise<void> => {
-  const start = Date.now();
+  const start = realDateNow();
   for (let i = 0; i < MAX_TASK_ITERATIONS; i++) {
-    if (Date.now() - start > FLUSH_TIMEOUT_MS) break;
+    if (realDateNow() - start > FLUSH_TIMEOUT_MS) break;
     await new Promise<void>((resolve) => {
       realSetTimeout(resolve, 0);
     });

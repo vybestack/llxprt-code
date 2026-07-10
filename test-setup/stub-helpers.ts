@@ -102,7 +102,11 @@ async function waitForImpl<T>(
  * Type guard: returns true when value is a function carrying a `.mock`
  * property object, which is the shared marker used by both Bun and Vitest.
  */
-export function isMockFunction(value: unknown): boolean {
+export function isMockFunction(value: unknown): value is ((
+  ...args: unknown[]
+) => unknown) & {
+  mock: Record<string, unknown>;
+} {
   return (
     typeof value === 'function' &&
     typeof (value as { mock?: unknown }).mock === 'object' &&
