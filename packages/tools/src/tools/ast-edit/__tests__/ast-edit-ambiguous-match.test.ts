@@ -12,11 +12,11 @@
  * location was left unchanged.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  createTempDir,
+  useTempDir,
   createFakeToolHost,
   executeApply,
   executePreview,
@@ -25,28 +25,17 @@ import { ASTEditTool } from '../../ast-edit.js';
 import { ToolErrorType } from '../../../types/tool-error.js';
 
 describe('ast_edit ambiguous match: exactly 2 occurrences', () => {
-  let tempDir: string;
-  let cleanup: () => void;
-
-  beforeEach(() => {
-    const tmp = createTempDir();
-    tempDir = tmp.dir;
-    cleanup = tmp.cleanup;
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
+  const ctx = useTempDir();
 
   it('rejects with occurrence mismatch when old_string appears twice', async () => {
-    const filePath = join(tempDir, 'two-matches.ts');
+    const filePath = join(ctx.tempDir, 'two-matches.ts');
     const content = [
       'const DUPLICATE = 1;',
       'const OTHER = 2;',
       'const DUPLICATE = 3;',
     ].join('\n');
     writeFileSync(filePath, content, 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executeApply(tool, {
       file_path: filePath,
@@ -62,10 +51,10 @@ describe('ast_edit ambiguous match: exactly 2 occurrences', () => {
   });
 
   it('reports the actual occurrence count in the mismatch error', async () => {
-    const filePath = join(tempDir, 'two-count.ts');
+    const filePath = join(ctx.tempDir, 'two-count.ts');
     const content = 'const TOKEN = 1;\nconst OTHER = 2;\nconst TOKEN = 3;\n';
     writeFileSync(filePath, content, 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executeApply(tool, {
       file_path: filePath,
@@ -83,28 +72,17 @@ describe('ast_edit ambiguous match: exactly 2 occurrences', () => {
 });
 
 describe('ast_edit ambiguous match: 3+ occurrences', () => {
-  let tempDir: string;
-  let cleanup: () => void;
-
-  beforeEach(() => {
-    const tmp = createTempDir();
-    tempDir = tmp.dir;
-    cleanup = tmp.cleanup;
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
+  const ctx = useTempDir();
 
   it('rejects with occurrence mismatch when old_string appears 3 times', async () => {
-    const filePath = join(tempDir, 'three-matches.ts');
+    const filePath = join(ctx.tempDir, 'three-matches.ts');
     const content = [
       'let value = placeholder;',
       'let value2 = placeholder;',
       'let value3 = placeholder;',
     ].join('\n');
     writeFileSync(filePath, content, 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executeApply(tool, {
       file_path: filePath,
@@ -121,21 +99,10 @@ describe('ast_edit ambiguous match: 3+ occurrences', () => {
 });
 
 describe('ast_edit ambiguous match: disambiguated match succeeds', () => {
-  let tempDir: string;
-  let cleanup: () => void;
-
-  beforeEach(() => {
-    const tmp = createTempDir();
-    tempDir = tmp.dir;
-    cleanup = tmp.cleanup;
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
+  const ctx = useTempDir();
 
   it('succeeds when caller provides enough surrounding context to match exactly once', async () => {
-    const filePath = join(tempDir, 'specific-target.ts');
+    const filePath = join(ctx.tempDir, 'specific-target.ts');
     const content = [
       'export const VERSION = "1.0.0";',
       'export function getVersion() {',
@@ -143,7 +110,7 @@ describe('ast_edit ambiguous match: disambiguated match succeeds', () => {
       '}',
     ].join('\n');
     writeFileSync(filePath, content, 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executeApply(tool, {
       file_path: filePath,
@@ -158,9 +125,9 @@ describe('ast_edit ambiguous match: disambiguated match succeeds', () => {
   });
 
   it('succeeds when there is exactly one occurrence of old_string', async () => {
-    const filePath = join(tempDir, 'single-match.ts');
+    const filePath = join(ctx.tempDir, 'single-match.ts');
     writeFileSync(filePath, 'const UNIQUE = 1;\nconst OTHER = 2;\n', 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executeApply(tool, {
       file_path: filePath,
@@ -174,23 +141,12 @@ describe('ast_edit ambiguous match: disambiguated match succeeds', () => {
 });
 
 describe('ast_edit ambiguous match: preview rejects same as apply', () => {
-  let tempDir: string;
-  let cleanup: () => void;
-
-  beforeEach(() => {
-    const tmp = createTempDir();
-    tempDir = tmp.dir;
-    cleanup = tmp.cleanup;
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
+  const ctx = useTempDir();
 
   it('preview also rejects ambiguous matches with occurrence mismatch', async () => {
-    const filePath = join(tempDir, 'preview-ambiguous.ts');
+    const filePath = join(ctx.tempDir, 'preview-ambiguous.ts');
     writeFileSync(filePath, 'const X = dup;\nconst Y = dup;\n', 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executePreview(tool, {
       file_path: filePath,

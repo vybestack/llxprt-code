@@ -90,6 +90,7 @@ const calculateTotal = (items: Item[]): number => {
 - **It**: Specific behavior in plain English
 - **Arrange-Act-Assert**: Clear test sections
 - **Single Assertion**: One behavior per test
+- **DRY setup**: Never copy-paste identical beforeEach/afterEach setup boilerplate (e.g., temp-dir creation, cleanup) across every describe block. Extract a shared helper that wires the lifecycle hooks (e.g., a `useTempDir()` helper that registers beforeEach/afterEach internally and returns a lazy accessor). Repeating 5+ lines of identical setup in N describe blocks is a maintenance hazard: any future change must be applied in N places, and the noise hides what each test actually does. One line of shared setup per describe block is the target.
 
 ### What to Test
 

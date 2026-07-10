@@ -10,11 +10,11 @@
  * ASTEditTool instances. No mocking of the tool under test.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  createTempDir,
+  useTempDir,
   createFakeToolHost,
   executePreview,
   writeFileWithMtime,
@@ -23,22 +23,11 @@ import {
 import { ASTEditTool } from '../../ast-edit.js';
 
 describe('ast_edit preview phase: non-existent file path', () => {
-  let tempDir: string;
-  let cleanup: () => void;
-
-  beforeEach(() => {
-    const tmp = createTempDir();
-    tempDir = tmp.dir;
-    cleanup = tmp.cleanup;
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
+  const ctx = useTempDir();
 
   it('reports file_not_found error when file does not exist and old_string is non-empty', async () => {
-    const filePath = join(tempDir, 'does-not-exist.ts');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const filePath = join(ctx.tempDir, 'does-not-exist.ts');
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executePreview(tool, {
       file_path: filePath,
@@ -53,8 +42,8 @@ describe('ast_edit preview phase: non-existent file path', () => {
   });
 
   it('does not create the file in preview mode when file is missing', async () => {
-    const filePath = join(tempDir, 'no-create.ts');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const filePath = join(ctx.tempDir, 'no-create.ts');
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     await executePreview(tool, {
       file_path: filePath,
@@ -62,28 +51,19 @@ describe('ast_edit preview phase: non-existent file path', () => {
       new_string: 'something else',
     });
 
-    expect(() => readFileSync(filePath, 'utf-8')).toThrow('ENOENT');
+    expect(() => readFileSync(filePath, 'utf-8')).toThrow(
+      expect.objectContaining({ code: 'ENOENT' }),
+    );
   });
 });
 
 describe('ast_edit preview phase: occurrence count reporting', () => {
-  let tempDir: string;
-  let cleanup: () => void;
-
-  beforeEach(() => {
-    const tmp = createTempDir();
-    tempDir = tmp.dir;
-    cleanup = tmp.cleanup;
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
+  const ctx = useTempDir();
 
   it('reports 0 occurrences in the error message when old_string is absent', async () => {
-    const filePath = join(tempDir, 'no-match.ts');
+    const filePath = join(ctx.tempDir, 'no-match.ts');
     writeFileSync(filePath, 'const x = 1;\n', 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executePreview(tool, {
       file_path: filePath,
@@ -97,21 +77,10 @@ describe('ast_edit preview phase: occurrence count reporting', () => {
 });
 
 describe('ast_edit preview response structure', () => {
-  let tempDir: string;
-  let cleanup: () => void;
-
-  beforeEach(() => {
-    const tmp = createTempDir();
-    tempDir = tmp.dir;
-    cleanup = tmp.cleanup;
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
+  const ctx = useTempDir();
 
   it('includes declaration count, function count, and class count in preview output', async () => {
-    const filePath = join(tempDir, 'structure.ts');
+    const filePath = join(ctx.tempDir, 'structure.ts');
     const content = [
       'export function greet(name: string): string {',
       '  return `hello ${name}`;',
@@ -127,7 +96,7 @@ describe('ast_edit preview response structure', () => {
       'export const DEFAULT_NAME = "world";',
     ].join('\n');
     writeFileSync(filePath, content, 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executePreview(tool, {
       file_path: filePath,
@@ -143,9 +112,9 @@ describe('ast_edit preview response structure', () => {
   });
 
   it('includes AST validation status in preview output', async () => {
-    const filePath = join(tempDir, 'valid-ast.ts');
+    const filePath = join(ctx.tempDir, 'valid-ast.ts');
     writeFileSync(filePath, 'const x = 1;\n', 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executePreview(tool, {
       file_path: filePath,
@@ -158,9 +127,9 @@ describe('ast_edit preview response structure', () => {
   });
 
   it('includes AST validation failure with error details when syntax is broken', async () => {
-    const filePath = join(tempDir, 'broken-result.ts');
+    const filePath = join(ctx.tempDir, 'broken-result.ts');
     writeFileSync(filePath, 'const x = 1;\n', 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executePreview(tool, {
       file_path: filePath,
@@ -175,10 +144,10 @@ describe('ast_edit preview response structure', () => {
   });
 
   it('includes file timestamp in preview output for use with last_modified', async () => {
-    const filePath = join(tempDir, 'timestamp.ts');
+    const filePath = join(ctx.tempDir, 'timestamp.ts');
     const fixedMtime = 1700000000000;
     writeFileWithMtime(filePath, 'const x = 1;\n', fixedMtime);
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executePreview(tool, {
       file_path: filePath,
@@ -192,7 +161,7 @@ describe('ast_edit preview response structure', () => {
   });
 
   it('includes enhanced context with declaration names and line numbers', async () => {
-    const filePath = join(tempDir, 'context-detail.ts');
+    const filePath = join(ctx.tempDir, 'context-detail.ts');
     const content = [
       'export function alpha(): void {',
       '  // first function',
@@ -203,7 +172,7 @@ describe('ast_edit preview response structure', () => {
       '}',
     ].join('\n');
     writeFileSync(filePath, content, 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executePreview(tool, {
       file_path: filePath,
@@ -220,10 +189,10 @@ describe('ast_edit preview response structure', () => {
   });
 
   it('includes returnDisplay metadata with astValidation and currentMtime', async () => {
-    const filePath = join(tempDir, 'metadata.ts');
+    const filePath = join(ctx.tempDir, 'metadata.ts');
     writeFileWithMtime(filePath, 'const x = 1;\n');
     const expectedMtime = getFileMtime(filePath);
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executePreview(tool, {
       file_path: filePath,

@@ -15,6 +15,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { beforeEach, afterEach } from 'vitest';
 import type { IToolHost } from '../../../interfaces/IToolHost.js';
 import type { ASTEditTool, ASTEditToolParams } from '../../ast-edit.js';
 import type { ToolResult } from '../../tools.js';
@@ -36,6 +37,41 @@ export function createTempDir(prefix = 'llxprt-ast-edit-test-'): {
       } catch {
         // Best-effort cleanup after each test.
       }
+    },
+  };
+}
+
+/**
+ * Wires temp-directory creation/destruction into beforeEach/afterEach
+ * automatically so tests stay DRY without repeating setup boilerplate
+ * in every describe block.
+ *
+ * IMPORTANT: Do NOT destructure the return value — `tempDir` is a getter
+ * that resolves at test-run time (after beforeEach sets it). Access it
+ * as `ctx.tempDir` instead.
+ *
+ * Usage inside a describe:
+ *   const ctx = useTempDir();
+ *   // ...
+ *   const filePath = join(ctx.tempDir, 'file.ts');
+ */
+export function useTempDir(): { readonly tempDir: string } {
+  let dir = '';
+  let cleanup: () => void = () => {};
+
+  beforeEach(() => {
+    const tmp = createTempDir();
+    dir = tmp.dir;
+    cleanup = tmp.cleanup;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  return {
+    get tempDir() {
+      return dir;
     },
   };
 }

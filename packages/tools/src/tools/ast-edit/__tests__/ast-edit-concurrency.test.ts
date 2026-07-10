@@ -10,11 +10,11 @@
  * These tests verify the four timestamp scenarios: stale, future, exact, omitted.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  createTempDir,
+  useTempDir,
   createFakeToolHost,
   executeApply,
   writeFileWithMtime,
@@ -23,24 +23,13 @@ import {
 import { ASTEditTool } from '../../ast-edit.js';
 
 describe('ast_edit last_modified: stale timestamp triggers conflict', () => {
-  let tempDir: string;
-  let cleanup: () => void;
-
-  beforeEach(() => {
-    const tmp = createTempDir();
-    tempDir = tmp.dir;
-    cleanup = tmp.cleanup;
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
+  const ctx = useTempDir();
 
   it('returns file_modified_conflict when file mtime is greater than last_modified', async () => {
-    const filePath = join(tempDir, 'stale.ts');
+    const filePath = join(ctx.tempDir, 'stale.ts');
     const actualMtime = 1700000005000;
     writeFileWithMtime(filePath, 'const x = 1;\n', actualMtime);
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executeApply(tool, {
       file_path: filePath,
@@ -54,11 +43,11 @@ describe('ast_edit last_modified: stale timestamp triggers conflict', () => {
   });
 
   it('includes both current and provided timestamps in the conflict error', async () => {
-    const filePath = join(tempDir, 'stale-detail.ts');
+    const filePath = join(ctx.tempDir, 'stale-detail.ts');
     const actualMtime = 1700000005000;
     const providedMtime = actualMtime - 2000;
     writeFileWithMtime(filePath, 'const x = 1;\n', actualMtime);
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executeApply(tool, {
       file_path: filePath,
@@ -73,10 +62,10 @@ describe('ast_edit last_modified: stale timestamp triggers conflict', () => {
   });
 
   it('does not modify the file when a conflict is detected', async () => {
-    const filePath = join(tempDir, 'stale-no-write.ts');
+    const filePath = join(ctx.tempDir, 'stale-no-write.ts');
     const actualMtime = 1700000005000;
     writeFileWithMtime(filePath, 'const x = 1;\n', actualMtime);
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     await executeApply(tool, {
       file_path: filePath,
@@ -90,24 +79,13 @@ describe('ast_edit last_modified: stale timestamp triggers conflict', () => {
 });
 
 describe('ast_edit last_modified: future timestamp proceeds normally', () => {
-  let tempDir: string;
-  let cleanup: () => void;
-
-  beforeEach(() => {
-    const tmp = createTempDir();
-    tempDir = tmp.dir;
-    cleanup = tmp.cleanup;
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
+  const ctx = useTempDir();
 
   it('applies the edit when last_modified is greater than actual file mtime', async () => {
-    const filePath = join(tempDir, 'future.ts');
+    const filePath = join(ctx.tempDir, 'future.ts');
     const actualMtime = 1700000000000;
     writeFileWithMtime(filePath, 'const x = 1;\n', actualMtime);
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executeApply(tool, {
       file_path: filePath,
@@ -122,25 +100,14 @@ describe('ast_edit last_modified: future timestamp proceeds normally', () => {
 });
 
 describe('ast_edit last_modified: exact match timestamp proceeds', () => {
-  let tempDir: string;
-  let cleanup: () => void;
-
-  beforeEach(() => {
-    const tmp = createTempDir();
-    tempDir = tmp.dir;
-    cleanup = tmp.cleanup;
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
+  const ctx = useTempDir();
 
   it('applies the edit when last_modified equals the actual file mtime', async () => {
-    const filePath = join(tempDir, 'exact.ts');
+    const filePath = join(ctx.tempDir, 'exact.ts');
     const content = 'const x = 1;\n';
     writeFileWithMtime(filePath, content);
     const exactMtime = getFileMtime(filePath);
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executeApply(tool, {
       file_path: filePath,
@@ -155,23 +122,12 @@ describe('ast_edit last_modified: exact match timestamp proceeds', () => {
 });
 
 describe('ast_edit last_modified: omitted timestamp skips check', () => {
-  let tempDir: string;
-  let cleanup: () => void;
-
-  beforeEach(() => {
-    const tmp = createTempDir();
-    tempDir = tmp.dir;
-    cleanup = tmp.cleanup;
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
+  const ctx = useTempDir();
 
   it('applies the edit when last_modified is not provided', async () => {
-    const filePath = join(tempDir, 'omitted.ts');
+    const filePath = join(ctx.tempDir, 'omitted.ts');
     writeFileWithMtime(filePath, 'const x = 1;\n', 1700000000000);
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executeApply(tool, {
       file_path: filePath,

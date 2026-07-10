@@ -6,11 +6,11 @@
  * Behavioral tests for ast_edit empty and edge-case inputs (issue #1758).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  createTempDir,
+  useTempDir,
   createFakeToolHost,
   executeApply,
   executePreview,
@@ -18,24 +18,13 @@ import {
 import { ASTEditTool } from '../../ast-edit.js';
 
 describe('ast_edit edge cases: empty old_string on existing file', () => {
-  let tempDir: string;
-  let cleanup: () => void;
-
-  beforeEach(() => {
-    const tmp = createTempDir();
-    tempDir = tmp.dir;
-    cleanup = tmp.cleanup;
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
+  const ctx = useTempDir();
 
   it('returns edit_no_occurrence_found when old_string is empty and file already exists', async () => {
-    const filePath = join(tempDir, 'empty-old-existing.ts');
+    const filePath = join(ctx.tempDir, 'empty-old-existing.ts');
     const originalContent = 'const x = 1;\n';
     writeFileSync(filePath, originalContent, 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executeApply(tool, {
       file_path: filePath,
@@ -50,24 +39,13 @@ describe('ast_edit edge cases: empty old_string on existing file', () => {
 });
 
 describe('ast_edit edge cases: old_string equals new_string', () => {
-  let tempDir: string;
-  let cleanup: () => void;
-
-  beforeEach(() => {
-    const tmp = createTempDir();
-    tempDir = tmp.dir;
-    cleanup = tmp.cleanup;
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
+  const ctx = useTempDir();
 
   it('returns edit_no_change error when old_string and new_string are identical', async () => {
-    const filePath = join(tempDir, 'no-op.ts');
+    const filePath = join(ctx.tempDir, 'no-op.ts');
     const originalContent = 'const greeting = "hello";\n';
     writeFileSync(filePath, originalContent, 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executeApply(tool, {
       file_path: filePath,
@@ -81,10 +59,10 @@ describe('ast_edit edge cases: old_string equals new_string', () => {
   });
 
   it('returns edit_no_change error in preview mode when old_string equals new_string', async () => {
-    const filePath = join(tempDir, 'no-op-preview.ts');
+    const filePath = join(ctx.tempDir, 'no-op-preview.ts');
     const originalContent = 'const greeting = "hello";\n';
     writeFileSync(filePath, originalContent, 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executePreview(tool, {
       file_path: filePath,
@@ -99,28 +77,17 @@ describe('ast_edit edge cases: old_string equals new_string', () => {
 });
 
 describe('ast_edit edge cases: very large old_string spanning entire file', () => {
-  let tempDir: string;
-  let cleanup: () => void;
-
-  beforeEach(() => {
-    const tmp = createTempDir();
-    tempDir = tmp.dir;
-    cleanup = tmp.cleanup;
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
+  const ctx = useTempDir();
 
   it('replaces entire file content when old_string matches the whole file', async () => {
-    const filePath = join(tempDir, 'full-replace.ts');
+    const filePath = join(ctx.tempDir, 'full-replace.ts');
     const lines: string[] = [];
     for (let i = 0; i < 100; i++) {
       lines.push(`export const VALUE_${i} = ${i};`);
     }
     const fullContent = lines.join('\n') + '\n';
     writeFileSync(filePath, fullContent, 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executeApply(tool, {
       file_path: filePath,
@@ -136,24 +103,13 @@ describe('ast_edit edge cases: very large old_string spanning entire file', () =
 });
 
 describe('ast_edit edge cases: whitespace-only differences from file content', () => {
-  let tempDir: string;
-  let cleanup: () => void;
-
-  beforeEach(() => {
-    const tmp = createTempDir();
-    tempDir = tmp.dir;
-    cleanup = tmp.cleanup;
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
+  const ctx = useTempDir();
 
   it('fails to match when old_string has trailing whitespace that the file does not', async () => {
-    const filePath = join(tempDir, 'trailing-ws.ts');
+    const filePath = join(ctx.tempDir, 'trailing-ws.ts');
     const originalContent = 'const x = 1;\n';
     writeFileSync(filePath, originalContent, 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executeApply(tool, {
       file_path: filePath,
@@ -167,10 +123,10 @@ describe('ast_edit edge cases: whitespace-only differences from file content', (
   });
 
   it('fails to match when old_string has different indentation than file content', async () => {
-    const filePath = join(tempDir, 'indentation.ts');
+    const filePath = join(ctx.tempDir, 'indentation.ts');
     const originalContent = 'function f() {\n  return 1;\n}\n';
     writeFileSync(filePath, originalContent, 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executeApply(tool, {
       file_path: filePath,
