@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { accumulateLiveOutput } from './liveOutput.js';
 import type { AnsiOutput, AnsiToken } from '../utils/terminalSerializer.js';
 
+/** Builds a minimal valid AnsiToken for test fixtures. */
 function makeToken(text: string): AnsiToken {
   return {
     text,
