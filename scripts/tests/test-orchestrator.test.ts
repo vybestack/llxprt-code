@@ -259,10 +259,13 @@ describe('parseArgs', () => {
 
   it('warns on unknown arguments but still parses known ones', () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const opts = parseArgs(['--unknown-flag', '--workspace', 'tools']);
-    expect(opts.workspaceFilter).toBe('tools');
-    expect(spy).toHaveBeenCalled();
-    spy.mockRestore();
+    try {
+      const opts = parseArgs(['--unknown-flag', '--workspace', 'tools']);
+      expect(opts.workspaceFilter).toBe('tools');
+      expect(spy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('throws when --workspace has no value', () => {
@@ -563,9 +566,17 @@ describe('dummy', () => { it('passes', () => { expect(1).toBe(1); }); });`,
       },
     ]);
 
-    orchestrateTests(root, parseArgs(['--skip-scripts']), failingPretest);
+    const summary = orchestrateTests(
+      root,
+      parseArgs(['--skip-scripts']),
+      failingPretest,
+    );
     const testRan = commands.some((c) => c.command === 'vitest run');
     expect(testRan).toBe(false);
+    expect(summary.failed).toBeGreaterThan(0);
+    const pretestResult = summary.results.find((r) => r.phase === 'pretest');
+    expect(pretestResult).toBeDefined();
+    expect(pretestResult!.success).toBe(false);
   });
 
   it('returns a summary with total counts', () => {
@@ -618,6 +629,35 @@ describe('dummy', () => { it('passes', () => { expect(1).toBe(1); }); });`,
     expect(commands.some((c) => c.command === 'echo pretest')).toBe(true);
     expect(summary.passed).toBe(2);
     // Summary counts must be consistent: passed + failed + skipped = total
+    expect(summary.passed + summary.failed + summary.skipped).toBe(
+      summary.totalWorkspaces,
+    );
+  });
+
+  it('skips workspace with neither pretest nor test script', () => {
+    const { runner } = createRecordingRunner();
+
+    const root = createFixtureRepo([
+      {
+        dir: 'packages/no-scripts',
+        name: 'pkg-no-scripts',
+        scripts: { build: 'echo build' },
+      },
+      {
+        dir: 'packages/normal',
+        name: 'pkg-normal',
+        scripts: { test: 'vitest run' },
+      },
+    ]);
+
+    const summary = orchestrateTests(
+      root,
+      parseArgs(['--skip-scripts']),
+      runner,
+    );
+    // No-scripts workspace is skipped; normal workspace passes
+    expect(summary.passed).toBe(1);
+    expect(summary.skipped).toBe(1);
     expect(summary.passed + summary.failed + summary.skipped).toBe(
       summary.totalWorkspaces,
     );
