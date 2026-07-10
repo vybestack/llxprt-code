@@ -46,6 +46,14 @@ const wrapMockFactory =
     factory(importActual);
 
 /**
+ * Capture the real setTimeout at module load time, before any test can call
+ * vi.useFakeTimers(). This ensures flushPendingTasks always schedules on the
+ * real event loop, not a fake-timer mock, so async timer helpers don't hang
+ * when fake timers are active.
+ */
+const realSetTimeout = setTimeout;
+
+/**
  * Vitest's async timer methods drain all pending microtasks and macrotasks
  * recursively. A single `await Promise.resolve()` only flushes one microtask
  * level. This bounded loop alternates macrotask boundaries so timer callbacks
@@ -57,7 +65,7 @@ const MAX_TASK_ITERATIONS = 100;
 const flushPendingTasks = async (): Promise<void> => {
   for (let i = 0; i < MAX_TASK_ITERATIONS; i++) {
     await new Promise<void>((resolve) => {
-      setTimeout(resolve, 0);
+      realSetTimeout(resolve, 0);
     });
   }
 };
