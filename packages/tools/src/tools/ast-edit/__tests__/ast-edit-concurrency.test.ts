@@ -67,13 +67,14 @@ describe('ast_edit last_modified: stale timestamp triggers conflict', () => {
     writeFileWithMtime(filePath, 'const x = 1;\n', actualMtime);
     const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
-    await executeApply(tool, {
+    const result = await executeApply(tool, {
       file_path: filePath,
       old_string: 'const x = 1;',
       new_string: 'const x = 2;',
       last_modified: actualMtime - 1000,
     });
 
+    expect(result.error?.type).toBe('file_modified_conflict');
     expect(readFileSync(filePath, 'utf-8')).toBe('const x = 1;\n');
   });
 });

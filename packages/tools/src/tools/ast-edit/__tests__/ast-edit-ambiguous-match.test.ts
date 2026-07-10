@@ -146,7 +146,8 @@ describe('ast_edit ambiguous match: preview rejects same as apply', () => {
 
   it('preview also rejects ambiguous matches with occurrence mismatch', async () => {
     const filePath = join(ctx.tempDir, 'preview-ambiguous.ts');
-    writeFileSync(filePath, 'const X = dup;\nconst Y = dup;\n', 'utf-8');
+    const content = 'const X = dup;\nconst Y = dup;\n';
+    writeFileSync(filePath, content, 'utf-8');
     const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executePreview(tool, {
@@ -159,6 +160,8 @@ describe('ast_edit ambiguous match: preview rejects same as apply', () => {
     expect(result.error?.type).toBe(
       ToolErrorType.EDIT_EXPECTED_OCCURRENCE_MISMATCH,
     );
+    expect(result.llmContent).toBeDefined();
     expect(String(result.llmContent)).not.toContain('LLXPRT EDIT PREVIEW');
+    expect(readFileSync(filePath, 'utf-8')).toBe(content);
   });
 });
