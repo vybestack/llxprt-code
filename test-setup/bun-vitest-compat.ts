@@ -86,13 +86,16 @@ const realSetTimeout = setTimeout;
  * Vitest's async timer methods drain all pending microtasks and macrotasks
  * recursively. A single `await Promise.resolve()` only flushes one microtask
  * level. This bounded loop alternates macrotask boundaries so timer callbacks
- * fire and their promise chains settle. The iteration cap prevents infinite
- * hangs when timers reschedule themselves indefinitely.
+ * fire and their promise chains settle. Both the iteration cap and the
+ * wall-clock guard prevent infinite hangs when timers reschedule themselves.
  */
 const MAX_TASK_ITERATIONS = 100;
+const FLUSH_TIMEOUT_MS = 5_000;
 
 const flushPendingTasks = async (): Promise<void> => {
+  const start = Date.now();
   for (let i = 0; i < MAX_TASK_ITERATIONS; i++) {
+    if (Date.now() - start > FLUSH_TIMEOUT_MS) break;
     await new Promise<void>((resolve) => {
       realSetTimeout(resolve, 0);
     });
@@ -141,12 +144,21 @@ const polyfilledVi = {
   mock: (
     id: string,
     factory?: (importOriginal: () => Promise<unknown>) => unknown,
-  ): unknown =>
-    mock.module(id, factory ? wrapMockFactory(id, factory) : () => ({})),
+  ): unknown => {
+    if (factory) {
+      return mock.module(id, wrapMockFactory(id, factory));
+    }
+    return mock.module(id);
+  },
   doMock: (
     id: string,
-    factory: (importOriginal: () => Promise<unknown>) => unknown,
-  ): unknown => mock.module(id, wrapMockFactory(id, factory)),
+    factory?: (importOriginal: () => Promise<unknown>) => unknown,
+  ): unknown => {
+    if (factory) {
+      return mock.module(id, wrapMockFactory(id, factory));
+    }
+    return mock.module(id);
+  },
   doUnmock,
   unmock,
   isMockFunction,
