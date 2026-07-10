@@ -107,8 +107,8 @@ describe('ast_edit preview response structure', () => {
     expect(result.error).toBeUndefined();
     const output = String(result.llmContent);
     expect(output).toContain('Context: typescript file');
-    expect(output).toContain('Functions:');
-    expect(output).toContain('Classes:');
+    expect(output).toMatch(/Functions: \d+/);
+    expect(output).toMatch(/Classes: \d+/);
   });
 
   it('includes AST validation status in preview output', async () => {
@@ -183,9 +183,8 @@ describe('ast_edit preview response structure', () => {
     expect(result.error).toBeUndefined();
     const output = String(result.llmContent);
     expect(output).toContain('ENHANCED CONTEXT ANALYSIS:');
-    expect(output).toContain('function: alpha');
-    expect(output).toContain('function: beta');
-    expect(output).toMatch(/line \d+/);
+    expect(output).toContain('function: alpha (line 1)');
+    expect(output).toContain('function: beta (line 5)');
   });
 
   it('includes returnDisplay metadata with astValidation and currentMtime', async () => {

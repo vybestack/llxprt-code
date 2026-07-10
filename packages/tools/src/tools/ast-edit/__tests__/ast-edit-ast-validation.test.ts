@@ -290,5 +290,14 @@ describe('ast_edit AST validation: multi-language support', () => {
 
     expect(result.error).toBeUndefined();
     expect(String(result.llmContent)).toContain('AST validation: PASSED');
+
+    const brokenResult = await executePreview(tool, {
+      file_path: filePath,
+      old_string: '<label>Name</label>;',
+      new_string: '<label>Name</label',
+    });
+
+    expect(brokenResult.error).toBeUndefined();
+    expect(String(brokenResult.llmContent)).toContain('AST validation: FAILED');
   });
 });
