@@ -57,7 +57,7 @@ export class StubRegistry {
  * Poll-async helper that repeatedly invokes callback until it stops throwing,
  * mirroring Vitest's vi.waitFor. Supports both sync and async callbacks.
  */
-export async function waitFor<T>(
+export function waitFor<T>(
   callback: () => T | Promise<T>,
   options?: WaitForOptions,
 ): Promise<T> {
@@ -74,6 +74,14 @@ export async function waitFor<T>(
     throw new TypeError('waitFor: interval and timeout must be finite numbers');
   }
 
+  return waitForImpl(callback, interval, timeout);
+}
+
+async function waitForImpl<T>(
+  callback: () => T | Promise<T>,
+  interval: number,
+  timeout: number,
+): Promise<T> {
   const deadline = Date.now() + timeout;
   let lastError: unknown;
 
