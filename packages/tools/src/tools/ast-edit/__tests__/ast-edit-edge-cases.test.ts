@@ -49,8 +49,8 @@ describe('ast_edit edge cases: old_string equals new_string', () => {
 
     const result = await executeApply(tool, {
       file_path: filePath,
-      old_string: 'const greeting = "hello";',
-      new_string: 'const greeting = "hello";',
+      old_string: originalContent,
+      new_string: originalContent,
     });
 
     expect(result.error).toBeDefined();
@@ -66,8 +66,8 @@ describe('ast_edit edge cases: old_string equals new_string', () => {
 
     const result = await executePreview(tool, {
       file_path: filePath,
-      old_string: 'const greeting = "hello";',
-      new_string: 'const greeting = "hello";',
+      old_string: originalContent,
+      new_string: originalContent,
     });
 
     expect(result.error).toBeDefined();

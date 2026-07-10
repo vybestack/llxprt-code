@@ -31,13 +31,7 @@ export function createTempDir(prefix = 'llxprt-ast-edit-test-'): {
   mkdirSync(dir, { recursive: true });
   return {
     dir,
-    cleanup: () => {
-      try {
-        rmSync(dir, { recursive: true, force: true });
-      } catch {
-        // Best-effort cleanup after each test.
-      }
-    },
+    cleanup: () => rmSync(dir, { recursive: true, force: true }),
   };
 }
 
