@@ -225,10 +225,22 @@ function buildLoadBalancerProfileSnapshot(
     );
   }
 
+  // Exhaustive over LoadBalancingProviderConfig['strategy']: adding a new
+  // strategy without a profile-policy mapping fails compilation here rather
+  // than silently saving as roundrobin.
+  const policyByStrategy: Record<
+    LoadBalancingProviderConfig['strategy'],
+    LoadBalancerProfile['policy']
+  > = {
+    failover: 'failover',
+    'round-robin': 'roundrobin',
+  };
+  const policy = policyByStrategy[lbConfig.strategy];
+
   return {
     version: 1,
     type: 'loadbalancer',
-    policy: lbConfig.strategy === 'failover' ? 'failover' : 'roundrobin',
+    policy,
     profiles: memberNames,
     ...(typeof lbConfig.contextLimit === 'number' && lbConfig.contextLimit > 0
       ? { contextLimit: lbConfig.contextLimit }

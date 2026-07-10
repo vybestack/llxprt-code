@@ -635,6 +635,11 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     expect(typeof cacheKey).toBe('string');
     expect(cacheKey.length).toBeLessThanOrEqual(64);
     expect(cacheKey).not.toBe(overlongKey);
+    // The explicitly injected (sanitized) modelParams key wins over the
+    // runtimeId-derived default, proving the translateRequestOverrides path
+    // was exercised rather than applyPromptCaching overwriting it.
+    expect(cacheKey).toBe(sanitizePromptCacheKey(overlongKey));
+    expect(cacheKey).not.toBe(sanitizePromptCacheKey('short-runtime-id'));
   });
 
   it('should drop a non-string prompt_cache_key injected via modelParams instead of forwarding it', async () => {

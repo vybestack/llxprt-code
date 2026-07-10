@@ -19,11 +19,16 @@ import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
 
-if (!process.env.LLXPRT_CONFIG_HOME) {
+// Guard on a dedicated marker (NOT on LLXPRT_CONFIG_HOME): a developer or CI
+// shell may legitimately export LLXPRT_CONFIG_HOME for CLI usage, and reusing
+// it as the guard would silently skip isolation and let tests write into that
+// real directory. The marker only dedupes isolation within this process tree.
+if (!process.env.LLXPRT_TEST_STORAGE_ISOLATED) {
   const testStorageRoot = fs.mkdtempSync(
     path.join(os.tmpdir(), 'llxprt-cli-test-storage-'),
   );
   process.env.LLXPRT_CONFIG_HOME = path.join(testStorageRoot, 'config');
   process.env.LLXPRT_DATA_HOME = path.join(testStorageRoot, 'data');
   process.env.LLXPRT_CACHE_HOME = path.join(testStorageRoot, 'cache');
+  process.env.LLXPRT_TEST_STORAGE_ISOLATED = '1';
 }

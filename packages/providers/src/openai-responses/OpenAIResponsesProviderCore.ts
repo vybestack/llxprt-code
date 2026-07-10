@@ -526,6 +526,17 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       '1h';
     if (promptCachingSetting === 'off') return;
 
+    // An explicit prompt_cache_key from modelParams/request overrides (already
+    // sanitized at translateRequestOverrides) takes precedence over the
+    // runtimeId-derived default.
+    if (
+      typeof request.prompt_cache_key === 'string' &&
+      request.prompt_cache_key.trim() !== ''
+    ) {
+      if (!isCodex) request.prompt_cache_retention = '24h';
+      return;
+    }
+
     const cacheKey =
       (options.invocation as { runtimeId?: string } | undefined)?.runtimeId ??
       options.runtime?.runtimeId;

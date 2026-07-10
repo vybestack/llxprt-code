@@ -123,7 +123,7 @@ describe('profile save while load balancer is active (issue #2479)', () => {
     expect(snapshot.policy).toBe('failover');
   });
 
-  it('the saved loadbalancer snapshot passes isLoadBalancerProfile so reload takes the LB path', async () => {
+  it('the saved loadbalancer snapshot passes isLoadBalancerProfile validation', async () => {
     const saved = await saveProfileSnapshot('glm');
 
     expect(saveProfileMock).toHaveBeenCalledTimes(1);
