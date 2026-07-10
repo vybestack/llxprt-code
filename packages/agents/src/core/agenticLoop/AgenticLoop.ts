@@ -639,7 +639,10 @@ export class AgenticLoop {
       await recordCancelledToolHistory(geminiTools, this.agentClient);
       return { continueLoop: false, nextMessage: [] };
     }
-    const responseParts = buildToolResponses(geminiTools);
+    const responseParts = buildToolResponses(
+      geminiTools,
+      this.config.getImagePayloadBudgetBytes(),
+    );
     if (responseParts.length === 0) {
       return { continueLoop: false, nextMessage: [] };
     }

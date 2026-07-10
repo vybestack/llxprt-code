@@ -527,6 +527,25 @@ export function convertBlocksToParts(blocks: ContentBlock[]): Part[] {
         });
         break;
       }
+      case 'media': {
+        const mediaBlock = block;
+        if (mediaBlock.encoding === 'url') {
+          parts.push({
+            fileData: {
+              mimeType: mediaBlock.mimeType,
+              fileUri: mediaBlock.data,
+            },
+          });
+        } else {
+          parts.push({
+            inlineData: {
+              mimeType: mediaBlock.mimeType,
+              data: mediaBlock.data,
+            },
+          });
+        }
+        break;
+      }
       case 'thinking': {
         const thinkingBlock = block;
         const thoughtPart: ThoughtPart = {

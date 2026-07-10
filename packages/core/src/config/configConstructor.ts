@@ -21,6 +21,7 @@ import {
   normalizeShellReplacement,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
+  DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
   type AccessibilitySettings,
   type BugCommandSettings,
   type ChatCompressionSettings,
@@ -169,6 +170,7 @@ export interface ConfigConstructorTarget {
   truncateToolOutputLines: number;
   enableToolOutputTruncation: boolean;
   continueOnFailedApiCall: boolean;
+  imagePayloadBudgetBytes: number;
   enableShellOutputEfficiency: boolean;
   continueSession: boolean | string;
   extensionManagement: boolean;
@@ -436,6 +438,8 @@ function applySessionFlags(
   params: ConfigParameters,
 ): void {
   config.continueOnFailedApiCall = params.continueOnFailedApiCall ?? true;
+  config.imagePayloadBudgetBytes =
+    params.imagePayloadBudgetBytes ?? DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES;
   config.continueSession = params.continueSession ?? false;
   config.storage = new Storage(config.targetDir);
   config.fileExclusions = new FileExclusions(config as unknown as Config);
