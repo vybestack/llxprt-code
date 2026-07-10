@@ -10,6 +10,7 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
+import { sanitizePromptCacheKey } from '../sanitizePromptCacheKey.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createProviderRuntimeContext,
@@ -703,8 +704,6 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     // The invalid non-string override must not survive; the provider's own
     // runtimeId-derived key (a valid string) is applied instead.
     const cacheKey = requestBody.prompt_cache_key as string;
-    expect(typeof cacheKey).toBe('string');
-    expect(cacheKey).not.toBe(12345 as unknown as string);
-    expect(cacheKey.length).toBeLessThanOrEqual(64);
+    expect(cacheKey).toBe(sanitizePromptCacheKey('short-runtime-id'));
   });
 });
