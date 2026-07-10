@@ -296,12 +296,20 @@ describe('ASTEditTool pre-existing vs newly-introduced error categorization (iss
   });
 
   it('reports mixed pre-existing and newly-introduced errors in preview', async () => {
-    // File has a pre-existing syntax error (unclosed function) and the edit
-    // introduces a second error (replacing valid code with @@@).
+    // File has a pre-existing syntax error (unclosed function at line 7) and
+    // the edit introduces a new error (@@@ at line 1). The errors are far
+    // enough apart (> tolerance) to trigger the mixed categorization.
     const filePath = join(tempDir, 'mixed-errors.ts');
     const NL = String.fromCharCode(10);
-    const brokenContent =
-      'const greeting = "hello";' + NL + 'function broken(' + NL;
+    const brokenContent = [
+      'const greeting = "hello";',
+      'const a = 1;',
+      'const b = 2;',
+      'const c = 3;',
+      'const d = 4;',
+      'const e = 5;',
+      'function broken(',
+    ].join(NL);
     writeFileSync(filePath, brokenContent, 'utf-8');
 
     const tool = new ASTEditTool(createFakeToolHost(tempDir));
@@ -318,7 +326,11 @@ describe('ASTEditTool pre-existing vs newly-introduced error categorization (iss
     const content = String(result.llmContent);
     // The baseline was already broken.
     expect(content).toContain('Pre-existing syntax errors: Yes');
-    // Post-edit still has errors (either pre-existing or newly introduced).
+    // Post-edit still has errors.
     expect(content).toContain('FAILED');
+    // Must NOT be classified as purely pre-existing — the edit introduced a
+    // new error at a different location, so the output should not claim it
+    // was "present before this edit".
+    expect(content).not.toContain('present before this edit');
   });
 });

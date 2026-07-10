@@ -209,6 +209,20 @@ describe('summarizeAstValidation', () => {
     expect(summary.newlyIntroduced).toBe(true);
   });
 
+  it('flags as mixed when a post-edit error below the edit aligns numerically with a pre-edit error above the edit', () => {
+    // Pre-edit error at line 5 (above edit at line 10), edit adds 10 lines,
+    // new error at line 15. linesMatch must NOT match these: the pre-edit
+    // error above the edit stayed at line 5 and line 15 is a different error.
+    const summary = summarizeAstValidation(
+      { valid: false, errors: ['Syntax error at line 5, column 1'] },
+      { valid: false, errors: ['Syntax error at line 15, column 1'] },
+      10,
+      10,
+    );
+    expect(summary.preExisting).toBe(true);
+    expect(summary.newlyIntroduced).toBe(true);
+  });
+
   it('flags as mixed when a post-edit error lacks a parseable line number', () => {
     // A post-edit error without a line number cannot be verified against the
     // pre-edit baseline and must be conservatively treated as possibly new.

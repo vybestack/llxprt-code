@@ -93,11 +93,15 @@ function linesMatch(
   editStartLine: number | null,
 ): boolean {
   if (editStartLine !== null) {
-    // Errors at or below the edit start shifted by lineDelta.
-    if (postLine >= editStartLine) {
-      return Math.abs(preLine - (postLine - lineDelta)) <= LINE_MATCH_TOLERANCE;
+    // Whether the PRE-EDIT error was at/below the edit determines whether it
+    // shifted. Checking postLine instead causes false positives: a new error
+    // below the edit can numerically align with a shifted pre-edit error that
+    // was actually above the edit and never moved.
+    if (preLine >= editStartLine) {
+      // Error was at/below edit start → shifted by lineDelta.
+      return Math.abs(preLine + lineDelta - postLine) <= LINE_MATCH_TOLERANCE;
     }
-    // Errors above the edit start did not shift.
+    // Error was above edit start → did not shift.
     return Math.abs(preLine - postLine) <= LINE_MATCH_TOLERANCE;
   }
 
