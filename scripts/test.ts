@@ -197,6 +197,10 @@ export function parseArgs(argv: readonly string[]): TestOptions {
 // Command execution
 // ---------------------------------------------------------------------------
 
+function extractExitCode(error: unknown): number {
+  return (propertyValue(error, 'status') as number | undefined) ?? 1;
+}
+
 // Mirrors `npm run` semantics: commands from package.json scripts are
 // executed through a shell. This relies on repository trust — package.json
 // files are part of the trusted source tree, just as they are for npm.
@@ -213,15 +217,17 @@ export const defaultRunner: CommandRunner = (
     });
     return { success: true, exitCode: 0 };
   } catch (error) {
-    const exitCode =
-      (propertyValue(error, 'status') as number | undefined) ?? 1;
-    return { success: false, exitCode };
+    return { success: false, exitCode: extractExitCode(error) };
   }
 };
 
 function createRunnerWithPATH(rootDir: string): CommandRunner {
   const nodeModulesBin = join(rootDir, 'node_modules', '.bin');
-  const pathEnv = `${nodeModulesBin}${delimiter}${process.env.PATH ?? ''}`;
+  const existingPath = process.env.PATH;
+  // Avoid trailing delimiter when PATH is unset (trailing ':' adds CWD on Unix)
+  const pathEnv = existingPath
+    ? `${nodeModulesBin}${delimiter}${existingPath}`
+    : nodeModulesBin;
 
   return (command, cwd, env = process.env) =>
     defaultRunner(command, cwd, { ...env, PATH: pathEnv });
@@ -265,10 +271,7 @@ function runPhase(
   try {
     result = runner(command, cwd);
   } catch (error) {
-    result = {
-      success: false,
-      exitCode: (propertyValue(error, 'status') as number | undefined) ?? 1,
-    };
+    result = { success: false, exitCode: extractExitCode(error) };
   }
   const durationMs = Date.now() - start;
 
@@ -507,25 +510,32 @@ function formatDuration(ms: number): string {
 // ---------------------------------------------------------------------------
 
 function main(): void {
-  const rootDir = resolve(__dirname, '..');
-  const options = parseArgs(process.argv.slice(2));
+  try {
+    const rootDir = resolve(__dirname, '..');
+    const options = parseArgs(process.argv.slice(2));
 
-  console.log('Running Bun-backed test orchestration...');
-  if (options.workspaceFilter) {
-    console.log(`  Filter: ${options.workspaceFilter}`);
-  }
-  if (options.skipScripts) {
-    console.log('  Skipping script harness tests');
-  }
-  if (options.skipPretest) {
-    console.log('  Skipping pretest hooks');
-  }
-  console.log('');
+    console.log('Running Bun-backed test orchestration...');
+    if (options.workspaceFilter) {
+      console.log(`  Filter: ${options.workspaceFilter}`);
+    }
+    if (options.skipScripts) {
+      console.log('  Skipping script harness tests');
+    }
+    if (options.skipPretest) {
+      console.log('  Skipping pretest hooks');
+    }
+    console.log('');
 
-  const summary = orchestrateTests(rootDir, options);
-  console.log(formatSummary(summary));
+    const summary = orchestrateTests(rootDir, options);
+    console.log(formatSummary(summary));
 
-  if (summary.failed > 0) {
+    if (summary.failed > 0) {
+      process.exit(1);
+    }
+  } catch (error) {
+    console.error(
+      `Fatal error: ${error instanceof Error ? error.message : String(error)}`,
+    );
     process.exit(1);
   }
 }

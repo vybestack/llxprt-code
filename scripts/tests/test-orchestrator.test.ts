@@ -592,6 +592,36 @@ describe('dummy', () => { it('passes', () => { expect(1).toBe(1); }); });`,
     expect(summary.failed).toBe(0);
     expect(summary.durationMs).toBeGreaterThanOrEqual(0);
   });
+
+  it('handles workspace with pretest but no test script', () => {
+    const { runner, commands } = createRecordingRunner();
+
+    const root = createFixtureRepo([
+      {
+        dir: 'packages/pretest-only',
+        name: 'pkg-pretest-only',
+        scripts: { pretest: 'echo pretest' },
+      },
+      {
+        dir: 'packages/normal',
+        name: 'pkg-normal',
+        scripts: { test: 'vitest run' },
+      },
+    ]);
+
+    const summary = orchestrateTests(
+      root,
+      parseArgs(['--skip-scripts']),
+      runner,
+    );
+    // Pretest-only workspace runs its pretest and is counted as passed
+    expect(commands.some((c) => c.command === 'echo pretest')).toBe(true);
+    expect(summary.passed).toBeGreaterThanOrEqual(1);
+    // Summary counts must be consistent: passed + failed + skipped = total
+    expect(summary.passed + summary.failed + summary.skipped).toBe(
+      summary.totalWorkspaces,
+    );
+  });
 });
 
 describe('formatSummary', () => {
