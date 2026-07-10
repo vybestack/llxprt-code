@@ -25,6 +25,20 @@ function findStreamBlockIndex(
   return blocks.findIndex((block) => block.streamId === streamId);
 }
 
+function hasDuplicateNoStreamThought(
+  blocks: ThinkingBlock[],
+  thoughtText: string,
+  streamId: string | undefined,
+): boolean {
+  return (
+    streamId === undefined &&
+    thoughtText !== '' &&
+    blocks.some(
+      (block) => block.streamId === undefined && block.thought === thoughtText,
+    )
+  );
+}
+
 function buildThoughtText(thoughtSummary: ThoughtSummary): string {
   return [thoughtSummary.subject, thoughtSummary.description]
     .filter(Boolean)
@@ -59,11 +73,12 @@ export function applyThoughtToState(
 
   if (streamBlockIndex >= 0) {
     const existingBlock = thinkingBlocksRef.current[streamBlockIndex];
+    const updatedThought = thoughtText || existingBlock.thought;
     thinkingBlocksRef.current = thinkingBlocksRef.current.map((block, index) =>
       index === streamBlockIndex
         ? {
             ...existingBlock,
-            thought: thoughtText,
+            thought: updatedThought,
             streamStatus: thoughtSummary.streamStatus,
           }
         : block,
@@ -73,6 +88,16 @@ export function applyThoughtToState(
       thinkingBlocksRef,
       setPendingHistoryItem,
     );
+    return;
+  }
+
+  if (
+    hasDuplicateNoStreamThought(
+      thinkingBlocksRef.current,
+      thoughtText,
+      thoughtSummary.streamId,
+    )
+  ) {
     return;
   }
 

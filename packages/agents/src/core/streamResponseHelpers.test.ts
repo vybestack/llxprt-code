@@ -104,6 +104,119 @@ describe('consolidateTextParts identity-aware thinking consolidation', () => {
     expect(thinkingSignatures(result)).toStrictEqual(['sig-one', 'sig-two']);
   });
 
+  it('consolidates non-adjacent interleaved updates by stream id without merging distinct blocks', () => {
+    const parts: Part[] = [
+      thoughtPart({
+        text: 'First',
+        signature: 'sig-first-delta',
+        streamId: 'thinking:0',
+        streamStatus: 'delta',
+      }),
+      textPart('Answer '),
+      thoughtPart({
+        text: 'Second',
+        signature: 'sig-second',
+        streamId: 'thinking:1',
+        streamStatus: 'complete',
+      }),
+      textPart('text'),
+      thoughtPart({
+        text: 'First complete',
+        streamId: 'thinking:0',
+        streamStatus: 'delta',
+      }),
+      thoughtPart({
+        text: 'First complete',
+        signature: 'sig-first-final',
+        streamId: 'thinking:0',
+        streamStatus: 'complete',
+      }),
+    ];
+
+    const result = consolidateTextParts(parts);
+
+    expect(result.map((part) => part.text)).toStrictEqual([
+      'First complete',
+      'Answer ',
+      'Second',
+      'text',
+    ]);
+    expect(thinkingTexts(result)).toStrictEqual(['First complete', 'Second']);
+    expect(thinkingSignatures(result)).toStrictEqual([
+      'sig-first-final',
+      'sig-second',
+    ]);
+  });
+
+  it('preserves a prior signature when a later same-stream delta omits it', () => {
+    const parts: Part[] = [
+      thoughtPart({
+        text: 'Signed partial',
+        signature: 'sig-prior',
+        streamId: 'thinking:0',
+        streamStatus: 'delta',
+      }),
+      thoughtPart({
+        text: 'Signed partial plus more',
+        streamId: 'thinking:0',
+        streamStatus: 'delta',
+      }),
+    ];
+
+    const result = consolidateTextParts(parts);
+
+    expect(thinkingTexts(result)).toStrictEqual(['Signed partial plus more']);
+    expect(thinkingSignatures(result)).toStrictEqual(['sig-prior']);
+  });
+
+  it('preserves a prior signature when a later same-stream delta explicitly clears it', () => {
+    const parts: Part[] = [
+      thoughtPart({
+        text: 'Signed partial',
+        signature: 'sig-prior',
+        streamId: 'thinking:0',
+        streamStatus: 'delta',
+      }),
+      {
+        ...thoughtPart({
+          text: 'Signed partial plus more',
+          streamId: 'thinking:0',
+          streamStatus: 'delta',
+        }),
+        thoughtSignature: undefined,
+      },
+    ];
+
+    const result = consolidateTextParts(parts);
+
+    expect(thinkingTexts(result)).toStrictEqual(['Signed partial plus more']);
+    expect(thinkingSignatures(result)).toStrictEqual(['sig-prior']);
+  });
+
+  it('preserves prior text when a same-stream metadata delta explicitly clears text', () => {
+    const parts: Part[] = [
+      thoughtPart({
+        text: 'Signed partial',
+        signature: 'sig-prior',
+        streamId: 'thinking:0',
+        streamStatus: 'delta',
+      }),
+      {
+        ...thoughtPart({
+          text: 'ignored by override',
+          streamId: 'thinking:0',
+          streamStatus: 'complete',
+        }),
+        text: undefined,
+      },
+    ];
+
+    const result = consolidateTextParts(parts);
+
+    expect(thinkingTexts(result)).toStrictEqual(['Signed partial']);
+    expect(thinkingSignatures(result)).toStrictEqual(['sig-prior']);
+  });
+
   it('does not mutate input parts while consolidating text and thinking updates', () => {
     const firstText = textPart('Hello');
     const secondText = textPart(' world');

@@ -225,7 +225,6 @@ describe('ContentConverters - Tool ID Normalization', () => {
       expect(thinkingBlock?.sourceField).toBe('thought');
     });
 
-
     it('keeps ordinary thought parts visible when no hidden metadata is present', () => {
       const geminiContent: TestContent = {
         role: 'model',
@@ -613,6 +612,94 @@ describe('ContentConverters - neutral type I/O (#2397)', () => {
     expect(block.sourceField).toBe('thinking');
     expect(block.signature).toBe('sig-abc');
     expect(block.thought).toBe('reasoning here');
+  });
+});
+describe('issue #1723 – thinking visibility compatibility', () => {
+  it('preserves absent isHidden through a core-conversation round trip', () => {
+    const original: IContent = {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'thinking',
+          thought: 'Visible by default for legacy API compatibility',
+          sourceField: 'thought',
+          streamId: 'stream-visible',
+          streamStatus: 'complete',
+        },
+      ],
+    };
+
+    const gemini = ContentConverters.toGeminiContent(original);
+    expect(gemini.parts[0].llxprtThoughtIsHidden).toBeUndefined();
+
+    const restored = ContentConverters.toIContent(
+      gemini,
+      undefined,
+      undefined,
+      'turn-visible',
+    );
+    expect(restored.blocks[0].type).toBe('thinking');
+    const thinkingBlock = restored.blocks[0] as ThinkingBlock;
+
+    expect(thinkingBlock.isHidden).toBeUndefined();
+    expect(thinkingBlock.streamId).toBe('stream-visible');
+    expect(thinkingBlock.streamStatus).toBe('complete');
+  });
+
+  it('preserves explicit visible metadata through a core-conversation round trip', () => {
+    const original: IContent = {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'thinking',
+          thought: 'Explicitly visible thought',
+          sourceField: 'thought',
+          isHidden: false,
+        },
+      ],
+    };
+
+    const gemini = ContentConverters.toGeminiContent(original);
+    expect(gemini.parts[0].llxprtThoughtIsHidden).toBe(false);
+
+    const restored = ContentConverters.toIContent(
+      gemini,
+      undefined,
+      undefined,
+      'turn-visible-explicit',
+    );
+    expect(restored.blocks[0].type).toBe('thinking');
+    const thinkingBlock = restored.blocks[0] as ThinkingBlock;
+
+    expect(thinkingBlock.isHidden).toBe(false);
+  });
+
+  it('preserves explicit hidden metadata through a core-conversation round trip', () => {
+    const original: IContent = {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'thinking',
+          thought: 'Context-only thought',
+          sourceField: 'thought',
+          isHidden: true,
+        },
+      ],
+    };
+
+    const gemini = ContentConverters.toGeminiContent(original);
+    expect(gemini.parts[0].llxprtThoughtIsHidden).toBe(true);
+
+    const restored = ContentConverters.toIContent(
+      gemini,
+      undefined,
+      undefined,
+      'turn-hidden',
+    );
+    expect(restored.blocks[0].type).toBe('thinking');
+    const thinkingBlock = restored.blocks[0] as ThinkingBlock;
+
+    expect(thinkingBlock.isHidden).toBe(true);
   });
 });
 

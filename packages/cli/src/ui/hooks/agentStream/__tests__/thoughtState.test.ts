@@ -6,7 +6,10 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import type React from 'react';
-import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
+import type {
+  ThinkingBlock,
+  ThoughtSummary,
+} from '@vybestack/llxprt-code-core';
 import type { HistoryItemAi, HistoryItemWithoutId } from '../../../types.js';
 import { applyThoughtToState } from '../thoughtState.js';
 
@@ -28,12 +31,7 @@ function createArgs(overrides: {
 
 function applyThought(
   args: ReturnType<typeof createArgs>,
-  thoughtSummary: {
-    subject: string;
-    description: string;
-    streamId?: string;
-    streamStatus?: 'delta' | 'complete';
-  },
+  thoughtSummary: ThoughtSummary,
 ): void {
   applyThoughtToState(
     thoughtSummary,
@@ -214,6 +212,60 @@ describe('applyThoughtToState identity-aware streaming updates', () => {
         streamId: 'thinking:0',
         streamStatus: 'complete',
       },
+    ]);
+  });
+
+  it('preserves existing text when a same-stream update has empty sanitized content', () => {
+    const args = createArgs({
+      getContentPrefixIdentity: () => null,
+    });
+
+    applyThought(args, {
+      subject: '',
+      description: 'Keep this text',
+      streamId: 'thinking:0',
+      streamStatus: 'delta',
+    });
+    applyThought(args, {
+      subject: '',
+      description: '',
+      streamId: 'thinking:0',
+      streamStatus: 'complete',
+    });
+
+    expect(args.thinkingBlocksRef.current).toStrictEqual([
+      {
+        type: 'thinking',
+        thought: 'Keep this text',
+        sourceField: 'thought',
+        streamId: 'thinking:0',
+        streamStatus: 'complete',
+      },
+    ]);
+  });
+
+  it('suppresses exact duplicate thoughts only when providers omit stream ids', () => {
+    const args = createArgs({
+      getContentPrefixIdentity: () => null,
+    });
+
+    applyThought(args, { subject: '', description: 'Duplicate' });
+    applyThought(args, { subject: '', description: 'Duplicate' });
+    applyThought(args, {
+      subject: '',
+      description: 'Duplicate',
+      streamId: 'thinking:0',
+      streamStatus: 'complete',
+    });
+
+    expect(
+      args.thinkingBlocksRef.current.map((block) => ({
+        thought: block.thought,
+        streamId: block.streamId,
+      })),
+    ).toStrictEqual([
+      { thought: 'Duplicate', streamId: undefined },
+      { thought: 'Duplicate', streamId: 'thinking:0' },
     ]);
   });
 

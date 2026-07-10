@@ -727,6 +727,7 @@ export class AnthropicProvider extends BaseProvider {
         unprefixToolName: (name, oauth) => this.unprefixToolName(name, oauth),
         findToolSchema: (t, name, oauth) => this.findToolSchema(t, name, oauth),
         cacheLogger: requestContext.cacheLogger,
+        includeThinkingInResponse: requestContext.includeThinkingInResponse,
       });
     }
   }

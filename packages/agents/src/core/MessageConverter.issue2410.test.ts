@@ -20,7 +20,54 @@ import {
   normalizeToolInteractionInput,
   createUserContentWithFunctionResponseFix,
   convertMixedPartsToIContent,
+  classifyMixedParts,
+  convertBlocksToParts,
 } from './MessageConverter.js';
+import type { ThinkingBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
+describe('issue #1723 – ThinkingBlock stream metadata round-trip', () => {
+  it('maps llxprt thought stream metadata back to ThinkingBlock identity and status', () => {
+    const { blocks } = classifyMixedParts([
+      {
+        thought: true,
+        text: 'thinking text',
+        thoughtSignature: 'sig-rt',
+        llxprtSourceField: 'thinking',
+        llxprtThoughtBlockId: 'anthropic-thinking:0:block-1',
+        llxprtThoughtBlockStatus: 'complete',
+      },
+    ]);
+
+    expect(blocks).toStrictEqual([
+      {
+        type: 'thinking',
+        thought: 'thinking text',
+        sourceField: 'thinking',
+        signature: 'sig-rt',
+        streamId: 'anthropic-thinking:0:block-1',
+        streamStatus: 'complete',
+      },
+    ]);
+  });
+
+  it('round-trips ThinkingBlock stream identity/status through Google parts', () => {
+    const blocks: ThinkingBlock[] = [
+      {
+        type: 'thinking',
+        thought: 'round-trip thought',
+        sourceField: 'thinking',
+        signature: 'sig-round-trip',
+        streamId: 'anthropic-thinking:0:block-1',
+        streamStatus: 'delta',
+      },
+    ];
+
+    const parts = convertBlocksToParts(blocks);
+    const classified = classifyMixedParts(parts).blocks;
+
+    expect(classified).toStrictEqual(blocks);
+  });
+});
 
 describe('issue #2410 – empty message arrays must not create zero-part Content', () => {
   describe('createUserContentWithFunctionResponseFix', () => {

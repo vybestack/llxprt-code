@@ -273,6 +273,8 @@ export function buildThinkingConfig(options: {
   if (!options.reasoningEnabled) {
     return {};
   }
+  const display =
+    options.includeInResponse === false ? 'omitted' : 'summarized';
 
   // Claude Fable 5: adaptive thinking is the only mode and is always on — it
   // cannot be disabled or switched to legacy budgeted 'enabled' thinking.
@@ -281,8 +283,6 @@ export function buildThinkingConfig(options: {
   // never returns raw thinking, so request `display: 'summarized'` to get
   // readable summaries instead of empty thinking blocks.
   if (isFable5(options.model)) {
-    const display =
-      options.includeInResponse === false ? 'omitted' : 'summarized';
     return buildAdaptiveConfig(options.thinkingEffort, display);
   }
 
@@ -293,8 +293,6 @@ export function buildThinkingConfig(options: {
     options.reasoningBudgetTokens == null &&
     options.adaptiveThinking !== false
   ) {
-    const display =
-      options.includeInResponse === false ? 'omitted' : 'summarized';
     return buildAdaptiveConfig(options.thinkingEffort, display);
   }
 

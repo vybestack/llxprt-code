@@ -152,36 +152,42 @@ export function accumulateChunkMetadata(
   }
   acc.allChunks.push(chunk);
 }
+type PreservedThoughtMetadataKey =
+  | 'thoughtSignature'
+  | 'llxprtSourceField'
+  | 'llxprtThoughtIsHidden';
 
-/**
- * #1723: Detect whether an incoming thought part is an incremental update
- * of the last consolidated thought — i.e. same thought lineage with the
- * incoming text being a prefix-extending accumulation of the last. This
- * drives merging of streaming thinking deltas so only the final signed
- * block reaches history.
- */
-function isIncrementalThought(
-  lastPart: Part | undefined,
-  part: Part,
-): lastPart is ThoughtPart {
-  if (!isThoughtPart(lastPart) || !isThoughtPart(part)) {
-    return false;
-  }
-  return (
-    lastPart.llxprtThoughtBlockId !== undefined &&
-    lastPart.llxprtThoughtBlockId === part.llxprtThoughtBlockId
-  );
+// Stream status is intentionally not preserved: it describes the current delta's
+// lifecycle role, not accumulated block metadata.
+const PRESERVED_THOUGHT_METADATA_KEYS = [
+  'thoughtSignature',
+  'llxprtSourceField',
+  'llxprtThoughtIsHidden',
+] as const satisfies readonly PreservedThoughtMetadataKey[];
+
+function preserveIncomingUndefinedFields(
+  previousThought: ThoughtPart,
+  incomingThought: ThoughtPart,
+): Partial<Pick<ThoughtPart, PreservedThoughtMetadataKey>> {
+  return Object.fromEntries(
+    PRESERVED_THOUGHT_METADATA_KEYS.filter(
+      (key) =>
+        incomingThought[key] === undefined &&
+        previousThought[key] !== undefined,
+    ).map((key) => [key, previousThought[key]]),
+  ) as Partial<Pick<ThoughtPart, PreservedThoughtMetadataKey>>;
 }
 
 function mergeIncrementalThought(
-  lastThought: ThoughtPart,
+  previousThought: ThoughtPart,
   incomingThought: ThoughtPart,
 ): ThoughtPart {
   return {
-    ...lastThought,
+    ...previousThought,
     ...incomingThought,
-    text: incomingThought.text,
+    text: incomingThought.text ?? previousThought.text,
     thought: true,
+    ...preserveIncomingUndefinedFields(previousThought, incomingThought),
   };
 }
 
@@ -192,46 +198,67 @@ function mergeTextParts(lastPart: Part, part: Part): Part {
   };
 }
 
+function consolidateTextPart(result: Part[], part: Part): void {
+  if (result.length === 0) {
+    result.push({ ...part });
+    return;
+  }
+
+  const lastPart = result[result.length - 1];
+  if (isValidNonThoughtTextPart(lastPart) && isValidNonThoughtTextPart(part)) {
+    result[result.length - 1] = mergeTextParts(lastPart, part);
+    return;
+  }
+  result.push({ ...part });
+}
+
+function consolidateThoughtPart(
+  result: Part[],
+  part: ThoughtPart,
+  streamPartIndexes: Map<string, number>,
+): void {
+  const streamId = part.llxprtThoughtBlockId;
+  if (streamId !== undefined) {
+    const existingIndex = streamPartIndexes.get(streamId);
+    if (existingIndex !== undefined) {
+      const previousPart = result[existingIndex];
+      if (isThoughtPart(previousPart)) {
+        result[existingIndex] = mergeIncrementalThought(previousPart, part);
+        return;
+      }
+      streamPartIndexes.delete(streamId);
+    }
+  }
+
+  result.push({ ...part });
+  if (streamId !== undefined) {
+    streamPartIndexes.set(streamId, result.length - 1);
+  }
+}
+
 /**
- * Consolidate adjacent text parts and incremental thinking parts.
+ * Consolidate adjacent text parts and stream-identified thinking updates.
  *
- * #1723: Streaming thinking deltas are now emitted during streaming (each
- * delta carries the accumulated thinking text, not a fragment). These
- * accumulate as incremental thought parts in modelResponseParts. Without
- * consolidation, the final block at content_block_stop (which carries the
- * signature) would be appended as a SECOND thought part, duplicating the
- * text and leaving an unsigned intermediate in history — causing 400
- * "thinking.signature: Field required" on the next turn. The fix: when the
- * last consolidated part is a thought whose text is a prefix of the
- * incoming thought's text, merge them — the incoming part supersedes the
- * last (it may carry a signature the last lacked). This mirrors the
- * incremental accumulation already used by the UI's thoughtState.
- *
- * The array index access can return `undefined` at runtime when the array
- * is empty (length-1 == -1), so `lastPart` is annotated `Part | undefined`.
+ * #1723: A provider-owned stream id represents exactly one thinking block
+ * lifecycle, from its first delta through its complete event. While a lifecycle
+ * is open, later events with the same stream id replace that block even when
+ * text or other thinking blocks are interleaved. A provider must mint a fresh
+ * stream id for each distinct thinking block; text-prefix similarity is not
+ * identity and is intentionally ignored.
  */
 export function consolidateTextParts(modelResponseParts: Part[]): Part[] {
-  return modelResponseParts.reduce<Part[]>((consolidatedParts, part) => {
-    const lastPart = consolidatedParts[consolidatedParts.length - 1];
-    if (
-      consolidatedParts.length > 0 &&
-      lastPart.text !== undefined &&
-      isValidNonThoughtTextPart(lastPart) &&
-      isValidNonThoughtTextPart(part)
-    ) {
-      return [
-        ...consolidatedParts.slice(0, -1),
-        mergeTextParts(lastPart, part),
-      ];
+  const result: Part[] = [];
+  const streamPartIndexes = new Map<string, number>();
+
+  for (const part of modelResponseParts) {
+    if (isThoughtPart(part)) {
+      consolidateThoughtPart(result, part, streamPartIndexes);
+    } else {
+      consolidateTextPart(result, part);
     }
-    if (isIncrementalThought(lastPart, part) && isThoughtPart(part)) {
-      return [
-        ...consolidatedParts.slice(0, -1),
-        mergeIncrementalThought(lastPart, part),
-      ];
-    }
-    return [...consolidatedParts, { ...part }];
-  }, []);
+  }
+
+  return result;
 }
 
 /**

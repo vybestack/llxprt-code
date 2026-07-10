@@ -468,6 +468,12 @@ export function classifyMixedParts(parts: Part[]): {
       if (part.thoughtSignature) {
         thinkingBlock.signature = part.thoughtSignature;
       }
+      if (part.llxprtThoughtBlockId !== undefined) {
+        thinkingBlock.streamId = part.llxprtThoughtBlockId;
+      }
+      if (part.llxprtThoughtBlockStatus !== undefined) {
+        thinkingBlock.streamStatus = part.llxprtThoughtBlockStatus;
+      }
       blocks.push(thinkingBlock);
       hasAIContent = true;
     } else if ('text' in part && part.text !== undefined) {
@@ -535,16 +541,16 @@ export function convertBlocksToParts(blocks: ContentBlock[]): Part[] {
           thought: true,
           text: thinkingBlock.thought,
         };
-        if (thinkingBlock.signature) {
+        if (thinkingBlock.signature !== undefined) {
           thoughtPart.thoughtSignature = thinkingBlock.signature;
         }
-        if (thinkingBlock.sourceField) {
+        if (thinkingBlock.sourceField !== undefined) {
           thoughtPart.llxprtSourceField = thinkingBlock.sourceField;
         }
-        if (thinkingBlock.streamId) {
+        if (thinkingBlock.streamId !== undefined) {
           thoughtPart.llxprtThoughtBlockId = thinkingBlock.streamId;
         }
-        if (thinkingBlock.streamStatus) {
+        if (thinkingBlock.streamStatus !== undefined) {
           thoughtPart.llxprtThoughtBlockStatus = thinkingBlock.streamStatus;
         }
         if (thinkingBlock.isHidden !== undefined) {

@@ -97,6 +97,17 @@ describe('AnthropicProvider thinking display field @plan:PLAN-ANTHROPIC-THINKING
     expect(request.thinking?.display).toBe('omitted');
   });
 
+  it('should omit display for budgeted thinking when reasoning.includeInResponse is true @issue:1723', async () => {
+    settingsService.set('reasoning.enabled', true);
+    settingsService.set('reasoning.budgetTokens', 15000);
+    settingsService.set('reasoning.includeInResponse', true);
+    const request = await captureRequest('claude-sonnet-4-5');
+    expect(request.thinking).toBeDefined();
+    expect(request.thinking?.type).toBe('enabled');
+    expect(request.thinking?.budget_tokens).toBe(15000);
+    expect(request.thinking?.display).toBeUndefined();
+  });
+
   it('should set display:summarized for Fable 5 when reasoning.includeInResponse is true @issue:1723', async () => {
     settingsService.set('reasoning.enabled', true);
     settingsService.set('reasoning.includeInResponse', true);
