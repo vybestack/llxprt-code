@@ -24,6 +24,16 @@ interface AiMessageProps {
   thinkingBlocks?: ThinkingBlock[]; // @plan:PLAN-20251202-THINKING-UI.P06
 }
 
+export function getVisibleThinkingBlocks(
+  showThinking: boolean,
+  thinkingBlocks?: ThinkingBlock[],
+): ThinkingBlock[] | undefined {
+  if (!showThinking) {
+    return undefined;
+  }
+  return thinkingBlocks?.filter((block) => block.isHidden !== true);
+}
+
 export const AiMessage: React.FC<AiMessageProps> = ({
   text,
   isPending,
@@ -49,9 +59,10 @@ export const AiMessage: React.FC<AiMessageProps> = ({
   // #1723: Show thinking blocks in BOTH pending and committed items so thinking
   // content streams in real-time. The LoadingIndicator still shows the transient
   // thought subject, but the growing thinking block is now visible below it.
-  const visibleThinkingBlocks = showThinking
-    ? thinkingBlocks?.filter((block) => block.isHidden !== true)
-    : undefined;
+  const visibleThinkingBlocks = getVisibleThinkingBlocks(
+    showThinking,
+    thinkingBlocks,
+  );
 
   return (
     <Box flexDirection="column">

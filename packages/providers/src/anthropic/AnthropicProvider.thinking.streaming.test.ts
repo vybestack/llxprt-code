@@ -23,6 +23,17 @@ import {
 } from './test-utils/anthropicThinkingTestSetup.js';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
+function findThinkingBlock(chunk: IContent): ThinkingBlock {
+  const block = chunk.blocks.find(
+    (contentBlock): contentBlock is ThinkingBlock =>
+      contentBlock.type === 'thinking',
+  );
+  if (block === undefined) {
+    throw new Error('Expected chunk to contain a thinking block');
+  }
+  return block;
+}
+
 describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
   let provider: ThinkingTestSetup['provider'];
   let settingsService: ThinkingTestSetup['settingsService'];
@@ -93,10 +104,7 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     // 3 deltas + 1 content_block_stop = 4 thinking chunks
     expect(thinkingChunks.length).toBe(4);
 
-    const thinkingBlocks = thinkingChunks.map(
-      (chunk) =>
-        chunk.blocks.find((b) => b.type === 'thinking') as ThinkingBlock,
-    );
+    const thinkingBlocks = thinkingChunks.map(findThinkingBlock);
     expect(thinkingBlocks.map((block) => block.thought)).toStrictEqual([
       'First',
       'First part',
@@ -140,19 +148,11 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
           delta: { type: 'thinking_delta', thinking: ' the data' },
         };
         yield {
-          type: 'signature_delta',
+          type: 'content_block_delta',
           index: 0,
           delta: { type: 'signature_delta', signature: mockSignature },
         };
-        yield {
-          type: 'content_block_stop',
-          index: 0,
-          content_block: {
-            type: 'thinking',
-            thinking: '',
-            signature: mockSignature,
-          },
-        };
+        yield { type: 'content_block_stop', index: 0 };
       },
     };
 
@@ -181,19 +181,13 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     // 2 deltas + 1 content_block_stop = 3 thinking chunks
     expect(thinkingChunks.length).toBe(3);
 
-    const delta1 = thinkingChunks[0].blocks.find(
-      (b) => b.type === 'thinking',
-    ) as ThinkingBlock;
+    const delta1 = findThinkingBlock(thinkingChunks[0]);
     expect(delta1.thought).toBe('Analyzing');
 
-    const delta2 = thinkingChunks[1].blocks.find(
-      (b) => b.type === 'thinking',
-    ) as ThinkingBlock;
+    const delta2 = findThinkingBlock(thinkingChunks[1]);
     expect(delta2.thought).toBe('Analyzing the data');
 
-    const final = thinkingChunks[2].blocks.find(
-      (b) => b.type === 'thinking',
-    ) as ThinkingBlock;
+    const final = findThinkingBlock(thinkingChunks[2]);
     // The final chunk carries both the accumulated text AND the signature.
     expect(final.thought).toBe('Analyzing the data');
     expect(final.signature).toBe(mockSignature);
@@ -219,15 +213,7 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
           index: 0,
           delta: { type: 'signature_delta', signature: firstSignature },
         };
-        yield {
-          type: 'content_block_stop',
-          index: 0,
-          content_block: {
-            type: 'thinking',
-            thinking: '',
-            signature: firstSignature,
-          },
-        };
+        yield { type: 'content_block_stop', index: 0 };
         yield {
           type: 'content_block_start',
           index: 0,
@@ -243,15 +229,7 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
           index: 0,
           delta: { type: 'signature_delta', signature: secondSignature },
         };
-        yield {
-          type: 'content_block_stop',
-          index: 0,
-          content_block: {
-            type: 'thinking',
-            thinking: '',
-            signature: secondSignature,
-          },
-        };
+        yield { type: 'content_block_stop', index: 0 };
       },
     };
 
@@ -304,6 +282,7 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
       'anthropic-thinking:0:block-1',
     ]);
   });
+
   it('should hide streaming thinking chunks when reasoning.includeInResponse is false', async () => {
     settingsService.set('reasoning.includeInResponse', false);
     const mockStream = {
@@ -365,6 +344,55 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     ]);
   });
 
+  it('should hide redacted streaming thinking when reasoning.includeInResponse is false', async () => {
+    settingsService.set('reasoning.includeInResponse', false);
+    const mockStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          type: 'content_block_start',
+          index: 0,
+          content_block: {
+            type: 'redacted_thinking',
+            data: 'encrypted-reasoning',
+          },
+        };
+      },
+    };
+
+    mockMessagesCreate.mockResolvedValue(mockStream);
+
+    const messages: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Think privately' }],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(
+      buildCallOptions(messages),
+    );
+
+    const chunks: IContent[] = [];
+    for await (const chunk of generator) {
+      chunks.push(chunk);
+    }
+
+    const thinkingBlocks = chunks.flatMap((chunk) =>
+      chunk.blocks.filter(
+        (block): block is ThinkingBlock => block.type === 'thinking',
+      ),
+    );
+
+    expect(thinkingBlocks).toHaveLength(1);
+    expect(thinkingBlocks[0]).toMatchObject({
+      thought: '[redacted]',
+      signature: 'encrypted-reasoning',
+      isHidden: true,
+      streamId: 'anthropic-thinking:0:block-0',
+      streamStatus: 'complete',
+    });
+  });
+
   it('should not emit thinking chunks for empty thinking deltas or zero-length final text', async () => {
     const mockStream = {
       async *[Symbol.asyncIterator]() {
@@ -417,14 +445,11 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
           content_block: { type: 'thinking', thinking: '' },
         };
         yield {
-          type: 'content_block_stop',
+          type: 'content_block_delta',
           index: 0,
-          content_block: {
-            type: 'thinking',
-            thinking: '',
-            signature: mockSignature,
-          },
+          delta: { type: 'signature_delta', signature: mockSignature },
         };
+        yield { type: 'content_block_stop', index: 0 };
       },
     };
 
@@ -451,9 +476,7 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     );
 
     expect(thinkingChunks.length).toBe(1);
-    const thinkingBlock = thinkingChunks[0].blocks.find(
-      (b) => b.type === 'thinking',
-    ) as ThinkingBlock;
+    const thinkingBlock = findThinkingBlock(thinkingChunks[0]);
     expect(thinkingBlock.signature).toBe(mockSignature);
   });
 
@@ -519,14 +542,10 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     expect(textChunks.length).toBe(2);
 
     // Verify thinking content accumulated correctly
-    const thinkingDelta = thinkingChunks[0].blocks.find(
-      (b) => b.type === 'thinking',
-    ) as ThinkingBlock;
+    const thinkingDelta = findThinkingBlock(thinkingChunks[0]);
     expect(thinkingDelta.thought).toBe('Thinking part 1');
 
-    const finalThinking = thinkingChunks[1].blocks.find(
-      (b) => b.type === 'thinking',
-    ) as ThinkingBlock;
+    const finalThinking = findThinkingBlock(thinkingChunks[1]);
     expect(finalThinking.thought).toBe('Thinking part 1');
 
     // Verify text content (use find for robustness against future block-packing changes)

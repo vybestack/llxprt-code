@@ -101,7 +101,10 @@ export function applyThoughtToState(
     return;
   }
 
-  const thinkingBlock = buildThinkingBlock(thoughtText, thoughtSummary);
+  const thinkingBlock = createThinkingBlockFromSummary(
+    thoughtText,
+    thoughtSummary,
+  );
   if (thinkingBlock) {
     thinkingBlocksRef.current = [...thinkingBlocksRef.current, thinkingBlock];
     updatePendingWithThinking(
@@ -137,7 +140,7 @@ function updatePendingWithThinking(
   });
 }
 
-function buildThinkingBlock(
+function createThinkingBlockFromSummary(
   thoughtText: string,
   thoughtSummary: ThoughtSummary,
 ): ThinkingBlock | null {

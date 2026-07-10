@@ -67,7 +67,7 @@ describe('consolidateTextParts identity-aware thinking consolidation', () => {
     expect(thinkingSignatures(result)).toStrictEqual(['sig-final']);
   });
 
-  it('keeps adjacent signed blocks distinct when prefix-overlapping text has different stream ids', () => {
+  it('keeps prefix-overlapping signed blocks distinct when they have different stream ids', () => {
     const parts: Part[] = [
       thoughtPart({
         text: 'Plan',

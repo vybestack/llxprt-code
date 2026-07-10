@@ -133,6 +133,7 @@ async function* processStreamEvents(
         unprefixToolName,
         thinkingBlockIdentity,
         logger,
+        options.includeThinkingInResponse,
       );
       if (blockResult.currentToolCall !== undefined) {
         currentToolCall = blockResult.currentToolCall;
@@ -307,6 +308,7 @@ function handleContentBlockStartStateful(
   unprefixToolName: (name: string, isOAuth: boolean) => string,
   thinkingBlockIdentity: ThinkingBlockIdentity,
   logger: { debug: (fn: () => string) => void },
+  includeThinkingInResponse: boolean,
 ): {
   currentToolCall?: { id: string; name: string; input: string };
   currentThinkingBlock?: CurrentThinkingBlock;
@@ -346,6 +348,9 @@ function handleContentBlockStartStateful(
             thought: '[redacted]',
             sourceField: 'thinking',
             signature: redactedBlock.data,
+            streamId: thinkingBlockIdentity.nextStreamId(chunk.index),
+            streamStatus: 'complete',
+            ...(!includeThinkingInResponse ? { isHidden: true } : {}),
           } as ThinkingBlock,
         ],
       } as IContent,

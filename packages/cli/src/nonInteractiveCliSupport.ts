@@ -54,15 +54,26 @@ function emitStreamError(
   });
 }
 
+type ThoughtBufferEntry = {
+  streamId?: string;
+  text: string;
+};
+
+type ThoughtBuffer = ThoughtBufferEntry[];
+
 function flushThoughtBuffer(
-  thoughtBuffer: string,
+  thoughtBuffer: ThoughtBuffer,
   includeThinking: boolean,
-): string {
-  if (!includeThinking || !thoughtBuffer.trim()) {
-    return '';
+): ThoughtBuffer {
+  const thoughtText = thoughtBuffer
+    .map((entry) => entry.text.trim())
+    .filter(Boolean)
+    .join(' ');
+  if (!includeThinking || !thoughtText) {
+    return [];
   }
-  process.stdout.write(`<think>${thoughtBuffer.trim()}</think>\n`);
-  return '';
+  process.stdout.write(`<think>${thoughtText}</think>\n`);
+  return [];
 }
 
 function flushEmojiBuffer(
@@ -91,12 +102,16 @@ function flushEmojiBuffer(
 }
 
 function handleThinking(
-  thought: { subject?: string; description?: string },
+  thought: {
+    subject?: string;
+    description?: string;
+    streamId?: string;
+  },
   context: StreamConsumerContext,
   writeProfileName: () => void,
-  thoughtBuffer: string,
+  thoughtBuffer: ThoughtBuffer,
   includeThinking: boolean,
-): string {
+): ThoughtBuffer {
   if (!includeThinking) {
     return thoughtBuffer;
   }
@@ -114,7 +129,21 @@ function handleThinking(
       thoughtText = filterResult.filtered;
     }
   }
-  return thoughtBuffer ? `${thoughtBuffer} ${thoughtText}` : thoughtText;
+  if (thought.streamId === undefined) {
+    return [...thoughtBuffer, { text: thoughtText }];
+  }
+  const existingIndex = thoughtBuffer.findIndex(
+    (entry) => entry.streamId === thought.streamId,
+  );
+  if (existingIndex < 0) {
+    return [
+      ...thoughtBuffer,
+      { streamId: thought.streamId, text: thoughtText },
+    ];
+  }
+  return thoughtBuffer.map((entry, index) =>
+    index === existingIndex ? { ...entry, text: thoughtText } : entry,
+  );
 }
 
 function handleText(
@@ -345,7 +374,7 @@ function handleDone(
 }
 
 function finalizeStream(
-  thoughtBuffer: string,
+  thoughtBuffer: ThoughtBuffer,
   jsonResponseText: string,
   pendingDone: Extract<AgentEvent, { type: 'done' }> | null,
   context: StreamConsumerContext,
@@ -363,7 +392,7 @@ function finalizeStream(
 }
 
 interface StreamState {
-  thoughtBuffer: string;
+  thoughtBuffer: ThoughtBuffer;
   jsonResponseText: string;
   pendingDone: Extract<AgentEvent, { type: 'done' }> | null;
 }
@@ -467,7 +496,7 @@ export async function processAgentStream(
     !context.streamJsonOutput &&
     context.config.getEphemeralSetting('reasoning.includeInResponse') !== false;
   const state: StreamState = {
-    thoughtBuffer: '',
+    thoughtBuffer: [],
     jsonResponseText: '',
     pendingDone: null,
   };

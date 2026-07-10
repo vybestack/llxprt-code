@@ -56,6 +56,7 @@ describe('AnthropicProvider thinking display field @plan:PLAN-ANTHROPIC-THINKING
       }),
     );
     await generator.next();
+    expect(mockMessagesCreate).toHaveBeenCalled();
     return mockMessagesCreate.mock.calls[0][0] as AnthropicRequestBody;
   }
 

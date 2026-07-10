@@ -25,6 +25,17 @@ function expectCanonical(id: string): void {
   expect(id).toMatch(CANONICAL_ID_PATTERN);
 }
 
+function findThinkingBlock(content: IContent): ThinkingBlock {
+  const block = content.blocks.find(
+    (contentBlock): contentBlock is ThinkingBlock =>
+      contentBlock.type === 'thinking',
+  );
+  if (block === undefined) {
+    throw new Error('Expected content to contain a thinking block');
+  }
+  return block;
+}
+
 describe('ContentConverters - Tool ID Normalization', () => {
   describe('toIContent - Converting TO History Format', () => {
     it('should canonicalize tool call IDs', () => {
@@ -225,58 +236,6 @@ describe('ContentConverters - Tool ID Normalization', () => {
       expect(thinkingBlock?.sourceField).toBe('thought');
     });
 
-    it('keeps ordinary thought parts visible when no hidden metadata is present', () => {
-      const geminiContent: TestContent = {
-        role: 'model',
-        parts: [
-          {
-            text: 'Ordinary public thought',
-            thought: true,
-          },
-        ],
-      };
-
-      const iContent = ContentConverters.toIContent(
-        geminiContent,
-        undefined,
-        undefined,
-        'turn-test',
-      );
-
-      const thinkingBlock = iContent.blocks.find(
-        (block) => block.type === 'thinking',
-      );
-
-      expect(thinkingBlock).toBeDefined();
-      expect(thinkingBlock?.isHidden).toBeUndefined();
-    });
-
-    it('preserves explicit hidden thought metadata', () => {
-      const geminiContent: TestContent = {
-        role: 'model',
-        parts: [
-          {
-            text: 'Context-only thought',
-            thought: true,
-            llxprtThoughtIsHidden: true,
-          },
-        ],
-      };
-
-      const iContent = ContentConverters.toIContent(
-        geminiContent,
-        undefined,
-        undefined,
-        'turn-test',
-      );
-
-      const thinkingBlock = iContent.blocks.find(
-        (block) => block.type === 'thinking',
-      );
-
-      expect(thinkingBlock).toBeDefined();
-      expect(thinkingBlock?.isHidden).toBe(true);
-    });
     it('should preserve explicit Anthropic thinking sourceField metadata', () => {
       const geminiContent: TestContent = {
         role: 'model',
@@ -615,6 +574,53 @@ describe('ContentConverters - neutral type I/O (#2397)', () => {
   });
 });
 describe('issue #1723 – thinking visibility compatibility', () => {
+  it('keeps ordinary thought parts visible when no hidden metadata is present', () => {
+    const geminiContent: TestContent = {
+      role: 'model',
+      parts: [
+        {
+          text: 'Ordinary public thought',
+          thought: true,
+        },
+      ],
+    };
+
+    const iContent = ContentConverters.toIContent(
+      geminiContent,
+      undefined,
+      undefined,
+      'turn-test',
+    );
+
+    const thinkingBlock = findThinkingBlock(iContent);
+
+    expect(thinkingBlock.isHidden).toBeUndefined();
+  });
+
+  it('preserves explicit hidden thought metadata', () => {
+    const geminiContent: TestContent = {
+      role: 'model',
+      parts: [
+        {
+          text: 'Context-only thought',
+          thought: true,
+          llxprtThoughtIsHidden: true,
+        },
+      ],
+    };
+
+    const iContent = ContentConverters.toIContent(
+      geminiContent,
+      undefined,
+      undefined,
+      'turn-test',
+    );
+
+    const thinkingBlock = findThinkingBlock(iContent);
+
+    expect(thinkingBlock.isHidden).toBe(true);
+  });
+
   it('preserves absent isHidden through a core-conversation round trip', () => {
     const original: IContent = {
       speaker: 'ai',
@@ -638,8 +644,7 @@ describe('issue #1723 – thinking visibility compatibility', () => {
       undefined,
       'turn-visible',
     );
-    expect(restored.blocks[0].type).toBe('thinking');
-    const thinkingBlock = restored.blocks[0] as ThinkingBlock;
+    const thinkingBlock = findThinkingBlock(restored);
 
     expect(thinkingBlock.isHidden).toBeUndefined();
     expect(thinkingBlock.streamId).toBe('stream-visible');
@@ -668,8 +673,7 @@ describe('issue #1723 – thinking visibility compatibility', () => {
       undefined,
       'turn-visible-explicit',
     );
-    expect(restored.blocks[0].type).toBe('thinking');
-    const thinkingBlock = restored.blocks[0] as ThinkingBlock;
+    const thinkingBlock = findThinkingBlock(restored);
 
     expect(thinkingBlock.isHidden).toBe(false);
   });
@@ -696,8 +700,7 @@ describe('issue #1723 – thinking visibility compatibility', () => {
       undefined,
       'turn-hidden',
     );
-    expect(restored.blocks[0].type).toBe('thinking');
-    const thinkingBlock = restored.blocks[0] as ThinkingBlock;
+    const thinkingBlock = findThinkingBlock(restored);
 
     expect(thinkingBlock.isHidden).toBe(true);
   });
