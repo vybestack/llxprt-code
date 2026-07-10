@@ -31,7 +31,7 @@ export class StubRegistry {
     this.target = target;
   }
 
-  stub(key: string, value: unknown): void {
+  stub(key: string | symbol, value: unknown): void {
     if (!this.snapshots.has(key)) {
       this.snapshots.set(key, {
         existed: Object.prototype.hasOwnProperty.call(this.target, key),
