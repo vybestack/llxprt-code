@@ -5,9 +5,11 @@
  *
  * Behavioral tests for ast_edit ambiguous match handling (issue #1758).
  *
- * When old_string appears in multiple locations, the tool uses
- * String.replace() semantics: only the FIRST occurrence is replaced.
- * These tests verify that actual file-on-disk behavior.
+ * When old_string appears in multiple locations, the tool MUST reject
+ * the edit with EDIT_EXPECTED_OCCURRENCE_MISMATCH and tell the caller
+ * to include more surrounding context. Silently replacing only the
+ * first occurrence is unsafe — the caller may not realize a second
+ * location was left unchanged.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -20,6 +22,7 @@ import {
   executePreview,
 } from './test-helpers.js';
 import { ASTEditTool } from '../../ast-edit.js';
+import { ToolErrorType } from '../../../types/tool-error.js';
 
 describe('ast_edit ambiguous match: exactly 2 occurrences', () => {
   let tempDir: string;
@@ -35,7 +38,7 @@ describe('ast_edit ambiguous match: exactly 2 occurrences', () => {
     cleanup();
   });
 
-  it('replaces only the first occurrence when old_string appears twice', async () => {
+  it('rejects with occurrence mismatch when old_string appears twice', async () => {
     const filePath = join(tempDir, 'two-matches.ts');
     const content = [
       'const DUPLICATE = 1;',
@@ -51,22 +54,17 @@ describe('ast_edit ambiguous match: exactly 2 occurrences', () => {
       new_string: 'RENAMED',
     });
 
-    expect(result.error).toBeUndefined();
-    const fileContent = readFileSync(filePath, 'utf-8');
-    const lines = fileContent.split('\n');
-    expect(lines[0]).toContain('RENAMED');
-    expect(lines[0]).not.toContain('DUPLICATE');
-    expect(lines[2]).toContain('DUPLICATE');
-    expect(lines[2]).not.toContain('RENAMED');
+    expect(result.error).toBeDefined();
+    expect(result.error?.type).toBe(
+      ToolErrorType.EDIT_EXPECTED_OCCURRENCE_MISMATCH,
+    );
+    expect(readFileSync(filePath, 'utf-8')).toBe(content);
   });
 
-  it('reports 1 replacement applied when old_string matches twice', async () => {
+  it('reports the actual occurrence count in the mismatch error', async () => {
     const filePath = join(tempDir, 'two-count.ts');
-    writeFileSync(
-      filePath,
-      'const TOKEN = 1;\nconst OTHER = 2;\nconst TOKEN = 3;\n',
-      'utf-8',
-    );
+    const content = 'const TOKEN = 1;\nconst OTHER = 2;\nconst TOKEN = 3;\n';
+    writeFileSync(filePath, content, 'utf-8');
     const tool = new ASTEditTool(createFakeToolHost(tempDir));
 
     const result = await executeApply(tool, {
@@ -75,8 +73,12 @@ describe('ast_edit ambiguous match: exactly 2 occurrences', () => {
       new_string: 'ID',
     });
 
-    expect(result.error).toBeUndefined();
-    expect(String(result.llmContent)).toContain('1 replacement(s)');
+    expect(result.error).toBeDefined();
+    expect(result.error?.type).toBe(
+      ToolErrorType.EDIT_EXPECTED_OCCURRENCE_MISMATCH,
+    );
+    expect(String(result.llmContent)).toContain('2 times');
+    expect(readFileSync(filePath, 'utf-8')).toBe(content);
   });
 });
 
@@ -94,7 +96,7 @@ describe('ast_edit ambiguous match: 3+ occurrences', () => {
     cleanup();
   });
 
-  it('replaces only the first occurrence when old_string appears 3 times', async () => {
+  it('rejects with occurrence mismatch when old_string appears 3 times', async () => {
     const filePath = join(tempDir, 'three-matches.ts');
     const content = [
       'let value = placeholder;',
@@ -110,16 +112,15 @@ describe('ast_edit ambiguous match: 3+ occurrences', () => {
       new_string: 'real',
     });
 
-    expect(result.error).toBeUndefined();
-    const fileContent = readFileSync(filePath, 'utf-8');
-    const lines = fileContent.split('\n');
-    expect(lines[0]).toContain('real');
-    expect(lines[1]).toContain('placeholder');
-    expect(lines[2]).toContain('placeholder');
+    expect(result.error).toBeDefined();
+    expect(result.error?.type).toBe(
+      ToolErrorType.EDIT_EXPECTED_OCCURRENCE_MISMATCH,
+    );
+    expect(readFileSync(filePath, 'utf-8')).toBe(content);
   });
 });
 
-describe('ast_edit ambiguous match: correct occurrence targeted', () => {
+describe('ast_edit ambiguous match: disambiguated match succeeds', () => {
   let tempDir: string;
   let cleanup: () => void;
 
@@ -133,37 +134,7 @@ describe('ast_edit ambiguous match: correct occurrence targeted', () => {
     cleanup();
   });
 
-  it('targets the first occurrence in document order when old_string has different surrounding context', async () => {
-    const filePath = join(tempDir, 'context-order.ts');
-    const content = [
-      '// Section A',
-      'function process() {',
-      '  return COMMON_PATTERN;',
-      '}',
-      '// Section B',
-      'function validate() {',
-      '  return COMMON_PATTERN;',
-      '}',
-    ].join('\n');
-    writeFileSync(filePath, content, 'utf-8');
-    const tool = new ASTEditTool(createFakeToolHost(tempDir));
-
-    const result = await executeApply(tool, {
-      file_path: filePath,
-      old_string: 'COMMON_PATTERN',
-      new_string: 'RESOLVED',
-    });
-
-    expect(result.error).toBeUndefined();
-    const fileContent = readFileSync(filePath, 'utf-8');
-    const firstIdx = fileContent.indexOf('RESOLVED');
-    const processIdx = fileContent.indexOf('function process');
-    const validateIdx = fileContent.indexOf('function validate');
-    expect(firstIdx).toBeGreaterThan(processIdx);
-    expect(firstIdx).toBeLessThan(validateIdx);
-  });
-
-  it('uses a more specific old_string to target a later occurrence', async () => {
+  it('succeeds when caller provides enough surrounding context to match exactly once', async () => {
     const filePath = join(tempDir, 'specific-target.ts');
     const content = [
       'export const VERSION = "1.0.0";',
@@ -185,9 +156,24 @@ describe('ast_edit ambiguous match: correct occurrence targeted', () => {
     expect(fileContent).toContain('return VERSION + "-debug";');
     expect(fileContent).toContain('const VERSION = "1.0.0";');
   });
+
+  it('succeeds when there is exactly one occurrence of old_string', async () => {
+    const filePath = join(tempDir, 'single-match.ts');
+    writeFileSync(filePath, 'const UNIQUE = 1;\nconst OTHER = 2;\n', 'utf-8');
+    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+
+    const result = await executeApply(tool, {
+      file_path: filePath,
+      old_string: 'UNIQUE',
+      new_string: 'RENAMED',
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(readFileSync(filePath, 'utf-8')).toContain('RENAMED');
+  });
 });
 
-describe('ast_edit ambiguous match: preview consistency with apply', () => {
+describe('ast_edit ambiguous match: preview rejects same as apply', () => {
   let tempDir: string;
   let cleanup: () => void;
 
@@ -201,38 +187,21 @@ describe('ast_edit ambiguous match: preview consistency with apply', () => {
     cleanup();
   });
 
-  it('preview shows the same first-occurrence replacement that apply produces', async () => {
-    const filePath = join(tempDir, 'preview-consistency.ts');
-    const content = 'const X = dup;\nconst Y = dup;\n';
-    writeFileSync(filePath, content, 'utf-8');
+  it('preview also rejects ambiguous matches with occurrence mismatch', async () => {
+    const filePath = join(tempDir, 'preview-ambiguous.ts');
+    writeFileSync(filePath, 'const X = dup;\nconst Y = dup;\n', 'utf-8');
     const tool = new ASTEditTool(createFakeToolHost(tempDir));
 
-    const previewResult = await executePreview(tool, {
+    const result = await executePreview(tool, {
       file_path: filePath,
       old_string: 'dup',
       new_string: 'unique',
     });
 
-    expect(previewResult.error).toBeUndefined();
-    const previewDisplay = previewResult.returnDisplay as {
-      newContent: string;
-    };
-    expect(previewDisplay.newContent).toContain('unique');
-    const previewLines = previewDisplay.newContent.split('\n');
-    expect(previewLines[0]).toContain('unique');
-    expect(previewLines[1]).toContain('dup');
-
-    const applyFilePath = join(tempDir, 'apply-consistency.ts');
-    writeFileSync(applyFilePath, content, 'utf-8');
-    const applyTool = new ASTEditTool(createFakeToolHost(tempDir));
-    const applyResult = await executeApply(applyTool, {
-      file_path: applyFilePath,
-      old_string: 'dup',
-      new_string: 'unique',
-    });
-
-    expect(applyResult.error).toBeUndefined();
-    const appliedContent = readFileSync(applyFilePath, 'utf-8');
-    expect(appliedContent).toBe(previewDisplay.newContent);
+    expect(result.error).toBeDefined();
+    expect(result.error?.type).toBe(
+      ToolErrorType.EDIT_EXPECTED_OCCURRENCE_MISMATCH,
+    );
+    expect(String(result.llmContent)).not.toContain('LLXPRT EDIT PREVIEW');
   });
 });

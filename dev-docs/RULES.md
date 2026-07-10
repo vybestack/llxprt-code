@@ -101,10 +101,11 @@ const calculateTotal = (items: Item[]): number => {
 
 ### What NOT to Test
 
-❌ Implementation details
-❌ Private methods
-❌ Third-party libraries
-❌ Mock interactions
+- Implementation details
+- Private methods
+- Third-party libraries
+- Mock interactions
+- Erroneous behavior — never write a passing test that asserts incorrect behavior, even if that is what the code currently does. If you discover a bug while writing tests, do NOT enshrine it as specification. Instead: (1) file an issue or ask the user, (2) write a failing test that asserts the CORRECT behavior, (3) fix the production code so the test passes. A test suite that encodes bugs as passing tests is worse than no tests — it actively prevents future fixes by making the correct behavior look like a regression.
 
 ## Code Patterns
 
