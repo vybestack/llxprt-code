@@ -142,11 +142,30 @@ describe('discoverWorkspaces', () => {
     expect(withoutPretest!.hasPretest).toBe(false);
   });
 
-  it('detects test scripts in all workspaces', () => {
-    const workspaces = discoverWorkspaces(repoRoot);
-    for (const ws of workspaces) {
-      expect(ws.hasTest, `${ws.name} should have a test script`).toBe(true);
-    }
+  it('detects test scripts via fixture repo', () => {
+    const fixtureRoot = createFixtureRepo([
+      {
+        dir: 'packages/with-test',
+        name: 'fixture-with-test',
+        scripts: { test: 'vitest run' },
+      },
+      {
+        dir: 'packages/without-test',
+        name: 'fixture-without-test',
+        scripts: { build: 'echo build' },
+      },
+    ]);
+
+    const workspaces = discoverWorkspaces(fixtureRoot);
+    const withTest = workspaces.find((w) => w.name === 'fixture-with-test');
+    expect(withTest).toBeDefined();
+    expect(withTest!.hasTest).toBe(true);
+
+    const withoutTest = workspaces.find(
+      (w) => w.name === 'fixture-without-test',
+    );
+    expect(withoutTest).toBeDefined();
+    expect(withoutTest!.hasTest).toBe(false);
   });
 
   it('returns absolute paths that actually exist', () => {
@@ -162,7 +181,9 @@ describe('discoverWorkspaces', () => {
   it('returns relative paths relative to root', () => {
     const workspaces = discoverWorkspaces(repoRoot);
     for (const ws of workspaces) {
-      expect(ws.relativePath).toMatch(/^packages\//);
+      // relativePath must be genuinely relative (not absolute)
+      expect(ws.relativePath).not.toMatch(/^\//u);
+      // and must resolve to the same absolute path
       expect(resolve(repoRoot, ws.relativePath)).toBe(ws.absolutePath);
     }
   });

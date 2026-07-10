@@ -280,8 +280,9 @@ export function orchestrateTests(
 
   const allWorkspaces = discoverWorkspaces(rootDir);
 
-  const workspaces = options.workspaceFilter
-    ? allWorkspaces.filter((ws) => matchesFilter(ws, options.workspaceFilter!))
+  const { workspaceFilter } = options;
+  const workspaces = workspaceFilter
+    ? allWorkspaces.filter((ws) => matchesFilter(ws, workspaceFilter))
     : allWorkspaces;
 
   const failedWorkspaces = new Set<string>();
@@ -307,8 +308,9 @@ export function orchestrateTests(
     const shouldRunTest = workspace.hasTest && !skipTest;
 
     if (skipTest && !options.continueOnError) {
+      // Pretest failed in fail-fast mode: the workspace has failed
+      // (recorded via its pretest TestPhaseResult), not skipped.
       failedWorkspaces.add(workspace.name);
-      skippedWorkspaces.push(workspace.name);
     }
 
     if (shouldRunTest) {
@@ -327,7 +329,11 @@ export function orchestrateTests(
     }
   }
 
-  if (failedWorkspaces.size === 0) {
+  // Skip script tests if any workspace phase failed, regardless of
+  // continue-on-error mode. Checking results (not failedWorkspaces)
+  // catches failures in both fail-fast and continue-on-error modes.
+  const anyPhaseFailed = results.some((r) => !r.success);
+  if (!anyPhaseFailed) {
     runScriptTests(rootDir, options, runner, results);
   }
 
