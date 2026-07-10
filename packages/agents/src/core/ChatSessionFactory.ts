@@ -85,6 +85,9 @@ export function buildSettingsSnapshot(
     'reasoning.stripFromContext': config.getEphemeralSetting(
       'reasoning.stripFromContext',
     ) as 'all' | 'allButLast' | 'none' | undefined,
+    'reasoning.fieldName': config.getEphemeralSetting('reasoning.fieldName') as
+      | string
+      | undefined,
     'reasoning.effort': config.getEphemeralSetting('reasoning.effort') as
       | 'minimal'
       | 'low'

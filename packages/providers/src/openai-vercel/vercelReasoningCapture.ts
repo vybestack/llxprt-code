@@ -25,14 +25,17 @@ export interface CaptureBuffer {
   finalized: boolean;
   headers?: Headers;
   parsePromise?: Promise<void>;
+  fieldName?: string;
+  actualFieldName?: string;
 }
 
-export function createCaptureBuffer(): CaptureBuffer {
+export function createCaptureBuffer(fieldName?: string): CaptureBuffer {
   return {
     reasoningChunks: [],
     finalized: false,
     headers: undefined,
     parsePromise: undefined,
+    fieldName,
   };
 }
 
@@ -45,7 +48,7 @@ function captureReasoningFromJson(
   logger: DebugLogger,
 ): void {
   let parsed: {
-    choices?: Array<{ delta?: { reasoning_content?: string } }>;
+    choices?: Array<{ delta?: Record<string, unknown> }>;
   };
   try {
     parsed = JSON.parse(jsonStr) as typeof parsed;
@@ -57,12 +60,29 @@ function captureReasoningFromJson(
   if (parsed.choices === undefined || parsed.choices.length === 0) {
     return;
   }
-  const reasoningContent = parsed.choices[0]?.delta?.reasoning_content;
-  if (reasoningContent && typeof reasoningContent === 'string') {
+  const delta = parsed.choices[0]?.delta;
+  if (delta === undefined) return;
+
+  const fieldName = captureBuffer.fieldName ?? 'reasoning_content';
+  let actualFieldName = fieldName;
+  let reasoningContent: unknown = delta[fieldName];
+
+  // Auto-fallback: when fieldName was not explicitly set (undefined), also
+  // check 'reasoning' for Ollama compatibility (issue #2488)
+  if (
+    (reasoningContent === undefined || reasoningContent === null) &&
+    captureBuffer.fieldName === undefined
+  ) {
+    reasoningContent = delta['reasoning'];
+    actualFieldName = 'reasoning';
+  }
+
+  if (typeof reasoningContent === 'string' && reasoningContent !== '') {
     captureBuffer.reasoningChunks.push(reasoningContent);
+    captureBuffer.actualFieldName = actualFieldName;
     logger.debug(
       () =>
-        `[ReasoningCaptureFetch] Captured reasoning_content chunk: ${reasoningContent.length} chars`,
+        `[ReasoningCaptureFetch] Captured ${actualFieldName} chunk: ${reasoningContent.length} chars`,
     );
   }
 }
