@@ -154,8 +154,8 @@ describe('ast_edit edge cases: whitespace-only differences from file content', (
 
     const result = await executeApply(tool, {
       file_path: filePath,
-      old_string: 'function f() {\n    return 1;\n}',
-      new_string: 'function f() {\n    return 2;\n}',
+      old_string: 'function f() {\n    return 1;\n}\n',
+      new_string: 'function f() {\n    return 2;\n}\n',
     });
 
     expect(result.error).toBeDefined();
