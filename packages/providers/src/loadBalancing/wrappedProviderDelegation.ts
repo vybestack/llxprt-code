@@ -14,18 +14,19 @@
  * a corrupt standard profile with provider:'load-balancer' (issue #2479).
  */
 
-export function delegateGetStats(wrapped: unknown): unknown {
-  const candidate = wrapped as { getStats?: () => unknown };
-  if (typeof candidate.getStats === 'function') {
-    return candidate.getStats();
+function delegateMethod(wrapped: unknown, methodName: string): unknown {
+  const candidate = wrapped as Record<string, unknown>;
+  const method = candidate[methodName];
+  if (typeof method === 'function') {
+    return (method as (this: unknown) => unknown).call(wrapped);
   }
   return undefined;
 }
 
+export function delegateGetStats(wrapped: unknown): unknown {
+  return delegateMethod(wrapped, 'getStats');
+}
+
 export function delegateGetLoadBalancerConfig(wrapped: unknown): unknown {
-  const candidate = wrapped as { getLoadBalancerConfig?: () => unknown };
-  if (typeof candidate.getLoadBalancerConfig === 'function') {
-    return candidate.getLoadBalancerConfig();
-  }
-  return undefined;
+  return delegateMethod(wrapped, 'getLoadBalancerConfig');
 }
