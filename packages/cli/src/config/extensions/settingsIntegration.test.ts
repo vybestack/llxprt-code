@@ -19,7 +19,9 @@ import { getWorkspaceIdentity } from '../../utils/gitUtils.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 vi.mock('../../utils/gitUtils.js', async () => {
-  const actual = await import('../../utils/gitUtils.js?__importActual');
+  const actual = (await import(
+    '../../utils/gitUtils.js?__importActual'
+  )) as unknown as typeof import('../../utils/gitUtils.js');
   return {
     ...actual,
     getWorkspaceIdentity: vi.fn(actual.getWorkspaceIdentity),

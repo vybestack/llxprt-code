@@ -76,7 +76,9 @@ vi.mock('./utils/sandbox.js', () => ({
 }));
 
 vi.mock('./utils/bootstrap.js', async () => {
-  const actual = await import('./utils/bootstrap.js?__importActual');
+  const actual = (await import(
+    './utils/bootstrap.js?__importActual'
+  )) as unknown as typeof import('./utils/bootstrap.js');
   return {
     ...actual,
     shouldRelaunchForMemory: vi.fn(() => []),

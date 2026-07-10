@@ -63,9 +63,9 @@ function resolvePromptType(prompt: string): string {
 }
 
 vi.mock('../../config/extensions/settingsIntegration.js', async () => {
-  const actual = await import(
+  const actual = (await import(
     '../../config/extensions/settingsIntegration.js?__importActual'
-  );
+  )) as unknown as typeof import('../../config/extensions/settingsIntegration.js');
   return {
     updateSetting: mockUpdateSetting,
     getScopedEnvContents: mockGetScopedEnvContents,
