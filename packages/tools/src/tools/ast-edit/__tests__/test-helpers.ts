@@ -16,7 +16,7 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { IToolHost } from '../../../interfaces/IToolHost.js';
-import type { ASTEditTool } from '../../ast-edit.js';
+import type { ASTEditTool, ASTEditToolParams } from '../../ast-edit.js';
 import type { ToolResult } from '../../tools.js';
 
 export function createTempDir(prefix = 'llxprt-ast-edit-test-'): {
@@ -49,7 +49,7 @@ export function createFakeToolHost(targetDir: string): IToolHost {
     isInteractive: () => false,
     hasFeatureFlag: () => false,
     getEphemeralSettings: () => ({}),
-  } as IToolHost;
+  } as unknown as IToolHost;
 }
 
 /**
@@ -57,7 +57,7 @@ export function createFakeToolHost(targetDir: string): IToolHost {
  */
 export async function executePreview(
   tool: ASTEditTool,
-  params: Record<string, unknown>,
+  params: Omit<ASTEditToolParams, 'force'>,
 ): Promise<ToolResult> {
   return tool
     .build({ ...params, force: false })
@@ -69,7 +69,7 @@ export async function executePreview(
  */
 export async function executeApply(
   tool: ASTEditTool,
-  params: Record<string, unknown>,
+  params: Omit<ASTEditToolParams, 'force'>,
 ): Promise<ToolResult> {
   return tool
     .build({ ...params, force: true })
