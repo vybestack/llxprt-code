@@ -33,6 +33,15 @@ describe('accumulateLiveOutput', () => {
     expect(accumulateLiveOutput(undefined, 'first')).toBe('first');
   });
 
+  it('returns the chunk when existing is null or other non-string type', () => {
+    expect(accumulateLiveOutput(null, 'delta')).toBe('delta');
+    expect(accumulateLiveOutput(42, 'delta')).toBe('delta');
+  });
+
+  it('preserves existing output when the delta is an empty string', () => {
+    expect(accumulateLiveOutput('Hello ', '')).toBe('Hello ');
+  });
+
   it('accumulates multiple string deltas in sequence', () => {
     let acc: string | AnsiOutput | undefined = undefined;
     acc = accumulateLiveOutput(acc, 'one ');

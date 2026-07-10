@@ -82,8 +82,8 @@ describe('TaskTool', () => {
       );
 
       // Verify messages are sent without [agentId] prefix
-      expect(updateOutput).toHaveBeenNthCalledWith(2, 'First message\n');
-      expect(updateOutput).toHaveBeenNthCalledWith(3, 'Second message\n');
+      expect(updateOutput).toHaveBeenNthCalledWith(2, 'First message');
+      expect(updateOutput).toHaveBeenNthCalledWith(3, 'Second message');
 
       // Verify closing tag is sent last
       expect(updateOutput).toHaveBeenLastCalledWith(
@@ -140,7 +140,7 @@ describe('TaskTool', () => {
         1,
         '<subagent name="interactive-agent" id="agent-xml-002">\n',
       );
-      expect(updateOutput).toHaveBeenNthCalledWith(2, 'Interactive message\n');
+      expect(updateOutput).toHaveBeenNthCalledWith(2, 'Interactive message');
       expect(updateOutput).toHaveBeenLastCalledWith(
         '</subagent name="interactive-agent" id="agent-xml-002">\n',
       );
@@ -290,6 +290,133 @@ describe('TaskTool', () => {
       expect(updateOutput).toHaveBeenLastCalledWith(
         '</subagent name="async-helper" id="async-xml-agent">\n',
       );
+    });
+  });
+
+  describe('Issue #2008: subagent streaming text should flow, not one word per line', () => {
+    it('accumulates word-by-word tokens as flowing text without forced newlines', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const updateOutput = vi.fn();
+      const scope: {
+        output: {
+          emitted_vars: Record<string, string>;
+          terminate_reason: SubagentTerminateMode;
+        };
+        runInteractive: ReturnType<typeof vi.fn>;
+        runNonInteractive: ReturnType<typeof vi.fn>;
+        onMessage?: (message: string) => void;
+      } = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn(),
+        runNonInteractive: vi
+          .fn()
+          .mockImplementation(async (_ctx: ContextState) => {
+            const tokens = [
+              'The',
+              ' project',
+              ' combines',
+              ' Ink',
+              ' rendering',
+              ' with',
+              ' a',
+              ' modular',
+              ' architecture.',
+            ];
+            for (const token of tokens) {
+              scope.onMessage?.(token);
+            }
+          }),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-stream-001',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => false,
+      });
+      const invocation = tool.build({
+        subagent_name: 'streaming-agent',
+        goal_prompt: 'Do work',
+      });
+
+      await invocation.execute(new AbortController().signal, updateOutput);
+
+      const calls = updateOutput.mock.calls.map((c) => c[0] as string);
+      // Slice off opening tag (first) and closing tag (last)
+      const textChunks = calls.slice(1, -1);
+      const accumulated = textChunks.join('');
+
+      // Should be flowing prose, not a vertical column of single words
+      expect(accumulated).toBe(
+        'The project combines Ink rendering with a modular architecture.',
+      );
+      expect(accumulated).not.toContain('\n');
+    });
+
+    it('preserves newlines the LLM includes in its own tokens', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const updateOutput = vi.fn();
+      const scope: {
+        output: {
+          emitted_vars: Record<string, string>;
+          terminate_reason: SubagentTerminateMode;
+        };
+        runInteractive: ReturnType<typeof vi.fn>;
+        runNonInteractive: ReturnType<typeof vi.fn>;
+        onMessage?: (message: string) => void;
+      } = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn(),
+        runNonInteractive: vi
+          .fn()
+          .mockImplementation(async (_ctx: ContextState) => {
+            scope.onMessage?.('First paragraph.');
+            scope.onMessage?.('\nSecond ');
+            scope.onMessage?.('paragraph.');
+          }),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-stream-002',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => false,
+      });
+      const invocation = tool.build({
+        subagent_name: 'streaming-agent',
+        goal_prompt: 'Do work',
+      });
+
+      await invocation.execute(new AbortController().signal, updateOutput);
+
+      const calls = updateOutput.mock.calls.map((c) => c[0] as string);
+      const textChunks = calls.slice(1, -1);
+      const accumulated = textChunks.join('');
+
+      // LLM's own \n is preserved; no extra \n added to bare tokens
+      expect(accumulated).toBe('First paragraph.\nSecond paragraph.');
     });
   });
 
