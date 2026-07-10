@@ -111,13 +111,14 @@ function processParamEntry(
     }
     return { key: normalizedKey, value: sanitized };
   }
-  if (normalizedKey === 'prompt_cache_key' && typeof value === 'string') {
-    if (value.trim() === '') {
-      return undefined;
-    }
+  if (normalizedKey === 'prompt_cache_key') {
     // OpenAI rejects prompt_cache_key longer than 64 chars (issue #2135);
     // clamp at egress so overlong runtime/session-derived keys never reach
-    // the API regardless of which layer injected them.
+    // the API regardless of which layer injected them. Non-string or empty
+    // values are dropped rather than forwarded as invalid request fields.
+    if (typeof value !== 'string' || value.trim() === '') {
+      return undefined;
+    }
     return { key: normalizedKey, value: sanitizePromptCacheKey(value) };
   }
   return { key: normalizedKey, value };

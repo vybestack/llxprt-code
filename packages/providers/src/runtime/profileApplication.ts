@@ -38,6 +38,12 @@ import { maybeRegisterLoadBalancerProfile } from './profile-application/loadBala
 export interface ProviderSelectionResult {
   providerName: string;
   warnings: string[];
+  /**
+   * Always false since issue #2479: a named-but-unavailable provider now
+   * throws instead of silently falling back, so no success path sets this to
+   * true anymore. Retained for API stability (threaded through
+   * ProfileApplicationResult and profileSnapshot consumers).
+   */
   didFallback: boolean;
 
   requestedProvider: string | null;

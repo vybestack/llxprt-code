@@ -29,6 +29,7 @@ import {
   _internal as runtimeAccessorsInternal,
 } from './runtimeAccessors.js';
 import { applyProfileWithGuards } from './profileApplication.js';
+import type { LoadBalancingProviderConfig } from '../loadBalancing/loadBalancerTypes.js';
 import {
   getProfileEphemeralSettings,
   getProfileModel,
@@ -206,23 +207,16 @@ function buildLoadBalancerProfileSnapshot(
 ): LoadBalancerProfile {
   const provider = snapshotProviderManager.getProviderByName?.(
     'load-balancer',
-  ) as { getLoadBalancerConfig?: () => unknown } | null | undefined;
+  ) as
+    | { getLoadBalancerConfig?: () => Readonly<LoadBalancingProviderConfig> }
+    | null
+    | undefined;
   const lbConfig =
     typeof provider?.getLoadBalancerConfig === 'function'
-      ? (provider.getLoadBalancerConfig() as {
-          strategy?: string;
-          subProfiles?: Array<{ name?: unknown }>;
-          contextLimit?: number;
-          lbProfileEphemeralSettings?: Record<string, unknown>;
-          lbProfileModelParams?: Record<string, unknown>;
-        } | null)
+      ? provider.getLoadBalancerConfig()
       : null;
 
-  const memberNames = Array.isArray(lbConfig?.subProfiles)
-    ? lbConfig.subProfiles
-        .map((sub) => sub.name)
-        .filter((name): name is string => typeof name === 'string')
-    : [];
+  const memberNames = lbConfig?.subProfiles.map((sub) => sub.name) ?? [];
 
   if (!lbConfig || memberNames.length === 0) {
     throw new Error(

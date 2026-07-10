@@ -635,4 +635,76 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     expect(cacheKey.length).toBeLessThanOrEqual(64);
     expect(cacheKey).not.toBe(overlongKey);
   });
+
+  it('should drop a non-string prompt_cache_key injected via modelParams instead of forwarding it', async () => {
+    const provider = new OpenAIResponsesProvider(
+      'test-api-key',
+      'https://api.openai.com/v1',
+    );
+
+    let capturedBody: string | undefined;
+    mockFetch.mockImplementation(
+      async (
+        _input: RequestInfo | URL,
+        init?: RequestInit,
+      ): Promise<Response> => {
+        if (init?.body != null) {
+          capturedBody =
+            typeof init.body === 'string'
+              ? init.body
+              : await new Response(init.body).text();
+        }
+        return createMockStreamingResponse();
+      },
+    );
+
+    const settings = new SettingsService();
+    settings.set('activeProvider', provider.name);
+    settings.setProviderSetting(provider.name, 'model', 'o3-mini');
+
+    const config = createRuntimeConfigStub(settings);
+    const runtime = createProviderRuntimeContext({
+      settingsService: settings,
+      runtimeId: 'short-runtime-id',
+      config,
+    });
+
+    const invocation = createRuntimeInvocationContext({
+      runtime,
+      settings,
+      providerName: provider.name,
+      ephemeralsSnapshot: {
+        'prompt-caching': '1h',
+        prompt_cache_key: 12345,
+      },
+    });
+
+    const options = createProviderCallOptions({
+      settings,
+      config,
+      runtime,
+      invocation,
+      providerName: provider.name,
+      contents: [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'test message' }] },
+      ],
+      ephemeralSettings: { 'prompt-caching': '1h' },
+    });
+
+    const generator = provider.generateChatCompletion(options);
+    for await (const _content of generator) {
+      // drain
+    }
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(capturedBody).toBeDefined();
+    const requestBody = JSON.parse(capturedBody!);
+
+    // The invalid non-string override must not survive; the provider's own
+    // runtimeId-derived key (a valid string) is applied instead.
+    const cacheKey = requestBody.prompt_cache_key as string;
+    expect(typeof cacheKey).toBe('string');
+    expect(cacheKey).not.toBe(12345 as unknown as string);
+    expect(cacheKey.length).toBeLessThanOrEqual(64);
+  });
 });

@@ -288,11 +288,21 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
           () =>
             `Skipping reasoning object in modelParams - handled via model-behavior settings`,
         );
-      } else if (key === 'prompt_cache_key' && typeof value === 'string') {
+      } else if (key === 'prompt_cache_key') {
         // OpenAI rejects prompt_cache_key longer than 64 chars (issue #2135);
         // clamp at egress so overlong keys injected via modelParams never
-        // reach the API.
-        requestOverrides[key] = sanitizePromptCacheKey(value);
+        // reach the API. Non-string or empty values are dropped entirely
+        // rather than forwarded as invalid request fields.
+        const sanitized =
+          typeof value === 'string' ? sanitizePromptCacheKey(value) : '';
+        if (sanitized !== '') {
+          requestOverrides[key] = sanitized;
+        } else {
+          this.logger.debug(
+            () =>
+              `Dropping invalid prompt_cache_key from modelParams (type=${typeof value})`,
+          );
+        }
       } else {
         requestOverrides[key] = value;
       }

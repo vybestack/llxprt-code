@@ -91,4 +91,13 @@ describe('filterOpenAIRequestParams', () => {
 
     expect(filtered).toBeUndefined();
   });
+
+  it('drops non-string prompt_cache_key values instead of forwarding them', () => {
+    const filtered = filterOpenAIRequestParams({
+      prompt_cache_key: 12345,
+      temperature: 0.5,
+    });
+
+    expect(filtered).toStrictEqual({ temperature: 0.5 });
+  });
 });
