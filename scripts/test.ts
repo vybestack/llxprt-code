@@ -394,8 +394,30 @@ function buildSummary(
   durationMs: number,
   skippedWorkspaces: string[],
 ): TestSummary {
-  const passed = results.filter((r) => r.success).length;
-  const failed = results.filter((r) => !r.success).length;
+  // Compute workspace-level outcomes so the summary counts are consistent
+  // with totalWorkspaces. Each workspace can produce multiple phase results
+  // (pretest + test); a workspace passes only if ALL its phases pass.
+  const workspaceOutcomes = new Map<string, boolean>();
+  for (const result of results) {
+    if (result.phase === 'scripts') {
+      continue;
+    }
+    const current = workspaceOutcomes.get(result.workspace);
+    workspaceOutcomes.set(
+      result.workspace,
+      (current ?? true) && result.success,
+    );
+  }
+
+  let passed = 0;
+  let failed = 0;
+  for (const success of workspaceOutcomes.values()) {
+    if (success) {
+      passed++;
+    } else {
+      failed++;
+    }
+  }
 
   return {
     results,

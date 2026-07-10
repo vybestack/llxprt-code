@@ -327,7 +327,8 @@ describe('orchestrateTests', () => {
       parseArgs(['--skip-scripts']),
       runner,
     );
-    expect(summary.passed).toBe(2);
+    // 1 workspace with pretest + test both passing = 1 workspace passed
+    expect(summary.passed).toBe(1);
     expect(commands[0].command).toBe('echo pretest');
     expect(commands[1].command).toBe('vitest run');
   });
