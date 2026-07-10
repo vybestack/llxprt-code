@@ -54,8 +54,7 @@ describe('ast_edit AST validation: TypeScript', () => {
     const output = String(result.llmContent);
     expect(output).toContain('AST validation: FAILED');
     expect(output).toContain('AST errors:');
-    expect(output).toMatch(/line \d+/);
-    expect(output).toMatch(/column \d+/);
+    expect(output).toMatch(/Syntax error at line \d+, column \d+/);
   });
 
   it('reports AST FAILED for broken TypeScript with unterminated string', async () => {

@@ -141,6 +141,11 @@ describe('ast_edit preview response structure', () => {
     const output = String(result.llmContent);
     expect(output).toContain('AST validation: FAILED');
     expect(output).toContain('AST errors:');
+    const display = result.returnDisplay as {
+      metadata?: { astValidation?: { valid: boolean; errors: string[] } };
+    };
+    expect(display.metadata?.astValidation?.valid).toBe(false);
+    expect(display.metadata?.astValidation?.errors.length).toBeGreaterThan(0);
   });
 
   it('includes file timestamp in preview output for use with last_modified', async () => {
