@@ -17,8 +17,11 @@
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 /**
- * Buffer that accumulates reasoning_content chunks captured from the
+ * Buffer that accumulates reasoning chunks captured from the
  * raw SSE stream while Vercel AI SDK processes its own copy.
+ *
+ * The delta field name is configurable via captureBuffer.fieldName
+ * (default: reasoning_content; auto-fallback to reasoning for Ollama).
  */
 export interface CaptureBuffer {
   reasoningChunks: string[];
@@ -40,7 +43,8 @@ export function createCaptureBuffer(fieldName?: string): CaptureBuffer {
 }
 
 /**
- * Parses a single SSE `data:` JSON line and extracts reasoning_content.
+ * Parses a single SSE `data:` JSON line and extracts reasoning from
+ * the configured delta field (default: reasoning_content).
  */
 function captureReasoningFromJson(
   jsonStr: string,
@@ -88,8 +92,9 @@ function captureReasoningFromJson(
 }
 
 /**
- * Parses an SSE stream reader to extract reasoning_content from chunks.
- * Runs in the background while the SDK processes the other tee'd stream.
+ * Parses an SSE stream reader to extract reasoning from chunks using the
+ * configured field name. Runs in the background while the SDK processes
+ * the other tee'd stream.
  */
 export async function parseReasoningFromSseStream(
   reader: ReadableStreamDefaultReader<Uint8Array>,
@@ -137,11 +142,11 @@ export async function parseReasoningFromSseStream(
 
 /**
  * Creates a custom fetch function that intercepts streaming responses
- * and extracts reasoning_content from SSE chunks.
+ * and extracts reasoning from SSE chunks using the configured field name.
  *
- * This is necessary because Vercel AI SDK doesn't expose reasoning_content
- * from the OpenAI-compatible API response. Kimi K2 and similar models
- * send reasoning via this field.
+ * This is necessary because Vercel AI SDK doesn't expose reasoning
+ * from the OpenAI-compatible API response. Models like Kimi K2 send
+ * reasoning via the reasoning_content field; Ollama uses reasoning.
  */
 export function createReasoningCaptureFetch(
   captureBuffer: CaptureBuffer,
