@@ -26,6 +26,7 @@ export interface CalculatedEdit {
   error?: { display: string; raw: string; type: ToolErrorType };
   isNewFile: boolean;
   astValidation?: { valid: boolean; errors: string[] };
+  preEditValidation?: { valid: boolean; errors: string[] };
   fileFreshness?: number | null;
 }
 
@@ -86,6 +87,14 @@ export async function calculateEdit(
     params.file_path,
   );
 
+  // Validate the original (pre-edit) content so post-edit errors can be
+  // categorized as pre-existing vs newly-introduced (issue #2124).
+  // Skipped for new files where there is no prior content to baseline.
+  const preEditValidation =
+    !noChangeError && currentContent !== null
+      ? validateASTSyntax(params.file_path, currentContent)
+      : undefined;
+
   let astValidation: { valid: boolean; errors: string[] } | undefined;
   if (!noChangeError) {
     astValidation = validateASTSyntax(params.file_path, newContent);
@@ -98,6 +107,7 @@ export async function calculateEdit(
     error: noChangeError,
     isNewFile,
     astValidation,
+    preEditValidation,
     fileFreshness: currentMtime,
   };
 }
@@ -164,6 +174,7 @@ function checkFreshness(
       },
       isNewFile: false,
       astValidation: undefined,
+      preEditValidation: undefined,
       fileFreshness: currentMtime,
     };
   }

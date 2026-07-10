@@ -165,3 +165,133 @@ describe('ASTEditTool preview phase validation (issue #1755)', () => {
     );
   });
 });
+
+const NL = String.fromCharCode(10);
+
+function makeBrokenFile(): string {
+  return [
+    'export function greet(name: string): string {',
+    '  return `hello ${name}`;',
+    '}',
+    'const broken = @@@;',
+    '',
+  ].join(NL);
+}
+
+describe('ASTEditTool pre-existing vs newly-introduced error categorization (issue #2124)', () => {
+  let tempDir: string;
+  let cleanup: () => void = () => {};
+
+  beforeEach(() => {
+    const tmp = createTempDir('llxprt-ast-categorize-');
+    tempDir = tmp.dir;
+    cleanup = tmp.cleanup;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('categorizes a pre-existing syntax error as pre-existing in preview', async () => {
+    const filePath = join(tempDir, 'preexisting-error.ts');
+    writeFileSync(filePath, makeBrokenFile(), 'utf-8');
+
+    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const result = await executePreview(tool, {
+      file_path: filePath,
+      old_string: 'return `hello ${name}`;',
+      new_string: 'return `world ${name}`;',
+      force: false,
+    });
+
+    expect(result.error).toBeUndefined();
+    const content = String(result.llmContent);
+    expect(content).toContain('pre-existing');
+    expect(content).not.toContain('new error introduced');
+    expect(content).toContain('Pre-existing syntax errors: Yes');
+  });
+
+  it('categorizes a syntax error introduced by the edit as newly-introduced in preview', async () => {
+    const filePath = join(tempDir, 'clean-before-edit.ts');
+    writeFileSync(filePath, 'const greeting = "hello";' + NL, 'utf-8');
+
+    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const result = await executePreview(tool, {
+      file_path: filePath,
+      old_string: 'const greeting = "hello";',
+      new_string: 'const greeting = @@@;',
+      force: false,
+    });
+
+    expect(result.error).toBeUndefined();
+    const content = String(result.llmContent);
+    expect(content).toContain('new error introduced by this edit');
+    expect(content).not.toContain('Pre-existing syntax errors: Yes');
+  });
+
+  it('reports PASSED when editing a clean file without introducing errors', async () => {
+    const filePath = join(tempDir, 'clean-edit.ts');
+    writeFileSync(filePath, 'const greeting = "hello";' + NL, 'utf-8');
+
+    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const result = await executePreview(tool, {
+      file_path: filePath,
+      old_string: 'const greeting = "hello";',
+      new_string: 'const greeting = "world";',
+      force: false,
+    });
+
+    expect(result.error).toBeUndefined();
+    const content = String(result.llmContent);
+    expect(content).toContain('AST validation: PASSED');
+    expect(content).not.toContain('FAILED');
+    expect(content).not.toContain('Pre-existing syntax errors: Yes');
+  });
+
+  it('categorizes a pre-existing error as pre-existing in apply (force) output', async () => {
+    const filePath = join(tempDir, 'apply-preexisting.ts');
+    writeFileSync(filePath, makeBrokenFile(), 'utf-8');
+
+    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const result = await tool
+      .build({
+        file_path: filePath,
+        old_string: 'return `hello ${name}`;',
+        new_string: 'return `world ${name}`;',
+        force: true,
+      })
+      .execute(new AbortController().signal);
+
+    expect(result.error).toBeUndefined();
+    const content = String(result.llmContent);
+    expect(content).toContain('pre-existing');
+    expect(content).not.toContain('new error introduced');
+    expect(content).toContain('Pre-existing syntax errors: Yes');
+    // Verify the file was actually written despite the pre-existing error.
+    expect(readFileSync(filePath, 'utf-8')).toContain(
+      'return `world ${name}`;',
+    );
+  });
+
+  it('categorizes a newly-introduced error in apply (force) output', async () => {
+    const filePath = join(tempDir, 'apply-new-error.ts');
+    writeFileSync(filePath, 'const greeting = "hello";' + NL, 'utf-8');
+
+    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const result = await tool
+      .build({
+        file_path: filePath,
+        old_string: 'const greeting = "hello";',
+        new_string: 'const greeting = @@@;',
+        force: true,
+      })
+      .execute(new AbortController().signal);
+
+    expect(result.error).toBeUndefined();
+    const content = String(result.llmContent);
+    expect(content).toContain('new error introduced by this edit');
+    expect(content).not.toContain('Pre-existing syntax errors: Yes');
+    // Verify the file was actually written with the (broken) new content.
+    expect(readFileSync(filePath, 'utf-8')).toContain('@@@');
+  });
+});
