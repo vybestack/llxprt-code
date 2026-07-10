@@ -253,7 +253,7 @@ export class ASTEditToolInvocation
       this.validateASTSyntax(this.params.file_path, editData.newContent);
     const preEditValidation: AstValidationResult | undefined =
       editData.preEditValidation ??
-      (editData.currentContent !== null
+      (editData.currentContent != null
         ? this.validateASTSyntax(this.params.file_path, editData.currentContent)
         : undefined);
     const lineDelta = computeLineDelta(

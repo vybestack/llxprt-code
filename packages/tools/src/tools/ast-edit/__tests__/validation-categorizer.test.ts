@@ -289,12 +289,13 @@ describe('findEditStartLine', () => {
     expect(findEditStartLine(null, 'abc')).toBeNull();
     expect(findEditStartLine('abc', '')).toBeNull();
   });
-  it('returns the first occurrence when old_string appears multiple times', () => {
-    // ast_edit enforces single replacement, so old_string should be unique.
-    // When it is not, findEditStartLine resolves to the first match.
+  it('returns null when old_string appears multiple times (ambiguous)', () => {
+    // When old_string is not unique, indexOf would return the first match,
+    // but the actual edit could target a different occurrence. Returning null
+    // causes the categorizer to fall back to safer lineDelta-based matching.
     const NL = String.fromCharCode(10);
     const content = ['foo', 'bar', 'foo', 'baz'].join(NL);
-    expect(findEditStartLine(content, 'foo')).toBe(1);
+    expect(findEditStartLine(content, 'foo')).toBeNull();
   });
 });
 

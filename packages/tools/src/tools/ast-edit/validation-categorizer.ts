@@ -41,16 +41,23 @@ export function extractErrorLineNumber(error: string): number | null {
 
 /**
  * Finds the 1-based line number where an edit begins in the original content.
- * Returns null when the position cannot be determined (e.g. new file).
+ * Returns null when the position cannot be determined (e.g. new file) or when
+ * oldString appears more than once (ambiguous — indexOf would return the first
+ * match, but the actual edit could target a different occurrence, making the
+ * computed line unreliable for shift matching).
  */
 export function findEditStartLine(
   content: string | null,
   oldString: string,
 ): number | null {
   if (!content || !oldString) return null;
-  const idx = content.indexOf(oldString);
-  if (idx === -1) return null;
-  return content.substring(0, idx).split('\n').length;
+  const firstIdx = content.indexOf(oldString);
+  if (firstIdx === -1) return null;
+  // Ambiguous: oldString appears more than once, so we cannot reliably
+  // determine which occurrence the edit targets. Return null to fall back
+  // to the less precise (but safe) lineDelta-based matching.
+  if (content.indexOf(oldString, firstIdx + 1) !== -1) return null;
+  return content.substring(0, firstIdx).split('\n').length;
 }
 
 /**
