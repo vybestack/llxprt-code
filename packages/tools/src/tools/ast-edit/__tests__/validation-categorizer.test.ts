@@ -164,6 +164,65 @@ describe('summarizeAstValidation', () => {
     expect(summary.preExisting).toBe(true);
     expect(summary.newlyIntroduced).toBe(false);
   });
+
+  it('matches multiple pre-existing errors when all shift correctly', () => {
+    const summary = summarizeAstValidation(
+      {
+        valid: false,
+        errors: [
+          'Syntax error at line 10, column 1',
+          'Syntax error at line 100, column 1',
+        ],
+      },
+      {
+        valid: false,
+        errors: [
+          'Syntax error at line 20, column 1',
+          'Syntax error at line 110, column 1',
+        ],
+      },
+      10,
+      5,
+    );
+    expect(summary.preExisting).toBe(true);
+    expect(summary.newlyIntroduced).toBe(false);
+    expect(summary.label).toContain('pre-existing');
+  });
+
+  it('flags as mixed when one of multiple post-edit errors does not match', () => {
+    const summary = summarizeAstValidation(
+      {
+        valid: false,
+        errors: ['Syntax error at line 100, column 1'],
+      },
+      {
+        valid: false,
+        errors: [
+          'Syntax error at line 110, column 1',
+          'Syntax error at line 500, column 1',
+        ],
+      },
+      10,
+      50,
+    );
+    expect(summary.preExisting).toBe(true);
+    expect(summary.newlyIntroduced).toBe(true);
+  });
+
+  it('flags as mixed when a post-edit error lacks a parseable line number', () => {
+    // A post-edit error without a line number cannot be verified against the
+    // pre-edit baseline and must be conservatively treated as possibly new.
+    const summary = summarizeAstValidation(
+      { valid: false, errors: ['Syntax error at line 173, column 5'] },
+      {
+        valid: false,
+        errors: ['Syntax error at line 173, column 5', 'unknown parse failure'],
+      },
+      0,
+    );
+    expect(summary.preExisting).toBe(true);
+    expect(summary.newlyIntroduced).toBe(true);
+  });
 });
 
 describe('computeLineDelta', () => {
@@ -216,6 +275,13 @@ describe('findEditStartLine', () => {
     expect(findEditStartLine(null, 'abc')).toBeNull();
     expect(findEditStartLine('abc', '')).toBeNull();
   });
+  it('returns the first occurrence when old_string appears multiple times', () => {
+    // ast_edit enforces single replacement, so old_string should be unique.
+    // When it is not, findEditStartLine resolves to the first match.
+    const NL = String.fromCharCode(10);
+    const content = ['foo', 'bar', 'foo', 'baz'].join(NL);
+    expect(findEditStartLine(content, 'foo')).toBe(1);
+  });
 });
 
 describe('extractErrorLineNumber', () => {
@@ -227,6 +293,11 @@ describe('extractErrorLineNumber', () => {
 
   it('returns null when no line number is present', () => {
     expect(extractErrorLineNumber('some other error')).toBeNull();
+  });
+
+  it('extracts line number from alternative parser error formats', () => {
+    expect(extractErrorLineNumber('Error on line 42')).toBe(42);
+    expect(extractErrorLineNumber('Parse error at line 99')).toBe(99);
   });
 });
 

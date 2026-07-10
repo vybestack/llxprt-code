@@ -431,11 +431,11 @@ export class ASTEditToolInvocation
         },
       };
 
-      const { lineDelta, editStartLine } =
+      const { astValidation, preEditValidation, lineDelta, editStartLine } =
         this.computeValidationContext(editData);
       const summary = summarizeAstValidation(
-        editData.preEditValidation,
-        editData.astValidation,
+        preEditValidation,
+        astValidation,
         lineDelta,
         editStartLine,
       );
@@ -446,15 +446,15 @@ export class ASTEditToolInvocation
         `- AST validation: ${summary.label}`,
       ];
 
-      if (editData.preEditValidation && !editData.preEditValidation.valid) {
+      if (preEditValidation && !preEditValidation.valid) {
         llmSuccessMessageParts.push(
-          `- Pre-existing syntax errors: Yes${formatValidationLineLabel(editData.preEditValidation.errors)}${summary.newlyIntroduced ? '' : ' (not introduced by this edit)'}`,
+          `- Pre-existing syntax errors: Yes${formatValidationLineLabel(preEditValidation.errors)}${summary.newlyIntroduced ? '' : ' (not introduced by this edit)'}`,
         );
       }
 
-      if (summary.newlyIntroduced && editData.astValidation) {
+      if (summary.newlyIntroduced) {
         llmSuccessMessageParts.push(
-          `- AST errors: ${editData.astValidation.errors.join(', ')}`,
+          `- AST errors: ${astValidation.errors.join(', ')}`,
         );
       }
 

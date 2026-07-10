@@ -164,17 +164,27 @@ export function summarizeAstValidation(
     };
   }
 
-  // Both pre- and post-edit are invalid. Determine whether the post-edit errors
-  // correspond to the same locations as the pre-edit ones.
+  // Both pre- and post-edit are invalid. Determine whether every post-edit
+  // error corresponds to the same location as a pre-edit one. Iterate over the
+  // raw error strings (not just those with parseable line numbers) so that
+  // unparseable post-edit errors are conservatively treated as unmatched
+  // rather than silently dropped.
   const preLines = extractErrorLineNumbers(preEdit.errors);
-  const postLines = extractErrorLineNumbers(postErrors);
-  const allMatch =
-    postLines.length > 0 &&
-    postLines.every((pl) =>
-      preLines.some((prel) => linesMatch(prel, pl, lineDelta, editStartLine)),
-    );
+  let allMatched = postErrors.length > 0;
+  for (const postErr of postErrors) {
+    const postLine = extractErrorLineNumber(postErr);
+    if (
+      postLine === null ||
+      !preLines.some((prel) =>
+        linesMatch(prel, postLine, lineDelta, editStartLine),
+      )
+    ) {
+      allMatched = false;
+      break;
+    }
+  }
 
-  if (allMatch) {
+  if (allMatched) {
     return {
       status: 'FAILED',
       preExisting: true,

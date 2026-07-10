@@ -294,4 +294,31 @@ describe('ASTEditTool pre-existing vs newly-introduced error categorization (iss
     // Verify the file was actually written with the (broken) new content.
     expect(readFileSync(filePath, 'utf-8')).toContain('@@@');
   });
+
+  it('reports mixed pre-existing and newly-introduced errors in preview', async () => {
+    // File has a pre-existing syntax error (unclosed function) and the edit
+    // introduces a second error (replacing valid code with @@@).
+    const filePath = join(tempDir, 'mixed-errors.ts');
+    const NL = String.fromCharCode(10);
+    const brokenContent =
+      'const greeting = "hello";' + NL + 'function broken(' + NL;
+    writeFileSync(filePath, brokenContent, 'utf-8');
+
+    const tool = new ASTEditTool(createFakeToolHost(tempDir));
+    const result = await tool
+      .build({
+        file_path: filePath,
+        old_string: 'const greeting = "hello";',
+        new_string: 'const greeting = @@@;',
+        force: false,
+      })
+      .execute(new AbortController().signal);
+
+    expect(result.error).toBeUndefined();
+    const content = String(result.llmContent);
+    // The baseline was already broken.
+    expect(content).toContain('Pre-existing syntax errors: Yes');
+    // Post-edit still has errors (either pre-existing or newly introduced).
+    expect(content).toContain('FAILED');
+  });
 });
