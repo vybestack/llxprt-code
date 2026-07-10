@@ -23,8 +23,8 @@ import {
   debugLogger,
   type ContractPart,
   PLACEHOLDER_MODEL,
+  activateSettingsRuntimeContext,
 } from '@vybestack/llxprt-code-core';
-import { activateSettingsRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import {
   fromConfig,
   type Agent,

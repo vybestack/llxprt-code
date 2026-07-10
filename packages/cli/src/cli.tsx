@@ -66,22 +66,26 @@ import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
 import { existsSync, mkdirSync } from 'fs';
 import { firstNonEmptyString } from './utils/coalesce.js';
 import {
-  activateConfiguredProvider,
   configureEarlyDebugLogging,
-  configureProvidersAndServices,
-  connectIdeClientIfEnabled,
   createMemoizedStdinReader,
-  ensureAcpProviderActivated,
   ensureStdinOrPromptProvided,
   handleVersionAndHelpFlags,
-  initializeConfigWithSpinner,
-  maybeHopIntoSandbox,
   maybeRelaunchForMemory,
-  prepareTerminalSession,
   redirectConsoleForAcp,
   rejectPromptInteractiveWithPipedStdin,
   throwIfSettingsErrors,
 } from './cliBootstrap.js';
+import {
+  activateConfiguredProvider,
+  configureProvidersAndServices,
+  connectIdeClientIfEnabled,
+  ensureAcpProviderActivated,
+} from './cliProviderInit.js';
+import {
+  initializeConfigWithSpinner,
+  prepareTerminalSession,
+} from './cliTerminalSession.js';
+import { maybeHopIntoSandbox } from './cliSandbox.js';
 import {
   bootstrapRuntimeAndConfig,
   setupSessionRecording,
@@ -142,6 +146,17 @@ function setupProcessLifecycle(): () => void {
   return cleanupStdio;
 }
 
+/**
+ * CLI entry point — four-step flow (#2378):
+ * 1. Parse/resolve: argv, settings, profiles, extensions → resolved Config data
+ * 2. Configure: provider activation, Config.initialize, sandbox hop (pre-agent)
+ * 3. Agent construction: `fromConfig(config)` in the dispatch layer assembles
+ *    runtime state, MessageBus, and provider wiring behind the public API
+ * 4. Render/Run: interactive UI or non-interactive stream consumes Agent events
+ *
+ * Runtime assembly (MessageBus, runtime state/context seeding, policy engine)
+ * lives behind `fromConfig`/`createAgent` in packages/agents, not in CLI code.
+ */
 export async function main() {
   configureEarlyDebugLogging();
 

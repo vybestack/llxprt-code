@@ -5,7 +5,11 @@
  */
 
 import type { CommandModule } from 'yargs';
-import { MessageBus, debugLogger } from '@vybestack/llxprt-code-core';
+import {
+  type MessageBus,
+  createSessionMessageBus,
+  debugLogger,
+} from '@vybestack/llxprt-code-core';
 import { loadSettings } from '../../config/settings.js';
 import { loadCliConfig } from '../../config/config.js';
 import { type CliArgs } from '../../config/cliArgParser.js';
@@ -36,7 +40,7 @@ export async function handleList(showAll = false) {
     workspaceDir,
   );
 
-  const sessionMessageBus = new MessageBus(
+  const sessionMessageBus = createSessionMessageBus(
     config.getPolicyEngine(),
     config.getDebugMode(),
   );

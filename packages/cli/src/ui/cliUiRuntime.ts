@@ -135,6 +135,7 @@ export interface UiContentGeneratorConfig {
 export interface AgentClientSource {
   getAgentClient(): AgentClientContract;
   getAgentClientFactory?(): AgentClientFactory | undefined;
+  createDetachedAgentClient?(runtimeId?: string): AgentClientContract;
 }
 
 /**
@@ -510,10 +511,15 @@ function buildModelRuntime(source: StreamRuntimeBareSource): ModelState {
 function buildAgentClientSource(
   source: StreamRuntimeBareSource,
 ): AgentClientSource {
-  return {
+  const base: AgentClientSource = {
     getAgentClient: () => source.getAgentClient(),
     getAgentClientFactory: () => source.getAgentClientFactory?.(),
   };
+  if (source.createDetachedAgentClient) {
+    base.createDetachedAgentClient = (runtimeId) =>
+      source.createDetachedAgentClient!(runtimeId);
+  }
+  return base;
 }
 
 function buildShellRuntime(source: StreamRuntimeBareSource): ShellState {

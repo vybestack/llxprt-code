@@ -18,7 +18,8 @@ import {
   getProjectHash,
   type IContent,
   type LockHandle,
-  MessageBus,
+  type MessageBus,
+  createSessionMessageBus,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 import {
@@ -140,7 +141,7 @@ export async function bootstrapRuntimeAndConfig(
     workspaceRoot,
     { settingsService: runtimeSettingsService },
   );
-  const sessionMessageBus = new MessageBus(
+  const sessionMessageBus = createSessionMessageBus(
     config.getPolicyEngine(),
     config.getDebugMode(),
   );

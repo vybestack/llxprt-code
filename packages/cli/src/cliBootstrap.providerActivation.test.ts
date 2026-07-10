@@ -15,7 +15,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { ProviderActivationIntent } from '@vybestack/llxprt-code-agents';
-import type { CliProviderManager, ParsedCliArgs } from './cliBootstrap.js';
+import type { CliProviderManager } from './cliProviderInit.js';
+import type { ParsedCliArgs } from './cliBootstrap.js';
 
 const { executeProviderActivationMock } = vi.hoisted(() => ({
   executeProviderActivationMock: vi.fn(),
@@ -30,7 +31,7 @@ vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
   };
 });
 
-import { activateConfiguredProvider } from './cliBootstrap.js';
+import { activateConfiguredProvider } from './cliProviderInit.js';
 
 function makeConfig(
   provider: string | undefined,

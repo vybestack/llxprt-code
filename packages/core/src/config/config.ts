@@ -39,6 +39,7 @@ import {
 import { ConfigBase } from './configBase.js';
 import {
   buildNewContentGeneratorConfig,
+  createDetachedAgentClient,
   disposePreviousAgentClient,
   extractExistingState,
   requireAgentClientFactory,
@@ -211,6 +212,15 @@ export class Config extends ConfigBase {
       return undefined;
     }
     return client;
+  }
+
+  /**
+   * Creates a detached agent client with a fresh runtime state, isolated
+   * from the session's primary agent client and with its tool set cleared.
+   * Used for one-shot operations such as subagent auto-prompt generation.
+   */
+  createDetachedAgentClient(runtimeId?: string): AgentClientContract {
+    return createDetachedAgentClient(this, runtimeId);
   }
 
   private registerSubagents(): void {

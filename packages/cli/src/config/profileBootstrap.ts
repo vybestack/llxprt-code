@@ -11,10 +11,12 @@
  */
 
 import {
-  MessageBus,
+  type MessageBus,
+  createSessionMessageBus,
   type ProviderRuntimeContext,
+  resolveRuntimeSettingsService,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
-import { resolveRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
@@ -25,7 +27,6 @@ import {
   setCliRuntimeContext,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 export const DEFAULT_RUNTIME_ID = 'cli.runtime.bootstrap';
 
@@ -430,11 +431,11 @@ export async function prepareRuntimeForProfile(
     const runtimeMessageBus =
       runtimeInit.messageBus ??
       (runtimeConfig
-        ? new MessageBus(
+        ? createSessionMessageBus(
             runtimeConfig.getPolicyEngine(),
             runtimeConfig.getDebugMode(),
           )
-        : new MessageBus());
+        : createSessionMessageBus());
 
     const { manager: providerManager, oauthManager } = createProviderManager(
       runtime,

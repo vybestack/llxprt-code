@@ -140,18 +140,9 @@ const PUBLIC_SUBPATHS_BY_PACKAGE: Record<string, readonly string[]> = {
  *     not yet promoted to a public core entrypoint).
  */
 const ALLOWLIST: Record<string, readonly string[]> = {
-  // ── config bootstrap: core settings-runtime adapter ────────────────────
-  // These are genuine composition-boundary sites: the core-owned
-  // settingsRuntimeAdapter is the dependency-inversion seam that binds a
-  // SettingsService to a runtime context. It has no public core entrypoint
-  // yet (the core root does not re-export it), so these bootstrap files are
-  // the ONLY allowed deep importers.
-  'packages/cli/src/config/profileBootstrap.ts': [
-    '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js',
-  ],
-  'packages/cli/src/nonInteractiveCli.ts': [
-    '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js',
-  ],
+  // All former deep-import allowlist entries have been eliminated (#2378).
+  // The CLI must import only from public root barrels. This object is kept
+  // empty on purpose — any new entry is a regression that CI should reject.
 };
 
 // Paths under packages/cli/src that are test infrastructure (excluded from the

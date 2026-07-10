@@ -603,6 +603,15 @@ export type {
 } from './runtime/AgentRuntimeContext.js';
 export { TelemetryTarget } from './runtime/AgentRuntimeContext.js';
 export { createAgentRuntimeContext } from './runtime/createAgentRuntimeContext.js';
+
+// Export settings runtime adapter helpers so CLI code can resolve/activate the
+// ambient settings runtime context via the public barrel rather than deep
+// imports (#2378).
+export {
+  resolveRuntimeSettingsService,
+  activateSettingsRuntimeContext,
+} from './runtime/settingsRuntimeAdapter.js';
+
 export type {
   RuntimeProvider,
   RuntimeProviderManager,
