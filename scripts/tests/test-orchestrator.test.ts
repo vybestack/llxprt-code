@@ -616,7 +616,7 @@ describe('dummy', () => { it('passes', () => { expect(1).toBe(1); }); });`,
     );
     // Pretest-only workspace runs its pretest and is counted as passed
     expect(commands.some((c) => c.command === 'echo pretest')).toBe(true);
-    expect(summary.passed).toBeGreaterThanOrEqual(1);
+    expect(summary.passed).toBe(2);
     // Summary counts must be consistent: passed + failed + skipped = total
     expect(summary.passed + summary.failed + summary.skipped).toBe(
       summary.totalWorkspaces,
