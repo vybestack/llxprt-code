@@ -197,6 +197,9 @@ export function parseArgs(argv: readonly string[]): TestOptions {
 // Command execution
 // ---------------------------------------------------------------------------
 
+// Mirrors `npm run` semantics: commands from package.json scripts are
+// executed through a shell. This relies on repository trust — package.json
+// files are part of the trusted source tree, just as they are for npm.
 export const defaultRunner: CommandRunner = (
   command,
   cwd,
@@ -258,7 +261,16 @@ function runPhase(
   runner: CommandRunner,
 ): TestPhaseResult {
   const start = Date.now();
-  const result = runner(command, cwd);
+  let result: { success: boolean; exitCode: number };
+  try {
+    result = runner(command, cwd);
+  } catch (error) {
+    result = {
+      success: false,
+      exitCode:
+        (propertyValue(error, 'status') as number | undefined) ?? 1,
+    };
+  }
   const durationMs = Date.now() - start;
 
   return {
@@ -326,6 +338,11 @@ export function orchestrateTests(
       if (!testResult.success && !options.continueOnError) {
         failedWorkspaces.add(workspace.name);
       }
+    } else if (!shouldRunPretest) {
+      // Workspace has neither a test nor a pretest script — nothing to run.
+      // Record it as skipped so passed + failed + skipped stays consistent
+      // with totalWorkspaces.
+      skippedWorkspaces.push(workspace.name);
     }
   }
 

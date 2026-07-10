@@ -20,6 +20,7 @@ import {
   parseArgs,
   type CommandRunner,
   type TestOptions,
+  type TestSummary,
   orchestrateTests,
   formatSummary,
 } from '../test.ts';
@@ -61,10 +62,6 @@ function writePackageJson(
 
 function succeedingRunner(): CommandRunner {
   return () => ({ success: true, exitCode: 0 });
-}
-
-function failingRunner(): CommandRunner {
-  return () => ({ success: false, exitCode: 1 });
 }
 
 function createFixtureRepo(
@@ -598,54 +595,59 @@ describe('dummy', () => { it('passes', () => { expect(1).toBe(1); }); });`,
 });
 
 describe('formatSummary', () => {
+  function makeSummary(overrides: Partial<TestSummary> = {}): TestSummary {
+    return {
+      results: [],
+      totalWorkspaces: 0,
+      passed: 0,
+      failed: 0,
+      skipped: 0,
+      skippedWorkspaces: [],
+      durationMs: 100,
+      ...overrides,
+    };
+  }
+
   it('formats a passing summary', () => {
-    const summary = orchestrateTests(
-      createFixtureRepo([
+    const summary = makeSummary({
+      results: [
         {
-          dir: 'packages/a',
-          name: 'pkg-a',
-          scripts: { test: 'vitest run' },
+          workspace: 'pkg-a',
+          phase: 'test',
+          success: true,
+          exitCode: 0,
+          durationMs: 50,
         },
-      ]),
-      parseArgs(['--skip-scripts']),
-      succeedingRunner(),
-    );
+      ],
+      totalWorkspaces: 1,
+      passed: 1,
+    });
     const output = formatSummary(summary);
     expect(output).toContain('PASS');
     expect(output).toContain('pkg-a');
   });
 
   it('formats a failing summary', () => {
-    const root = createFixtureRepo([
-      {
-        dir: 'packages/a',
-        name: 'pkg-a',
-        scripts: { test: 'vitest run' },
-      },
-    ]);
-    const summary = orchestrateTests(
-      root,
-      parseArgs(['--skip-scripts']),
-      failingRunner(),
-    );
+    const summary = makeSummary({
+      results: [
+        {
+          workspace: 'pkg-a',
+          phase: 'test',
+          success: false,
+          exitCode: 1,
+          durationMs: 50,
+        },
+      ],
+      totalWorkspaces: 1,
+      failed: 1,
+    });
     const output = formatSummary(summary);
     expect(output).toContain('FAIL');
     expect(output).toContain('pkg-a');
   });
 
   it('includes duration information', () => {
-    const root = createFixtureRepo([
-      {
-        dir: 'packages/a',
-        name: 'pkg-a',
-        scripts: { test: 'vitest run' },
-      },
-    ]);
-    const summary = orchestrateTests(
-      root,
-      parseArgs(['--skip-scripts']),
-      succeedingRunner(),
-    );
+    const summary = makeSummary({ durationMs: 100 });
     const output = formatSummary(summary);
     expect(output).toMatch(/Duration:.*(?:ms|s)/u);
     expect(output).toMatch(/[0-9]/u);
