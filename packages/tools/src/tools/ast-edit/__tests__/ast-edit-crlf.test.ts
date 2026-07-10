@@ -38,8 +38,7 @@ describe('ast_edit CRLF normalization: file with CRLF, old_string with LF', () =
 
     expect(result.error).toBeUndefined();
     const fileContent = readFileSync(filePath, 'utf-8');
-    expect(fileContent).toContain('hi');
-    expect(fileContent).toContain('earth');
+    expect(fileContent).toBe('const greeting = "hi";\nconst name = "earth";\n');
   });
 });
 
@@ -60,8 +59,8 @@ describe('ast_edit CRLF normalization: file with LF, old_string with CRLF', () =
 
     expect(result.error).toBeUndefined();
     const fileContent = readFileSync(filePath, 'utf-8');
-    expect(fileContent).toContain('hi');
-    expect(fileContent).toContain('earth');
+    expect(fileContent).toBe('const greeting = "hi";\nconst name = "earth";\n');
+    expect(fileContent).not.toContain('\r\n');
   });
 });
 
@@ -82,9 +81,7 @@ describe('ast_edit CRLF normalization: mixed line endings', () => {
 
     expect(result.error).toBeUndefined();
     const fileContent = readFileSync(filePath, 'utf-8');
-    expect(fileContent).toContain('const a = 10;');
-    expect(fileContent).toContain('const b = 20;');
-    expect(fileContent).toContain('const c = 30;');
+    expect(fileContent).toBe('const a = 10;\nconst b = 20;\nconst c = 30;\n');
   });
 });
 
