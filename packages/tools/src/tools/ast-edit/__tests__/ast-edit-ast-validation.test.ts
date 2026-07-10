@@ -165,7 +165,7 @@ describe('ast_edit AST validation: unknown file extension', () => {
     expect(String(result.llmContent)).toContain('AST validation: PASSED');
   });
 
-  it('reports AST PASSED for a .md file with arbitrary content', async () => {
+  it('reports AST PASSED for a .md file with broken syntax', async () => {
     const filePath = join(ctx.tempDir, 'doc.md');
     writeFileSync(filePath, '# Title\n\nSome text.\n', 'utf-8');
     const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));

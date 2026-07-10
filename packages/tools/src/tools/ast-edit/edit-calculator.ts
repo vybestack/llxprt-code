@@ -256,7 +256,7 @@ export function countOccurrences(
   let idx = content.indexOf(searchString);
   while (idx !== -1) {
     count++;
-    idx = content.indexOf(searchString, idx + 1);
+    idx = content.indexOf(searchString, idx + searchString.length);
   }
   return count;
 }
