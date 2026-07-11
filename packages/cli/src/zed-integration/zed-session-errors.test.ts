@@ -12,8 +12,11 @@
  * `Failed to resume session: <detail>` envelope that SessionControl.resume adds —
  * and assert the resulting JSON-RPC error code + carried detail. This guards the
  * not-found vs everything-else classification against the real core vocabulary,
- * so a wording drift on either side is caught. No mocks: pure inputs -> real
- * RequestError.
+ * so a wording drift on either side is caught. No result-shaped mocks of the
+ * code under test: the classifier runs for real over pure inputs (the injected
+ * directory listers are honest fakes returning entry names / throwing errno
+ * errors, not stand-ins for the matching logic) and produces real RequestError
+ * instances.
  */
 
 import { describe, expect, it } from 'vitest';

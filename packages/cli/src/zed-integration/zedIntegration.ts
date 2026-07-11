@@ -39,6 +39,7 @@ import {
   parseZedAuthMethodId,
   buildAvailableModes,
   buildSessionModes,
+  describeSessionUpdateForLog,
   mapDoneReasonToStopReason,
   extractThoughtText,
   translateErrorEvent,
@@ -989,7 +990,9 @@ export class Session {
    */
   private async sendUpdateStrict(update: acp.SessionUpdate): Promise<void> {
     const params: acp.SessionNotification = { sessionId: this.id, update };
+    this.logger.debug(() => describeSessionUpdateForLog(update));
     await this.connection.sessionUpdate(params);
+    this.logger.debug(() => 'sendUpdate: delivered');
   }
 
   /**

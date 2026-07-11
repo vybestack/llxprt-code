@@ -279,3 +279,16 @@ export function translateIdleTimeout(
 ): Error {
   return new Error(event.error.message);
 }
+
+/**
+ * Renders the pre-delivery debug line for a session/update notification: the
+ * update kind plus the text length when the update carries text content. Pure;
+ * extracted here to keep zedIntegration.ts within its max-lines budget.
+ */
+export function describeSessionUpdateForLog(update: acp.SessionUpdate): string {
+  const chars =
+    'content' in update && update.content && 'text' in update.content
+      ? `(${(update.content as { text: string }).text.length} chars)`
+      : '';
+  return `sendUpdate: ${update.sessionUpdate} ${chars}`;
+}

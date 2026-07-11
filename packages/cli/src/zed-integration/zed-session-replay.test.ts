@@ -141,7 +141,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
     });
   });
 
-  it('maps a { output } success result to a completed tool_call_update carrying the output text (FINDING 3)', () => {
+  it('maps a { output } success result to a completed tool_call_update carrying the output text (FINDING F3)', () => {
     const history: IContent[] = [
       {
         speaker: 'ai',
@@ -174,7 +174,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
     });
   });
 
-  it('maps a { error } result to a FAILED tool_call_update carrying the error text (FINDING 3)', () => {
+  it('maps a { error } result to a FAILED tool_call_update carrying the error text (FINDING F3)', () => {
     const history: IContent[] = [
       {
         speaker: 'ai',
@@ -242,7 +242,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
     });
   });
 
-  it('maps a tool_response whose block.error is set to a FAILED tool_call_update carrying the error text (FINDING 3)', () => {
+  it('maps a tool_response whose block.error is set to a FAILED tool_call_update carrying the error text (FINDING F3)', () => {
     const history: IContent[] = [
       {
         speaker: 'ai',
