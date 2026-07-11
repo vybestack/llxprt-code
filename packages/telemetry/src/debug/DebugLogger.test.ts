@@ -2,7 +2,7 @@
  * @plan PLAN-20250120-DEBUGLOGGING.P04
  * @requirement REQ-001,REQ-002,REQ-006
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { DebugLogger } from './DebugLogger.js';
 import { ConfigurationManager } from './ConfigurationManager.js';
@@ -65,6 +65,7 @@ describe('DebugLogger', () => {
 
     const expensiveFn = vi.fn(() => 'expensive message');
     const writeSpy = vi.spyOn(logger.fileOutput, 'write');
+    writeSpy.mockClear();
 
     logger.log(expensiveFn);
 
@@ -107,6 +108,7 @@ describe('DebugLogger', () => {
     // Behavioral guarantee: the disabled path must be a pure no-op.
     // This is deterministic and is the real "zero overhead" contract.
     const writeSpy = vi.spyOn(logger.fileOutput, 'write');
+    writeSpy.mockClear();
 
     // Secondary timing check: generous budget for CI runner variance.
     // The previous 3 ms bound was routinely exceeded on shared GitHub runners.
@@ -132,6 +134,7 @@ describe('DebugLogger', () => {
     logger.enabled = true;
 
     const writeSpy = vi.spyOn(logger.fileOutput, 'write');
+    writeSpy.mockClear();
     logger.log('Using apiKey: sk-1234567890');
 
     expect(writeSpy).toHaveBeenCalledWith(
@@ -154,6 +157,7 @@ describe('DebugLogger', () => {
     logger.level = 'error';
 
     const writeSpy = vi.spyOn(logger.fileOutput, 'write');
+    writeSpy.mockClear();
     logger.debug('debug message');
 
     expect(writeSpy).not.toHaveBeenCalled();
@@ -171,6 +175,7 @@ describe('DebugLogger', () => {
     logger.enabled = true;
 
     const writeSpy = vi.spyOn(logger.fileOutput, 'write');
+    writeSpy.mockClear();
     logger.error('error message');
 
     expect(writeSpy).toHaveBeenCalledWith(
@@ -195,6 +200,7 @@ describe('DebugLogger', () => {
     logger.enabled = true;
 
     const writeSpy = vi.spyOn(logger.fileOutput, 'write');
+    writeSpy.mockClear();
     logger.log('message', { data: 'value' }, 123);
 
     expect(writeSpy).toHaveBeenCalledWith(
@@ -268,6 +274,7 @@ describe('DebugLogger', () => {
     logger.enabled = true;
 
     const writeSpy = vi.spyOn(logger.fileOutput, 'write');
+    writeSpy.mockClear();
     logger.log('simple string message');
 
     expect(writeSpy).toHaveBeenCalledWith(
@@ -289,6 +296,7 @@ describe('DebugLogger', () => {
     logger.enabled = true;
 
     const writeSpy = vi.spyOn(logger.fileOutput, 'write');
+    writeSpy.mockClear();
     logger.log('test message');
 
     const writtenEntry = writeSpy.mock.calls[0][0] as { timestamp: string };
@@ -348,6 +356,7 @@ describe('DebugLogger', () => {
     expect(typeof logger.fileOutput.write).toBe('function');
 
     const writeSpy = vi.spyOn(logger.fileOutput, 'write');
+    writeSpy.mockClear();
     logger.log('test message');
 
     expect(writeSpy).toHaveBeenCalled();
@@ -383,6 +392,7 @@ describe('DebugLogger', () => {
     logger.level = 'debug';
 
     const writeSpy = vi.spyOn(logger.fileOutput, 'write');
+    writeSpy.mockClear();
     logger.debug('debug message');
 
     expect(writeSpy).toHaveBeenCalledWith(
@@ -406,6 +416,7 @@ describe('DebugLogger', () => {
 
     const expensiveFn = vi.fn(() => 'function result');
     const writeSpy = vi.spyOn(logger.fileOutput, 'write');
+    writeSpy.mockClear();
 
     logger.log(expensiveFn, { extra: 'data' }, 42);
 
@@ -468,6 +479,7 @@ describe('DebugLogger', () => {
         logger.enabled = false;
 
         const writeSpy = vi.spyOn(logger.fileOutput, 'write');
+        writeSpy.mockClear();
         logger.log(message);
 
         // Verify that when disabled, no write operation occurs
@@ -488,6 +500,7 @@ describe('DebugLogger', () => {
         logger.enabled = true;
 
         const writeSpy = vi.spyOn(logger.fileOutput, 'write');
+        writeSpy.mockClear();
         logger.log(message);
 
         expect(writeSpy.mock.calls.length).toBeGreaterThan(0);
@@ -546,6 +559,7 @@ describe('DebugLogger', () => {
           logger.enabled = true;
 
           const writeSpy = vi.spyOn(logger.fileOutput, 'write');
+          writeSpy.mockClear();
           logger.log(message, ...args);
 
           expect(writeSpy.mock.calls.length).toBeGreaterThan(0);
@@ -599,6 +613,7 @@ describe('DebugLogger', () => {
           logger.enabled = true;
 
           const writeSpy = vi.spyOn(logger.fileOutput, 'write');
+          writeSpy.mockClear();
 
           if (level === 'debug') {
             logger.debug(message);
@@ -664,6 +679,7 @@ describe('DebugLogger', () => {
 
         const testFn = vi.fn(() => returnValue);
         const writeSpy = vi.spyOn(logger.fileOutput, 'write');
+        writeSpy.mockClear();
 
         logger.log(testFn);
 
