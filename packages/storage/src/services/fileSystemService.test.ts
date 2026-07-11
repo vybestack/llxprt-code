@@ -4,56 +4,50 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import fs from 'fs/promises';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { promises as fs } from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { StandardFileSystemService } from './fileSystemService.js';
-
-vi.mock('fs/promises');
 
 describe('StandardFileSystemService', () => {
   let fileSystem: StandardFileSystemService;
+  let tempDir: string;
 
-  beforeEach(() => {
-    vi.resetAllMocks();
+  beforeEach(async () => {
     fileSystem = new StandardFileSystemService();
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'llxprt-storage-'));
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
   });
 
   describe('readTextFile', () => {
     it('should read file content using fs', async () => {
+      const filePath = path.join(tempDir, 'test.txt');
       const testContent = 'Hello, World!';
-      vi.mocked(fs.readFile).mockResolvedValue(testContent);
+      await fs.writeFile(filePath, testContent, 'utf-8');
 
-      const result = await fileSystem.readTextFile('/test/file.txt');
+      const result = await fileSystem.readTextFile(filePath);
 
-      expect(fs.readFile).toHaveBeenCalledWith('/test/file.txt', 'utf-8');
       expect(result).toBe(testContent);
     });
 
-    it('should propagate fs.readFile errors', async () => {
-      const error = new Error('ENOENT: File not found');
-      vi.mocked(fs.readFile).mockRejectedValue(error);
+    it('should propagate fs.readFile errors', () => {
+      const filePath = path.join(tempDir, 'missing.txt');
 
-      await expect(fileSystem.readTextFile('/test/file.txt')).rejects.toThrow(
-        'ENOENT: File not found',
-      );
+      expect(fileSystem.readTextFile(filePath)).rejects.toThrow('ENOENT');
     });
   });
 
   describe('writeTextFile', () => {
     it('should write file content using fs', async () => {
-      vi.mocked(fs.writeFile).mockResolvedValue();
+      const filePath = path.join(tempDir, 'test.txt');
 
-      await fileSystem.writeTextFile('/test/file.txt', 'Hello, World!');
+      await fileSystem.writeTextFile(filePath, 'Hello, World!');
 
-      expect(fs.writeFile).toHaveBeenCalledWith(
-        '/test/file.txt',
-        'Hello, World!',
-        'utf-8',
-      );
+      expect(await fs.readFile(filePath, 'utf-8')).toBe('Hello, World!');
     });
   });
 });

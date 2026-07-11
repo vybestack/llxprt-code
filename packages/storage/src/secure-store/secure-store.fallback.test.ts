@@ -13,7 +13,7 @@
  * @plan PLAN-20260211-SECURESTORE.P05
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -626,7 +626,7 @@ describe('SecureStore — Default Path Uses Platform Standards', () => {
     expect(fallbackDir).toContain('test-service');
   });
 
-  it.runIf(process.platform === 'darwin')(
+  (process.platform === 'darwin' ? it : it.skip)(
     'default fallbackDir uses macOS Application Support path',
     () => {
       const store = new SecureStore('test-service', {
@@ -638,7 +638,7 @@ describe('SecureStore — Default Path Uses Platform Standards', () => {
     },
   );
 
-  it.runIf(process.platform === 'win32')(
+  (process.platform === 'win32' ? it : it.skip)(
     'default fallbackDir uses Windows AppData path',
     () => {
       const store = new SecureStore('test-service', {
@@ -650,29 +650,28 @@ describe('SecureStore — Default Path Uses Platform Standards', () => {
     },
   );
 
-  it.runIf(process.platform === 'linux')(
+  (process.platform === 'linux' ? it : it.skip)(
     'default fallbackDir uses Linux XDG data path with XDG_DATA_HOME set',
     async () => {
-      vi.stubEnv('XDG_DATA_HOME', '/tmp/custom-xdg');
-      try {
-        vi.resetModules();
-        const { SecureStore: EnvSecureStore } = await import(
-          './secure-store.js'
-        );
-        const store = new EnvSecureStore('test-service', {
+      const script = `
+        import { SecureStore } from './secure-store.ts';
+        const store = new SecureStore('test-service', {
           keyringLoader: async () => null,
           fallbackPolicy: 'allow',
         });
-        const fallbackDir = getFallbackDir(store);
-        expect(fallbackDir).toContain('/tmp/custom-xdg');
-      } finally {
-        vi.unstubAllEnvs();
-        vi.resetModules();
-      }
+        console.log((store as unknown as { fallbackDir: string }).fallbackDir);
+      `;
+      const processResult = Bun.spawnSync({
+        cmd: [process.execPath, '-e', script],
+        cwd: import.meta.dir,
+        env: { ...process.env, XDG_DATA_HOME: '/tmp/custom-xdg' },
+      });
+      expect(processResult.exitCode).toBe(0);
+      expect(processResult.stdout.toString()).toContain('/tmp/custom-xdg');
     },
   );
 
-  it.runIf(process.platform === 'linux' && !process.env.XDG_DATA_HOME)(
+  (process.platform === 'linux' && !process.env.XDG_DATA_HOME ? it : it.skip)(
     'default fallbackDir uses Linux XDG data path default',
     () => {
       const store = new SecureStore('test-service', {

@@ -16,7 +16,7 @@
  * provider logic is exercised; the module under test is never mocked.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -599,7 +599,7 @@ describe('Machine Secret Provider — Permission repair', () => {
       expect(setCalls).toBe(0);
       expect(keyring.store.size).toBe(0);
       // ...nor to the file fallback.
-      await expect(fs.readFile(tempFilePath, 'utf8')).rejects.toMatchObject({
+      expect(fs.readFile(tempFilePath, 'utf8')).rejects.toMatchObject({
         code: 'ENOENT',
       });
     });
@@ -619,7 +619,7 @@ describe('Machine Secret Provider — Permission repair', () => {
 
       expect(secret).toBeNull();
       // Nothing was persisted to the file fallback.
-      await expect(fs.readFile(tempFilePath, 'utf8')).rejects.toMatchObject({
+      expect(fs.readFile(tempFilePath, 'utf8')).rejects.toMatchObject({
         code: 'ENOENT',
       });
     });

@@ -14,7 +14,7 @@
  * weak per-file derivation.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as crypto from 'node:crypto';
 import {
   encryptEnvelopeString,
@@ -152,7 +152,7 @@ describe('envelope-codec — decryptEnvelopeString', () => {
       { machineSecretLoader: secretLoader(FIXED_SECRET_A) },
     );
 
-    await expect(
+    expect(
       decryptEnvelopeString(envelopeJson, 'test-service', {
         machineSecretLoader: secretLoader(FIXED_SECRET_B),
       }),
@@ -166,7 +166,7 @@ describe('envelope-codec — decryptEnvelopeString', () => {
       { machineSecretLoader: secretLoader(FIXED_SECRET_A) },
     );
 
-    await expect(
+    expect(
       decryptEnvelopeString(envelopeJson, 'test-service', {
         machineSecretLoader: nullSecretLoader(),
       }),
@@ -174,7 +174,7 @@ describe('envelope-codec — decryptEnvelopeString', () => {
   });
 
   it('malformed JSON fails closed (CORRUPT)', async () => {
-    await expect(
+    expect(
       decryptEnvelopeString('not-json-at-all', 'test-service', {
         machineSecretLoader: secretLoader(FIXED_SECRET_A),
       }),
@@ -194,7 +194,7 @@ describe('envelope-codec — decryptEnvelopeString', () => {
       },
       data: 'aaaa',
     });
-    await expect(
+    expect(
       decryptEnvelopeString(bogus, 'test-service', {
         machineSecretLoader: secretLoader(FIXED_SECRET_A),
       }),
@@ -207,7 +207,7 @@ describe('envelope-codec — decryptEnvelopeString', () => {
     });
     const parsed = JSON.parse(envelopeJson) as { crypto: { N: number } };
     parsed.crypto.N = 2; // weaken scrypt
-    await expect(
+    expect(
       decryptEnvelopeString(JSON.stringify(parsed), 'svc', {
         machineSecretLoader: secretLoader(FIXED_SECRET_A),
       }),
@@ -223,7 +223,7 @@ describe('envelope-codec — decryptEnvelopeString', () => {
     const buf = Buffer.from(parsed.data, 'base64');
     buf[buf.length - 1] ^= 0x01;
     parsed.data = buf.toString('base64');
-    await expect(
+    expect(
       decryptEnvelopeString(JSON.stringify(parsed), 'svc', {
         machineSecretLoader: secretLoader(FIXED_SECRET_A),
       }),
@@ -235,7 +235,7 @@ describe('envelope-codec — decryptEnvelopeString', () => {
       machineSecretLoader: secretLoader(FIXED_SECRET_A),
     });
     // Decrypting with a different service name must fail (auth failure).
-    await expect(
+    expect(
       decryptEnvelopeString(envelopeJson, 'service-b', {
         machineSecretLoader: secretLoader(FIXED_SECRET_A),
       }),
@@ -253,7 +253,7 @@ describe('envelope-codec — decryptEnvelopeString', () => {
     const parsed = JSON.parse(envelopeJson) as { v: number };
     expect(parsed.v).toBe(1);
 
-    await expect(
+    expect(
       decryptEnvelopeString(envelopeJson, 'service-b', {
         machineSecretLoader: nullSecretLoader(),
       }),
@@ -274,7 +274,7 @@ describe('envelope-codec — decryptEnvelopeString', () => {
     // message ("...too short to contain a valid header") is an internal detail
     // and not part of the public API, so matching it would make this test
     // brittle to harmless rewording.
-    await expect(
+    expect(
       decryptEnvelopeString(JSON.stringify(parsed), 'svc', {
         machineSecretLoader: secretLoader(FIXED_SECRET_A),
       }),
@@ -311,12 +311,12 @@ describe('envelope-codec — decryptEnvelopeString', () => {
       throw new Error('keyring unavailable');
     };
 
-    await expect(
+    expect(
       decryptEnvelopeString(envelopeJson, 'svc', {
         machineSecretLoader: rejectingLoader,
       }),
     ).rejects.toThrow(/keyring unavailable/);
-    await expect(
+    expect(
       decryptEnvelopeString(envelopeJson, 'svc', {
         machineSecretLoader: rejectingLoader,
       }),
@@ -333,7 +333,7 @@ describe('envelope-codec — anti-downgrade (existingEnvelopeVersion)', () => {
     const version = readEnvelopeVersion(existing);
     expect(version).toBe(2);
 
-    await expect(
+    expect(
       encryptEnvelopeString('new', 'svc', {
         machineSecretLoader: nullSecretLoader(),
         existingEnvelopeVersion: version,

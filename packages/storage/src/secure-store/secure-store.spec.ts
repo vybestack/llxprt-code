@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   SecureStore,
   SecureStoreError,
@@ -183,9 +183,7 @@ describe('SecureStore - Linux Keyring Fallback Reliability', () => {
           throw fileWriteError;
         };
 
-        await expect(
-          store.set('linux-key', 'my-secret'),
-        ).resolves.toBeUndefined();
+        expect(store.set('linux-key', 'my-secret')).resolves.toBeUndefined();
 
         (
           store as unknown as {

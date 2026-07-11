@@ -14,7 +14,7 @@
  * @plan PLAN-20260211-SECURESTORE.P11
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -222,7 +222,7 @@ describe('ProviderKeyStorage — CRUD Operations', () => {
    * @requirement R9.2
    */
   it('saveKey rejects empty API key value after trimming', async () => {
-    await expect(storage.saveKey('emptyval', '   \n\r  ')).rejects.toThrow(
+    expect(storage.saveKey('emptyval', '   \n\r  ')).rejects.toThrow(
       'API key value cannot be empty.',
     );
   });
@@ -315,16 +315,16 @@ describe('ProviderKeyStorage — CRUD Operations', () => {
    * @requirement R10.1
    */
   it('CRUD methods validate key name before operating', async () => {
-    await expect(storage.saveKey('bad name!', 'value')).rejects.toThrow(
+    expect(storage.saveKey('bad name!', 'value')).rejects.toThrow(
       "Key name 'bad name!' is invalid.",
     );
-    await expect(storage.getKey('bad name!')).rejects.toThrow(
+    expect(storage.getKey('bad name!')).rejects.toThrow(
       "Key name 'bad name!' is invalid.",
     );
-    await expect(storage.deleteKey('bad name!')).rejects.toThrow(
+    expect(storage.deleteKey('bad name!')).rejects.toThrow(
       "Key name 'bad name!' is invalid.",
     );
-    await expect(storage.hasKey('bad name!')).rejects.toThrow(
+    expect(storage.hasKey('bad name!')).rejects.toThrow(
       "Key name 'bad name!' is invalid.",
     );
   });

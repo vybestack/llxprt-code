@@ -13,7 +13,7 @@
  * @plan PLAN-20260609-ISSUE1590.P04b
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { promises as fsp } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -469,13 +469,13 @@ describe('ConversationFileWriter — Never-Rejects Contract', () => {
 
       // First failing write: the filesystem op fails and logger.error() throws,
       // but the returned promise must still resolve (best-effort, never rejects).
-      await expect(
+      expect(
         writer.writeEntry({ type: 'doomed-first' }),
       ).resolves.toBeUndefined();
 
       // Second write must also resolve — the prior failure must not have
       // poisoned the chain. (Pre-fix this rejected and skipped appendEntry.)
-      await expect(
+      expect(
         writer.writeEntry({ type: 'doomed-second' }),
       ).resolves.toBeUndefined();
     } finally {
