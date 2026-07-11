@@ -4,35 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { RestoreCommand, ListCheckpointsCommand } from './restore.js';
 import type { Config, GitService } from '@vybestack/llxprt-code-core';
 import type { CommandContext } from './types.js';
-import * as fs from 'node:fs/promises';
 import type { Stats } from 'node:fs';
 import * as path from 'node:path';
 
-const mockFormatCheckpointDisplayList = vi.hoisted(() => vi.fn());
-const mockGetToolCallDataSchema = vi.hoisted(() => vi.fn());
-
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-
-  return {
-    ...original,
-    formatCheckpointDisplayList: mockFormatCheckpointDisplayList,
-    getToolCallDataSchema: mockGetToolCallDataSchema,
-  };
-});
-
-vi.mock('node:fs/promises');
-vi.mock('node:path', async (importOriginal) => {
-  const original = await importOriginal<typeof import('node:path')>();
-  return {
-    ...original,
-  };
-});
+const mockFormatCheckpointDisplayList = vi.fn();
+const mockGetToolCallDataSchema = vi.fn();
+const mockReaddir = vi.fn();
+const mockLstat = vi.fn();
+const mockReadFile = vi.fn();
+const dependencies = {
+  formatCheckpointDisplayList: mockFormatCheckpointDisplayList,
+  getToolCallDataSchema: mockGetToolCallDataSchema,
+  readdir: mockReaddir,
+  lstat: mockLstat,
+  readFile: mockReadFile,
+};
 
 describe('ListCheckpointsCommand', () => {
   let mockConfig: Config;
@@ -53,13 +43,13 @@ describe('ListCheckpointsCommand', () => {
   });
 
   it('should have the correct name', () => {
-    const command = new ListCheckpointsCommand();
+    const command = new ListCheckpointsCommand(dependencies);
     expect(command.name).toStrictEqual('restore list');
   });
 
   it('should return error when checkpointing is disabled', async () => {
-    const command = new ListCheckpointsCommand();
-    vi.mocked(mockConfig.getCheckpointingEnabled).mockReturnValue(false);
+    const command = new ListCheckpointsCommand(dependencies);
+    mockConfig.getCheckpointingEnabled.mockReturnValue(false);
 
     const result = await command.execute(context, []);
 
@@ -70,9 +60,9 @@ describe('ListCheckpointsCommand', () => {
   });
 
   it('should return "No checkpoints found." for empty directory', async () => {
-    const command = new ListCheckpointsCommand();
-    vi.mocked(mockConfig.getCheckpointingEnabled).mockReturnValue(true);
-    vi.mocked(fs.readdir).mockResolvedValue([]);
+    const command = new ListCheckpointsCommand(dependencies);
+    mockConfig.getCheckpointingEnabled.mockReturnValue(true);
+    mockReaddir.mockResolvedValue([]);
     mockFormatCheckpointDisplayList.mockReturnValue('');
 
     const result = await command.execute(context, []);
@@ -84,10 +74,10 @@ describe('ListCheckpointsCommand', () => {
   });
 
   it('should return formatted list for directory with .json files', async () => {
-    const command = new ListCheckpointsCommand();
-    vi.mocked(mockConfig.getCheckpointingEnabled).mockReturnValue(true);
+    const command = new ListCheckpointsCommand(dependencies);
+    mockConfig.getCheckpointingEnabled.mockReturnValue(true);
     // readdir returns string[] when called without options
-    vi.mocked(fs.readdir).mockResolvedValue([
+    mockReaddir.mockResolvedValue([
       'checkpoint1.json',
       'checkpoint2.json',
       'other.txt',
@@ -131,27 +121,27 @@ describe('RestoreCommand', () => {
   });
 
   it('should have the correct name', () => {
-    const command = new RestoreCommand();
+    const command = new RestoreCommand(dependencies);
     expect(command.name).toStrictEqual('restore');
   });
 
   it('should require workspace', () => {
-    const command = new RestoreCommand();
+    const command = new RestoreCommand(dependencies);
     expect(command.requiresWorkspace).toBe(true);
   });
 
   it('should be a top-level command', () => {
-    const command = new RestoreCommand();
+    const command = new RestoreCommand(dependencies);
     expect(command.topLevel).toBe(true);
   });
 
   it('should have ListCheckpointsCommand as a subcommand', () => {
-    const command = new RestoreCommand();
+    const command = new RestoreCommand(dependencies);
     expect(command.subCommands.map((c) => c.name)).toContain('restore list');
   });
 
   it('should return error when no args provided', async () => {
-    const command = new RestoreCommand();
+    const command = new RestoreCommand(dependencies);
 
     const result = await command.execute(context, []);
 
@@ -160,7 +150,7 @@ describe('RestoreCommand', () => {
   });
 
   it('should reject path traversal attempts', async () => {
-    const command = new RestoreCommand();
+    const command = new RestoreCommand(dependencies);
 
     const result = await command.execute(context, ['../../../etc/passwd']);
 
@@ -170,7 +160,7 @@ describe('RestoreCommand', () => {
   });
 
   it('should reject paths with subdirectories', async () => {
-    const command = new RestoreCommand();
+    const command = new RestoreCommand(dependencies);
 
     const result = await command.execute(context, ['subdir/name.json']);
 
@@ -180,8 +170,8 @@ describe('RestoreCommand', () => {
   });
 
   it('should return error for nonexistent file', async () => {
-    const command = new RestoreCommand();
-    vi.mocked(fs.lstat).mockRejectedValue({ code: 'ENOENT' });
+    const command = new RestoreCommand(dependencies);
+    mockLstat.mockRejectedValue({ code: 'ENOENT' });
 
     const result = await command.execute(context, ['nonexistent.json']);
 
@@ -190,8 +180,8 @@ describe('RestoreCommand', () => {
   });
 
   it('should return error for symlink file', async () => {
-    const command = new RestoreCommand();
-    vi.mocked(fs.lstat).mockResolvedValue({
+    const command = new RestoreCommand(dependencies);
+    mockLstat.mockResolvedValue({
       isSymbolicLink: () => true,
     } as Stats);
 
@@ -203,11 +193,11 @@ describe('RestoreCommand', () => {
   });
 
   it('should return error for schema-invalid JSON', async () => {
-    const command = new RestoreCommand();
-    vi.mocked(fs.lstat).mockResolvedValue({
+    const command = new RestoreCommand(dependencies);
+    mockLstat.mockResolvedValue({
       isSymbolicLink: () => false,
     } as Stats);
-    vi.mocked(fs.readFile).mockResolvedValue('{"invalid": "data"}');
+    mockReadFile.mockResolvedValue('{"invalid": "data"}');
 
     const mockSchema = {
       parse: vi.fn().mockImplementation(() => {
@@ -223,7 +213,7 @@ describe('RestoreCommand', () => {
   });
 
   it('should call restoreProjectFromSnapshot for valid checkpoint with commitHash and git', async () => {
-    const command = new RestoreCommand();
+    const command = new RestoreCommand(dependencies);
     const validData = {
       commitHash: 'abc123',
       toolCall: {
@@ -232,10 +222,10 @@ describe('RestoreCommand', () => {
       },
     };
 
-    vi.mocked(fs.lstat).mockResolvedValue({
+    mockLstat.mockResolvedValue({
       isSymbolicLink: () => false,
     } as Stats);
-    vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(validData));
+    mockReadFile.mockResolvedValue(JSON.stringify(validData));
 
     const mockSchema = {
       parse: vi.fn().mockReturnValue(validData),
@@ -255,7 +245,7 @@ describe('RestoreCommand', () => {
   });
 
   it('should return error when commitHash present but no git service', async () => {
-    const command = new RestoreCommand();
+    const command = new RestoreCommand(dependencies);
     const contextNoGit = { config: mockConfig };
     const validData = {
       commitHash: 'abc123',
@@ -265,10 +255,10 @@ describe('RestoreCommand', () => {
       },
     };
 
-    vi.mocked(fs.lstat).mockResolvedValue({
+    mockLstat.mockResolvedValue({
       isSymbolicLink: () => false,
     } as Stats);
-    vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(validData));
+    mockReadFile.mockResolvedValue(JSON.stringify(validData));
 
     const mockSchema = {
       parse: vi.fn().mockReturnValue(validData),
@@ -283,7 +273,7 @@ describe('RestoreCommand', () => {
   });
 
   it('should succeed for valid checkpoint without commitHash (no git needed)', async () => {
-    const command = new RestoreCommand();
+    const command = new RestoreCommand(dependencies);
     const contextNoGit = { config: mockConfig };
     const validData = {
       toolCall: {
@@ -292,10 +282,10 @@ describe('RestoreCommand', () => {
       },
     };
 
-    vi.mocked(fs.lstat).mockResolvedValue({
+    mockLstat.mockResolvedValue({
       isSymbolicLink: () => false,
     } as Stats);
-    vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(validData));
+    mockReadFile.mockResolvedValue(JSON.stringify(validData));
 
     const mockSchema = {
       parse: vi.fn().mockReturnValue(validData),
@@ -314,7 +304,7 @@ describe('RestoreCommand', () => {
   });
 
   it('should add .json extension if not present', async () => {
-    const command = new RestoreCommand();
+    const command = new RestoreCommand(dependencies);
     const validData = {
       toolCall: {
         name: 'test_tool',
@@ -322,24 +312,20 @@ describe('RestoreCommand', () => {
       },
     };
 
-    vi.mocked(fs.lstat).mockResolvedValue({
+    mockLstat.mockResolvedValue({
       isSymbolicLink: () => false,
     } as Stats);
-    vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(validData));
+    mockReadFile.mockResolvedValue(JSON.stringify(validData));
 
     const mockSchema = {
       parse: vi.fn().mockReturnValue(validData),
     };
     mockGetToolCallDataSchema.mockReturnValue(mockSchema);
 
-    const pathJoinSpy = vi.spyOn(path, 'join');
-
     await command.execute(context, ['checkpoint-name']);
 
-    // Verify that the joined path includes .json extension
-    expect(pathJoinSpy).toHaveBeenCalledWith(
-      checkpointDir,
-      'checkpoint-name.json',
+    expect(mockLstat).toHaveBeenCalledWith(
+      path.join(checkpointDir, 'checkpoint-name.json'),
     );
   });
 });

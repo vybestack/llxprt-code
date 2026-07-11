@@ -16,9 +16,19 @@ import type {
   CommandExecutionResponse,
 } from './types.js';
 
+export interface RestoreCommandDependencies {
+  readdir?: typeof fs.readdir;
+  lstat?: typeof fs.lstat;
+  readFile?: typeof fs.readFile;
+  formatCheckpointDisplayList?: typeof formatCheckpointDisplayList;
+  getToolCallDataSchema?: typeof getToolCallDataSchema;
+}
+
 export class ListCheckpointsCommand implements Command {
   readonly name = 'restore list';
   readonly description = 'Lists all available checkpoints.';
+
+  constructor(private readonly dependencies: RestoreCommandDependencies = {}) {}
 
   async execute(
     context: CommandContext,
@@ -34,10 +44,15 @@ export class ListCheckpointsCommand implements Command {
 
       const checkpointDir =
         context.config.storage.getProjectTempCheckpointsDir();
-      const files = await fs.readdir(checkpointDir);
+      const files = await (this.dependencies.readdir ?? fs.readdir)(
+        checkpointDir,
+      );
       const jsonFiles = files.filter((file) => file.endsWith('.json'));
 
-      const result = formatCheckpointDisplayList(jsonFiles);
+      const result = (
+        this.dependencies.formatCheckpointDisplayList ??
+        formatCheckpointDisplayList
+      )(jsonFiles);
 
       return {
         name: this.name,
@@ -59,7 +74,11 @@ export class RestoreCommand implements Command {
   readonly description = 'Restore a checkpoint.';
   readonly requiresWorkspace = true;
   readonly topLevel = true;
-  readonly subCommands = [new ListCheckpointsCommand()];
+  readonly subCommands: Command[];
+
+  constructor(private readonly dependencies: RestoreCommandDependencies = {}) {
+    this.subCommands = [new ListCheckpointsCommand(dependencies)];
+  }
 
   async execute(
     context: CommandContext,
@@ -94,7 +113,7 @@ export class RestoreCommand implements Command {
       const fullPath = path.join(checkpointDir, filename);
 
       // Check if file is a symlink
-      const stats = await fs.lstat(fullPath);
+      const stats = await (this.dependencies.lstat ?? fs.lstat)(fullPath);
       if (stats.isSymbolicLink()) {
         return {
           name: this.name,
@@ -103,11 +122,16 @@ export class RestoreCommand implements Command {
       }
 
       // Read and parse file
-      const content = await fs.readFile(fullPath, 'utf-8');
+      const content = await (this.dependencies.readFile ?? fs.readFile)(
+        fullPath,
+        'utf-8',
+      );
       const data = JSON.parse(content);
 
       // Validate schema
-      const schema = getToolCallDataSchema();
+      const schema = (
+        this.dependencies.getToolCallDataSchema ?? getToolCallDataSchema
+      )();
       const validatedData = schema.parse(data);
 
       // Restore from snapshot if commitHash exists
