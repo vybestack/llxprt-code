@@ -33,6 +33,7 @@ export const CodexRateLimitResetCreditsResponseSchema = z
         available_count: z.number().int().nonnegative(),
         credits: z.array(CodexRateLimitResetCreditSchema),
       })
+      .nullable()
       .optional(),
   })
   .passthrough();
@@ -80,8 +81,11 @@ function resolveBackendApiRoot(baseUrl?: string): string {
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
 
   if (normalizedBaseUrl) {
-    if (normalizedBaseUrl.includes('/backend-api/codex')) {
-      return normalizedBaseUrl.replace('/backend-api/codex', '/backend-api');
+    if (/\/backend-api\/codex(?:\/|$)/.test(normalizedBaseUrl)) {
+      return normalizedBaseUrl.replace(
+        /\/backend-api\/codex(?=\/|$)/,
+        '/backend-api',
+      );
     }
     if (normalizedBaseUrl.includes('/backend-api')) {
       return normalizedBaseUrl;
@@ -233,12 +237,12 @@ export async function consumeCodexRateLimitResetCredit(
     return null;
   }
 
-  if (!creditId || typeof creditId !== 'string') {
+  if (typeof creditId !== 'string' || creditId.trim() === '') {
     logger.debug(() => 'Invalid credit ID provided');
     return null;
   }
 
-  if (!redeemRequestId || typeof redeemRequestId !== 'string') {
+  if (typeof redeemRequestId !== 'string' || redeemRequestId.trim() === '') {
     logger.debug(() => 'Invalid redeem request ID provided');
     return null;
   }

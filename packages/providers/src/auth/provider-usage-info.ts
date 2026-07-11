@@ -215,7 +215,7 @@ async function fetchAndStoreCodexResetCredits(
     accountId: string,
     baseUrl?: string,
   ) => Promise<CodexRateLimitResetCreditsResponse | null>,
-  result: Map<string, Record<string, unknown>>,
+  result: Map<string, CodexRateLimitResetCreditsResponse>,
   logger: DebugLogger,
 ): Promise<void> {
   try {
@@ -242,8 +242,8 @@ async function fetchAndStoreCodexResetCredits(
 export async function getAllCodexRateLimitResetCredits(
   tokenStore: TokenStore,
   config?: Config,
-): Promise<Map<string, Record<string, unknown>>> {
-  const result = new Map<string, Record<string, unknown>>();
+): Promise<Map<string, CodexRateLimitResetCreditsResponse>> {
+  const result = new Map<string, CodexRateLimitResetCreditsResponse>();
 
   const buckets = await tokenStore.listBuckets('codex');
   const bucketsToCheck = buckets.length > 0 ? buckets : ['default'];

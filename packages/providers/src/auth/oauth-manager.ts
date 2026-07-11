@@ -465,8 +465,8 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * Returns a map of bucket name to reset-credits info for all buckets that
    * have valid OAuth tokens with account_id.
    */
-  async getAllCodexRateLimitResetCredits(): Promise<
-    Map<string, Record<string, unknown>>
+  async getAllCodexRateLimitResetCredits(): ReturnType<
+    typeof getAllCodexRateLimitResetCredits
   > {
     return getAllCodexRateLimitResetCredits(this.tokenStore, this.config);
   }

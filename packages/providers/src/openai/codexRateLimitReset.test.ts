@@ -213,10 +213,25 @@ describe('codexRateLimitReset', () => {
         'account123',
       );
 
-      expect(result).not.toBeNull();
-      expect(result?.rate_limit_reset_credits).toBeDefined();
-      expect(result?.rate_limit_reset_credits.available_count).toBe(0);
-      expect(result?.rate_limit_reset_credits.credits).toStrictEqual([]);
+      expect(result).toStrictEqual({
+        unrelated_field: 'something',
+        rate_limit_reset_credits: { available_count: 0, credits: [] },
+      });
+    });
+
+    it('should degrade null rate_limit_reset_credits to zero available credits', async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ rate_limit_reset_credits: null }),
+      } as Response);
+
+      const result = await fetchCodexRateLimitResetCredits(
+        'token123',
+        'account123',
+      );
+      expect(result).toStrictEqual({
+        rate_limit_reset_credits: { available_count: 0, credits: [] },
+      });
     });
 
     it('should return null when rate_limit_reset_credits is present but schema-invalid', async () => {
@@ -355,6 +370,28 @@ describe('codexRateLimitReset', () => {
         'account123',
         'credit-1',
         'redeem-1',
+      );
+      expect(result).toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('should return null for a whitespace-only credit ID without fetching', async () => {
+      const result = await consumeCodexRateLimitResetCredit(
+        'token123',
+        'account123',
+        '   ',
+        'redeem-1',
+      );
+      expect(result).toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('should return null for a whitespace-only redeem request ID without fetching', async () => {
+      const result = await consumeCodexRateLimitResetCredit(
+        'token123',
+        'account123',
+        'credit-1',
+        '   ',
       );
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
@@ -593,6 +630,26 @@ describe('codexRateLimitReset', () => {
 
       expect(fetchMock).toHaveBeenCalledWith(
         'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    it('should preserve a backend path segment that only starts with codex', async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ code: 'reset' }),
+      } as Response);
+
+      await consumeCodexRateLimitResetCredit(
+        'token123',
+        'account123',
+        'credit-1',
+        'redeem-1',
+        'https://custom.example/backend-api/codexify',
+      );
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://custom.example/backend-api/codexify/wham/rate-limit-reset-credits/consume',
         expect.objectContaining({ method: 'POST' }),
       );
     });
