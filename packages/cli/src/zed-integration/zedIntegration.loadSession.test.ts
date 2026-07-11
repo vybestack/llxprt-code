@@ -26,13 +26,49 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import type * as acp from '@agentclientprotocol/sdk';
 import { RequestError } from '@agentclientprotocol/sdk';
 import type { Config, IContent } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
+import type { ChatSessionFileLister } from './zed-session-loader.js';
 
 import { RecordingConnection } from './zed-test-helpers.js';
+
+/**
+ * A chats dir that never exists on disk, so the disk-resume corrupt-vs-missing
+ * probe (zed-session-loader.listSessionFileNames does a REAL readdir here) always
+ * hits ENOENT and falls back to the plain not-found mapping — keeping the
+ * resourceNotFound test deterministic. The RE-ATTACH probe (hasRecordedSessionFile)
+ * uses the INJECTED lister below instead, so this path value is irrelevant to it.
+ */
+const NONEXISTENT_CHATS_PARENT = path.join(
+  os.tmpdir(),
+  'llxprt-zed-loadsession-tests-nonexistent',
+);
+
+/**
+ * Honest readdir-like lister that reports NO on-disk recordings (empty chats
+ * dir), driving loadSession down the RE-ATTACH path when a live session exists.
+ */
+const emptyChatsLister: ChatSessionFileLister = async () => [];
+
+/**
+ * Honest readdir-like lister that reports a recorded session file on disk for
+ * each given session id, driving loadSession down the DISK-RESUME path (the file
+ * "exists"). Returns real directory ENTRY NAMES matching the
+ * `session-<timestamp>-<first-12-of-id>.jsonl` shape SessionRecordingService
+ * writes, so the production findMatchingSessionFile logic (not a result-shaped
+ * mock) decides the branch.
+ */
+function recordedFilesLister(...sessionIds: string[]): ChatSessionFileLister {
+  const names = sessionIds.map(
+    (id) => `session-2026-07-11T10-00-00-${id.substring(0, 12)}.jsonl`,
+  );
+  return async () => names;
+}
 
 const mockFromConfig = vi.hoisted(() => vi.fn());
 
@@ -58,16 +94,24 @@ interface StubAgentHandle {
   readonly resume: ReturnType<typeof vi.fn>;
   readonly setRecording: ReturnType<typeof vi.fn>;
   readonly dispose: ReturnType<typeof vi.fn>;
+  readonly getHistory: ReturnType<typeof vi.fn>;
 }
 
 /**
  * Builds a stub Agent whose session.resume returns the given fixed history (or
- * rejects with the given error). Captures the resume/setRecording/dispose spies
- * so orchestration can be asserted without a real provider bootstrap.
+ * rejects with the given error). Captures the resume/setRecording/dispose/getHistory
+ * spies so orchestration can be asserted without a real provider bootstrap.
+ *
+ * `getHistory` returns the LIVE in-memory history (Gemini AgentMessage[]) used by
+ * the #1604 re-attach replay path; it defaults to empty (a fresh unprompted
+ * session → zero replay updates). It is DISTINCT from `resumeHistory`, which is
+ * the neutral IContent[] the disk resume returns.
  */
 function buildStubAgent(options: {
   resumeHistory?: readonly IContent[];
   resumeError?: Error;
+  liveHistory?: readonly AgentMessage[];
+  streamText?: string;
 }): StubAgentHandle {
   const resume = vi.fn(async () => {
     if (options.resumeError !== undefined) {
@@ -77,15 +121,32 @@ function buildStubAgent(options: {
   });
   const setRecording = vi.fn(async () => undefined);
   const dispose = vi.fn(async () => undefined);
+  const getHistory = vi.fn(async () => options.liveHistory ?? []);
+  const streamText = options.streamText;
   const agent = {
     getApprovalMode: () => 'default',
     setApprovalMode: vi.fn(),
     dispose,
-    async *stream() {},
+    getHistory,
+    async *stream() {
+      if (streamText !== undefined) {
+        yield { type: 'text', text: streamText };
+      }
+      yield { type: 'done', reason: 'stop' };
+    },
     session: { resume, setRecording },
     tools: { respondToConfirmation: vi.fn() },
   } as unknown as Agent;
-  return { agent, resume, setRecording, dispose };
+  return { agent, resume, setRecording, dispose, getHistory };
+}
+
+/**
+ * Builds a live Gemini AgentMessage (Content) for the re-attach getHistory stub:
+ * a model turn carrying a single text part. Used to prove the re-attach path
+ * replays the live in-memory transcript (not the disk resume fixture).
+ */
+function modelMessage(text: string): AgentMessage {
+  return { role: 'model', parts: [{ text }] };
 }
 
 function buildBaseConfig(): Config {
@@ -101,6 +162,13 @@ function buildBaseConfig(): Config {
     getDebugMode: () => false,
     getTargetDir: () => '/project',
     getMaxSessionTurns: () => 50,
+    // The re-attach + corrupt-vs-missing probes derive the chats dir from
+    // storage.getProjectTempDir(); point it at a dir that never exists so the
+    // disk-resume probe's REAL readdir hits ENOENT (falling back to the plain
+    // mapping) while the injected re-attach lister decides the re-attach branch.
+    storage: {
+      getProjectTempDir: () => NONEXISTENT_CHATS_PARENT,
+    },
   } as unknown as Config;
 }
 
@@ -127,12 +195,14 @@ function buildInitializeRequest(): acp.InitializeRequest {
  */
 async function makeZedAgent(
   connection: RecordingConnection,
+  sessionFileLister?: ChatSessionFileLister,
 ): Promise<InstanceType<typeof import('./zedIntegration.js').ZedAgent>> {
   const mod = await import('./zedIntegration.js');
   const zedAgent = new mod.ZedAgent(
     buildBaseConfig(),
     buildStubSettings(),
     connection as unknown as acp.AgentSideConnection,
+    sessionFileLister,
   );
   await zedAgent.initialize(buildInitializeRequest());
   return zedAgent;
@@ -309,7 +379,13 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
       .mockResolvedValueOnce(retryStub.agent);
 
     const connection = new RecordingConnection();
-    const zedAgent = await makeZedAgent(connection);
+    // This is a RECORDED session (the reconnect exercises the disk-resume replace
+    // path), so the injected probe reports a matching on-disk file for the id —
+    // driving loadSession down the destroy-prior + resume branch, NOT re-attach.
+    const zedAgent = await makeZedAgent(
+      connection,
+      recordedFilesLister('lock-session'),
+    );
 
     const params: acp.LoadSessionRequest = {
       sessionId: 'lock-session',
@@ -356,7 +432,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     expect(agentTexts).toStrictEqual(['live session', 'retry session']);
   });
 
-  it('replaces a prior loaded session with the same id (reconnect friendliness)', async () => {
+  it('takes the DISK-RESUME path (dispose prior + fresh build/resume/replay) when a matching recording EXISTS on disk for a live same-id session (#1604 probe decides disk branch)', async () => {
     const firstStub = buildStubAgent({
       resumeHistory: [
         { speaker: 'ai', blocks: [{ type: 'text', text: 'first load' }] },
@@ -367,12 +443,22 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
         { speaker: 'ai', blocks: [{ type: 'text', text: 'second load' }] },
       ],
     });
+    // The module-level fromConfig mock accumulates calls across tests (no
+    // beforeEach reset in this file); reset it so this test's build-count
+    // assertion has a clean baseline and its two agents are returned in order.
+    mockFromConfig.mockReset();
     mockFromConfig
       .mockResolvedValueOnce(firstStub.agent)
       .mockResolvedValueOnce(secondStub.agent);
 
     const connection = new RecordingConnection();
-    const zedAgent = await makeZedAgent(connection);
+    // A recording EXISTS on disk for this id, so the second (reconnect) load must
+    // take the disk-resume replace path — NOT re-attach. The injected lister is an
+    // honest readdir fake returning the real session-*-<first12>.jsonl entry name,
+    // so production findMatchingSessionFile decides the branch.
+    const lister = recordedFilesLister('dup-session');
+    const listerSpy = vi.fn(lister);
+    const zedAgent = await makeZedAgent(connection, listerSpy);
 
     const params: acp.LoadSessionRequest = {
       sessionId: 'dup-session',
@@ -383,14 +469,168 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     await zedAgent.loadSession(params);
     await zedAgent.loadSession(params);
 
-    // The prior session's agent was disposed when the second load replaced it.
+    // The probe was consulted on the second load (a live session existed) and,
+    // finding a matching file, routed to the disk path.
+    expect(listerSpy).toHaveBeenCalledTimes(1);
+    // Disk path: a fresh agent was built + resumed for the reconnect...
+    expect(mockFromConfig).toHaveBeenCalledTimes(2);
+    expect(secondStub.resume).toHaveBeenCalledWith('dup-session');
+    // ...and the prior session's agent was disposed when the second load replaced it.
     expect(firstStub.dispose).toHaveBeenCalledTimes(1);
-    // Both loads streamed their respective transcripts.
+    // Both loads streamed their respective (disk-resumed) transcripts.
     const agentTexts = connection
       .onlySessionUpdates()
       .filter((u) => u.sessionUpdate === 'agent_message_chunk')
       .map((u) => (u as { content: { text: string } }).content.text);
     expect(agentTexts).toStrictEqual(['first load', 'second load']);
+  });
+
+  // ─── #1604: re-attach live unprompted sessions on session/load ────────────
+
+  it('RE-ATTACHES a just-created unprompted session on immediate loadSession: succeeds with modes, ZERO replay updates, original session preserved (promptable), fromConfig NOT called again, nothing disposed', async () => {
+    // A fresh session created via newSession with no prompt: empty live history
+    // (zero replay), and a stream that completes so a later prompt proves the
+    // ORIGINAL session object is still live.
+    const stub = buildStubAgent({ liveHistory: [], streamText: 'still alive' });
+    // Clean baseline for the strict fromConfig build-count assertions below (the
+    // module-level mock accumulates across tests; no beforeEach reset here).
+    mockFromConfig.mockReset();
+    mockFromConfig.mockResolvedValue(stub.agent);
+
+    const connection = new RecordingConnection();
+    // Empty chats dir → no on-disk recording for the unprompted session → the
+    // load must RE-ATTACH rather than destroy-and-resume.
+    const zedAgent = await makeZedAgent(connection, emptyChatsLister);
+
+    const created = await zedAgent.newSession({
+      cwd: '/project',
+      mcpServers: [],
+    } as acp.NewSessionRequest);
+    // newSession built exactly one agent.
+    expect(mockFromConfig).toHaveBeenCalledTimes(1);
+
+    const response = await zedAgent.loadSession({
+      sessionId: created.sessionId,
+      cwd: '/project',
+      mcpServers: [],
+    } as acp.LoadSessionRequest);
+
+    // Succeeds and advertises modes (ACP loadSession conformance on a live,
+    // never-prompted session — no resourceNotFound).
+    expect(response.modes?.currentModeId).toBe('default');
+    expect(response.modes?.availableModes.map((m) => m.id)).toContain(
+      'default',
+    );
+    // ZERO replay updates: an unprompted session has no history to replay.
+    expect(connection.sessionUpdateKinds()).toStrictEqual([]);
+    // The live in-memory history was consulted (re-attach path), and the disk
+    // resume was NOT taken.
+    expect(stub.getHistory).toHaveBeenCalledTimes(1);
+    expect(stub.resume).toHaveBeenCalledTimes(0);
+    // No SECOND agent was built — the ORIGINAL session was re-attached, not
+    // rebuilt.
+    expect(mockFromConfig).toHaveBeenCalledTimes(1);
+    // Nothing was disposed: the live session survived the load.
+    expect(stub.dispose).toHaveBeenCalledTimes(0);
+
+    // The ORIGINAL session is still live and promptable after the re-attach.
+    await expect(
+      zedAgent.prompt({
+        sessionId: created.sessionId,
+        prompt: [{ type: 'text', text: 'are you there?' }],
+      } as acp.PromptRequest),
+    ).resolves.toBeDefined();
+    // Still the SAME agent (never rebuilt/disposed) served the prompt.
+    expect(mockFromConfig).toHaveBeenCalledTimes(1);
+    expect(stub.dispose).toHaveBeenCalledTimes(0);
+  });
+
+  it('RE-ATTACH replays the live in-memory transcript (from getHistory) when an unprompted session was loaded after some in-memory turns, without a disk resume', async () => {
+    // A live session whose in-memory history has content but which has NOT yet
+    // materialized a recording file (empty chats dir): re-attach must replay the
+    // LIVE history (getHistory), not the disk resume fixture.
+    const stub = buildStubAgent({
+      liveHistory: [modelMessage('live reattach text')],
+      // resumeHistory is deliberately DIFFERENT so a wrong (disk) path is visible.
+      resumeHistory: [
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'DISK not used' }] },
+      ],
+    });
+    mockFromConfig.mockResolvedValue(stub.agent);
+
+    const connection = new RecordingConnection();
+    const zedAgent = await makeZedAgent(connection, emptyChatsLister);
+
+    const created = await zedAgent.newSession({
+      cwd: '/project',
+      mcpServers: [],
+    } as acp.NewSessionRequest);
+
+    await zedAgent.loadSession({
+      sessionId: created.sessionId,
+      cwd: '/project',
+      mcpServers: [],
+    } as acp.LoadSessionRequest);
+
+    // The live transcript was replayed via getHistory; resume was NOT called.
+    expect(stub.getHistory).toHaveBeenCalledTimes(1);
+    expect(stub.resume).toHaveBeenCalledTimes(0);
+    const agentTexts = connection
+      .onlySessionUpdates()
+      .filter((u) => u.sessionUpdate === 'agent_message_chunk')
+      .map((u) => (u as { content: { text: string } }).content.text);
+    expect(agentTexts).toStrictEqual(['live reattach text']);
+    // Live session preserved (re-attach never disposes a healthy session).
+    expect(stub.dispose).toHaveBeenCalledTimes(0);
+  });
+
+  it('RE-ATTACH propagates a wrapped internalError WITHOUT disposing the healthy live session when replay delivery fails', async () => {
+    const stub = buildStubAgent({
+      liveHistory: [modelMessage('will fail to deliver')],
+    });
+    // Clean baseline for the fromConfig build-count assertion below.
+    mockFromConfig.mockReset();
+    mockFromConfig.mockResolvedValue(stub.agent);
+
+    const connection = new RecordingConnection();
+    // Dead transport: the first (and only) replay update rejects.
+    connection.failSessionUpdateAfter(0, new Error('transport is dead'));
+    const zedAgent = await makeZedAgent(connection, emptyChatsLister);
+
+    const created = await zedAgent.newSession({
+      cwd: '/project',
+      mcpServers: [],
+    } as acp.NewSessionRequest);
+
+    let caught: unknown;
+    try {
+      await zedAgent.loadSession({
+        sessionId: created.sessionId,
+        cwd: '/project',
+        mcpServers: [],
+      } as acp.LoadSessionRequest);
+    } catch (e) {
+      caught = e;
+    }
+
+    // A lost re-attach transcript surfaces as a wrapped internalError (replay
+    // phase), mirroring the disk path's strict-replay contract.
+    expect(caught).toBeInstanceOf(RequestError);
+    expect((caught as RequestError).code).toBe(-32603);
+    expect((caught as RequestError).message).toContain('replay');
+    // CRUCIAL re-attach cleanup semantics: the healthy live session is NOT
+    // disposed on a replay failure (it was never destroyed), so it is still
+    // live and promptable — unlike the disk path which disposes on replay failure.
+    expect(stub.dispose).toHaveBeenCalledTimes(0);
+    // clearing the transport, the SAME live session still serves a prompt.
+    connection.clearSessionUpdateFailure();
+    await expect(
+      zedAgent.prompt({
+        sessionId: created.sessionId,
+        prompt: [{ type: 'text', text: 'recovered?' }],
+      } as acp.PromptRequest),
+    ).resolves.toBeDefined();
+    expect(mockFromConfig).toHaveBeenCalledTimes(1);
   });
 
   // ─── FINDING A: strict history-replay delivery ────────────────────────────
@@ -550,7 +790,12 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
       .mockResolvedValueOnce(secondStub.agent);
 
     const connection = new RecordingConnection();
-    const zedAgent = await makeZedAgent(connection);
+    // Recorded session: the second (serialized) load must take the disk-resume
+    // replace path, so the injected probe reports a matching on-disk file.
+    const zedAgent = await makeZedAgent(
+      connection,
+      recordedFilesLister('concurrent-session'),
+    );
 
     const params: acp.LoadSessionRequest = {
       sessionId: 'concurrent-session',

@@ -20,6 +20,7 @@ import { describe, expect, it } from 'vitest';
 import { RequestError } from '@agentclientprotocol/sdk';
 import {
   classifyResumeFailure,
+  findMatchingSessionFile,
   mapResumeError,
   wrapReplayFailure,
 } from './zed-session-errors.js';
@@ -205,5 +206,47 @@ describe('wrapReplayFailure (issue #1604 FINDING A: strict replay delivery)', ()
   it('passes an already-constructed RequestError through unchanged (no double-wrap)', () => {
     const original = RequestError.internalError({ x: 1 }, 'inner');
     expect(wrapReplayFailure(SESSION_ID, original)).toBe(original);
+  });
+});
+
+describe('findMatchingSessionFile (issue #1604: shared session-file matcher)', () => {
+  const ID = 'corrupt-abcdef123456';
+
+  it('returns the matching entry naming this session (session-<ts>-<first12>.jsonl)', () => {
+    const match = matchingFileName(ID);
+    expect(
+      findMatchingSessionFile(ID, [
+        'session-unrelated-000000000000.jsonl',
+        match,
+      ]),
+    ).toBe(match);
+  });
+
+  it('returns null when NO entry matches the id (unprompted session / different id)', () => {
+    expect(
+      findMatchingSessionFile(ID, [
+        'session-something-else-999999999999.jsonl',
+        'not-a-session.txt',
+      ]),
+    ).toBeNull();
+  });
+
+  it('returns null for an empty directory listing', () => {
+    expect(findMatchingSessionFile(ID, [])).toBeNull();
+  });
+
+  it('requires BOTH the session- prefix and the -<first12>.jsonl suffix (no partial match)', () => {
+    // Right suffix but wrong prefix word → no match.
+    expect(
+      findMatchingSessionFile(ID, [
+        `chat-2026-07-11-${ID.substring(0, 12)}.jsonl`,
+      ]),
+    ).toBeNull();
+    // Right prefix but wrong id suffix → no match.
+    expect(
+      findMatchingSessionFile(ID, [
+        'session-2026-07-11T10-00-00-000000000000.jsonl',
+      ]),
+    ).toBeNull();
   });
 });

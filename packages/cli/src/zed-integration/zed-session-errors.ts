@@ -157,6 +157,22 @@ async function probeMatchingSessionFile(
     );
     return null;
   }
+  return findMatchingSessionFile(sessionId, entries);
+}
+
+/**
+ * Pure matcher: returns the first entry naming a recorded session file for
+ * `sessionId`, or null when none match. SessionRecordingService.materialize
+ * names files `session-<timestamp>-<first-12-of-id>.jsonl`, so a matching file
+ * both starts with `session-` and ends with `-<first-12-of-id>.jsonl`. Exported
+ * so the loadSession re-attach probe (zed-session-loader.ts) decides "does an
+ * on-disk recording exist for this id?" against the EXACT same naming rule the
+ * corrupt-vs-missing resume probe uses, keeping the two in lockstep.
+ */
+export function findMatchingSessionFile(
+  sessionId: string,
+  entries: readonly string[],
+): string | null {
   const suffix = sessionFileSuffix(sessionId);
   return (
     entries.find(

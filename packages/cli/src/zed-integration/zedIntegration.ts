@@ -25,8 +25,6 @@ import {
   fromConfig,
   type Agent,
   type AgentEvent,
-  type DoneReason,
-  type ThoughtSummary,
 } from '@vybestack/llxprt-code-agents';
 import { Readable, Writable } from 'node:stream';
 import { type LoadedSettings } from '../config/settings.js';
@@ -37,7 +35,15 @@ import {
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import { runExitCleanup } from '../utils/cleanup.js';
 import { AcpFileSystemService } from './fileSystemService.js';
-import { parseZedAuthMethodId, buildAvailableModes } from './zed-helpers.js';
+import {
+  parseZedAuthMethodId,
+  buildAvailableModes,
+  buildSessionModes,
+  mapDoneReasonToStopReason,
+  extractThoughtText,
+  translateErrorEvent,
+  translateIdleTimeout,
+} from './zed-helpers.js';
 import { ZedPathResolver } from './zed-path-resolver.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
@@ -52,6 +58,10 @@ import { wrapReplayFailure } from './zed-session-errors.js';
 import {
   resumeAgentHistory,
   toLoadRequestError,
+  hasRecordedSessionFile,
+  readAgentHistoryAsIContent,
+  nodeChatSessionFileLister,
+  type ChatSessionFileLister,
 } from './zed-session-loader.js';
 import { StreamBatcher } from './zed-stream-batcher.js';
 import {
@@ -122,12 +132,24 @@ export class ZedAgent {
   private clientCapabilities: acp.ClientCapabilities | undefined;
   private logger: DebugLogger;
 
+  /**
+   * Directory lister used by the loadSession re-attach probe (#1604) to decide
+   * whether an on-disk recording already exists for a session id. Defaults to
+   * the real `node:fs/promises` readdir wrapper; injectable via the constructor
+   * as an HONEST readdir-like seam (returns directory entry names) so tests can
+   * exercise the real chats-dir derivation + filename matching without stubbing
+   * our own decision logic.
+   */
+  private readonly sessionFileLister: ChatSessionFileLister;
+
   constructor(
     private config: Config,
     _settings: LoadedSettings,
     private connection: acp.AgentSideConnection,
+    sessionFileLister: ChatSessionFileLister = nodeChatSessionFileLister,
   ) {
     this.logger = new DebugLogger('llxprt:zed-integration');
+    this.sessionFileLister = sessionFileLister;
   }
 
   async initialize(
@@ -193,10 +215,7 @@ export class ZedAgent {
 
       return {
         sessionId,
-        modes: {
-          availableModes: buildAvailableModes(),
-          currentModeId: agent.getApprovalMode(),
-        },
+        modes: buildSessionModes(agent.getApprovalMode()),
       };
     } catch (error) {
       this.logger.debug(() => `ERROR in newSession: ${error}`);
@@ -233,34 +252,46 @@ export class ZedAgent {
 
   /**
    * Loads (resumes) a previously recorded session so its conversation can be
-   * continued (issue #1604). The persisted history is replayed to the client as
-   * ordered session/update notifications BEFORE this resolves, so the Zed
-   * transcript is reconstructed. A fresh Agent (bound to a session-scoped Config
-   * + AcpFileSystemService, identical to newSession) is created for the loaded
-   * session id, and `agent.session.resume` restores the history AND re-subscribes
-   * continuous recording so subsequent turns keep appending to the SAME file.
+   * continued (issue #1604). The history is replayed to the client as ordered
+   * session/update notifications BEFORE this resolves, so the Zed transcript is
+   * reconstructed.
    *
-   * Replace-order + lock semantics: an already-loaded same-id Session holds the
-   * on-disk session lock (SessionLockManager), so the fresh agent's resume CANNOT
-   * acquire the lock until the prior Session is disposed. Disposing first is
-   * therefore unavoidable. To keep the destructive step safe we (a) dispose the
-   * prior Session AND remove it from this.sessions up front so no half-dead entry
-   * survives a subsequent failure, then (b) build + resume the replacement; if
-   * that fails, the fresh agent is disposed and a precise RequestError (carrying
-   * the lower-layer reason, see mapResumeError) is thrown, leaving this.sessions
-   * with NO entry for the id so a later retry can cleanly load again. On success
-   * the replacement is installed and the restored transcript is streamed.
+   * Two paths, chosen by whether a recording exists on disk (see
+   * {@link performLoadSession}):
    *
-   * Full-replay-on-reconnect: even when a healthy in-memory Session already
-   * exists for this id, we still perform the disk-based replace (fresh agent +
-   * resume + replay) rather than short-circuiting, because Zed expects a complete
-   * history replay on every session/load (e.g. a client reconnect rebuilding its
-   * transcript). The in-memory Session is not a substitute for that replay.
+   * 1. RE-ATTACH (live session, no on-disk recording): a session that was created
+   *    via session/new but never prompted has NO recording file — SessionRecordingService
+   *    materializes the JSONL only on the FIRST content event — so a disk resume
+   *    would fail with "No sessions found for this project" AND the destroy-first
+   *    step would have thrown away a perfectly healthy live session. Instead we
+   *    KEEP the live session, replay its IN-MEMORY history (empty for a fresh
+   *    unprompted session → zero updates), and return its modes. This keeps ACP
+   *    loadSession conformant (an agent that advertises loadSession must not error
+   *    on a just-created session) and lets a Zed reconnect to an unprompted session
+   *    succeed. Because the live session is healthy, a replay failure here does NOT
+   *    dispose it — the wrapped internalError is simply propagated.
+   *
+   * 2. DISK RESUME (recording present, or no live session): a fresh Agent (bound
+   *    to a session-scoped Config + AcpFileSystemService, identical to newSession)
+   *    is created and `agent.session.resume` restores the recorded history AND
+   *    re-subscribes continuous recording so subsequent turns keep appending to the
+   *    SAME file. Replace-order + lock semantics: an already-loaded same-id Session
+   *    holds the on-disk session lock (SessionLockManager), so the fresh agent's
+   *    resume CANNOT acquire the lock until the prior Session is disposed; disposing
+   *    first is therefore unavoidable. To keep the destructive step safe we (a)
+   *    dispose the prior Session AND remove it from this.sessions up front so no
+   *    half-dead entry survives a subsequent failure, then (b) build + resume the
+   *    replacement; if that fails, the fresh agent is disposed and a precise
+   *    RequestError (carrying the lower-layer reason, see mapResumeError) is thrown,
+   *    leaving this.sessions with NO entry for the id so a later retry can cleanly
+   *    load again. On success the replacement is installed and the restored
+   *    transcript is streamed.
    *
    * Concurrency: same-id loads are SERIALIZED (FINDING F5) via loadSessionQueues
    * so two concurrent session/load calls for one id cannot both build agents and
    * race to install (which would orphan the earlier load's recording lock);
-   * distinct ids remain fully parallel.
+   * distinct ids remain fully parallel. The re-attach probe + replay run INSIDE
+   * this serialization too.
    */
   async loadSession(
     params: acp.LoadSessionRequest,
@@ -290,9 +321,15 @@ export class ZedAgent {
   }
 
   /**
-   * Performs a single (already-serialized, see {@link loadSession}) session/load:
-   * disposes any prior same-id Session to release its on-disk lock, then builds +
-   * resumes + installs the replacement and streams the restored transcript.
+   * Performs a single (already-serialized, see {@link loadSession}) session/load.
+   *
+   * Decision: if a live same-id session exists AND no recording file exists on
+   * disk for it, RE-ATTACH the live session (an unprompted session has no
+   * recording — the file materializes on first content — so a disk resume would
+   * both fail and needlessly destroy the healthy live session). Otherwise fall
+   * back to the disk path: dispose any prior same-id Session to release its
+   * on-disk lock, then build + resume + install the replacement and stream the
+   * restored transcript.
    */
   private async performLoadSession(
     params: acp.LoadSessionRequest,
@@ -300,15 +337,51 @@ export class ZedAgent {
     const { sessionId } = params;
     this.logger.debug(() => `loadSession - loading session ${sessionId}`);
 
+    const reattached = await this.tryReattachLiveSession(sessionId);
+    if (reattached !== null) {
+      return { modes: buildSessionModes(reattached.getApprovalMode()) };
+    }
+
     await this.disposePriorSession(sessionId);
     const session = await this.installResumedSession(sessionId, params.cwd);
+    return { modes: buildSessionModes(session.getApprovalMode()) };
+  }
 
-    return {
-      modes: {
-        availableModes: buildAvailableModes(),
-        currentModeId: session.getApprovalMode(),
-      },
-    };
+  /**
+   * RE-ATTACH decision + replay (#1604). Returns the live same-id Session (after
+   * replaying its in-memory history) when one exists AND has no on-disk recording
+   * yet (an unprompted session, whose JSONL file has not materialized) — a disk
+   * resume would both fail and needlessly destroy the healthy live session, so we
+   * keep it and replay instead. Returns null (so the caller takes the disk-resume
+   * path) when there is no live session OR a recording file already exists. For a
+   * fresh unprompted session the in-memory history is empty, so ZERO replay
+   * updates are sent. A replay failure is propagated (already wrapped as a precise
+   * RequestError by Session.streamHistory) WITHOUT disposing the session — it was
+   * healthy and the client can retry — the re-attach cleanup contract (no destroy
+   * on failure), distinct from the disk path's destroy-on-failure.
+   */
+  private async tryReattachLiveSession(
+    sessionId: string,
+  ): Promise<Session | null> {
+    const existing = this.sessions.get(sessionId);
+    if (existing === undefined) {
+      return null;
+    }
+    const recordingExists = await hasRecordedSessionFile(
+      this.config,
+      sessionId,
+      this.sessionFileLister,
+    );
+    if (recordingExists) {
+      return null;
+    }
+    this.logger.debug(
+      () =>
+        `loadSession - re-attaching live session ${sessionId} (no on-disk ` +
+        `recording; replaying in-memory history)`,
+    );
+    await existing.replayLiveHistory();
+    return existing;
   }
 
   /**
@@ -485,29 +558,6 @@ export class ZedAgent {
     const sessions = [...this.sessions.values()];
     this.sessions.clear();
     await Promise.allSettled(sessions.map((session) => session.dispose()));
-  }
-}
-
-function mapDoneReasonToStopReason(reason: DoneReason): acp.StopReason {
-  switch (reason) {
-    case 'stop':
-    case 'loop-detected':
-      return 'end_turn';
-    case 'aborted':
-      return 'cancelled';
-    case 'max-turns':
-      return 'max_turn_requests';
-    case 'context-overflow':
-      return 'max_tokens';
-    case 'refusal':
-      return 'refusal';
-    case 'error':
-    case 'hook-stopped':
-      throw new Error(`Agent stopped with terminal reason: ${reason}`);
-    default: {
-      const exhaustive: never = reason;
-      return exhaustive;
-    }
   }
 }
 
@@ -749,7 +799,7 @@ export class Session {
         batcher.append(event.text, false);
         return null;
       case 'thinking': {
-        const thoughtText = this.extractThoughtText(event.thought);
+        const thoughtText = extractThoughtText(event.thought);
         if (thoughtText.length > 0) {
           batcher.append(thoughtText, true);
         }
@@ -776,10 +826,10 @@ export class Session {
         return mapDoneReasonToStopReason(event.reason);
       case 'error':
         await batcher.flush();
-        throw this.translateErrorEvent(event);
+        throw translateErrorEvent(event);
       case 'idle-timeout':
         await batcher.flush();
-        throw this.translateIdleTimeout(event);
+        throw translateIdleTimeout(event);
       case 'invalid-stream':
         await batcher.flush();
         throw new Error(
@@ -917,29 +967,6 @@ export class Session {
     }
   }
 
-  private extractThoughtText(thought: ThoughtSummary): string {
-    const parts = [thought.subject, thought.description].filter(
-      (v) => v.length > 0,
-    );
-    return parts.join(parts.length > 1 ? ' ' : '');
-  }
-
-  private translateErrorEvent(
-    event: Extract<AgentEvent, { type: 'error' }>,
-  ): Error {
-    const error = new Error(event.error.message);
-    if (event.error.status !== undefined) {
-      Object.assign(error, { status: event.error.status });
-    }
-    return error;
-  }
-
-  private translateIdleTimeout(
-    event: Extract<AgentEvent, { type: 'idle-timeout' }>,
-  ): Error {
-    return new Error(event.error.message);
-  }
-
   /**
    * STRICT delivery of a single session/update: rethrows any transport failure.
    * Used ONLY by streamHistory (ACP session/load replay) so a dead/failing
@@ -1009,6 +1036,24 @@ export class Session {
         throw wrapReplayFailure(this.id, error);
       }
     }
+  }
+
+  /**
+   * Re-attach replay for ACP session/load (#1604): replays this live session's
+   * IN-MEMORY conversation to the client, used when a session/load targets a
+   * still-live session that has no on-disk recording yet (an unprompted session,
+   * whose JSONL file has not materialized). The live agent's history is read via
+   * the Agent API and converted to neutral IContent[] (readAgentHistoryAsIContent)
+   * so it maps through the SAME strict {@link streamHistory} path a disk resume
+   * uses. A fresh unprompted session has empty history → ZERO updates. Delivery
+   * is strict: a transport failure rejects (wrapped by streamHistory) so a lost
+   * transcript is reported rather than silently resolving; the caller
+   * (reattachLiveSession) deliberately does NOT dispose the session on failure
+   * because it remains healthy.
+   */
+  async replayLiveHistory(): Promise<void> {
+    const items = await readAgentHistoryAsIContent(this.agent);
+    await this.streamHistory(items);
   }
 
   async dispose(): Promise<void> {

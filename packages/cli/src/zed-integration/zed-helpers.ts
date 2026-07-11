@@ -9,6 +9,11 @@ import {
   ToolConfirmationOutcome,
   ApprovalMode,
 } from '@vybestack/llxprt-code-core';
+import type {
+  AgentEvent,
+  DoneReason,
+  ThoughtSummary,
+} from '@vybestack/llxprt-code-agents';
 import type * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
 
@@ -20,6 +25,36 @@ export function parseZedAuthMethodId(
     throw new Error('No profiles available for selection');
   }
   return z.enum(availableProfiles as [string, ...string[]]).parse(methodId);
+}
+
+/**
+ * Maps an Agent-API {@link DoneReason} to the ACP {@link acp.StopReason} the Zed
+ * client expects. Terminal failure reasons (`error`, `hook-stopped`) have no
+ * clean stop reason and throw so the prompt path surfaces them as errors. Kept
+ * here (a pure mapper alongside the other Zed mapping helpers) so zedIntegration.ts
+ * stays within its max-lines budget.
+ */
+export function mapDoneReasonToStopReason(reason: DoneReason): acp.StopReason {
+  switch (reason) {
+    case 'stop':
+    case 'loop-detected':
+      return 'end_turn';
+    case 'aborted':
+      return 'cancelled';
+    case 'max-turns':
+      return 'max_turn_requests';
+    case 'context-overflow':
+      return 'max_tokens';
+    case 'refusal':
+      return 'refusal';
+    case 'error':
+    case 'hook-stopped':
+      throw new Error(`Agent stopped with terminal reason: ${reason}`);
+    default: {
+      const exhaustive: never = reason;
+      return exhaustive;
+    }
+  }
 }
 
 /**
@@ -189,4 +224,58 @@ export function buildAvailableModes(): acp.SessionMode[] {
       description: 'Auto-approves all tools',
     },
   ];
+}
+
+/**
+ * Builds the ACP session `modes` block (available modes + the session's current
+ * mode) shared by the newSession and loadSession (disk-resume AND #1604
+ * re-attach) responses. Typed via the response's `modes` field so it stays exact
+ * without importing a possibly-renamed acp type. Centralized here so the mode
+ * advertisement is identical across all three response paths.
+ */
+export function buildSessionModes(
+  currentModeId: ApprovalMode,
+): acp.LoadSessionResponse['modes'] {
+  return {
+    availableModes: buildAvailableModes(),
+    currentModeId,
+  };
+}
+
+/**
+ * Flattens an Agent-API {@link ThoughtSummary} into the display text the Zed
+ * thought-chunk carries: the non-empty subject/description joined by a space.
+ * Pure mapper kept alongside the other Zed event mappers so zedIntegration.ts
+ * stays within its max-lines budget.
+ */
+export function extractThoughtText(thought: ThoughtSummary): string {
+  const parts = [thought.subject, thought.description].filter(
+    (v) => v.length > 0,
+  );
+  return parts.join(parts.length > 1 ? ' ' : '');
+}
+
+/**
+ * Translates an Agent `error` event into an Error for the prompt path, carrying
+ * the upstream numeric `status` (when present) so downstream 429 handling can
+ * still detect a rate-limit. Pure; extracted here to keep zedIntegration.ts thin.
+ */
+export function translateErrorEvent(
+  event: Extract<AgentEvent, { type: 'error' }>,
+): Error {
+  const error = new Error(event.error.message);
+  if (event.error.status !== undefined) {
+    Object.assign(error, { status: event.error.status });
+  }
+  return error;
+}
+
+/**
+ * Translates an Agent `idle-timeout` event into an Error carrying its message.
+ * Pure; extracted here to keep zedIntegration.ts within its max-lines budget.
+ */
+export function translateIdleTimeout(
+  event: Extract<AgentEvent, { type: 'idle-timeout' }>,
+): Error {
+  return new Error(event.error.message);
 }
