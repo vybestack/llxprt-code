@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect } from 'bun:test';
 import { execSync } from 'node:child_process';
 import { env } from 'node:process';
 import type * as pty from '@lydell/node-pty';
@@ -78,7 +77,9 @@ export class InteractiveRun {
       effectiveTimeout,
       200,
     );
-    expect(stripAnsi(this.output).toLowerCase()).toContain(text.toLowerCase());
+    if (!stripAnsi(this.output).toLowerCase().includes(text.toLowerCase())) {
+      throw new Error(`Expected interactive output to contain "${text}"`);
+    }
   }
 
   // This types slowly to make sure command is correct, but only work for short

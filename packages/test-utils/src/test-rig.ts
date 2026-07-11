@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect } from 'bun:test';
 import { execSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -339,7 +338,6 @@ export class TestRig {
       100,
     );
 
-    expect(success).toBe(true);
     if (!success) {
       throw new Error(
         `Expected to find successful toolCalls for ${JSON.stringify(toolNames)}`,
@@ -570,7 +568,9 @@ async function waitForInteractiveReady(
     200,
   );
 
-  expect(isReady).toBe(true);
+  if (!isReady) {
+    throw new Error('Interactive LLxprt process did not become ready');
+  }
   return run;
 }
 
