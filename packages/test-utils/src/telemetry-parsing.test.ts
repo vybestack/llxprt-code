@@ -7,7 +7,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import type { DiagnosticsSink } from './diagnostics.js';
 import {
   extractApiRequests,
@@ -55,7 +55,7 @@ describe('telemetry parsing helpers', () => {
 
     expect(logs).toHaveLength(1);
     expect(logs[0]?.attributes?.['event.name']).toBe('llxprt_code.api_request');
-    expect(diagnostics.error).toHaveBeenCalledOnce();
+    expect(diagnostics.error).toHaveBeenCalledTimes(1);
   });
 
   it('extracts tool calls, API requests, and metrics from parsed telemetry', () => {

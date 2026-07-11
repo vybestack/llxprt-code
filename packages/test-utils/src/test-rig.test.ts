@@ -7,14 +7,15 @@
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { restoreEnv, setEnv } from './env-test-helpers.js';
 import { TestRig } from './test-rig.js';
 
 describe('TestRig setup and cleanup behavior', () => {
   const tempDirs: string[] = [];
 
   afterEach(() => {
-    vi.unstubAllEnvs();
+    restoreEnv();
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -23,7 +24,7 @@ describe('TestRig setup and cleanup behavior', () => {
   function createRoot(): string {
     const root = mkdtempSync(join(tmpdir(), 'test-rig-behavior-'));
     tempDirs.push(root);
-    vi.stubEnv('INTEGRATION_TEST_FILE_DIR', root);
+    setEnv('INTEGRATION_TEST_FILE_DIR', root);
     return root;
   }
 
@@ -47,7 +48,7 @@ describe('TestRig setup and cleanup behavior', () => {
     const rig = new TestRig();
     rig.setup('cleanup empty keep output');
     const testDir = rig.testDir;
-    vi.stubEnv('KEEP_OUTPUT', '');
+    setEnv('KEEP_OUTPUT', '');
 
     await rig.cleanup();
 
@@ -60,7 +61,7 @@ describe('TestRig setup and cleanup behavior', () => {
     const rig = new TestRig();
     rig.setup('cleanup truthy keep output');
     const testDir = rig.testDir;
-    vi.stubEnv('KEEP_OUTPUT', '1');
+    setEnv('KEEP_OUTPUT', '1');
 
     await rig.cleanup();
 

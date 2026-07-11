@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { restoreEnv, setEnv } from './env-test-helpers.js';
 import {
   assertProviderConfig,
   buildChildEnv,
@@ -15,7 +16,7 @@ import {
 
 describe('cli-args helpers', () => {
   afterEach(() => {
-    vi.unstubAllEnvs();
+    restoreEnv();
   });
 
   it('uses fake provider args when fake responses are configured', () => {
@@ -31,9 +32,9 @@ describe('cli-args helpers', () => {
   });
 
   it('requires non-empty provider configuration without fake responses', () => {
-    vi.stubEnv('LLXPRT_DEFAULT_PROVIDER', '');
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'model');
-    vi.stubEnv('OPENAI_API_KEY', 'key');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', '');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'model');
+    setEnv('OPENAI_API_KEY', 'key');
 
     expect(() => assertProviderConfig(undefined)).toThrow(
       'LLXPRT_DEFAULT_PROVIDER environment variable is required but not set',
@@ -41,19 +42,19 @@ describe('cli-args helpers', () => {
   });
 
   it('accepts a key file as authentication when no API key is present', () => {
-    vi.stubEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'model');
-    vi.stubEnv('OPENAI_API_KEY', '');
-    vi.stubEnv('LLXPRT_TEST_PROFILE_KEYFILE', '/tmp/keyfile');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'model');
+    setEnv('OPENAI_API_KEY', '');
+    setEnv('LLXPRT_TEST_PROFILE_KEYFILE', '/tmp/keyfile');
 
     expect(() => assertProviderConfig(undefined)).not.toThrow();
   });
 
   it('adds provider, model, base URL, and key args for real provider runs', () => {
-    vi.stubEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'gpt-test');
-    vi.stubEnv('OPENAI_BASE_URL', 'https://example.test/v1');
-    vi.stubEnv('OPENAI_API_KEY', 'secret');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'gpt-test');
+    setEnv('OPENAI_BASE_URL', 'https://example.test/v1');
+    setEnv('OPENAI_API_KEY', 'secret');
 
     expect(buildExtraArgs(undefined, false)).toStrictEqual([
       '--ide-mode',
@@ -70,9 +71,9 @@ describe('cli-args helpers', () => {
   });
 
   it('builds child env without IDE detection variables and with fake response path', () => {
-    vi.stubEnv('TERM_PROGRAM', 'vscode');
-    vi.stubEnv('TERM_PROGRAM_VERSION', '1.0.0');
-    vi.stubEnv('KEEP_ME', 'yes');
+    setEnv('TERM_PROGRAM', 'vscode');
+    setEnv('TERM_PROGRAM_VERSION', '1.0.0');
+    setEnv('KEEP_ME', 'yes');
 
     const childEnv = buildChildEnv('/tmp/test-dir', '/tmp/fake.json');
 
@@ -87,8 +88,8 @@ describe('cli-args helpers', () => {
   });
 
   it('resolves installed binary and profile names from environment', () => {
-    vi.stubEnv('INTEGRATION_TEST_USE_INSTALLED_LLXPRT', 'true');
-    vi.stubEnv('LLXPRT_TEST_PROFILE', ' profile-name ');
+    setEnv('INTEGRATION_TEST_USE_INSTALLED_LLXPRT', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', ' profile-name ');
 
     expect(
       getCommandAndArgs('/packages/cli/bin/llxprt.cjs', ['--flag']),

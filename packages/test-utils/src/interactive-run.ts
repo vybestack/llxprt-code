@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect } from 'vitest';
+import { expect } from 'bun:test';
 import { execSync } from 'node:child_process';
 import { env } from 'node:process';
 import type * as pty from '@lydell/node-pty';

@@ -7,15 +7,16 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { createDiagnosticsSink, logVerbose } from './diagnostics.js';
+import { restoreEnv, setEnv } from './env-test-helpers.js';
 
 describe('diagnostics sink', () => {
   const tempDirs: string[] = [];
 
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.unstubAllEnvs();
+    restoreEnv();
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -51,7 +52,7 @@ describe('diagnostics sink', () => {
   });
 
   it('emits to process streams when VERBOSE is true', () => {
-    vi.stubEnv('VERBOSE', 'true');
+    setEnv('VERBOSE', 'true');
     const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
     const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
     const sink = createDiagnosticsSink(null);
