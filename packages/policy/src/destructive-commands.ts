@@ -773,7 +773,10 @@ function findChmodMode(
   if (dashIndex === 0) {
     return partition.operandZone[0];
   }
-  return partition.flagZone.find((token) => !token.startsWith('-'));
+  return (
+    partition.flagZone.find((token) => !token.startsWith('-')) ??
+    partition.operandZone[0]
+  );
 }
 
 /** Pattern E: best-effort detection of writes to credential paths (.ssh, .aws/credentials). */

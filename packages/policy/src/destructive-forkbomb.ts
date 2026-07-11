@@ -384,7 +384,19 @@ function extractInvocationFromOriginal(
       progressed = true;
     }
   }
-  return original.slice(i);
+  return unwrapInvocationSubstitution(original.slice(i));
+}
+
+function unwrapInvocationSubstitution(tail: string): string {
+  if (tail.startsWith('$(')) {
+    const close = tail.indexOf(')');
+    return close > 2 ? tail.slice(2, close) : tail;
+  }
+  if (tail.startsWith('`')) {
+    const close = tail.indexOf('`', 1);
+    return close > 1 ? tail.slice(1, close) : tail;
+  }
+  return tail;
 }
 
 /**

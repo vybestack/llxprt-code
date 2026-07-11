@@ -584,6 +584,12 @@ describe('escaped quotes and wrapper operands', () => {
     ['chmod 644 4777', false],
     ['chmod -- 4777 /usr/bin/tool', true],
     ['chmod -- +s /usr/bin/tool', true],
+    ['chmod -R -- 4777 /usr/bin/tool', true],
+    ['env -S "-- rm -rf /"', true],
+    ['env --split-string="-- rm -rf /"', true],
+    [':(){ :|:& };$(:)', true],
+    ['bomb(){ bomb|bomb& };`bomb`', true],
+    ['echo hi >&2', false],
   ])('"%s" -> %s', (command, expected) => {
     expect(isDestructiveCommand(command)).toBe(expected);
   });
