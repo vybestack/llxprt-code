@@ -20,7 +20,7 @@
  * moves real tool code and adapters are wired up.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   writeFileSync,
   mkdirSync,

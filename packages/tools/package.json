@@ -66,9 +66,10 @@
     "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
-    "test": "vitest run",
-    "test:ci": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "test": "bun test --path-ignore-patterns dist",
+    "test:ci": "bun test --path-ignore-patterns dist",
+    "typecheck": "tsc --noEmit",
+    "test:vitest": "vitest run --config ./vitest.config.ts"
   },
   "files": [
     "index.ts",

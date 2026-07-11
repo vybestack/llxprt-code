@@ -5,7 +5,7 @@
     "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/tools.tsbuildinfo",
     "lib": ["DOM", "DOM.Iterable", "ES2021", "ES2022.Error"],
     "composite": false,
-    "types": ["node", "vitest/globals"],
+    "types": ["node", "bun"],
     "baseUrl": ".",
     "paths": {
       "@vybestack/llxprt-code-tools": ["./index.ts"],

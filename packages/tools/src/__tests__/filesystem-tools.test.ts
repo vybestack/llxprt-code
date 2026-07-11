@@ -23,7 +23,7 @@
  * EXPECTED_BEHAVIORAL_RED failures.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   writeFileSync,
   mkdirSync,

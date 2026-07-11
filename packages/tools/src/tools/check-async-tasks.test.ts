@@ -8,7 +8,7 @@
  * @plan PLAN-20260130-ASYNCTASK.P13
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { CheckAsyncTasksTool } from './check-async-tasks.js';
 import type { AsyncTaskInfo, IAsyncTaskService } from '../interfaces/index.js';
 

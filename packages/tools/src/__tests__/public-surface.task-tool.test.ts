@@ -10,7 +10,7 @@ import {
   exportsIdentifierFromSource,
   exportsModuleFromSource,
 } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as toolsRoot from '@vybestack/llxprt-code-tools';
 
 const toolsIndexPath = resolve(import.meta.dirname, '../index.ts');
