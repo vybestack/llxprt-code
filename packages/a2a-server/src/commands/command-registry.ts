@@ -10,18 +10,26 @@ import { InitCommand } from './init.js';
 import type { Command } from './types.js';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 
-class CommandRegistry {
+export class CommandRegistry {
   private readonly commands = new Map<string, Command>();
 
-  constructor() {
-    this.register(new ExtensionsCommand());
-    this.register(new RestoreCommand());
-    this.register(new InitCommand());
+  constructor(
+    commands: Command[] = [
+      new ExtensionsCommand(),
+      new RestoreCommand(),
+      new InitCommand(),
+    ],
+    private readonly warn: (message: string) => void = (message) =>
+      debugLogger.warn(message),
+  ) {
+    for (const command of commands) {
+      this.register(command);
+    }
   }
 
   register(command: Command) {
     if (this.commands.has(command.name)) {
-      debugLogger.warn(`Command ${command.name} already registered. Skipping.`);
+      this.warn(`Command ${command.name} already registered. Skipping.`);
       return;
     }
 

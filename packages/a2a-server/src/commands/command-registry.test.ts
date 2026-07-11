@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { CommandRegistry } from './command-registry.js';
 import type { Command } from './types.js';
 
 describe('CommandRegistry', () => {
@@ -13,73 +14,44 @@ describe('CommandRegistry', () => {
     description: 'Lists all installed extensions.',
     execute: vi.fn(),
   };
-  const mockListExtensionsCommand = vi.fn(
-    () => mockListExtensionsCommandInstance,
-  );
-
   const mockExtensionsCommandInstance: Command = {
     name: 'extensions',
     description: 'Manage extensions.',
     execute: vi.fn(),
     subCommands: [mockListExtensionsCommandInstance],
   };
-  const mockExtensionsCommand = vi.fn(() => mockExtensionsCommandInstance);
-
-  const mockRestoreCommandInstance: Command = {
-    name: 'restore',
-    description: 'Restore command.',
-    execute: vi.fn(),
-  };
-  const mockRestoreCommand = vi.fn(() => mockRestoreCommandInstance);
-
-  const mockInitCommandInstance: Command = {
-    name: 'init',
-    description: 'Init command.',
-    execute: vi.fn(),
-  };
-  const mockInitCommand = vi.fn(() => mockInitCommandInstance);
-
-  beforeEach(async () => {
-    vi.resetModules();
+  beforeEach(() => {
     vi.clearAllMocks();
-    vi.doMock('@vybestack/llxprt-code-core', () => ({
-      debugLogger: {
-        warn: vi.fn(),
-      },
-    }));
-    vi.doMock('./extensions.js', () => ({
-      ExtensionsCommand: mockExtensionsCommand,
-      ListExtensionsCommand: mockListExtensionsCommand,
-    }));
-    vi.doMock('./restore.js', () => ({
-      RestoreCommand: mockRestoreCommand,
-    }));
-    vi.doMock('./init.js', () => ({
-      InitCommand: mockInitCommand,
-    }));
   });
 
   it('should register ExtensionsCommand on initialization', async () => {
-    const { commandRegistry } = await import('./command-registry.js');
-    expect(mockExtensionsCommand).toHaveBeenCalled();
+    const commandRegistry = new CommandRegistry([
+      mockExtensionsCommandInstance,
+    ]);
     const command = commandRegistry.get('extensions');
     expect(command).toBe(mockExtensionsCommandInstance);
   });
 
   it('should register sub commands on initialization', async () => {
-    const { commandRegistry } = await import('./command-registry.js');
+    const commandRegistry = new CommandRegistry([
+      mockExtensionsCommandInstance,
+    ]);
     const command = commandRegistry.get('extensions list');
     expect(command).toBe(mockListExtensionsCommandInstance);
   });
 
   it('get() should return undefined for a non-existent command', async () => {
-    const { commandRegistry } = await import('./command-registry.js');
+    const commandRegistry = new CommandRegistry([
+      mockExtensionsCommandInstance,
+    ]);
     const command = commandRegistry.get('non-existent');
     expect(command).toBeUndefined();
   });
 
   it('register() should register a new command', async () => {
-    const { commandRegistry } = await import('./command-registry.js');
+    const commandRegistry = new CommandRegistry([
+      mockExtensionsCommandInstance,
+    ]);
     const mockCommand: Command = {
       name: 'test-command',
       description: '',
@@ -91,7 +63,9 @@ describe('CommandRegistry', () => {
   });
 
   it('register() should register a nested command', async () => {
-    const { commandRegistry } = await import('./command-registry.js');
+    const commandRegistry = new CommandRegistry([
+      mockExtensionsCommandInstance,
+    ]);
     const mockSubSubCommand: Command = {
       name: 'test-command-sub-sub',
       description: '',
@@ -121,8 +95,11 @@ describe('CommandRegistry', () => {
   });
 
   it('register() should not enter an infinite loop with a cyclic command', async () => {
-    const { debugLogger } = await import('@vybestack/llxprt-code-core');
-    const { commandRegistry } = await import('./command-registry.js');
+    const warn = vi.fn();
+    const commandRegistry = new CommandRegistry(
+      [mockExtensionsCommandInstance],
+      warn,
+    );
     const mockCommand: Command = {
       name: 'cyclic-command',
       description: '',
@@ -135,7 +112,7 @@ describe('CommandRegistry', () => {
     commandRegistry.register(mockCommand);
 
     expect(commandRegistry.get('cyclic-command')).toBe(mockCommand);
-    expect(debugLogger.warn).toHaveBeenCalledWith(
+    expect(warn).toHaveBeenCalledWith(
       'Command cyclic-command already registered. Skipping.',
     );
     // If the test finishes, it means we didn't get into an infinite loop.
