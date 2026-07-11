@@ -41,13 +41,11 @@ The shell tool is the only tool that can reach **outside your workspace**. All f
 
 ### Web
 
-| Tool                | What It Does                                  |
-| ------------------- | --------------------------------------------- |
-| `google_web_search` | Search the web via Google                     |
-| `exa_web_search`    | Search the web via Exa AI                     |
-| `direct_web_fetch`  | Fetch and convert a URL to text/markdown      |
-| `google_web_fetch`  | Fetch a URL via Google's infrastructure       |
-| `codesearch`        | Search for code snippets, APIs, documentation |
+| Tool               | What It Does                                  |
+| ------------------ | --------------------------------------------- |
+| `exa_web_search`   | Search the web via Exa AI (recommended)       |
+| `direct_web_fetch` | Fetch and convert a URL to text/markdown      |
+| `codesearch`       | Search for code snippets, APIs, documentation |
 
 ### Memory and Context
 

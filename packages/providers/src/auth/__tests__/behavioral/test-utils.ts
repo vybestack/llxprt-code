@@ -7,7 +7,7 @@
 import { OAuthManager } from '../../oauth-manager.js';
 import { BucketFailoverHandlerImpl } from '../../BucketFailoverHandlerImpl.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from '../../types.js';
-import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
+import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
 
 export class MemoryTokenStore implements TokenStore {
   private tokens = new Map<string, OAuthToken>();

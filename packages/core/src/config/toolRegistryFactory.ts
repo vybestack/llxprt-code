@@ -20,7 +20,6 @@ import {
   ReadManyFilesTool,
   RipGrepTool,
   WriteFileTool,
-  GoogleWebFetchTool,
   AstGrepTool,
   StructuralAnalysisTool,
   ASTEditTool,
@@ -32,7 +31,6 @@ import {
   TodoPause,
   ListSubagentsTool,
   CheckAsyncTasksTool,
-  GoogleWebSearchTool,
   ExaWebSearchTool,
   CodeSearchTool,
   DirectWebFetchTool,
@@ -45,7 +43,6 @@ import { CoreIdeServiceAdapter } from '../tools-adapters/CoreIdeServiceAdapter.j
 import { CoreLspServiceAdapter } from '../tools-adapters/CoreLspServiceAdapter.js';
 import { CoreToolKeyStorageAdapter } from '../tools-adapters/CoreToolKeyStorageAdapter.js';
 import { CoreSettingsServiceAdapter } from '../tools-adapters/CoreSettingsServiceAdapter.js';
-import { CoreWebSearchServiceAdapter } from '../tools-adapters/CoreWebSearchServiceAdapter.js';
 import { CoreStorageServiceAdapter } from '../tools-adapters/CoreStorageServiceAdapter.js';
 import { CoreMessageBusAdapter } from '../tools-adapters/CoreMessageBusAdapter.js';
 import { CoreShellToolHostAdapter } from '../tools-adapters/CoreShellToolHostAdapter.js';
@@ -350,7 +347,6 @@ function registerStandardTools(
   const lspServiceAdapter = new CoreLspServiceAdapter(config);
   const toolKeyStorageAdapter = new CoreToolKeyStorageAdapter();
   const settingsServiceAdapter = new CoreSettingsServiceAdapter(config);
-  const webSearchServiceAdapter = new CoreWebSearchServiceAdapter(config);
   const storageServiceAdapter = new CoreStorageServiceAdapter();
   const messageBusAdapter = new CoreMessageBusAdapter(messageBus);
   const todoServiceAdapter = new CoreTodoServiceAdapter();
@@ -373,7 +369,6 @@ function registerStandardTools(
   );
   registerCoreTool(ASTEditTool, toolHostAdapter, lspServiceAdapter);
   registerCoreTool(WriteFileTool, toolHostAdapter);
-  registerCoreTool(GoogleWebFetchTool, toolHostAdapter);
   registerCoreTool(ReadManyFilesTool, toolHostAdapter);
   registerCoreTool(ReadLineRangeTool, toolHostAdapter);
   registerCoreTool(ASTReadFileTool, toolHostAdapter);
@@ -409,7 +404,6 @@ function registerStandardTools(
     getWorkingDir: () => config.getWorkingDir(),
     messageBus: messageBusAdapter,
   });
-  registerCoreTool(GoogleWebSearchTool, webSearchServiceAdapter);
   registerCoreTool(ExaWebSearchTool, { keyStorage: toolKeyStorageAdapter });
   registerCoreTool(TodoWrite, todoServiceAdapter, toolHostAdapter);
   registerCoreTool(TodoRead, todoServiceAdapter);

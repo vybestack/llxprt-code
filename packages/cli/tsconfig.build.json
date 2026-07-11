@@ -4,6 +4,9 @@
     "rootDir": ".",
     "paths": {
       "@vybestack/llxprt-code-agents": ["../agents/dist/index.d.ts"],
+      "@vybestack/llxprt-code-agents/constants.js": [
+        "../agents/dist/src/constants.d.ts"
+      ],
       "@vybestack/llxprt-code-core": ["../core/dist/index.d.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/dist/src/*"],
       "@vybestack/llxprt-code-mcp": ["../mcp/dist/mcp/index.d.ts"],

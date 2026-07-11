@@ -104,14 +104,20 @@ export class McpClientManager {
    */
   async startExtension(extension: LlxprtExtension) {
     logger.log(`Loading extension: ${extension.name}`);
-    await Promise.all(
-      Object.entries(extension.mcpServers ?? {}).map(([name, config]) =>
-        this.maybeDiscoverMcpServer(name, {
-          ...config,
-          extension,
-        }),
-      ),
-    );
+    // Issue #2325: Fire MCP discovery without blocking — discovery completes
+    // in the background and is tracked by whenDiscoverySettled().
+    for (const [name, config] of Object.entries(extension.mcpServers ?? {})) {
+      try {
+        void this.maybeDiscoverMcpServer(name, { ...config, extension });
+      } catch (error) {
+        logger.warn(
+          `Error dispatching MCP discovery for server '${name}': ${getErrorMessage(error)}`,
+        );
+      }
+    }
+    // refreshMcpContext here sees pre-discovery tool state, but connectAndDiscover
+    // emits McpClientUpdate + calls scheduleMcpContextRefresh once each server
+    // connects, so the context converges as servers come online.
     await this.cliConfig.refreshMcpContext();
   }
 

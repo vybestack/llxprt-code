@@ -24,6 +24,8 @@ import {
 import { CredentialProxyServer } from '../credential-proxy-server.js';
 import { createAndStartProxy, stopProxy } from '../sandbox-proxy-lifecycle.js';
 
+const isWindows = process.platform === 'win32';
+
 /** @plan:PLAN-20250214-CREDPROXY.P31 */
 
 class InMemoryTokenStore implements TokenStore {
@@ -244,29 +246,35 @@ describe('proxy integration (phase 31)', () => {
     await expect(handle.stop()).resolves.toBeUndefined();
   });
 
-  it('creates socket file on server start and removes it on server stop', async () => {
-    // @requirement R25.1
-    // @scenario Real server lifecycle should materialize then clean up Unix socket file.
-    let socketPath = '';
-    await withServer(async (started) => {
-      socketPath = started.socketPath;
-      expect(fs.existsSync(started.socketPath)).toBe(true);
-    });
-    expect(fs.existsSync(socketPath)).toBe(false);
-  });
+  it.skipIf(isWindows)(
+    'creates socket file on server start and removes it on server stop',
+    async () => {
+      // @requirement R25.1
+      // @scenario Real server lifecycle should materialize then clean up Unix socket file.
+      let socketPath = '';
+      await withServer(async (started) => {
+        socketPath = started.socketPath;
+        expect(fs.existsSync(started.socketPath)).toBe(true);
+      });
+      expect(fs.existsSync(socketPath)).toBe(false);
+    },
+  );
 
-  it('builds socket path using pid+nonce naming convention', async () => {
-    // @requirement R25.2
-    // @scenario Generated socket path should include process id and random nonce suffix.
-    await withServer(async ({ socketPath }) => {
-      const socketFile = path.basename(socketPath);
-      // Socket filename format: {pid}-{base64url nonce}.sock
-      // base64url uses [A-Za-z0-9_-], 128 bits = 22 chars
-      expect(socketFile).toMatch(
-        new RegExp(`^${process.pid}-[A-Za-z0-9_-]{22}\\.sock$`),
-      );
-    });
-  });
+  it.skipIf(isWindows)(
+    'builds socket path using pid+nonce naming convention',
+    async () => {
+      // @requirement R25.2
+      // @scenario Generated socket path should include process id and random nonce suffix.
+      await withServer(async ({ socketPath }) => {
+        const socketFile = path.basename(socketPath);
+        // Socket filename format: {pid}-{base64url nonce}.sock
+        // base64url uses [A-Za-z0-9_-], 128 bits = 22 chars
+        expect(socketFile).toMatch(
+          new RegExp(`^${process.pid}-[A-Za-z0-9_-]{22}\\.sock$`),
+        );
+      });
+    },
+  );
 
   it('returns sanitized token over proxy getToken when host token has refresh_token', async () => {
     // @requirement R10.1

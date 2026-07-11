@@ -29,9 +29,11 @@ import {
   sortObjectKeys,
 } from './AnthropicRequestBuilder.js';
 import { getRetryConfig } from './AnthropicRateLimitHandler.js';
+import { isAnthropicOAuthBaseURL } from './AnthropicEndpointUtils.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
+import { mergeSystemInstruction as mergeSystemInstructionShared } from '../utils/systemInstructionMerge.js';
 
 /**
  * Request preparation context returned to caller
@@ -124,6 +126,22 @@ interface RequestSettings {
   configEphemerals: Record<string, unknown>;
   wantCaching: boolean;
   ttl: '5m' | '1h';
+}
+
+function resolveRequestMaxTokens(
+  defaultMaxTokens: number,
+  requestOverrides: Record<string, unknown>,
+): number {
+  const override = requestOverrides['max_tokens'];
+  if (
+    typeof override === 'number' &&
+    Number.isFinite(override) &&
+    Number.isInteger(override) &&
+    override > 0
+  ) {
+    return override;
+  }
+  return defaultMaxTokens;
 }
 
 /**
@@ -257,6 +275,7 @@ async function buildOAuthSystemContext(params: {
   wantCaching: boolean;
   ttl: '5m' | '1h';
   cacheLogger: { debug: (fn: () => string) => void };
+  systemInstruction: string | undefined;
 }): Promise<SystemContextResult> {
   const {
     currentModel,
@@ -269,6 +288,7 @@ async function buildOAuthSystemContext(params: {
     wantCaching,
     ttl,
     cacheLogger,
+    systemInstruction,
   } = params;
 
   const messages = [...anthropicMessages];
@@ -281,7 +301,15 @@ async function buildOAuthSystemContext(params: {
     interactionMode,
   });
 
-  if (corePrompt) {
+  // Issue #2410: Merge the caller-supplied system instruction (e.g. a
+  // subagent persona/task prompt) with the core prompt before wrapping it in
+  // the <system> tag so task directives reach the OAuth endpoint.
+  const systemMessage = mergeSystemInstructionShared(
+    corePrompt,
+    systemInstruction,
+  );
+
+  if (systemMessage) {
     if (wantCaching) {
       messages.unshift({
         role: 'user',
@@ -289,7 +317,7 @@ async function buildOAuthSystemContext(params: {
           {
             type: 'text',
             text: `<system>
-${corePrompt}
+${systemMessage}
 </system>
 
 User provided conversation begins here:`,
@@ -306,7 +334,7 @@ User provided conversation begins here:`,
       messages.unshift({
         role: 'user',
         content: `<system>
-${corePrompt}
+${systemMessage}
 </system>
 
 User provided conversation begins here:`,
@@ -333,6 +361,7 @@ async function buildNonOAuthSystemContext(params: {
   anthropicMessages: readonly AnthropicMessage[];
   wantCaching: boolean;
   ttl: '5m' | '1h';
+  systemInstruction: string | undefined;
 }): Promise<SystemContextResult> {
   const {
     currentModel,
@@ -344,6 +373,7 @@ async function buildNonOAuthSystemContext(params: {
     anthropicMessages,
     wantCaching,
     ttl,
+    systemInstruction,
   } = params;
 
   const systemPrompt = await getCoreSystemPromptAsync({
@@ -355,8 +385,17 @@ async function buildNonOAuthSystemContext(params: {
     interactionMode,
   });
 
+  // Issue #2410: Merge the caller-supplied system instruction (e.g. a
+  // subagent persona/task prompt) with the core system prompt. The
+  // caller instruction is appended after the core prompt so the model
+  // sees both the base behavior directives and the agent-specific task.
+  const mergedPrompt = mergeSystemInstructionShared(
+    systemPrompt,
+    systemInstruction,
+  );
+
   const systemFieldValue = buildAnthropicSystemPrompt({
-    corePromptText: systemPrompt,
+    corePromptText: mergedPrompt,
     isOAuth: false,
     wantCaching,
     ttl,
@@ -380,6 +419,7 @@ async function buildSystemContext(params: {
   wantCaching: boolean;
   ttl: '5m' | '1h';
   cacheLogger: { debug: (fn: () => string) => void };
+  systemInstruction: string | undefined;
 }): Promise<SystemContextResult> {
   if (params.isOAuth) {
     return buildOAuthSystemContext(params);
@@ -480,7 +520,10 @@ function buildThinkingAndRequestBody(params: {
     system: systemField,
     tools:
       anthropicTools && anthropicTools.length > 0 ? anthropicTools : undefined,
-    maxTokens: getMaxTokensForModel(currentModel),
+    maxTokens: resolveRequestMaxTokens(
+      getMaxTokensForModel(currentModel),
+      requestOverrides,
+    ),
     streamingEnabled,
     modelParams: requestOverrides,
     thinking: thinkingConfig.thinking,
@@ -660,6 +703,7 @@ function buildRequestContext(params: {
   cacheLogger: { debug: (fn: () => string) => void };
   toolsLogger: DebugLogger;
   logger: DebugLogger;
+  wantCaching: boolean;
 }): AnthropicRequestContext {
   const {
     reasoningSettings,
@@ -671,9 +715,13 @@ function buildRequestContext(params: {
     cacheLogger,
     toolsLogger,
     logger,
+    wantCaching,
   } = params;
 
-  if (requestSettings.wantCaching) {
+  // Issue #2410: use the effective caching flag (already gated on whether the
+  // base URL is a native Anthropic endpoint) for both system-field and
+  // message-level cache_control injection.
+  if (wantCaching) {
     attachPromptCaching(
       systemContext.messages,
       requestSettings.ttl,
@@ -711,7 +759,7 @@ function buildRequestContext(params: {
     requestBody,
     anthropicMessages: systemContext.messages,
     streamingEnabled: requestSettings.streamingEnabled,
-    wantCaching: requestSettings.wantCaching,
+    wantCaching,
     ttl: requestSettings.ttl,
     configEphemerals: requestSettings.configEphemerals,
     maxAttempts,
@@ -752,7 +800,23 @@ export async function prepareAnthropicRequest(
     params.providerName,
   );
 
-  if (requestSettings.wantCaching) {
+  // Issue #2410: z.ai and other third-party Anthropic-compatible endpoints
+  // reject the prompt-cache `system` array format
+  // ([{type:'text', text:'...', cache_control:{...}}]). Only emit cache_control
+  // when the request targets the native Anthropic API. Reusing the OAuth
+  // eligibility helper avoids duplicating the hostname check.
+  const effectiveWantCaching =
+    requestSettings.wantCaching &&
+    isAnthropicOAuthBaseURL(params.options.resolved.baseURL);
+
+  if (!effectiveWantCaching && requestSettings.wantCaching) {
+    params.cacheLogger.debug(
+      () =>
+        `Prompt caching disabled: base URL (${params.options.resolved.baseURL ?? '<unset>'}) is not a native Anthropic endpoint`,
+    );
+  }
+
+  if (effectiveWantCaching) {
     params.cacheLogger.debug(
       () => `Prompt caching enabled with TTL: ${requestSettings.ttl}`,
     );
@@ -778,9 +842,10 @@ export async function prepareAnthropicRequest(
     includeSubagentDelegation,
     interactionMode,
     anthropicMessages,
-    wantCaching: requestSettings.wantCaching,
+    wantCaching: effectiveWantCaching,
     ttl: requestSettings.ttl,
     cacheLogger: params.cacheLogger,
+    systemInstruction: params.options.systemInstruction,
   });
 
   return buildRequestContext({
@@ -793,5 +858,6 @@ export async function prepareAnthropicRequest(
     cacheLogger: params.cacheLogger,
     toolsLogger: params.toolsLogger,
     logger: params.logger,
+    wantCaching: effectiveWantCaching,
   });
 }

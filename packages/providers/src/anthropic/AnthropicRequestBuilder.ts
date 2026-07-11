@@ -18,6 +18,52 @@ import type {
 import { isFable5, supportsAdaptiveThinking } from './AnthropicModelData.js';
 
 /**
+ * Top-level sampling parameters the Anthropic Messages API accepts on the
+ * request body. Profile `modelParams` are filtered to this set before being
+ * spread into the request so provider-agnostic or vendor-specific params (e.g.
+ * GLM's `clear_thinking`, which is NOT an Anthropic field) never reach the API.
+ *
+ * Sending an unknown top-level key makes strict Anthropic-compatible endpoints
+ * reject the whole request — e.g. z.ai returns 400 code 1213 "The prompt
+ * parameter was not received normally" (Issue #2410). This mirrors the
+ * block-level sanitization already done in {@link sanitizeBlockForCacheControl}
+ * ("Extra inputs are not permitted").
+ *
+ * `max_tokens`, `stream`, `model`, `messages`, `system`, `tools`, `thinking`
+ * and `output_config` are set explicitly by the builder and are intentionally
+ * NOT part of this passthrough set.
+ */
+const ANTHROPIC_PASSTHROUGH_MODEL_PARAMS: ReadonlySet<string> = new Set([
+  'temperature',
+  'top_p',
+  'top_k',
+  'stop_sequences',
+  'metadata',
+  'service_tier',
+]);
+
+/**
+ * Filters caller-supplied model params to the Anthropic-API-permitted
+ * passthrough set (see {@link ANTHROPIC_PASSTHROUGH_MODEL_PARAMS}). Drops
+ * nullish (undefined and null) values and any key the Anthropic Messages API
+ * does not accept as a top-level field.
+ */
+function sanitizeAnthropicModelParams(
+  modelParams: Record<string, unknown>,
+): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(modelParams)) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+    if (ANTHROPIC_PASSTHROUGH_MODEL_PARAMS.has(key)) {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
+/**
  * A content block with cache_control attached.
  * @issue #1414
  */
@@ -342,7 +388,7 @@ export function buildAnthropicRequestBody(options: {
     messages: options.messages,
     max_tokens: options.maxTokens,
     stream: options.streamingEnabled,
-    ...options.modelParams,
+    ...sanitizeAnthropicModelParams(options.modelParams),
   };
 
   if (options.system !== undefined) {

@@ -21,4 +21,16 @@ export interface IModel {
   supportedToolFormats: string[];
   contextWindow?: number;
   maxOutputTokens?: number;
+  /**
+   * Field-specific geometry authority markers. When a field is marked
+   * `true`, the model's own value is authoritative and must NOT be
+   * overridden by registry data during hydration. Internal marker — not
+   * surfaced to the UI.
+   *
+   * @issue #2483
+   */
+  geometryAuthority?: {
+    contextWindow?: boolean;
+    maxOutputTokens?: boolean;
+  };
 }

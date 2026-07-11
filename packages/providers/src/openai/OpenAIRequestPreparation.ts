@@ -21,6 +21,7 @@ import { convertToolsToOpenAI, type OpenAITool } from './schemaConverter.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
+import { mergeSystemInstruction } from '../utils/systemInstructionMerge.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import { extractModelParamsFromOptions } from './OpenAIClientFactory.js';
@@ -115,7 +116,7 @@ async function resolveSystemPrompt(
         ? config.getSubagentManager()
         : undefined,
   );
-  return getCoreSystemPromptAsync({
+  const corePrompt = await getCoreSystemPromptAsync({
     userMemory,
     mcpInstructions,
     model,
@@ -128,6 +129,10 @@ async function resolveSystemPrompt(
         ? 'interactive'
         : 'non-interactive',
   });
+  // Issue #2410: Merge the caller-supplied system instruction (e.g. a
+  // subagent persona/task prompt) with the core system prompt so the
+  // instruction reaches the Chat Completions API as the system message.
+  return mergeSystemInstruction(corePrompt, options.systemInstruction);
 }
 
 type OpenAIInvocationRuntime = {

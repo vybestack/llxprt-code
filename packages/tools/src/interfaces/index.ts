@@ -101,10 +101,6 @@ export type {
   Prompt,
 } from './IPromptRegistryService.js';
 export type {
-  IWebSearchService,
-  WebSearchServerToolsProvider,
-} from './IWebSearchService.js';
-export type {
   HostWorkspaceContextCap,
   HostIdeCap,
   HostLspCap,

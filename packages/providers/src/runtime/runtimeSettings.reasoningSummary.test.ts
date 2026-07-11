@@ -31,4 +31,8 @@ describe('reasoning.summary profile save/load @issue:922', () => {
     // text.verbosity is for OpenAI Responses API response verbosity control
     expect(PROFILE_EPHEMERAL_KEYS).toContain('text.verbosity');
   });
+
+  it('should include reasoning.fieldName in PROFILE_EPHEMERAL_KEYS', () => {
+    expect(PROFILE_EPHEMERAL_KEYS).toContain('reasoning.fieldName');
+  });
 });

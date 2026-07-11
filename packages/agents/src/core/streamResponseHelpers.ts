@@ -38,6 +38,10 @@ import { analyzeResponseOutcomeFromParts } from './googlePartHelpers.js';
 import { isFunctionResponse } from '@vybestack/llxprt-code-core/utils/messageInspectors.js';
 import { InvalidStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { isThoughtPart } from './googlePartHelpers.js';
+import {
+  filterEagerlyRecordedToolResponses,
+  type FilteredEagerToolResponses,
+} from './agenticLoop/loopHelpers.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 /** Whether a finish reason is missing (null, undefined, or empty string). */
@@ -277,6 +281,62 @@ export function validateStreamCompletion(
   }
 }
 
+interface UserInputFlags {
+  readonly userInputWasArray?: boolean;
+  readonly userInputWasFunctionResponse?: boolean;
+}
+
+export interface PreparedHistoryUserInput {
+  readonly historyUserInput: Content | Content[];
+  readonly filteredResults: readonly FilteredEagerToolResponses[];
+  readonly userInputFlags: UserInputFlags | undefined;
+}
+
+export function prepareHistoryUserInput(
+  userInput: Content | Content[],
+  eagerlyRecordedToolResponseCallIds: ReadonlySet<string>,
+): PreparedHistoryUserInput {
+  const filteredResults = (
+    Array.isArray(userInput) ? userInput : [userInput]
+  ).map((content) =>
+    filterEagerlyRecordedToolResponses(
+      content,
+      eagerlyRecordedToolResponseCallIds,
+    ),
+  );
+  const filteredUserInput = filteredResults.flatMap(
+    (result) => result.content ?? [],
+  );
+  const allSingleUserInputPartsWereEagerlyRecorded =
+    !Array.isArray(userInput) && filteredResults[0]?.content === null;
+
+  return {
+    historyUserInput: Array.isArray(userInput)
+      ? filteredUserInput
+      : (filteredResults[0]?.content ?? filteredUserInput),
+    filteredResults,
+    userInputFlags: allSingleUserInputPartsWereEagerlyRecorded
+      ? {
+          // The filtered history input is now an empty array, so keep the shape
+          // flags aligned with what ConversationManager will actually see.
+          userInputWasArray: true,
+          userInputWasFunctionResponse: true,
+        }
+      : undefined,
+  };
+}
+
+export function clearMatchedEagerToolResponseCallIds(
+  filteredResults: readonly FilteredEagerToolResponses[],
+  eagerlyRecordedToolResponseCallIds: Set<string>,
+): void {
+  for (const result of filteredResults) {
+    for (const callId of result.matchedCallIds) {
+      eagerlyRecordedToolResponseCallIds.delete(callId);
+    }
+  }
+}
+
 interface RecordHistoryParams {
   userInput: Content | Content[];
   consolidatedParts: Part[];
@@ -285,6 +345,7 @@ interface RecordHistoryParams {
   historyService: HistoryService;
   compressionHandler: CompressionHandler;
   logger: DebugLogger;
+  userInputFlags?: UserInputFlags;
 }
 
 /**
@@ -321,6 +382,7 @@ export async function recordHistoryWithUsage(
     modelOutput,
     undefined,
     streamingUsageMetadata,
+    args.userInputFlags,
   );
 
   await args.historyService.waitForTokenUpdates();

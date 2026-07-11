@@ -16,11 +16,16 @@
  * with no coupling to OAuthManager internals.
  */
 
-import { DebugLogger, type Config } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { getRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
-import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
+import {
+  CodexOAuthTokenSchema,
+  type IOAuthSettingsProvider,
+} from '@vybestack/llxprt-code-auth';
 import type { TokenStore } from './types.js';
 import { isAuthOnlyEnabled } from './auth-utils.js';
+import type { CodexRateLimitResetCreditsResponse } from '../openai/codexRateLimitReset.js';
 
 const logger = new DebugLogger('llxprt:oauth:provider-usage');
 
@@ -192,6 +197,92 @@ export async function getAllCodexUsageInfo(
         accountId,
         codexBaseUrl,
         fetchCodexUsage,
+        result,
+        logger,
+      );
+    }
+  }
+
+  return result;
+}
+
+async function fetchAndStoreCodexResetCredits(
+  bucket: string,
+  accessToken: string,
+  accountId: string,
+  codexBaseUrl: string | undefined,
+  fetchFn: (
+    token: string,
+    accountId: string,
+    baseUrl?: string,
+  ) => Promise<CodexRateLimitResetCreditsResponse | null>,
+  result: Map<string, CodexRateLimitResetCreditsResponse>,
+  logger: DebugLogger,
+): Promise<void> {
+  try {
+    const creditsInfo = await fetchFn(accessToken, accountId, codexBaseUrl);
+    if (creditsInfo) {
+      result.set(bucket, creditsInfo);
+    }
+  } catch (error) {
+    logger.debug(
+      `Error fetching Codex reset credits for bucket ${bucket}:`,
+      error,
+    );
+  }
+}
+
+/**
+ * Get Codex rate-limit-reset credits for all authenticated buckets.
+ * Returns a map of bucket name to reset-credits info for all buckets that
+ * have valid, non-expired OAuth tokens with an account_id field.
+ *
+ * @param tokenStore - Token store to read from
+ * @param config - Optional Config for base-url resolution
+ */
+export async function getAllCodexRateLimitResetCredits(
+  tokenStore: TokenStore,
+  config?: Config,
+): Promise<Map<string, CodexRateLimitResetCreditsResponse>> {
+  const result = new Map<string, CodexRateLimitResetCreditsResponse>();
+
+  const buckets = await tokenStore.listBuckets('codex');
+  const bucketsToCheck = buckets.length > 0 ? buckets : ['default'];
+
+  const { fetchCodexRateLimitResetCredits } = await import(
+    '@vybestack/llxprt-code-providers'
+  );
+
+  // The base-url does not depend on the bucket, so resolve it once before the
+  // loop instead of recomputing it per iteration.
+  const runtimeBaseUrl = config?.getEphemeralSetting('base-url');
+  const codexBaseUrl =
+    typeof runtimeBaseUrl === 'string' && runtimeBaseUrl.trim() !== ''
+      ? runtimeBaseUrl
+      : undefined;
+
+  // Neither the base-url nor the current time depends on the bucket, so both
+  // are resolved once before the loop instead of recomputing them per bucket.
+  const nowInSeconds = Math.floor(Date.now() / 1000);
+
+  for (const bucket of bucketsToCheck) {
+    const token = await tokenStore.getToken('codex', bucket);
+    if (!token) {
+      continue;
+    }
+
+    const parsedToken = CodexOAuthTokenSchema.safeParse(token);
+    if (!parsedToken.success) {
+      continue;
+    }
+
+    if (parsedToken.data.expiry > nowInSeconds) {
+      await fetchAndStoreCodexResetCredits(
+        bucket,
+        parsedToken.data.access_token,
+        parsedToken.data.account_id,
+        codexBaseUrl,
+        fetchCodexRateLimitResetCredits,
         result,
         logger,
       );

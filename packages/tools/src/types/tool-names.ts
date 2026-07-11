@@ -17,7 +17,6 @@
  */
 
 // Web Search Tools
-export const GOOGLE_WEB_SEARCH_TOOL = 'google_web_search';
 export const EXA_WEB_SEARCH_TOOL = 'exa_web_search';
 
 // Aliases for upstream compatibility
@@ -47,7 +46,6 @@ export const LIST_DIRECTORY_TOOL = 'list_directory';
 export const CODE_SEARCH_TOOL = 'code_search';
 
 // Web Fetch Tools
-export const GOOGLE_WEB_FETCH_TOOL = 'web_fetch';
 export const DIRECT_WEB_FETCH_TOOL = 'direct_web_fetch';
 
 // Task & Memory Tools
@@ -79,7 +77,6 @@ export const EDIT_TOOL_NAMES = new Set([EDIT_TOOL_NAME, WRITE_FILE_TOOL]);
  * Union type of all tool names for type safety.
  */
 export type ToolName =
-  | typeof GOOGLE_WEB_SEARCH_TOOL
   | typeof EXA_WEB_SEARCH_TOOL
   | typeof READ_FILE_TOOL
   | typeof WRITE_FILE_TOOL
@@ -94,7 +91,6 @@ export type ToolName =
   | typeof LS_TOOL
   | typeof LIST_DIRECTORY_TOOL
   | typeof CODE_SEARCH_TOOL
-  | typeof GOOGLE_WEB_FETCH_TOOL
   | typeof DIRECT_WEB_FETCH_TOOL
   | typeof TASK_TOOL
   | typeof MEMORY_TOOL

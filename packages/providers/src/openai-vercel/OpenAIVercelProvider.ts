@@ -190,7 +190,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
     const aiTools = buildVercelTools(formattedTools);
     const params = resolveModelCallParams(options, metadata, this);
-    const captureBuffer: CaptureBuffer = createCaptureBuffer();
+    const rawFieldName = options.settings.get('reasoning.fieldName') as
+      | string
+      | undefined;
+    const captureBuffer: CaptureBuffer = createCaptureBuffer(rawFieldName);
     const { model } = await createConfiguredModel(
       options,
       this.getClientConfig(options),

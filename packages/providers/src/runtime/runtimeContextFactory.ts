@@ -146,6 +146,7 @@ interface RuntimeActivationBindings {
     options: {
       metadata?: Record<string, unknown>;
       runtimeId: string;
+      profileManager?: ProfileManager;
       setAsDefault?: boolean;
       runtimeKind?: RuntimeKind;
     },
@@ -201,6 +202,7 @@ export interface IsolatedRuntimeContextOptions {
   metadata?: Record<string, unknown>;
   settingsService?: SettingsService;
   config?: Config;
+  profileManager?: ProfileManager;
   model?: string;
   debugMode?: boolean;
   workspaceDir?: string;
@@ -304,6 +306,7 @@ function resolveRuntimeConfig(
 
   const llxprtDir = Storage.getGlobalConfigDir();
   const resolvedProfileManager =
+    options.profileManager ??
     config.getProfileManager() ??
     new ProfileManager(path.join(llxprtDir, 'profiles'));
   const resolvedSubagentManager =
@@ -399,6 +402,7 @@ function buildActivateClosure(
         bindings.setRuntimeContext(resolvedSettingsService, config, {
           runtimeId: state.currentRuntimeId,
           metadata: state.currentMetadata,
+          profileManager: config.getProfileManager(),
           // Isolated runtimes MUST NOT mutate the CLI default pointer (issue
           // #2300); only the CLI composition boundary sets the default.
           setAsDefault: false,

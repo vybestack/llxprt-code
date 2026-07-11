@@ -31,6 +31,20 @@ function generateTurnKey(): string {
 }
 
 /**
+ * Maps a Gemini Content part to a human-readable type label for logging.
+ * Used by both `logToIContentInput` and the zero-block warning so they
+ * produce consistent output for cross-referencing during debugging.
+ */
+function classifyPartType(part: GeminiContentPart): string {
+  if ('text' in part) return 'text';
+  if ('functionCall' in part) return 'functionCall';
+  if ('functionResponse' in part) return 'functionResponse';
+  if ('inlineData' in part) return 'inlineData';
+  if ('thought' in part) return 'thought';
+  return 'other';
+}
+
+/**
  * Converts between Gemini Content format and IContent format
  */
 export class ContentConverters {
@@ -166,13 +180,7 @@ export class ContentConverters {
     this.logger.debug('Converted to Gemini Content:', {
       role,
       partCount: parts.length,
-      partTypes: parts.map((p) => {
-        if ('text' in p) return 'text';
-        if ('functionCall' in p) return 'functionCall';
-        if ('functionResponse' in p) return 'functionResponse';
-        if ('thought' in p) return 'thought';
-        return 'other';
-      }),
+      partTypes: parts.map(classifyPartType),
       functionCallIds: parts
         .filter((p) => 'functionCall' in p)
         .map((p) => (p as { functionCall?: { id?: string } }).functionCall?.id),
@@ -436,32 +444,7 @@ export class ContentConverters {
     getNextUnmatchedToolCall?: () => { historyId: string; toolName?: string },
     turnKeyOverride?: string,
   ): IContent {
-    this.logger.debug('Converting Gemini Content to IContent:', {
-      role: content.role,
-      partCount: content.parts?.length ?? 0,
-      partTypes:
-        content.parts?.map((p) => {
-          if ('text' in p) return 'text';
-          if ('functionCall' in p) return 'functionCall';
-          if ('functionResponse' in p) return 'functionResponse';
-          if ('thought' in p) return 'thought';
-          return 'other';
-        }) ?? [],
-      functionCallIds:
-        content.parts
-          ?.filter((p) => 'functionCall' in p)
-          .map(
-            (p) => (p as { functionCall?: { id?: string } }).functionCall?.id,
-          ) ?? [],
-      functionResponseIds:
-        content.parts
-          ?.filter((p) => 'functionResponse' in p)
-          .map(
-            (p) =>
-              (p as { functionResponse?: { id?: string } }).functionResponse
-                ?.id,
-          ) ?? [],
-    });
+    this.logToIContentInput(content);
 
     const speaker = content.role === 'user' ? 'human' : 'ai';
     const blocks: ContentBlock[] = [];
@@ -502,6 +485,19 @@ export class ContentConverters {
       metadata,
     };
 
+    if (blocks.length === 0) {
+      this.logger.warn(
+        () =>
+          `[ContentConverters] toIContent produced zero blocks (issue #2410) — this turn will be dropped by history`,
+        {
+          turnKey,
+          role: content.role,
+          partCount: content.parts?.length ?? 0,
+          partTypes: content.parts?.map(classifyPartType) ?? [],
+        },
+      );
+    }
+
     this.logger.debug('Converted to IContent:', {
       originalRole: content.role,
       finalSpeaker,
@@ -516,6 +512,32 @@ export class ContentConverters {
     });
 
     return result;
+  }
+
+  /**
+   * Log raw Gemini Content details before conversion to IContent.
+   * Extracted from toIContent to keep that method within complexity limits.
+   */
+  private static logToIContentInput(content: GeminiContent): void {
+    this.logger.debug('Converting Gemini Content to IContent:', {
+      role: content.role,
+      partCount: content.parts?.length ?? 0,
+      partTypes: content.parts?.map(classifyPartType) ?? [],
+      functionCallIds:
+        content.parts
+          ?.filter((p) => 'functionCall' in p)
+          .map(
+            (p) => (p as { functionCall?: { id?: string } }).functionCall?.id,
+          ) ?? [],
+      functionResponseIds:
+        content.parts
+          ?.filter((p) => 'functionResponse' in p)
+          .map(
+            (p) =>
+              (p as { functionResponse?: { id?: string } }).functionResponse
+                ?.id,
+          ) ?? [],
+    });
   }
 
   /**

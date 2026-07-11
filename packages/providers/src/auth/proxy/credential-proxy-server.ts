@@ -6,7 +6,8 @@
 
 /**
  * Host-side credential proxy server that listens on a Unix domain socket
- * and serves token/key operations to sandboxed inner processes.
+ * (POSIX) or a Windows named pipe (win32) and serves token/key operations
+ * to sandboxed inner processes.
  *
  * @plan PLAN-20250214-CREDPROXY.P15
  * @requirement R1, R2, R3
@@ -39,6 +40,8 @@ export type { OAuthFlowInterface } from './credential-proxy-oauth-handler.js';
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const PROTOCOL_VERSION = 1;
+
+const isWindows = process.platform === 'win32';
 
 // ─── Options ─────────────────────────────────────────────────────────────────
 
@@ -76,21 +79,35 @@ export class CredentialProxyServer {
     const socketPath = this.buildSocketPath();
     this.socketPath = socketPath;
 
-    const dir = path.dirname(socketPath);
-    fs.mkdirSync(dir, { mode: 0o700, recursive: true });
+    // Windows named pipes have no on-disk directory to create; only POSIX
+    // Unix-domain sockets live on the filesystem.
+    if (!isWindows) {
+      const dir = path.dirname(socketPath);
+      fs.mkdirSync(dir, { mode: 0o700, recursive: true });
+    }
 
     this.server = net.createServer((socket) => this.handleConnection(socket));
 
     await new Promise<void>((resolve, reject) => {
       this.server!.once('error', reject);
+      // Node accepts a `\\.\pipe\...` string here unchanged on Windows. Node/
+      // libuv create the pipe with the system default security descriptor and
+      // do NOT apply a per-user DACL, so the 128-bit nonce in the pipe name is
+      // the primary access-control barrier (the same unguessability defense the
+      // POSIX socket path relies on).
       this.server!.listen(socketPath, () => {
         this.server!.removeListener('error', reject);
         resolve();
       });
     });
 
-    // Set socket permissions to owner read/write only (0o600)
-    fs.chmodSync(socketPath, 0o600);
+    if (!isWindows) {
+      // Set socket permissions to owner read/write only (0o600).
+      // On Windows there is no on-disk file to chmod; the named pipe uses the
+      // system default security descriptor (no per-user DACL is applied by
+      // Node), so the 128-bit nonce is the sole access-control mechanism.
+      fs.chmodSync(socketPath, 0o600);
+    }
 
     return socketPath;
   }
@@ -114,7 +131,9 @@ export class CredentialProxyServer {
         });
       }
     } finally {
-      if (socketPathToClean !== null) {
+      // Windows named pipes are released when the server closes; there is no
+      // on-disk file to unlink. Only POSIX Unix-domain sockets need cleanup.
+      if (!isWindows && socketPathToClean !== null) {
         try {
           fs.unlinkSync(socketPathToClean);
         } catch {
@@ -129,11 +148,20 @@ export class CredentialProxyServer {
   }
 
   private buildSocketPath(): string {
-    const tmpdir = fs.realpathSync(os.tmpdir());
-    const uid = process.getuid?.() ?? process.pid;
     // Use 128-bit cryptographic nonce, base64url encoded for compactness
     // (macOS has ~104 char limit on Unix socket paths)
     const nonce = crypto.randomBytes(16).toString('base64url');
+
+    if (isWindows) {
+      // Windows named pipe. Use string concatenation (not path.join) so the
+      // `\\.\pipe` prefix is preserved. base64url never contains a backslash, so the
+      // nonce cannot corrupt the pipe namespace. The socketDir option is
+      // intentionally ignored — a named pipe has no directory component.
+      return `\\\\.\\pipe\\lxcp-${process.pid}-${nonce}`;
+    }
+
+    const tmpdir = fs.realpathSync(os.tmpdir());
+    const uid = process.getuid?.() ?? process.pid;
     // Use short directory name "lc-" to fit within macOS socket path limits
     const dir = this.options.socketDir ?? path.join(tmpdir, `lc-${uid}`);
     return path.join(dir, `${process.pid}-${nonce}.sock`);

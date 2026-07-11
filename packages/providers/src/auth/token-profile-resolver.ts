@@ -13,10 +13,8 @@
  * without instantiating the full coordinator.
  */
 
-import {
-  DebugLogger,
-  type OAuthTokenRequestMetadata,
-} from '@vybestack/llxprt-code-core';
+import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { createProfileManager } from './profile-utils.js';
 import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 

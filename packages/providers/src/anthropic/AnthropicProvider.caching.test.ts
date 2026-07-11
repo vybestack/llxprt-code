@@ -155,7 +155,7 @@ describe('AnthropicProvider', () => {
     clearActiveProviderRuntimeContext();
   });
   describe('Prompt Caching - Structure', () => {
-    it('should not add cache_control to last message when content is empty string', async () => {
+    it('should add cache_control to sanitized empty string content', async () => {
       settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
 
       mockMessagesCreate.mockResolvedValueOnce({
@@ -185,12 +185,17 @@ describe('AnthropicProvider', () => {
       const lastMessage = anthropicMessages[anthropicMessages.length - 1];
       expect(lastMessage.role).toBe('user');
 
-      // Last message content should remain a string (not converted to array)
-      expect(typeof lastMessage.content).toBe('string');
-      expect(lastMessage.content).toBe('');
+      expect(Array.isArray(lastMessage.content)).toBe(true);
+      expect(lastMessage.content).toStrictEqual([
+        {
+          type: 'text',
+          text: '[Empty message]',
+          cache_control: { type: 'ephemeral', ttl: '5m' },
+        },
+      ]);
     });
 
-    it('should not add cache_control to last message when content is whitespace only', async () => {
+    it('should add cache_control to sanitized whitespace-only string content', async () => {
       settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
 
       mockMessagesCreate.mockResolvedValueOnce({
@@ -220,9 +225,14 @@ describe('AnthropicProvider', () => {
       const lastMessage = anthropicMessages[anthropicMessages.length - 1];
       expect(lastMessage.role).toBe('user');
 
-      // Last message content should remain a string (not converted to array)
-      expect(typeof lastMessage.content).toBe('string');
-      expect(lastMessage.content).toBe('   \n\t  ');
+      expect(Array.isArray(lastMessage.content)).toBe(true);
+      expect(lastMessage.content).toStrictEqual([
+        {
+          type: 'text',
+          text: '[Empty message]',
+          cache_control: { type: 'ephemeral', ttl: '5m' },
+        },
+      ]);
     });
 
     describe('Cache Control Structure', () => {

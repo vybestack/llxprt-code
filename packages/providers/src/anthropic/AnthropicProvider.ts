@@ -38,6 +38,7 @@ import {
   getLatestClaudeModel as getLatestClaudeModelFn,
 } from './AnthropicModelData.js';
 import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
+import { isAnthropicOAuthBaseURL } from './AnthropicEndpointUtils.js';
 import { firstTruthyString } from '../utils/falsyFallback.js';
 import {
   buildAnthropicCustomHeaders,
@@ -339,11 +340,12 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   override getCurrentModel(): string {
-    // Always return from getDefaultModel - providers must not cache model state
-    // @plan PLAN-20251023-STATELESS-HARDENING.P08 @requirement REQ-SP4-002
-    const defaultModel = this.getDefaultModel();
-    this.getLogger().debug(() => `Using default model: ${defaultModel}`);
-    return defaultModel;
+    // Tool-format detection must use the active per-call model, not the
+    // provider default, so Anthropic-compatible GLM/Qwen profiles serialize
+    // tools with the expected dialect.
+    const model = this.getModel();
+    this.getLogger().debug(() => `Resolved current model: ${model}`);
+    return model;
   }
 
   override getDefaultModel(): string {
@@ -738,23 +740,10 @@ export class AnthropicProvider extends BaseProvider {
   }
 }
 
-/**
- * True when the given base URL is Anthropic's own API host (or unset), meaning
- * OAuth against api.anthropic.com is a valid credential path. For any
- * third-party gateway (e.g. https://api.z.ai/api/anthropic) this returns false
- * so we never attempt an Anthropic OAuth handshake against the wrong endpoint.
- */
-export function isAnthropicOAuthBaseURL(baseURL?: string): boolean {
-  if (baseURL === undefined || baseURL.trim() === '') {
-    return true;
-  }
-  try {
-    const host = new URL(baseURL).hostname.toLowerCase();
-    return host === 'anthropic.com' || host.endsWith('.anthropic.com');
-  } catch {
-    return false;
-  }
-}
+// Re-exported from AnthropicEndpointUtils for backwards compatibility.
+// Issue #2410: extracted to a standalone module to avoid a circular import
+// between AnthropicProvider and AnthropicRequestPreparation.
+export { isAnthropicOAuthBaseURL } from './AnthropicEndpointUtils.js';
 
 function isRuntimeAuthTokenProvider(
   value: unknown,

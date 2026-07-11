@@ -569,6 +569,10 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
     expect(READ_ONLY_TOOL_NAMES).toContain('search_file_content');
     expect(READ_ONLY_TOOL_NAMES).toContain('list_directory');
     expect(READ_ONLY_TOOL_NAMES).toContain('ls');
+    // exa_web_search replaces the removed google_web_search as the read-only
+    // web search tool, so it must remain in the non-interactive default allow set.
+    expect(READ_ONLY_TOOL_NAMES).toContain('exa_web_search');
+    expect(READ_ONLY_TOOL_NAMES).not.toContain('google_web_search');
   });
 
   it('READ_ONLY_TOOL_NAMES does NOT contain write tools', () => {
