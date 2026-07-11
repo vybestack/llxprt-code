@@ -742,13 +742,11 @@ export type ProfileWriteResult =
   | { readonly kind: 'exists'; readonly path: string };
 
 function profileFilePath(profilesDir: string, profileName: string): string {
+  const forbiddenNames = new Set(['', '.', '..']);
+  const hasForbiddenSeparator = /[\\/\0]/u.test(profileName);
   if (
-    profileName.trim() === '' ||
-    profileName === '.' ||
-    profileName === '..' ||
-    profileName.includes('\0') ||
-    profileName.includes('/') ||
-    profileName.includes('\\') ||
+    forbiddenNames.has(profileName.trim()) ||
+    hasForbiddenSeparator ||
     path.isAbsolute(profileName)
   ) {
     throw new Error(`Invalid profile name: ${JSON.stringify(profileName)}`);
