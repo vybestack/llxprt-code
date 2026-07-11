@@ -590,6 +590,8 @@ describe('escaped quotes and wrapper operands', () => {
     [':(){ :|:& };$(:)', true],
     ['bomb(){ bomb|bomb& };`bomb`', true],
     ['echo hi >&2', false],
+    ['chmod -R 755 / 777', false],
+    ['bash -c "echo \\$HOME/.ssh/authorized_keys"', false],
   ])('"%s" -> %s', (command, expected) => {
     expect(isDestructiveCommand(command)).toBe(expected);
   });

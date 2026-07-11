@@ -757,12 +757,9 @@ function isChmodDangerous(segment: CanonicalSegment): boolean {
   const recursive =
     partition.flagZone.includes('--recursive') ||
     partition.flagZone.some((token) => hasShortFlag(token, 'R'));
-  if (!recursive) return false;
+  if (!recursive || mode === undefined || !/^0*777$/.test(mode)) return false;
   const allOperands = [...partition.flagZone, ...partition.operandZone];
-  return (
-    allOperands.some((token) => /^0*777$/.test(token)) &&
-    allOperands.some(isSensitiveRootGlob)
-  );
+  return allOperands.some(isSensitiveRootGlob);
 }
 
 function findChmodMode(

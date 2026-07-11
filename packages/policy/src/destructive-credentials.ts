@@ -81,8 +81,14 @@ function stripOneQuoteLayer(token: string): string {
 function unescapeDoubleQuoteInterior(inner: string): string {
   let result = '';
   for (let i = 0; i < inner.length; i++) {
-    if (inner[i] === '\\' && i + 1 < inner.length && inner[i + 1] === '"') {
-      result += '"';
+    if (
+      inner[i] === '\\' &&
+      i + 1 < inner.length &&
+      DOUBLE_QUOTE_ESCAPABLE.has(inner[i + 1])
+    ) {
+      if (inner[i + 1] !== NEWLINE_CHAR) {
+        result += inner[i + 1];
+      }
       i++;
     } else {
       result += inner[i];
@@ -115,7 +121,14 @@ function redirectOpAt(
     if (next === '>') {
       return { end: i + 2 };
     }
-    if (next === '&' && !isDigitChar(rawSegment[i + 2] ?? '')) {
+    if (next === '&' && isDigitChar(rawSegment[i + 2] ?? '')) {
+      let j = i + 2;
+      while (j < rawSegment.length && isDigitChar(rawSegment[j])) {
+        j++;
+      }
+      return { end: j };
+    }
+    if (next === '&') {
       return { end: i + 2 };
     }
     return { end: i + 1 };
