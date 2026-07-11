@@ -341,7 +341,7 @@ function removeOwnArtifactSync(lockPath: string, ownerToken: string): void {
  * @internal Tests inside settings can import this directly.
  */
 export function acquireProfilesLockSync(profilesDir: string): SyncLockHandle {
-  fsSync.mkdirSync(profilesDir, { recursive: true });
+  fsSync.mkdirSync(profilesDir, { recursive: true, mode: 0o700 });
   const lockPath = lockPathForProfilesDir(profilesDir);
   try {
     const metadata = createLockArtifactSync(lockPath);
@@ -461,7 +461,15 @@ async function removeOwnArtifact(
 ): Promise<void> {
   const onDiskToken = await readLockToken(lockPath);
   if (onDiskToken === null) {
-    return;
+    try {
+      await fs.lstat(lockPath);
+    } catch (error) {
+      if (hasErrnoCode(error, 'ENOENT')) {
+        return;
+      }
+      throw error;
+    }
+    throw new Error(`Profiles lock ownership changed at ${lockPath}`);
   }
   if (onDiskToken !== ownerToken) {
     throw new Error(`Profiles lock ownership changed at ${lockPath}`);
@@ -509,6 +517,36 @@ export function withProfilesLockSync<T>(
 
   try {
     lock.release();
+  } catch (releaseError) {
+    if (outcome.kind === 'error') {
+      throw new AggregateError(
+        [outcome.error, releaseError],
+        'profiles operation and lock release both failed',
+      );
+    }
+    throw releaseError;
+  }
+
+  if (outcome.kind === 'error') {
+    throw outcome.error;
+  }
+  return outcome.value;
+}
+
+async function withProfilesLock<T>(
+  profilesDir: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const lock = await acquireProfilesLock(profilesDir);
+  let outcome: { kind: 'result'; value: T } | { kind: 'error'; error: unknown };
+  try {
+    outcome = { kind: 'result', value: await operation() };
+  } catch (error) {
+    outcome = { kind: 'error', error };
+  }
+
+  try {
+    await lock.release();
   } catch (releaseError) {
     if (outcome.kind === 'error') {
       throw new AggregateError(
@@ -742,10 +780,12 @@ export type ProfileWriteResult =
   | { readonly kind: 'exists'; readonly path: string };
 
 function profileFilePath(profilesDir: string, profileName: string): string {
+  const trimmedName = profileName.trim();
   const forbiddenNames = new Set(['', '.', '..']);
   const hasForbiddenSeparator = /[\\/\0]/u.test(profileName);
   if (
-    forbiddenNames.has(profileName.trim()) ||
+    forbiddenNames.has(trimmedName) ||
+    trimmedName !== profileName ||
     hasForbiddenSeparator ||
     path.isAbsolute(profileName)
   ) {
@@ -783,12 +823,9 @@ export async function writeProfileFile(
   mode: ProfileWriteMode = 'overwrite',
 ): Promise<ProfileWriteResult> {
   const filePath = profileFilePath(profilesDir, profileName);
-  const lock = await acquireProfilesLock(profilesDir);
-  try {
-    await fs.mkdir(profilesDir, { recursive: true, mode: 0o700 });
-
+  return withProfilesLock(profilesDir, async () => {
     if (mode === 'create') {
-      return await createProfileExclusive(filePath, data);
+      return createProfileExclusive(filePath, data);
     }
 
     // overwrite: preserve existing mode, default 0600 for new files
@@ -801,9 +838,7 @@ export async function writeProfileFile(
     }
     await atomicWriteFile(filePath, data, fileMode);
     return { kind: 'written', path: filePath };
-  } finally {
-    await lock.release();
-  }
+  });
 }
 
 /**
@@ -895,11 +930,8 @@ export async function deleteProfileFile(
   profileName: string,
 ): Promise<void> {
   const filePath = profileFilePath(profilesDir, profileName);
-  const lock = await acquireProfilesLock(profilesDir);
-  try {
+  await withProfilesLock(profilesDir, async () => {
     await fs.unlink(filePath);
     await fsyncDir(profilesDir);
-  } finally {
-    await lock.release();
-  }
+  });
 }

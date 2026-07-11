@@ -127,6 +127,8 @@ function doCopyProfilesDirNormalized(
       entry,
       srcPath,
       destPath,
+      srcProfilesDir,
+      destProfilesDir,
       visited,
       errors,
       logger,
@@ -140,13 +142,23 @@ function copyProfileEntry(
   entry: fs.Dirent,
   srcPath: string,
   destPath: string,
+  legacyRoot: string,
+  destRoot: string,
   visited: Set<string>,
   errors: string[],
   logger: DebugLogger,
 ): number {
   if (entry.isDirectory()) {
     // Nested directories copy byte-for-byte (no normalization).
-    return copyNestedDirectory(srcPath, destPath, visited, errors, logger);
+    return copyNestedDirectory(
+      srcPath,
+      destPath,
+      legacyRoot,
+      destRoot,
+      visited,
+      errors,
+      logger,
+    );
   }
   if (entry.isFile() && entry.name.endsWith('.json')) {
     // Top-level .json file: try normalization, fall back to raw copy.
@@ -259,7 +271,6 @@ function publishNormalizedExclusive(
   } finally {
     if (pathEntryExists(tmpPath)) {
       fs.unlinkSync(tmpPath);
-      fsyncDirSync(dir);
     }
   }
 }
@@ -303,12 +314,9 @@ function normalizeLegacyProfileBytes(legacyPath: string): string | null {
     return null;
   }
 
-  // Serialize the normalized shape (modelParams guaranteed present) so the
-  // canonical bytes are consistent.
-  const modelParams =
-    parsed.modelParams === undefined ? {} : parsed.modelParams;
-  const normalized = { ...parsed, modelParams };
-  return JSON.stringify(normalized, null, 2);
+  // Serialize the validated normalized profile so this migration remains
+  // aligned with the shared profile parsing boundary.
+  return JSON.stringify(profile, null, 2);
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -326,6 +334,8 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 function copyNestedDirectory(
   src: string,
   dest: string,
+  legacyRoot: string,
+  destRoot: string,
   visited: Set<string>,
   errors: string[],
   logger: DebugLogger,
@@ -333,6 +343,8 @@ function copyNestedDirectory(
   return copyDirFilteredWithInterceptor(
     src,
     dest,
+    legacyRoot,
+    destRoot,
     visited,
     errors,
     (s, d) => copyFileWithMode(s, d, errors, logger),

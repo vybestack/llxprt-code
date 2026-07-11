@@ -140,7 +140,10 @@ export function isCorruptStandardProfileFromRaw(rawParsed: unknown): boolean {
     return false;
   }
   const modelParams = rawParsed['modelParams'];
-  if (!isRawObject(modelParams) || Object.keys(modelParams).length !== 0) {
+  if (
+    modelParams !== undefined &&
+    (!isRawObject(modelParams) || Object.keys(modelParams).length !== 0)
+  ) {
     return false;
   }
   const ephemeralSettings = rawParsed['ephemeralSettings'];
@@ -480,7 +483,8 @@ function claimBackup(
       throw error;
     }
   }
-  for (let counter = 1; counter < Number.MAX_SAFE_INTEGER; counter++) {
+  const maxBackupAttempts = 1000;
+  for (let counter = 1; counter <= maxBackupAttempts; counter++) {
     const next = path.join(
       dir,
       `${baseFileName}.${counter}${REPAIR_BACKUP_SUFFIX}`,
@@ -602,9 +606,10 @@ function repairCanonicalProfilesLocked(
 
   try {
     const repaired = repairOneCandidate(candidates[0]);
-    return repaired
-      ? { kind: 'repaired', profilesRepaired: 1, errors: [] }
-      : { kind: 'none' };
+    if (repaired) {
+      return { kind: 'repaired', profilesRepaired: 1, errors };
+    }
+    return errors.length === 0 ? { kind: 'none' } : { kind: 'error', errors };
   } catch (error) {
     return {
       kind: 'error',

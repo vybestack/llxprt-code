@@ -159,7 +159,13 @@ export function copyDirFiltered(
   visited.add(realSrc);
 
   let count = 0;
-  fs.mkdirSync(dest, { recursive: true });
+  try {
+    fs.mkdirSync(dest, { recursive: true });
+  } catch (error) {
+    errors.push(`${dest}: ${String(error)}`);
+    logger.debug(`Cannot create directory ${dest}: ${String(error)}`);
+    return count;
+  }
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(src, { withFileTypes: true });
@@ -209,6 +215,8 @@ export function copyDirFiltered(
 export function copyDirFilteredWithInterceptor(
   src: string,
   dest: string,
+  legacyRoot: string,
+  destRoot: string,
   visited: Set<string>,
   errors: string[],
   fileInterceptor: (srcPath: string, destPath: string) => number,
@@ -231,7 +239,13 @@ export function copyDirFilteredWithInterceptor(
   visited.add(realSrc);
 
   let count = 0;
-  fs.mkdirSync(dest, { recursive: true });
+  try {
+    fs.mkdirSync(dest, { recursive: true });
+  } catch (error) {
+    errors.push(`${dest}: ${String(error)}`);
+    logger.debug(`Cannot create directory ${dest}: ${String(error)}`);
+    return count;
+  }
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(src, { withFileTypes: true });
@@ -249,6 +263,8 @@ export function copyDirFilteredWithInterceptor(
       count += copyDirFilteredWithInterceptor(
         srcPath,
         destPath,
+        legacyRoot,
+        destRoot,
         visited,
         errors,
         fileInterceptor,
@@ -262,7 +278,14 @@ export function copyDirFilteredWithInterceptor(
         logger.debug(`Interceptor failed for '${srcPath}': ${String(error)}`);
       }
     } else if (entry.isSymbolicLink() && !pathEntryExists(destPath)) {
-      count += createSymlinkClone(srcPath, destPath, src, dest, errors, logger);
+      count += createSymlinkClone(
+        srcPath,
+        destPath,
+        legacyRoot,
+        destRoot,
+        errors,
+        logger,
+      );
     }
   }
 

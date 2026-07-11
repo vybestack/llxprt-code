@@ -18,7 +18,7 @@ import * as crypto from 'node:crypto';
 // ─── Structural error guard ─────────────────────────────────────────────────
 
 export interface ErrnoError {
-  readonly code?: string;
+  readonly code: string;
   readonly message: string;
 }
 
@@ -89,7 +89,7 @@ export function uniqueTempPath(
 // ─── Fsync helper ───────────────────────────────────────────────────────────
 
 export function fsyncFileSync(filePath: string): void {
-  const fd = fs.openSync(filePath, 'r');
+  const fd = fs.openSync(filePath, 'r+');
   try {
     fs.fsyncSync(fd);
   } finally {
