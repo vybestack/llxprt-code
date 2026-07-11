@@ -49,8 +49,9 @@
   },
   "scripts": {
     "build": "bun ../../scripts/build_package.ts",
-    "test": "vitest run",
-    "test:ci": "vitest run",
+    "test": "bun test --path-ignore-patterns research",
+    "test:vitest": "vitest run",
+    "test:ci": "bun test --path-ignore-patterns research",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write ."
