@@ -81,6 +81,74 @@ describe('mapHistoryToSessionUpdates — malformed persisted history (issue #160
     ];
     expect(mapHistoryToSessionUpdates(history)).toStrictEqual([]);
   });
+  // ─── FINDING D1 (block level): malformed ELEMENTS inside a narrowed blocks ──
+  // The item-level narrowing only proves `blocks` is an array; each ELEMENT is
+  // still untrusted. A null/undefined/primitive element, or an object with no
+  // string `type`, must be SKIPPED silently (no throw on `block.type`) so one
+  // corrupt element cannot abort the whole replay.
+
+  it.each([
+    ['null', null],
+    ['undefined', undefined],
+    ['a number', 42],
+    ['a string', 'x'],
+    ['an object without a type', {}],
+    ['an object whose type is not a string', { type: 42 }],
+  ])(
+    'skips a block that is %s without throwing (FINDING D1 block level)',
+    (_label, badBlock) => {
+      const history = [
+        {
+          speaker: 'ai',
+          blocks: [badBlock],
+        } as unknown as IContent,
+      ];
+      expect(mapHistoryToSessionUpdates(history)).toStrictEqual([]);
+    },
+  );
+
+  it('replays a VALID block that FOLLOWS a malformed one in the SAME item (FINDING D1 block level)', () => {
+    const history = [
+      {
+        speaker: 'ai',
+        blocks: [
+          null,
+          42,
+          { type: 'text', text: 'after malformed' },
+        ],
+      } as unknown as IContent,
+    ];
+    // The two malformed leading elements are skipped; the trailing valid text
+    // block still maps to its agent_message_chunk.
+    expect(mapHistoryToSessionUpdates(history)).toStrictEqual([
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'after malformed' },
+      },
+    ]);
+  });
+
+  it('replays a VALID item that FOLLOWS an item with malformed blocks (FINDING D1 block level)', () => {
+    const history = [
+      {
+        speaker: 'ai',
+        blocks: [null, { type: 42 }, 'x'],
+      } as unknown as IContent,
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'next item survives' }],
+      } as unknown as IContent,
+    ];
+    // Every element of the first item is malformed (skipped), and the whole
+    // second item still replays.
+    expect(mapHistoryToSessionUpdates(history)).toStrictEqual([
+      {
+        sessionUpdate: 'user_message_chunk',
+        content: { type: 'text', text: 'next item survives' },
+      },
+    ]);
+  });
+
 
   // ─── FINDING D4: tool blocks missing a string id/name ─────────────────────
 

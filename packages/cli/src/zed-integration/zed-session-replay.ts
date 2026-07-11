@@ -87,7 +87,20 @@ export function mapHistoryToSessionUpdates(
     if (item === null) {
       continue;
     }
-    for (const block of item.blocks) {
+    // FINDING D1 (block level): each ELEMENT of a narrowed blocks array is STILL
+    // untrusted — the item-level narrowing only proved `blocks` is an array, not
+    // that its elements are objects. Persisted JSONL can carry blocks: [null],
+    // [undefined], [42], ['x'], [{}] (no type), or [{type: 42}]. asRenderableBlock
+    // narrows every element to a non-null object with a STRING `type`, so a
+    // malformed element is skipped silently (matching the malformed-ITEM skip)
+    // instead of throwing on `block.type` in appendBlockUpdates and aborting the
+    // WHOLE replay. A valid block AFTER a malformed one in the same item — and a
+    // valid item AFTER a malformed-blocks item — both still replay.
+    for (const rawBlock of item.blocks) {
+      const block = asRenderableBlock(rawBlock);
+      if (block === null) {
+        continue;
+      }
       appendBlockUpdates(item.speaker, block, pending, updates);
     }
   }
@@ -290,13 +303,15 @@ function isNonEmptyString(value: unknown): value is string {
  * non-null object whose `blocks` is an array (FINDING D1). Returns null for a
  * null/undefined item or one whose blocks is missing/non-array (a
  * corrupt/truncated JSONL line that still JSON-parsed), so the caller skips it
- * rather than throwing on `item.blocks`. Individual malformed BLOCKS are handled
- * downstream by the per-block guards (D2/D4); this only guarantees `blocks` is
- * iterable.
+ * rather than throwing on `item.blocks`. The array ELEMENTS deliberately stay
+ * `unknown`: the caller narrows each one with {@link asRenderableBlock} (D1 at
+ * the block level) before use, and the type-specific fields are then guarded by
+ * the per-block D2/D4 checks. This function only guarantees `blocks` is iterable
+ * — it does NOT (and must not) pretend the raw elements are valid ContentBlocks.
  */
 function asRenderableContent(
   value: unknown,
-): { speaker: IContent['speaker']; blocks: readonly ContentBlock[] } | null {
+): { speaker: IContent['speaker']; blocks: readonly unknown[] } | null {
   if (value === null || typeof value !== 'object') {
     return null;
   }
@@ -306,8 +321,36 @@ function asRenderableContent(
   }
   return {
     speaker: record.speaker as IContent['speaker'],
-    blocks: record.blocks as readonly ContentBlock[],
+    blocks: record.blocks as readonly unknown[],
   };
+}
+
+/**
+ * Narrows a single UNTRUSTED persisted block to a renderable {@link ContentBlock}
+ * — a non-null object carrying a STRING `type` discriminator (FINDING D1 at the
+ * block level). Returns null for a null/undefined/primitive element or an object
+ * with no string `type` (the `blocks: [null]`, `[undefined]`, `[42]`, `['x']`,
+ * `[{}]`, `[{type: 42}]` shapes a corrupt/truncated JSONL line can carry), so the
+ * caller SKIPS it silently rather than throwing on `block.type` in
+ * {@link appendBlockUpdates} and aborting the WHOLE replay.
+ *
+ * Only the `type` discriminator is validated here; the type-specific fields
+ * (text/thought/id/callId) remain guarded downstream by the per-block D2/D4
+ * checks exactly as they are for a statically-typed block, so an object with a
+ * valid `type` but a malformed payload is still handled defensively rather than
+ * throwing. The `as ContentBlock` mirrors the established narrowing idiom in this
+ * module (see {@link asRecord} / {@link asRenderableContent}): a runtime check
+ * precedes a precise assertion, never `any`.
+ */
+function asRenderableBlock(value: unknown): ContentBlock | null {
+  if (value === null || typeof value !== 'object') {
+    return null;
+  }
+  const record = value as { type?: unknown };
+  if (typeof record.type !== 'string') {
+    return null;
+  }
+  return value as ContentBlock;
 }
 
 /**
