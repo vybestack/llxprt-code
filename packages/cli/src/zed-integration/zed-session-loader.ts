@@ -23,6 +23,7 @@ import {
   classifyResumeFailure,
   findMatchingSessionFile,
   isEnoent,
+  wrapReplayFailure,
 } from './zed-session-errors.js';
 
 /**
@@ -156,6 +157,24 @@ export async function readAgentHistoryAsIContent(
 ): Promise<readonly IContent[]> {
   const history = await agent.getHistory();
   return ContentConverters.toIContents([...history]);
+}
+
+/**
+ * {@link readAgentHistoryAsIContent} with replay-failure normalization: a
+ * getHistory()/conversion rejection is wrapped exactly like a delivery failure
+ * ({@link wrapReplayFailure} -> internalError, phase:'replay') so a re-attach
+ * load always rejects with a well-formed RequestError — consistent with the
+ * disk-resume path's error semantics.
+ */
+export async function readAgentHistoryForReplay(
+  agent: Agent,
+  sessionId: string,
+): Promise<readonly IContent[]> {
+  try {
+    return await readAgentHistoryAsIContent(agent);
+  } catch (error) {
+    throw wrapReplayFailure(sessionId, error);
+  }
 }
 
 /**

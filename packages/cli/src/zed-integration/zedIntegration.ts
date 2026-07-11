@@ -60,7 +60,7 @@ import {
   resumeAgentHistory,
   toLoadRequestError,
   hasRecordedSessionFile,
-  readAgentHistoryAsIContent,
+  readAgentHistoryForReplay,
   nodeChatSessionFileLister,
   type ChatSessionFileLister,
 } from './zed-session-loader.js';
@@ -989,9 +989,8 @@ export class Session {
    * live path (sendUpdate) must NOT use this.
    */
   private async sendUpdateStrict(update: acp.SessionUpdate): Promise<void> {
-    const params: acp.SessionNotification = { sessionId: this.id, update };
     this.logger.debug(() => describeSessionUpdateForLog(update));
-    await this.connection.sessionUpdate(params);
+    await this.connection.sessionUpdate({ sessionId: this.id, update });
     this.logger.debug(() => 'sendUpdate: delivered');
   }
 
@@ -1056,20 +1055,17 @@ export class Session {
 
   /**
    * Re-attach replay for ACP session/load (#1604): replays this live session's
-   * IN-MEMORY conversation to the client, used when a session/load targets a
-   * still-live session that has no on-disk recording yet (an unprompted session,
-   * whose JSONL file has not materialized). The live agent's history is read via
-   * the Agent API and converted to neutral IContent[] (readAgentHistoryAsIContent)
-   * so it maps through the SAME strict {@link streamHistory} path a disk resume
-   * uses. A fresh unprompted session has empty history → ZERO updates. Delivery
-   * is strict: a transport failure rejects (wrapped by streamHistory) so a lost
-   * transcript is reported rather than silently resolving; the caller
-   * (reattachLiveSession) deliberately does NOT dispose the session on failure
-   * because it remains healthy.
+   * IN-MEMORY conversation, used when a load targets a still-live session with
+   * no on-disk recording yet (unprompted; JSONL not materialized). History is
+   * read + wrapped by readAgentHistoryForReplay and maps through the SAME
+   * strict {@link streamHistory} path a disk resume uses (empty history → zero
+   * updates). Any failure rejects as a well-formed replay RequestError; the
+   * caller deliberately does NOT dispose the session — it remains healthy.
    */
   async replayLiveHistory(): Promise<void> {
-    const items = await readAgentHistoryAsIContent(this.agent);
-    await this.streamHistory(items);
+    await this.streamHistory(
+      await readAgentHistoryForReplay(this.agent, this.id),
+    );
   }
 
   async dispose(): Promise<void> {

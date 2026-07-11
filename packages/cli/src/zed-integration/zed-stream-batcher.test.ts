@@ -69,10 +69,16 @@ describe('StreamBatcher blocked-path timer handling (issue #1604 E1/E2)', () => 
 
     // 1) A normal clean chunk: emits nothing yet but ARMS the 100ms batch timer.
     batcher.append('clean text ', false);
+    // Precondition: the timer really is armed by the first append — otherwise
+    // the later no-stray-flush assertions would pass vacuously (nothing to
+    // clear) and the timer-clearing path would go unexercised.
+    expect(vi.getTimerCount()).toBe(1);
 
     // 2) A blocked chunk (carries an emoji, error mode → blocked): must clear the
     // armed timer, flush the residual, then emit the blocked error message.
     batcher.append('oops \u{1F600}', false);
+    // The armed batch timer was cleared synchronously by the blocked path.
+    expect(vi.getTimerCount()).toBe(0);
 
     // Let the blocked-path microtask chain settle.
     await vi.runAllTimersAsync();

@@ -112,9 +112,16 @@ export class StreamBatcher {
       clearTimeout(this.batchTimer);
       this.batchTimer = null;
     }
-    const pending = this.flushChain
-      .then(() => this.doFlush())
-      .then(() => this.flushEmojiBuffer());
+    // try/finally so the trailing emoji-buffer flush runs even if a future
+    // doFlush change introduces a rejection path — the residual filter content
+    // must never be stranded behind a failed chunk send.
+    const pending = this.flushChain.then(async () => {
+      try {
+        await this.doFlush();
+      } finally {
+        await this.flushEmojiBuffer();
+      }
+    });
     this.flushChain = this.settleChainLink(pending);
     await pending;
   }
@@ -138,6 +145,13 @@ export class StreamBatcher {
   }
 
   private async flushEmojiBuffer(): Promise<void> {
+    // A dispose() that raced an in-flight chain link means the prompt is over:
+    // do not re-queue residual filter content past the turn boundary. (The
+    // standard prompt pattern — await flush() in try, dispose() in finally —
+    // never hits this: dispose only runs after the flush chain link settled.)
+    if (this.disposed) {
+      return;
+    }
     const remaining = this.emojiFilter.flushBuffer();
     if (remaining.length === 0) {
       return;
