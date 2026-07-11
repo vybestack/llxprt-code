@@ -815,6 +815,37 @@ describe('Gemini Client (client.ts)', () => {
       );
     });
 
+    it('does not retry InvalidStream after ordinary content was emitted', async () => {
+      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
+        true,
+      );
+      const mockStream = (async function* () {
+        yield { type: AgentEventType.Content, value: 'Partial content' };
+        yield { type: AgentEventType.InvalidStream };
+      })();
+      mockTurnRunFn.mockReturnValueOnce(mockStream);
+      client['chat'] = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      } as unknown as ChatSession;
+
+      const events = await fromAsync(
+        client.sendMessageStream(
+          [{ text: 'Hi' }],
+          new AbortController().signal,
+          'prompt-id-invalid-stream-after-content',
+        ),
+      );
+
+      expect(events).toContainEqual({
+        type: AgentEventType.Content,
+        value: 'Partial content',
+      });
+      expect(events).toContainEqual({ type: AgentEventType.InvalidStream });
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+    });
+
     it('should not recursively call sendMessageStream with "Please continue." when InvalidStream event is received and flag is false', async () => {
       vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
         false,

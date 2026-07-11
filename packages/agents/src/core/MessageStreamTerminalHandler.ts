@@ -176,7 +176,12 @@ async function* handleErrorEvent(
     hadThinking: state.hadThinking,
   });
 
-  if (errorStatus === 413 && config.getContinueOnFailedApiCall()) {
+  if (
+    errorStatus === 413 &&
+    config.getContinueOnFailedApiCall() &&
+    !state.hadContent &&
+    !state.hadThinking
+  ) {
     const result = yield* handle413Error(
       deps,
       ctx,
@@ -225,7 +230,12 @@ async function* handleInvalidStreamEvent(
     hadThinking: state.hadThinking,
   });
 
-  if (config.getContinueOnFailedApiCall() && !ctx.isInvalidStreamRetry) {
+  if (
+    config.getContinueOnFailedApiCall() &&
+    !ctx.isInvalidStreamRetry &&
+    !state.hadContent &&
+    !state.hadThinking
+  ) {
     yield* deps.sendMessageStream(
       [{ text: 'System: Please continue.' }],
       signal,

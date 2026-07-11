@@ -292,6 +292,41 @@ describe('Gemini Client (client.ts)', () => {
       );
     });
 
+    it('does not retry a 413 after ordinary content was already emitted', async () => {
+      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
+        true,
+      );
+      const mockStream = (async function* () {
+        yield { type: AgentEventType.Content, value: 'Partial content' };
+        yield {
+          type: AgentEventType.Error,
+          value: {
+            error: { message: 'Payload too large', status: 413 },
+          },
+        };
+      })();
+      mockTurnRunFn.mockReturnValueOnce(mockStream);
+      client['chat'] = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      } as unknown as ChatSession;
+
+      const events = await fromAsync(
+        client.sendMessageStream(
+          [{ text: 'Hi' }],
+          new AbortController().signal,
+          'prompt-id-413-after-content',
+        ),
+      );
+
+      expect(events).toContainEqual({
+        type: AgentEventType.Content,
+        value: 'Partial content',
+      });
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+    });
+
     it('should not retry on 413 when getContinueOnFailedApiCall returns false', async () => {
       vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
         false,
