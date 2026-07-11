@@ -16,6 +16,7 @@ import {
   DebugLogger,
   EmojiFilter,
   type FilterConfiguration,
+  type IContent,
   type TodoUpdateEvent,
   type Todo,
   type ApprovalMode,
@@ -49,6 +50,8 @@ import {
   requestToolConfirmation,
   type PermissionRoundTripResult,
 } from './zed-tool-handler.js';
+import { mapHistoryToSessionUpdates } from './zed-session-replay.js';
+import { StreamBatcher } from './zed-stream-batcher.js';
 
 export { parseZedAuthMethodId } from './zed-helpers.js';
 
@@ -180,7 +183,7 @@ export class ZedAgent {
       protocolVersion: acp.PROTOCOL_VERSION,
       authMethods,
       agentCapabilities: {
-        loadSession: false,
+        loadSession: true,
         promptCapabilities: {
           image: true,
           audio: true,
@@ -206,27 +209,15 @@ export class ZedAgent {
   }: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
     try {
       const sessionId = randomUUID();
-      const baseFileSystemService = this.config.getFileSystemService();
-      const sessionFileSystemService = this.clientCapabilities?.fs
-        ? new AcpFileSystemService(
-            this.connection,
-            sessionId,
-            this.clientCapabilities.fs,
-            baseFileSystemService,
-          )
-        : baseFileSystemService;
-      const sessionConfig = createSessionScopedConfig(
-        this.config,
-        sessionFileSystemService,
-        resolveSessionTargetDir(this.config, cwd),
-      );
-
-      this.logger.debug(() => `newSession - creating session ${sessionId}`);
-
-      const agent = await fromConfig({
-        config: sessionConfig,
+      const { agent, config: sessionConfig } = await this.buildSessionAgent(
         sessionId,
-      });
+        cwd,
+      );
+      // Enable continuous session recording so the conversation is persisted to
+      // a JSONL session file (under <projectTempDir>/chats) and can later be
+      // resumed via loadSession. Recording must never break session creation, so
+      // a startup failure is logged and swallowed.
+      await this.enableRecording(agent, sessionId);
 
       const session = new Session(
         sessionId,
@@ -246,6 +237,126 @@ export class ZedAgent {
     } catch (error) {
       this.logger.debug(() => `ERROR in newSession: ${error}`);
       throw error;
+    }
+  }
+
+  /**
+   * Loads (resumes) a previously recorded session so its conversation can be
+   * continued (issue #1604). The persisted history is replayed to the client as
+   * ordered session/update notifications BEFORE this resolves, so the Zed
+   * transcript is reconstructed. A fresh Agent (bound to a session-scoped Config
+   * + AcpFileSystemService, identical to newSession) is created for the loaded
+   * session id, and `agent.session.resume` restores the history AND re-subscribes
+   * continuous recording so subsequent turns keep appending to the SAME file.
+   *
+   * Reconnect friendliness: if a session with this id is already loaded, the
+   * prior Session is disposed and replaced (Zed may call loadSession again on
+   * reconnect; replacing is friendlier than rejecting).
+   *
+   * On resume failure (not found / locked / corrupted) a JSON-RPC
+   * resourceNotFound error is thrown carrying the session id.
+   */
+  async loadSession(
+    params: acp.LoadSessionRequest,
+  ): Promise<acp.LoadSessionResponse> {
+    const { sessionId } = params;
+    this.logger.debug(() => `loadSession - loading session ${sessionId}`);
+
+    const existing = this.sessions.get(sessionId);
+    if (existing !== undefined) {
+      this.sessions.delete(sessionId);
+      await existing.dispose();
+    }
+
+    const { agent, config: sessionConfig } = await this.buildSessionAgent(
+      sessionId,
+      params.cwd,
+    );
+
+    let history: readonly IContent[];
+    try {
+      history = await agent.session.resume(sessionId);
+    } catch (error) {
+      // The resume machinery failed to discover/lock/replay the session. Tear
+      // down the freshly built agent so no lock/recording leaks, then surface a
+      // resourceNotFound JSON-RPC error (the closest ACP-standard code) rather
+      // than inventing a custom code.
+      await agent.dispose().catch(() => undefined);
+      this.logger.debug(() => `loadSession - resume failed: ${error}`);
+      throw acp.RequestError.resourceNotFound(sessionId);
+    }
+
+    const session = new Session(
+      sessionId,
+      agent,
+      sessionConfig,
+      this.connection,
+    );
+    this.sessions.set(sessionId, session);
+
+    // Replay the restored conversation to the client before returning so the
+    // transcript is reconstructed on the Zed side.
+    await session.streamHistory(history);
+
+    return {
+      modes: {
+        availableModes: buildAvailableModes(),
+        currentModeId: agent.getApprovalMode(),
+      },
+    };
+  }
+
+  /**
+   * Shared per-session Agent construction used by BOTH newSession and
+   * loadSession: builds the session-scoped Config proxy (with an
+   * AcpFileSystemService when the client advertises fs capabilities) rooted at
+   * the resolved target dir, then creates the Agent-API agent bound to that
+   * Config and session id. Extracted to avoid duplicating the setup across the
+   * two entry points.
+   */
+  private async buildSessionAgent(
+    sessionId: string,
+    cwd: string | undefined,
+  ): Promise<{ agent: Agent; config: Config }> {
+    const baseFileSystemService = this.config.getFileSystemService();
+    const sessionFileSystemService = this.clientCapabilities?.fs
+      ? new AcpFileSystemService(
+          this.connection,
+          sessionId,
+          this.clientCapabilities.fs,
+          baseFileSystemService,
+        )
+      : baseFileSystemService;
+    const sessionConfig = createSessionScopedConfig(
+      this.config,
+      sessionFileSystemService,
+      resolveSessionTargetDir(this.config, cwd),
+    );
+
+    this.logger.debug(() => `buildSessionAgent - session ${sessionId}`);
+
+    const agent = await fromConfig({
+      config: sessionConfig,
+      sessionId,
+    });
+    return { agent, config: sessionConfig };
+  }
+
+  /**
+   * Enables continuous session recording for a freshly created session. Failures
+   * are logged and swallowed so recording startup can never break session
+   * creation (the session remains fully usable, just unrecorded).
+   */
+  private async enableRecording(
+    agent: Agent,
+    sessionId: string,
+  ): Promise<void> {
+    try {
+      await agent.session.setRecording({ enabled: true });
+    } catch (error) {
+      this.logger.debug(
+        () => `enableRecording failed for session ${sessionId}: ${error}`,
+      );
     }
   }
 
@@ -756,6 +867,24 @@ export class Session {
     await this.sendUpdate({ sessionUpdate: 'plan', entries });
   }
 
+  /**
+   * Replays a resumed conversation (ordered IContent[]) to the client as
+   * session/update notifications, in order, for ACP session/load (issue #1604).
+   * The neutral history is mapped to ACP updates by the pure
+   * mapHistoryToSessionUpdates helper (human text -> user_message_chunk, ai text
+   * -> agent_message_chunk, ai thinking -> agent_thought_chunk, ai tool_call ->
+   * tool_call, tool tool_response -> tool_call_update). Replay text is sent
+   * verbatim (NOT routed through the EmojiFilter): the recorded transcript was
+   * already filtered when first streamed, so re-filtering on replay would be
+   * redundant and could double-alter historical content.
+   */
+  async streamHistory(items: readonly IContent[]): Promise<void> {
+    const updates = mapHistoryToSessionUpdates(items);
+    for (const update of updates) {
+      await this.sendUpdate(update);
+    }
+  }
+
   async dispose(): Promise<void> {
     try {
       todoEvents.offTodoUpdated(this.todoListener);
@@ -768,94 +897,6 @@ export class Session {
       } catch (error) {
         debugLogger.error('Failed to dispose Zed session agent:', error);
       }
-    }
-  }
-}
-
-const BATCH_INTERVAL_MS = 100;
-
-class StreamBatcher {
-  private pendingChunks: Array<{ kind: 'text' | 'thought'; text: string }> = [];
-  private batchTimer: ReturnType<typeof setTimeout> | null = null;
-  private flushChain: Promise<void> = Promise.resolve();
-
-  constructor(
-    private readonly emojiFilter: EmojiFilter,
-    private readonly sendUpdate: (update: acp.SessionUpdate) => Promise<void>,
-  ) {}
-
-  append(text: string, isThought: boolean): void {
-    const filterResult = isThought
-      ? this.emojiFilter.filterText(text)
-      : this.emojiFilter.filterStreamChunk(text);
-    if (filterResult.blocked) {
-      const pending = this.flushChain
-        .then(() => this.doFlush())
-        .then(() =>
-          this.sendUpdate({
-            sessionUpdate: 'agent_message_chunk',
-            content: {
-              type: 'text',
-              text: '[Error: Response blocked due to emoji detection]',
-            },
-          }),
-        );
-      this.flushChain = pending.catch(() => undefined);
-      return;
-    }
-    const filteredText =
-      typeof filterResult.filtered === 'string' ? filterResult.filtered : '';
-    if (filteredText.length === 0) {
-      return;
-    }
-    this.appendPendingChunk(isThought ? 'thought' : 'text', filteredText);
-    this.batchTimer ??= setTimeout(() => {
-      this.batchTimer = null;
-      void this.flush();
-    }, BATCH_INTERVAL_MS);
-  }
-
-  async flush(): Promise<void> {
-    if (this.batchTimer !== null) {
-      clearTimeout(this.batchTimer);
-      this.batchTimer = null;
-    }
-    const pending = this.flushChain
-      .then(() => this.doFlush())
-      .then(() => this.flushEmojiBuffer());
-    this.flushChain = pending.catch(() => undefined);
-    await pending;
-  }
-
-  private async flushEmojiBuffer(): Promise<void> {
-    const remaining = this.emojiFilter.flushBuffer();
-    if (remaining.length === 0) {
-      return;
-    }
-    this.appendPendingChunk('text', remaining);
-    await this.doFlush();
-  }
-
-  private appendPendingChunk(kind: 'text' | 'thought', text: string): void {
-    const lastChunk = this.pendingChunks.at(-1);
-    if (lastChunk?.kind === kind) {
-      lastChunk.text += text;
-      return;
-    }
-    this.pendingChunks.push({ kind, text });
-  }
-
-  private async doFlush(): Promise<void> {
-    const chunks = this.pendingChunks;
-    this.pendingChunks = [];
-    for (const chunk of chunks) {
-      await this.sendUpdate({
-        sessionUpdate:
-          chunk.kind === 'thought'
-            ? 'agent_thought_chunk'
-            : 'agent_message_chunk',
-        content: { type: 'text', text: chunk.text },
-      });
     }
   }
 }

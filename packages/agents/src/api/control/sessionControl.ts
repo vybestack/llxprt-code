@@ -19,10 +19,15 @@
  *   converts the loaded Content[] to IContent[] before the client restore path.
  * - Recording is backed by SessionRecordingService; setRecording(true) starts a
  *   service and seeds it with the current history so a file is materialized,
- *   setRecording(false) flushes + disposes it.
+ *   then subscribes a RecordingIntegration to the client's HistoryService so
+ *   EVERY subsequent turn's content is appended to the JSONL file (continuous
+ *   recording, not a one-shot snapshot). setRecording(false) disposes the
+ *   integration + service.
  * - resume is backed by resumeSession (CONTINUE_LATEST for 'latest'); a success
- *   feeds the reconstructed IContent history through the client restore path and
- *   adopts the returned recording service.
+ *   feeds the reconstructed IContent history through the client restore path,
+ *   adopts the returned recording service, subscribes a fresh RecordingIntegration
+ *   so post-resume turns keep appending to the resumed file, and returns the
+ *   restored IContent[] so callers (e.g. the Zed loadSession path) can replay it.
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -31,6 +36,7 @@ import { join } from 'node:path';
 import {
   Logger,
   SessionRecordingService,
+  RecordingIntegration,
   resumeSession,
   CONTINUE_LATEST,
   getProjectHash,
@@ -98,6 +104,19 @@ export class SessionControl implements AgentSessionControl {
   private recording: SessionRecordingService | null = null;
 
   /**
+   * The live RecordingIntegration bridging the client's HistoryService
+   * 'contentAdded'/compression events onto the active recording service, or
+   * null when recording is disabled. This is what makes recording CONTINUOUS
+   * (every subsequent turn is appended) rather than a one-shot snapshot. It is
+   * created + subscribed by startRecording/resume and disposed (unsubscribed)
+   * by releaseRecording so no history-event listener leaks past a stop/resume/
+   * dispose.
+   * @plan:PLAN-20260617-COREAPI.P20
+   * @requirement:REQ-010
+   */
+  private integration: RecordingIntegration | null = null;
+
+  /**
    * The on-disk session lock acquired by a successful resume, or null when no
    * resume holds a lock. Released (and cleared) when a new resume replaces it,
    * when recording is stopped, or when the surface is disposed.
@@ -124,13 +143,25 @@ export class SessionControl implements AgentSessionControl {
    * are released by dispose()/teardownActiveSession(), so neither the prior nor
    * the resumed resources leak on any path. On failure a clear typed Error is
    * thrown carrying the core error (never a not-implemented signal).
+   *
+   * After the resumed history is restored into the client, a fresh
+   * RecordingIntegration is subscribed to the client's HistoryService so
+   * post-resume turns keep appending to the resumed JSONL file (continuous
+   * recording across the resume boundary). The prior integration (if any) is
+   * disposed alongside the prior recording so no history-event listener leaks.
+   *
+   * Returns the reconstructed IContent[] history so callers that need to replay
+   * the restored conversation (e.g. the Zed ACP loadSession path streaming
+   * session/update notifications) can consume it directly WITHOUT a lossy
+   * getHistory() Gemini Content[] round-trip. Callers that ignore the return
+   * value remain source-compatible.
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
   async resume(
     target: 'latest' | string,
     _options?: { readonly prefix?: boolean },
-  ): Promise<void> {
+  ): Promise<readonly IContent[]> {
     const request: ResumeRequest = {
       continueRef: target === 'latest' ? CONTINUE_LATEST : target,
       projectHash: getProjectHash(this.deps.config.getProjectRoot()),
@@ -143,25 +174,31 @@ export class SessionControl implements AgentSessionControl {
     if (!result.ok) {
       throw new Error(`Failed to resume session: ${result.error}`);
     }
-    // Capture the prior recording service + session lock, then adopt the resumed
-    // recording + lock into the instance fields (and install the recording on
-    // Config) SYNCHRONOUSLY — before any await. Adopting before any throwable
-    // await guarantees the resumed recording service and on-disk session lock are
-    // owned by the fields on every subsequent throw path (prior-resource teardown
-    // OR restoreHistory), so dispose()/teardownActiveSession() can always release
-    // them and neither the prior nor the resumed resources can leak.
+    // Capture the prior recording service + integration + session lock, then
+    // adopt the resumed recording + lock into the instance fields (and install
+    // the recording on Config) SYNCHRONOUSLY — before any await. Adopting before
+    // any throwable await guarantees the resumed recording service and on-disk
+    // session lock are owned by the fields on every subsequent throw path
+    // (prior-resource teardown OR restoreHistory), so dispose()/
+    // teardownActiveSession() can always release them and neither the prior nor
+    // the resumed resources can leak.
     const priorRecording = this.recording;
+    const priorIntegration = this.integration;
     const priorLockHandle = this.currentLockHandle;
     this.recording = result.recording;
+    this.integration = null;
     this.deps.config.setSessionRecordingService(result.recording);
     this.currentLockHandle = result.lockHandle;
-    // Release the prior recording service + session lock now that the resumed
-    // resources are owned. The captured prior locals are disposed/released
-    // directly (NOT via releaseRecording/releaseLockHandle, which act on the
-    // fields that now hold the resumed resources). Each step is guarded so a
-    // single prior-teardown failure does not skip the other; a collected failure
+    // Release the prior integration + recording service + session lock now that
+    // the resumed resources are owned. The captured prior locals are disposed/
+    // released directly (NOT via releaseRecording/releaseLockHandle, which act on
+    // the fields that now hold the resumed resources). Each step is guarded so a
+    // single prior-teardown failure does not skip the others; a collected failure
     // is surfaced after the resumed history is restored.
     const teardownErrors: unknown[] = [];
+    if (priorIntegration !== null) {
+      this.guardSync(teardownErrors, () => priorIntegration.dispose());
+    }
     await this.guard(teardownErrors, async () => {
       if (priorRecording !== null) {
         await priorRecording.dispose();
@@ -173,9 +210,17 @@ export class SessionControl implements AgentSessionControl {
       }
     });
     await this.deps.resolveClient().restoreHistory(result.history);
+    // Subscribe a fresh integration AFTER restoreHistory so the client's chat
+    // (and thus its HistoryService) is materialized; post-resume turns now
+    // append to the resumed file. Guarded so a subscription failure does not
+    // mask a prior-teardown failure surfaced below.
+    this.guardSync(teardownErrors, () =>
+      this.subscribeIntegration(result.recording),
+    );
     if (teardownErrors.length > 0) {
       throw teardownErrors[0];
     }
+    return result.history;
   }
 
   /**
@@ -292,11 +337,24 @@ export class SessionControl implements AgentSessionControl {
 
   /**
    * Starts a fresh recording service for this session, replacing any prior one
-   * (the prior service is flushed + disposed first). The current history is
-   * recorded as content events so the file materializes and getRecording().path
-   * is defined. The freshly built service is installed on Config via
-   * setSessionRecordingService so the rest of the system (which reads the active
-   * recording via config.getSessionRecordingService) observes the swap.
+   * (the prior service + integration are flushed + disposed first). The current
+   * history is recorded as content events so the file materializes and
+   * getRecording().path is defined. The freshly built service is installed on
+   * Config via setSessionRecordingService so the rest of the system (which reads
+   * the active recording via config.getSessionRecordingService) observes the
+   * swap. A RecordingIntegration is then subscribed to the client's
+   * HistoryService so EVERY subsequent turn's 'contentAdded' event is appended
+   * to the JSONL file — this is what makes recording continuous rather than a
+   * one-shot snapshot.
+   *
+   * HistoryService availability: the agents-package client eagerly creates +
+   * stores a HistoryService at construction (storeHistoryServiceForReuse) and
+   * reuses that SAME instance across turns (createChatSessionSafe reuses the
+   * stored service), so getHistoryService() is non-null here and the single
+   * subscription established now captures all future turns. If it is
+   * nonetheless null at this moment (no client/chat), the integration is still
+   * created and Config still owns the service; subscribeIntegration is a no-op
+   * that the next startRecording/resume re-attempts.
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
@@ -318,6 +376,32 @@ export class SessionControl implements AgentSessionControl {
     await service.flush();
     this.recording = service;
     this.deps.config.setSessionRecordingService(service);
+    this.subscribeIntegration(service);
+  }
+
+  /**
+   * Creates a RecordingIntegration around the given service and subscribes it
+   * to the client's HistoryService so future 'contentAdded'/compression events
+   * are appended continuously. Stored in the instance field so releaseRecording
+   * can dispose it (unsubscribe) on stop/resume/dispose. When the client's
+   * HistoryService is not yet available, the integration is still created +
+   * stored but left unsubscribed; a later start/resume re-attempts the
+   * subscription. Idempotent per call: any prior integration is disposed first
+   * so no duplicate listeners accumulate.
+   * @plan:PLAN-20260617-COREAPI.P20
+   * @requirement:REQ-010
+   */
+  private subscribeIntegration(service: SessionRecordingService): void {
+    if (this.integration !== null) {
+      this.integration.dispose();
+      this.integration = null;
+    }
+    const integration = new RecordingIntegration(service);
+    const historyService = this.deps.resolveClient().getHistoryService();
+    if (historyService !== null) {
+      integration.subscribeToHistory(historyService);
+    }
+    this.integration = integration;
   }
 
   /**
@@ -333,12 +417,20 @@ export class SessionControl implements AgentSessionControl {
   }
 
   /**
-   * Disposes the live recording service (if any), clears the private field, and
-   * clears it from Config. No-op when no recording is active.
+   * Disposes the live RecordingIntegration (unsubscribing its HistoryService
+   * listeners) and the live recording service (if any), clears the private
+   * fields, and clears the service from Config. The integration is disposed
+   * FIRST so no 'contentAdded' event can reach a service mid-disposal. No-op
+   * when no recording is active.
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
   private async releaseRecording(): Promise<void> {
+    const integration = this.integration;
+    if (integration !== null) {
+      this.integration = null;
+      integration.dispose();
+    }
     const service = this.recording;
     if (service === null) {
       return;
@@ -375,6 +467,21 @@ export class SessionControl implements AgentSessionControl {
   ): Promise<void> {
     try {
       await fn();
+    } catch (e) {
+      errors.push(e);
+    }
+  }
+
+  /**
+   * Synchronous variant of {@link guard} for non-awaitable teardown/subscription
+   * steps (integration dispose/subscribe) so a single failure is collected
+   * rather than short-circuiting the remaining steps.
+   * @plan:PLAN-20260617-COREAPI.P20
+   * @requirement:REQ-010
+   */
+  private guardSync(errors: unknown[], fn: () => void): void {
+    try {
+      fn();
     } catch (e) {
       errors.push(e);
     }

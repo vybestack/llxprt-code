@@ -350,7 +350,7 @@ const TOOL_KIND_BY_NAME = new Map<string, acp.ToolKind>([
   ),
 ]);
 
-function inferToolKind(name: string): acp.ToolKind | undefined {
+export function inferToolKind(name: string): acp.ToolKind | undefined {
   return TOOL_KIND_BY_NAME.get(name);
 }
 
