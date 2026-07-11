@@ -45,6 +45,11 @@ const workspaceDependencyAliasPlugin = {
 
 export default defineConfig({
   plugins: [workspaceDependencyAliasPlugin],
+  resolve: {
+    alias: {
+      'bun:test': 'vitest',
+    },
+  },
   test: {
     globals: true,
     environment: 'node',

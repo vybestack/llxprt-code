@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { ApprovalMode, PolicyDecision } from '@vybestack/llxprt-code-policy';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';

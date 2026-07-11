@@ -57,8 +57,9 @@
     "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
-    "test": "vitest run",
-    "test:ci": "vitest run",
+    "test": "bun test --path-ignore-patterns research",
+    "test:vitest": "vitest run",
+    "test:ci": "bun test --path-ignore-patterns research",
     "typecheck": "tsc --noEmit"
   },
   "files": [
