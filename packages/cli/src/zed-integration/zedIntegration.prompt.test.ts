@@ -165,11 +165,18 @@ describe('Zed Session.prompt (Agent API) - tool-call status progression', () => 
     const startUpdate = updates[0] as {
       locations: acp.ToolCallLocation[];
       status: string;
+      rawInput?: Record<string, unknown>;
     };
     expect(startUpdate.status).toBe('in_progress');
     expect(startUpdate.locations).toStrictEqual([
       { path: '/project/file.txt', line: 7 },
     ]);
+    // FINDING F: the LIVE tool_call start carries rawInput (the tool args) for
+    // parity with the replay start shape and ACP debugging conformance.
+    expect(startUpdate.rawInput).toStrictEqual({
+      absolute_path: '/project/file.txt',
+      offset: 7,
+    });
     expect((updates[1] as { status: string }).status).toBe('in_progress');
     expect((updates[2] as { status: string }).status).toBe('completed');
   });

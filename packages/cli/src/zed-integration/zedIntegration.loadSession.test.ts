@@ -5,24 +5,24 @@
  */
 
 /**
- * Behavioral tests for ACP session/load (loadSession) in the Zed integration
- * (issue #1604). Two honest layers:
+ * Behavioral tests for ACP session/load (loadSession) ORCHESTRATION in the Zed
+ * integration (issue #1604). This drives the REAL ZedAgent with a stubbed
+ * `fromConfig` whose agent.session.resume returns a fixed IContent[] (or
+ * rejects). It asserts the restored conversation is streamed to the client
+ * (RecordingConnection) as ordered session/update notifications BEFORE
+ * loadSession resolves, that the response advertises modes, that an unknown
+ * session rejects with the chosen RequestError, that a duplicate load replaces
+ * the prior session, and — for the second review round — that a failing
+ * history-replay transport fully cleans up (no stale entry / leaked lock) so a
+ * retry loads cleanly (FINDING A).
  *
- *  1. IContent -> ACP SessionUpdate mapping (mapHistoryToSessionUpdates):
- *     asserts EXACT v1 snake_case wire payload shapes for every block kind, so a
- *     regression in the discriminators or field names is caught structurally.
- *
- *  2. ZedAgent.loadSession orchestration: drives the REAL ZedAgent with a stubbed
- *     `fromConfig` whose agent.session.resume returns a fixed IContent[]. Asserts
- *     the restored conversation is streamed to the client (RecordingConnection)
- *     as ordered session/update notifications BEFORE loadSession resolves, that
- *     the response advertises modes, that an unknown session rejects with the
- *     chosen RequestError, and that a duplicate load replaces the prior session.
- *
- * The record->resume->history FIDELITY is proven separately by the agents-package
- * behavioral tests (sessionControl.recording.behavior.test.ts) against the REAL
- * recording services; here the resume return value is a fixed fixture so the
- * mapping + orchestration are asserted without a provider bootstrap.
+ * The pure IContent -> ACP SessionUpdate MAPPING (mapHistoryToSessionUpdates,
+ * exact wire shapes + ordered tool pairing + MCP extraction) is asserted
+ * separately in zed-session-replay.test.ts; the record->resume->history FIDELITY
+ * is proven by the agents-package behavioral tests
+ * (sessionControl.recording.behavior.test.ts) against the REAL recording
+ * services. Here the resume return value is a fixed fixture so the orchestration
+ * is asserted without a provider bootstrap.
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -31,7 +31,6 @@ import { RequestError } from '@agentclientprotocol/sdk';
 import type { Config, IContent } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
-import { mapHistoryToSessionUpdates } from './zed-session-replay.js';
 import { RecordingConnection } from './zed-test-helpers.js';
 
 const mockFromConfig = vi.hoisted(() => vi.fn());
@@ -52,410 +51,6 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   loadProfileByName: vi.fn(),
   setCliRuntimeContext: vi.fn(),
 }));
-
-// ─── Layer 1: pure mapping (exact v1 snake_case wire shapes) ─────────────────
-
-describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
-  it('maps a human text block to a user_message_chunk', () => {
-    const history: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'hello there' }] },
-    ];
-    expect(mapHistoryToSessionUpdates(history)).toStrictEqual([
-      {
-        sessionUpdate: 'user_message_chunk',
-        content: { type: 'text', text: 'hello there' },
-      },
-    ]);
-  });
-
-  it('maps an ai text block to an agent_message_chunk', () => {
-    const history: IContent[] = [
-      { speaker: 'ai', blocks: [{ type: 'text', text: 'the answer' }] },
-    ];
-    expect(mapHistoryToSessionUpdates(history)).toStrictEqual([
-      {
-        sessionUpdate: 'agent_message_chunk',
-        content: { type: 'text', text: 'the answer' },
-      },
-    ]);
-  });
-
-  it('maps an ai thinking block to an agent_thought_chunk carrying the thought text', () => {
-    const history: IContent[] = [
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'thinking', thought: 'let me reason' }],
-      },
-    ];
-    expect(mapHistoryToSessionUpdates(history)).toStrictEqual([
-      {
-        sessionUpdate: 'agent_thought_chunk',
-        content: { type: 'text', text: 'let me reason' },
-      },
-    ]);
-  });
-
-  it('maps a lone ai tool_call (no recorded response) to an in_progress tool_call matching the live start shape, then a synthetic failed update (FINDING 2/3: orphaned/interrupted turn)', () => {
-    const history: IContent[] = [
-      {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: 'call-1',
-            name: 'read_file',
-            parameters: { absolute_path: '/project/a.ts' },
-          },
-        ],
-      },
-    ];
-    // Live start shape (emitToolCallStart): in_progress, empty content, inferred
-    // locations + kind, rawInput. Because the call has NO paired response in the
-    // history, a terminal failed tool_call_update (empty content) is synthesized
-    // so the client does not render a perpetually-running tool.
-    expect(mapHistoryToSessionUpdates(history)).toStrictEqual([
-      {
-        sessionUpdate: 'tool_call',
-        toolCallId: 'call-1',
-        title: 'read_file',
-        status: 'in_progress',
-        content: [],
-        locations: [{ path: '/project/a.ts' }],
-        kind: 'read',
-        rawInput: { absolute_path: '/project/a.ts' },
-      },
-      {
-        sessionUpdate: 'tool_call_update',
-        toolCallId: 'call-1',
-        status: 'failed',
-        content: [],
-      },
-    ]);
-  });
-
-  it('maps a tool tool_response block to a completed tool_call_update with text content', () => {
-    const history: IContent[] = [
-      {
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: 'call-1',
-            toolName: 'read_file',
-            result: 'file body contents',
-          },
-        ],
-      },
-    ];
-    expect(mapHistoryToSessionUpdates(history)).toStrictEqual([
-      {
-        sessionUpdate: 'tool_call_update',
-        toolCallId: 'call-1',
-        status: 'completed',
-        content: [
-          {
-            type: 'content',
-            content: { type: 'text', text: 'file body contents' },
-          },
-        ],
-      },
-    ]);
-  });
-
-  it('maps a { output } success result to a completed tool_call_update carrying the output text (FINDING 3)', () => {
-    const history: IContent[] = [
-      {
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: 'call-out',
-            toolName: 'run_shell_command',
-            result: { output: 'x' },
-          },
-        ],
-      },
-    ];
-    expect(mapHistoryToSessionUpdates(history)).toStrictEqual([
-      {
-        sessionUpdate: 'tool_call_update',
-        toolCallId: 'call-out',
-        status: 'completed',
-        content: [{ type: 'content', content: { type: 'text', text: 'x' } }],
-      },
-    ]);
-  });
-
-  it('maps a { error } result to a FAILED tool_call_update carrying the error text (FINDING 3)', () => {
-    const history: IContent[] = [
-      {
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: 'call-err',
-            toolName: 'run_shell_command',
-            result: { error: 'y' },
-          },
-        ],
-      },
-    ];
-    expect(mapHistoryToSessionUpdates(history)).toStrictEqual([
-      {
-        sessionUpdate: 'tool_call_update',
-        toolCallId: 'call-err',
-        status: 'failed',
-        content: [{ type: 'content', content: { type: 'text', text: 'y' } }],
-      },
-    ]);
-  });
-
-  it('maps a tool_response whose block.error is set to a FAILED tool_call_update carrying the error text (FINDING 3)', () => {
-    const history: IContent[] = [
-      {
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: 'call-boom',
-            toolName: 'write_file',
-            result: {},
-            error: 'permission denied',
-          },
-        ],
-      },
-    ];
-    expect(mapHistoryToSessionUpdates(history)).toStrictEqual([
-      {
-        sessionUpdate: 'tool_call_update',
-        toolCallId: 'call-boom',
-        status: 'failed',
-        content: [
-          {
-            type: 'content',
-            content: { type: 'text', text: 'permission denied' },
-          },
-        ],
-      },
-    ]);
-  });
-
-  it('emits an empty content array for a tool_response with no representable text', () => {
-    const history: IContent[] = [
-      {
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: 'call-2',
-            toolName: 'secret_tool',
-            result: {},
-          },
-        ],
-      },
-    ];
-    expect(mapHistoryToSessionUpdates(history)).toStrictEqual([
-      {
-        sessionUpdate: 'tool_call_update',
-        toolCallId: 'call-2',
-        status: 'completed',
-        content: [],
-      },
-    ]);
-  });
-
-  it('skips whitespace-only text and skips media/code blocks (v1 replay)', () => {
-    const history: IContent[] = [
-      { speaker: 'ai', blocks: [{ type: 'text', text: '   ' }] },
-      {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: 'AAAA',
-            encoding: 'base64',
-          },
-          { type: 'code', code: 'const x = 1;' },
-        ],
-      },
-    ];
-    expect(mapHistoryToSessionUpdates(history)).toStrictEqual([]);
-  });
-
-  it('omits kind for an unknown tool name but still emits the in_progress tool_call (with no inferable locations)', () => {
-    const history: IContent[] = [
-      {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: 'call-x',
-            name: 'totally_unknown_tool',
-            parameters: { foo: 'bar' },
-          },
-        ],
-      },
-    ];
-    const [update] = mapHistoryToSessionUpdates(history);
-    expect(update).toStrictEqual({
-      sessionUpdate: 'tool_call',
-      toolCallId: 'call-x',
-      title: 'totally_unknown_tool',
-      status: 'in_progress',
-      content: [],
-      locations: [],
-      rawInput: { foo: 'bar' },
-    });
-    expect('kind' in update).toBe(false);
-  });
-
-  it('pairs an ai tool_call with its later tool_response: in_progress start THEN completed update, no synthetic failure (FINDING 2/3 ordered pairing)', () => {
-    const history: IContent[] = [
-      {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: 'paired-1',
-            name: 'read_file',
-            parameters: { absolute_path: '/project/z.ts' },
-          },
-        ],
-      },
-      {
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: 'paired-1',
-            toolName: 'read_file',
-            result: { output: 'paired body' },
-          },
-        ],
-      },
-    ];
-    expect(mapHistoryToSessionUpdates(history)).toStrictEqual([
-      {
-        sessionUpdate: 'tool_call',
-        toolCallId: 'paired-1',
-        title: 'read_file',
-        status: 'in_progress',
-        content: [],
-        locations: [{ path: '/project/z.ts' }],
-        kind: 'read',
-        rawInput: { absolute_path: '/project/z.ts' },
-      },
-      {
-        sessionUpdate: 'tool_call_update',
-        toolCallId: 'paired-1',
-        status: 'completed',
-        content: [
-          { type: 'content', content: { type: 'text', text: 'paired body' } },
-        ],
-      },
-    ]);
-  });
-
-  it('orders pairing across a multi-tool conversation: each call starts in_progress and completes from its own response (FINDING 2/3)', () => {
-    const history: IContent[] = [
-      {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: 't1',
-            name: 'read_file',
-            parameters: { absolute_path: '/a' },
-          },
-          {
-            type: 'tool_call',
-            id: 't2',
-            name: 'run_shell_command',
-            parameters: { command: 'ls' },
-          },
-        ],
-      },
-      {
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: 't1',
-            toolName: 'read_file',
-            result: { output: 'first' },
-          },
-        ],
-      },
-      {
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: 't2',
-            toolName: 'run_shell_command',
-            result: { error: 'boom' },
-          },
-        ],
-      },
-    ];
-    expect(
-      mapHistoryToSessionUpdates(history).map((u) => ({
-        kind: u.sessionUpdate,
-        id: (u as { toolCallId?: string }).toolCallId,
-        status: (u as { status?: string }).status,
-      })),
-    ).toStrictEqual([
-      { kind: 'tool_call', id: 't1', status: 'in_progress' },
-      { kind: 'tool_call', id: 't2', status: 'in_progress' },
-      { kind: 'tool_call_update', id: 't1', status: 'completed' },
-      { kind: 'tool_call_update', id: 't2', status: 'failed' },
-    ]);
-  });
-
-  it('preserves whole-conversation order across a multi-block transcript', () => {
-    const history: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'do a thing' }] },
-      {
-        speaker: 'ai',
-        blocks: [
-          { type: 'thinking', thought: 'planning' },
-          { type: 'text', text: 'working on it' },
-          {
-            type: 'tool_call',
-            id: 'c1',
-            name: 'run_shell_command',
-            parameters: { command: 'ls' },
-          },
-        ],
-      },
-      {
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: 'c1',
-            toolName: 'run_shell_command',
-            result: 'a.ts b.ts',
-          },
-        ],
-      },
-      { speaker: 'ai', blocks: [{ type: 'text', text: 'done' }] },
-    ];
-    expect(
-      mapHistoryToSessionUpdates(history).map((u) => u.sessionUpdate),
-    ).toStrictEqual([
-      'user_message_chunk',
-      'agent_thought_chunk',
-      'agent_message_chunk',
-      'tool_call',
-      'tool_call_update',
-      'agent_message_chunk',
-    ]);
-  });
-});
-
-// ─── Layer 2: ZedAgent.loadSession orchestration ────────────────────────────
 
 interface StubAgentHandle {
   readonly agent: Agent;
@@ -778,5 +373,107 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
       .filter((u) => u.sessionUpdate === 'agent_message_chunk')
       .map((u) => (u as { content: { text: string } }).content.text);
     expect(agentTexts).toStrictEqual(['first load', 'second load']);
+  });
+
+  // ─── FINDING A: strict history-replay delivery ────────────────────────────
+
+  it('rejects with internalError and fully cleans up when history replay delivery FAILS on the very first update (FINDING A)', async () => {
+    const stub = buildStubAgent({
+      resumeHistory: [
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'lost transcript' }] },
+      ],
+    });
+    mockFromConfig.mockResolvedValue(stub.agent);
+
+    const connection = new RecordingConnection();
+    // Dead transport: every session/update rejects, starting with the first.
+    connection.failSessionUpdateAfter(0, new Error('transport is dead'));
+    const zedAgent = await makeZedAgent(connection);
+
+    const params: acp.LoadSessionRequest = {
+      sessionId: 'replay-fail-session',
+      cwd: '/project',
+      mcpServers: [],
+    } as acp.LoadSessionRequest;
+
+    let caught: unknown;
+    try {
+      await zedAgent.loadSession(params);
+    } catch (e) {
+      caught = e;
+    }
+
+    // A lost transcript must NOT resolve as success: it is an internal error.
+    expect(caught).toBeInstanceOf(RequestError);
+    expect((caught as RequestError).code).toBe(-32603);
+    expect((caught as RequestError).message).toContain('replay');
+    // The fresh agent was disposed exactly once (releasing the recording lock).
+    expect(stub.dispose).toHaveBeenCalledTimes(1);
+    // No transcript survived, and NO stale session entry remains: prompting the
+    // id fails with "Session not found".
+    await expect(
+      zedAgent.prompt({
+        sessionId: 'replay-fail-session',
+        prompt: [{ type: 'text', text: 'hello?' }],
+      } as acp.PromptRequest),
+    ).rejects.toThrow(/Session not found/);
+  });
+
+  it('cleans up on a PARTIAL replay failure (first N updates delivered, then a mid-stream failure) and a later retry loads cleanly (FINDING A)', async () => {
+    const history: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'a1' }] },
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'a2-never-delivered' }] },
+    ];
+    const failingStub = buildStubAgent({ resumeHistory: history });
+    const retryStub = buildStubAgent({
+      resumeHistory: [
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'retry ok' }] },
+      ],
+    });
+    mockFromConfig
+      .mockResolvedValueOnce(failingStub.agent)
+      .mockResolvedValueOnce(retryStub.agent);
+
+    const connection = new RecordingConnection();
+    // Deliver the first two updates, then fail the third mid-replay.
+    connection.failSessionUpdateAfter(2, new Error('socket closed mid-replay'));
+    const zedAgent = await makeZedAgent(connection);
+
+    const params: acp.LoadSessionRequest = {
+      sessionId: 'partial-fail-session',
+      cwd: '/project',
+      mcpServers: [],
+    } as acp.LoadSessionRequest;
+
+    let caught: unknown;
+    try {
+      await zedAgent.loadSession(params);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(RequestError);
+    expect((caught as RequestError).code).toBe(-32603);
+    // The two updates that DID land are recorded; the third failed the load.
+    expect(connection.sessionUpdateKinds()).toStrictEqual([
+      'user_message_chunk',
+      'agent_message_chunk',
+    ]);
+    // Full cleanup even on partial delivery: fresh agent disposed once.
+    expect(failingStub.dispose).toHaveBeenCalledTimes(1);
+
+    // Transport recovers before the retry.
+    connection.clearSessionUpdateFailure();
+
+    // A subsequent load for the SAME id (transport now healthy) succeeds and
+    // installs cleanly, proving no leaked lock / stale entry blocked the retry.
+    const response = await zedAgent.loadSession(params);
+    expect(response.modes?.currentModeId).toBe('default');
+    const agentTexts = connection
+      .onlySessionUpdates()
+      .filter((u) => u.sessionUpdate === 'agent_message_chunk')
+      .map((u) => (u as { content: { text: string } }).content.text);
+    // 'a1' from the failed load, then 'retry ok' from the successful retry.
+    expect(agentTexts).toStrictEqual(['a1', 'retry ok']);
   });
 });

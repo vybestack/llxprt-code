@@ -25,6 +25,9 @@ export async function emitToolCallStart(
   call: AgentToolCall,
   sendUpdate: SendUpdateFn,
 ): Promise<void> {
+  // rawInput carries the tool arguments for parity with the replay start shape
+  // (zed-session-replay.ts buildToolCallStart) and because ACP recommends it on
+  // tool_call for client-side debugging (conformance tooling flags its absence).
   await sendUpdate({
     sessionUpdate: 'tool_call',
     toolCallId: call.id,
@@ -33,6 +36,7 @@ export async function emitToolCallStart(
     content: [],
     locations: buildToolLocations(call.args),
     kind: inferToolKind(call.name),
+    rawInput: call.args,
   });
 }
 

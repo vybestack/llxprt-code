@@ -51,7 +51,11 @@ import {
   type PermissionRoundTripResult,
 } from './zed-tool-handler.js';
 import { mapHistoryToSessionUpdates } from './zed-session-replay.js';
-import { mapResumeError } from './zed-session-errors.js';
+import { wrapReplayFailure } from './zed-session-errors.js';
+import {
+  resumeAgentHistory,
+  toLoadRequestError,
+} from './zed-session-loader.js';
 import { StreamBatcher } from './zed-stream-batcher.js';
 
 export { parseZedAuthMethodId } from './zed-helpers.js';
@@ -273,24 +277,8 @@ export class ZedAgent {
     const { sessionId } = params;
     this.logger.debug(() => `loadSession - loading session ${sessionId}`);
 
-    // Dispose + drop any prior same-id Session FIRST so it releases the on-disk
-    // session lock the replacement resume needs, and so a resume failure below
-    // cannot leave a stale/half-disposed entry in this.sessions.
-    const existing = this.sessions.get(sessionId);
-    if (existing !== undefined) {
-      this.sessions.delete(sessionId);
-      await existing.dispose();
-    }
-
-    const { session, history } = await this.buildAndResumeSession(
-      sessionId,
-      params.cwd,
-    );
-    this.sessions.set(sessionId, session);
-
-    // Replay the restored conversation to the client before returning so the
-    // transcript is reconstructed on the Zed side.
-    await session.streamHistory(history);
+    await this.disposePriorSession(sessionId);
+    const session = await this.installResumedSession(sessionId, params.cwd);
 
     return {
       modes: {
@@ -301,14 +289,59 @@ export class ZedAgent {
   }
 
   /**
+   * Disposes + drops any prior same-id Session FIRST so it releases the on-disk
+   * session lock the replacement resume needs, and so a later failure cannot
+   * leave a stale/half-disposed entry in this.sessions.
+   */
+  private async disposePriorSession(sessionId: string): Promise<void> {
+    const existing = this.sessions.get(sessionId);
+    if (existing !== undefined) {
+      this.sessions.delete(sessionId);
+      await existing.dispose();
+    }
+  }
+
+  /**
+   * Builds + resumes the replacement Session, installs it in this.sessions, then
+   * replays the restored transcript to the client BEFORE returning. Install
+   * order is failure-safe (FINDING A): the map entry is added only after a
+   * successful build/resume, and if the strict history replay fails (a
+   * dead/failing transport, see Session.streamHistory) the entry is removed and
+   * the Session disposed (releasing the recording lock) before the precise
+   * RequestError is rethrown — so a failed load never leaves a stale entry or a
+   * leaked lock, and a later retry for the same id can cleanly load again.
+   */
+  private async installResumedSession(
+    sessionId: string,
+    cwd: string | undefined,
+  ): Promise<Session> {
+    const { session, history } = await this.buildAndResumeSession(
+      sessionId,
+      cwd,
+    );
+    this.sessions.set(sessionId, session);
+    try {
+      await session.streamHistory(history);
+    } catch (error) {
+      this.sessions.delete(sessionId);
+      await session.dispose();
+      this.logger.debug(() => `loadSession - replay failed: ${error}`);
+      throw error;
+    }
+    return session;
+  }
+
+  /**
    * Builds the replacement Agent for a loadSession and resumes its recorded
-   * history. On resume failure the freshly built agent is disposed (so no
-   * lock/recording leaks) and the failure is mapped to a precise ACP
-   * RequestError via mapResumeError — a not-found reason becomes resourceNotFound
-   * while a locked/corrupt/other reason becomes internalError carrying the
-   * underlying detail. Extracted from loadSession so the destructive dispose-first
-   * orchestration and the build/resume/error-mapping stay individually small and
-   * within the lint complexity/line budgets.
+   * history. Everything AFTER fromConfig runs under a guard that disposes the
+   * fresh agent before rethrowing (FINDING E), so neither a resume rejection nor
+   * a throw while constructing the Session (after resume already adopted the
+   * recording + lock) can leak the lock/recording. A resume rejection is mapped
+   * to a precise ACP RequestError (see resumeAgentHistory / classifyResumeFailure:
+   * not-found-but-file-present becomes internalError, genuine missing becomes
+   * resourceNotFound); any other post-fromConfig throw is wrapped as internalError
+   * (an already-constructed RequestError passes through unchanged). Extracted from
+   * loadSession so the orchestration stays within the lint complexity/line budgets.
    */
   private async buildAndResumeSession(
     sessionId: string,
@@ -318,21 +351,20 @@ export class ZedAgent {
       sessionId,
       cwd,
     );
-    let history: readonly IContent[];
     try {
-      history = await agent.session.resume(sessionId);
+      const history = await resumeAgentHistory(agent, sessionId, sessionConfig);
+      const session = new Session(
+        sessionId,
+        agent,
+        sessionConfig,
+        this.connection,
+      );
+      return { session, history };
     } catch (error) {
       await agent.dispose().catch(() => undefined);
-      this.logger.debug(() => `loadSession - resume failed: ${error}`);
-      throw mapResumeError(sessionId, error);
+      this.logger.debug(() => `loadSession - build/resume failed: ${error}`);
+      throw toLoadRequestError(sessionId, error);
     }
-    const session = new Session(
-      sessionId,
-      agent,
-      sessionConfig,
-      this.connection,
-    );
-    return { session, history };
   }
 
   /**
@@ -869,19 +901,27 @@ export class Session {
     return new Error(event.error.message);
   }
 
-  private async sendUpdate(update: acp.SessionUpdate): Promise<void> {
+  /**
+   * STRICT delivery of a single session/update: rethrows any transport failure.
+   * Used ONLY by streamHistory (ACP session/load replay) so a dead/failing
+   * client connection fails the load rather than silently losing the transcript
+   * while loadSession still resolves successfully (FINDING A). The best-effort
+   * live path (sendUpdate) must NOT use this.
+   */
+  private async sendUpdateStrict(update: acp.SessionUpdate): Promise<void> {
     const params: acp.SessionNotification = { sessionId: this.id, update };
-    this.logger.debug(
-      () =>
-        `sendUpdate: ${update.sessionUpdate} ${
-          'content' in update && update.content && 'text' in update.content
-            ? `(${(update.content as { text: string }).text.length} chars)`
-            : ''
-        }`,
-    );
+    await this.connection.sessionUpdate(params);
+  }
+
+  /**
+   * BEST-EFFORT delivery for the LIVE prompt path: a transient client error
+   * must not abort an in-flight turn, so delivery failures are logged and
+   * swallowed. Replay uses sendUpdateStrict instead so lost history surfaces as
+   * a failed load.
+   */
+  private async sendUpdate(update: acp.SessionUpdate): Promise<void> {
     try {
-      await this.connection.sessionUpdate(params);
-      this.logger.debug(() => 'sendUpdate: delivered');
+      await this.sendUpdateStrict(update);
     } catch (error) {
       this.logger.debug(
         () =>
@@ -919,7 +959,16 @@ export class Session {
   async streamHistory(items: readonly IContent[]): Promise<void> {
     const updates = mapHistoryToSessionUpdates(items);
     for (const update of updates) {
-      await this.sendUpdate(update);
+      // STRICT: a failed delivery here (dead/failing transport) must reject so
+      // loadSession can clean up and report the failure instead of resolving as
+      // a success with a lost transcript (FINDING A). wrapReplayFailure maps the
+      // rejection to a precise internalError (passing an existing RequestError
+      // through unchanged) for loadSession's catch path.
+      try {
+        await this.sendUpdateStrict(update);
+      } catch (error) {
+        throw wrapReplayFailure(this.id, error);
+      }
     }
   }
 

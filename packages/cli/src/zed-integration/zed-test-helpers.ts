@@ -84,6 +84,34 @@ export class RecordingConnection {
     optionId: ToolConfirmationOutcome.ProceedOnce,
   };
   private permissionRejection: Error | null = null;
+  private sessionUpdateFailAfter: number | null = null;
+  private sessionUpdateError: Error | null = null;
+  private sessionUpdateCalls = 0;
+
+  /**
+   * Arms sessionUpdate to REJECT starting with the (0-based) `afterCount`-th
+   * call: the first `afterCount` notifications are still recorded/delivered
+   * normally, then every subsequent call throws `error`. Used to simulate a
+   * dead/failing transport mid history-replay (issue #1604 FINDING A) so strict
+   * streamHistory delivery and loadSession cleanup can be asserted. `afterCount:
+   * 0` fails the very first update.
+   */
+  failSessionUpdateAfter(afterCount: number, error: Error): void {
+    this.sessionUpdateFailAfter = afterCount;
+    this.sessionUpdateError = error;
+  }
+
+  /**
+   * Disarms {@link failSessionUpdateAfter} and resets the call counter so a
+   * SUBSEQUENT operation on the same connection delivers normally — used to
+   * simulate a transport that has recovered before a retry load (issue #1604
+   * FINDING A partial-failure test).
+   */
+  clearSessionUpdateFailure(): void {
+    this.sessionUpdateFailAfter = null;
+    this.sessionUpdateError = null;
+    this.sessionUpdateCalls = 0;
+  }
   private gatedDeferred: {
     resolve: (o: acp.RequestPermissionOutcome) => void;
     promise: Promise<acp.RequestPermissionOutcome>;
@@ -125,6 +153,17 @@ export class RecordingConnection {
 
   sessionUpdate: Mock = vi.fn(
     async (params: acp.SessionNotification): Promise<void> => {
+      if (
+        this.sessionUpdateFailAfter !== null &&
+        this.sessionUpdateCalls >= this.sessionUpdateFailAfter
+      ) {
+        this.sessionUpdateCalls++;
+        throw (
+          this.sessionUpdateError ??
+          new Error('sessionUpdate transport failure')
+        );
+      }
+      this.sessionUpdateCalls++;
       this.messages.push({ kind: 'sessionUpdate', update: params.update });
     },
   );

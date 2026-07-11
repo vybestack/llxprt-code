@@ -16,15 +16,27 @@
  * the ordered list of ACP {@link acp.SessionUpdate} notifications the live
  * streaming path (StreamBatcher / zed-tool-handler.ts) would have produced.
  *
- * Tool-call fidelity: the live path emits a tool_call (status 'in_progress',
- * empty content, inferred locations/kind) at call time and a SEPARATE
- * tool_call_update (completed/failed with the result text) when the response
- * arrives. Replay mirrors that two-update shape so a reconstructed transcript is
- * wire-indistinguishable from a live one: each recorded ai ToolCallBlock emits
- * the in_progress tool_call, and its paired tool ToolResponseBlock emits the
- * terminal tool_call_update. A ToolCallBlock with no recorded response (an
- * interrupted turn) gets a synthetic 'failed' tool_call_update so the client
- * never renders a perpetually-running tool.
+ * Tool-call fidelity (order-aware pairing): the live path emits a tool_call
+ * (status 'in_progress', empty content, inferred locations/kind) at call time
+ * and a SEPARATE tool_call_update (completed/failed with the result text) when
+ * the response arrives. Replay mirrors that two-update shape via a SINGLE
+ * ordered walk that tracks a `pending` set of started-but-unfinished callIds:
+ *
+ *  - an ai ToolCallBlock emits the in_progress tool_call and marks the id
+ *    pending;
+ *  - a tool ToolResponseBlock whose id IS pending emits exactly ONE terminal
+ *    tool_call_update (first response wins) and clears the id — a duplicate
+ *    response for the same id is then dropped;
+ *  - a tool ToolResponseBlock whose id is NOT pending (an orphan response before
+ *    its start, or a second response after completion) is DROPPED so replay
+ *    never emits a floating terminal update with no matching start;
+ *  - any id still pending at end-of-history (an interrupted turn) gets a
+ *    synthetic 'failed' tool_call_update, in original start order, so the client
+ *    never renders a perpetually-running tool.
+ *
+ * This ordered pairing (vs a global pre-scan of every response id) keeps the
+ * start->end status transitions correct across response-before-call, duplicate
+ * responses, and the same id reused across turns.
  *
  * It is kept separate from zedIntegration.ts (and free of any I/O) so the
  * mapping stays small, individually unit-testable against the v1 snake_case
@@ -50,57 +62,46 @@ type Dict = Readonly<Record<string, unknown>>;
  * Maps a full resumed history (ordered IContent[]) to the ordered ACP
  * SessionUpdate notifications that replay the conversation. Empty/whitespace
  * text chunks are skipped; unmappable blocks (media, code) contribute no update.
- * Each ai tool_call contributes an in_progress tool_call PLUS — when the call
- * has no recorded response — a terminal failed tool_call_update; a recorded tool
- * response contributes the matching completed/failed tool_call_update. The
- * output preserves the history order and, per message, the block order.
+ *
+ * Tool calls are paired in a single ordered pass (see the module doc): each ai
+ * tool_call emits an in_progress tool_call and is tracked as pending; the FIRST
+ * tool response for a pending id emits the terminal completed/failed update and
+ * clears it; unmatched responses are dropped; and any call still pending after
+ * the whole history is walked yields a trailing synthetic failed update, in
+ * original start order (Set iteration preserves insertion order). The output
+ * preserves history order and, per message, block order.
  */
 export function mapHistoryToSessionUpdates(
   items: readonly IContent[],
 ): acp.SessionUpdate[] {
-  const respondedCallIds = collectRespondedCallIds(items);
   const updates: acp.SessionUpdate[] = [];
+  const pending = new Set<string>();
   for (const item of items) {
     for (const block of item.blocks) {
-      appendBlockUpdates(item.speaker, block, respondedCallIds, updates);
+      appendBlockUpdates(item.speaker, block, pending, updates);
     }
+  }
+  // Every id still pending had no delivered response (an interrupted turn):
+  // synthesize its terminal failed update now, in start order, so the client
+  // does not render a perpetually-running tool. Set iteration order is the
+  // insertion (call-start) order.
+  for (const toolCallId of pending) {
+    updates.push(buildSyntheticFailedUpdate(toolCallId));
   }
   return updates;
 }
 
 /**
- * Pre-scans the history for the callIds that DO have a tool ToolResponseBlock,
- * so the block pass can tell a paired tool_call (whose response will emit the
- * terminal update) from an orphaned one (interrupted turn) that needs a
- * synthetic failed update. Kept as a separate pure pass so the per-block mapping
- * stays a simple forward walk.
- */
-function collectRespondedCallIds(
-  items: readonly IContent[],
-): ReadonlySet<string> {
-  const ids = new Set<string>();
-  for (const item of items) {
-    if (item.speaker !== 'tool') {
-      continue;
-    }
-    for (const block of item.blocks) {
-      if (block.type === 'tool_response') {
-        ids.add(block.callId);
-      }
-    }
-  }
-  return ids;
-}
-
-/**
- * Appends the SessionUpdate(s) for a single (speaker, block) pair to `out`. Most
- * blocks map to at most one update; an ai tool_call may append two (the
- * in_progress tool_call and, when orphaned, a terminal failed update).
+ * Appends the SessionUpdate(s) for a single (speaker, block) pair to `out`,
+ * mutating `pending` for tool-call lifecycle tracking. Text/thinking map to at
+ * most one update; an ai tool_call emits its in_progress start and marks the id
+ * pending; a tool tool_response emits its terminal update only when it pairs
+ * with a pending start (see appendToolResponseUpdate).
  */
 function appendBlockUpdates(
   speaker: IContent['speaker'],
   block: ContentBlock,
-  respondedCallIds: ReadonlySet<string>,
+  pending: Set<string>,
   out: acp.SessionUpdate[],
 ): void {
   switch (block.type) {
@@ -112,12 +113,13 @@ function appendBlockUpdates(
       return;
     case 'tool_call':
       if (speaker === 'ai') {
-        appendToolCallUpdates(block, respondedCallIds, out);
+        out.push(buildToolCallStart(block));
+        pending.add(block.id);
       }
       return;
     case 'tool_response':
       if (speaker === 'tool') {
-        out.push(mapToolResponseBlock(block));
+        appendToolResponseUpdate(block, pending, out);
       }
       return;
     // Media/code blocks are intentionally skipped in v1 replay: ACP has no
@@ -127,6 +129,45 @@ function appendBlockUpdates(
     default:
       return;
   }
+}
+
+/**
+ * Emits the terminal tool_call_update for a recorded tool response, order-aware
+ * against the `pending` set of started-but-unfinished calls:
+ *  - if the callId IS pending: emit exactly ONE terminal update (first response
+ *    wins) and clear the id so a later duplicate response for the same id is
+ *    dropped;
+ *  - if the callId is NOT pending (an orphan response that arrived before its
+ *    start, or a second response after the call already completed): DROP it.
+ *    Emitting a floating terminal update with no matching in_progress start
+ *    would hand the client a tool_call_update it never saw begin, corrupting the
+ *    status transition; dropping keeps replay wire-consistent with the live
+ *    start->end pairing.
+ */
+function appendToolResponseUpdate(
+  block: ToolResponseBlock,
+  pending: Set<string>,
+  out: acp.SessionUpdate[],
+): void {
+  if (!pending.has(block.callId)) {
+    return;
+  }
+  pending.delete(block.callId);
+  out.push(mapToolResponseBlock(block));
+}
+
+/**
+ * Builds the synthetic terminal update for a tool call that never received a
+ * response: a 'failed' tool_call_update with empty content, matching the live
+ * behavior of never leaving a perpetually-running tool on the client.
+ */
+function buildSyntheticFailedUpdate(toolCallId: string): acp.SessionUpdate {
+  return {
+    sessionUpdate: 'tool_call_update',
+    toolCallId,
+    status: 'failed',
+    content: [],
+  };
 }
 
 /** Pushes `update` onto `out` when it is non-null (small readability helper). */
@@ -188,30 +229,6 @@ function mapThinkingBlock(
 }
 
 /**
- * Appends the replay updates for an ai ToolCallBlock: first the in_progress
- * tool_call matching the live start shape, then — ONLY when the call has no
- * recorded response — a terminal failed tool_call_update (empty content) so an
- * interrupted turn does not leave a perpetually-running tool on the client. A
- * call WITH a recorded response gets its terminal update from that response
- * block (mapToolResponseBlock), preserving the live "start then complete" pair.
- */
-function appendToolCallUpdates(
-  block: ToolCallBlock,
-  respondedCallIds: ReadonlySet<string>,
-  out: acp.SessionUpdate[],
-): void {
-  out.push(buildToolCallStart(block));
-  if (!respondedCallIds.has(block.id)) {
-    out.push({
-      sessionUpdate: 'tool_call_update',
-      toolCallId: block.id,
-      status: 'failed',
-      content: [],
-    });
-  }
-}
-
-/**
  * ai tool_call -> in_progress tool_call. Field names + shape mirror the live
  * start path in zed-tool-handler.ts (emitToolCallStart): status 'in_progress',
  * empty content, locations inferred from the recorded parameters via the SAME
@@ -240,10 +257,11 @@ function buildToolCallStart(block: ToolCallBlock): acp.SessionUpdate {
  * with a string `error` property (the { error } failure shape produced by
  * createErrorResponse), else 'completed'. The displayed text is extracted with a
  * precedence that mirrors how results are actually recorded: result.output
- * (the { output } success shape), then a string result.content, then the failure
- * error text, then the shared extractToolResultText fallback. Only non-empty
- * text yields a content entry; otherwise the update carries an empty content
- * array (mirroring the live suppressed-display behavior).
+ * (the { output } success shape), then a string result.content, then an
+ * MCP-style result.content array (joined text elements), then the failure error
+ * text, then the shared extractToolResultText fallback. Only non-empty text
+ * yields a content entry; otherwise the update carries an empty content array
+ * (mirroring the live suppressed-display behavior).
  *
  * Diff replay gap: the recorded IContent does NOT persist the display/FileDiff
  * metadata the live path uses to emit a { type: 'diff' } ToolCallContent, so a
@@ -284,9 +302,10 @@ function isFailedResponse(
 
 /**
  * Extracts the display text for a tool response with the precedence documented
- * on mapToolResponseBlock: result.output, then string result.content, then (for
- * failures) the error text, then the shared extractToolResultText fallback.
- * Returns null when no non-empty text is representable.
+ * on mapToolResponseBlock: result.output, then string result.content, then an
+ * MCP-style result.content array, then (for failures) the error text, then the
+ * shared extractToolResultText fallback. Returns null when no non-empty text is
+ * representable.
  */
 function extractResponseText(
   block: ToolResponseBlock,
@@ -301,6 +320,10 @@ function extractResponseText(
   if (typeof inlineContent === 'string' && inlineContent.length > 0) {
     return inlineContent;
   }
+  const arrayText = extractContentArrayText(inlineContent);
+  if (arrayText !== null) {
+    return arrayText;
+  }
   if (failed) {
     const errorText = failureText(block, record);
     if (errorText !== null) {
@@ -308,6 +331,40 @@ function extractResponseText(
     }
   }
   return extractToolResultText({ llmContent: block.result });
+}
+
+/**
+ * Joins the text of an MCP-style result.content array: keeps only elements that
+ * look like `{ type: 'text', text: string }`, concatenates their `text` (no
+ * separator, matching how streamed text chunks recombine), and returns the
+ * result only when non-empty. Non-text elements (images, resources) are skipped.
+ * Returns null when the value is not an array or yields no text, so the caller
+ * falls through to the next precedence tier.
+ */
+function extractContentArrayText(value: unknown): string | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const text = value
+    .map((element) => textOfContentElement(element))
+    .filter((entry): entry is string => entry !== null)
+    .join('');
+  return text.length > 0 ? text : null;
+}
+
+/**
+ * Narrows a single MCP-style content-array element to its text: returns the
+ * `text` string for a non-empty `{ type: 'text', text: string }` element, else
+ * null (skipping images/resources and malformed entries).
+ */
+function textOfContentElement(element: unknown): string | null {
+  const record = asRecord(element);
+  if (record === null || record.type !== 'text') {
+    return null;
+  }
+  return typeof record.text === 'string' && record.text.length > 0
+    ? record.text
+    : null;
 }
 
 /**
