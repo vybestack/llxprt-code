@@ -101,7 +101,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
     ]);
   });
 
-  it('maps a tool tool_response block to a completed tool_call_update with text content', () => {
+  it('maps a tool-speaker tool_response block to a completed tool_call_update with text content', () => {
     // Paired call so the response has a matching in_progress start (FINDING C
     // drops orphan responses); the terminal update is asserted at index [1].
     const history: IContent[] = [

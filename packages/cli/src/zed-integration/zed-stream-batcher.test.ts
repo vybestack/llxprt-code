@@ -116,4 +116,23 @@ describe('StreamBatcher blocked-path timer handling (issue #1604 E1/E2)', () => 
       '[Error: Response blocked due to emoji detection]',
     );
   });
+
+  it('ignores a late append after dispose(): nothing is emitted and no timer is armed past the turn', async () => {
+    const filter = new EmojiFilter({ mode: 'allowed' });
+    const collector = buildCollector();
+    const batcher = new StreamBatcher(filter, collector.sendUpdate);
+
+    batcher.append('flushed before dispose', false);
+    await batcher.flush();
+    batcher.dispose();
+
+    // A stray chunk arriving after the owning prompt disposed the batcher must
+    // be dropped: no new batch timer, no pending chunk, no late emission.
+    batcher.append('late chunk after dispose', false);
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.runAllTimersAsync();
+    await batcher.flush();
+
+    expect(collector.texts()).toStrictEqual(['flushed before dispose']);
+  });
 });

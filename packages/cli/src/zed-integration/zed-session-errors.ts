@@ -217,9 +217,11 @@ async function probeMatchingSessionFile(
 /**
  * True when `error` is a Node ENOENT (no-such-file/directory) rejection — used
  * to distinguish a genuinely-absent chats dir (missing session) from a real
- * probe failure such as EACCES (FINDING B2).
+ * probe failure such as EACCES (FINDING B2). Exported so the loadSession
+ * re-attach probe (zed-session-loader.ts) classifies its probe failures with
+ * the exact same rule instead of keeping a duplicate.
  */
-function isEnoent(error: unknown): boolean {
+export function isEnoent(error: unknown): boolean {
   return (
     typeof error === 'object' &&
     error !== null &&

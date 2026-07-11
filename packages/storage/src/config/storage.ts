@@ -288,6 +288,17 @@ export class Storage {
     return path.join(this.getProjectTempDir(), 'checkpoints');
   }
 
+  /**
+   * The single source of truth for the chats directory, where session
+   * recordings/persistence files live (`<projectTempDir>/chats`). Every
+   * consumer (session recording, resume probes, session cleanup, chat
+   * persistence) must derive the path through this helper so the writers and
+   * the readers/probes can never drift apart on the location.
+   */
+  getProjectChatsDir(): string {
+    return path.join(this.getProjectTempDir(), 'chats');
+  }
+
   getExtensionsDir(): string {
     return path.join(this.getLlxprtDir(), 'extensions');
   }

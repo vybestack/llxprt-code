@@ -14,7 +14,6 @@
  */
 
 import { readdir } from 'node:fs/promises';
-import * as path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
 import type { Config, IContent } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
@@ -23,6 +22,7 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   classifyResumeFailure,
   findMatchingSessionFile,
+  isEnoent,
 } from './zed-session-errors.js';
 
 /**
@@ -71,7 +71,7 @@ export async function resumeAgentHistory(
 /**
  * Lists the chats-dir entry names for the corrupt-vs-missing probe (FINDING B),
  * deriving the directory the SAME way the recording layer does
- * (`join(storage.getProjectTempDir(), 'chats')`) and delegating the actual read
+ * (via Storage.getProjectChatsDir()) and delegating the actual read
  * to the injected {@link ChatSessionFileLister} (FINDING C1) so the resume probe
  * and the re-attach probe ({@link hasRecordedSessionFile}) share ONE injected
  * lister rather than one hardcoding readdir. A read failure propagates to
@@ -102,7 +102,7 @@ async function listSessionFileNames(
  * directory safely routes to re-attach rather than surfacing an error.
  *
  * The directory is derived the SAME way the recording layer does
- * (`join(storage.getProjectTempDir(), 'chats')`) and matched with the SAME
+ * (via Storage.getProjectChatsDir()) and matched with the SAME
  * filename rule the corrupt-vs-missing resume probe uses
  * ({@link findMatchingSessionFile}), keeping the two in lockstep.
  */
@@ -125,7 +125,7 @@ export async function hasRecordedSessionFile(
     //   - any other error (EACCES, EIO, ...) is UNEXPECTED and means the probe
     //     could not actually determine recording presence: log at warn so it is
     //     visible, while still returning false (re-attach) rather than rethrowing.
-    if (isEnoentError(error)) {
+    if (isEnoent(error)) {
       logger.debug(
         () =>
           `hasRecordedSessionFile: chats dir absent (ENOENT) for ${sessionId}; ` +
@@ -140,20 +140,6 @@ export async function hasRecordedSessionFile(
     }
     return false;
   }
-}
-
-/**
- * True when `error` is a Node ENOENT (no-such-file/directory) rejection — used
- * by {@link hasRecordedSessionFile} to log the expected missing-chats-dir case
- * at debug while surfacing genuinely unexpected probe failures at warn
- * (FINDING C2).
- */
-function isEnoentError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    (error as NodeJS.ErrnoException).code === 'ENOENT'
-  );
 }
 
 /**
@@ -173,22 +159,14 @@ export async function readAgentHistoryAsIContent(
 }
 
 /**
- * Derives the chats directory (where session recordings live) from a config's
- * project storage temp dir: `join(storage.getProjectTempDir(), 'chats')`.
- *
- * FINDING C3 — this 'chats' derivation is DUPLICATED across three call sites
- * that MUST stay in lockstep (there is no shared exported constant because
- * SessionControl's copy is private in packages/agents and core does not export
- * one). If the derivation ever changes, update ALL of:
- *   1. this function (the zed loadSession re-attach + corrupt-vs-missing probes);
- *   2. SessionControl.chatsDir() (packages/agents/src/api/control/sessionControl.ts)
- *      — the recording/resume path that WRITES the files;
- *   3. the `chatsDir` passed into SessionRecordingService's config (the core
- *      recording layer that materializes `<chatsDir>/session-*.jsonl`).
- * A drift in any one silently breaks the probe↔recording filename match.
+ * The chats directory (where session recordings live), delegated to
+ * Storage.getProjectChatsDir() — the single source of truth shared with
+ * SessionControl.chatsDir() (the recording/resume path that WRITES the files),
+ * so the probe↔recording filename match can never drift on the location
+ * (FINDING C3).
  */
 function chatsDirFor(config: Config): string {
-  return path.join(config.storage.getProjectTempDir(), 'chats');
+  return config.storage.getProjectChatsDir();
 }
 
 /**

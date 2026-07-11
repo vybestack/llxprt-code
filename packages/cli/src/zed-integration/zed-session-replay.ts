@@ -118,7 +118,7 @@ export function mapHistoryToSessionUpdates(
  * Appends the SessionUpdate(s) for a single (speaker, block) pair to `out`,
  * mutating `pending` for tool-call lifecycle tracking. Text/thinking map to at
  * most one update; an ai tool_call emits its in_progress start and marks the id
- * pending; a tool tool_response emits its terminal update only when it pairs
+ * pending; a tool-speaker tool_response emits its terminal update only when it pairs
  * with a pending start (see appendToolResponseUpdate).
  */
 function appendBlockUpdates(
@@ -304,16 +304,25 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
 
+/** The valid IContent speaker discriminators a persisted item may carry. */
+const VALID_SPEAKERS: ReadonlySet<IContent['speaker']> = new Set([
+  'human',
+  'ai',
+  'tool',
+]);
+
 /**
  * Narrows an UNTRUSTED persisted history entry to a renderable IContent — a
- * non-null object whose `blocks` is an array (FINDING D1). Returns null for a
- * null/undefined item or one whose blocks is missing/non-array (a
+ * non-null object whose `speaker` is a valid discriminator ('human' | 'ai' |
+ * 'tool') and whose `blocks` is an array (FINDING D1). Returns null for a
+ * null/undefined item or one whose speaker/blocks is missing/invalid (a
  * corrupt/truncated JSONL line that still JSON-parsed), so the caller skips it
- * rather than throwing on `item.blocks`. The array ELEMENTS deliberately stay
- * `unknown`: the caller narrows each one with {@link asRenderableBlock} (D1 at
- * the block level) before use, and the type-specific fields are then guarded by
- * the per-block D2/D4 checks. This function only guarantees `blocks` is iterable
- * — it does NOT (and must not) pretend the raw elements are valid ContentBlocks.
+ * rather than throwing on `item.blocks` or silently mapping an unknown speaker.
+ * The array ELEMENTS deliberately stay `unknown`: the caller narrows each one
+ * with {@link asRenderableBlock} (D1 at the block level) before use, and the
+ * type-specific fields are then guarded by the per-block D2/D4 checks. This
+ * function only guarantees the speaker union and that `blocks` is iterable — it
+ * does NOT (and must not) pretend the raw elements are valid ContentBlocks.
  */
 function asRenderableContent(
   value: unknown,
@@ -322,6 +331,9 @@ function asRenderableContent(
     return null;
   }
   const record = value as { speaker?: unknown; blocks?: unknown };
+  if (!VALID_SPEAKERS.has(record.speaker as IContent['speaker'])) {
+    return null;
+  }
   if (!Array.isArray(record.blocks)) {
     return null;
   }
@@ -360,7 +372,7 @@ function asRenderableBlock(value: unknown): ContentBlock | null {
 }
 
 /**
- * tool tool_response -> terminal tool_call_update. Status is 'failed' when the
+ * tool-speaker tool_response -> terminal tool_call_update. Status is 'failed' when the
  * block carries an error (ToolResponseBlock.error) OR its result is an object
  * with a non-empty string `error` property OR a nested `error.message` string
  * (the { error } and { error: { message } } failure shapes produced by

@@ -55,6 +55,24 @@ describe('mapHistoryToSessionUpdates — malformed persisted history (issue #160
     expect(mapHistoryToSessionUpdates(history)).toStrictEqual([]);
   });
 
+  it.each([
+    ['missing', undefined],
+    ['null', null],
+    ['a number', 42],
+    ['an unknown string', 'narrator'],
+  ])(
+    'skips an item whose speaker is %s (not human/ai/tool) instead of mapping it (FINDING D1)',
+    (_label, badSpeaker) => {
+      const history = [
+        {
+          speaker: badSpeaker,
+          blocks: [{ type: 'text', text: 'should not be replayed' }],
+        } as unknown as IContent,
+      ];
+      expect(mapHistoryToSessionUpdates(history)).toStrictEqual([]);
+    },
+  );
+
   it('continues replaying VALID items after skipping a malformed one (FINDING D1)', () => {
     const validItem: IContent = {
       speaker: 'human',

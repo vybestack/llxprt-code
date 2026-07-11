@@ -564,6 +564,13 @@ Session lifecycle: `resume(target, options?)`, `createCheckpoint(label?)`,
 `restoreCheckpoint(id)`, `listCheckpoints()`, `setRecording(state)`,
 `getRecording()`.
 
+`resume()` returns the reconstructed history
+(`Promise<readonly AgentHistoryItem[]>`) so callers can replay the restored
+conversation without a lossy `getHistory()` round-trip (previously
+`Promise<void>`; callers that ignore the return value are source-compatible).
+`setRecording({ enabled: true })` records continuously: it snapshots the
+current history and appends every subsequent turn to the session JSONL file.
+
 #### `agent.hooks` — `AgentHookControl`
 
 Lifecycle hooks: `onHookExecution(cb)`, `triggerSessionStart()`,

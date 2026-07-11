@@ -882,13 +882,15 @@ export class SessionControl implements AgentSessionControl {
   // ─── Path derivation ─────────────────────────────────────────────────────
 
   /**
-   * Derives the chats directory (where session recordings live) from the
-   * project storage temp dir, matching the CLI's derivation.
+   * The chats directory (where session recordings live), delegated to
+   * Storage.getProjectChatsDir() — the single source of truth every
+   * reader/prober shares, so the recording writer and the probes can never
+   * drift apart on the location.
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
   private chatsDir(): string {
-    return join(this.deps.config.storage.getProjectTempDir(), 'chats');
+    return this.deps.config.storage.getProjectChatsDir();
   }
 
   /**

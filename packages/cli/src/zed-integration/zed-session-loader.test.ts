@@ -28,11 +28,12 @@ import {
 const PROJECT_TEMP_DIR = '/tmp/llxprt-project-abc';
 const EXPECTED_CHATS_DIR = path.join(PROJECT_TEMP_DIR, 'chats');
 
-/** Config whose storage.getProjectTempDir drives the chats-dir derivation. */
+/** Config whose storage.getProjectChatsDir drives the chats-dir derivation. */
 function buildConfig(): Config {
   return {
     storage: {
       getProjectTempDir: () => PROJECT_TEMP_DIR,
+      getProjectChatsDir: () => EXPECTED_CHATS_DIR,
     },
   } as unknown as Config;
 }
@@ -49,7 +50,7 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
     vi.restoreAllMocks();
   });
 
-  it('derives the chats dir from storage.getProjectTempDir()/chats and reports true when a matching recording exists', async () => {
+  it('derives the chats dir from storage.getProjectChatsDir() and reports true when a matching recording exists', async () => {
     const sessionId = 'sess-1234567890ab';
     let listedDir: string | undefined;
     const lister: ChatSessionFileLister = async (dir) => {

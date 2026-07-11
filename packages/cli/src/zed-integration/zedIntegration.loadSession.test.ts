@@ -163,11 +163,12 @@ function buildBaseConfig(): Config {
     getTargetDir: () => '/project',
     getMaxSessionTurns: () => 50,
     // The re-attach + corrupt-vs-missing probes derive the chats dir from
-    // storage.getProjectTempDir(); point it at a dir that never exists so the
+    // storage.getProjectChatsDir(); point it at a dir that never exists so the
     // disk-resume probe's REAL readdir hits ENOENT (falling back to the plain
     // mapping) while the injected re-attach lister decides the re-attach branch.
     storage: {
       getProjectTempDir: () => NONEXISTENT_CHATS_PARENT,
+      getProjectChatsDir: () => path.join(NONEXISTENT_CHATS_PARENT, 'chats'),
     },
   } as unknown as Config;
 }

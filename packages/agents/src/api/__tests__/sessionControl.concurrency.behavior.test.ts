@@ -52,14 +52,17 @@ function humanText(text: string): IContent {
 
 /**
  * Minimal in-memory Config projection exposing ONLY the surface SessionControl
- * touches: a fixed project root, a storage.getProjectTempDir() that drives the
- * chats-dir derivation, a workspace context, and the recording-service
+ * touches: a fixed project root, a storage whose getProjectChatsDir() drives
+ * the chats-dir derivation, a workspace context, and the recording-service
  * get/set pair. The installed recording service is observable so A2 can assert
  * Config was not left pointing at a half-installed resumed service.
  */
 interface FakeConfig {
   readonly getProjectRoot: () => string;
-  readonly storage: { readonly getProjectTempDir: () => string };
+  readonly storage: {
+    readonly getProjectTempDir: () => string;
+    readonly getProjectChatsDir: () => string;
+  };
   readonly getWorkspaceContext: () => {
     readonly getDirectories: () => readonly string[];
   };
@@ -73,7 +76,10 @@ function buildFakeConfig(projectRoot: string): FakeConfig {
   let installed: SessionRecordingServiceType | undefined;
   return {
     getProjectRoot: () => projectRoot,
-    storage: { getProjectTempDir: () => projectRoot },
+    storage: {
+      getProjectTempDir: () => projectRoot,
+      getProjectChatsDir: () => join(projectRoot, 'chats'),
+    },
     getWorkspaceContext: () => ({ getDirectories: () => [projectRoot] }),
     setSessionRecordingService: (service) => {
       installed = service;

@@ -18,6 +18,7 @@ import {
   isWithinRoot,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
+import type { FileSystemService } from '@vybestack/llxprt-code-storage';
 
 /**
  * Resolves the effective target directory for a session from an optional
@@ -51,7 +52,7 @@ export function resolveSessionTargetDir(
  */
 export function createSessionScopedConfig(
   config: Config,
-  initialFileSystemService: ReturnType<Config['getFileSystemService']>,
+  initialFileSystemService: FileSystemService,
   targetDir: string = config.getTargetDir(),
 ): Config {
   let fileSystemService = initialFileSystemService;
@@ -63,7 +64,7 @@ export function createSessionScopedConfig(
         return () => fileSystemService;
       }
       if (property === 'setFileSystemService') {
-        return (nextFileSystemService: typeof fileSystemService) => {
+        return (nextFileSystemService: FileSystemService) => {
           fileSystemService = nextFileSystemService;
         };
       }

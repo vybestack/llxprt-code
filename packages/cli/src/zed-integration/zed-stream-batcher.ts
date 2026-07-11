@@ -34,6 +34,7 @@ export class StreamBatcher {
   private pendingChunks: Array<{ kind: 'text' | 'thought'; text: string }> = [];
   private batchTimer: ReturnType<typeof setTimeout> | null = null;
   private flushChain: Promise<void> = Promise.resolve();
+  private disposed = false;
   private readonly logger: DebugLogger;
 
   constructor(
@@ -49,6 +50,9 @@ export class StreamBatcher {
   }
 
   append(text: string, isThought: boolean): void {
+    if (this.disposed) {
+      return;
+    }
     const filterResult = isThought
       ? this.emojiFilter.filterText(text)
       : this.emojiFilter.filterStreamChunk(text);
@@ -117,11 +121,15 @@ export class StreamBatcher {
 
   /**
    * Clears any pending batch timer and drops buffered chunks so no timer fires
-   * after the owning prompt completes/aborts (FINDING F9). Idempotent and safe
-   * to call after {@link flush}; it does NOT emit, so any pending chunks must be
-   * flushed first (the prompt path flushes then disposes).
+   * after the owning prompt completes/aborts (FINDING F9), and marks the batcher
+   * disposed so a late {@link append} after the turn ends is a silent no-op
+   * (nothing new can enter the flush chain). Idempotent and safe to call after
+   * {@link flush}; it does NOT emit, so any pending chunks must be flushed first
+   * (the prompt path flushes then disposes). An in-flight flush link is left to
+   * settle naturally — it only drains the (now empty) pending queue.
    */
   dispose(): void {
+    this.disposed = true;
     if (this.batchTimer !== null) {
       clearTimeout(this.batchTimer);
       this.batchTimer = null;

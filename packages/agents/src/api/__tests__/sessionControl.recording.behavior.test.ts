@@ -82,8 +82,11 @@ async function withIsolatedAgent(
   // The temp dirs must be removed on EVERY exit path, including a buildAgent
   // rejection (which would otherwise leak the just-created workingDir), a
   // scenario failure, and — FINDING F1 — a cleanup() rejection, which must NOT
-  // skip the rmSync calls. cleanup() is nested in its own try/finally so both
-  // removals always run while the original error still propagates.
+  // skip the rmSync calls. Note that only ONE error can ultimately propagate:
+  // if fn() throws AND cleanup() then also rejects in the finally, cleanup()'s
+  // error replaces fn()'s. That is the standard try/finally trade-off and
+  // acceptable here — either failure fails the test loudly; the invariant this
+  // helper guarantees is only that no temp dir survives.
   try {
     const { agent, cleanup } = await buildAgent(fixture, { workingDir });
     try {
