@@ -95,7 +95,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
     ]);
   });
 
-  it('maps an ai tool_call block to a completed tool_call with inferred kind + rawInput', () => {
+  it('maps a lone ai tool_call (no recorded response) to an in_progress tool_call matching the live start shape, then a synthetic failed update (FINDING 2/3: orphaned/interrupted turn)', () => {
     const history: IContent[] = [
       {
         speaker: 'ai',
@@ -109,14 +109,26 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
         ],
       },
     ];
+    // Live start shape (emitToolCallStart): in_progress, empty content, inferred
+    // locations + kind, rawInput. Because the call has NO paired response in the
+    // history, a terminal failed tool_call_update (empty content) is synthesized
+    // so the client does not render a perpetually-running tool.
     expect(mapHistoryToSessionUpdates(history)).toStrictEqual([
       {
         sessionUpdate: 'tool_call',
         toolCallId: 'call-1',
         title: 'read_file',
-        status: 'completed',
+        status: 'in_progress',
+        content: [],
+        locations: [{ path: '/project/a.ts' }],
         kind: 'read',
         rawInput: { absolute_path: '/project/a.ts' },
+      },
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'call-1',
+        status: 'failed',
+        content: [],
       },
     ]);
   });
@@ -144,6 +156,84 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
           {
             type: 'content',
             content: { type: 'text', text: 'file body contents' },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('maps a { output } success result to a completed tool_call_update carrying the output text (FINDING 3)', () => {
+    const history: IContent[] = [
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call-out',
+            toolName: 'run_shell_command',
+            result: { output: 'x' },
+          },
+        ],
+      },
+    ];
+    expect(mapHistoryToSessionUpdates(history)).toStrictEqual([
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'call-out',
+        status: 'completed',
+        content: [{ type: 'content', content: { type: 'text', text: 'x' } }],
+      },
+    ]);
+  });
+
+  it('maps a { error } result to a FAILED tool_call_update carrying the error text (FINDING 3)', () => {
+    const history: IContent[] = [
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call-err',
+            toolName: 'run_shell_command',
+            result: { error: 'y' },
+          },
+        ],
+      },
+    ];
+    expect(mapHistoryToSessionUpdates(history)).toStrictEqual([
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'call-err',
+        status: 'failed',
+        content: [{ type: 'content', content: { type: 'text', text: 'y' } }],
+      },
+    ]);
+  });
+
+  it('maps a tool_response whose block.error is set to a FAILED tool_call_update carrying the error text (FINDING 3)', () => {
+    const history: IContent[] = [
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call-boom',
+            toolName: 'write_file',
+            result: {},
+            error: 'permission denied',
+          },
+        ],
+      },
+    ];
+    expect(mapHistoryToSessionUpdates(history)).toStrictEqual([
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'call-boom',
+        status: 'failed',
+        content: [
+          {
+            type: 'content',
+            content: { type: 'text', text: 'permission denied' },
           },
         ],
       },
@@ -193,7 +283,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
     expect(mapHistoryToSessionUpdates(history)).toStrictEqual([]);
   });
 
-  it('omits kind for an unknown tool name but still emits the tool_call', () => {
+  it('omits kind for an unknown tool name but still emits the in_progress tool_call (with no inferable locations)', () => {
     const history: IContent[] = [
       {
         speaker: 'ai',
@@ -212,10 +302,115 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
       sessionUpdate: 'tool_call',
       toolCallId: 'call-x',
       title: 'totally_unknown_tool',
-      status: 'completed',
+      status: 'in_progress',
+      content: [],
+      locations: [],
       rawInput: { foo: 'bar' },
     });
     expect('kind' in update).toBe(false);
+  });
+
+  it('pairs an ai tool_call with its later tool_response: in_progress start THEN completed update, no synthetic failure (FINDING 2/3 ordered pairing)', () => {
+    const history: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'paired-1',
+            name: 'read_file',
+            parameters: { absolute_path: '/project/z.ts' },
+          },
+        ],
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'paired-1',
+            toolName: 'read_file',
+            result: { output: 'paired body' },
+          },
+        ],
+      },
+    ];
+    expect(mapHistoryToSessionUpdates(history)).toStrictEqual([
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'paired-1',
+        title: 'read_file',
+        status: 'in_progress',
+        content: [],
+        locations: [{ path: '/project/z.ts' }],
+        kind: 'read',
+        rawInput: { absolute_path: '/project/z.ts' },
+      },
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'paired-1',
+        status: 'completed',
+        content: [
+          { type: 'content', content: { type: 'text', text: 'paired body' } },
+        ],
+      },
+    ]);
+  });
+
+  it('orders pairing across a multi-tool conversation: each call starts in_progress and completes from its own response (FINDING 2/3)', () => {
+    const history: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 't1',
+            name: 'read_file',
+            parameters: { absolute_path: '/a' },
+          },
+          {
+            type: 'tool_call',
+            id: 't2',
+            name: 'run_shell_command',
+            parameters: { command: 'ls' },
+          },
+        ],
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 't1',
+            toolName: 'read_file',
+            result: { output: 'first' },
+          },
+        ],
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 't2',
+            toolName: 'run_shell_command',
+            result: { error: 'boom' },
+          },
+        ],
+      },
+    ];
+    expect(
+      mapHistoryToSessionUpdates(history).map((u) => ({
+        kind: u.sessionUpdate,
+        id: (u as { toolCallId?: string }).toolCallId,
+        status: (u as { status?: string }).status,
+      })),
+    ).toStrictEqual([
+      { kind: 'tool_call', id: 't1', status: 'in_progress' },
+      { kind: 'tool_call', id: 't2', status: 'in_progress' },
+      { kind: 'tool_call_update', id: 't1', status: 'completed' },
+      { kind: 'tool_call_update', id: 't2', status: 'failed' },
+    ]);
   });
 
   it('preserves whole-conversation order across a multi-block transcript', () => {
@@ -434,6 +629,118 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     expect(stub.dispose).toHaveBeenCalledTimes(1);
     // No transcript was streamed for a failed load.
     expect(connection.sessionUpdateKinds()).toStrictEqual([]);
+  });
+
+  it('maps a non-not-found resume failure (locked/corrupt) to RequestError.internalError (code -32603) carrying the underlying detail (FINDING 4)', async () => {
+    const stub = buildStubAgent({
+      resumeError: new Error(
+        'Failed to resume session: Failed to replay session: Missing or corrupt session_start event',
+      ),
+    });
+    mockFromConfig.mockResolvedValue(stub.agent);
+
+    const connection = new RecordingConnection();
+    const zedAgent = await makeZedAgent(connection);
+
+    let caught: unknown;
+    try {
+      await zedAgent.loadSession({
+        sessionId: 'corrupt-session',
+        cwd: '/project',
+        mcpServers: [],
+      } as acp.LoadSessionRequest);
+    } catch (e) {
+      caught = e;
+    }
+
+    // A corrupt/locked reason is NOT resourceNotFound: it is surfaced as an
+    // internal error so the client sees the session exists but could not load.
+    expect(caught).toBeInstanceOf(RequestError);
+    expect((caught as RequestError).code).toBe(-32603);
+    // The underlying core detail is carried in the message AND the data payload
+    // so the client can show why the load failed (actionable, not "not found").
+    expect((caught as RequestError).message).toContain('corrupt');
+    expect((caught as RequestError).data).toMatchObject({
+      sessionId: 'corrupt-session',
+    });
+    expect(
+      ((caught as RequestError).data as { reason: string }).reason,
+    ).toContain('corrupt');
+    // The freshly built agent was still torn down on the failure path.
+    expect(stub.dispose).toHaveBeenCalledTimes(1);
+    expect(connection.sessionUpdateKinds()).toStrictEqual([]);
+  });
+
+  it('does not leave a stale/half-dead session when the replacement resume fails, and a later successful load for the same id works (FINDING 1)', async () => {
+    // First load succeeds and installs a live in-memory session.
+    const firstStub = buildStubAgent({
+      resumeHistory: [
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'live session' }] },
+      ],
+    });
+    // Second load (a reconnect) builds a fresh agent whose resume REJECTS: the
+    // prior session was already disposed to release the on-disk lock, so this
+    // must NOT leave a half-dead entry behind.
+    const failingStub = buildStubAgent({
+      resumeError: new Error('Session is in use by another process'),
+    });
+    // Third load (a retry) succeeds again and must cleanly install.
+    const retryStub = buildStubAgent({
+      resumeHistory: [
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'retry session' }] },
+      ],
+    });
+    mockFromConfig
+      .mockResolvedValueOnce(firstStub.agent)
+      .mockResolvedValueOnce(failingStub.agent)
+      .mockResolvedValueOnce(retryStub.agent);
+
+    const connection = new RecordingConnection();
+    const zedAgent = await makeZedAgent(connection);
+
+    const params: acp.LoadSessionRequest = {
+      sessionId: 'lock-session',
+      cwd: '/project',
+      mcpServers: [],
+    } as acp.LoadSessionRequest;
+
+    // 1) Initial successful load installs a live session; nothing disposed yet.
+    await zedAgent.loadSession(params);
+    expect(firstStub.dispose).toHaveBeenCalledTimes(0);
+
+    // 2) Failing reload: surfaces the underlying detail, disposes the fresh
+    // (failing) agent, and leaves NO stale entry for the id.
+    let caught: unknown;
+    try {
+      await zedAgent.loadSession(params);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(RequestError);
+    // 'in use' is a lock reason (not not-found) -> internalError carrying detail.
+    expect((caught as RequestError).code).toBe(-32603);
+    expect((caught as RequestError).message).toContain('in use');
+    // The prior in-memory session was disposed FIRST (to release the on-disk
+    // lock the replacement needs), and the fresh failing agent was disposed on
+    // the failure path — each exactly once.
+    expect(firstStub.dispose).toHaveBeenCalledTimes(1);
+    expect(failingStub.dispose).toHaveBeenCalledTimes(1);
+    // Prompting the id now fails because NO stale entry survived the failed load.
+    await expect(
+      zedAgent.prompt({
+        sessionId: 'lock-session',
+        prompt: [{ type: 'text', text: 'are you there?' }],
+      } as acp.PromptRequest),
+    ).rejects.toThrow(/Session not found/);
+
+    // 3) A subsequent successful load for the SAME id works and streams again.
+    const response = await zedAgent.loadSession(params);
+    expect(response.modes?.currentModeId).toBe('default');
+    const agentTexts = connection
+      .onlySessionUpdates()
+      .filter((u) => u.sessionUpdate === 'agent_message_chunk')
+      .map((u) => (u as { content: { text: string } }).content.text);
+    expect(agentTexts).toStrictEqual(['live session', 'retry session']);
   });
 
   it('replaces a prior loaded session with the same id (reconnect friendliness)', async () => {

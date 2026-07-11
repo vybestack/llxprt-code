@@ -51,6 +51,7 @@ import {
   type PermissionRoundTripResult,
 } from './zed-tool-handler.js';
 import { mapHistoryToSessionUpdates } from './zed-session-replay.js';
+import { mapResumeError } from './zed-session-errors.js';
 import { StreamBatcher } from './zed-stream-batcher.js';
 
 export { parseZedAuthMethodId } from './zed-helpers.js';
@@ -249,12 +250,22 @@ export class ZedAgent {
    * session id, and `agent.session.resume` restores the history AND re-subscribes
    * continuous recording so subsequent turns keep appending to the SAME file.
    *
-   * Reconnect friendliness: if a session with this id is already loaded, the
-   * prior Session is disposed and replaced (Zed may call loadSession again on
-   * reconnect; replacing is friendlier than rejecting).
+   * Replace-order + lock semantics: an already-loaded same-id Session holds the
+   * on-disk session lock (SessionLockManager), so the fresh agent's resume CANNOT
+   * acquire the lock until the prior Session is disposed. Disposing first is
+   * therefore unavoidable. To keep the destructive step safe we (a) dispose the
+   * prior Session AND remove it from this.sessions up front so no half-dead entry
+   * survives a subsequent failure, then (b) build + resume the replacement; if
+   * that fails, the fresh agent is disposed and a precise RequestError (carrying
+   * the lower-layer reason, see mapResumeError) is thrown, leaving this.sessions
+   * with NO entry for the id so a later retry can cleanly load again. On success
+   * the replacement is installed and the restored transcript is streamed.
    *
-   * On resume failure (not found / locked / corrupted) a JSON-RPC
-   * resourceNotFound error is thrown carrying the session id.
+   * Full-replay-on-reconnect: even when a healthy in-memory Session already
+   * exists for this id, we still perform the disk-based replace (fresh agent +
+   * resume + replay) rather than short-circuiting, because Zed expects a complete
+   * history replay on every session/load (e.g. a client reconnect rebuilding its
+   * transcript). The in-memory Session is not a substitute for that replay.
    */
   async loadSession(
     params: acp.LoadSessionRequest,
@@ -262,35 +273,18 @@ export class ZedAgent {
     const { sessionId } = params;
     this.logger.debug(() => `loadSession - loading session ${sessionId}`);
 
+    // Dispose + drop any prior same-id Session FIRST so it releases the on-disk
+    // session lock the replacement resume needs, and so a resume failure below
+    // cannot leave a stale/half-disposed entry in this.sessions.
     const existing = this.sessions.get(sessionId);
     if (existing !== undefined) {
       this.sessions.delete(sessionId);
       await existing.dispose();
     }
 
-    const { agent, config: sessionConfig } = await this.buildSessionAgent(
+    const { session, history } = await this.buildAndResumeSession(
       sessionId,
       params.cwd,
-    );
-
-    let history: readonly IContent[];
-    try {
-      history = await agent.session.resume(sessionId);
-    } catch (error) {
-      // The resume machinery failed to discover/lock/replay the session. Tear
-      // down the freshly built agent so no lock/recording leaks, then surface a
-      // resourceNotFound JSON-RPC error (the closest ACP-standard code) rather
-      // than inventing a custom code.
-      await agent.dispose().catch(() => undefined);
-      this.logger.debug(() => `loadSession - resume failed: ${error}`);
-      throw acp.RequestError.resourceNotFound(sessionId);
-    }
-
-    const session = new Session(
-      sessionId,
-      agent,
-      sessionConfig,
-      this.connection,
     );
     this.sessions.set(sessionId, session);
 
@@ -301,9 +295,44 @@ export class ZedAgent {
     return {
       modes: {
         availableModes: buildAvailableModes(),
-        currentModeId: agent.getApprovalMode(),
+        currentModeId: session.getApprovalMode(),
       },
     };
+  }
+
+  /**
+   * Builds the replacement Agent for a loadSession and resumes its recorded
+   * history. On resume failure the freshly built agent is disposed (so no
+   * lock/recording leaks) and the failure is mapped to a precise ACP
+   * RequestError via mapResumeError — a not-found reason becomes resourceNotFound
+   * while a locked/corrupt/other reason becomes internalError carrying the
+   * underlying detail. Extracted from loadSession so the destructive dispose-first
+   * orchestration and the build/resume/error-mapping stay individually small and
+   * within the lint complexity/line budgets.
+   */
+  private async buildAndResumeSession(
+    sessionId: string,
+    cwd: string | undefined,
+  ): Promise<{ session: Session; history: readonly IContent[] }> {
+    const { agent, config: sessionConfig } = await this.buildSessionAgent(
+      sessionId,
+      cwd,
+    );
+    let history: readonly IContent[];
+    try {
+      history = await agent.session.resume(sessionId);
+    } catch (error) {
+      await agent.dispose().catch(() => undefined);
+      this.logger.debug(() => `loadSession - resume failed: ${error}`);
+      throw mapResumeError(sessionId, error);
+    }
+    const session = new Session(
+      sessionId,
+      agent,
+      sessionConfig,
+      this.connection,
+    );
+    return { session, history };
   }
 
   /**
@@ -469,6 +498,15 @@ export class Session {
     }
     this.agent.setApprovalMode(mode.id as ApprovalMode);
     return {};
+  }
+
+  /**
+   * Returns the session's current approval mode, delegating to the underlying
+   * Agent. Used by loadSession to advertise the resumed session's currentModeId
+   * without reaching through to the private agent from the ZedAgent orchestrator.
+   */
+  getApprovalMode(): ApprovalMode {
+    return this.agent.getApprovalMode();
   }
 
   async cancelPendingPrompt(): Promise<void> {

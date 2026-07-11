@@ -231,7 +231,7 @@ function buildConfirmationLocations(
   return path === undefined ? [] : [buildLocation(path)];
 }
 
-function buildToolLocations(args: Dict): acp.ToolCallLocation[] {
+export function buildToolLocations(args: Dict): acp.ToolCallLocation[] {
   const paths = [
     firstString(args, [
       'absolute_path',

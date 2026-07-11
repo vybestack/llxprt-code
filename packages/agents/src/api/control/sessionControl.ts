@@ -47,6 +47,7 @@ import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type {
   AgentSessionControl,
   SessionCheckpoint,
@@ -56,6 +57,15 @@ import type {
 const CHECKPOINT_PREFIX = 'checkpoint-';
 const CHECKPOINT_SUFFIX = '.json';
 const RECORDING_FORMAT = 'jsonl';
+
+/**
+ * Module logger mirroring the neighboring toolControl.ts precedent
+ * (a module-scoped core DebugLogger). Used to surface an otherwise-silent
+ * recording-subscription gap so lost continuous recording is diagnosable.
+ * @plan:PLAN-20260617-COREAPI.P20
+ * @requirement:REQ-010
+ */
+const logger = new DebugLogger('llxprt:agents:session-control');
 
 /**
  * The shape of a parsed checkpoint file payload (Logger.saveCheckpoint writes
@@ -400,6 +410,16 @@ export class SessionControl implements AgentSessionControl {
     const historyService = this.deps.resolveClient().getHistoryService();
     if (historyService !== null) {
       integration.subscribeToHistory(historyService);
+    } else {
+      // No HistoryService yet: the integration is created + stored but left
+      // unsubscribed, so NO subsequent turn is appended until a later
+      // start/resume re-attempts the subscription. Left silent this is an
+      // invisible continuous-recording loss; warn so it is diagnosable.
+      logger.warn(
+        () =>
+          `subscribeIntegration: HistoryService unavailable for session ${this.deps.sessionId()}; ` +
+          `recording integration left unsubscribed (subsequent turns will not be recorded until re-subscribed)`,
+      );
     }
     this.integration = integration;
   }

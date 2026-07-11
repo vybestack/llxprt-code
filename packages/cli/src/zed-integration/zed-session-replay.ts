@@ -16,6 +16,16 @@
  * the ordered list of ACP {@link acp.SessionUpdate} notifications the live
  * streaming path (StreamBatcher / zed-tool-handler.ts) would have produced.
  *
+ * Tool-call fidelity: the live path emits a tool_call (status 'in_progress',
+ * empty content, inferred locations/kind) at call time and a SEPARATE
+ * tool_call_update (completed/failed with the result text) when the response
+ * arrives. Replay mirrors that two-update shape so a reconstructed transcript is
+ * wire-indistinguishable from a live one: each recorded ai ToolCallBlock emits
+ * the in_progress tool_call, and its paired tool ToolResponseBlock emits the
+ * terminal tool_call_update. A ToolCallBlock with no recorded response (an
+ * interrupted turn) gets a synthetic 'failed' tool_call_update so the client
+ * never renders a perpetually-running tool.
+ *
  * It is kept separate from zedIntegration.ts (and free of any I/O) so the
  * mapping stays small, individually unit-testable against the v1 snake_case
  * wire discriminators, and lint-clean under the complexity guardrails.
@@ -30,63 +40,102 @@ import type {
   ToolCallBlock,
   ToolResponseBlock,
 } from '@vybestack/llxprt-code-core';
-import { inferToolKind } from './zed-tool-handler.js';
+import { buildToolLocations, inferToolKind } from './zed-tool-handler.js';
 import { extractToolResultText } from './zed-content-utils.js';
+
+/** Readonly JSON-object shape used when narrowing recorded `unknown` payloads. */
+type Dict = Readonly<Record<string, unknown>>;
 
 /**
  * Maps a full resumed history (ordered IContent[]) to the ordered ACP
  * SessionUpdate notifications that replay the conversation. Empty/whitespace
- * text chunks are skipped; unmappable blocks (media, code, empty tool text)
- * contribute no update. The output order preserves the history order and, per
- * message, the block order — matching how the live path emits chunks.
+ * text chunks are skipped; unmappable blocks (media, code) contribute no update.
+ * Each ai tool_call contributes an in_progress tool_call PLUS — when the call
+ * has no recorded response — a terminal failed tool_call_update; a recorded tool
+ * response contributes the matching completed/failed tool_call_update. The
+ * output preserves the history order and, per message, the block order.
  */
 export function mapHistoryToSessionUpdates(
   items: readonly IContent[],
 ): acp.SessionUpdate[] {
+  const respondedCallIds = collectRespondedCallIds(items);
   const updates: acp.SessionUpdate[] = [];
   for (const item of items) {
-    appendMessageUpdates(item, updates);
+    for (const block of item.blocks) {
+      appendBlockUpdates(item.speaker, block, respondedCallIds, updates);
+    }
   }
   return updates;
 }
 
 /**
- * Appends the SessionUpdates for a single IContent message, dispatching on the
- * speaker so each block is mapped by the rules for that role.
+ * Pre-scans the history for the callIds that DO have a tool ToolResponseBlock,
+ * so the block pass can tell a paired tool_call (whose response will emit the
+ * terminal update) from an orphaned one (interrupted turn) that needs a
+ * synthetic failed update. Kept as a separate pure pass so the per-block mapping
+ * stays a simple forward walk.
  */
-function appendMessageUpdates(item: IContent, out: acp.SessionUpdate[]): void {
-  for (const block of item.blocks) {
-    const update = mapBlock(item.speaker, block);
-    if (update !== null) {
-      out.push(update);
+function collectRespondedCallIds(
+  items: readonly IContent[],
+): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const item of items) {
+    if (item.speaker !== 'tool') {
+      continue;
+    }
+    for (const block of item.blocks) {
+      if (block.type === 'tool_response') {
+        ids.add(block.callId);
+      }
     }
   }
+  return ids;
 }
 
 /**
- * Maps a single (speaker, block) pair to at most one SessionUpdate, or null when
- * the block has no faithful replay representation (empty text, media/code, a
- * human-authored non-text block, etc.).
+ * Appends the SessionUpdate(s) for a single (speaker, block) pair to `out`. Most
+ * blocks map to at most one update; an ai tool_call may append two (the
+ * in_progress tool_call and, when orphaned, a terminal failed update).
  */
-function mapBlock(
+function appendBlockUpdates(
   speaker: IContent['speaker'],
   block: ContentBlock,
-): acp.SessionUpdate | null {
+  respondedCallIds: ReadonlySet<string>,
+  out: acp.SessionUpdate[],
+): void {
   switch (block.type) {
     case 'text':
-      return mapTextBlock(speaker, block);
+      pushDefined(out, mapTextBlock(speaker, block));
+      return;
     case 'thinking':
-      return mapThinkingBlock(speaker, block);
+      pushDefined(out, mapThinkingBlock(speaker, block));
+      return;
     case 'tool_call':
-      return speaker === 'ai' ? mapToolCallBlock(block) : null;
+      if (speaker === 'ai') {
+        appendToolCallUpdates(block, respondedCallIds, out);
+      }
+      return;
     case 'tool_response':
-      return speaker === 'tool' ? mapToolResponseBlock(block) : null;
+      if (speaker === 'tool') {
+        out.push(mapToolResponseBlock(block));
+      }
+      return;
     // Media/code blocks are intentionally skipped in v1 replay: ACP has no
     // lossless chunk for a stored CodeBlock, and re-streaming base64 MediaBlock
     // payloads on every reconnect would be wasteful and is not required to
     // reconstruct the readable transcript.
     default:
-      return null;
+      return;
+  }
+}
+
+/** Pushes `update` onto `out` when it is non-null (small readability helper). */
+function pushDefined(
+  out: acp.SessionUpdate[],
+  update: acp.SessionUpdate | null,
+): void {
+  if (update !== null) {
+    out.push(update);
   }
 }
 
@@ -139,32 +188,73 @@ function mapThinkingBlock(
 }
 
 /**
- * ai tool_call -> tool_call update (status 'completed', since a stored history
- * block represents a call that already ran). Field names mirror the live start
- * path in zed-tool-handler.ts (toolCallId/title/kind/rawInput); kind is inferred
- * from the tool name via the SAME TOOL_KIND_BY_NAME table.
+ * Appends the replay updates for an ai ToolCallBlock: first the in_progress
+ * tool_call matching the live start shape, then — ONLY when the call has no
+ * recorded response — a terminal failed tool_call_update (empty content) so an
+ * interrupted turn does not leave a perpetually-running tool on the client. A
+ * call WITH a recorded response gets its terminal update from that response
+ * block (mapToolResponseBlock), preserving the live "start then complete" pair.
  */
-function mapToolCallBlock(block: ToolCallBlock): acp.SessionUpdate {
+function appendToolCallUpdates(
+  block: ToolCallBlock,
+  respondedCallIds: ReadonlySet<string>,
+  out: acp.SessionUpdate[],
+): void {
+  out.push(buildToolCallStart(block));
+  if (!respondedCallIds.has(block.id)) {
+    out.push({
+      sessionUpdate: 'tool_call_update',
+      toolCallId: block.id,
+      status: 'failed',
+      content: [],
+    });
+  }
+}
+
+/**
+ * ai tool_call -> in_progress tool_call. Field names + shape mirror the live
+ * start path in zed-tool-handler.ts (emitToolCallStart): status 'in_progress',
+ * empty content, locations inferred from the recorded parameters via the SAME
+ * buildToolLocations helper, kind inferred via the SAME inferToolKind table, and
+ * rawInput carrying the narrowed parameters. kind is omitted (rather than sent
+ * as undefined) for unknown tools; both are wire-identical after JSON encoding.
+ */
+function buildToolCallStart(block: ToolCallBlock): acp.SessionUpdate {
   const kind = inferToolKind(block.name);
+  const rawInput = toRawInput(block.parameters);
   return {
     sessionUpdate: 'tool_call',
     toolCallId: block.id,
     title: block.name,
-    status: 'completed',
+    status: 'in_progress',
+    content: [],
+    locations: buildToolLocations(rawInput ?? {}),
     ...(kind !== undefined ? { kind } : {}),
-    rawInput: toRawInput(block.parameters),
+    ...(rawInput !== undefined ? { rawInput } : {}),
   };
 }
 
 /**
- * tool tool_response -> tool_call_update (status 'completed'). When the stored
- * result renders to non-empty text (via the SAME extractToolResultText helper
- * the live tool path uses), it is included as a single text ToolCallContent;
- * otherwise the update carries an empty content array (mirroring the live
- * suppressed-display behavior).
+ * tool tool_response -> terminal tool_call_update. Status is 'failed' when the
+ * block carries an error (ToolResponseBlock.error) OR its result is an object
+ * with a string `error` property (the { error } failure shape produced by
+ * createErrorResponse), else 'completed'. The displayed text is extracted with a
+ * precedence that mirrors how results are actually recorded: result.output
+ * (the { output } success shape), then a string result.content, then the failure
+ * error text, then the shared extractToolResultText fallback. Only non-empty
+ * text yields a content entry; otherwise the update carries an empty content
+ * array (mirroring the live suppressed-display behavior).
+ *
+ * Diff replay gap: the recorded IContent does NOT persist the display/FileDiff
+ * metadata the live path uses to emit a { type: 'diff' } ToolCallContent, so a
+ * faithful diff replay is not reconstructable from recorded history yet. It is
+ * intentionally deferred here (tracked on issue #1604); replay surfaces the
+ * textual result instead of a structured diff.
  */
 function mapToolResponseBlock(block: ToolResponseBlock): acp.SessionUpdate {
-  const text = extractToolResultText({ llmContent: block.result });
+  const record = asRecord(block.result);
+  const failed = isFailedResponse(block, record);
+  const text = extractResponseText(block, record, failed);
   const content: acp.ToolCallContent[] =
     text !== null && text.length > 0
       ? [{ type: 'content', content: { type: 'text', text } }]
@@ -172,9 +262,70 @@ function mapToolResponseBlock(block: ToolResponseBlock): acp.SessionUpdate {
   return {
     sessionUpdate: 'tool_call_update',
     toolCallId: block.callId,
-    status: 'completed',
+    status: failed ? 'failed' : 'completed',
     content,
   };
+}
+
+/**
+ * A recorded tool response is a failure when its block carries a non-empty
+ * error string OR its result object exposes a non-empty string `error` property
+ * (the { error } shape emitted by the core createErrorResponse path).
+ */
+function isFailedResponse(
+  block: ToolResponseBlock,
+  record: Dict | null,
+): boolean {
+  if (typeof block.error === 'string' && block.error.length > 0) {
+    return true;
+  }
+  return typeof record?.error === 'string' && record.error.length > 0;
+}
+
+/**
+ * Extracts the display text for a tool response with the precedence documented
+ * on mapToolResponseBlock: result.output, then string result.content, then (for
+ * failures) the error text, then the shared extractToolResultText fallback.
+ * Returns null when no non-empty text is representable.
+ */
+function extractResponseText(
+  block: ToolResponseBlock,
+  record: Dict | null,
+  failed: boolean,
+): string | null {
+  const output = record?.output;
+  if (typeof output === 'string' && output.length > 0) {
+    return output;
+  }
+  const inlineContent = record?.content;
+  if (typeof inlineContent === 'string' && inlineContent.length > 0) {
+    return inlineContent;
+  }
+  if (failed) {
+    const errorText = failureText(block, record);
+    if (errorText !== null) {
+      return errorText;
+    }
+  }
+  return extractToolResultText({ llmContent: block.result });
+}
+
+/**
+ * Returns the failure text for a failed response: the block-level error string
+ * when present, else a string result.error property, else null.
+ */
+function failureText(
+  block: ToolResponseBlock,
+  record: Dict | null,
+): string | null {
+  if (typeof block.error === 'string' && block.error.length > 0) {
+    return block.error;
+  }
+  const resultError = record?.error;
+  if (typeof resultError === 'string' && resultError.length > 0) {
+    return resultError;
+  }
+  return null;
 }
 
 /**
@@ -182,15 +333,19 @@ function mapToolResponseBlock(block: ToolResponseBlock): acp.SessionUpdate {
  * shape ACP expects: a JSON object, or undefined when the stored value is not a
  * plain object (so the wire payload never carries a non-object rawInput).
  */
-function toRawInput(
-  parameters: unknown,
-): Readonly<Record<string, unknown>> | undefined {
-  if (
-    parameters !== null &&
-    typeof parameters === 'object' &&
-    !Array.isArray(parameters)
-  ) {
-    return parameters as Readonly<Record<string, unknown>>;
+function toRawInput(parameters: unknown): Dict | undefined {
+  const record = asRecord(parameters);
+  return record ?? undefined;
+}
+
+/**
+ * Narrows an unknown value to a readonly JSON object (non-null, non-array
+ * object), or null otherwise. Local to this module so the mapping stays
+ * self-contained and pure.
+ */
+function asRecord(value: unknown): Dict | null {
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Dict;
   }
-  return undefined;
+  return null;
 }
