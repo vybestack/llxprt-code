@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { fileURLToPath } from 'node:url';
 
 import { createLspClient } from '../src/service/lsp-client';

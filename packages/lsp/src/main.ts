@@ -255,7 +255,23 @@ function createWriteStreamFromFd(fd: number) {
   return createWriteStream('', { fd, autoClose: false });
 }
 
-export async function main(): Promise<void> {
+type MainDependencies = {
+  createOrchestrator: typeof createOrchestrator;
+  createRpcConnection: typeof createRpcConnection;
+  setupRpcChannel: typeof setupRpcChannel;
+  createMcpChannel: typeof createMcpChannel;
+};
+
+const defaultMainDependencies: MainDependencies = {
+  createOrchestrator,
+  createRpcConnection,
+  setupRpcChannel,
+  createMcpChannel,
+};
+
+export async function main(
+  dependencies: MainDependencies = defaultMainDependencies,
+): Promise<void> {
   const bootstrap = parseBootstrapFromEnv();
   const builtins = getBuiltinServers();
   const bootstrapServerEntries = toServerRegistryEntries(
@@ -272,13 +288,13 @@ export async function main(): Promise<void> {
     args: s.args ? [...s.args] : undefined,
     extensions: [...s.extensions],
   }));
-  const orchestrator = createOrchestrator(
+  const orchestrator = dependencies.createOrchestrator(
     { ...bootstrap.config, servers: mergedServers },
     bootstrap.workspaceRoot,
   );
 
-  const rpcConnection = createRpcConnection();
-  setupRpcChannel(rpcConnection, orchestrator);
+  const rpcConnection = dependencies.createRpcConnection();
+  dependencies.setupRpcChannel(rpcConnection, orchestrator);
   rpcConnection.listen();
 
   let mcpServer: { close: () => Promise<void> } | null = null;
@@ -286,7 +302,7 @@ export async function main(): Promise<void> {
     try {
       const mcpInput = createReadStreamFromFd(3);
       const mcpOutput = createWriteStreamFromFd(4);
-      mcpServer = await createMcpChannel(
+      mcpServer = await dependencies.createMcpChannel(
         orchestrator,
         bootstrap.workspaceRoot,
         mcpInput,

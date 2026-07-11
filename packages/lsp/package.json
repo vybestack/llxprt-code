@@ -14,7 +14,9 @@
     "build": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "bunx vitest run"
+    "test": "bun test",
+    "test:ci": "bun test",
+    "test:vitest": "vitest run --config ./vitest.config.ts"
   },
   "files": [
     "dist"

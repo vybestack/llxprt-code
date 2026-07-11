@@ -5,7 +5,7 @@
  * @pseudocode rpc-channel.md lines 01-42
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   createMessageConnection,
   NullLogger,

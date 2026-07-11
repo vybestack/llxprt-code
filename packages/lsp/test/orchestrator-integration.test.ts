@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'bun:test';
 
 import { createOrchestrator } from '../src/service/orchestrator';
 import type { LspConfig } from '../src/service/diagnostics';

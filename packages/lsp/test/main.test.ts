@@ -2,7 +2,8 @@
  * @plan:PLAN-20250212-LSP.P26
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { main, parseBootstrapFromEnv } from '../src/main.js';
 
 type BootstrapResult = {
   workspaceRoot: string;
@@ -11,12 +12,9 @@ type BootstrapResult = {
 
 describe('main bootstrap parsing', () => {
   beforeEach(() => {
-    vi.resetModules();
     vi.restoreAllMocks();
     delete process.env.LSP_BOOTSTRAP;
   });
-
-  const loadMain = async () => import('../src/main.js');
 
   it('missing LSP_BOOTSTRAP throws and writes stderr', async () => {
     const exitSpy = vi
@@ -24,9 +22,7 @@ describe('main bootstrap parsing', () => {
       .mockImplementation((() => undefined) as never);
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 
-    const mod = await loadMain();
-
-    expect(() => mod.parseBootstrapFromEnv()).toThrowError(
+    expect(() => parseBootstrapFromEnv()).toThrowError(
       'LSP_BOOTSTRAP environment variable is required',
     );
     expect(stderrSpy).toHaveBeenCalledWith(
@@ -41,8 +37,7 @@ describe('main bootstrap parsing', () => {
       config: { navigationTools: true, diagnosticsTimeoutMs: 1000 },
     });
 
-    const mod = await loadMain();
-    const result = mod.parseBootstrapFromEnv() as BootstrapResult;
+    const result = parseBootstrapFromEnv() as BootstrapResult;
 
     expect(result.workspaceRoot).toBe('/tmp/ws');
     expect(result.config).toMatchObject({
@@ -58,9 +53,7 @@ describe('main bootstrap parsing', () => {
       .mockImplementation((() => undefined) as never);
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 
-    const mod = await loadMain();
-
-    expect(() => mod.parseBootstrapFromEnv()).toThrowError(
+    expect(() => parseBootstrapFromEnv()).toThrowError(
       'LSP_BOOTSTRAP must be valid JSON',
     );
     expect(stderrSpy).toHaveBeenCalledWith(
@@ -76,9 +69,7 @@ describe('main bootstrap parsing', () => {
       .mockImplementation((() => undefined) as never);
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 
-    const mod = await loadMain();
-
-    expect(() => mod.parseBootstrapFromEnv()).toThrowError(
+    expect(() => parseBootstrapFromEnv()).toThrowError(
       'LSP_BOOTSTRAP.workspaceRoot must be a non-empty string',
     );
     expect(stderrSpy).toHaveBeenCalledWith(
@@ -90,8 +81,7 @@ describe('main bootstrap parsing', () => {
   it('default config is used when config is absent', async () => {
     process.env.LSP_BOOTSTRAP = JSON.stringify({ workspaceRoot: '/tmp/ws' });
 
-    const mod = await loadMain();
-    const result = mod.parseBootstrapFromEnv() as BootstrapResult;
+    const result = parseBootstrapFromEnv() as BootstrapResult;
 
     expect(result.workspaceRoot).toBe('/tmp/ws');
     expect(result.config).toEqual({});
@@ -107,9 +97,7 @@ describe('main bootstrap parsing', () => {
       .mockImplementation((() => undefined) as never);
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 
-    const mod = await loadMain();
-
-    expect(() => mod.parseBootstrapFromEnv()).toThrowError(
+    expect(() => parseBootstrapFromEnv()).toThrowError(
       'LSP_BOOTSTRAP.config.diagnosticsTimeoutMs must be a number',
     );
     expect(stderrSpy).toHaveBeenCalledWith(
@@ -128,9 +116,7 @@ describe('main bootstrap parsing', () => {
       .mockImplementation((() => undefined) as never);
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 
-    const mod = await loadMain();
-
-    expect(() => mod.parseBootstrapFromEnv()).toThrowError(
+    expect(() => parseBootstrapFromEnv()).toThrowError(
       'LSP_BOOTSTRAP.config.requestTimeoutMs must be a number',
     );
     expect(stderrSpy).toHaveBeenCalledWith(
@@ -145,8 +131,7 @@ describe('main bootstrap parsing', () => {
       config: { requestTimeoutMs: 5000 },
     });
 
-    const mod = await loadMain();
-    const result = mod.parseBootstrapFromEnv() as BootstrapResult;
+    const result = parseBootstrapFromEnv() as BootstrapResult;
 
     expect(result.config.requestTimeoutMs).toBe(5000);
   });
@@ -161,9 +146,7 @@ describe('main bootstrap parsing', () => {
       .mockImplementation((() => undefined) as never);
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 
-    const mod = await loadMain();
-
-    expect(() => mod.parseBootstrapFromEnv()).toThrowError(
+    expect(() => parseBootstrapFromEnv()).toThrowError(
       'LSP_BOOTSTRAP.config.requestTimeoutMs must be a finite positive number',
     );
     expect(stderrSpy).toHaveBeenCalledWith(
@@ -182,9 +165,7 @@ describe('main bootstrap parsing', () => {
       .mockImplementation((() => undefined) as never);
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 
-    const mod = await loadMain();
-
-    expect(() => mod.parseBootstrapFromEnv()).toThrowError(
+    expect(() => parseBootstrapFromEnv()).toThrowError(
       'LSP_BOOTSTRAP.config.requestTimeoutMs must be a finite positive number',
     );
     expect(stderrSpy).toHaveBeenCalledWith(
@@ -204,9 +185,7 @@ describe('main bootstrap parsing', () => {
       .mockImplementation((() => undefined) as never);
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 
-    const mod = await loadMain();
-
-    expect(() => mod.parseBootstrapFromEnv()).toThrowError(
+    expect(() => parseBootstrapFromEnv()).toThrowError(
       'LSP_BOOTSTRAP.config.requestTimeoutMs must be a number',
     );
     expect(stderrSpy).toHaveBeenCalledWith(
@@ -225,9 +204,7 @@ describe('main bootstrap parsing', () => {
       .mockImplementation((() => undefined) as never);
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 
-    const mod = await loadMain();
-
-    expect(() => mod.parseBootstrapFromEnv()).toThrowError(
+    expect(() => parseBootstrapFromEnv()).toThrowError(
       'LSP_BOOTSTRAP.config.requestTimeoutMs must be a number',
     );
     expect(stderrSpy).toHaveBeenCalledWith(
@@ -246,9 +223,7 @@ describe('main bootstrap parsing', () => {
       .mockImplementation((() => undefined) as never);
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 
-    const mod = await loadMain();
-
-    expect(() => mod.parseBootstrapFromEnv()).toThrowError(
+    expect(() => parseBootstrapFromEnv()).toThrowError(
       'LSP_BOOTSTRAP.config.firstTouchTimeoutMs must be a number',
     );
     expect(stderrSpy).toHaveBeenCalledWith(
@@ -263,8 +238,7 @@ describe('main bootstrap parsing', () => {
       config: { firstTouchTimeoutMs: 15000 },
     });
 
-    const mod = await loadMain();
-    const result = mod.parseBootstrapFromEnv() as BootstrapResult;
+    const result = parseBootstrapFromEnv() as BootstrapResult;
 
     expect(result.config.firstTouchTimeoutMs).toBe(15000);
   });
@@ -275,8 +249,7 @@ describe('main bootstrap parsing', () => {
       config: { diagnosticsTimeoutMs: 1000 },
     });
 
-    const mod = await loadMain();
-    const result = mod.parseBootstrapFromEnv() as BootstrapResult;
+    const result = parseBootstrapFromEnv() as BootstrapResult;
 
     expect(result.config.firstTouchTimeoutMs).toBeUndefined();
     expect(result.config.diagnosticsTimeoutMs).toBe(1000);
@@ -287,8 +260,13 @@ describe('main channel wiring', () => {
   let onSpy: ReturnType<typeof vi.spyOn>;
   let exitSpy: ReturnType<typeof vi.spyOn>;
 
+  const createRpcConnection = (sendNotification = vi.fn()) => ({
+    listen: vi.fn(),
+    dispose: vi.fn(),
+    sendNotification,
+  });
+
   beforeEach(() => {
-    vi.resetModules();
     vi.restoreAllMocks();
     onSpy = vi.spyOn(process, 'on');
     exitSpy = vi
@@ -313,23 +291,12 @@ describe('main channel wiring', () => {
       .mockResolvedValue({ close: vi.fn().mockResolvedValue(undefined) });
     const createOrchestrator = vi.fn(() => orchestrator);
 
-    vi.doMock('../src/service/orchestrator.js', () => ({
+    await main({
       createOrchestrator,
-    }));
-    vi.doMock('../src/channels/rpc-channel.js', () => ({ setupRpcChannel }));
-    vi.doMock('../src/channels/mcp-channel.js', () => ({ createMcpChannel }));
-    vi.doMock('vscode-jsonrpc/node.js', () => ({
-      StreamMessageReader: vi.fn(),
-      StreamMessageWriter: vi.fn(),
-      createMessageConnection: vi.fn(() => ({
-        listen: vi.fn(),
-        dispose: vi.fn(),
-        sendNotification: vi.fn(),
-      })),
-    }));
-
-    const mod = await import('../src/main.js');
-    await mod.main();
+      setupRpcChannel,
+      createMcpChannel,
+      createRpcConnection,
+    });
 
     expect(createOrchestrator.mock.calls[0]?.[0]).toMatchObject({
       servers: expect.arrayContaining([expect.objectContaining({ id: 'ts' })]),
@@ -352,21 +319,12 @@ describe('main channel wiring', () => {
     const orchestrator = { shutdown: vi.fn().mockResolvedValue(undefined) };
     const createOrchestrator = vi.fn(() => orchestrator);
 
-    vi.doMock('../src/service/orchestrator.js', () => ({
+    await main({
       createOrchestrator,
-    }));
-    vi.doMock('vscode-jsonrpc/node.js', () => ({
-      StreamMessageReader: vi.fn(),
-      StreamMessageWriter: vi.fn(),
-      createMessageConnection: vi.fn(() => ({
-        listen: vi.fn(),
-        dispose: vi.fn(),
-        sendNotification: vi.fn(),
-      })),
-    }));
-
-    const mod = await import('../src/main.js');
-    await mod.main();
+      setupRpcChannel: vi.fn(),
+      createMcpChannel: vi.fn(),
+      createRpcConnection,
+    });
 
     expect(createOrchestrator.mock.calls[0]?.[0].servers).toEqual([
       {
@@ -385,19 +343,14 @@ describe('main channel wiring', () => {
 
     const createMcpChannel = vi.fn();
 
-    vi.doMock('../src/channels/mcp-channel.js', () => ({ createMcpChannel }));
-    vi.doMock('vscode-jsonrpc/node.js', () => ({
-      StreamMessageReader: vi.fn(),
-      StreamMessageWriter: vi.fn(),
-      createMessageConnection: vi.fn(() => ({
-        listen: vi.fn(),
-        dispose: vi.fn(),
-        sendNotification: vi.fn(),
+    await main({
+      createOrchestrator: vi.fn(() => ({
+        shutdown: vi.fn().mockResolvedValue(undefined),
       })),
-    }));
-
-    const mod = await import('../src/main.js');
-    await mod.main();
+      setupRpcChannel: vi.fn(),
+      createMcpChannel,
+      createRpcConnection,
+    });
 
     expect(createMcpChannel).not.toHaveBeenCalled();
   });
@@ -410,21 +363,12 @@ describe('main channel wiring', () => {
 
     const orchestrator = { shutdown: vi.fn().mockResolvedValue(undefined) };
 
-    vi.doMock('../src/service/orchestrator.js', () => ({
+    await main({
       createOrchestrator: vi.fn(() => orchestrator),
-    }));
-    vi.doMock('vscode-jsonrpc/node.js', () => ({
-      StreamMessageReader: vi.fn(),
-      StreamMessageWriter: vi.fn(),
-      createMessageConnection: vi.fn(() => ({
-        listen: vi.fn(),
-        dispose: vi.fn(),
-        sendNotification: vi.fn(),
-      })),
-    }));
-
-    const mod = await import('../src/main.js');
-    await mod.main();
+      setupRpcChannel: vi.fn(),
+      createMcpChannel: vi.fn(),
+      createRpcConnection,
+    });
 
     const sigterm = onSpy.mock.calls.find(
       (call) => call[0] === 'SIGTERM',
@@ -446,18 +390,14 @@ describe('main channel wiring', () => {
 
     const sendNotification = vi.fn();
 
-    vi.doMock('vscode-jsonrpc/node.js', () => ({
-      StreamMessageReader: vi.fn(),
-      StreamMessageWriter: vi.fn(),
-      createMessageConnection: vi.fn(() => ({
-        listen: vi.fn(),
-        dispose: vi.fn(),
-        sendNotification,
+    await main({
+      createOrchestrator: vi.fn(() => ({
+        shutdown: vi.fn().mockResolvedValue(undefined),
       })),
-    }));
-
-    const mod = await import('../src/main.js');
-    await mod.main();
+      setupRpcChannel: vi.fn(),
+      createMcpChannel: vi.fn(),
+      createRpcConnection: () => createRpcConnection(sendNotification),
+    });
 
     expect(sendNotification).toHaveBeenCalledWith('lsp/ready');
   });

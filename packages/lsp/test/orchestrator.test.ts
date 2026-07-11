@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import fc from 'fast-check';
 
 import { createOrchestrator } from '../src/service/orchestrator';

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import { fileURLToPath } from 'node:url';
 

@@ -4,7 +4,7 @@
  * @pseudocode:language-map.md lines 01-82
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 
 import {
   getExtensionsForLanguage,
