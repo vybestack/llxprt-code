@@ -27,13 +27,15 @@ const dependencies = {
 describe('ListCheckpointsCommand', () => {
   let mockConfig: Config;
   let context: CommandContext;
+  let getCheckpointingEnabled: ReturnType<typeof vi.fn<() => boolean>>;
   const checkpointDir = '/mock/checkpoint/dir';
 
   beforeEach(() => {
     vi.clearAllMocks();
 
+    getCheckpointingEnabled = vi.fn();
     mockConfig = {
-      getCheckpointingEnabled: vi.fn(),
+      getCheckpointingEnabled,
       storage: {
         getProjectTempCheckpointsDir: vi.fn().mockReturnValue(checkpointDir),
       },
@@ -49,7 +51,7 @@ describe('ListCheckpointsCommand', () => {
 
   it('should return error when checkpointing is disabled', async () => {
     const command = new ListCheckpointsCommand(dependencies);
-    mockConfig.getCheckpointingEnabled.mockReturnValue(false);
+    getCheckpointingEnabled.mockReturnValue(false);
 
     const result = await command.execute(context, []);
 
@@ -61,7 +63,7 @@ describe('ListCheckpointsCommand', () => {
 
   it('should return "No checkpoints found." for empty directory', async () => {
     const command = new ListCheckpointsCommand(dependencies);
-    mockConfig.getCheckpointingEnabled.mockReturnValue(true);
+    getCheckpointingEnabled.mockReturnValue(true);
     mockReaddir.mockResolvedValue([]);
     mockFormatCheckpointDisplayList.mockReturnValue('');
 
@@ -75,7 +77,7 @@ describe('ListCheckpointsCommand', () => {
 
   it('should return formatted list for directory with .json files', async () => {
     const command = new ListCheckpointsCommand(dependencies);
-    mockConfig.getCheckpointingEnabled.mockReturnValue(true);
+    getCheckpointingEnabled.mockReturnValue(true);
     // readdir returns string[] when called without options
     mockReaddir.mockResolvedValue([
       'checkpoint1.json',

@@ -89,11 +89,18 @@ type TaskStores = {
   taskStoreForHandler: TaskStore;
 };
 
-export async function createApp() {
+export interface CreateAppDependencies {
+  createStartupContext?: () => Promise<AppContext & TaskStores>;
+  getGitService?: (
+    config: Awaited<ReturnType<typeof loadConfig>>,
+  ) => Promise<GitService | undefined>;
+}
+
+export async function createApp(dependencies: CreateAppDependencies = {}) {
   try {
     const { config, agentExecutor, taskStoreForExecutor, taskStoreForHandler } =
-      await createStartupContext();
-    const git = await getGitService(config);
+      await (dependencies.createStartupContext ?? createStartupContext)();
+    const git = await (dependencies.getGitService ?? getGitService)(config);
     const requestHandler = new DefaultRequestHandler(
       coderAgentCard,
       taskStoreForHandler,

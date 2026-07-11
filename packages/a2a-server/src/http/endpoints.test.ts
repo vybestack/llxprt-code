@@ -4,74 +4,63 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'bun:test';
 import request from 'supertest';
 import type express from 'express';
+import { InMemoryTaskStore } from '@a2a-js/sdk/server';
 import { createApp, updateCoderAgentCardUrl } from './app.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import type { Server } from 'node:http';
+import type { Task as SDKTask } from '@a2a-js/sdk';
 import type { TaskMetadata } from '../types.js';
 import type { AddressInfo } from 'node:net';
 import { logger } from '../utils/logger.js';
 
-// Mock the logger to avoid polluting test output
-// Comment out to help debug
-vi.mock('../utils/logger.js', () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-}));
+interface EndpointTask {
+  id: string;
+  task: {
+    getMetadata: () => Promise<TaskMetadata>;
+  };
+  toSDKTask: () => SDKTask;
+}
 
-// Mock loadConfig to avoid authentication requirements
-vi.mock('../config/config.js', () => ({
-  loadConfig: vi.fn().mockImplementation(async () => ({
-    // Return a minimal Config-like object that satisfies test needs
-    getContentGeneratorConfig: vi.fn().mockReturnValue({ model: 'gemini-pro' }),
-    getSessionId: () => 'test-session',
-    getModel: () => 'gemini-pro',
-  })),
-  loadSettings: vi.fn().mockReturnValue({}),
-  loadExtensions: vi.fn().mockReturnValue([]),
-  loadEnvironment: vi.fn(),
-  setTargetDir: vi
-    .fn()
-    .mockImplementation((settings) => settings?.workspacePath ?? process.cwd()),
-}));
-
-// Mock Task.create to avoid its complex setup
-vi.mock('../agent/task.js', () => {
-  class MockTask {
-    id: string;
-    contextId: string;
-    taskState = 'submitted';
-    config = {
-      getContentGeneratorConfig: vi
-        .fn()
-        .mockReturnValue({ model: 'gemini-pro' }),
-    };
-    agentClient = {
-      initialize: vi.fn().mockResolvedValue(undefined),
-    };
-    constructor(id: string, contextId: string) {
-      this.id = id;
-      this.contextId = contextId;
-    }
-    static create = vi
-      .fn()
-      .mockImplementation((id, contextId) =>
-        Promise.resolve(new MockTask(id, contextId)),
-      );
-    getMetadata = vi.fn().mockImplementation(async () => ({
-      id: this.id,
-      contextId: this.contextId,
-      taskState: this.taskState,
-      model: 'gemini-pro',
-      mcpServers: [],
-      availableTools: [],
-    }));
-  }
-  return { Task: MockTask };
-});
+function createEndpointExecutor() {
+  const tasks = new Map<string, EndpointTask>();
+  return {
+    execute: vi.fn(),
+    cancelTask: vi.fn(),
+    createTask: vi.fn((id: string, contextId: string) => {
+      const metadata = {
+        id,
+        contextId,
+        taskState: 'submitted',
+        model: 'gemini-pro',
+        mcpServers: [],
+        availableTools: [],
+      } as TaskMetadata;
+      const wrapper = {
+        id,
+        task: { getMetadata: async () => metadata },
+        toSDKTask: () => ({
+          id,
+          contextId,
+          kind: 'task' as const,
+          status: { state: 'submitted' as const },
+          metadata: {},
+          history: [],
+          artifacts: [],
+        }),
+      } as EndpointTask;
+      tasks.set(id, wrapper);
+      return Promise.resolve(wrapper);
+    }),
+    getTask: (id: string) => tasks.get(id),
+    getAllTasks: () => [...tasks.values()],
+    reconstruct: vi.fn(),
+  };
+}
 
 describe('Agent Server Endpoints', () => {
   let app: express.Express;
@@ -95,7 +84,18 @@ describe('Agent Server Endpoints', () => {
     testWorkspace = fs.mkdtempSync(
       path.join(os.tmpdir(), 'gemini-agent-test-'),
     );
-    app = await createApp();
+    const taskStore = new InMemoryTaskStore();
+    const agentExecutor = createEndpointExecutor();
+    app = await createApp({
+      createStartupContext: async () => ({
+        config: {} as never,
+        git: undefined,
+        agentExecutor: agentExecutor as never,
+        taskStoreForExecutor: taskStore,
+        taskStoreForHandler: taskStore,
+      }),
+      getGitService: async () => undefined,
+    });
     await new Promise<void>((resolve) => {
       server = app.listen(0, () => {
         const port = (server.address() as AddressInfo).port;

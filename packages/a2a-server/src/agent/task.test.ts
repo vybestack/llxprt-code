@@ -45,7 +45,9 @@ function createNoopToolCallRequest(): ToolCallRequestInfo {
   };
 }
 
-function createWaitingToolCall(onConfirm: Mock): WaitingToolCall {
+function createWaitingToolCall(
+  onConfirm: Mock<() => Promise<void>>,
+): WaitingToolCall {
   return {
     request: {
       callId: '1',
@@ -555,7 +557,7 @@ describe('Task', () => {
     let mockConfig: Config;
     let mockEventBus: ExecutionEventBus;
     let schedulerToolCalls: WaitingToolCall[];
-    let scheduleMock: Mock = vi.fn();
+    let scheduleMock: Mock<() => Promise<void>> = vi.fn();
 
     beforeEach(async () => {
       schedulerToolCalls = [];
@@ -592,7 +594,7 @@ describe('Task', () => {
 
     it('should auto-approve tool calls when autoExecute is true', async () => {
       task.autoExecute = true;
-      const onConfirmSpy = vi.fn();
+      const onConfirmSpy = vi.fn(async () => {});
       const toolCalls = [createWaitingToolCall(onConfirmSpy)];
 
       schedulerToolCalls = toolCalls;
@@ -607,9 +609,11 @@ describe('Task', () => {
     });
 
     it('should auto-approve tool calls when approval mode is YOLO', async () => {
-      (mockConfig.getApprovalMode as Mock).mockReturnValue(ApprovalMode.YOLO);
+      (mockConfig.getApprovalMode as Mock<() => ApprovalMode>).mockReturnValue(
+        ApprovalMode.YOLO,
+      );
       task.autoExecute = false;
-      const onConfirmSpy = vi.fn();
+      const onConfirmSpy = vi.fn(async () => {});
       const toolCalls = [createWaitingToolCall(onConfirmSpy)];
 
       schedulerToolCalls = toolCalls;
@@ -625,10 +629,10 @@ describe('Task', () => {
 
     it('should NOT auto-approve when autoExecute is false and mode is not YOLO', async () => {
       task.autoExecute = false;
-      (mockConfig.getApprovalMode as Mock).mockReturnValue(
+      (mockConfig.getApprovalMode as Mock<() => ApprovalMode>).mockReturnValue(
         ApprovalMode.DEFAULT,
       );
-      const onConfirmSpy = vi.fn();
+      const onConfirmSpy = vi.fn(async () => {});
       const toolCalls = [createWaitingToolCall(onConfirmSpy)];
 
       schedulerToolCalls = toolCalls;
