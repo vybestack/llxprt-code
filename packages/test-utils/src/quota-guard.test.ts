@@ -354,5 +354,29 @@ describe('quota-guard', () => {
 
       expect(callsIncludeAnnotation(spy.mock.calls)).toBe(false);
     });
+
+    it('stays silent when the sentinel write fails with a non-EEXIST error', () => {
+      // Point the guard at a state dir whose PARENT does not exist, so the
+      // exclusive `wx` write throws ENOENT rather than EEXIST. No sentinel is
+      // created, so there is no cross-process latch to dedupe against. If the
+      // guard emitted here, every worker (and every subsequent call) would hit
+      // the same failing write and announce its own wall — flooding CI with
+      // duplicate annotations. It must therefore stay silent; the quota wall is
+      // still surfaced by the failing test itself.
+      const dir = makeTempDir();
+      const missingStateDir = join(dir, 'missing-parent', 'state');
+      vi.stubEnv('INTEGRATION_TEST_FILE_DIR', missingStateDir);
+      vi.stubEnv('GITHUB_ACTIONS', 'true');
+      vi.stubEnv('GITHUB_STEP_SUMMARY', undefined);
+
+      const spy = vi
+        .spyOn(process.stdout, 'write')
+        .mockImplementation(() => true);
+
+      expect(() => tripQuotaGuard('provider quota exhausted')).not.toThrow();
+
+      expect(callsIncludeAnnotation(spy.mock.calls)).toBe(false);
+      expect(getQuotaGuardTrip()).toBeNull();
+    });
   });
 });

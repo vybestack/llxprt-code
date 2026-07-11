@@ -193,9 +193,16 @@ function emitGitHubAnnotations(reason: string): void {
  * processes: the sentinel is created with the exclusive `wx` flag, so exactly
  * one writer succeeds. A separate `existsSync` pre-check would be a TOCTOU race
  * (two workers could both observe "absent" and the LAST write would clobber the
- * first reason); the atomic exclusive create closes that window. Only the
- * winning writer emits the CI annotation, so a losing worker never duplicates
- * it or overwrites the recorded reason.
+ * first reason); the atomic exclusive create closes that window.
+ *
+ * The CI annotation is emitted ONLY when this process actually wins the
+ * exclusive create, i.e. it now owns the sentinel latch. A worker that loses
+ * the race (EEXIST) stays silent, and — crucially — so does a worker whose
+ * write fails for any OTHER reason (ENOSPC, EACCES, missing parent dir): with
+ * no sentinel there is no latch to dedupe against, so emitting would let every
+ * worker announce its own wall and flood CI with duplicates. Sentinel I/O is
+ * therefore best-effort and never throws; the quota wall is still surfaced by
+ * the failing test itself.
  */
 export function tripQuotaGuard(reason: string): void {
   if (!isGuardActive()) {
@@ -217,11 +224,20 @@ export function tripQuotaGuard(reason: string): void {
       // do not overwrite it, and do not emit a duplicate annotation.
       return;
     }
-    // Best-effort persistence for any other error (e.g. disk full): never fail
-    // the run because of sentinel I/O. Fall through so the wall is still
-    // surfaced in CI even when the cross-process sentinel could not be written.
+    // Any other error (ENOSPC, EACCES, ENOENT for a missing parent dir, ...):
+    // the sentinel — which IS the cross-process latch in the success/EEXIST
+    // paths — was never written, so there is nothing to dedupe subsequent
+    // callers against. Emitting here would make EVERY worker (and every retry)
+    // hit this same failing write and announce its own wall, flooding CI with
+    // duplicate annotations and breaking the "first reason wins / losers stay
+    // silent" guarantee. Return without emitting; the quota wall is still
+    // surfaced by the failing test itself, and we never fail the run because of
+    // sentinel I/O.
+    return;
   }
 
+  // Reached only when the exclusive create above actually succeeded, i.e. this
+  // process is the sole winner that owns the sentinel latch.
   emitGitHubAnnotations(reason);
 }
 
