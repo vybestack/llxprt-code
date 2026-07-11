@@ -27,8 +27,10 @@
 export const RESUME_NO_SESSIONS_FOUND = 'No sessions found for this project';
 
 /**
- * Prefix of the SessionDiscovery.resolveSessionRef message for an unknown
- * session reference; the full message appends `: <ref>`.
+ * Prefix (including the trailing colon) of the
+ * SessionDiscovery.resolveSessionRef message for an unknown session reference;
+ * the full message appends ` <ref>` (space + ref) after it — see
+ * {@link resumeSessionNotFoundMessage}.
  */
 export const RESUME_SESSION_NOT_FOUND_PREFIX =
   'Session not found for this project:';
@@ -50,10 +52,13 @@ export const RESUME_SESSION_INDEX_OUT_OF_RANGE_PREFIX = 'Session index ';
 
 /**
  * Builds the full SessionDiscovery.resolveSessionRef out-of-range message for
- * a specific index and session count.
+ * a specific index and session count. `ref` must render as digits (a number,
+ * or the digit-only string the caller already validated with /^\d+$/) so the
+ * produced message stays matchable by
+ * {@link RESUME_SESSION_INDEX_OUT_OF_RANGE_RE}.
  */
 export function resumeSessionIndexOutOfRangeMessage(
-  ref: string | number,
+  ref: number | `${number}`,
   count: number,
 ): string {
   return `${RESUME_SESSION_INDEX_OUT_OF_RANGE_PREFIX}${ref} out of range (1-${count})`;

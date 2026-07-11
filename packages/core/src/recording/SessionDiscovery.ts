@@ -167,7 +167,7 @@ export class SessionDiscovery {
         return { session: sessions[indexNum - 1] };
       }
       return {
-        error: resumeSessionIndexOutOfRangeMessage(ref, sessions.length),
+        error: resumeSessionIndexOutOfRangeMessage(indexNum, sessions.length),
       };
     }
 
