@@ -32,8 +32,11 @@ import {
 import { ToolErrorType } from '../types/tool-error.js';
 import { debugLogger as logger } from '../utils/debugLogger.js';
 
-function tildeifyPath(filePath: string): string {
-  const homeDir = os.homedir();
+function tildeifyPath(
+  filePath: string,
+  getHomeDir: () => string = os.homedir,
+): string {
+  const homeDir = getHomeDir();
   if (
     homeDir &&
     (filePath === homeDir || filePath.startsWith(`${homeDir}${path.sep}`))
@@ -175,6 +178,7 @@ export interface MemoryToolDependencies {
   storageService: IStorageService;
   settingsService?: Pick<ISettingsService, 'getSetting'>;
   getWorkingDir?: () => string;
+  getHomeDir?: () => string;
   messageBus?: IToolMessageBus;
 }
 
@@ -269,6 +273,7 @@ class MemoryToolInvocation extends BaseToolInvocation<
     messageBus: IToolMessageBus,
     private readonly storageService: IStorageService,
     private getWorkingDir?: () => string,
+    private readonly getHomeDir: () => string = os.homedir,
   ) {
     super(params, messageBus);
   }
@@ -316,7 +321,7 @@ class MemoryToolInvocation extends BaseToolInvocation<
 
   override getDescription(): string {
     const memoryFilePath = this.getMemoryFilePath();
-    return `in ${tildeifyPath(memoryFilePath)}`;
+    return `in ${tildeifyPath(memoryFilePath, this.getHomeDir)}`;
   }
 
   override async shouldConfirmExecute(
@@ -345,7 +350,7 @@ class MemoryToolInvocation extends BaseToolInvocation<
 
     const confirmationDetails: ToolEditConfirmationDetails = {
       type: 'edit',
-      title: `Confirm Memory Save: ${tildeifyPath(memoryFilePath)}`,
+      title: `Confirm Memory Save: ${tildeifyPath(memoryFilePath, this.getHomeDir)}`,
       fileName: memoryFilePath,
       filePath: memoryFilePath,
       fileDiff,
@@ -436,6 +441,7 @@ export class MemoryTool
   private readonly storageService: IStorageService;
   private readonly settingsService?: Pick<ISettingsService, 'getSetting'>;
   private readonly getWorkingDir?: () => string;
+  private readonly getHomeDir: () => string;
 
   constructor(
     dependencies: MemoryToolDependencies | IStorageService = {
@@ -466,6 +472,7 @@ export class MemoryTool
     this.storageService = resolvedDependencies.storageService;
     this.settingsService = resolvedDependencies.settingsService;
     this.getWorkingDir = resolvedDependencies.getWorkingDir;
+    this.getHomeDir = resolvedDependencies.getHomeDir ?? os.homedir;
   }
 
   protected override validateToolParamValues(
@@ -508,6 +515,7 @@ export class MemoryTool
       messageBus,
       this.storageService,
       this.getWorkingDir,
+      this.getHomeDir,
     );
   }
 
