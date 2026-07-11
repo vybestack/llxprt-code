@@ -263,19 +263,35 @@ export class InteractiveRun {
   expectExit(timeout?: number): Promise<number> {
     const effectiveTimeout = timeout ?? getDefaultTimeout();
     return new Promise((resolve, reject) => {
+      // Latch so exactly one of the exit/timeout paths proceeds. Without it a
+      // fired timeout (which rejects via _exitTimeoutError and runs quota
+      // detection) could be followed by a late onExit — node-pty fires onExit
+      // whenever the child finally dies — that re-enters _settleExit and
+      // re-runs quota detection as a spurious side effect. Mirrors the
+      // documented `settled` latch in process-run.ts's spawnRunWithTimeout.
+      let settled = false;
+
       // If the PTY already exited, the constructor's onExit handler captured
       // the code; a late onExit registration here would never fire (node-pty
       // does not replay the event), so settle synchronously instead of hanging
       // until the timeout.
       if (this._exited) {
+        settled = true;
         this._settleExit(this._exitCode ?? 0, resolve, reject);
         return;
       }
-      const timer = setTimeout(
-        () => reject(this._exitTimeoutError(effectiveTimeout)),
-        effectiveTimeout,
-      );
+      const timer = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        reject(this._exitTimeoutError(effectiveTimeout));
+      }, effectiveTimeout);
       this.ptyProcess.onExit(({ exitCode }) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
         clearTimeout(timer);
         this._settleExit(exitCode, resolve, reject);
       });

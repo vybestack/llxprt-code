@@ -13,7 +13,15 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 
-const SENTINEL_FILENAME = 'quota-guard-tripped.json';
+/**
+ * Filename of the cross-process trip sentinel written into
+ * `INTEGRATION_TEST_FILE_DIR`.
+ *
+ * Exported so tests (and any harness code) that need to locate, assert on, or
+ * pre-seed the sentinel reference a single source of truth instead of
+ * duplicating the literal string, keeping them in lockstep if it ever changes.
+ */
+export const SENTINEL_FILENAME = 'quota-guard-tripped.json';
 const MAX_EXCERPT_LENGTH = 160;
 
 interface QuotaSignalPattern {
@@ -45,8 +53,14 @@ const QUOTA_SIGNAL_PATTERNS: readonly QuotaSignalPattern[] = [
     regex: /\brate[\s_-]?limits?\s+(?:exceeded|reached|hit)\b/i,
   },
   {
+    // A bare "quota limit" is deliberately NOT matched: benign config/help text
+    // like "Config: quota limit = 60" merely NAMES the limit rather than
+    // reporting a wall. The "limit" branch therefore requires a trailing
+    // exhaustion verb ("quota limit reached/exceeded/hit"), while "quota
+    // exceeded"/"quota exhausted" remain sufficient on their own.
     label: 'quota exceeded',
-    regex: /\bquota\s+(?:exceeded|exhausted|limit)\b/i,
+    regex:
+      /\bquota\s+(?:exceeded|exhausted|limit\s+(?:reached|exceeded|hit))\b/i,
   },
   {
     // Classic OpenAI 429 body wording ("You exceeded your current quota, ...")
@@ -124,6 +138,16 @@ function isQuotaGuardTrip(value: unknown): value is QuotaGuardTrip {
 }
 
 /**
+ * Narrows an unknown caught value to a Node `EEXIST` filesystem error without a
+ * type assertion, so the exclusive-create trip path can recognise "another
+ * worker already won the race" while complying with strict lint rules (no
+ * `any`, no `as NodeJS.ErrnoException` cast).
+ */
+function isEexistError(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'EEXIST';
+}
+
+/**
  * Escape a GitHub Actions workflow-command *message* payload.
  *
  * Per the workflow-command spec, the data segment after `::` must have `%`,
@@ -165,7 +189,13 @@ function emitGitHubAnnotations(reason: string): void {
  * Records that the harness has hit a provider quota / rate-limit wall.
  *
  * No-op when the guard is inactive (no state dir, or explicitly disabled).
- * Idempotent: the first reason wins and subsequent trips are ignored.
+ * Idempotent, and the FIRST reason wins even across concurrent vitest worker
+ * processes: the sentinel is created with the exclusive `wx` flag, so exactly
+ * one writer succeeds. A separate `existsSync` pre-check would be a TOCTOU race
+ * (two workers could both observe "absent" and the LAST write would clobber the
+ * first reason); the atomic exclusive create closes that window. Only the
+ * winning writer emits the CI annotation, so a losing worker never duplicates
+ * it or overwrites the recorded reason.
  */
 export function tripQuotaGuard(reason: string): void {
   if (!isGuardActive()) {
@@ -175,16 +205,21 @@ export function tripQuotaGuard(reason: string): void {
   if (sentinelPath === null) {
     return;
   }
-  if (existsSync(sentinelPath)) {
-    return;
-  }
   try {
     writeFileSync(
       sentinelPath,
       JSON.stringify({ reason, timestamp: new Date().toISOString() }),
+      { flag: 'wx' },
     );
-  } catch {
-    // Best-effort persistence; never fail the run because of sentinel I/O.
+  } catch (error) {
+    if (isEexistError(error)) {
+      // Another worker won the race and recorded the first reason. Stay silent:
+      // do not overwrite it, and do not emit a duplicate annotation.
+      return;
+    }
+    // Best-effort persistence for any other error (e.g. disk full): never fail
+    // the run because of sentinel I/O. Fall through so the wall is still
+    // surfaced in CI even when the cross-process sentinel could not be written.
   }
 
   emitGitHubAnnotations(reason);

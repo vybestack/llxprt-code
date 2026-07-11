@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
+import { SENTINEL_FILENAME } from './quota-guard.js';
 
 /**
  * Real-process proof of the vitest-level acceptance mechanism.
@@ -152,6 +153,8 @@ function createFixture(): { root: string; stateDir: string } {
  */
 function childEnv(stateDir: string): NodeJS.ProcessEnv {
   const next: NodeJS.ProcessEnv = { ...process.env };
+  // `Object.keys` snapshots the keys up front, so deleting entries from `next`
+  // while iterating that snapshot is safe (we never mutate the array we loop).
   for (const key of Object.keys(next)) {
     if (key.startsWith('VITEST')) {
       delete next[key];
@@ -167,7 +170,15 @@ function childEnv(stateDir: string): NodeJS.ProcessEnv {
 describe('quota guard vitest acceptance semantics', () => {
   afterEach(() => {
     for (const root of fixtureRoots) {
-      rmSync(root, { recursive: true, force: true });
+      // Best-effort: an orphaned vitest worker may still hold the fixture cwd
+      // for a beat after a SIGKILL timeout, so a rmSync can hit EBUSY/EPERM.
+      // Swallow it so the remaining fixture roots are still cleaned up; the OS
+      // temp dir is reclaimed regardless.
+      try {
+        rmSync(root, { recursive: true, force: true });
+      } catch {
+        // Ignore — leftover temp dirs are harmless and OS-reclaimed.
+      }
     }
     fixtureRoots.length = 0;
   });
@@ -183,6 +194,13 @@ describe('quota guard vitest acceptance semantics', () => {
         env: childEnv(stateDir),
         encoding: 'utf8',
         timeout: 90000,
+        // On timeout, SIGKILL (not the default SIGTERM) the vitest child so it
+        // cannot linger in a graceful-shutdown handler; SIGTERM alone reaches
+        // only the direct child, letting vitest worker processes orphan and
+        // race the afterEach rmSync of their cwd. SIGKILL plus best-effort
+        // cleanup below is the practical mitigation (a post-hoc process-group
+        // kill is not possible with spawnSync).
+        killSignal: 'SIGKILL',
       },
     );
 
@@ -203,7 +221,7 @@ describe('quota guard vitest acceptance semantics', () => {
 
     // The sentinel was actually tripped inside the child (real cross-process
     // file handshake, not a simulation).
-    expect(existsSync(join(stateDir, 'quota-guard-tripped.json'))).toBe(true);
+    expect(existsSync(join(stateDir, SENTINEL_FILENAME))).toBe(true);
 
     // The reporter surfaced the quota skip note for the skipped test...
     expect(combinedOutput).toContain(SKIP_NOTE);

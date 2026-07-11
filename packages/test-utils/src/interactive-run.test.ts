@@ -29,15 +29,18 @@ function makeTempDir(): string {
 }
 
 /**
- * Stub a fresh, isolated guard state directory and disable both CI annotations
- * and the fake-responses env so each test exercises the real guard behaviour.
- * Returns the state dir (also used as the child cwd).
+ * Stub a fresh, isolated guard state directory and disable CI annotations so
+ * each test exercises the real guard behaviour. Returns the state dir (also
+ * used as the child cwd).
+ *
+ * Unlike the non-interactive process-run path, InteractiveRun's guard is gated
+ * solely by the explicit `quotaGuardEnabled` constructor flag (never by
+ * `LLXPRT_FAKE_RESPONSES`), so no fake-responses env stubbing is needed here.
  */
 function activateGuard(): string {
   const dir = makeTempDir();
   vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
   vi.stubEnv('GITHUB_ACTIONS', 'false');
-  vi.stubEnv('LLXPRT_FAKE_RESPONSES', undefined);
   clearQuotaGuard();
   return dir;
 }
@@ -110,15 +113,24 @@ async function waitUntilExited(
 
 describe('InteractiveRun quota guard integration', () => {
   afterEach(async () => {
-    for (const run of liveRuns) {
-      await run.kill();
-    }
+    // Kill every live run concurrently: each kill() may wait out a SIGTERM
+    // grace period before SIGKILL, so awaiting them sequentially would cost
+    // N × gracePeriod. Best-effort — swallow per-run kill errors so one failure
+    // never blocks cleanup of the rest.
+    await Promise.all(liveRuns.map((run) => run.kill().catch(() => {})));
     liveRuns.length = 0;
     clearQuotaGuard();
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
     for (const dir of tempDirs) {
-      rmSync(dir, { recursive: true, force: true });
+      // The temp dir is (was) the PTY child's cwd; if the OS has not fully
+      // reaped the just-killed child, rmSync can hit EBUSY/EPERM. Swallow it so
+      // the remaining dirs are still cleaned up; leftovers are OS-reclaimed.
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // Ignore — best-effort cleanup.
+      }
     }
     tempDirs.length = 0;
   });

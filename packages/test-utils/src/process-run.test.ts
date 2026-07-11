@@ -112,6 +112,29 @@ describe('process-run quota guard integration', () => {
     expect(getQuotaGuardTrip()).toBeNull();
   });
 
+  it('reports the signal name (not "code null") when the child is signal-killed', async () => {
+    const dir = activateGuard();
+    const ctx: RunContext = {
+      command: process.execPath,
+      commandArgs: [
+        '-e',
+        // The child terminates itself with SIGTERM, so Node's close event emits
+        // `code: null, signal: "SIGTERM"`. The error message must name the
+        // signal rather than the misleading "exited with code null".
+        'process.kill(process.pid, "SIGTERM")',
+      ],
+      testDir: dir,
+    };
+
+    const error = await captureRejection(
+      spawnRun(ctx, {}, false, identityTransform),
+    );
+
+    expect(error.message).toContain('terminated by signal SIGTERM');
+    expect(error.message).not.toContain('code null');
+    expect(getQuotaGuardTrip()).toBeNull();
+  });
+
   it('does not trip the guard when the run uses fake responses', async () => {
     const dir = activateGuard();
     const ctx: RunContext = {

@@ -18,10 +18,10 @@ import {
   clearQuotaGuard,
   detectQuotaSignal,
   getQuotaGuardTrip,
+  SENTINEL_FILENAME,
   tripQuotaGuard,
 } from './quota-guard.js';
 
-const SENTINEL_FILENAME = 'quota-guard-tripped.json';
 const ANNOTATION_MARKER = '::error title=E2E quota guard tripped::';
 
 const tempDirs: string[] = [];
@@ -87,6 +87,10 @@ describe('quota-guard', () => {
       // Classic OpenAI 429 body wording that carries no status/code context.
       'You exceeded your current quota, please check your plan and billing details.',
       'You have reached your daily gemini-2.5-pro quota limit',
+      // "quota limit" WITH a trailing exhaustion verb is a genuine wall; the
+      // bare-"limit" form (see negative cases) must stay green.
+      'quota limit exceeded',
+      'quota limit reached',
       'RESOURCE_EXHAUSTED',
       'insufficient_quota',
     ];
@@ -108,6 +112,9 @@ describe('quota-guard', () => {
       'tests for rate limits',
       // "quota" without exhaustion context must stay green.
       'quota check passed',
+      // A bare "quota limit" that merely NAMES the limit (config/help text) is
+      // not a wall — only "quota limit reached/exceeded/hit" trips the guard.
+      'Config: quota limit = 60',
       '',
     ];
 
@@ -140,6 +147,57 @@ describe('quota-guard', () => {
       tripQuotaGuard('second');
 
       expect(getQuotaGuardTrip()).toStrictEqual({ reason: 'first' });
+    });
+
+    it('keeps a reason written externally by another worker (wx never clobbers)', () => {
+      const dir = makeTempDir();
+      vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
+      vi.stubEnv('GITHUB_ACTIONS', 'false');
+
+      // Simulate a concurrent worker that already won the race by pre-creating
+      // the sentinel out-of-band (not via tripQuotaGuard in this process). The
+      // exclusive `wx` create must fail with EEXIST and leave reason A intact.
+      const sentinelPath = join(dir, SENTINEL_FILENAME);
+      writeFileSync(
+        sentinelPath,
+        JSON.stringify({
+          reason: 'external worker reason A',
+          timestamp: new Date().toISOString(),
+        }),
+      );
+
+      tripQuotaGuard('reason B from this worker');
+
+      expect(getQuotaGuardTrip()).toStrictEqual({
+        reason: 'external worker reason A',
+      });
+    });
+
+    it('does not emit a CI annotation when it loses the exclusive-create race', () => {
+      const dir = makeTempDir();
+      vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
+      vi.stubEnv('GITHUB_ACTIONS', 'true');
+      vi.stubEnv('GITHUB_STEP_SUMMARY', undefined);
+
+      // The sentinel already exists (another worker won), so this trip must hit
+      // the EEXIST branch and return before emitting an annotation — only the
+      // winning writer announces the wall.
+      const sentinelPath = join(dir, SENTINEL_FILENAME);
+      writeFileSync(
+        sentinelPath,
+        JSON.stringify({
+          reason: 'already tripped',
+          timestamp: new Date().toISOString(),
+        }),
+      );
+
+      const spy = vi
+        .spyOn(process.stdout, 'write')
+        .mockImplementation(() => true);
+
+      tripQuotaGuard('late loser reason');
+
+      expect(callsIncludeAnnotation(spy.mock.calls)).toBe(false);
     });
 
     it('returns null after the guard is cleared', () => {

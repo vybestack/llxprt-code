@@ -120,13 +120,24 @@ function detectAndTripQuota(
  * Build the rejection error for a non-zero exit, upgrading it to a labelled
  * quota error (and tripping the guard) when the output looks like a provider
  * quota/rate-limit wall.
+ *
+ * Node's `close` event reports EITHER a numeric exit `code` (with `signal`
+ * `null`) or a `signal` name (with `code` `null`) when the child was terminated
+ * by a signal. The message distinguishes the two so a signal-killed child reads
+ * as "terminated by signal SIGTERM" rather than a misleading
+ * "exited with code null".
  */
 function buildExitFailureError(
   ctx: RunContext,
-  code: number,
+  code: number | null,
+  signal: NodeJS.Signals | null,
   accumulator: StreamAccumulator,
 ): Error {
-  const baseMessage = `Process exited with code ${code}:\n${accumulator.stderr}`;
+  const detail =
+    code !== null
+      ? `Process exited with code ${code}`
+      : `Process terminated by signal ${signal ?? 'unknown'}`;
+  const baseMessage = `${detail}:\n${accumulator.stderr}`;
   const reason = detectAndTripQuota(ctx, accumulator);
   if (reason !== null) {
     return new Error(`[QUOTA/RATE-LIMIT] ${reason}\n${baseMessage}`);
@@ -182,14 +193,14 @@ export function spawnRun(
   child.stderr.on('data', onStderr);
 
   return new Promise<string>((resolve, reject) => {
-    child.on('close', (code: number) => {
+    child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
       if (code === 0) {
         const transformed = transform(accumulator.stdout);
         resolve(
           maybeAppendStderr(transformed, accumulator.stderr, isJsonOutput),
         );
       } else {
-        reject(buildExitFailureError(ctx, code, accumulator));
+        reject(buildExitFailureError(ctx, code, signal, accumulator));
       }
     });
   });
@@ -229,7 +240,7 @@ export function spawnRunWithTimeout(
   let settled = false;
   let timeoutHandle: NodeJS.Timeout;
   const processPromise = new Promise<string>((resolve, reject) => {
-    child.on('close', (code: number) => {
+    child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
       if (settled) {
         return;
       }
@@ -241,7 +252,7 @@ export function spawnRunWithTimeout(
           maybeAppendStderr(transformed, accumulator.stderr, isJsonOutput),
         );
       } else {
-        reject(buildExitFailureError(ctx, code, accumulator));
+        reject(buildExitFailureError(ctx, code, signal, accumulator));
       }
     });
   });
