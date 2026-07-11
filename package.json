@@ -75,6 +75,7 @@
     "build:sandbox": "bun scripts/build_sandbox.ts --skip-npm-install-build",
     "bundle": "npm run generate && bun scripts/bun-build.config.mjs",
     "test": "npm run test --workspaces --if-present",
+    "test:bun": "bun scripts/test.ts",
     "test:ci": "cross-env NODE_OPTIONS=--max-old-space-size=6144 npm run test:ci --workspaces --if-present && npm run test:scripts",
     "test:scripts": "vitest run --config ./scripts/tests/vitest.config.ts",
     "test:interactive-ui": "cross-env LLXPRT_E2E_TMUX=1 vitest run --config ./scripts/tests/vitest.config.ts scripts/tests/interactive-ui.test.ts --reporter=verbose",

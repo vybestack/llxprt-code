@@ -78,6 +78,9 @@ export function resolveReasoningSettings(
         | 'native'
         | 'field'
         | undefined) ?? 'field',
+    fieldName:
+      (options.settings.get('reasoning.fieldName') as string | undefined) ??
+      'reasoning_content',
   };
 }
 

@@ -16,7 +16,8 @@
  * with no coupling to OAuthManager internals.
  */
 
-import { DebugLogger, type Config } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { getRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import type { TokenStore } from './types.js';

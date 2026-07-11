@@ -20,10 +20,10 @@ const { flushMockRef, providerManagerRef, providerRef } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
+vi.mock('@vybestack/llxprt-code-auth', async () => {
   const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-core')
-  >('@vybestack/llxprt-code-core');
+    typeof import('@vybestack/llxprt-code-auth')
+  >('@vybestack/llxprt-code-auth');
   const flushMock = vi.fn(() => ({
     runtimeId: 'test-runtime',
     revokedTokens: [],
@@ -39,7 +39,7 @@ import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 
 import { OAuthManager } from './oauth-manager.js';
 import type { OAuthProvider } from './types.js';
-import type { TokenStore } from '@vybestack/llxprt-code-core';
+import type { TokenStore } from '@vybestack/llxprt-code-auth';
 
 describe('OAuthManager.logout runtime cache handling', () => {
   beforeEach(() => {
