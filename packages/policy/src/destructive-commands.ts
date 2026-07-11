@@ -516,14 +516,32 @@ function peelWrappers(tokens: readonly string[]): readonly string[] {
       current.slice(1),
       WRAPPER_OPERAND_FLAGS[name] ?? EMPTY_FLAGS,
     );
+    if (name === 'timeout' && isTimeoutDuration(current[0])) {
+      current = current.slice(1);
+    }
   }
   return current;
 }
+
+const isTimeoutDuration = (token: string | undefined): boolean =>
+  token !== undefined && /^\d+(?:\.\d+)?[smhd]?$/.test(token);
 
 const WRAPPER_OPERAND_FLAGS: Readonly<Record<string, readonly string[]>> = {
   timeout: ['-s', '--signal', '-k', '--kill-after'],
   sudo: ['-u', '--user', '-g', '--group'],
   doas: ['-u', '--user', '-g', '--group'],
+  xargs: [
+    '-I',
+    '--replace',
+    '-L',
+    '--max-lines',
+    '-n',
+    '--max-args',
+    '-s',
+    '--max-chars',
+    '-P',
+    '--max-procs',
+  ],
   // `env -u VAR`/`--unset VAR` and `-C DIR`/`--chdir DIR` consume the NEXT
   // token as an operand, so the wrapper peeler must skip both the flag and its
   // operand. `-S`/`--split-string` is intentionally NOT listed: its operand is
@@ -729,9 +747,10 @@ function isChmodDangerous(segment: CanonicalSegment): boolean {
     return false;
   }
   const partition = partitionByDoubleDash(segment.argTokens);
+  const mode = findChmodMode(segment.argTokens, partition);
   if (
-    partition.flagZone.some(isSetuidSymbolic) ||
-    partition.flagZone.some((token) => CHMOD_OCTAL_SPECIAL.test(token))
+    mode !== undefined &&
+    (isSetuidSymbolic(mode) || CHMOD_OCTAL_SPECIAL.test(mode))
   ) {
     return true;
   }
@@ -744,6 +763,17 @@ function isChmodDangerous(segment: CanonicalSegment): boolean {
     allOperands.some((token) => /^0*777$/.test(token)) &&
     allOperands.some(isSensitiveRootGlob)
   );
+}
+
+function findChmodMode(
+  argTokens: readonly string[],
+  partition: DashDashPartition,
+): string | undefined {
+  const dashIndex = argTokens.indexOf('--');
+  if (dashIndex === 0) {
+    return partition.operandZone[0];
+  }
+  return partition.flagZone.find((token) => !token.startsWith('-'));
 }
 
 /** Pattern E: best-effort detection of writes to credential paths (.ssh, .aws/credentials). */

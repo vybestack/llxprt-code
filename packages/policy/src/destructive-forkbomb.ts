@@ -295,13 +295,10 @@ function collapsedToOriginalOffset(
     const ch = original[origIdx];
     if (ch === NEWLINE) {
       origIdx++;
-      const nlStart = origIdx;
       while (origIdx < original.length && original[origIdx] === NEWLINE) {
         origIdx++;
       }
-      if (origIdx > nlStart) {
-        collIdx++;
-      }
+      collIdx++;
     } else if (isNonNewlineSpace(ch)) {
       origIdx++;
     } else {
@@ -476,16 +473,29 @@ function redirectTargetLength(s: string, start: number): number {
   let inDouble = false;
   while (end < s.length) {
     const ch = s[end];
-    if (ch === "'" && !inDouble) {
-      inSingle = !inSingle;
-    } else if (ch === '"' && !inSingle) {
-      inDouble = !inDouble;
-    } else if (!inSingle && !inDouble && isTokenTerminator(ch)) {
-      break;
+    if (ch === '\\' && !inSingle && isRedirectEscape(s, end, inDouble)) {
+      end += 2;
+    } else {
+      if (ch === "'" && !inDouble) {
+        inSingle = !inSingle;
+      } else if (ch === '"' && !inSingle) {
+        inDouble = !inDouble;
+      } else if (!inSingle && !inDouble && isTokenTerminator(ch)) {
+        break;
+      }
+      end++;
     }
-    end++;
   }
   return end - start;
+}
+
+function isRedirectEscape(
+  s: string,
+  index: number,
+  inDouble: boolean,
+): boolean {
+  const next = s[index + 1];
+  return !inDouble || ['$', '`', '"', '\\', NEWLINE].includes(next);
 }
 
 /** True if `ch` terminates a redirect target token (whitespace or separator). */

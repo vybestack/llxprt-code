@@ -3,10 +3,8 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
 import { describe, it, expect } from 'vitest';
 import { isDestructiveCommand } from '@vybestack/llxprt-code-policy';
-
 describe('isDestructiveCommand', () => {
   describe('pattern A: rm targeting sensitive roots', () => {
     it.each([
@@ -23,13 +21,11 @@ describe('isDestructiveCommand', () => {
     ])('detects "%s" (%s)', (command) => {
       expect(isDestructiveCommand(command)).toBe(true);
     });
-
     it('detects rm targeting home directory shorthand', () => {
       expect(isDestructiveCommand('rm -rf ~')).toBe(true);
       expect(isDestructiveCommand('rm -rf $HOME')).toBe(true);
       expect(isDestructiveCommand('rm -rf ${HOME}')).toBe(true);
     });
-
     it.each([
       ['rm -rf ./build', 'relative build dir'],
       ['rm -rf node_modules', 'node_modules'],
@@ -495,6 +491,11 @@ describe('isDestructiveCommand', () => {
       ['timeout -s KILL 5 rm -rf /', 'timeout -s consumes KILL as operand'],
       ['timeout -k 5 10 rm -rf /', 'timeout -k consumes 5 as operand'],
       ['timeout 5 rm -rf /', 'plain timeout with duration still flagged'],
+      ['timeout 10s rm -rf /', 'timeout duration with seconds suffix'],
+      [
+        'timeout 1.5m rm -rf /',
+        'timeout fractional duration with minutes suffix',
+      ],
     ])('flags destructive "%s" (%s)', (command) => {
       expect(isDestructiveCommand(command)).toBe(true);
     });

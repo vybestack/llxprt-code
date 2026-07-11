@@ -559,3 +559,32 @@ describe('Defect 4: POSIX double-quote backslash escape precision', () => {
     expect(isDestructiveCommand(command)).toBe(expected);
   });
 });
+
+describe('multiline and nested-substitution fork-bomb parsing', () => {
+  it.each<[string, boolean]>([
+    [':() {\n:|:&\n}\n:', true],
+    ['bomb() {\nbomb|bomb&\n}\nbomb arg', true],
+    [':(){ echo $(printf "}"); :|:& };:', true],
+    ['bomb(){ echo `printf "}"`; bomb|bomb& }; bomb', true],
+    ['safe(){ echo $(printf "}"); }; safe', false],
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});
+
+describe('escaped quotes and wrapper operands', () => {
+  it.each<[string, boolean]>([
+    [':(){ :|:& } >"file\\"name";:', true],
+    ['safe(){ echo ok; } >"file\\"name"; safe', false],
+    ['xargs -I {} rm -rf /', true],
+    ['xargs --replace={} rm -rf /', true],
+    ['xargs -L 1 rm -rf /', true],
+    ['xargs --max-args 2 rm -rf /', true],
+    ['xargs -I {} echo /', false],
+    ['chmod 644 4777', false],
+    ['chmod -- 4777 /usr/bin/tool', true],
+    ['chmod -- +s /usr/bin/tool', true],
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});
