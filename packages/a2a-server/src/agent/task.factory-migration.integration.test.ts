@@ -31,7 +31,7 @@
  * used.
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'bun:test';
 import { Task } from './task.js';
 import {
   Config,
@@ -290,7 +290,7 @@ describe('Task factory migration — Task.create produces a task with a real age
     // runs, so it is observable on the event bus regardless of the rejection.
     // The substring assertion matches the real CoreToolScheduler's TypeError
     // from its ToolDispatcher resolving against an uninitialized registry.
-    await expect(
+    expect(
       task.scheduleToolCalls(
         [
           {
