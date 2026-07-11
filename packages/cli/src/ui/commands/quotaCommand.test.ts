@@ -48,9 +48,7 @@ const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Get the last item added to the UI, typed for assertion convenience.
- * Uses the pre-existing `as { type: MessageType; text?: string }` convention
- * established in this test file.
+ * Get the last informational or error item added to the UI.
  */
 function getLastUiItem(ctx: CommandContext): {
   type: 'info' | 'error';

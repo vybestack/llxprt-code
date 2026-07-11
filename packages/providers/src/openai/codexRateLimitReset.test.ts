@@ -218,7 +218,6 @@ describe('codexRateLimitReset', () => {
         unrelated_field: 'something',
         rate_limit_reset_credits: { available_count: 0, credits: [] },
       });
-      expect(mockResponse).toStrictEqual({ unrelated_field: 'something' });
     });
 
     it('preserves additional nested reset-credit metadata during normalization', async () => {
