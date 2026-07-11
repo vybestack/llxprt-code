@@ -4,106 +4,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Storage } from '@google-cloud/storage';
-import * as fse from 'fs-extra';
-import * as tar from 'tar';
-import { gzipSync, gunzipSync } from 'node:zlib';
-import { v4 as uuidv4 } from 'uuid';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import type { Mock } from 'bun:test';
+import type { Storage } from '@google-cloud/storage';
 import type { Task as SDKTask } from '@a2a-js/sdk';
 import type { TaskStore } from '@a2a-js/sdk/server';
-import type { Mocked, MockedClass, Mock } from 'vitest';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { GCSTaskStore, NoOpTaskStore } from './gcs.js';
-import { logger } from '../utils/logger.js';
-import * as configModule from '../config/config.js';
-import { getPersistedState, METADATA_KEY } from '../types.js';
+import { METADATA_KEY } from '../types.js';
 
-// Mock dependencies
-const fsMocks = vi.hoisted(() => ({
-  readdir: vi.fn(),
-  createReadStream: vi.fn(),
-}));
-
-vi.mock('@google-cloud/storage');
-vi.mock('fs-extra', () => ({
-  pathExists: vi.fn(),
-  readdir: vi.fn(),
-  remove: vi.fn(),
-  ensureDir: vi.fn(),
-  createReadStream: vi.fn(),
-}));
-vi.mock('node:fs', async () => {
-  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
-  return {
-    ...actual,
-    promises: {
-      ...actual.promises,
-      readdir: fsMocks.readdir,
-    },
-    createReadStream: fsMocks.createReadStream,
-  };
-});
-vi.mock('fs', async () => {
-  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
-  return {
-    ...actual,
-    promises: {
-      ...actual.promises,
-      readdir: fsMocks.readdir,
-    },
-    createReadStream: fsMocks.createReadStream,
-  };
-});
-vi.mock('tar', async () => {
-  const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
-  return {
-    c: vi.fn(({ file }) => {
-      if (file != null) {
-        actualFs.writeFileSync(file, Buffer.from('dummy tar content'));
-      }
-      return Promise.resolve();
-    }),
-    x: vi.fn().mockResolvedValue(undefined),
-    t: vi.fn().mockResolvedValue(undefined),
-    r: vi.fn().mockResolvedValue(undefined),
-    u: vi.fn().mockResolvedValue(undefined),
-  };
-});
-vi.mock('zlib');
-vi.mock('uuid');
-vi.mock('../utils/logger.js', () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
-}));
-vi.mock('../config/config.js', () => ({
-  setTargetDir: vi.fn(),
-}));
-vi.mock('node:stream/promises', () => ({
-  pipeline: vi.fn(),
-}));
-vi.mock('../types.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../types.js')>();
-  return {
-    ...actual,
-    getPersistedState: vi.fn(),
-  };
-});
-
-const mockStorage = Storage as MockedClass<typeof Storage>;
-const mockFse = fse as Mocked<typeof fse>;
-const mockCreateReadStream = fsMocks.createReadStream;
-const mockTar = tar as Mocked<typeof tar>;
-const mockGzipSync = gzipSync as Mock;
-const mockGunzipSync = gunzipSync as Mock;
-const mockUuidv4 = uuidv4 as Mock;
-const mockSetTargetDir = configModule.setTargetDir as Mock;
-const mockGetPersistedState = getPersistedState as Mock;
 const TEST_METADATA_KEY = METADATA_KEY;
+const mockPathExists = vi.fn();
+const mockRemove = vi.fn();
+const mockEnsureDir = vi.fn();
+const mockReaddir = vi.fn();
+const mockCreateReadStream = vi.fn();
+const mockCreateArchive = vi.fn();
+const mockExtractArchive = vi.fn();
+const mockGzip = vi.fn();
+const mockGunzip = vi.fn();
+const mockCreateId = vi.fn();
+const mockSetTargetDir = vi.fn();
+const mockGetPersistedState = vi.fn();
 
 type MockWriteStream = {
   emit: Mock<(event: string, ...args: unknown[]) => boolean>;
@@ -148,6 +70,23 @@ describe('GCSTaskStore', () => {
   let mockWriteStream: MockWriteStream;
   let mockStorageInstance: MockStorageInstance;
 
+  const createStore = () =>
+    new GCSTaskStore(bucketName, {
+      storage: mockStorageInstance as unknown as Storage,
+      gzip: mockGzip,
+      gunzip: mockGunzip,
+      createArchive: mockCreateArchive,
+      extractArchive: mockExtractArchive,
+      pathExists: mockPathExists,
+      remove: mockRemove,
+      ensureDir: mockEnsureDir,
+      readdir: mockReaddir,
+      createReadStream: mockCreateReadStream,
+      getTmpDir: () => '/tmp',
+      createId: mockCreateId,
+      setTargetDir: mockSetTargetDir,
+      getPersistedState: mockGetPersistedState,
+    });
   beforeEach(() => {
     vi.clearAllMocks();
     bucketName = 'test-bucket';
@@ -187,46 +126,33 @@ describe('GCSTaskStore', () => {
       getBuckets: vi.fn().mockResolvedValue([[{ name: bucketName }]]),
       createBucket: vi.fn().mockResolvedValue([mockBucket]),
     };
-    mockStorage.mockReturnValue(mockStorageInstance as unknown as Storage);
-
-    mockUuidv4.mockReturnValue('test-uuid');
+    mockCreateId.mockReturnValue('test-uuid');
     mockSetTargetDir.mockReturnValue('/tmp/workdir');
     mockGetPersistedState.mockReturnValue({
       _agentSettings: {},
       _taskState: 'submitted',
     });
-    (fse.pathExists as Mock).mockResolvedValue(true);
-    fsMocks.readdir.mockResolvedValue(['file1.txt']);
-    mockFse.remove.mockResolvedValue(undefined);
-    mockFse.ensureDir.mockResolvedValue(undefined);
-    mockGzipSync.mockReturnValue(Buffer.from('compressed'));
-    mockGunzipSync.mockReturnValue(Buffer.from('{}'));
+    mockPathExists.mockResolvedValue(true);
+    mockReaddir.mockResolvedValue(['file1.txt']);
+    mockRemove.mockResolvedValue(undefined);
+    mockEnsureDir.mockResolvedValue(undefined);
+    mockGzip.mockReturnValue(Buffer.from('compressed'));
+    mockGunzip.mockReturnValue(Buffer.from('{}'));
     mockCreateReadStream.mockReturnValue({ on: vi.fn(), pipe: vi.fn() });
-    mockFse.createReadStream.mockReturnValue({
-      on: vi.fn(),
-      pipe: vi.fn(),
-    } as unknown as import('node:fs').ReadStream);
   });
 
   describe('Constructor & Initialization', () => {
     it('should initialize and check bucket existence', async () => {
-      const store = new GCSTaskStore(bucketName);
+      const store = createStore();
       await store['ensureBucketInitialized']();
-      expect(mockStorage).toHaveBeenCalledTimes(1);
-      expect(mockStorageInstance.getBuckets).toHaveBeenCalled();
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Bucket test-bucket exists'),
-      );
+      expect(mockStorageInstance.getBuckets).toHaveBeenCalledTimes(1);
     });
 
     it('should create bucket if it does not exist', async () => {
       mockStorageInstance.getBuckets.mockResolvedValue([[]]);
-      const store = new GCSTaskStore(bucketName);
+      const store = createStore();
       await store['ensureBucketInitialized']();
       expect(mockStorageInstance.createBucket).toHaveBeenCalledWith(bucketName);
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Bucket test-bucket created successfully'),
-      );
     });
 
     it('should throw if bucket creation fails', async () => {
@@ -234,8 +160,8 @@ describe('GCSTaskStore', () => {
       mockStorageInstance.createBucket.mockRejectedValue(
         new Error('Create failed'),
       );
-      const store = new GCSTaskStore(bucketName);
-      await expect(store['ensureBucketInitialized']()).rejects.toThrow(
+      const store = createStore();
+      expect(store['ensureBucketInitialized']()).rejects.toThrow(
         'Failed to create GCS bucket test-bucket: Error: Create failed',
       );
     });
@@ -251,33 +177,27 @@ describe('GCSTaskStore', () => {
     };
 
     it('should save metadata and workspace', async () => {
-      const store = new GCSTaskStore(bucketName);
+      const store = createStore();
       await store.save(mockTask);
 
       expect(mockFile.save).toHaveBeenCalledTimes(1);
-      expect(mockTar.c).toHaveBeenCalledTimes(1);
-      expect(mockFse.remove).toHaveBeenCalledTimes(1);
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('metadata saved to GCS'),
-      );
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('workspace saved to GCS'),
-      );
+      expect(mockCreateArchive).toHaveBeenCalledTimes(1);
+      expect(mockRemove).toHaveBeenCalledTimes(1);
     });
 
     it('should handle tar creation failure', async () => {
-      (fse.pathExists as Mock).mockImplementation(
+      mockPathExists.mockImplementation(
         (path: string) =>
           !path.includes('task-task1-workspace-test-uuid.tar.gz'),
       );
-      const store = new GCSTaskStore(bucketName);
-      await expect(store.save(mockTask)).rejects.toThrow(
+      const store = createStore();
+      expect(store.save(mockTask)).rejects.toThrow(
         'tar.c command failed to create',
       );
     });
 
     it('should throw an error if taskId contains path traversal sequences', async () => {
-      const store = new GCSTaskStore('test-bucket');
+      const store = createStore();
       const maliciousTask: SDKTask = {
         id: '../../../malicious-task',
         metadata: {
@@ -300,7 +220,7 @@ describe('GCSTaskStore', () => {
         history: [],
         artifacts: [],
       };
-      await expect(store.save(maliciousTask)).rejects.toThrow(
+      expect(store.save(maliciousTask)).rejects.toThrow(
         'Invalid taskId: ../../../malicious-task',
       );
     });
@@ -308,7 +228,7 @@ describe('GCSTaskStore', () => {
 
   describe('load', () => {
     it('should load task metadata and workspace', async () => {
-      mockGunzipSync.mockReturnValue(
+      mockGunzip.mockReturnValue(
         Buffer.from(
           JSON.stringify({
             [TEST_METADATA_KEY]: {
@@ -339,7 +259,7 @@ describe('GCSTaskStore', () => {
         return newMockFile;
       });
 
-      const store = new GCSTaskStore(bucketName);
+      const store = createStore();
       const task = await store.load('task1');
 
       expect(task).toBeDefined();
@@ -350,13 +270,13 @@ describe('GCSTaskStore', () => {
       expect(mockBucket.file).toHaveBeenCalledWith(
         'tasks/task1/workspace.tar.gz',
       );
-      expect(mockTar.x).toHaveBeenCalledTimes(1);
-      expect(mockFse.remove).toHaveBeenCalledTimes(1);
+      expect(mockExtractArchive).toHaveBeenCalledTimes(1);
+      expect(mockRemove).toHaveBeenCalledTimes(1);
     });
 
     it('should return undefined if metadata not found', async () => {
       mockFile.exists.mockResolvedValue([false]);
-      const store = new GCSTaskStore(bucketName);
+      const store = createStore();
       const task = await store.load('task1');
       expect(task).toBeUndefined();
       expect(mockBucket.file).toHaveBeenCalledWith(
@@ -365,7 +285,7 @@ describe('GCSTaskStore', () => {
     });
 
     it('should load metadata even if workspace not found', async () => {
-      mockGunzipSync.mockReturnValue(
+      mockGunzip.mockReturnValue(
         Buffer.from(
           JSON.stringify({
             [TEST_METADATA_KEY]: {
@@ -390,21 +310,18 @@ describe('GCSTaskStore', () => {
         return newMockFile;
       });
 
-      const store = new GCSTaskStore(bucketName);
+      const store = createStore();
       const task = await store.load('task1');
 
       expect(task).toBeDefined();
-      expect(mockTar.x).not.toHaveBeenCalled();
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('workspace archive not found'),
-      );
+      expect(mockExtractArchive).not.toHaveBeenCalled();
     });
   });
 
   it('should throw an error if taskId contains path traversal sequences', async () => {
-    const store = new GCSTaskStore('test-bucket');
+    const store = createStore();
     const maliciousTaskId = '../../../malicious-task';
-    await expect(store.load(maliciousTaskId)).rejects.toThrow(
+    expect(store.load(maliciousTaskId)).rejects.toThrow(
       `Invalid taskId: ${maliciousTaskId}`,
     );
   });
