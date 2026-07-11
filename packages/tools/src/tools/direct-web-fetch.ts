@@ -42,13 +42,20 @@ export interface DirectWebFetchToolParams {
   timeout?: number;
 }
 
+export interface DirectWebFetchToolDependencies {
+  fetch?: typeof fetch;
+}
+
 export class DirectWebFetchTool extends BaseDeclarativeTool<
   DirectWebFetchToolParams,
   ToolResult
 > {
   static readonly Name = DIRECT_WEB_FETCH_TOOL;
 
-  constructor(private readonly host: IToolHost) {
+  constructor(
+    private readonly host: IToolHost,
+    private readonly dependencies: DirectWebFetchToolDependencies = {},
+  ) {
     super(
       DirectWebFetchTool.Name,
       'DirectWebFetch',
@@ -81,7 +88,12 @@ export class DirectWebFetchTool extends BaseDeclarativeTool<
     params: DirectWebFetchToolParams,
     messageBus: IToolMessageBus,
   ): ToolInvocation<DirectWebFetchToolParams, ToolResult> {
-    return new DirectWebFetchToolInvocation(this.host, params, messageBus);
+    return new DirectWebFetchToolInvocation(
+      this.host,
+      this.dependencies,
+      params,
+      messageBus,
+    );
   }
 }
 
@@ -91,6 +103,7 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
 > {
   constructor(
     _host: IToolHost,
+    private readonly dependencies: DirectWebFetchToolDependencies,
     params: DirectWebFetchToolParams,
     messageBus: IToolMessageBus,
   ) {
@@ -175,7 +188,7 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
   private async fetchResponse(signal: AbortSignal) {
     return retryWithBackoff(
       async () => {
-        const resp = await fetch(this.params.url, {
+        const resp = await (this.dependencies.fetch ?? fetch)(this.params.url, {
           signal,
           headers: {
             'User-Agent':
