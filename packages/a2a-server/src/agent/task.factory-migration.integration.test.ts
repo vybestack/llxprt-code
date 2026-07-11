@@ -290,8 +290,8 @@ describe('Task factory migration — Task.create produces a task with a real age
     // runs, so it is observable on the event bus regardless of the rejection.
     // The substring assertion matches the real CoreToolScheduler's TypeError
     // from its ToolDispatcher resolving against an uninitialized registry.
-    expect(
-      task.scheduleToolCalls(
+    try {
+      await task.scheduleToolCalls(
         [
           {
             callId: 'sched-1',
@@ -302,8 +302,12 @@ describe('Task factory migration — Task.create produces a task with a real age
           },
         ],
         new AbortController().signal,
-      ),
-    ).rejects.toThrow('getTool');
+      );
+      throw new Error('Expected scheduling to reject');
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain('getTool');
+    }
 
     // Observable behavior: the Task published a 'working' status event
     // before scheduling (the task-state transition A2A relies on). We observe

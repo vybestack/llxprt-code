@@ -701,7 +701,7 @@ describe('E2E Tests', () => {
         ],
       });
 
-      expect(getAllCommandsSpy).toHaveBeenCalledOnce();
+      expect(getAllCommandsSpy).toHaveBeenCalledTimes(1);
       getAllCommandsSpy.mockRestore();
     });
 
