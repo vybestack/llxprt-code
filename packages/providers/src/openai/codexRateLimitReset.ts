@@ -33,6 +33,7 @@ export const CodexRateLimitResetCreditsResponseSchema = z
         available_count: z.number().int().nonnegative(),
         credits: z.array(CodexRateLimitResetCreditSchema),
       })
+      .passthrough()
       .nullable()
       .optional(),
   })
@@ -121,16 +122,13 @@ function buildResetEndpoints(baseUrl?: string): {
 function normalizeResetCredits(
   parsed: CodexRateLimitResetCreditsResponse,
 ): CodexRateLimitResetCreditsResponse {
-  const credits = parsed.rate_limit_reset_credits ?? {
+  const resetCredits = parsed.rate_limit_reset_credits ?? {
     available_count: 0,
     credits: [],
   };
   return {
     ...parsed,
-    rate_limit_reset_credits: {
-      available_count: credits.available_count,
-      credits: credits.credits,
-    },
+    rate_limit_reset_credits: resetCredits,
   };
 }
 

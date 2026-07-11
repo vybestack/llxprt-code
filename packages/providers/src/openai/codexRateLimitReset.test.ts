@@ -12,22 +12,26 @@ import {
   CodexRateLimitResetCreditsResponseSchema,
 } from './codexRateLimitReset.js';
 
+const RESET_CREDITS_URL =
+  'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits';
+const CONSUME_RESET_CREDIT_URL = `${RESET_CREDITS_URL}/consume`;
+
 describe('codexRateLimitReset', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  let originalFetch: typeof global.fetch;
+
+  beforeEach(() => {
+    originalFetch = global.fetch;
+    fetchMock = vi.fn();
+    global.fetch = fetchMock;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
   describe('fetchCodexRateLimitResetCredits', () => {
-    let fetchMock: ReturnType<typeof vi.fn>;
-    let originalFetch: typeof global.fetch;
-
-    beforeEach(() => {
-      originalFetch = global.fetch;
-      fetchMock = vi.fn();
-      global.fetch = fetchMock;
-    });
-
-    afterEach(() => {
-      global.fetch = originalFetch;
-      vi.restoreAllMocks();
-    });
-
     it('should return null for empty access token', async () => {
       const result = await fetchCodexRateLimitResetCredits('', 'account123');
       expect(result).toBeNull();
@@ -58,18 +62,15 @@ describe('codexRateLimitReset', () => {
         'account123',
       );
 
-      expect(fetchMock).toHaveBeenCalledWith(
-        'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits',
-        {
-          method: 'GET',
-          headers: {
-            Authorization: 'Bearer token123',
-            'ChatGPT-Account-Id': 'account123',
-            Accept: 'application/json',
-          },
-          signal: expect.any(AbortSignal),
+      expect(fetchMock).toHaveBeenCalledWith(RESET_CREDITS_URL, {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer token123',
+          'ChatGPT-Account-Id': 'account123',
+          Accept: 'application/json',
         },
-      );
+        signal: expect.any(AbortSignal),
+      });
       expect(result).toStrictEqual(mockResponse);
     });
 
@@ -93,7 +94,7 @@ describe('codexRateLimitReset', () => {
       );
 
       expect(fetchMock).toHaveBeenCalledWith(
-        'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits',
+        RESET_CREDITS_URL,
         expect.objectContaining({
           method: 'GET',
         }),
@@ -152,7 +153,7 @@ describe('codexRateLimitReset', () => {
       );
 
       expect(fetchMock).toHaveBeenCalledWith(
-        'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits',
+        RESET_CREDITS_URL,
         expect.objectContaining({
           method: 'GET',
         }),
@@ -217,6 +218,30 @@ describe('codexRateLimitReset', () => {
         unrelated_field: 'something',
         rate_limit_reset_credits: { available_count: 0, credits: [] },
       });
+      expect(mockResponse).toStrictEqual({ unrelated_field: 'something' });
+    });
+
+    it('preserves additional nested reset-credit metadata during normalization', async () => {
+      const mockResponse = {
+        rate_limit_reset_credits: {
+          available_count: 1,
+          credits: [{ id: 'credit-1' }],
+          next_refresh_at: '2030-01-01T00:00:00Z',
+        },
+      };
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+
+      const result = await fetchCodexRateLimitResetCredits(
+        'token123',
+        'account123',
+      );
+
+      expect(result?.rate_limit_reset_credits).toStrictEqual(
+        mockResponse.rate_limit_reset_credits,
+      );
     });
 
     it('should degrade null rate_limit_reset_credits to zero available credits', async () => {
@@ -306,20 +331,6 @@ describe('codexRateLimitReset', () => {
   });
 
   describe('consumeCodexRateLimitResetCredit', () => {
-    let fetchMock: ReturnType<typeof vi.fn>;
-    let originalFetch: typeof global.fetch;
-
-    beforeEach(() => {
-      originalFetch = global.fetch;
-      fetchMock = vi.fn();
-      global.fetch = fetchMock;
-    });
-
-    afterEach(() => {
-      global.fetch = originalFetch;
-      vi.restoreAllMocks();
-    });
-
     it('should return null for empty access token', async () => {
       const result = await consumeCodexRateLimitResetCredit(
         '',
@@ -415,23 +426,20 @@ describe('codexRateLimitReset', () => {
         'redeem-1',
       );
 
-      expect(fetchMock).toHaveBeenCalledWith(
-        'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume',
-        {
-          method: 'POST',
-          headers: {
-            Authorization: 'Bearer token123',
-            'ChatGPT-Account-Id': 'account123',
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            credit_id: 'credit-1',
-            redeem_request_id: 'redeem-1',
-          }),
-          signal: expect.any(AbortSignal),
+      expect(fetchMock).toHaveBeenCalledWith(CONSUME_RESET_CREDIT_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer token123',
+          'ChatGPT-Account-Id': 'account123',
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
         },
-      );
+        body: JSON.stringify({
+          credit_id: 'credit-1',
+          redeem_request_id: 'redeem-1',
+        }),
+        signal: expect.any(AbortSignal),
+      });
       expect(result).toStrictEqual(mockResponse);
     });
 
@@ -629,7 +637,7 @@ describe('codexRateLimitReset', () => {
       );
 
       expect(fetchMock).toHaveBeenCalledWith(
-        'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume',
+        CONSUME_RESET_CREDIT_URL,
         expect.objectContaining({ method: 'POST' }),
       );
     });
@@ -674,7 +682,7 @@ describe('codexRateLimitReset', () => {
       );
 
       expect(fetchMock).toHaveBeenCalledWith(
-        'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume',
+        CONSUME_RESET_CREDIT_URL,
         expect.objectContaining({ method: 'POST' }),
       );
     });

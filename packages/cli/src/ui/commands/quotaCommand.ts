@@ -54,6 +54,11 @@ interface RedeemableCredit {
   readonly firstCreditId: string;
 }
 
+interface RedeemableCreditWithToken extends RedeemableCredit {
+  readonly accessToken: string;
+  readonly accountId: string;
+}
+
 interface BucketTokenInfo {
   readonly accessToken: string | null;
   readonly accountId: string | null;
@@ -240,12 +245,13 @@ async function isCodexAuthed(oauthManager: OAuthManager): Promise<boolean> {
 }
 
 /**
- * Find the first bucket+credit that can be redeemed.
+ * Find all buckets with a credit that can be redeemed.
  */
-async function findRedeemableCredit(
+async function findRedeemableCredits(
   oauthManager: OAuthManager,
-): Promise<RedeemableCredit | null> {
+): Promise<readonly RedeemableCredit[]> {
   const creditsMap = await oauthManager.getAllCodexRateLimitResetCredits();
+  const redeemableCredits: RedeemableCredit[] = [];
 
   for (const [bucket, raw] of creditsMap.entries()) {
     const parsed = parseBucketCredits(bucket, raw);
@@ -254,10 +260,13 @@ async function findRedeemableCredit(
       parsed.availableCount > 0 &&
       parsed.firstCreditId !== null
     ) {
-      return { bucket: parsed.bucket, firstCreditId: parsed.firstCreditId };
+      redeemableCredits.push({
+        bucket: parsed.bucket,
+        firstCreditId: parsed.firstCreditId,
+      });
     }
   }
-  return null;
+  return redeemableCredits;
 }
 
 /**
@@ -286,6 +295,23 @@ async function resolveBucketToken(
     accessToken: parsed.data.access_token,
     accountId: parsed.data.account_id,
   };
+}
+
+async function findRedeemableCreditWithToken(
+  oauthManager: OAuthManager,
+  redeemableCredits: readonly RedeemableCredit[],
+): Promise<RedeemableCreditWithToken | null> {
+  for (const redeemable of redeemableCredits) {
+    const tokenInfo = await resolveBucketToken(oauthManager, redeemable.bucket);
+    if (tokenInfo.accessToken !== null && tokenInfo.accountId !== null) {
+      return {
+        ...redeemable,
+        accessToken: tokenInfo.accessToken,
+        accountId: tokenInfo.accountId,
+      };
+    }
+  }
+  return null;
 }
 
 const RESET_CONFIRMATION_PROMPT =
@@ -390,17 +416,20 @@ async function resetAction(
       return undefined;
     }
 
-    const redeemable = await findRedeemableCredit(oauthManager);
-    if (redeemable === null) {
+    const redeemableCredits = await findRedeemableCredits(oauthManager);
+    if (redeemableCredits.length === 0) {
       addInfo(context, NO_REDEEMABLE_CREDITS_MSG);
       return undefined;
     }
 
-    const tokenInfo = await resolveBucketToken(oauthManager, redeemable.bucket);
-    if (tokenInfo.accessToken === null || tokenInfo.accountId === null) {
+    const redeemable = await findRedeemableCreditWithToken(
+      oauthManager,
+      redeemableCredits,
+    );
+    if (redeemable === null) {
       addError(
         context,
-        'Codex credentials for the selected bucket are unavailable or expired. Run /auth codex to re-authenticate.',
+        'Codex credentials for all credit-bearing buckets are unavailable or expired. Run /auth codex to re-authenticate.',
       );
       return undefined;
     }
@@ -415,8 +444,8 @@ async function resetAction(
 
     await redeemResetCredit(
       context,
-      tokenInfo.accessToken,
-      tokenInfo.accountId,
+      redeemable.accessToken,
+      redeemable.accountId,
       redeemable.firstCreditId,
     );
     return undefined;

@@ -53,11 +53,18 @@ const UUID_REGEX =
  * established in this test file.
  */
 function getLastUiItem(ctx: CommandContext): {
-  type: MessageType;
+  type: 'info' | 'error';
   text?: string;
 } {
   const calls = vi.mocked(ctx.ui.addItem).mock.calls;
-  return calls[calls.length - 1]?.[0] as { type: MessageType; text?: string };
+  const lastItem = calls.at(-1)?.[0];
+  if (lastItem?.type === 'info') {
+    return { type: 'info', text: lastItem.text };
+  }
+  if (lastItem?.type === 'error') {
+    return { type: 'error', text: lastItem.text };
+  }
+  throw new Error('Expected an informational or error UI item to be added');
 }
 
 function makeCodexCreditsMap(
@@ -572,6 +579,47 @@ describe('quotaCommand', () => {
       const lastItem = getLastUiItem(mockContext);
       expect(lastItem.type).toBe(MessageType.ERROR);
       expect(lastItem.text).toContain('unavailable or expired');
+    });
+
+    it('redeems from a later bucket when the first credit-bearing bucket has expired credentials', async () => {
+      const oauthManager = makeCodexResetOauthManager({
+        getAllCodexRateLimitResetCredits: vi.fn().mockResolvedValue(
+          makeCodexCreditsMap([
+            {
+              bucket: 'expired-bucket',
+              availableCount: 1,
+              credits: [{ id: 'expired-credit' }],
+            },
+            {
+              bucket: 'valid-bucket',
+              availableCount: 1,
+              credits: [{ id: 'valid-credit' }],
+            },
+          ]),
+        ),
+        getTokenStore: vi.fn().mockReturnValue({
+          getToken: vi
+            .fn()
+            .mockResolvedValueOnce(
+              makeCodexToken({ expiry: Math.floor(Date.now() / 1000) - 1 }),
+            )
+            .mockResolvedValueOnce(makeCodexToken()),
+        }),
+      });
+      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      mockContext = createMockCommandContext({ overwriteConfirmed: true });
+      mockConsumeCodexRateLimitResetCredit.mockResolvedValue({ code: 'reset' });
+
+      const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
+      await reset!.action!(mockContext, '');
+
+      expect(mockConsumeCodexRateLimitResetCredit).toHaveBeenCalledWith(
+        'codex-access',
+        'acct-123',
+        'valid-credit',
+        expect.any(String),
+        undefined,
+      );
     });
 
     it('shows error when getAllCodexRateLimitResetCredits rejects during reset flow', async () => {
