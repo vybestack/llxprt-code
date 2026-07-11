@@ -11,17 +11,23 @@ import type {
   CommandExecutionResponse,
 } from './types.js';
 
+type ListExtensions = typeof listExtensions;
+
 export class ExtensionsCommand implements Command {
   readonly name = 'extensions';
   readonly description = 'Manage extensions.';
-  readonly subCommands = [new ListExtensionsCommand()];
+  readonly subCommands: Command[];
   readonly topLevel = true;
+
+  constructor(listInstalledExtensions: ListExtensions = listExtensions) {
+    this.subCommands = [new ListExtensionsCommand(listInstalledExtensions)];
+  }
 
   async execute(
     context: CommandContext,
     _: string[],
   ): Promise<CommandExecutionResponse> {
-    return new ListExtensionsCommand().execute(context, _);
+    return this.subCommands[0].execute(context, _);
   }
 }
 
@@ -29,11 +35,15 @@ export class ListExtensionsCommand implements Command {
   readonly name = 'extensions list';
   readonly description = 'Lists all installed extensions.';
 
+  constructor(
+    private readonly listInstalledExtensions: ListExtensions = listExtensions,
+  ) {}
+
   async execute(
     context: CommandContext,
     _: string[],
   ): Promise<CommandExecutionResponse> {
-    const extensions = listExtensions(context.config);
+    const extensions = this.listInstalledExtensions(context.config);
     const data =
       extensions.length > 0 ? extensions : 'No extensions installed.';
 
