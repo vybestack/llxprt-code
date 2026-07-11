@@ -44,6 +44,14 @@ export {
   type ResumeError,
 } from './resumeSession.js';
 export {
+  RESUME_NO_SESSIONS_FOUND,
+  RESUME_SESSION_NOT_FOUND_PREFIX,
+  RESUME_SESSION_INDEX_OUT_OF_RANGE_PREFIX,
+  RESUME_SESSION_INDEX_OUT_OF_RANGE_RE,
+  resumeSessionNotFoundMessage,
+  resumeSessionIndexOutOfRangeMessage,
+} from './resumeNotFoundMessages.js';
+export {
   listSessions,
   deleteSession,
   type ListSessionsResult,

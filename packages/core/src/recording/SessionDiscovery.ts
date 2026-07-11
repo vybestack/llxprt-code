@@ -28,6 +28,10 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { type SessionSummary, type SessionStartPayload } from './types.js';
 import { readSessionHeader } from './ReplayEngine.js';
+import {
+  resumeSessionIndexOutOfRangeMessage,
+  resumeSessionNotFoundMessage,
+} from './resumeNotFoundMessages.js';
 
 /**
  * Result of successfully resolving a session reference.
@@ -163,7 +167,7 @@ export class SessionDiscovery {
         return { session: sessions[indexNum - 1] };
       }
       return {
-        error: `Session index ${ref} out of range (1-${sessions.length})`,
+        error: resumeSessionIndexOutOfRangeMessage(ref, sessions.length),
       };
     }
 
@@ -176,7 +180,7 @@ export class SessionDiscovery {
       };
     }
 
-    return { error: `Session not found for this project: ${ref}` };
+    return { error: resumeSessionNotFoundMessage(ref) };
   }
 
   /**

@@ -34,7 +34,12 @@
  */
 
 import * as acp from '@agentclientprotocol/sdk';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import {
+  DebugLogger,
+  RESUME_NO_SESSIONS_FOUND,
+  RESUME_SESSION_NOT_FOUND_PREFIX,
+  RESUME_SESSION_INDEX_OUT_OF_RANGE_RE,
+} from '@vybestack/llxprt-code-core';
 
 /** JSON-RPC code ACP assigns to resourceNotFound (-32002). */
 const RESOURCE_NOT_FOUND_CODE = acp.RequestError.resourceNotFound('').code;
@@ -59,20 +64,14 @@ export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
  */
 const logger = new DebugLogger('llxprt:zed-integration:session-errors');
 
-/**
- * The EXACT not-found sentences the core resume flow emits, matched verbatim so
- * an unrelated message that merely CONTAINS the words "not found" (e.g. "Replay
- * failed: session content not found in cache") is NOT misclassified as a missing
- * session (FINDING F1). Sourced from:
- *  - resumeSession.ts: `No sessions found for this project`
- *  - SessionDiscovery.resolveSessionRef: `Session not found for this project: <ref>`
- *  - SessionDiscovery.resolveSessionRef: `Session index <n> out of range (1-<m>)`
- * Each is carried inside the `Failed to resume session: <detail>` envelope that
- * SessionControl.resume adds, so a substring match against that envelope is used.
- */
-const NO_SESSIONS_FOUND = 'No sessions found for this project';
-const SESSION_NOT_FOUND_PREFIX = 'Session not found for this project:';
-const SESSION_INDEX_OUT_OF_RANGE = /Session index \d+ out of range/;
+// The EXACT not-found sentences the core resume flow emits, matched verbatim so
+// an unrelated message that merely CONTAINS the words "not found" (e.g. "Replay
+// failed: session content not found in cache") is NOT misclassified as a missing
+// session (FINDING F1). Imported from core's resumeNotFoundMessages.ts — the
+// same constants the emitting sites (resumeSession.ts / SessionDiscovery.ts)
+// use — so a core rewording can never silently desynchronize this classifier.
+// Each sentence is carried inside the `Failed to resume session: <detail>`
+// envelope SessionControl.resume adds, so substring matching is used.
 
 /**
  * Maps a resume rejection to the closest ACP {@link acp.RequestError}. A
@@ -314,8 +313,8 @@ function errorMessage(error: unknown): string {
  */
 function isNotFoundResumeReason(detail: string): boolean {
   return (
-    detail.includes(NO_SESSIONS_FOUND) ||
-    detail.includes(SESSION_NOT_FOUND_PREFIX) ||
-    SESSION_INDEX_OUT_OF_RANGE.test(detail)
+    detail.includes(RESUME_NO_SESSIONS_FOUND) ||
+    detail.includes(RESUME_SESSION_NOT_FOUND_PREFIX) ||
+    RESUME_SESSION_INDEX_OUT_OF_RANGE_RE.test(detail)
   );
 }

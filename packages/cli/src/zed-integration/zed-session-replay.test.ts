@@ -724,9 +724,10 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
         ],
       },
     ];
-    // Orphan response (no start) still exercises extraction via a direct call is
-    // not possible here; instead assert through a paired call so a terminal
-    // update is produced.
+    // MCP content-array extraction is asserted through a PAIRED call/response:
+    // an orphan response (no matching start) would be dropped by the pending
+    // check before extraction is observable, so pairing is required to surface
+    // the extracted text on the terminal update.
     const paired: IContent[] = [
       {
         speaker: 'ai',

@@ -780,6 +780,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     const firstAgent = {
       getApprovalMode: () => 'default',
       setApprovalMode: vi.fn(),
+      getHistory: vi.fn(async () => []),
       dispose: firstDispose,
       async *stream() {},
       session: { resume: firstResume, setRecording: vi.fn() },
