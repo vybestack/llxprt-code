@@ -132,15 +132,17 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
       hasRecordedSessionFile(buildConfig(), 'sess-1234567890ab', lister),
     ).resolves.toBe(false);
     // ...but the unexpected failure IS surfaced at warn (not silently swallowed
-    // at the same level as the expected ENOENT case).
+    // at the same level as the expected ENOENT case). Assert the DIAGNOSTIC
+    // CONTENT (which session, which error) rather than the message's exact
+    // phrasing, so a reworded log does not break the behavioral contract.
     expect(warnSpy).toHaveBeenCalledTimes(1);
     const firstArg = warnSpy.mock.calls[0]?.[0];
     const rendered =
       typeof firstArg === 'function'
         ? (firstArg as () => string)()
         : String(firstArg);
+    expect(rendered).toContain('sess-1234567890ab');
     expect(rendered).toContain('EACCES');
-    expect(rendered.toLowerCase()).toContain('non-enoent');
   });
 
   it('matches ONLY on the session id suffix, not an unrelated file that merely starts with session-', async () => {

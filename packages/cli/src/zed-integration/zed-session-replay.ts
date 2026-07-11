@@ -265,27 +265,33 @@ function mapThinkingBlock(
  * start path in zed-tool-handler.ts (emitToolCallStart): status 'in_progress',
  * empty content, locations inferred from the recorded parameters via the SAME
  * buildToolLocations helper, kind inferred via the SAME inferToolKind table, and
- * rawInput carrying the narrowed parameters. kind is omitted (rather than sent
- * as undefined) for unknown tools; both are wire-identical after JSON encoding.
+ * rawInput ALWAYS present ({} when parameters are missing/malformed) exactly as
+ * the live path always sends call.args. kind is omitted (rather than sent as
+ * undefined) for unknown tools; both are wire-identical after JSON encoding.
  */
 function buildToolCallStart(block: ToolCallBlock): acp.SessionUpdate {
-  const kind = inferToolKind(block.name);
-  const rawInput = toRawInput(block.parameters);
   // FINDING D4: fall back to the id for the title when `name` is missing/non-
   // string in malformed persisted data. Keeping the (already-validated string)
   // id as the title preserves identifying info on the wire rather than sending
-  // an undefined title; kind inference on a non-string name yields undefined
-  // (omitted), which is correct for an unknown tool.
-  const title = isNonEmptyString(block.name) ? block.name : block.id;
+  // an undefined title. inferToolKind is only consulted for a validated string
+  // name — its signature requires one, and a malformed block must not leak a
+  // non-string into the lookup — so an unknown/malformed name yields undefined
+  // (kind omitted), which is correct for an unknown tool.
+  const named = isNonEmptyString(block.name);
+  const kind = named ? inferToolKind(block.name) : undefined;
+  // rawInput is sent unconditionally ({} when the recorded parameters are
+  // missing/malformed) to stay wire-identical with the live start path in
+  // zed-tool-handler.ts (emitToolCallStart), which always includes rawInput.
+  const rawInput = toRawInput(block.parameters) ?? {};
   return {
     sessionUpdate: 'tool_call',
     toolCallId: block.id,
-    title,
+    title: named ? block.name : block.id,
     status: 'in_progress',
     content: [],
-    locations: buildToolLocations(rawInput ?? {}),
+    locations: buildToolLocations(rawInput),
     ...(kind !== undefined ? { kind } : {}),
-    ...(rawInput !== undefined ? { rawInput } : {}),
+    rawInput,
   };
 }
 

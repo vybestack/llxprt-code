@@ -79,20 +79,21 @@ async function withIsolatedAgent(
   fn: (agent: Agent) => Promise<void>,
 ): Promise<void> {
   const workingDir = mkdtempSync(join(tmpdir(), 'llxprt-rec-spec-'));
-  const { agent, cleanup } = await buildAgent(fixture, { workingDir });
+  // The temp dirs must be removed on EVERY exit path, including a buildAgent
+  // rejection (which would otherwise leak the just-created workingDir), a
+  // scenario failure, and — FINDING F1 — a cleanup() rejection, which must NOT
+  // skip the rmSync calls. cleanup() is nested in its own try/finally so both
+  // removals always run while the original error still propagates.
   try {
-    await fn(agent);
-  } finally {
-    // FINDING F1: a cleanup() rejection must NOT skip the temp-dir removal. Nest
-    // the cleanup() in its own try/finally so BOTH rmSync calls always run
-    // (preventing leaked working/storage dirs across a cleanup failure), while
-    // the original cleanup() error still propagates out of the finally.
+    const { agent, cleanup } = await buildAgent(fixture, { workingDir });
     try {
-      await cleanup();
+      await fn(agent);
     } finally {
-      rmSync(workingDir, { recursive: true, force: true });
-      rmSync(storageTempDirFor(workingDir), { recursive: true, force: true });
+      await cleanup();
     }
+  } finally {
+    rmSync(workingDir, { recursive: true, force: true });
+    rmSync(storageTempDirFor(workingDir), { recursive: true, force: true });
   }
 }
 

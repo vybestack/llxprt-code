@@ -742,9 +742,14 @@ export class Session {
         // Flush any buffered chunks, THEN dispose so the batch timer is cleared
         // on completion/abort and no delayed flush fires after the turn ends
         // (FINDING F9). The batcher is per-prompt, so disposing here bounds its
-        // timer to the prompt lifecycle.
-        await batcher.flush();
-        batcher.dispose();
+        // timer to the prompt lifecycle. dispose() runs even when flush()
+        // rejects (e.g. a dead transport) — otherwise the pending timer would
+        // leak past the turn.
+        try {
+          await batcher.flush();
+        } finally {
+          batcher.dispose();
+        }
       }
 
       if (pendingSend.signal.aborted && terminalStopReason !== 'cancelled') {

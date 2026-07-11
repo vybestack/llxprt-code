@@ -235,6 +235,13 @@ function isEnoent(error: unknown): boolean {
  * so the loadSession re-attach probe (zed-session-loader.ts) decides "does an
  * on-disk recording exist for this id?" against the EXACT same naming rule the
  * corrupt-vs-missing resume probe uses, keeping the two in lockstep.
+ *
+ * Known limitation: because the file name embeds ONLY the first 12 characters
+ * of the id, two ids sharing that 12-char prefix are indistinguishable at the
+ * file-name level — the matcher inherits the recording service's naming
+ * granularity and cannot be stricter than it. Session ids are UUIDs, so a
+ * 12-hex-char prefix collision is not a practical concern; resolving it would
+ * require the recording service to embed the full id in the file name.
  */
 export function findMatchingSessionFile(
   sessionId: string,

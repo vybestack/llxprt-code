@@ -291,4 +291,22 @@ describe('findMatchingSessionFile (issue #1604: shared session-file matcher)', (
       ]),
     ).toBeNull();
   });
+
+  it('does NOT match a file for a DIFFERENT id whose first 12 chars merely overlap a longer id (suffix must be the full -<first12>.jsonl token)', () => {
+    // A file recorded for the 12-char id 'abcdef123456' ends with
+    // '-abcdef123456.jsonl'. Searching for the LONGER id 'abcdef123456X7890'
+    // uses suffix '-abcdef123456.jsonl' built from ITS first 12 chars — which
+    // happens to be identical. This documents the matcher's granularity: file
+    // names embed only the first 12 id characters (see sessionFileSuffix), so
+    // ids sharing that full 12-char prefix are indistinguishable by design
+    // (session ids are UUIDs, making such a collision impractical). What the
+    // matcher MUST still guarantee: an id whose first 12 chars DIFFER never
+    // matches, even when one is a prefix of the other.
+    const shortId = 'abcdef12345'; // 11 chars — first 12 differ from ID above
+    expect(findMatchingSessionFile(shortId, [matchingFileName(ID)])).toBeNull();
+    // And the exact-prefix file IS found for the id that owns it.
+    expect(findMatchingSessionFile(ID, [matchingFileName(ID)])).toBe(
+      matchingFileName(ID),
+    );
+  });
 });

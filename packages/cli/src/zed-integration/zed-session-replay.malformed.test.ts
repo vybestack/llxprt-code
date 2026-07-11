@@ -111,11 +111,7 @@ describe('mapHistoryToSessionUpdates — malformed persisted history (issue #160
     const history = [
       {
         speaker: 'ai',
-        blocks: [
-          null,
-          42,
-          { type: 'text', text: 'after malformed' },
-        ],
+        blocks: [null, 42, { type: 'text', text: 'after malformed' }],
       } as unknown as IContent,
     ];
     // The two malformed leading elements are skipped; the trailing valid text
@@ -148,7 +144,6 @@ describe('mapHistoryToSessionUpdates — malformed persisted history (issue #160
       },
     ]);
   });
-
 
   // ─── FINDING D4: tool blocks missing a string id/name ─────────────────────
 
@@ -220,4 +215,42 @@ describe('mapHistoryToSessionUpdates — malformed persisted history (issue #160
       content: [],
     });
   });
+
+  it.each([
+    ['missing', undefined],
+    ['null', null],
+    ['a number', 42],
+    ['an array', ['not', 'a', 'record']],
+  ])(
+    'sends rawInput as {} when the recorded parameters are %s — matching the live start path, which ALWAYS includes rawInput',
+    (_label, badParameters) => {
+      const history = [
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'call-badparams',
+              name: 'read_file',
+              parameters: badParameters,
+            } as unknown as ToolCallBlock,
+          ],
+        } as unknown as IContent,
+      ];
+      const [start] = mapHistoryToSessionUpdates(history);
+      // Live tool starts (zed-tool-handler emitToolCallStart) always carry
+      // rawInput; replay must stay wire-identical, so malformed/missing
+      // parameters degrade to an EMPTY object rather than omitting the field.
+      expect(start).toStrictEqual({
+        sessionUpdate: 'tool_call',
+        toolCallId: 'call-badparams',
+        title: 'read_file',
+        status: 'in_progress',
+        content: [],
+        locations: [],
+        kind: 'read',
+        rawInput: {},
+      });
+    },
+  );
 });
