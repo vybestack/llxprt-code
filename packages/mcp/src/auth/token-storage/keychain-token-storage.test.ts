@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import {
   KeychainTokenStorage,
   setKeytarLoader,
   resetKeytarLoader,
+  type KeychainFeedbackEmitter,
 } from './keychain-token-storage.js';
 import type { OAuthCredentials } from './types.js';
-import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 
 // Create mock keytar functions
 const mockKeytar = {
@@ -24,17 +24,13 @@ const mockKeytar = {
 const mockServiceName = 'service-name';
 const mockCryptoRandomBytesString = 'random-string';
 
-vi.mock('node:crypto', () => ({
-  randomBytes: vi.fn(() => ({
-    toString: vi.fn(() => mockCryptoRandomBytesString),
-  })),
-}));
-
-vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
-  coreEvents: {
-    emitFeedback: vi.fn(),
-  },
-}));
+// Injected feedback emitter, replacing the module-level mock of the shared
+// core events bus so diagnostic emissions can be asserted deterministically.
+const mockEvents: KeychainFeedbackEmitter & {
+  emitFeedback: ReturnType<typeof vi.fn>;
+} = {
+  emitFeedback: vi.fn(),
+};
 
 describe('KeychainTokenStorage', () => {
   let storage: KeychainTokenStorage;
@@ -43,7 +39,12 @@ describe('KeychainTokenStorage', () => {
     vi.resetAllMocks();
     // Inject the mock keytar via setKeytarLoader
     setKeytarLoader(() => Promise.resolve(mockKeytar));
-    storage = new KeychainTokenStorage(mockServiceName);
+    // Inject a deterministic random suffix (replacing node:crypto mocking) and
+    // the feedback emitter so the probe account and diagnostics are stable.
+    storage = new KeychainTokenStorage(mockServiceName, {
+      randomHex: () => mockCryptoRandomBytesString,
+      events: mockEvents,
+    });
   });
 
   afterEach(() => {
@@ -119,31 +120,31 @@ describe('KeychainTokenStorage', () => {
     });
 
     it('getCredentials should throw', async () => {
-      await expect(storage.getCredentials('server')).rejects.toThrow(
+      expect(storage.getCredentials('server')).rejects.toThrow(
         'Keychain is not available',
       );
     });
 
     it('setCredentials should throw', async () => {
-      await expect(storage.setCredentials(validCredentials)).rejects.toThrow(
+      expect(storage.setCredentials(validCredentials)).rejects.toThrow(
         'Keychain is not available',
       );
     });
 
     it('deleteCredentials should throw', async () => {
-      await expect(storage.deleteCredentials('server')).rejects.toThrow(
+      expect(storage.deleteCredentials('server')).rejects.toThrow(
         'Keychain is not available',
       );
     });
 
     it('listServers should throw', async () => {
-      await expect(storage.listServers()).rejects.toThrow(
+      expect(storage.listServers()).rejects.toThrow(
         'Keychain is not available',
       );
     });
 
     it('getAllCredentials should throw', async () => {
-      await expect(storage.getAllCredentials()).rejects.toThrow(
+      expect(storage.getAllCredentials()).rejects.toThrow(
         'Keychain is not available',
       );
     });
@@ -189,7 +190,7 @@ describe('KeychainTokenStorage', () => {
 
       it('should throw if stored data is corrupted JSON', async () => {
         mockKeytar.getPassword.mockResolvedValue('not-json');
-        await expect(storage.getCredentials('test-server')).rejects.toThrow(
+        expect(storage.getCredentials('test-server')).rejects.toThrow(
           'Failed to parse stored credentials for test-server',
         );
       });
@@ -211,7 +212,7 @@ describe('KeychainTokenStorage', () => {
         mockKeytar.setPassword.mockRejectedValue(
           new Error('keychain write error'),
         );
-        await expect(storage.setCredentials(validCredentials)).rejects.toThrow(
+        expect(storage.setCredentials(validCredentials)).rejects.toThrow(
           'keychain write error',
         );
       });
@@ -229,7 +230,7 @@ describe('KeychainTokenStorage', () => {
 
       it('should throw if no credentials were found to delete', async () => {
         mockKeytar.deletePassword.mockResolvedValue(false);
-        await expect(storage.deleteCredentials('test-server')).rejects.toThrow(
+        expect(storage.deleteCredentials('test-server')).rejects.toThrow(
           'No credentials found for test-server',
         );
       });
@@ -238,7 +239,7 @@ describe('KeychainTokenStorage', () => {
         mockKeytar.deletePassword.mockRejectedValue(
           new Error('keychain delete error'),
         );
-        await expect(storage.deleteCredentials('test-server')).rejects.toThrow(
+        expect(storage.deleteCredentials('test-server')).rejects.toThrow(
           'keychain delete error',
         );
       });
@@ -272,7 +273,7 @@ describe('KeychainTokenStorage', () => {
         mockKeytar.findCredentials.mockRejectedValue(error);
         const result = await storage.listServers();
         expect(result).toStrictEqual([]);
-        expect(coreEvents.emitFeedback).toHaveBeenCalledWith(
+        expect(mockEvents.emitFeedback).toHaveBeenCalledWith(
           'error',
           'Failed to list servers from keychain',
           error,
@@ -320,12 +321,12 @@ describe('KeychainTokenStorage', () => {
         expect(result.has('bad-server')).toBe(false);
         expect(result.has('invalid-server')).toBe(false);
 
-        expect(coreEvents.emitFeedback).toHaveBeenCalledWith(
+        expect(mockEvents.emitFeedback).toHaveBeenCalledWith(
           'error',
           'Failed to parse credentials for bad-server',
           expect.any(SyntaxError),
         );
-        expect(coreEvents.emitFeedback).toHaveBeenCalledWith(
+        expect(mockEvents.emitFeedback).toHaveBeenCalledWith(
           'error',
           'Failed to parse credentials for invalid-server',
           expect.any(Error),
@@ -338,7 +339,7 @@ describe('KeychainTokenStorage', () => {
 
         const result = await storage.getAllCredentials();
         expect(result.size).toBe(0);
-        expect(coreEvents.emitFeedback).toHaveBeenCalledWith(
+        expect(mockEvents.emitFeedback).toHaveBeenCalledWith(
           'error',
           'Failed to get all credentials from keychain',
           error,
@@ -376,7 +377,7 @@ describe('KeychainTokenStorage', () => {
           .mockResolvedValueOnce(true)
           .mockRejectedValueOnce(new Error('delete failed'));
 
-        await expect(storage.clearAll()).rejects.toThrow(
+        expect(storage.clearAll()).rejects.toThrow(
           'Failed to clear some credentials: delete failed',
         );
       });

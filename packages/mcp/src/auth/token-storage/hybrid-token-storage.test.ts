@@ -4,37 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { HybridTokenStorage } from './hybrid-token-storage.js';
-import { KeychainTokenStorage } from './keychain-token-storage.js';
-import { FileTokenStorage } from './file-token-storage.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  HybridTokenStorage,
+  type AvailabilityAwareTokenStorage,
+} from './hybrid-token-storage.js';
 import { type OAuthCredentials, TokenStorageType } from './types.js';
 
-vi.mock('./keychain-token-storage.js', () => ({
-  KeychainTokenStorage: vi.fn().mockImplementation(() => ({
-    isAvailable: vi.fn(),
-    getCredentials: vi.fn(),
-    setCredentials: vi.fn(),
-    deleteCredentials: vi.fn(),
-    listServers: vi.fn(),
-    getAllCredentials: vi.fn(),
-    clearAll: vi.fn(),
-  })),
-}));
-
-vi.mock('./file-token-storage.js', () => ({
-  FileTokenStorage: vi.fn().mockImplementation(() => ({
-    getCredentials: vi.fn(),
-    setCredentials: vi.fn(),
-    deleteCredentials: vi.fn(),
-    listServers: vi.fn(),
-    getAllCredentials: vi.fn(),
-    clearAll: vi.fn(),
-  })),
-}));
-
-interface MockStorage {
-  isAvailable?: ReturnType<typeof vi.fn>;
+interface MockKeychainStorage extends AvailabilityAwareTokenStorage {
+  isAvailable: ReturnType<typeof vi.fn>;
   getCredentials: ReturnType<typeof vi.fn>;
   setCredentials: ReturnType<typeof vi.fn>;
   deleteCredentials: ReturnType<typeof vi.fn>;
@@ -43,44 +21,57 @@ interface MockStorage {
   clearAll: ReturnType<typeof vi.fn>;
 }
 
+interface MockFileStorage {
+  getCredentials: ReturnType<typeof vi.fn>;
+  setCredentials: ReturnType<typeof vi.fn>;
+  deleteCredentials: ReturnType<typeof vi.fn>;
+  listServers: ReturnType<typeof vi.fn>;
+  getAllCredentials: ReturnType<typeof vi.fn>;
+  clearAll: ReturnType<typeof vi.fn>;
+}
+
+function createMockKeychainStorage(): MockKeychainStorage {
+  return {
+    isAvailable: vi.fn(),
+    getCredentials: vi.fn(),
+    setCredentials: vi.fn(),
+    deleteCredentials: vi.fn(),
+    listServers: vi.fn(),
+    getAllCredentials: vi.fn(),
+    clearAll: vi.fn(),
+  } as unknown as MockKeychainStorage;
+}
+
+function createMockFileStorage(): MockFileStorage {
+  return {
+    getCredentials: vi.fn(),
+    setCredentials: vi.fn(),
+    deleteCredentials: vi.fn(),
+    listServers: vi.fn(),
+    getAllCredentials: vi.fn(),
+    clearAll: vi.fn(),
+  } as unknown as MockFileStorage;
+}
+
 describe('HybridTokenStorage', () => {
   let storage: HybridTokenStorage;
-  let mockKeychainStorage: MockStorage;
-  let mockFileStorage: MockStorage;
+  let mockKeychainStorage: MockKeychainStorage;
+  let mockFileStorage: MockFileStorage;
   const originalEnv = process.env;
 
   beforeEach(() => {
     vi.clearAllMocks();
     process.env = { ...originalEnv };
 
-    // Create mock instances before creating HybridTokenStorage
-    mockKeychainStorage = {
-      isAvailable: vi.fn(),
-      getCredentials: vi.fn(),
-      setCredentials: vi.fn(),
-      deleteCredentials: vi.fn(),
-      listServers: vi.fn(),
-      getAllCredentials: vi.fn(),
-      clearAll: vi.fn(),
-    };
+    // Create fake backend instances and inject them via typed factories,
+    // replacing prior module-level mocking of the storage classes.
+    mockKeychainStorage = createMockKeychainStorage();
+    mockFileStorage = createMockFileStorage();
 
-    mockFileStorage = {
-      getCredentials: vi.fn(),
-      setCredentials: vi.fn(),
-      deleteCredentials: vi.fn(),
-      listServers: vi.fn(),
-      getAllCredentials: vi.fn(),
-      clearAll: vi.fn(),
-    };
-
-    (
-      KeychainTokenStorage as unknown as ReturnType<typeof vi.fn>
-    ).mockImplementation(() => mockKeychainStorage);
-    (
-      FileTokenStorage as unknown as ReturnType<typeof vi.fn>
-    ).mockImplementation(() => mockFileStorage);
-
-    storage = new HybridTokenStorage('test-service');
+    storage = new HybridTokenStorage('test-service', {
+      createKeychainStorage: () => Promise.resolve(mockKeychainStorage),
+      createFileStorage: () => mockFileStorage,
+    });
   });
 
   afterEach(() => {
@@ -89,7 +80,7 @@ describe('HybridTokenStorage', () => {
 
   describe('storage selection', () => {
     it('should use keychain when available', async () => {
-      mockKeychainStorage.isAvailable!.mockResolvedValue(true);
+      mockKeychainStorage.isAvailable.mockResolvedValue(true);
       mockKeychainStorage.getCredentials.mockResolvedValue(null);
 
       await storage.getCredentials('test-server');
@@ -117,7 +108,7 @@ describe('HybridTokenStorage', () => {
     });
 
     it('should fall back to file storage when keychain is unavailable', async () => {
-      mockKeychainStorage.isAvailable!.mockResolvedValue(false);
+      mockKeychainStorage.isAvailable.mockResolvedValue(false);
       mockFileStorage.getCredentials.mockResolvedValue(null);
 
       await storage.getCredentials('test-server');
@@ -132,7 +123,7 @@ describe('HybridTokenStorage', () => {
     });
 
     it('should fall back to file storage when keychain throws error', async () => {
-      mockKeychainStorage.isAvailable!.mockRejectedValue(
+      mockKeychainStorage.isAvailable.mockRejectedValue(
         new Error('Keychain error'),
       );
       mockFileStorage.getCredentials.mockResolvedValue(null);
@@ -149,7 +140,7 @@ describe('HybridTokenStorage', () => {
     });
 
     it('should cache storage selection', async () => {
-      mockKeychainStorage.isAvailable!.mockResolvedValue(true);
+      mockKeychainStorage.isAvailable.mockResolvedValue(true);
       mockKeychainStorage.getCredentials.mockResolvedValue(null);
 
       await storage.getCredentials('test-server');
@@ -170,7 +161,7 @@ describe('HybridTokenStorage', () => {
         updatedAt: Date.now(),
       };
 
-      mockKeychainStorage.isAvailable!.mockResolvedValue(true);
+      mockKeychainStorage.isAvailable.mockResolvedValue(true);
       mockKeychainStorage.getCredentials.mockResolvedValue(credentials);
 
       const result = await storage.getCredentials('test-server');
@@ -193,7 +184,7 @@ describe('HybridTokenStorage', () => {
         updatedAt: Date.now(),
       };
 
-      mockKeychainStorage.isAvailable!.mockResolvedValue(true);
+      mockKeychainStorage.isAvailable.mockResolvedValue(true);
       mockKeychainStorage.setCredentials.mockResolvedValue(undefined);
 
       await storage.setCredentials(credentials);
@@ -206,7 +197,7 @@ describe('HybridTokenStorage', () => {
 
   describe('deleteCredentials', () => {
     it('should delegate to selected storage', async () => {
-      mockKeychainStorage.isAvailable!.mockResolvedValue(true);
+      mockKeychainStorage.isAvailable.mockResolvedValue(true);
       mockKeychainStorage.deleteCredentials.mockResolvedValue(undefined);
 
       await storage.deleteCredentials('test-server');
@@ -220,7 +211,7 @@ describe('HybridTokenStorage', () => {
   describe('listServers', () => {
     it('should delegate to selected storage', async () => {
       const servers = ['server1', 'server2'];
-      mockKeychainStorage.isAvailable!.mockResolvedValue(true);
+      mockKeychainStorage.isAvailable.mockResolvedValue(true);
       mockKeychainStorage.listServers.mockResolvedValue(servers);
 
       const result = await storage.listServers();
@@ -251,7 +242,7 @@ describe('HybridTokenStorage', () => {
         ],
       ]);
 
-      mockKeychainStorage.isAvailable!.mockResolvedValue(true);
+      mockKeychainStorage.isAvailable.mockResolvedValue(true);
       mockKeychainStorage.getAllCredentials.mockResolvedValue(credentialsMap);
 
       const result = await storage.getAllCredentials();
@@ -263,7 +254,7 @@ describe('HybridTokenStorage', () => {
 
   describe('clearAll', () => {
     it('should delegate to selected storage', async () => {
-      mockKeychainStorage.isAvailable!.mockResolvedValue(true);
+      mockKeychainStorage.isAvailable.mockResolvedValue(true);
       mockKeychainStorage.clearAll.mockResolvedValue(undefined);
 
       await storage.clearAll();

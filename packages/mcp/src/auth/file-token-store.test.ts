@@ -4,51 +4,39 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { promises as fs } from 'node:fs';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as path from 'node:path';
 import { Buffer } from 'node:buffer';
 import * as crypto from 'node:crypto';
-import { FileTokenStore } from './file-token-store.js';
+import {
+  FileTokenStore,
+  type FileTokenStoreFileSystem,
+} from './file-token-store.js';
 import type { MCPOAuthToken, MCPOAuthCredentials } from './token-store.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 
-// Mock file system operations
-vi.mock('node:fs', () => ({
-  promises: {
+const TEST_ENCRYPTION_KEY = Buffer.alloc(32, 1);
+
+interface MockFileSystem extends FileTokenStoreFileSystem {
+  readFile: ReturnType<typeof vi.fn>;
+  writeFile: ReturnType<typeof vi.fn>;
+  mkdir: ReturnType<typeof vi.fn>;
+  unlink: ReturnType<typeof vi.fn>;
+}
+
+function createMockFileSystem(): MockFileSystem {
+  return {
     readFile: vi.fn(),
     writeFile: vi.fn(),
     mkdir: vi.fn(),
     unlink: vi.fn(),
-  },
-}));
+  } as unknown as MockFileSystem;
+}
 
-// Mock Storage module
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  )),
-  Storage: {
-    getMcpOAuthTokensPath: vi.fn().mockReturnValue('/test/path/tokens.json'),
-  },
-}));
-
-// Mock OS methods that might be causing issues
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:os')>();
-  return {
-    ...actual,
-    hostname: vi.fn().mockReturnValue('test-hostname'),
-    userInfo: vi.fn().mockReturnValue({ username: 'test-user' }),
-    homedir: vi.fn().mockReturnValue('/test/home'),
-  };
-});
-
-const TEST_ENCRYPTION_KEY = Buffer.alloc(32, 1);
-const DEFAULT_OPTIONS = {
-  encryptionKey: TEST_ENCRYPTION_KEY,
-  serviceName: 'test-service',
-};
+// The injected filesystem is (re)created per test; captured here so helpers and
+// assertions can reference the active instance, replacing prior module-level
+// `node:fs` mocking.
+let mockFs: MockFileSystem;
 
 const getCryptoHelpers = (_store: FileTokenStore) => {
   // Create proper encryption/decryption methods using the test key
@@ -120,9 +108,14 @@ describe('FileTokenStore', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFs = createMockFileSystem();
     vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
     vi.spyOn(debugLogger, 'error').mockImplementation(() => {});
-    tokenStore = new FileTokenStore(testTokenPath, DEFAULT_OPTIONS);
+    tokenStore = new FileTokenStore(testTokenPath, {
+      encryptionKey: TEST_ENCRYPTION_KEY,
+      serviceName: 'test-service',
+      fileSystem: mockFs,
+    });
   });
 
   afterEach(() => {
@@ -132,31 +125,39 @@ describe('FileTokenStore', () => {
   describe('constructor', () => {
     it('should use provided token file path', () => {
       const customPath = '/custom/path/tokens.json';
-      const store = new FileTokenStore(customPath, DEFAULT_OPTIONS);
+      const store = new FileTokenStore(customPath, {
+        encryptionKey: TEST_ENCRYPTION_KEY,
+        serviceName: 'test-service',
+        fileSystem: mockFs,
+      });
       expect(store).toBeInstanceOf(FileTokenStore);
     });
 
     it('should use default path when none provided', () => {
-      const store = new FileTokenStore(undefined, DEFAULT_OPTIONS);
+      const store = new FileTokenStore(undefined, {
+        encryptionKey: TEST_ENCRYPTION_KEY,
+        serviceName: 'test-service',
+        fileSystem: mockFs,
+      });
       expect(store).toBeInstanceOf(FileTokenStore);
     });
   });
 
   describe('loadTokens', () => {
     it('should return empty map when token file does not exist', async () => {
-      vi.mocked(fs.readFile).mockRejectedValue({ code: 'ENOENT' });
+      mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
 
       const tokens = await tokenStore.loadTokens();
 
       expect(tokens.size).toBe(0);
-      expect(fs.readFile).toHaveBeenCalledWith(testTokenPath, 'utf-8');
+      expect(mockFs.readFile).toHaveBeenCalledWith(testTokenPath, 'utf-8');
     });
 
     it('should load tokens from encrypted file successfully', async () => {
       const tokensArray = [mockCredentials];
       const { encrypt } = getCryptoHelpers(tokenStore);
       const encrypted = encrypt(JSON.stringify(tokensArray));
-      vi.mocked(fs.readFile).mockResolvedValue(encrypted);
+      mockFs.readFile.mockResolvedValue(encrypted);
 
       const tokens = await tokenStore.loadTokens();
 
@@ -166,7 +167,7 @@ describe('FileTokenStore', () => {
 
     it('should support legacy plaintext token files', async () => {
       const tokensArray = [mockCredentials];
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(tokensArray));
+      mockFs.readFile.mockResolvedValue(JSON.stringify(tokensArray));
 
       const tokens = await tokenStore.loadTokens();
 
@@ -175,7 +176,7 @@ describe('FileTokenStore', () => {
     });
 
     it('should handle corrupted token file gracefully', async () => {
-      vi.mocked(fs.readFile).mockResolvedValue('invalid json');
+      mockFs.readFile.mockResolvedValue('invalid json');
 
       const tokens = await tokenStore.loadTokens();
 
@@ -185,7 +186,7 @@ describe('FileTokenStore', () => {
     it('should handle invalid data structure gracefully', async () => {
       const { encrypt } = getCryptoHelpers(tokenStore);
       const encrypted = encrypt(JSON.stringify({ invalid: 'structure' }));
-      vi.mocked(fs.readFile).mockResolvedValue(encrypted);
+      mockFs.readFile.mockResolvedValue(encrypted);
 
       const tokens = await tokenStore.loadTokens();
 
@@ -200,7 +201,7 @@ describe('FileTokenStore', () => {
       ];
       const { encrypt } = getCryptoHelpers(tokenStore);
       const encrypted = encrypt(JSON.stringify(invalidCredentials));
-      vi.mocked(fs.readFile).mockResolvedValue(encrypted);
+      mockFs.readFile.mockResolvedValue(encrypted);
 
       const tokens = await tokenStore.loadTokens();
 
@@ -210,7 +211,7 @@ describe('FileTokenStore', () => {
 
     it('should handle file read errors other than ENOENT', async () => {
       const error = new Error('Permission denied');
-      vi.mocked(fs.readFile).mockRejectedValue(error);
+      mockFs.readFile.mockRejectedValue(error);
 
       const tokens = await tokenStore.loadTokens();
 
@@ -220,9 +221,9 @@ describe('FileTokenStore', () => {
 
   describe('saveToken', () => {
     it('should save token with restricted permissions', async () => {
-      vi.mocked(fs.readFile).mockRejectedValue({ code: 'ENOENT' });
-      vi.mocked(fs.mkdir).mockResolvedValue(undefined);
-      vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+      mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
 
       await tokenStore.saveToken(
         'test-server',
@@ -232,11 +233,11 @@ describe('FileTokenStore', () => {
         'https://mcp.url',
       );
 
-      expect(fs.mkdir).toHaveBeenCalledWith(path.dirname(testTokenPath), {
+      expect(mockFs.mkdir).toHaveBeenCalledWith(path.dirname(testTokenPath), {
         recursive: true,
         mode: 0o700,
       });
-      const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
+      const writeCall = mockFs.writeFile.mock.calls[0];
       expect(writeCall[0]).toBe(testTokenPath);
       expect(writeCall[1]).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/i);
       expect(writeCall[2]).toStrictEqual({ mode: 0o600 });
@@ -249,14 +250,14 @@ describe('FileTokenStore', () => {
       };
       const { encrypt, decrypt } = getCryptoHelpers(tokenStore);
       const encryptedExisting = encrypt(JSON.stringify([existingCredentials]));
-      vi.mocked(fs.readFile).mockResolvedValue(encryptedExisting);
-      vi.mocked(fs.mkdir).mockResolvedValue(undefined);
-      vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+      mockFs.readFile.mockResolvedValue(encryptedExisting);
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
 
       const newToken = { ...mockToken, accessToken: 'new_access_token' };
       await tokenStore.saveToken('existing-server', newToken);
 
-      const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
+      const writeCall = mockFs.writeFile.mock.calls[0];
       const savedData = JSON.parse(decrypt(writeCall[1] as string));
 
       expect(savedData).toHaveLength(1);
@@ -267,40 +268,40 @@ describe('FileTokenStore', () => {
     it('should validate token before saving', async () => {
       const invalidToken = { ...mockToken, accessToken: '' };
 
-      await expect(
-        tokenStore.saveToken('test-server', invalidToken),
-      ).rejects.toThrow('Token must have a valid accessToken');
+      expect(tokenStore.saveToken('test-server', invalidToken)).rejects.toThrow(
+        'Token must have a valid accessToken',
+      );
     });
 
     it('should validate server name before saving', async () => {
-      await expect(tokenStore.saveToken('', mockToken)).rejects.toThrow(
+      expect(tokenStore.saveToken('', mockToken)).rejects.toThrow(
         'Server name must be a non-empty string',
       );
 
-      await expect(tokenStore.saveToken('   ', mockToken)).rejects.toThrow(
+      expect(tokenStore.saveToken('   ', mockToken)).rejects.toThrow(
         'Server name must be a non-empty string',
       );
     });
 
     it('should handle mkdir errors', async () => {
       const mkdirError = new Error('Cannot create directory');
-      vi.mocked(fs.readFile).mockRejectedValue({ code: 'ENOENT' });
-      vi.mocked(fs.mkdir).mockRejectedValue(mkdirError);
+      mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
+      mockFs.mkdir.mockRejectedValue(mkdirError);
 
-      await expect(
-        tokenStore.saveToken('test-server', mockToken),
-      ).rejects.toThrow('Cannot create directory');
+      expect(tokenStore.saveToken('test-server', mockToken)).rejects.toThrow(
+        'Cannot create directory',
+      );
     });
 
     it('should handle write errors gracefully', async () => {
-      vi.mocked(fs.readFile).mockRejectedValue({ code: 'ENOENT' });
-      vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+      mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
+      mockFs.mkdir.mockResolvedValue(undefined);
       const writeError = new Error('Disk full');
-      vi.mocked(fs.writeFile).mockRejectedValue(writeError);
+      mockFs.writeFile.mockRejectedValue(writeError);
 
-      await expect(
-        tokenStore.saveToken('test-server', mockToken),
-      ).rejects.toThrow('Disk full');
+      expect(tokenStore.saveToken('test-server', mockToken)).rejects.toThrow(
+        'Disk full',
+      );
     });
   });
 
@@ -308,7 +309,7 @@ describe('FileTokenStore', () => {
     it('should return token for existing server', async () => {
       const { encrypt } = getCryptoHelpers(tokenStore);
       const encrypted = encrypt(JSON.stringify([mockCredentials]));
-      vi.mocked(fs.readFile).mockResolvedValue(encrypted);
+      mockFs.readFile.mockResolvedValue(encrypted);
 
       const result = await tokenStore.getToken('test-server');
 
@@ -318,7 +319,7 @@ describe('FileTokenStore', () => {
     it('should return null for non-existent server', async () => {
       const { encrypt } = getCryptoHelpers(tokenStore);
       const encrypted = encrypt(JSON.stringify([mockCredentials]));
-      vi.mocked(fs.readFile).mockResolvedValue(encrypted);
+      mockFs.readFile.mockResolvedValue(encrypted);
 
       const result = await tokenStore.getToken('non-existent');
 
@@ -326,7 +327,7 @@ describe('FileTokenStore', () => {
     });
 
     it('should return null when no tokens file exists', async () => {
-      vi.mocked(fs.readFile).mockRejectedValue({ code: 'ENOENT' });
+      mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
 
       const result = await tokenStore.getToken('test-server');
 
@@ -334,7 +335,7 @@ describe('FileTokenStore', () => {
     });
 
     it('should validate server name', async () => {
-      await expect(tokenStore.getToken('')).rejects.toThrow(
+      expect(tokenStore.getToken('')).rejects.toThrow(
         'Server name must be a non-empty string',
       );
     });
@@ -346,12 +347,12 @@ describe('FileTokenStore', () => {
       const credentials2 = { ...mockCredentials, serverName: 'server2' };
       const { encrypt, decrypt } = getCryptoHelpers(tokenStore);
       const encrypted = encrypt(JSON.stringify([credentials1, credentials2]));
-      vi.mocked(fs.readFile).mockResolvedValue(encrypted);
-      vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+      mockFs.readFile.mockResolvedValue(encrypted);
+      mockFs.writeFile.mockResolvedValue(undefined);
 
       await tokenStore.removeToken('server1');
 
-      const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
+      const writeCall = mockFs.writeFile.mock.calls[0];
       const savedData = JSON.parse(decrypt(writeCall[1] as string));
 
       expect(savedData).toHaveLength(1);
@@ -361,39 +362,39 @@ describe('FileTokenStore', () => {
     it('should remove token file when no tokens remain', async () => {
       const { encrypt } = getCryptoHelpers(tokenStore);
       const encrypted = encrypt(JSON.stringify([mockCredentials]));
-      vi.mocked(fs.readFile).mockResolvedValue(encrypted);
-      vi.mocked(fs.unlink).mockResolvedValue(undefined);
+      mockFs.readFile.mockResolvedValue(encrypted);
+      mockFs.unlink.mockResolvedValue(undefined);
 
       await tokenStore.removeToken('test-server');
 
-      expect(fs.unlink).toHaveBeenCalledWith(testTokenPath);
-      expect(fs.writeFile).not.toHaveBeenCalled();
+      expect(mockFs.unlink).toHaveBeenCalledWith(testTokenPath);
+      expect(mockFs.writeFile).not.toHaveBeenCalled();
     });
 
     it('should handle removal of non-existent token gracefully', async () => {
       const { encrypt } = getCryptoHelpers(tokenStore);
       const encrypted = encrypt(JSON.stringify([mockCredentials]));
-      vi.mocked(fs.readFile).mockResolvedValue(encrypted);
+      mockFs.readFile.mockResolvedValue(encrypted);
 
       await tokenStore.removeToken('non-existent');
 
-      expect(fs.writeFile).not.toHaveBeenCalled();
-      expect(fs.unlink).not.toHaveBeenCalled();
+      expect(mockFs.writeFile).not.toHaveBeenCalled();
+      expect(mockFs.unlink).not.toHaveBeenCalled();
     });
 
     it('should handle file operation errors gracefully', async () => {
       const { encrypt } = getCryptoHelpers(tokenStore);
       const encrypted = encrypt(JSON.stringify([mockCredentials]));
-      vi.mocked(fs.readFile).mockResolvedValue(encrypted);
-      vi.mocked(fs.unlink).mockRejectedValue(new Error('Permission denied'));
+      mockFs.readFile.mockResolvedValue(encrypted);
+      mockFs.unlink.mockRejectedValue(new Error('Permission denied'));
 
       await tokenStore.removeToken('test-server');
 
-      expect(fs.unlink).toHaveBeenCalled();
+      expect(mockFs.unlink).toHaveBeenCalled();
     });
 
     it('should validate server name', async () => {
-      await expect(tokenStore.removeToken('')).rejects.toThrow(
+      expect(tokenStore.removeToken('')).rejects.toThrow(
         'Server name must be a non-empty string',
       );
     });
@@ -401,27 +402,27 @@ describe('FileTokenStore', () => {
 
   describe('clearAllTokens', () => {
     it('should remove token file successfully', async () => {
-      vi.mocked(fs.unlink).mockResolvedValue(undefined);
+      mockFs.unlink.mockResolvedValue(undefined);
 
       await tokenStore.clearAllTokens();
 
-      expect(fs.unlink).toHaveBeenCalledWith(testTokenPath);
+      expect(mockFs.unlink).toHaveBeenCalledWith(testTokenPath);
     });
 
     it('should handle non-existent file gracefully', async () => {
-      vi.mocked(fs.unlink).mockRejectedValue({ code: 'ENOENT' });
+      mockFs.unlink.mockRejectedValue({ code: 'ENOENT' });
 
       await tokenStore.clearAllTokens();
 
-      expect(fs.unlink).toHaveBeenCalledWith(testTokenPath);
+      expect(mockFs.unlink).toHaveBeenCalledWith(testTokenPath);
     });
 
     it('should handle other file errors gracefully', async () => {
-      vi.mocked(fs.unlink).mockRejectedValue(new Error('Permission denied'));
+      mockFs.unlink.mockRejectedValue(new Error('Permission denied'));
 
       await tokenStore.clearAllTokens();
 
-      expect(fs.unlink).toHaveBeenCalledWith(testTokenPath);
+      expect(mockFs.unlink).toHaveBeenCalledWith(testTokenPath);
     });
   });
 });

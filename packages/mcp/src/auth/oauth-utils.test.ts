@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type {
   OAuthAuthorizationServerMetadata,
   OAuthProtectedResourceMetadata,
@@ -259,7 +259,7 @@ describe('OAuthUtils', () => {
           }),
       });
 
-      await expect(
+      expect(
         OAuthUtils.discoverOAuthConfig('https://example.com/mcp'),
       ).rejects.toThrow(/does not match expected/);
     });

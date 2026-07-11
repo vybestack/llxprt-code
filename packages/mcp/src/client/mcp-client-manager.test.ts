@@ -4,9 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, afterEach } from 'vitest';
-import { McpClientManager } from './mcp-client-manager.js';
-import { McpClient } from './mcp-client.js';
+import { vi, describe, it, expect } from 'bun:test';
+import {
+  McpClientManager,
+  type McpClientFactory,
+} from './mcp-client-manager.js';
+import type { McpClient } from './mcp-client.js';
 import { MCPDiscoveryState } from './mcp-client.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
@@ -17,98 +20,118 @@ import type { LlxprtExtension } from '@vybestack/llxprt-code-core/config/configT
 import { EventEmitter } from 'node:events';
 import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
 
-vi.mock('./mcp-client.js', () => ({
-  McpClient: vi.fn(),
-  MCPDiscoveryState: {
-    NOT_STARTED: 'not_started',
-    IN_PROGRESS: 'in_progress',
-    COMPLETED: 'completed',
-  },
-  populateMcpServerCommand: vi.fn((servers, _command) => servers),
-}));
+/**
+ * Minimal fake shape for {@link McpClient}. Only the members the manager
+ * touches during discovery are populated; each is a mock so tests can assert
+ * call counts and drive connect/discover outcomes.
+ */
+type FakeMcpClient = {
+  connect: ReturnType<typeof vi.fn>;
+  discover: ReturnType<typeof vi.fn>;
+  disconnect: ReturnType<typeof vi.fn>;
+  getStatus: ReturnType<typeof vi.fn>;
+  getServerConfig: ReturnType<typeof vi.fn>;
+  getInstructions?: ReturnType<typeof vi.fn>;
+};
+
+const makeFakeClient = (
+  overrides: Partial<FakeMcpClient> = {},
+): FakeMcpClient => ({
+  connect: vi.fn(),
+  discover: vi.fn(),
+  disconnect: vi.fn(),
+  getStatus: vi.fn(),
+  getServerConfig: vi.fn().mockReturnValue({}),
+  ...overrides,
+});
+
+/**
+ * Builds an injectable {@link McpClientFactory} that hands out the supplied
+ * fake clients in construction order (reusing the last one once exhausted).
+ * This replaces the previous module-level mock of `./mcp-client.js` with a
+ * typed dependency seam, mirroring the auth-provider factories.
+ */
+const factoryReturning = (...clients: FakeMcpClient[]): McpClientFactory => {
+  let callCount = 0;
+  return () => {
+    const client = clients[Math.min(callCount, clients.length - 1)];
+    callCount++;
+    return client as unknown as McpClient;
+  };
+};
+
+/**
+ * Builds a {@link Config} test double. Only the accessors the manager reads
+ * during discovery are implemented; server map, trust, and the refresh spy are
+ * parameterised so each test can assert the behaviour it cares about.
+ */
+const makeConfig = (options: {
+  servers?: Record<string, unknown>;
+  isTrustedFolder?: boolean;
+  refreshMcpContext?: ReturnType<typeof vi.fn>;
+  getAgentClient?: () => unknown;
+}): Config => {
+  const {
+    servers = {},
+    isTrustedFolder = true,
+    refreshMcpContext = vi.fn(),
+    getAgentClient = () => ({ isInitialized: () => false }),
+  } = options;
+  return {
+    isTrustedFolder: () => isTrustedFolder,
+    getMcpServers: () => servers,
+    getMcpServerCommand: () => '',
+    getPromptRegistry: () => ({}) as PromptRegistry,
+    getResourceRegistry: () => ({}) as ResourceRegistry,
+    getDebugMode: () => false,
+    getWorkspaceContext: () => ({}) as WorkspaceContext,
+    getEnableExtensionReloading: () => false,
+    getExtensionEvents: () => undefined,
+    getAllowedMcpServers: () => undefined,
+    getBlockedMcpServers: () => undefined,
+    getAgentClient,
+    refreshMcpContext,
+  } as unknown as Config;
+};
 
 describe('McpClientManager', () => {
-  afterEach(() => {
-    vi.mocked(McpClient).mockReset();
-  });
   it('should discover tools from all configured servers', async () => {
-    const mockedMcpClient = {
-      connect: vi.fn(),
-      discover: vi.fn(),
-      disconnect: vi.fn(),
-      getStatus: vi.fn(),
-      getServerConfig: vi.fn().mockReturnValue({}),
-    };
-    vi.mocked(McpClient).mockReturnValue(
-      mockedMcpClient as unknown as McpClient,
-    );
-    const mockConfig = {
-      isTrustedFolder: () => true,
-      getMcpServers: () => ({
-        'test-server': {},
-      }),
-      getMcpServerCommand: () => '',
-      getPromptRegistry: () => ({}) as PromptRegistry,
-      getResourceRegistry: () => ({}) as ResourceRegistry,
-      getDebugMode: () => false,
-      getWorkspaceContext: () => ({}) as WorkspaceContext,
-      getEnableExtensionReloading: () => false,
-      getExtensionEvents: () => undefined,
-      getAllowedMcpServers: () => undefined,
-      getBlockedMcpServers: () => undefined,
-      getAgentClient: () => ({
-        isInitialized: () => false,
-      }),
-      refreshMcpContext: vi.fn(),
-    } as unknown as Config;
+    const mockedMcpClient = makeFakeClient();
+    const refreshMcpContext = vi.fn();
+    const mockConfig = makeConfig({
+      servers: { 'test-server': {} },
+      refreshMcpContext,
+    });
     const manager = new McpClientManager(
       '0.0.1',
       {} as ToolRegistry,
       mockConfig,
+      undefined,
+      { createClient: factoryReturning(mockedMcpClient) },
     );
     await manager.startConfiguredMcpServers();
     expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
     expect(mockedMcpClient.discover).toHaveBeenCalledOnce();
-    expect(mockConfig.refreshMcpContext).toHaveBeenCalledOnce();
+    expect(refreshMcpContext).toHaveBeenCalledOnce();
   });
 
   it('should batch context refresh when starting multiple servers', async () => {
-    const mockedMcpClient = {
-      connect: vi.fn(),
-      discover: vi.fn(),
-      disconnect: vi.fn(),
-      getStatus: vi.fn(),
-      getServerConfig: vi.fn().mockReturnValue({}),
-    };
-    vi.mocked(McpClient).mockReturnValue(
-      mockedMcpClient as unknown as McpClient,
-    );
+    const mockedMcpClient = makeFakeClient();
     const refreshMcpContext = vi.fn();
-    const mockConfig = {
-      isTrustedFolder: () => true,
-      getMcpServers: () => ({
+    const mockConfig = makeConfig({
+      servers: {
         'server-1': {},
         'server-2': {},
         'server-3': {},
-      }),
-      getMcpServerCommand: () => '',
-      getPromptRegistry: () => ({}) as PromptRegistry,
-      getResourceRegistry: () => ({}) as ResourceRegistry,
-      getDebugMode: () => false,
-      getWorkspaceContext: () => ({}) as WorkspaceContext,
-      getEnableExtensionReloading: () => false,
-      getExtensionEvents: () => undefined,
-      getAllowedMcpServers: () => undefined,
-      getBlockedMcpServers: () => undefined,
-      getAgentClient: () => ({
-        isInitialized: () => false,
-      }),
+      },
       refreshMcpContext,
-    } as unknown as Config;
+    });
     const manager = new McpClientManager(
       '0.0.1',
       {} as ToolRegistry,
       mockConfig,
+      undefined,
+      { createClient: factoryReturning(mockedMcpClient) },
     );
     await manager.startConfiguredMcpServers();
 
@@ -121,38 +144,17 @@ describe('McpClientManager', () => {
   });
 
   it('should not discover tools if folder is not trusted', async () => {
-    const mockedMcpClient = {
-      connect: vi.fn(),
-      discover: vi.fn(),
-      disconnect: vi.fn(),
-      getStatus: vi.fn(),
-      getServerConfig: vi.fn().mockReturnValue({}),
-    };
-    vi.mocked(McpClient).mockReturnValue(
-      mockedMcpClient as unknown as McpClient,
-    );
-    const mockConfig = {
-      isTrustedFolder: () => false,
-      getMcpServers: () => ({
-        'test-server': {},
-      }),
-      getMcpServerCommand: () => '',
-      getPromptRegistry: () => ({}) as PromptRegistry,
-      getResourceRegistry: () => ({}) as ResourceRegistry,
-      getDebugMode: () => false,
-      getWorkspaceContext: () => ({}) as WorkspaceContext,
-      getEnableExtensionReloading: () => false,
-      getExtensionEvents: () => undefined,
-      getAllowedMcpServers: () => undefined,
-      getBlockedMcpServers: () => undefined,
-      getAgentClient: () => ({
-        isInitialized: () => false,
-      }),
-    } as unknown as Config;
+    const mockedMcpClient = makeFakeClient();
+    const mockConfig = makeConfig({
+      servers: { 'test-server': {} },
+      isTrustedFolder: false,
+    });
     const manager = new McpClientManager(
       '0.0.1',
       {} as ToolRegistry,
       mockConfig,
+      undefined,
+      { createClient: factoryReturning(mockedMcpClient) },
     );
     await manager.startConfiguredMcpServers();
     expect(mockedMcpClient.connect).not.toHaveBeenCalled();
@@ -160,40 +162,20 @@ describe('McpClientManager', () => {
   });
 
   it('should not hang when agentClient is not yet initialized during discovery', async () => {
-    const mockedMcpClient = {
-      connect: vi.fn(),
-      discover: vi.fn(),
-      disconnect: vi.fn(),
-      getStatus: vi.fn(),
-      getServerConfig: vi.fn().mockReturnValue({}),
-    };
-    vi.mocked(McpClient).mockReturnValue(
-      mockedMcpClient as unknown as McpClient,
-    );
+    const mockedMcpClient = makeFakeClient();
     // Simulate the real initialization order: agentClient is created AFTER
     // Promise.all([startConfiguredMcpServers(), extensionLoader.start()]),
     // so getAgentClient() returns undefined during MCP discovery.
-    const mockConfig = {
-      isTrustedFolder: () => true,
-      getMcpServers: () => ({
-        'test-server': {},
-      }),
-      getMcpServerCommand: () => '',
-      getPromptRegistry: () => ({}) as PromptRegistry,
-      getResourceRegistry: () => ({}) as ResourceRegistry,
-      getDebugMode: () => false,
-      getWorkspaceContext: () => ({}) as WorkspaceContext,
-      getEnableExtensionReloading: () => false,
-      getExtensionEvents: () => undefined,
-      getAllowedMcpServers: () => undefined,
-      getBlockedMcpServers: () => undefined,
+    const mockConfig = makeConfig({
+      servers: { 'test-server': {} },
       getAgentClient: () => undefined,
-      refreshMcpContext: vi.fn(),
-    } as unknown as Config;
+    });
     const manager = new McpClientManager(
       '0.0.1',
       {} as ToolRegistry,
       mockConfig,
+      undefined,
+      { createClient: factoryReturning(mockedMcpClient) },
     );
 
     // This must resolve, not hang forever
@@ -205,55 +187,28 @@ describe('McpClientManager', () => {
 
   describe('getMcpInstructions', () => {
     it('should aggregate instructions from all connected servers', async () => {
-      const mockedMcpClient1 = {
-        connect: vi.fn(),
-        discover: vi.fn(),
-        disconnect: vi.fn(),
+      const mockedMcpClient1 = makeFakeClient({
         getStatus: vi.fn().mockReturnValue('connected'),
-        getServerConfig: vi.fn().mockReturnValue({}),
         getInstructions: vi.fn().mockReturnValue('Server 1 instructions'),
-      };
-      const mockedMcpClient2 = {
-        connect: vi.fn(),
-        discover: vi.fn(),
-        disconnect: vi.fn(),
+      });
+      const mockedMcpClient2 = makeFakeClient({
         getStatus: vi.fn().mockReturnValue('connected'),
-        getServerConfig: vi.fn().mockReturnValue({}),
         getInstructions: vi.fn().mockReturnValue('Server 2 instructions'),
-      };
-
-      let callCount = 0;
-      vi.mocked(McpClient).mockImplementation(() => {
-        const client = callCount === 0 ? mockedMcpClient1 : mockedMcpClient2;
-        callCount++;
-        return client as unknown as McpClient;
       });
 
-      const mockConfig = {
-        isTrustedFolder: () => true,
-        getMcpServers: () => ({
+      const mockConfig = makeConfig({
+        servers: {
           'server-1': {},
           'server-2': {},
-        }),
-        getMcpServerCommand: () => '',
-        getPromptRegistry: () => ({}) as PromptRegistry,
-        getResourceRegistry: () => ({}) as ResourceRegistry,
-        getDebugMode: () => false,
-        getWorkspaceContext: () => ({}) as WorkspaceContext,
-        getEnableExtensionReloading: () => false,
-        getExtensionEvents: () => undefined,
-        getAllowedMcpServers: () => undefined,
-        getBlockedMcpServers: () => undefined,
-        getAgentClient: () => ({
-          isInitialized: () => false,
-        }),
-        refreshMcpContext: vi.fn(),
-      } as unknown as Config;
+        },
+      });
 
       const manager = new McpClientManager(
         '0.0.1',
         {} as ToolRegistry,
         mockConfig,
+        undefined,
+        { createClient: factoryReturning(mockedMcpClient1, mockedMcpClient2) },
       );
       await manager.startConfiguredMcpServers();
 
@@ -271,43 +226,21 @@ describe('McpClientManager', () => {
     });
 
     it('should return empty string when no servers have instructions', async () => {
-      const mockedMcpClient = {
-        connect: vi.fn(),
-        discover: vi.fn(),
-        disconnect: vi.fn(),
+      const mockedMcpClient = makeFakeClient({
         getStatus: vi.fn().mockReturnValue('connected'),
-        getServerConfig: vi.fn().mockReturnValue({}),
         getInstructions: vi.fn().mockReturnValue(''),
-      };
+      });
 
-      vi.mocked(McpClient).mockReturnValue(
-        mockedMcpClient as unknown as McpClient,
-      );
-
-      const mockConfig = {
-        isTrustedFolder: () => true,
-        getMcpServers: () => ({
-          'test-server': {},
-        }),
-        getMcpServerCommand: () => '',
-        getPromptRegistry: () => ({}) as PromptRegistry,
-        getResourceRegistry: () => ({}) as ResourceRegistry,
-        getDebugMode: () => false,
-        getWorkspaceContext: () => ({}) as WorkspaceContext,
-        getEnableExtensionReloading: () => false,
-        getExtensionEvents: () => undefined,
-        getAllowedMcpServers: () => undefined,
-        getBlockedMcpServers: () => undefined,
-        getAgentClient: () => ({
-          isInitialized: () => false,
-        }),
-        refreshMcpContext: vi.fn(),
-      } as unknown as Config;
+      const mockConfig = makeConfig({
+        servers: { 'test-server': {} },
+      });
 
       const manager = new McpClientManager(
         '0.0.1',
         {} as ToolRegistry,
         mockConfig,
+        undefined,
+        { createClient: factoryReturning(mockedMcpClient) },
       );
       await manager.startConfiguredMcpServers();
 
@@ -316,57 +249,30 @@ describe('McpClientManager', () => {
     });
 
     it('should include instructions from servers with content', async () => {
-      const mockedMcpClient1 = {
-        connect: vi.fn(),
-        discover: vi.fn(),
-        disconnect: vi.fn(),
+      const mockedMcpClient1 = makeFakeClient({
         getStatus: vi.fn().mockReturnValue('connected'),
-        getServerConfig: vi.fn().mockReturnValue({}),
         getInstructions: vi
           .fn()
           .mockReturnValue('Connected server instructions'),
-      };
-      const mockedMcpClient2 = {
-        connect: vi.fn(),
-        discover: vi.fn(),
-        disconnect: vi.fn(),
+      });
+      const mockedMcpClient2 = makeFakeClient({
         getStatus: vi.fn().mockReturnValue('connected'),
-        getServerConfig: vi.fn().mockReturnValue({}),
         getInstructions: vi.fn().mockReturnValue(''),
-      };
-
-      let callCount = 0;
-      vi.mocked(McpClient).mockImplementation(() => {
-        const client = callCount === 0 ? mockedMcpClient1 : mockedMcpClient2;
-        callCount++;
-        return client as unknown as McpClient;
       });
 
-      const mockConfig = {
-        isTrustedFolder: () => true,
-        getMcpServers: () => ({
+      const mockConfig = makeConfig({
+        servers: {
           'server-with-instructions': {},
           'server-without-instructions': {},
-        }),
-        getMcpServerCommand: () => '',
-        getPromptRegistry: () => ({}) as PromptRegistry,
-        getResourceRegistry: () => ({}) as ResourceRegistry,
-        getDebugMode: () => false,
-        getWorkspaceContext: () => ({}) as WorkspaceContext,
-        getEnableExtensionReloading: () => false,
-        getExtensionEvents: () => undefined,
-        getAllowedMcpServers: () => undefined,
-        getBlockedMcpServers: () => undefined,
-        getAgentClient: () => ({
-          isInitialized: () => false,
-        }),
-        refreshMcpContext: vi.fn(),
-      } as unknown as Config;
+        },
+      });
 
       const manager = new McpClientManager(
         '0.0.1',
         {} as ToolRegistry,
         mockConfig,
+        undefined,
+        { createClient: factoryReturning(mockedMcpClient1, mockedMcpClient2) },
       );
       await manager.startConfiguredMcpServers();
 
@@ -386,39 +292,16 @@ describe('McpClientManager', () => {
   describe('discovery state transitions', () => {
     const createManager = (servers: Record<string, unknown> = {}) => {
       const eventEmitter = new EventEmitter();
-      const mockedMcpClient = {
-        connect: vi.fn(),
-        discover: vi.fn(),
-        disconnect: vi.fn(),
-        getStatus: vi.fn(),
-        getServerConfig: vi.fn().mockReturnValue({}),
+      const mockedMcpClient = makeFakeClient({
         getInstructions: vi.fn().mockReturnValue(''),
-      };
-      vi.mocked(McpClient).mockReturnValue(
-        mockedMcpClient as unknown as McpClient,
-      );
-      const mockConfig = {
-        isTrustedFolder: () => true,
-        getMcpServers: () => servers,
-        getMcpServerCommand: () => '',
-        getPromptRegistry: () => ({}) as PromptRegistry,
-        getResourceRegistry: () => ({}) as ResourceRegistry,
-        getDebugMode: () => false,
-        getWorkspaceContext: () => ({}) as WorkspaceContext,
-        getEnableExtensionReloading: () => false,
-        getExtensionEvents: () => undefined,
-        getAllowedMcpServers: () => undefined,
-        getBlockedMcpServers: () => undefined,
-        getAgentClient: () => ({
-          isInitialized: () => false,
-        }),
-        refreshMcpContext: vi.fn(),
-      } as unknown as Config;
+      });
+      const mockConfig = makeConfig({ servers });
       const manager = new McpClientManager(
         '0.0.1',
         {} as ToolRegistry,
         mockConfig,
         eventEmitter,
+        { createClient: factoryReturning(mockedMcpClient) },
       );
       return { manager, eventEmitter, mockedMcpClient, mockConfig };
     };
@@ -478,37 +361,17 @@ describe('McpClientManager', () => {
     });
 
     it('should not change state when folder is not trusted', async () => {
-      const mockedMcpClient = {
-        connect: vi.fn(),
-        discover: vi.fn(),
-        disconnect: vi.fn(),
-        getStatus: vi.fn(),
-        getServerConfig: vi.fn().mockReturnValue({}),
-      };
-      vi.mocked(McpClient).mockReturnValue(
-        mockedMcpClient as unknown as McpClient,
-      );
-      const mockConfig = {
-        isTrustedFolder: () => false,
-        getMcpServers: () => ({ 'test-server': {} }),
-        getMcpServerCommand: () => '',
-        getPromptRegistry: () => ({}) as PromptRegistry,
-        getResourceRegistry: () => ({}) as ResourceRegistry,
-        getDebugMode: () => false,
-        getWorkspaceContext: () => ({}) as WorkspaceContext,
-        getEnableExtensionReloading: () => false,
-        getExtensionEvents: () => undefined,
-        getAllowedMcpServers: () => undefined,
-        getBlockedMcpServers: () => undefined,
-        getAgentClient: () => ({
-          isInitialized: () => false,
-        }),
-        refreshMcpContext: vi.fn(),
-      } as unknown as Config;
+      const mockedMcpClient = makeFakeClient();
+      const mockConfig = makeConfig({
+        servers: { 'test-server': {} },
+        isTrustedFolder: false,
+      });
       const manager = new McpClientManager(
         '0.0.1',
         {} as ToolRegistry,
         mockConfig,
+        undefined,
+        { createClient: factoryReturning(mockedMcpClient) },
       );
 
       await manager.startConfiguredMcpServers();
@@ -520,33 +383,14 @@ describe('McpClientManager', () => {
   });
 
   describe('startExtension background discovery (issue #2325)', () => {
-    const createExtensionManager = (
-      mockedMcpClient: Record<string, ReturnType<typeof vi.fn>>,
-    ) => {
-      vi.mocked(McpClient).mockReturnValue(
-        mockedMcpClient as unknown as McpClient,
-      );
-      const mockConfig = {
-        isTrustedFolder: () => true,
-        getMcpServers: () => ({}),
-        getMcpServerCommand: () => '',
-        getPromptRegistry: () => ({}) as PromptRegistry,
-        getResourceRegistry: () => ({}) as ResourceRegistry,
-        getDebugMode: () => false,
-        getWorkspaceContext: () => ({}) as WorkspaceContext,
-        getEnableExtensionReloading: () => false,
-        getExtensionEvents: () => undefined,
-        getAllowedMcpServers: () => undefined,
-        getBlockedMcpServers: () => undefined,
-        getAgentClient: () => ({
-          isInitialized: () => false,
-        }),
-        refreshMcpContext: vi.fn(),
-      } as unknown as Config;
+    const createExtensionManager = (mockedMcpClient: FakeMcpClient) => {
+      const mockConfig = makeConfig({ servers: {} });
       const manager = new McpClientManager(
         '0.0.1',
         {} as ToolRegistry,
         mockConfig,
+        undefined,
+        { createClient: factoryReturning(mockedMcpClient) },
       );
       return { manager, mockConfig };
     };
@@ -569,13 +413,12 @@ describe('McpClientManager', () => {
       const connectPromise = new Promise<void>((resolve) => {
         resolveConnect = resolve;
       });
-      const mockedMcpClient = {
+      const mockedMcpClient = makeFakeClient({
         connect: vi.fn().mockReturnValue(connectPromise),
         discover: vi.fn().mockResolvedValue(undefined),
         disconnect: vi.fn().mockResolvedValue(undefined),
-        getStatus: vi.fn(),
         getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
-      };
+      });
       const { manager } = createExtensionManager(mockedMcpClient);
 
       // startExtension should resolve immediately without waiting for connect
@@ -587,20 +430,19 @@ describe('McpClientManager', () => {
       expect(mockedMcpClient.discover).not.toHaveBeenCalled();
 
       // Now resolve the connect promise — discovery completes in background.
-      resolveConnect();
+      resolveConnect!();
       await manager.whenDiscoverySettled();
       // After settling, discover should have been called
       expect(mockedMcpClient.discover).toHaveBeenCalledOnce();
     });
 
     it('whenDiscoverySettled should resolve after background discovery from startExtension', async () => {
-      const mockedMcpClient = {
+      const mockedMcpClient = makeFakeClient({
         connect: vi.fn().mockResolvedValue(undefined),
         discover: vi.fn().mockResolvedValue(undefined),
         disconnect: vi.fn().mockResolvedValue(undefined),
-        getStatus: vi.fn(),
         getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
-      };
+      });
       const { manager } = createExtensionManager(mockedMcpClient);
 
       await manager.startExtension(makeTestExtension());
@@ -610,19 +452,19 @@ describe('McpClientManager', () => {
     });
 
     it('should not throw and whenDiscoverySettled should resolve when connect rejects', async () => {
-      const mockedMcpClient = {
+      const mockedMcpClient = makeFakeClient({
         connect: vi.fn().mockRejectedValue(new Error('connection refused')),
         discover: vi.fn().mockResolvedValue(undefined),
         disconnect: vi.fn().mockResolvedValue(undefined),
-        getStatus: vi.fn(),
         getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
-      };
+      });
       const { manager } = createExtensionManager(mockedMcpClient);
 
-      await expect(
-        manager.startExtension(makeTestExtension()),
-      ).resolves.toBeUndefined();
-      await expect(manager.whenDiscoverySettled()).resolves.toBeUndefined();
+      // startExtension must resolve (not throw) even though connect rejects,
+      // and whenDiscoverySettled must resolve once the background discovery
+      // pass has drained. Awaiting the real methods directly proves both.
+      await manager.startExtension(makeTestExtension());
+      await manager.whenDiscoverySettled();
       // connect was attempted but discover was never reached
       expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
       expect(mockedMcpClient.discover).not.toHaveBeenCalled();

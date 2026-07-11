@@ -88,10 +88,49 @@ export function resetKeytarLoader(): void {
   keyringLoader = defaultKeytarLoader;
 }
 
+/**
+ * Feedback surface used by {@link KeychainTokenStorage}. Injectable so tests
+ * can assert on emitted diagnostics without mocking the shared core events
+ * module. Defaults to the real {@link coreEvents}.
+ */
+export type KeychainFeedbackEmitter = Pick<typeof coreEvents, 'emitFeedback'>;
+
+/**
+ * Optional dependencies for {@link KeychainTokenStorage}. Exposed to replace
+ * module-level mocking of `node:crypto` and the core events bus with explicit,
+ * typed injection while defaulting to production behavior.
+ */
+export interface KeychainTokenStorageDependencies {
+  /**
+   * Produces the random hex suffix for the keychain probe account. Defaults to
+   * `crypto.randomBytes(sizeBytes).toString('hex')`.
+   */
+  randomHex?: (sizeBytes: number) => string;
+  /**
+   * Feedback emitter for non-fatal keychain diagnostics. Defaults to
+   * {@link coreEvents}.
+   */
+  events?: KeychainFeedbackEmitter;
+}
+
+const defaultRandomHex = (sizeBytes: number): string =>
+  crypto.randomBytes(sizeBytes).toString('hex');
+
 export class KeychainTokenStorage extends BaseTokenStorage {
   private keychainAvailable: boolean | null = null;
   private keytarModule: Keytar | null = null;
   private keytarLoadAttempted = false;
+  private readonly randomHex: (sizeBytes: number) => string;
+  private readonly events: KeychainFeedbackEmitter;
+
+  constructor(
+    serviceName: string,
+    dependencies: KeychainTokenStorageDependencies = {},
+  ) {
+    super(serviceName);
+    this.randomHex = dependencies.randomHex ?? defaultRandomHex;
+    this.events = dependencies.events ?? coreEvents;
+  }
 
   async getKeytar(): Promise<Keytar | null> {
     // If we've already tried loading (successfully or not), return the result
@@ -211,7 +250,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
         .filter((cred) => !cred.account.startsWith(KEYCHAIN_TEST_PREFIX))
         .map((cred: { account: string }) => cred.account);
     } catch (error) {
-      coreEvents.emitFeedback(
+      this.events.emitFeedback(
         'error',
         'Failed to list servers from keychain',
         error,
@@ -242,7 +281,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
           this.validateCredentials(data);
           result.set(cred.account, data);
         } catch (error) {
-          coreEvents.emitFeedback(
+          this.events.emitFeedback(
             'error',
             `Failed to parse credentials for ${cred.account}`,
             error,
@@ -250,7 +289,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
         }
       }
     } catch (error) {
-      coreEvents.emitFeedback(
+      this.events.emitFeedback(
         'error',
         'Failed to get all credentials from keychain',
         error,
@@ -306,7 +345,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
         return false;
       }
 
-      const testAccount = `${KEYCHAIN_TEST_PREFIX}${crypto.randomBytes(8).toString('hex')}`;
+      const testAccount = `${KEYCHAIN_TEST_PREFIX}${this.randomHex(8)}`;
       const testPassword = 'test';
 
       await keytar.setPassword(this.serviceName, testAccount, testPassword);

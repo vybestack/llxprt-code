@@ -16,8 +16,46 @@ import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configT
 import { FIVE_MIN_BUFFER_MS } from './oauth-utils.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 
+/**
+ * Minimal structural view of the Google auth client used by
+ * {@link GoogleCredentialProvider}. Captures only the members the provider
+ * relies on so tests can supply a fake without constructing a full
+ * {@link GoogleAuth} client.
+ */
+export interface GoogleAuthClientLike {
+  getAccessToken(): Promise<{ token?: string | null }>;
+  credentials?: { expiry_date?: number | null };
+  quotaProjectId?: string;
+}
+
+/**
+ * Minimal structural view of {@link GoogleAuth} used by the provider.
+ */
+export interface GoogleAuthLike {
+  getClient(): Promise<GoogleAuthClientLike>;
+}
+
+/**
+ * Factory for the Google auth client, mirroring the {@link GoogleAuth}
+ * constructor's options shape. Injectable so tests replace the network-backed
+ * ADC client with a fake instead of mocking the `google-auth-library` module.
+ */
+export type GoogleAuthFactory = (options: {
+  scopes: string[];
+}) => GoogleAuthLike;
+
+/**
+ * Optional dependencies for {@link GoogleCredentialProvider}.
+ */
+export interface GoogleCredentialProviderDependencies {
+  createGoogleAuth?: GoogleAuthFactory;
+}
+
+const defaultGoogleAuthFactory: GoogleAuthFactory = (options) =>
+  new GoogleAuth(options);
+
 export class GoogleCredentialProvider implements McpAuthProvider {
-  private readonly auth: GoogleAuth;
+  private readonly auth: GoogleAuthLike;
   private cachedToken?: OAuthTokens;
   private tokenExpiryTime?: number;
 
@@ -32,14 +70,19 @@ export class GoogleCredentialProvider implements McpAuthProvider {
   };
   private _clientInformation?: OAuthClientInformationFull;
 
-  constructor(private readonly config?: MCPServerConfig) {
+  constructor(
+    private readonly config?: MCPServerConfig,
+    dependencies: GoogleCredentialProviderDependencies = {},
+  ) {
     const scopes = this.config?.oauth?.scopes;
     if (!scopes || scopes.length === 0) {
       throw new Error(
         'Scopes must be provided in the oauth config for Google Credentials provider',
       );
     }
-    this.auth = new GoogleAuth({
+    const createGoogleAuth =
+      dependencies.createGoogleAuth ?? defaultGoogleAuthFactory;
+    this.auth = createGoogleAuth({
       scopes,
     });
   }

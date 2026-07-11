@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mocked } from 'vitest';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { Mocked } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { safeJsonStringify } from '@vybestack/llxprt-code-core/utils/safeJsonStringify.js';
 import {
   DiscoveredMCPTool,
@@ -171,9 +171,9 @@ describe('DiscoveredMCPTool', () => {
       mockCallTool.mockRejectedValue(expectedError);
 
       const invocation = tool.build(params);
-      await expect(
-        invocation.execute(new AbortController().signal),
-      ).rejects.toThrow(expectedError);
+      expect(invocation.execute(new AbortController().signal)).rejects.toThrow(
+        expectedError,
+      );
     });
 
     it.each([
@@ -628,7 +628,7 @@ describe('DiscoveredMCPTool', () => {
 
         const invocation = tool.build(params);
 
-        await expect(invocation.execute(controller.signal)).rejects.toThrow(
+        expect(invocation.execute(controller.signal)).rejects.toThrow(
           'Tool call aborted',
         );
 
@@ -665,7 +665,7 @@ describe('DiscoveredMCPTool', () => {
         // Abort after a short delay to simulate cancellation during execution
         setTimeout(() => controller.abort(), 50);
 
-        await expect(promise).rejects.toThrow('Tool call aborted');
+        expect(promise).rejects.toThrow('Tool call aborted');
       });
 
       it('should complete successfully if not aborted', async () => {
@@ -726,7 +726,7 @@ describe('DiscoveredMCPTool', () => {
 
         const invocation = tool.build(params);
 
-        await expect(invocation.execute(controller.signal)).rejects.toThrow(
+        expect(invocation.execute(controller.signal)).rejects.toThrow(
           expectedError,
         );
       });
@@ -763,7 +763,7 @@ describe('DiscoveredMCPTool', () => {
 
         const invocation = tool.build(params);
 
-        await expect(invocation.execute(controller.signal)).rejects.toThrow(
+        expect(invocation.execute(controller.signal)).rejects.toThrow(
           'Tool execution failed',
         );
 

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { BaseTokenStorage } from './base-token-storage.js';
 import type { MCPOAuthCredentials } from '../token-store.js';
 

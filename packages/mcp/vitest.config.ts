@@ -79,6 +79,11 @@ const shouldUseForkPool = isWindows || isMacCi;
 
 export default defineConfig({
   plugins: [workspaceDependencyAliasPlugin],
+  resolve: {
+    alias: {
+      'bun:test': 'vitest',
+    },
+  },
   test: {
     passWithNoTests: true,
     reporters: ['default', 'junit'],

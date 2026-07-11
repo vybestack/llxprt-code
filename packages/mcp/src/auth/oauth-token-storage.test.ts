@@ -4,8 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'bun:test';
 import { MCPOAuthTokenStorage } from './oauth-token-storage.js';
+
+const originalTokenStore = MCPOAuthTokenStorage.getTokenStore();
 import type { MCPOAuthToken } from './token-store.js';
 import type { OAuthCredentials, TokenStorage } from './token-storage/types.js';
 
@@ -76,6 +78,10 @@ describe('MCPOAuthTokenStorage', () => {
     MCPOAuthTokenStorage.setTokenStore(mockStore);
   });
 
+  afterAll(() => {
+    MCPOAuthTokenStorage.setTokenStore(originalTokenStore);
+  });
+
   it('allows swapping the underlying token store', () => {
     const custom = new MockTokenStorage();
     MCPOAuthTokenStorage.setTokenStore(custom);
@@ -138,12 +144,12 @@ describe('MCPOAuthTokenStorage', () => {
 
   it('throws when attempting to save invalid data', async () => {
     // Invalid server name
-    await expect(MCPOAuthTokenStorage.saveToken('', mockToken)).rejects.toThrow(
+    expect(MCPOAuthTokenStorage.saveToken('', mockToken)).rejects.toThrow(
       'Server name must be a non-empty string',
     );
 
     // Invalid token
-    await expect(
+    expect(
       MCPOAuthTokenStorage.saveToken('demo', { ...mockToken, accessToken: '' }),
     ).rejects.toThrow('Token must have a valid access token');
   });
@@ -174,11 +180,11 @@ describe('MCPOAuthTokenStorage', () => {
   it('handles backend errors gracefully', async () => {
     mockStore.setShouldThrow(true);
 
-    await expect(MCPOAuthTokenStorage.loadTokens()).rejects.toThrowError(
+    expect(MCPOAuthTokenStorage.loadTokens()).rejects.toThrowError(
       'Mock get error',
     );
 
-    await expect(
+    expect(
       MCPOAuthTokenStorage.saveToken('demo', mockToken),
     ).rejects.toThrowError('Mock set error');
   });

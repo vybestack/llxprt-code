@@ -4,8 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ServiceAccountImpersonationProvider } from './sa-impersonation-provider.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import {
+  ServiceAccountImpersonationProvider,
+  type ImpersonationGoogleAuthFactory,
+} from './sa-impersonation-provider.js';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
 
 const mockRequest = vi.fn();
@@ -13,15 +16,11 @@ const mockGetClient = vi.fn(() => ({
   request: mockRequest,
 }));
 
-// Mock the google-auth-library to use a shared mock function
-vi.mock('google-auth-library', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('google-auth-library')>();
-  return {
-    ...actual,
-    GoogleAuth: vi.fn().mockImplementation(() => ({
-      getClient: mockGetClient,
-    })),
-  };
+// Inject a factory returning a fake Google auth client, replacing prior
+// module-level mocking of google-auth-library. The shared mockRequest lets
+// each test drive token responses and assert request parameters.
+const createGoogleAuth: ImpersonationGoogleAuthFactory = () => ({
+  getClient: mockGetClient,
 });
 
 const defaultSAConfig: MCPServerConfig = {
@@ -66,7 +65,9 @@ describe('ServiceAccountImpersonationProvider', () => {
     const mockToken = 'mock-id-token-123';
     mockRequest.mockResolvedValue({ data: { token: mockToken } });
 
-    const provider = new ServiceAccountImpersonationProvider(defaultSAConfig);
+    const provider = new ServiceAccountImpersonationProvider(defaultSAConfig, {
+      createGoogleAuth,
+    });
     const tokens = await provider.tokens();
 
     expect(tokens).toBeDefined();
@@ -77,7 +78,9 @@ describe('ServiceAccountImpersonationProvider', () => {
   it('should return undefined if token acquisition fails', async () => {
     mockRequest.mockResolvedValue({ data: { token: null } });
 
-    const provider = new ServiceAccountImpersonationProvider(defaultSAConfig);
+    const provider = new ServiceAccountImpersonationProvider(defaultSAConfig, {
+      createGoogleAuth,
+    });
     const tokens = await provider.tokens();
 
     expect(tokens).toBeUndefined();
@@ -86,7 +89,9 @@ describe('ServiceAccountImpersonationProvider', () => {
   it('should make a request with the correct parameters', async () => {
     mockRequest.mockResolvedValue({ data: { token: 'test-token' } });
 
-    const provider = new ServiceAccountImpersonationProvider(defaultSAConfig);
+    const provider = new ServiceAccountImpersonationProvider(defaultSAConfig, {
+      createGoogleAuth,
+    });
     await provider.tokens();
 
     expect(mockRequest).toHaveBeenCalledWith({
@@ -100,7 +105,9 @@ describe('ServiceAccountImpersonationProvider', () => {
   });
 
   it('should return a cached token if it is not expired', async () => {
-    const provider = new ServiceAccountImpersonationProvider(defaultSAConfig);
+    const provider = new ServiceAccountImpersonationProvider(defaultSAConfig, {
+      createGoogleAuth,
+    });
     vi.useFakeTimers();
 
     // jwt payload with exp set to 1 hour from now
@@ -124,7 +131,9 @@ describe('ServiceAccountImpersonationProvider', () => {
   });
 
   it('should fetch a new token if the cached token is expired (using fake timers)', async () => {
-    const provider = new ServiceAccountImpersonationProvider(defaultSAConfig);
+    const provider = new ServiceAccountImpersonationProvider(defaultSAConfig, {
+      createGoogleAuth,
+    });
     vi.useFakeTimers();
 
     // Get and cache a token that expires in 1 second

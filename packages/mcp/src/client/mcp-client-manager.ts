@@ -35,6 +35,56 @@ import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 const logger = new DebugLogger('llxprt:mcp-client-manager');
 
 /**
+ * Parameters required to construct an {@link McpClient} for a single server.
+ * The registries, workspace context, and debug mode are resolved from
+ * {@link Config} by the default factory, so callers only supply the per-server
+ * identity plus the shared collaborators.
+ */
+export interface McpClientFactoryParams {
+  serverName: string;
+  serverConfig: MCPServerConfig;
+  toolRegistry: ToolRegistry;
+  cliConfig: Config;
+  clientVersion: string;
+  onToolsUpdated?: (signal?: AbortSignal) => Promise<void>;
+}
+
+/**
+ * Factory for the per-server {@link McpClient}. Injectable so tests can supply a
+ * fake client instead of module-mocking `./mcp-client.js`, mirroring the
+ * dependency-seam pattern used by the auth providers.
+ */
+export type McpClientFactory = (params: McpClientFactoryParams) => McpClient;
+
+/**
+ * Optional dependencies for {@link McpClientManager}.
+ */
+export interface McpClientManagerDependencies {
+  createClient?: McpClientFactory;
+}
+
+const defaultMcpClientFactory: McpClientFactory = ({
+  serverName,
+  serverConfig,
+  toolRegistry,
+  cliConfig,
+  clientVersion,
+  onToolsUpdated,
+}) =>
+  new McpClient(
+    serverName,
+    serverConfig,
+    toolRegistry,
+    cliConfig.getPromptRegistry(),
+    cliConfig.getResourceRegistry(),
+    cliConfig.getWorkspaceContext(),
+    cliConfig,
+    cliConfig.getDebugMode(),
+    clientVersion,
+    onToolsUpdated,
+  );
+
+/**
  * Manages the lifecycle of multiple MCP clients, including local child processes.
  * This class is responsible for starting, stopping, and discovering tools from
  * a collection of MCP servers defined in the configuration.
@@ -63,17 +113,20 @@ export class McpClientManager {
    * @requirement:REQ-013
    */
   private readonly discoveryFailures: Map<string, string> = new Map();
+  private readonly createClient: McpClientFactory;
 
   constructor(
     clientVersion: string,
     toolRegistry: ToolRegistry,
     cliConfig: Config,
     eventEmitter?: EventEmitter,
+    dependencies: McpClientManagerDependencies = {},
   ) {
     this.clientVersion = clientVersion;
     this.toolRegistry = toolRegistry;
     this.cliConfig = cliConfig;
     this.eventEmitter = eventEmitter;
+    this.createClient = dependencies.createClient ?? defaultMcpClientFactory;
   }
 
   getBlockedMcpServers() {
@@ -235,21 +288,17 @@ export class McpClientManager {
 
     const client =
       existing ??
-      new McpClient(
-        name,
-        config,
-        this.toolRegistry,
-        this.cliConfig.getPromptRegistry(),
-        this.cliConfig.getResourceRegistry(),
-        this.cliConfig.getWorkspaceContext(),
-        this.cliConfig,
-        this.cliConfig.getDebugMode(),
-        this.clientVersion,
-        async () => {
+      this.createClient({
+        serverName: name,
+        serverConfig: config,
+        toolRegistry: this.toolRegistry,
+        cliConfig: this.cliConfig,
+        clientVersion: this.clientVersion,
+        onToolsUpdated: async () => {
           debugLogger.log('Tools changed, updating Gemini context...');
           await this.scheduleMcpContextRefresh();
         },
-      );
+      });
     if (!existing) {
       this.clients.set(name, client);
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
@@ -295,20 +344,16 @@ export class McpClientManager {
   ): Promise<void> {
     const client =
       existing ??
-      new McpClient(
-        name,
-        config,
-        this.toolRegistry,
-        this.cliConfig.getPromptRegistry(),
-        this.cliConfig.getResourceRegistry(),
-        this.cliConfig.getWorkspaceContext(),
-        this.cliConfig,
-        this.cliConfig.getDebugMode(),
-        this.clientVersion,
-        async () => {
+      this.createClient({
+        serverName: name,
+        serverConfig: config,
+        toolRegistry: this.toolRegistry,
+        cliConfig: this.cliConfig,
+        clientVersion: this.clientVersion,
+        onToolsUpdated: async () => {
           await this.scheduleMcpContextRefresh();
         },
-      );
+      });
     if (!existing) {
       this.clients.set(name, client);
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {

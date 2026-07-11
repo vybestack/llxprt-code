@@ -13,7 +13,7 @@
  * fail-closed behavior are also covered.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -141,7 +141,7 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
       machineSecretLoader: secretLoaderB(),
     });
 
-    await expect(reader.getCredentials('secret-A')).rejects.toThrow(
+    expect(reader.getCredentials('secret-A')).rejects.toThrow(
       'Token file corrupted',
     );
   });
@@ -158,7 +158,7 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
       machineSecretLoader: nullSecretLoader(),
     });
 
-    await expect(reader.getCredentials('needs-secret')).rejects.toThrow(
+    expect(reader.getCredentials('needs-secret')).rejects.toThrow(
       'Token file corrupted',
     );
   });
@@ -184,7 +184,7 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
       },
     });
 
-    await expect(reader.getCredentials('loader-fault')).rejects.toThrow(
+    expect(reader.getCredentials('loader-fault')).rejects.toThrow(
       /keyring exploded/,
     );
   });
@@ -236,7 +236,7 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
       tokenFilePath,
       machineSecretLoader: nullSecretLoader(),
     });
-    await expect(
+    expect(
       degradedWriter.setCredentials(makeCredentials('protected')),
     ).rejects.toThrow(/Token file corrupted/);
 
@@ -280,7 +280,7 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
       machineSecretLoader: secretLoaderA(),
     });
 
-    await expect(reader.getCredentials('anything')).rejects.toThrow(
+    expect(reader.getCredentials('anything')).rejects.toThrow(
       'Token file corrupted',
     );
   });

@@ -168,9 +168,10 @@ export async function createTransportWithOAuth(
  */
 export async function getStoredOAuthToken(
   serverName: string,
+  createTokenStorage: () => MCPOAuthTokenStorage = () =>
+    new MCPOAuthTokenStorage(),
 ): Promise<string | null> {
-  const tokenStorage = new MCPOAuthTokenStorage();
-  const credentials = await tokenStorage.getCredentials(serverName);
+  const credentials = await createTokenStorage().getCredentials(serverName);
   if (!credentials) return null;
   return MCPOAuthProvider.getValidToken(serverName, {
     clientId: credentials.clientId,
@@ -312,6 +313,9 @@ export async function createTransport(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   debugMode: boolean,
+  createStdioTransport: (
+    options: ConstructorParameters<typeof StdioClientTransport>[0],
+  ) => StdioClientTransport = (options) => new StdioClientTransport(options),
 ): Promise<Transport> {
   const noUrl = !mcpServerConfig.url && !mcpServerConfig.httpUrl;
   if (noUrl) {
@@ -323,7 +327,7 @@ export async function createTransport(
   }
 
   if (mcpServerConfig.command) {
-    const transport = new StdioClientTransport({
+    const transport = createStdioTransport({
       command: mcpServerConfig.command,
       args: mcpServerConfig.args ?? [],
       env: {

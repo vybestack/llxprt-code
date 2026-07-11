@@ -7,7 +7,7 @@
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { AuthProviderType } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { GoogleCredentialProvider } from '../auth/google-auth-provider.js';
 
@@ -21,20 +21,7 @@ import {
   getTransportHeaders,
 } from './mcpClientTestHelpers.js';
 
-vi.mock('@modelcontextprotocol/sdk/client/stdio.js');
-vi.mock('@modelcontextprotocol/sdk/client/index.js');
-vi.mock('@google/genai');
-vi.mock('../auth/oauth-provider.js');
-vi.mock('../auth/oauth-token-storage.js');
-vi.mock('../auth/oauth-utils.js');
-vi.mock('google-auth-library');
 import { GoogleAuth } from 'google-auth-library';
-
-vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
-  coreEvents: {
-    emitFeedback: vi.fn(),
-  },
-}));
 
 describe('mcp-client', () => {
   describe('createTransport', () => {
@@ -116,9 +103,9 @@ describe('mcp-client', () => {
     });
 
     it('should connect via command', async () => {
-      const mockedTransport = vi
-        .spyOn(SdkClientStdioLib, 'StdioClientTransport')
-        .mockReturnValue({} as SdkClientStdioLib.StdioClientTransport);
+      const mockedTransport = vi.fn(
+        () => ({}) as SdkClientStdioLib.StdioClientTransport,
+      );
 
       await createTransport(
         'test-server',
@@ -129,6 +116,7 @@ describe('mcp-client', () => {
           cwd: 'test/cwd',
         },
         false,
+        mockedTransport,
       );
 
       expect(mockedTransport).toHaveBeenCalledWith({
@@ -148,7 +136,9 @@ describe('mcp-client', () => {
           quotaProjectId: 'myproject',
         };
 
-        vi.mocked(GoogleAuth.prototype.getClient).mockResolvedValue(mockClient);
+        vi.spyOn(GoogleAuth.prototype, 'getClient').mockResolvedValue(
+          mockClient,
+        );
       });
 
       it('should use GoogleCredentialProvider when specified', async () => {
@@ -245,7 +235,7 @@ describe('mcp-client', () => {
       });
 
       it('should throw an error if no URL is provided with GoogleCredentialProvider', async () => {
-        await expect(
+        expect(
           createTransport(
             'test-server',
             {

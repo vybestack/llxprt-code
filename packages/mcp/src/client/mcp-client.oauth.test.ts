@@ -8,13 +8,14 @@ import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MCPOAuthProvider } from '../auth/oauth-provider.js';
 import { MCPOAuthTokenStorage } from '../auth/oauth-token-storage.js';
 import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
 import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
 
+import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
 import {
   connectToMcpServer,
@@ -25,20 +26,6 @@ import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-
-vi.mock('@modelcontextprotocol/sdk/client/stdio.js');
-vi.mock('@modelcontextprotocol/sdk/client/index.js');
-vi.mock('@google/genai');
-vi.mock('../auth/oauth-provider.js');
-vi.mock('../auth/oauth-token-storage.js');
-vi.mock('../auth/oauth-utils.js');
-vi.mock('google-auth-library');
-
-vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
-  coreEvents: {
-    emitFeedback: vi.fn(),
-  },
-}));
 
 const createMockResourceRegistry = (): ResourceRegistry =>
   ({
@@ -51,7 +38,6 @@ describe('connectToMcpServer with OAuth', () => {
   let mockedClient: ClientLib.Client;
   let workspaceContext: WorkspaceContext;
   let testWorkspace: string;
-  let mockAuthProvider: MCPOAuthProvider;
   let mockTokenStorage: MCPOAuthTokenStorage;
 
   beforeEach(() => {
@@ -63,7 +49,6 @@ describe('connectToMcpServer with OAuth', () => {
       onclose: vi.fn(),
       notification: vi.fn(),
     } as unknown as ClientLib.Client;
-    vi.mocked(ClientLib.Client).mockImplementation(() => mockedClient);
 
     testWorkspace = fs.mkdtempSync(
       path.join(os.tmpdir(), 'gemini-agent-test-'),
@@ -73,17 +58,11 @@ describe('connectToMcpServer with OAuth', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(coreEvents, 'emitFeedback').mockImplementation(() => {});
 
     mockTokenStorage = {
       getCredentials: vi.fn().mockResolvedValue({ clientId: 'test-client' }),
     } as unknown as MCPOAuthTokenStorage;
-    vi.mocked(MCPOAuthTokenStorage).mockReturnValue(mockTokenStorage);
-    mockAuthProvider = {
-      authenticate: vi.fn().mockResolvedValue(undefined),
-      getValidToken: vi.fn().mockResolvedValue('test-access-token'),
-      tokenStorage: mockTokenStorage,
-    } as unknown as MCPOAuthProvider;
-    vi.mocked(MCPOAuthProvider).mockReturnValue(mockAuthProvider);
 
     // Mock static methods used by connectToMcpServer's OAuth flow
     vi.spyOn(MCPOAuthProvider, 'authenticate').mockResolvedValue(undefined);
@@ -93,24 +72,20 @@ describe('connectToMcpServer with OAuth', () => {
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should handle automatic OAuth flow on 401 with stored token', async () => {
     const serverUrl = 'http://test-server.com/';
 
-    vi.mocked(mockedClient.connect).mockRejectedValueOnce(
-      new Error('401 Unauthorized'),
-    );
+    mockedClient.connect.mockRejectedValueOnce(new Error('401 Unauthorized'));
 
     // We need this to be an any type because we dig into its private state.
     let capturedTransport: TransportWithInternals | undefined;
-    vi.mocked(mockedClient.connect).mockImplementationOnce(
-      async (transport) => {
-        capturedTransport = transport;
-        return Promise.resolve();
-      },
-    );
+    mockedClient.connect.mockImplementationOnce(async (transport) => {
+      capturedTransport = transport;
+      return Promise.resolve();
+    });
 
     const client = await connectToMcpServer(
       '0.0.1',
@@ -118,13 +93,15 @@ describe('connectToMcpServer with OAuth', () => {
       { httpUrl: serverUrl },
       false,
       workspaceContext,
+      {
+        createClient: () => mockedClient,
+        getStoredOAuthToken: async () => 'test-access-token',
+      },
     );
 
     expect(client).toBe(mockedClient);
     // First connect rejects with 401, second connect succeeds with stored token
     expect(mockedClient.connect).toHaveBeenCalledTimes(2);
-    // With stored token available, retryWithOAuth uses stored token directly
-    expect(MCPOAuthProvider.getValidToken).toHaveBeenCalled();
 
     const authHeader =
       capturedTransport?._requestInit?.headers?.['Authorization'];
@@ -137,17 +114,19 @@ describe('connectToMcpServer with OAuth', () => {
     // Mock no stored credentials so getStoredOAuthToken returns null
     mockTokenStorage.getCredentials = vi.fn().mockResolvedValue(null);
 
-    vi.mocked(mockedClient.connect).mockRejectedValueOnce(
-      new Error('401 Unauthorized'),
-    );
+    mockedClient.connect.mockRejectedValueOnce(new Error('401 Unauthorized'));
 
-    await expect(
+    expect(
       connectToMcpServer(
         '0.0.1',
         'test-server',
         { httpUrl: serverUrl },
         false,
         workspaceContext,
+        {
+          createClient: () => mockedClient,
+          getStoredOAuthToken: async () => null,
+        },
       ),
     ).rejects.toThrow(/requires OAuth authentication/);
 
@@ -156,6 +135,11 @@ describe('connectToMcpServer with OAuth', () => {
   });
 
   // Phase B: createTransportWithOAuth parity tests (RED phase)
+  const oauthConnectionDependencies = () => ({
+    createClient: () => mockedClient,
+    getStoredOAuthToken: async () => 'test-access-token',
+  });
+
   describe('createTransportWithOAuth transport selection', () => {
     // Note: createTransportWithOAuth is not directly exported, but we can test
     // its behavior through connectToMcpServer and retryWithOAuth
@@ -164,17 +148,13 @@ describe('connectToMcpServer with OAuth', () => {
     it('should use HTTP transport for httpUrl config', async () => {
       const serverUrl = 'http://test-server.com/http';
 
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
-        new Error('401 Unauthorized'),
-      );
+      mockedClient.connect.mockRejectedValueOnce(new Error('401 Unauthorized'));
 
       let capturedTransport: TransportWithInternals | undefined;
-      vi.mocked(mockedClient.connect).mockImplementationOnce(
-        async (transport) => {
-          capturedTransport = transport;
-          return Promise.resolve();
-        },
-      );
+      mockedClient.connect.mockImplementationOnce(async (transport) => {
+        capturedTransport = transport;
+        return Promise.resolve();
+      });
 
       await connectToMcpServer(
         '0.0.1',
@@ -182,6 +162,7 @@ describe('connectToMcpServer with OAuth', () => {
         { httpUrl: serverUrl },
         false,
         workspaceContext,
+        oauthConnectionDependencies(),
       );
 
       // Passes because retryWithOAuth uses HTTP for httpUrl
@@ -193,17 +174,13 @@ describe('connectToMcpServer with OAuth', () => {
     it('should use HTTP transport for url without type (default)', async () => {
       const serverUrl = 'http://test-server.com/mcp';
 
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
-        new Error('401 Unauthorized'),
-      );
+      mockedClient.connect.mockRejectedValueOnce(new Error('401 Unauthorized'));
 
       let capturedTransport: TransportWithInternals | undefined;
-      vi.mocked(mockedClient.connect).mockImplementationOnce(
-        async (transport) => {
-          capturedTransport = transport;
-          return Promise.resolve();
-        },
-      );
+      mockedClient.connect.mockImplementationOnce(async (transport) => {
+        capturedTransport = transport;
+        return Promise.resolve();
+      });
 
       await connectToMcpServer(
         '0.0.1',
@@ -211,6 +188,7 @@ describe('connectToMcpServer with OAuth', () => {
         { url: serverUrl },
         false,
         workspaceContext,
+        oauthConnectionDependencies(),
       );
 
       // Passes accidentally: retryWithOAuth hardcodes HTTP (should use createTransportWithOAuth)
@@ -222,17 +200,13 @@ describe('connectToMcpServer with OAuth', () => {
     it('should use HTTP transport for url + type:http', async () => {
       const serverUrl = 'http://test-server.com/http';
 
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
-        new Error('401 Unauthorized'),
-      );
+      mockedClient.connect.mockRejectedValueOnce(new Error('401 Unauthorized'));
 
       let capturedTransport: TransportWithInternals | undefined;
-      vi.mocked(mockedClient.connect).mockImplementationOnce(
-        async (transport) => {
-          capturedTransport = transport;
-          return Promise.resolve();
-        },
-      );
+      mockedClient.connect.mockImplementationOnce(async (transport) => {
+        capturedTransport = transport;
+        return Promise.resolve();
+      });
 
       await connectToMcpServer(
         '0.0.1',
@@ -240,6 +214,7 @@ describe('connectToMcpServer with OAuth', () => {
         { url: serverUrl, type: 'http' },
         false,
         workspaceContext,
+        oauthConnectionDependencies(),
       );
 
       // Passes accidentally: retryWithOAuth hardcodes HTTP (ignores type field)
@@ -250,17 +225,13 @@ describe('connectToMcpServer with OAuth', () => {
     it('should use SSE transport for url + type:sse', async () => {
       const serverUrl = 'http://test-server.com/sse';
 
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
-        new Error('401 Unauthorized'),
-      );
+      mockedClient.connect.mockRejectedValueOnce(new Error('401 Unauthorized'));
 
       let capturedTransport: TransportWithInternals | undefined;
-      vi.mocked(mockedClient.connect).mockImplementationOnce(
-        async (transport) => {
-          capturedTransport = transport;
-          return Promise.resolve();
-        },
-      );
+      mockedClient.connect.mockImplementationOnce(async (transport) => {
+        capturedTransport = transport;
+        return Promise.resolve();
+      });
 
       await connectToMcpServer(
         '0.0.1',
@@ -268,6 +239,7 @@ describe('connectToMcpServer with OAuth', () => {
         { url: serverUrl, type: 'sse' },
         false,
         workspaceContext,
+        oauthConnectionDependencies(),
       );
 
       // WILL FAIL: createTransportWithOAuth ignores type:sse, uses HTTP
@@ -276,18 +248,17 @@ describe('connectToMcpServer with OAuth', () => {
 
     // EXPECTED TO FAIL: currently returns null, should throw error
     it('should throw error when neither url nor httpUrl configured', async () => {
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
-        new Error('401 Unauthorized'),
-      );
+      mockedClient.connect.mockRejectedValueOnce(new Error('401 Unauthorized'));
 
       // WILL FAIL: current code returns null and continues, should throw
-      await expect(
+      expect(
         connectToMcpServer(
           '0.0.1',
           'test-server',
           { command: 'test-command' }, // No URL transport
           false,
           workspaceContext,
+          { createClient: () => mockedClient },
         ),
       ).rejects.toThrow(Error);
     });
@@ -306,12 +277,12 @@ describe('connectToMcpServer with OAuth', () => {
       const mockTransport = { close: vi.fn() };
 
       // First connect fails with non-401 error
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+      mockedClient.connect.mockRejectedValueOnce(
         new Error('Connection refused'),
       );
 
       // Second connect (SSE fallback) succeeds
-      vi.mocked(mockedClient.connect).mockResolvedValueOnce(undefined);
+      mockedClient.connect.mockResolvedValueOnce(undefined);
 
       vi.spyOn(
         StreamableHTTPClientTransport.prototype,
@@ -324,6 +295,7 @@ describe('connectToMcpServer with OAuth', () => {
         { url: serverUrl },
         false,
         workspaceContext,
+        { createClient: () => mockedClient },
       );
 
       // Should have tried twice: HTTP first, then SSE fallback
@@ -336,17 +308,16 @@ describe('connectToMcpServer with OAuth', () => {
       const serverUrl = 'http://test-server.com/mcp';
 
       // Simulate 404 error
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
-        new Error('404 Not Found'),
-      );
+      mockedClient.connect.mockRejectedValueOnce(new Error('404 Not Found'));
 
-      await expect(
+      expect(
         connectToMcpServer(
           '0.0.1',
           'test-server',
           { url: serverUrl },
           false,
           workspaceContext,
+          { createClient: () => mockedClient },
         ),
       ).rejects.toThrow(/404/);
 
@@ -358,17 +329,18 @@ describe('connectToMcpServer with OAuth', () => {
     it('should not attempt SSE fallback when type:http is explicit', async () => {
       const serverUrl = 'http://test-server.com/http';
 
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+      mockedClient.connect.mockRejectedValueOnce(
         new Error('Connection refused'),
       );
 
-      await expect(
+      expect(
         connectToMcpServer(
           '0.0.1',
           'test-server',
           { url: serverUrl, type: 'http' },
           false,
           workspaceContext,
+          { createClient: () => mockedClient },
         ),
       ).rejects.toThrow(/Connection refused/);
 
@@ -385,17 +357,18 @@ describe('connectToMcpServer with OAuth', () => {
         'close',
       ).mockImplementation(mockTransport.close);
 
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+      mockedClient.connect.mockRejectedValueOnce(
         new Error('Connection failed'),
       );
 
-      await expect(
+      expect(
         connectToMcpServer(
           '0.0.1',
           'test-server',
           { httpUrl: 'http://test-server.com' },
           false,
           workspaceContext,
+          { createClient: () => mockedClient },
         ),
       ).rejects.toThrow(/Connection failed/);
 
@@ -404,17 +377,16 @@ describe('connectToMcpServer with OAuth', () => {
 
     // Test mcpServerRequiresOAuth NOT set on non-auth failures (negative assertion)
     it('should not set mcpServerRequiresOAuth on non-auth connection failures', async () => {
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
-        new Error('Network timeout'),
-      );
+      mockedClient.connect.mockRejectedValueOnce(new Error('Network timeout'));
 
-      await expect(
+      expect(
         connectToMcpServer(
           '0.0.1',
           'test-server',
           { httpUrl: 'http://test-server.com' },
           false,
           workspaceContext,
+          { createClient: () => mockedClient },
         ),
       ).rejects.toThrow(/Network timeout/);
 
@@ -426,17 +398,16 @@ describe('connectToMcpServer with OAuth', () => {
 
     // Test fallback with different 404 string variants
     it('should detect "404" string and prevent SSE fallback', async () => {
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
-        new Error('HTTP 404'),
-      );
+      mockedClient.connect.mockRejectedValueOnce(new Error('HTTP 404'));
 
-      await expect(
+      expect(
         connectToMcpServer(
           '0.0.1',
           'test-server',
           { url: 'http://test-server.com/mcp' },
           false,
           workspaceContext,
+          { createClient: () => mockedClient },
         ),
       ).rejects.toThrow(/404/);
 
@@ -444,17 +415,16 @@ describe('connectToMcpServer with OAuth', () => {
     });
 
     it('should detect "Not Found" string and prevent SSE fallback', async () => {
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
-        new Error('Not Found'),
-      );
+      mockedClient.connect.mockRejectedValueOnce(new Error('Not Found'));
 
-      await expect(
+      expect(
         connectToMcpServer(
           '0.0.1',
           'test-server',
           { url: 'http://test-server.com/mcp' },
           false,
           workspaceContext,
+          { createClient: () => mockedClient },
         ),
       ).rejects.toThrow(/Not Found/);
 
@@ -466,23 +436,20 @@ describe('connectToMcpServer with OAuth', () => {
       const serverUrl = 'http://test-server.com/http';
 
       // First connect attempt: 401 Unauthorized (triggers OAuth retry)
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
-        new Error('401 Unauthorized'),
-      );
+      mockedClient.connect.mockRejectedValueOnce(new Error('401 Unauthorized'));
 
       // Second connect attempt (OAuth retry with HTTP): 404 Not Found
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
-        new Error('404 Not Found'),
-      );
+      mockedClient.connect.mockRejectedValueOnce(new Error('404 Not Found'));
 
       // Should fail with 404, NOT attempt SSE fallback
-      await expect(
+      expect(
         connectToMcpServer(
           '0.0.1',
           'test-server',
           { url: serverUrl, type: 'http' }, // Explicit HTTP type
           false,
           workspaceContext,
+          oauthConnectionDependencies(),
         ),
       ).rejects.toThrow(/404/);
 
@@ -500,7 +467,7 @@ describe('connectToMcpServer with OAuth', () => {
       ).mockReturnValue(mockTransport.close());
 
       // Error message contains "404" but is not an actual HTTP 404 error
-      vi.mocked(mockedClient.connect)
+      mockedClient.connect
         .mockRejectedValueOnce(new Error('Connection failed at port 40404'))
         .mockResolvedValueOnce(undefined); // SSE fallback succeeds
 
@@ -510,6 +477,7 @@ describe('connectToMcpServer with OAuth', () => {
         { url: 'http://test-server.com/mcp' },
         false,
         workspaceContext,
+        { createClient: () => mockedClient },
       );
 
       // Should have tried twice: HTTP first, then SSE fallback
@@ -524,7 +492,7 @@ describe('connectToMcpServer with OAuth', () => {
         'close',
       ).mockReturnValue(mockTransport.close());
 
-      vi.mocked(mockedClient.connect)
+      mockedClient.connect
         .mockRejectedValueOnce(new Error('Server returned error code 4040'))
         .mockResolvedValueOnce(undefined); // SSE fallback succeeds
 
@@ -534,6 +502,7 @@ describe('connectToMcpServer with OAuth', () => {
         { url: 'http://test-server.com/mcp' },
         false,
         workspaceContext,
+        { createClient: () => mockedClient },
       );
 
       expect(mockedClient.connect).toHaveBeenCalledTimes(2);
@@ -550,15 +519,16 @@ describe('connectToMcpServer with OAuth', () => {
       const error404 = new Error('Request failed');
       (error404 as unknown as { code: number }).code = 404;
 
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(error404);
+      mockedClient.connect.mockRejectedValueOnce(error404);
 
-      await expect(
+      expect(
         connectToMcpServer(
           '0.0.1',
           'test-server',
           { url: 'http://test-server.com/mcp' },
           false,
           workspaceContext,
+          { createClient: () => mockedClient },
         ),
       ).rejects.toThrow(/Request failed/);
 
@@ -568,17 +538,18 @@ describe('connectToMcpServer with OAuth', () => {
     });
 
     it('should detect proper HTTP 404 error message format', async () => {
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+      mockedClient.connect.mockRejectedValueOnce(
         new Error('HTTP 404 Not Found'),
       );
 
-      await expect(
+      expect(
         connectToMcpServer(
           '0.0.1',
           'test-server',
           { url: 'http://test-server.com/mcp' },
           false,
           workspaceContext,
+          { createClient: () => mockedClient },
         ),
       ).rejects.toThrow(/404/);
 
@@ -586,17 +557,18 @@ describe('connectToMcpServer with OAuth', () => {
     });
 
     it('should detect status 404 error message format', async () => {
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+      mockedClient.connect.mockRejectedValueOnce(
         new Error('Request failed with status 404'),
       );
 
-      await expect(
+      expect(
         connectToMcpServer(
           '0.0.1',
           'test-server',
           { url: 'http://test-server.com/mcp' },
           false,
           workspaceContext,
+          { createClient: () => mockedClient },
         ),
       ).rejects.toThrow(/status 404/);
 
@@ -617,12 +589,6 @@ describe('connectToMcpServer with OAuth', () => {
         setRequestHandler: vi.fn(),
         close: vi.fn(),
       };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
-      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
-        {} as SdkClientStdioLib.StdioClientTransport,
-      );
 
       const mcpClient = new McpClient(
         'test-server',
@@ -634,6 +600,12 @@ describe('connectToMcpServer with OAuth', () => {
         {} as Config,
         false,
         '0.0.1',
+        undefined,
+        {
+          createClient: () => mockedClient,
+          createTransport: async () =>
+            ({}) as SdkClientStdioLib.StdioClientTransport,
+        },
       );
 
       await mcpClient.connect();
@@ -652,12 +624,6 @@ describe('connectToMcpServer with OAuth', () => {
         setRequestHandler: vi.fn(),
         close: vi.fn(),
       };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
-      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
-        {} as SdkClientStdioLib.StdioClientTransport,
-      );
 
       const mcpClient = new McpClient(
         'test-server',
@@ -669,6 +635,12 @@ describe('connectToMcpServer with OAuth', () => {
         {} as Config,
         false,
         '0.0.1',
+        undefined,
+        {
+          createClient: () => mockedClient,
+          createTransport: async () =>
+            ({}) as SdkClientStdioLib.StdioClientTransport,
+        },
       );
 
       await mcpClient.connect();

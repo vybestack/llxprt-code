@@ -417,7 +417,15 @@ export class OAuthUtils {
    * @returns The resource parameter value
    */
   static buildResourceParameter(endpointUrl: string): string {
-    const url = new URL(endpointUrl);
+    let url: URL;
+    try {
+      url = new URL(endpointUrl);
+    } catch (error) {
+      // The native URL constructor's message is runtime-dependent (Node vs
+      // Bun), so normalize it to a stable, explicit error for consistent
+      // caller behavior and diagnostics across engines.
+      throw new Error(`Invalid URL: ${endpointUrl}`, { cause: error });
+    }
     return `${url.protocol}//${url.host}${url.pathname}`;
   }
 

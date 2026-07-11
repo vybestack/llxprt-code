@@ -15,9 +15,10 @@ import type { OAuthTokenResponse } from './oauth-provider-utils.js';
 import { MCPOAuthTokenStorage } from './oauth-token-storage.js';
 import type { MCPOAuthToken } from './oauth-token-storage.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import * as crypto from 'node:crypto';
 
-export const mockFetch = vi.fn();
+export const mockFetch = Object.assign(vi.fn(), {
+  preconnect: vi.fn(),
+});
 
 export const createMockResponse = (options: {
   ok: boolean;
@@ -118,21 +119,6 @@ export function setupOAuthTestSpies(
   vi.spyOn(DebugLogger.prototype, 'warn').mockImplementation(() => {});
   vi.spyOn(DebugLogger.prototype, 'error').mockImplementation(() => {});
   vi.spyOn(DebugLogger.prototype, 'debug').mockImplementation(() => {});
-
-  vi.mocked(crypto.randomBytes).mockImplementation((size: number) => {
-    if (size === 32) {
-      return Buffer.from('mock_code_verifier_32_bytes_long_string');
-    }
-    if (size === 16) {
-      return Buffer.from('mock_state_16_bytes');
-    }
-    return Buffer.alloc(size);
-  });
-
-  vi.mocked(crypto.createHash).mockReturnValue({
-    update: vi.fn().mockReturnThis(),
-    digest: vi.fn().mockReturnValue('code_challenge_mock'),
-  } as unknown as crypto.Hash);
 
   const saveTokenSpy = vi
     .spyOn(MCPOAuthTokenStorage.prototype, 'saveToken')

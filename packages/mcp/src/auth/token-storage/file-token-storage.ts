@@ -20,6 +20,27 @@ import {
 } from '@vybestack/llxprt-code-storage/storage/envelope-codec.js';
 
 /**
+ * Minimal async filesystem surface used by {@link FileTokenStorage}. Injectable
+ * so tests can deterministically exercise ENOENT / write-error / chmod-failure
+ * branches without touching the real filesystem, replacing prior module-level
+ * `node:fs` mocking. Defaults to `node:fs`'s promise API in production.
+ */
+export interface FileTokenStorageFileSystem {
+  readFile(path: string, encoding: 'utf-8'): Promise<string>;
+  writeFile(
+    path: string,
+    data: string,
+    options: { mode: number },
+  ): Promise<void>;
+  unlink(path: string): Promise<void>;
+  mkdir(
+    path: string,
+    options: { recursive: boolean; mode: number },
+  ): Promise<string | undefined>;
+  chmod(path: string, mode: number): Promise<void>;
+}
+
+/**
  * Options for {@link FileTokenStorage}.
  */
 export interface FileTokenStorageOptions {
@@ -39,7 +60,36 @@ export interface FileTokenStorageOptions {
    * `machineSecretLoader` is provided.
    */
   machineSecretPath?: string;
+  /**
+   * Injectable async filesystem. Defaults to `node:fs` promises. Exposed so
+   * tests can drive filesystem edge cases without global module mocking.
+   */
+  fileSystem?: FileTokenStorageFileSystem;
+  /**
+   * Injectable hostname source for the legacy KDF salt. Defaults to
+   * {@link os.hostname}. Exposed so legacy-format read tests can pin the salt
+   * derivation deterministically.
+   */
+  hostname?: () => string;
+  /**
+   * Injectable username source for the legacy KDF salt. Defaults to
+   * `os.userInfo().username`. Exposed so legacy-format read tests can pin the
+   * salt derivation deterministically.
+   */
+  username?: () => string;
 }
+
+/**
+ * Production-default filesystem adapter that forwards to `node:fs` promises.
+ * Declared once at module scope so every non-test construction shares it.
+ */
+const defaultFileSystem: FileTokenStorageFileSystem = {
+  readFile: (filePath, encoding) => fs.readFile(filePath, encoding),
+  writeFile: (filePath, data, options) => fs.writeFile(filePath, data, options),
+  unlink: (filePath) => fs.unlink(filePath),
+  mkdir: (dirPath, options) => fs.mkdir(dirPath, options),
+  chmod: (filePath, mode) => fs.chmod(filePath, mode),
+};
 
 export class FileTokenStorage extends BaseTokenStorage {
   private readonly tokenFilePath: string;
@@ -50,6 +100,9 @@ export class FileTokenStorage extends BaseTokenStorage {
    */
   private legacyEncryptionKey: Buffer | null = null;
   private readonly codecOptions: EnvelopeCodecOptions;
+  private readonly fileSystem: FileTokenStorageFileSystem;
+  private readonly hostname: () => string;
+  private readonly username: () => string;
 
   constructor(serviceName: string, options?: FileTokenStorageOptions) {
     super(serviceName);
@@ -61,6 +114,9 @@ export class FileTokenStorage extends BaseTokenStorage {
       machineSecretLoader: options?.machineSecretLoader,
       machineSecretPath: options?.machineSecretPath,
     };
+    this.fileSystem = options?.fileSystem ?? defaultFileSystem;
+    this.hostname = options?.hostname ?? (() => os.hostname());
+    this.username = options?.username ?? (() => os.userInfo().username);
   }
 
   /**
@@ -70,7 +126,7 @@ export class FileTokenStorage extends BaseTokenStorage {
    */
   private getLegacyEncryptionKey(): Buffer {
     if (this.legacyEncryptionKey === null) {
-      const salt = `${os.hostname()}-${os.userInfo().username}-llxprt-cli`;
+      const salt = `${this.hostname()}-${this.username()}-llxprt-cli`;
       this.legacyEncryptionKey = crypto.scryptSync(
         'llxprt-cli-oauth',
         salt,
@@ -123,13 +179,13 @@ export class FileTokenStorage extends BaseTokenStorage {
 
   private async ensureDirectoryExists(): Promise<void> {
     const dir = path.dirname(this.tokenFilePath);
-    await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+    await this.fileSystem.mkdir(dir, { recursive: true, mode: 0o700 });
   }
 
   private async loadTokens(): Promise<Map<string, MCPOAuthCredentials>> {
     let data: string;
     try {
-      data = await fs.readFile(this.tokenFilePath, 'utf-8');
+      data = await this.fileSystem.readFile(this.tokenFilePath, 'utf-8');
     } catch (error: unknown) {
       const err = error as NodeJS.ErrnoException;
       if (err.code === 'ENOENT') {
@@ -207,7 +263,10 @@ export class FileTokenStorage extends BaseTokenStorage {
     // CLI's normal usage.
     let existingVersion: number | null = null;
     try {
-      const existing = await fs.readFile(this.tokenFilePath, 'utf-8');
+      const existing = await this.fileSystem.readFile(
+        this.tokenFilePath,
+        'utf-8',
+      );
       existingVersion = readEnvelopeVersion(existing);
     } catch (error: unknown) {
       const err = error as NodeJS.ErrnoException;
@@ -223,13 +282,15 @@ export class FileTokenStorage extends BaseTokenStorage {
       existingEnvelopeVersion: existingVersion,
     });
 
-    await fs.writeFile(this.tokenFilePath, encrypted, { mode: 0o600 });
+    await this.fileSystem.writeFile(this.tokenFilePath, encrypted, {
+      mode: 0o600,
+    });
     // writeFile's `mode` only applies on creation; overwriting a pre-existing
     // file leaves its (possibly looser) permissions intact. Tighten explicitly
     // on POSIX so the token file is never left group/world-readable.
     if (process.platform !== 'win32') {
       try {
-        await fs.chmod(this.tokenFilePath, 0o600);
+        await this.fileSystem.chmod(this.tokenFilePath, 0o600);
       } catch (chmodError) {
         // The token file was written but its permissions could not be
         // restricted. Remove it so OAuth credentials are never left on disk
@@ -237,7 +298,7 @@ export class FileTokenStorage extends BaseTokenStorage {
         // write failure.
         let unlinkFailed = false;
         try {
-          await fs.unlink(this.tokenFilePath);
+          await this.fileSystem.unlink(this.tokenFilePath);
         } catch {
           // The over-permissive file could not be removed either; report this
           // so the caller knows credentials may still be on disk rather than
@@ -292,7 +353,7 @@ export class FileTokenStorage extends BaseTokenStorage {
 
     if (tokens.size === 0) {
       try {
-        await fs.unlink(this.tokenFilePath);
+        await this.fileSystem.unlink(this.tokenFilePath);
       } catch (error: unknown) {
         const err = error as NodeJS.ErrnoException;
         if (err.code !== 'ENOENT') {
@@ -322,7 +383,7 @@ export class FileTokenStorage extends BaseTokenStorage {
 
   async clearAll(): Promise<void> {
     try {
-      await fs.unlink(this.tokenFilePath);
+      await this.fileSystem.unlink(this.tokenFilePath);
     } catch (error: unknown) {
       const err = error as NodeJS.ErrnoException;
       if (err.code !== 'ENOENT') {

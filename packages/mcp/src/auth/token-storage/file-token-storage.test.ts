@@ -14,13 +14,15 @@
  * errors, path construction) and legacy hex-colon read routing.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { promises as fs } from 'node:fs';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as crypto from 'node:crypto';
 import { decryptEnvelopeString } from '@vybestack/llxprt-code-storage/storage/envelope-codec.js';
-import { FileTokenStorage } from './file-token-storage.js';
+import {
+  FileTokenStorage,
+  type FileTokenStorageFileSystem,
+} from './file-token-storage.js';
 import type { MCPOAuthCredentials } from '../token-store.js';
 
 // The service name FileTokenStorage passes to the envelope codec is the
@@ -49,28 +51,11 @@ async function decryptWrittenEnvelope(
   return JSON.parse(plaintext) as Record<string, MCPOAuthCredentials>;
 }
 
-vi.mock('node:fs', () => ({
-  promises: {
-    readFile: vi.fn(),
-    writeFile: vi.fn(),
-    unlink: vi.fn(),
-    mkdir: vi.fn(),
-    chmod: vi.fn(),
-  },
-}));
-
-vi.mock('node:os', () => ({
-  default: {
-    homedir: vi.fn(() => '/home/test'),
-    hostname: vi.fn(() => 'test-host'),
-    userInfo: vi.fn(() => ({ username: 'test-user' })),
-    tmpdir: vi.fn(() => '/tmp'),
-  },
-  homedir: vi.fn(() => '/home/test'),
-  hostname: vi.fn(() => 'test-host'),
-  userInfo: vi.fn(() => ({ username: 'test-user' })),
-  tmpdir: vi.fn(() => '/tmp'),
-}));
+// Legacy KDF salt inputs injected into FileTokenStorage so the legacy
+// hex-colon read tests derive the same key as `buildLegacyHexColon` below,
+// without mocking `node:os` at the module level.
+const LEGACY_HOSTNAME = 'test-host';
+const LEGACY_USERNAME = 'test-user';
 
 const FIXED_SECRET = crypto.randomBytes(32);
 function fixedSecretLoader(): () => Promise<Buffer | null> {
@@ -102,15 +87,27 @@ function buildLegacyHexColon(plaintext: string): string {
   return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
 }
 
+interface MockFileSystem extends FileTokenStorageFileSystem {
+  readFile: ReturnType<typeof vi.fn>;
+  writeFile: ReturnType<typeof vi.fn>;
+  unlink: ReturnType<typeof vi.fn>;
+  mkdir: ReturnType<typeof vi.fn>;
+  chmod: ReturnType<typeof vi.fn>;
+}
+
+function createMockFileSystem(): MockFileSystem {
+  return {
+    readFile: vi.fn(),
+    writeFile: vi.fn(),
+    unlink: vi.fn(),
+    mkdir: vi.fn(),
+    chmod: vi.fn(),
+  } as unknown as MockFileSystem;
+}
+
 describe('FileTokenStorage', () => {
   let storage: FileTokenStorage;
-  const mockFs = fs as unknown as {
-    readFile: ReturnType<typeof vi.fn>;
-    writeFile: ReturnType<typeof vi.fn>;
-    unlink: ReturnType<typeof vi.fn>;
-    mkdir: ReturnType<typeof vi.fn>;
-    chmod: ReturnType<typeof vi.fn>;
-  };
+  let mockFs: MockFileSystem;
   const existingCredentials: MCPOAuthCredentials = {
     serverName: 'existing-server',
     token: {
@@ -126,11 +123,15 @@ describe('FileTokenStorage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env['LLXPRT_CONFIG_HOME'] = CONFIG_HOME;
+    mockFs = createMockFileSystem();
     // chmod is invoked after every write to tighten permissions on overwrite;
     // default it to resolve so write-path tests do not need to wire it up.
     mockFs.chmod.mockResolvedValue(undefined);
     storage = new FileTokenStorage('test-storage', {
       machineSecretLoader: fixedSecretLoader(),
+      fileSystem: mockFs,
+      hostname: () => LEGACY_HOSTNAME,
+      username: () => LEGACY_USERNAME,
     });
   });
 
@@ -195,7 +196,7 @@ describe('FileTokenStorage', () => {
     it('should throw error for corrupted (non-envelope, non-legacy) files', async () => {
       mockFs.readFile.mockResolvedValue('corrupted-data');
 
-      await expect(storage.getCredentials('test-server')).rejects.toThrow(
+      expect(storage.getCredentials('test-server')).rejects.toThrow(
         'Token file corrupted',
       );
     });
@@ -330,7 +331,7 @@ describe('FileTokenStorage', () => {
           updatedAt: Date.now(),
         };
 
-        await expect(storage.setCredentials(credentials)).rejects.toThrow(
+        expect(storage.setCredentials(credentials)).rejects.toThrow(
           /permissions could not be restricted/,
         );
         expect(mockFs.unlink).toHaveBeenCalledWith(
@@ -360,7 +361,7 @@ describe('FileTokenStorage', () => {
           updatedAt: Date.now(),
         };
 
-        await expect(storage.setCredentials(credentials)).rejects.toThrow(
+        expect(storage.setCredentials(credentials)).rejects.toThrow(
           /could not be removed/,
         );
       },
@@ -371,7 +372,7 @@ describe('FileTokenStorage', () => {
     it('should throw when credentials do not exist in empty storage', async () => {
       mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
 
-      await expect(storage.deleteCredentials('test-server')).rejects.toThrow(
+      expect(storage.deleteCredentials('test-server')).rejects.toThrow(
         'No credentials found for test-server',
       );
     });
@@ -483,7 +484,7 @@ describe('FileTokenStorage', () => {
     it('should not throw when file does not exist', async () => {
       mockFs.unlink.mockRejectedValue({ code: 'ENOENT' });
 
-      await expect(storage.clearAll()).resolves.not.toThrow();
+      expect(storage.clearAll()).resolves.toBeUndefined();
     });
   });
 });
