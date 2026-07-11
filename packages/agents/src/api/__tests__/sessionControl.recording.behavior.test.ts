@@ -83,9 +83,16 @@ async function withIsolatedAgent(
   try {
     await fn(agent);
   } finally {
-    await cleanup();
-    rmSync(workingDir, { recursive: true, force: true });
-    rmSync(storageTempDirFor(workingDir), { recursive: true, force: true });
+    // FINDING F1: a cleanup() rejection must NOT skip the temp-dir removal. Nest
+    // the cleanup() in its own try/finally so BOTH rmSync calls always run
+    // (preventing leaked working/storage dirs across a cleanup failure), while
+    // the original cleanup() error still propagates out of the finally.
+    try {
+      await cleanup();
+    } finally {
+      rmSync(workingDir, { recursive: true, force: true });
+      rmSync(storageTempDirFor(workingDir), { recursive: true, force: true });
+    }
   }
 }
 

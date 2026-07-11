@@ -40,6 +40,18 @@ import { DebugLogger } from '@vybestack/llxprt-code-core';
 const RESOURCE_NOT_FOUND_CODE = acp.RequestError.resourceNotFound('').code;
 
 /**
+ * Length of the session-id prefix embedded in a recorded session filename
+ * (FINDING B1). SessionRecordingService.materialize (packages/core) names files
+ * `session-<timestamp>-<first-N-of-id>.jsonl` using `sessionId.substring(0, 12)`
+ * — that call is the SOURCE OF TRUTH for this contract. Core does not export the
+ * constant, so it is duplicated here (the single place the zed layer reconstructs
+ * the filename) rather than left as a bare magic `12`; if core ever changes the
+ * prefix length, update it here to keep the corrupt-vs-missing + re-attach probes
+ * matching real recorded filenames.
+ */
+export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
+
+/**
  * Module logger (mirroring the zedIntegration.ts / sessionControl.ts precedent
  * of a namespaced core DebugLogger) used to surface the otherwise-silent
  * corrupt-vs-missing probe failure (FINDING F6) so a swallowed readdir error is
@@ -119,45 +131,100 @@ export async function classifyResumeFailure(
   if (mapped.code !== RESOURCE_NOT_FOUND_CODE) {
     return mapped;
   }
-  const matchingFile = await probeMatchingSessionFile(sessionId, probe);
-  if (matchingFile === null) {
-    return mapped;
+  const outcome = await probeMatchingSessionFile(sessionId, probe);
+  if (outcome.kind === 'match') {
+    const detail = `session file exists but could not be read/replayed (corrupt or incompatible): ${outcome.file}`;
+    return acp.RequestError.internalError(
+      { sessionId, reason: detail, file: outcome.file },
+      detail,
+    );
   }
-  const detail = `session file exists but could not be read/replayed (corrupt or incompatible): ${matchingFile}`;
-  return acp.RequestError.internalError(
-    { sessionId, reason: detail, file: matchingFile },
-    detail,
-  );
+  if (outcome.kind === 'probe-error') {
+    // FINDING B2: a NON-ENOENT probe failure (EACCES, disk error, ...) means we
+    // genuinely could not determine whether the session exists on disk, so
+    // reporting resourceNotFound would be MISLEADING (the session may well
+    // exist). Surface an internalError carrying the probe failure as cause
+    // detail so the client sees the real, actionable reason instead of a
+    // spurious "not found". ENOENT (chats dir absent) is NOT a probe-error — it
+    // means genuinely missing and keeps the resourceNotFound path below.
+    const detail = `could not determine whether the session exists on disk (session-file probe failed): ${outcome.message}`;
+    return acp.RequestError.internalError(
+      { sessionId, reason: detail, probeError: outcome.message },
+      detail,
+    );
+  }
+  // outcome.kind === 'no-match' (including ENOENT chats dir): genuinely missing.
+  return mapped;
 }
 
 /**
- * Returns the first chats-dir entry that matches this session's recorded
- * filename, or null when none match or the probe fails. A probe rejection is
- * swallowed (returns null) so the caller falls back to the plain mapping and the
- * original resume failure is never masked by a directory-read error.
+ * The three distinguishable outcomes of the corrupt-vs-missing session-file
+ * probe (FINDING B2): a matching file was found (corrupt-but-present), no file
+ * matched (genuinely missing — includes an ENOENT chats dir), or the probe
+ * itself failed for a NON-ENOENT reason (EACCES/disk error) so existence is
+ * indeterminate and must surface as an internalError rather than a misleading
+ * resourceNotFound.
+ */
+type ProbeOutcome =
+  | { readonly kind: 'match'; readonly file: string }
+  | { readonly kind: 'no-match' }
+  | { readonly kind: 'probe-error'; readonly message: string };
+
+/**
+ * Probes the on-disk chats-dir namespace for a recorded file matching
+ * `sessionId`, returning a {@link ProbeOutcome}. A successful listing yields
+ * `match` (with the filename) or `no-match`. A probe rejection is classified by
+ * errno: an ENOENT (the chats dir does not exist yet) is treated as `no-match`
+ * (genuinely missing, keep the resourceNotFound path); any other rejection
+ * (EACCES, EIO, ...) yields `probe-error` (existence indeterminate → the caller
+ * surfaces internalError, FINDING B2) and is logged at debug (FINDING F6) so the
+ * underlying directory-read error stays diagnosable.
  */
 async function probeMatchingSessionFile(
   sessionId: string,
   probe: () => Promise<readonly string[]>,
-): Promise<string | null> {
+): Promise<ProbeOutcome> {
   let entries: readonly string[];
   try {
     entries = await probe();
   } catch (error) {
-    // A probe (readdir) failure must NOT mask the original resume failure, so
-    // the caller falls back to the plain not-found mapping. Log at debug level
-    // (FINDING F6) so the swallowed directory-read error stays diagnosable
-    // instead of vanishing silently.
+    const message = error instanceof Error ? error.message : String(error);
+    if (isEnoent(error)) {
+      // The chats dir does not exist yet: the session is genuinely missing, not
+      // a probe failure. Keep the plain not-found mapping.
+      logger.debug(
+        () =>
+          `probeMatchingSessionFile: chats dir absent (ENOENT) for ${sessionId}; ` +
+          `treating as genuinely missing: ${message}`,
+      );
+      return { kind: 'no-match' };
+    }
+    // A NON-ENOENT probe failure (EACCES/disk error) means existence is
+    // indeterminate; the caller surfaces internalError instead of a misleading
+    // resourceNotFound (FINDING B2). Log at debug (FINDING F6) so it stays
+    // diagnosable.
     logger.debug(
       () =>
         `probeMatchingSessionFile: session-file probe failed for ${sessionId}; ` +
-        `falling back to plain mapping: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `reporting indeterminate existence: ${message}`,
     );
-    return null;
+    return { kind: 'probe-error', message };
   }
-  return findMatchingSessionFile(sessionId, entries);
+  const file = findMatchingSessionFile(sessionId, entries);
+  return file === null ? { kind: 'no-match' } : { kind: 'match', file };
+}
+
+/**
+ * True when `error` is a Node ENOENT (no-such-file/directory) rejection — used
+ * to distinguish a genuinely-absent chats dir (missing session) from a real
+ * probe failure such as EACCES (FINDING B2).
+ */
+function isEnoent(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as NodeJS.ErrnoException).code === 'ENOENT'
+  );
 }
 
 /**
@@ -188,7 +255,7 @@ export function findMatchingSessionFile(
  * with `session-` and ends with this suffix.
  */
 function sessionFileSuffix(sessionId: string): string {
-  return `-${sessionId.substring(0, 12)}.jsonl`;
+  return `-${sessionId.substring(0, SESSION_FILE_ID_PREFIX_LENGTH)}.jsonl`;
 }
 
 /**

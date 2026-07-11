@@ -76,7 +76,17 @@ export function mapHistoryToSessionUpdates(
 ): acp.SessionUpdate[] {
   const updates: acp.SessionUpdate[] = [];
   const pending = new Set<string>();
-  for (const item of items) {
+  // FINDING D1: iterate as `unknown` because persisted history read back from
+  // disk is UNTRUSTED — the static `readonly IContent[]` type is a contract, not
+  // a runtime guarantee. A corrupt/truncated JSONL line can yield a null item or
+  // one whose `blocks` is missing/non-array; asRenderableContent narrows each
+  // against the real runtime shape so a malformed entry is skipped instead of
+  // throwing and aborting the WHOLE load.
+  for (const raw of items as readonly unknown[]) {
+    const item = asRenderableContent(raw);
+    if (item === null) {
+      continue;
+    }
     for (const block of item.blocks) {
       appendBlockUpdates(item.speaker, block, pending, updates);
     }
@@ -112,13 +122,19 @@ function appendBlockUpdates(
       pushDefined(out, mapThinkingBlock(speaker, block));
       return;
     case 'tool_call':
-      if (speaker === 'ai') {
+      // FINDING D4: a tool_call whose id is missing/non-string cannot be tracked
+      // (nothing could ever pair its response) and would emit an update carrying
+      // an undefined toolCallId on the wire. Skip it entirely.
+      if (speaker === 'ai' && isNonEmptyString(block.id)) {
         out.push(buildToolCallStart(block));
         pending.add(block.id);
       }
       return;
     case 'tool_response':
-      if (speaker === 'tool') {
+      // FINDING D4: a tool_response without a string callId can never pair with a
+      // started call, so it would always be dropped by the pending check anyway;
+      // guard explicitly so the intent is clear and no undefined id is handled.
+      if (speaker === 'tool' && isNonEmptyString(block.callId)) {
         appendToolResponseUpdate(block, pending, out);
       }
       return;
@@ -189,7 +205,10 @@ function mapTextBlock(
   block: TextBlock,
 ): acp.SessionUpdate | null {
   const text = block.text;
-  if (text.trim().length === 0) {
+  // FINDING D2: guard against a non-string `text` in malformed persisted data
+  // (mirrors the guard mapThinkingBlock already has for `thought`). Calling
+  // .trim() on a non-string would throw and abort the load; skip instead.
+  if (typeof text !== 'string' || text.trim().length === 0) {
     return null;
   }
   if (speaker === 'human') {
@@ -239,15 +258,55 @@ function mapThinkingBlock(
 function buildToolCallStart(block: ToolCallBlock): acp.SessionUpdate {
   const kind = inferToolKind(block.name);
   const rawInput = toRawInput(block.parameters);
+  // FINDING D4: fall back to the id for the title when `name` is missing/non-
+  // string in malformed persisted data. Keeping the (already-validated string)
+  // id as the title preserves identifying info on the wire rather than sending
+  // an undefined title; kind inference on a non-string name yields undefined
+  // (omitted), which is correct for an unknown tool.
+  const title = isNonEmptyString(block.name) ? block.name : block.id;
   return {
     sessionUpdate: 'tool_call',
     toolCallId: block.id,
-    title: block.name,
+    title,
     status: 'in_progress',
     content: [],
     locations: buildToolLocations(rawInput ?? {}),
     ...(kind !== undefined ? { kind } : {}),
     ...(rawInput !== undefined ? { rawInput } : {}),
+  };
+}
+
+/**
+ * True when `value` is a non-empty string. Used to validate persisted tool-call
+ * ids/callIds/names read back from disk (FINDING D4) before they are emitted on
+ * the wire, so a corrupt block never yields an update with an undefined id.
+ */
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+/**
+ * Narrows an UNTRUSTED persisted history entry to a renderable IContent — a
+ * non-null object whose `blocks` is an array (FINDING D1). Returns null for a
+ * null/undefined item or one whose blocks is missing/non-array (a
+ * corrupt/truncated JSONL line that still JSON-parsed), so the caller skips it
+ * rather than throwing on `item.blocks`. Individual malformed BLOCKS are handled
+ * downstream by the per-block guards (D2/D4); this only guarantees `blocks` is
+ * iterable.
+ */
+function asRenderableContent(
+  value: unknown,
+): { speaker: IContent['speaker']; blocks: readonly ContentBlock[] } | null {
+  if (value === null || typeof value !== 'object') {
+    return null;
+  }
+  const record = value as { speaker?: unknown; blocks?: unknown };
+  if (!Array.isArray(record.blocks)) {
+    return null;
+  }
+  return {
+    speaker: record.speaker as IContent['speaker'],
+    blocks: record.blocks as readonly ContentBlock[],
   };
 }
 

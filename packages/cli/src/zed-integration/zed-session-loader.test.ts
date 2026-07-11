@@ -14,8 +14,9 @@
  * logic is mocked.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'node:path';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
 import {
@@ -42,6 +43,12 @@ function recordedName(sessionId: string): string {
 }
 
 describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
+  afterEach(() => {
+    // Restore any DebugLogger.prototype.warn spy installed by the C2 tests so it
+    // does not leak into sibling tests.
+    vi.restoreAllMocks();
+  });
+
   it('derives the chats dir from storage.getProjectTempDir()/chats and reports true when a matching recording exists', async () => {
     const sessionId = 'sess-1234567890ab';
     let listedDir: string | undefined;
@@ -86,7 +93,12 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
     expect(exists).toBe(false);
   });
 
-  it('treats a probe failure (e.g. chats dir does not exist, ENOENT) as no recording present (→ re-attach) rather than surfacing an error', async () => {
+  it('treats an ENOENT probe failure (chats dir does not exist) as no recording present (→ re-attach) WITHOUT a warn (expected case, FINDING C2)', async () => {
+    // Spy on the DebugLogger the loader module uses so we can assert the ENOENT
+    // case stays at debug level (no warn) — the common fresh-project path.
+    const warnSpy = vi
+      .spyOn(DebugLogger.prototype, 'warn')
+      .mockImplementation(() => undefined);
     const lister: ChatSessionFileLister = async () => {
       const error = new Error(
         'ENOENT: no such file or directory, scandir chats',
@@ -99,6 +111,36 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
     await expect(
       hasRecordedSessionFile(buildConfig(), 'sess-1234567890ab', lister),
     ).resolves.toBe(false);
+    // ENOENT is expected → logged at debug only, NOT warn.
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('treats a NON-ENOENT probe failure (EACCES) as no recording present (→ re-attach, fail-open) BUT logs a warn so it is diagnosable (FINDING C2)', async () => {
+    const warnSpy = vi
+      .spyOn(DebugLogger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    const lister: ChatSessionFileLister = async () => {
+      const error = new Error(
+        'EACCES: permission denied, scandir chats',
+      ) as NodeJS.ErrnoException;
+      error.code = 'EACCES';
+      throw error;
+    };
+
+    // Still fail-open to re-attach (a load must not crash on a probe issue)...
+    await expect(
+      hasRecordedSessionFile(buildConfig(), 'sess-1234567890ab', lister),
+    ).resolves.toBe(false);
+    // ...but the unexpected failure IS surfaced at warn (not silently swallowed
+    // at the same level as the expected ENOENT case).
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const firstArg = warnSpy.mock.calls[0]?.[0];
+    const rendered =
+      typeof firstArg === 'function'
+        ? (firstArg as () => string)()
+        : String(firstArg);
+    expect(rendered).toContain('EACCES');
+    expect(rendered.toLowerCase()).toContain('non-enoent');
   });
 
   it('matches ONLY on the session id suffix, not an unrelated file that merely starts with session-', async () => {

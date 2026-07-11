@@ -11,6 +11,7 @@ import type { Config } from '@vybestack/llxprt-code-core';
 import { todoEvents } from '@vybestack/llxprt-code-core';
 
 import { Session } from './zedIntegration.js';
+import { STREAM_BLOCKED_MESSAGE } from './zed-stream-batcher.js';
 import {
   buildFakeAgent,
   buildScriptedAgent,
@@ -152,10 +153,7 @@ describe('Zed Session.prompt (Agent API) - streaming output', () => {
     const texts = connection
       .onlySessionUpdates()
       .map((u) => (u as { content: { text: string } }).content.text);
-    expect(texts).toStrictEqual([
-      '[Error: Response blocked due to emoji detection]',
-      'all clean now.',
-    ]);
+    expect(texts).toStrictEqual([STREAM_BLOCKED_MESSAGE, 'all clean now.']);
   });
 });
 

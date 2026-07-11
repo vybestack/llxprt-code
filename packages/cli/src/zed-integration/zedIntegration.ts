@@ -459,7 +459,15 @@ export class ZedAgent {
       cwd,
     );
     try {
-      const history = await resumeAgentHistory(agent, sessionId, sessionConfig);
+      // FINDING C1: pass the SAME injected lister the re-attach probe uses so
+      // BOTH on-disk session-file probes (re-attach + corrupt-vs-missing resume)
+      // read through one injectable seam rather than one hardcoding readdir.
+      const history = await resumeAgentHistory(
+        agent,
+        sessionId,
+        sessionConfig,
+        this.sessionFileLister,
+      );
       const session = new Session(
         sessionId,
         agent,

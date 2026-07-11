@@ -25,7 +25,7 @@
  * is asserted without a provider bootstrap.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import type * as acp from '@agentclientprotocol/sdk';
@@ -209,6 +209,18 @@ async function makeZedAgent(
 }
 
 describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
+  // FINDING F2: reset the module-level fromConfig mock before EVERY test so no
+  // test inherits queued mockResolvedValueOnce implementations or accumulated
+  // call counts from a prior test. Each test then establishes its OWN
+  // resolved-value expectation (single mockResolvedValue or ordered
+  // mockResolvedValueOnce chain), so the strict build-count / call-order
+  // assertions are self-contained and order-independent. This replaces the
+  // scattered inline mockFromConfig.mockReset() calls the individual tests used
+  // to need.
+  beforeEach(() => {
+    mockFromConfig.mockReset();
+  });
+
   it('initialize() advertises loadSession: true', async () => {
     const connection = new RecordingConnection();
     const mod = await import('./zedIntegration.js');
@@ -443,10 +455,9 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
         { speaker: 'ai', blocks: [{ type: 'text', text: 'second load' }] },
       ],
     });
-    // The module-level fromConfig mock accumulates calls across tests (no
-    // beforeEach reset in this file); reset it so this test's build-count
-    // assertion has a clean baseline and its two agents are returned in order.
-    mockFromConfig.mockReset();
+    // The top-level beforeEach (FINDING F2) already reset the mock; this test
+    // just establishes its ordered two-agent resolution for the build-count
+    // assertion below.
     mockFromConfig
       .mockResolvedValueOnce(firstStub.agent)
       .mockResolvedValueOnce(secondStub.agent);
@@ -492,9 +503,8 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     // (zero replay), and a stream that completes so a later prompt proves the
     // ORIGINAL session object is still live.
     const stub = buildStubAgent({ liveHistory: [], streamText: 'still alive' });
-    // Clean baseline for the strict fromConfig build-count assertions below (the
-    // module-level mock accumulates across tests; no beforeEach reset here).
-    mockFromConfig.mockReset();
+    // The top-level beforeEach (F2) reset the mock; set this test's single
+    // resolution for the strict fromConfig build-count assertions below.
     mockFromConfig.mockResolvedValue(stub.agent);
 
     const connection = new RecordingConnection();
@@ -588,8 +598,8 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     const stub = buildStubAgent({
       liveHistory: [modelMessage('will fail to deliver')],
     });
-    // Clean baseline for the fromConfig build-count assertion below.
-    mockFromConfig.mockReset();
+    // beforeEach (F2) already reset the mock; set this test's single resolution
+    // for the fromConfig build-count assertion below.
     mockFromConfig.mockResolvedValue(stub.agent);
 
     const connection = new RecordingConnection();
@@ -781,10 +791,8 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
       ],
     });
 
-    // The module-level fromConfig mock accumulates calls across tests (no
-    // beforeEach reset in this file); reset it so this test's build-count
-    // assertion has a clean baseline and its two agents are returned in order.
-    mockFromConfig.mockReset();
+    // The top-level beforeEach (F2) already reset the mock; establish this
+    // test's ordered two-agent resolution for the build-count assertion below.
     mockFromConfig
       .mockResolvedValueOnce(firstAgent)
       .mockResolvedValueOnce(secondStub.agent);

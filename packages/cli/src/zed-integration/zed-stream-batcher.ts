@@ -21,6 +21,15 @@ import { type EmojiFilter, DebugLogger } from '@vybestack/llxprt-code-core';
 
 const BATCH_INTERVAL_MS = 100;
 
+/**
+ * The message emitted (as an agent_message_chunk) when the EmojiFilter blocks a
+ * streamed response in error mode (FINDING E2). Exported so tests reference this
+ * single source of truth instead of duplicating the literal, keeping the wire
+ * text and its assertions in lockstep.
+ */
+export const STREAM_BLOCKED_MESSAGE =
+  '[Error: Response blocked due to emoji detection]';
+
 export class StreamBatcher {
   private pendingChunks: Array<{ kind: 'text' | 'thought'; text: string }> = [];
   private batchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -57,6 +66,17 @@ export class StreamBatcher {
       if (residual.length > 0) {
         this.appendPendingChunk('text', residual);
       }
+      // FINDING E1: clear any pending batch timer BEFORE building the blocked
+      // chain (exactly as flush() does). Otherwise a timer armed by a prior
+      // normal chunk survives and later fires its own flush() — appending a
+      // SECOND doFlush()+flushEmojiBuffer chain that races the blocked-path
+      // chain, re-flushing already-flushed content after the error message. The
+      // blocked path here already flushes the residual + queued chunks, so the
+      // timer has nothing left to do.
+      if (this.batchTimer !== null) {
+        clearTimeout(this.batchTimer);
+        this.batchTimer = null;
+      }
       const pending = this.flushChain
         .then(() => this.doFlush())
         .then(() =>
@@ -64,7 +84,7 @@ export class StreamBatcher {
             sessionUpdate: 'agent_message_chunk',
             content: {
               type: 'text',
-              text: '[Error: Response blocked due to emoji detection]',
+              text: STREAM_BLOCKED_MESSAGE,
             },
           }),
         );

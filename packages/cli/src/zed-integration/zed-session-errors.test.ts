@@ -140,18 +140,60 @@ describe('classifyResumeFailure (issue #1604 FINDING B: corrupt vs missing)', ()
     expect(error.message).toContain(CORRUPT_ID);
   });
 
-  it('falls back to the plain not-found mapping when the probe itself REJECTS (never masks the original error)', async () => {
+  it('falls back to the plain resourceNotFound mapping when the probe rejects with ENOENT (chats dir absent → genuinely missing, FINDING B2)', async () => {
     const error = await classifyResumeFailure(
       CORRUPT_ID,
       resumeError(`Session not found for this project: ${CORRUPT_ID}`),
       async () => {
-        throw new Error('EACCES: permission denied, scandir chats');
+        const enoent = new Error(
+          'ENOENT: no such file or directory, scandir chats',
+        ) as NodeJS.ErrnoException;
+        enoent.code = 'ENOENT';
+        throw enoent;
       },
     );
-    // A directory-read failure must not become the surfaced error: the original
-    // not-found classification stands.
+    // An absent chats dir means the session genuinely does not exist on disk:
+    // the original not-found classification stands.
     expect(error.code).toBe(-32002);
     expect(error.message).toContain(CORRUPT_ID);
+  });
+
+  it('maps a NON-ENOENT probe rejection (EACCES) to internalError carrying the probe failure, NOT a misleading resourceNotFound (FINDING B2)', async () => {
+    const error = await classifyResumeFailure(
+      CORRUPT_ID,
+      resumeError(`Session not found for this project: ${CORRUPT_ID}`),
+      async () => {
+        const eacces = new Error(
+          'EACCES: permission denied, scandir chats',
+        ) as NodeJS.ErrnoException;
+        eacces.code = 'EACCES';
+        throw eacces;
+      },
+    );
+    // Existence is indeterminate (we could not read the dir), so reporting "not
+    // found" would be misleading: surface an internalError whose detail names
+    // the probe failure so the client sees the real, actionable reason.
+    expect(error).toBeInstanceOf(RequestError);
+    expect(error.code).toBe(-32603);
+    expect(error.message).toContain('EACCES');
+    expect(error.message.toLowerCase()).toContain('probe failed');
+    expect(error.data).toMatchObject({ sessionId: CORRUPT_ID });
+    expect((error.data as { probeError: string }).probeError).toContain(
+      'EACCES',
+    );
+  });
+
+  it('maps a NON-ENOENT probe rejection with NO errno code to internalError (indeterminate existence, FINDING B2)', async () => {
+    const error = await classifyResumeFailure(
+      CORRUPT_ID,
+      resumeError('No sessions found for this project'),
+      async () => {
+        throw new Error('disk exploded');
+      },
+    );
+    // A generic (no-code) probe error is also indeterminate → internalError.
+    expect(error.code).toBe(-32603);
+    expect(error.message).toContain('disk exploded');
   });
 
   it('does NOT probe (and returns internalError) for a non-not-found reason even if a file would match', async () => {

@@ -57,12 +57,13 @@ export async function resumeAgentHistory(
   agent: Agent,
   sessionId: string,
   sessionConfig: Config,
+  listFiles: ChatSessionFileLister = nodeChatSessionFileLister,
 ): Promise<readonly IContent[]> {
   try {
     return await agent.session.resume(sessionId);
   } catch (error) {
     throw await classifyResumeFailure(sessionId, error, () =>
-      listSessionFileNames(sessionConfig),
+      listSessionFileNames(sessionConfig, listFiles),
     );
   }
 }
@@ -70,15 +71,20 @@ export async function resumeAgentHistory(
 /**
  * Lists the chats-dir entry names for the corrupt-vs-missing probe (FINDING B),
  * deriving the directory the SAME way the recording layer does
- * (`join(storage.getProjectTempDir(), 'chats')`). A read failure propagates to
- * {@link classifyResumeFailure}, which swallows it and falls back to the plain
- * mapping so the original resume failure is never masked.
+ * (`join(storage.getProjectTempDir(), 'chats')`) and delegating the actual read
+ * to the injected {@link ChatSessionFileLister} (FINDING C1) so the resume probe
+ * and the re-attach probe ({@link hasRecordedSessionFile}) share ONE injected
+ * lister rather than one hardcoding readdir. A read failure propagates to
+ * {@link classifyResumeFailure}, which classifies it (ENOENT → genuinely
+ * missing; other → indeterminate/internalError) so the original resume failure
+ * is never silently masked.
  */
 async function listSessionFileNames(
   sessionConfig: Config,
+  listFiles: ChatSessionFileLister,
 ): Promise<readonly string[]> {
   const chatsDir = chatsDirFor(sessionConfig);
-  return readdir(chatsDir);
+  return listFiles(chatsDir);
 }
 
 /**
@@ -110,15 +116,44 @@ export async function hasRecordedSessionFile(
     const entries = await listFiles(chatsDir);
     return findMatchingSessionFile(sessionId, entries) !== null;
   } catch (error) {
-    logger.debug(
-      () =>
-        `hasRecordedSessionFile: probe failed for ${sessionId}; treating as ` +
-        `no on-disk recording (re-attach): ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-    );
+    const message = error instanceof Error ? error.message : String(error);
+    // FINDING C2: both branches fail-open to re-attach (a load must NOT crash on
+    // a probe issue), but distinguish the severity so a real problem is
+    // diagnosable rather than swallowed at the SAME level as the expected case:
+    //   - ENOENT (chats dir not created yet — the common fresh-project case) is
+    //     EXPECTED: log at debug only.
+    //   - any other error (EACCES, EIO, ...) is UNEXPECTED and means the probe
+    //     could not actually determine recording presence: log at warn so it is
+    //     visible, while still returning false (re-attach) rather than rethrowing.
+    if (isEnoentError(error)) {
+      logger.debug(
+        () =>
+          `hasRecordedSessionFile: chats dir absent (ENOENT) for ${sessionId}; ` +
+          `treating as no on-disk recording (re-attach): ${message}`,
+      );
+    } else {
+      logger.warn(
+        () =>
+          `hasRecordedSessionFile: probe failed (non-ENOENT) for ${sessionId}; ` +
+          `could not determine recording presence, failing open to re-attach: ${message}`,
+      );
+    }
     return false;
   }
+}
+
+/**
+ * True when `error` is a Node ENOENT (no-such-file/directory) rejection — used
+ * by {@link hasRecordedSessionFile} to log the expected missing-chats-dir case
+ * at debug while surfacing genuinely unexpected probe failures at warn
+ * (FINDING C2).
+ */
+function isEnoentError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as NodeJS.ErrnoException).code === 'ENOENT'
+  );
 }
 
 /**
@@ -139,8 +174,18 @@ export async function readAgentHistoryAsIContent(
 
 /**
  * Derives the chats directory (where session recordings live) from a config's
- * project storage temp dir, matching the recording layer + SessionControl
- * derivation exactly.
+ * project storage temp dir: `join(storage.getProjectTempDir(), 'chats')`.
+ *
+ * FINDING C3 — this 'chats' derivation is DUPLICATED across three call sites
+ * that MUST stay in lockstep (there is no shared exported constant because
+ * SessionControl's copy is private in packages/agents and core does not export
+ * one). If the derivation ever changes, update ALL of:
+ *   1. this function (the zed loadSession re-attach + corrupt-vs-missing probes);
+ *   2. SessionControl.chatsDir() (packages/agents/src/api/control/sessionControl.ts)
+ *      — the recording/resume path that WRITES the files;
+ *   3. the `chatsDir` passed into SessionRecordingService's config (the core
+ *      recording layer that materializes `<chatsDir>/session-*.jsonl`).
+ * A drift in any one silently breaks the probe↔recording filename match.
  */
 function chatsDirFor(config: Config): string {
   return path.join(config.storage.getProjectTempDir(), 'chats');
