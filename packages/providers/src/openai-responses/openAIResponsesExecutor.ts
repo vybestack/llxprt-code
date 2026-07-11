@@ -193,11 +193,20 @@ async function resolveApiKey(
   deps: ResponsesExecutorDeps,
 ): Promise<string> {
   const promptAuthToken = await deps.resolveAuthTokenForPrompt();
-  if (promptAuthToken !== '') return promptAuthToken;
+  // Strict guard on the value that becomes the Authorization header:
+  // only forward a genuine non-empty string. Provider implementations
+  // can resolve to '' from deeper auth paths, and a defensive runtime
+  // typeof check ensures a non-string (undefined/null from a loosely
+  // typed implementation) is never injected into the header.
+  if (typeof promptAuthToken === 'string' && promptAuthToken !== '') {
+    return promptAuthToken;
+  }
   const runtimeToken = await resolveRuntimeAuthToken(
     options.resolved.authToken,
   );
-  if (runtimeToken !== undefined && runtimeToken !== '') return runtimeToken;
+  if (typeof runtimeToken === 'string' && runtimeToken !== '') {
+    return runtimeToken;
+  }
 
   const isCodex = deps.isCodexBaseURL(effectiveBaseURL);
   throw new Error(

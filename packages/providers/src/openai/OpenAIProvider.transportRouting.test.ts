@@ -167,6 +167,7 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
 
     expect(capturedUrl).toBeDefined();
     expect(capturedUrl).toContain('/responses');
+    expect(capturedUrl).not.toContain('/chat/completions');
   });
 
   it('keeps GPT-5.5 on the /chat/completions endpoint', async () => {

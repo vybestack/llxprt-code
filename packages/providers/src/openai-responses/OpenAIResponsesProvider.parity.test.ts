@@ -148,9 +148,13 @@ describe('OpenAIResponsesProvider ↔ OpenAIProvider delegated Responses parity 
     }
 
     // --- Assert parity ---
-    const standaloneReq = standaloneCapture.getCaptured()[0];
-    const delegatedReq = delegatedCapture.getCaptured()[0];
+    const standaloneCaptured = standaloneCapture.getCaptured();
+    const delegatedCaptured = delegatedCapture.getCaptured();
+    expect(standaloneCaptured).toHaveLength(1);
+    expect(delegatedCaptured).toHaveLength(1);
 
+    const standaloneReq = standaloneCaptured[0];
+    const delegatedReq = delegatedCaptured[0];
     expect(standaloneReq).toBeDefined();
     expect(delegatedReq).toBeDefined();
 

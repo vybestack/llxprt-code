@@ -72,6 +72,13 @@ function buildNormalizedOptions(
       baseURL: 'https://api.openai.com/v1',
       authToken: 'test-token',
     },
+    // The double assertion is required because `config` here is a
+    // lightweight `createRuntimeConfigStub`, which intentionally does NOT
+    // implement the full core `Config` surface that
+    // `NormalizedGenerateChatOptions.config` demands. The executor only
+    // touches the narrow subset exercised below, so constructing a real
+    // `Config` would add large, irrelevant setup. This matches the
+    // established stub convention used across the providers test suite.
   } as unknown as NormalizedGenerateChatOptions;
 
   return { ...base, ...overrides };
@@ -155,6 +162,11 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
     const promptArg = getCoreSystemPromptAsyncSpy.mock.calls[0][0] as {
       model: string;
     };
+    // Positive assertion: the fallback must be the provider default, not
+    // merely "anything other than the base URL" (which undefined/null would
+    // also satisfy). This makes the regression test fail if the fallback
+    // logic breaks in any way.
+    expect(promptArg.model).toBe('o3-mini');
     expect(promptArg.model).not.toBe(baseURL);
   });
 
