@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { Task } from './task.js';
 import {
   type Config,
@@ -22,7 +22,7 @@ import {
 import { createMockConfig } from '../utils/testing_utils.js';
 import { CoderAgentEvent } from '../types.js';
 import type { ExecutionEventBus, RequestContext } from '@a2a-js/sdk/server';
-import type { Mock } from 'vitest';
+import type { Mock } from 'bun:test';
 
 function createMockEventBus(): ExecutionEventBus {
   return {
