@@ -330,7 +330,7 @@ describe('MessageStreamOrchestrator — todo_pause loop break (issue #2287)', ()
   });
 
   it('streams ordinary content before the turn source completes', async () => {
-    let releaseSecondChunk: (() => void) | undefined;
+    let releaseSecondChunk = (): void => {};
     const secondChunkReady = new Promise<void>((resolve) => {
       releaseSecondChunk = resolve;
     });
@@ -367,7 +367,7 @@ describe('MessageStreamOrchestrator — todo_pause loop break (issue #2287)', ()
       value: { type: AgentEventType.Content, value: 'Hello' },
     });
 
-    releaseSecondChunk?.();
+    releaseSecondChunk();
     const remaining: ServerAgentStreamEvent[] = [];
     for await (const event of iterator) remaining.push(event);
     expect(
