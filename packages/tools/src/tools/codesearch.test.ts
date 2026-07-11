@@ -4,13 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import fetch from 'node-fetch';
-
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { CodeSearchTool, type CodeSearchToolParams } from './codesearch.js';
 
-vi.mock('node-fetch');
-const mockedFetch = fetch as unknown as ReturnType<typeof vi.fn>;
+const mockedFetch = vi.fn();
 
 describe('CodeSearchTool', () => {
   const keyStorage = { resolveKey: vi.fn() };
@@ -24,7 +21,11 @@ describe('CodeSearchTool', () => {
     vi.clearAllMocks();
     keyStorage.resolveKey.mockResolvedValue(null);
     settingsService.getSetting.mockReturnValue(undefined);
-    tool = new CodeSearchTool({ keyStorage, settingsService });
+    tool = new CodeSearchTool({
+      fetch: mockedFetch,
+      keyStorage,
+      settingsService,
+    });
   });
 
   it('validates parameters correctly', () => {
