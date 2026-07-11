@@ -271,15 +271,15 @@ export async function getAllCodexRateLimitResetCredits(
     }
 
     const parsedToken = CodexOAuthTokenSchema.safeParse(token);
-    const accountId = parsedToken.success
-      ? parsedToken.data.account_id
-      : undefined;
+    if (!parsedToken.success) {
+      continue;
+    }
 
-    if (token.expiry > nowInSeconds && accountId) {
+    if (parsedToken.data.expiry > nowInSeconds) {
       await fetchAndStoreCodexResetCredits(
         bucket,
-        token.access_token,
-        accountId,
+        parsedToken.data.access_token,
+        parsedToken.data.account_id,
         codexBaseUrl,
         fetchCodexRateLimitResetCredits,
         result,
