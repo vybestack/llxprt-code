@@ -22,7 +22,7 @@ import type {
   SchedulerCallbacks,
 } from '@vybestack/llxprt-code-core';
 
-import { expect, vi } from 'vitest';
+import { expect, vi } from 'bun:test';
 
 type MockToolCall = {
   request: ToolCallRequestInfo;
