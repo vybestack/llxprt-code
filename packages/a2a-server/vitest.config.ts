@@ -92,6 +92,7 @@ export default defineConfig({
   plugins: [workspaceDependencyAliasPlugin],
   resolve: {
     alias: {
+      'bun:test': 'vitest',
       /**
        * @plan:PLAN-20260603-ISSUE1584.P16
        * @requirement:REQ-VERIFY-001

@@ -4,38 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { InitCommand } from './init.js';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { CoderAgentExecutor } from '../agent/executor.js';
 import { CoderAgentEvent } from '../types.js';
 import type { ExecutionEventBus } from '@a2a-js/sdk/server';
 import type { TaskStatusUpdateEvent } from '@a2a-js/sdk';
 import { createMockConfig } from '../utils/testing_utils.js';
 import type { CommandContext } from './types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
-import { logger } from '../utils/logger.js';
-
-vi.mock('node:fs', () => ({
-  existsSync: vi.fn(),
-  writeFileSync: vi.fn(),
-}));
-
-vi.mock('../agent/executor.js', () => ({
-  CoderAgentExecutor: vi.fn().mockImplementation(() => ({
-    execute: vi.fn(),
-  })),
-}));
-
-vi.mock('../utils/logger.js', () => ({
-  logger: {
-    info: vi.fn(),
-    error: vi.fn(),
-  },
-}));
 
 describe('InitCommand', () => {
+  const mockExistsSync = vi.fn();
+  const mockWriteFileSync = vi.fn();
+  const mockLogInfo = vi.fn();
   let eventBus: ExecutionEventBus;
   let command: InitCommand;
   let context: CommandContext;
@@ -49,11 +31,19 @@ describe('InitCommand', () => {
     eventBus = {
       publish: vi.fn(),
     } as unknown as ExecutionEventBus;
-    command = new InitCommand();
+    command = new InitCommand({
+      existsSync: mockExistsSync,
+      writeFileSync: mockWriteFileSync,
+      createId: () => 'test-id',
+      logInfo: mockLogInfo,
+    });
     const mockConfig = createMockConfig({
       getModel: () => 'gemini-pro',
     });
-    const mockExecutorInstance = new CoderAgentExecutor();
+    const mockExecutorInstance = {
+      execute: vi.fn(),
+      cancelTask: vi.fn(),
+    };
     context = {
       config: mockConfig as unknown as Config,
       agentExecutor: mockExecutorInstance,
@@ -61,7 +51,7 @@ describe('InitCommand', () => {
     } as CommandContext;
     publishSpy = vi.spyOn(eventBus, 'publish');
     mockExecute = vi.fn();
-    vi.spyOn(mockExecutorInstance, 'execute').mockImplementation(mockExecute);
+    mockExecutorInstance.execute.mockImplementation(mockExecute);
   });
 
   it('has requiresWorkspace set to true', () => {
@@ -74,7 +64,7 @@ describe('InitCommand', () => {
 
   describe('execute', () => {
     it('handles info when LLXPRT.md already exists', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      mockExistsSync.mockReturnValue(true);
 
       await command.execute(context, []);
 
@@ -90,7 +80,7 @@ describe('InitCommand', () => {
       expect(firstPart.text).toContain('already exists');
 
       // Verify logger was also called
-      expect(logger.info).toHaveBeenCalledWith(
+      expect(mockLogInfo).toHaveBeenCalledWith(
         '[EventBus event]: ',
         expect.objectContaining({
           kind: 'status-update',
@@ -100,13 +90,13 @@ describe('InitCommand', () => {
 
     describe('when LLXPRT.md does not exist', () => {
       beforeEach(() => {
-        vi.mocked(fs.existsSync).mockReturnValue(false);
+        mockExistsSync.mockReturnValue(false);
       });
 
       it('writes the file and executes the agent', async () => {
         await command.execute(context, []);
 
-        expect(fs.writeFileSync).toHaveBeenCalledWith(
+        expect(mockWriteFileSync).toHaveBeenCalledWith(
           path.join(mockWorkspacePath, 'LLXPRT.md'),
           '',
           'utf8',
