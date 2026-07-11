@@ -23,6 +23,7 @@ import {
 import * as acp from '@agentclientprotocol/sdk';
 import {
   fromConfig,
+  getTokenLimitForConfiguredContext,
   type Agent,
   type AgentEvent,
 } from '@vybestack/llxprt-code-agents';
@@ -39,6 +40,7 @@ import {
   parseZedAuthMethodId,
   buildAvailableModes,
   buildSessionModes,
+  buildUsageUpdate,
   describeSessionUpdateForLog,
   mapDoneReasonToStopReason,
   extractThoughtText,
@@ -895,16 +897,17 @@ export class Session {
   private async sendUsageUpdate(
     usage: Extract<AgentEvent, { type: 'usage' }>['usage'],
   ): Promise<void> {
-    const outputTokens = usage.candidatesTokenCount ?? 0;
-    const size = usage.totalTokenCount ?? outputTokens;
-    if (size === 0 && outputTokens === 0) {
-      return;
+    // size = the configured context window (user override -> provider limit ->
+    // model lookup, the shared #2251 resolver), used = tokens now in context —
+    // so the client renders consumption against the real window (issue #1607)
+    // instead of the previous used===size placeholder.
+    const update = buildUsageUpdate(
+      usage,
+      getTokenLimitForConfiguredContext(this.config.getModel(), this.config),
+    );
+    if (update !== null) {
+      await this.sendUpdate(update);
     }
-    await this.sendUpdate({
-      sessionUpdate: 'usage_update',
-      used: size,
-      size,
-    });
   }
 
   private isPromptStale(

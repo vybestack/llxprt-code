@@ -226,6 +226,10 @@ export function buildMinimalConfig(): Config {
     getEnableRecursiveFileSearch: () => false,
     getFileSystemService: () => ({ readTextFile: async () => '' }),
     getMaxSessionTurns: () => 50,
+    // usage_update path (issue #1607): sendUsageUpdate resolves the context
+    // window via getTokenLimitForConfiguredContext(model, config).
+    getModel: () => 'test-model',
+    getContentGeneratorConfig: () => undefined,
   } as unknown as Config;
 }
 

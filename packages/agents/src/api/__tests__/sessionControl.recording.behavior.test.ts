@@ -38,6 +38,8 @@ import {
   buildAgent,
   drain,
   captureHistoryServiceIdentity,
+  respondToFirstConfirmation,
+  ToolConfirmationOutcome,
 } from './helpers/agentHarness.js';
 
 /** Builds a public AgentMessage (Content) with role + a single text part. */
@@ -179,6 +181,65 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
       const raw = readFileSync(path, 'utf8');
       expect(raw).toContain('post-resume-sentinel-gamma');
       expect(raw).toContain('a plain text reply');
+    });
+  });
+
+  it('records COMPLETED TOOL CALLS (call + response) into the session JSONL for later replay (issue #1605 verification) @requirement:REQ-010', async () => {
+    await withIsolatedAgent('tool-call-then-answer.jsonl', async (agent) => {
+      // Recording is enabled BEFORE the tool turn, so the tool call and its
+      // response reach the JSONL only via the live RecordingIntegration
+      // subscription — proving the Agent API runtime records completed tool
+      // calls into session history (the #1605 acceptance bar the Zed
+      // loadSession replay depends on). The file materializes on first content
+      // (the session is unprompted at enable time), so the path is read AFTER
+      // the turn.
+      await agent.session.setRecording({ enabled: true });
+
+      const responder = respondToFirstConfirmation(
+        agent,
+        ToolConfirmationOutcome.ProceedOnce,
+      );
+      try {
+        await drain(agent.stream('run the tool'));
+      } finally {
+        responder.unsubscribe();
+      }
+
+      const path = agent.session.getRecording().path ?? '';
+      expect(path.length).toBeGreaterThan(0);
+
+      // Disable to flush + dispose so all queued writes land.
+      await agent.session.setRecording({ enabled: false });
+
+      const raw = readFileSync(path, 'utf8');
+      // The recorded transcript carries the tool CALL block for read_file …
+      expect(raw).toContain('"tool_call"');
+      expect(raw).toContain('read_file');
+      // … its RESPONSE block …
+      expect(raw).toContain('"tool_response"');
+      // … and the post-tool assistant text, i.e. the full completed exchange.
+      expect(raw).toContain('after the tool ran');
+
+      // The recorded call and response PAIR: the response's callId equals the
+      // recorded call's id (the runtime normalizes ids in history, so the
+      // fixture's raw id is not asserted — the pairing invariant is what the
+      // #1604 replay's tool_call/tool_call_update matching depends on).
+      const blocks = raw
+        .split(String.fromCharCode(10))
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .flatMap((entry) => {
+          const payload = entry['payload'] as
+            | { content?: { blocks?: ReadonlyArray<Record<string, unknown>> } }
+            | undefined;
+          return payload?.content?.blocks ?? [];
+        });
+      const callBlock = blocks.find((b) => b['type'] === 'tool_call');
+      const responseBlock = blocks.find((b) => b['type'] === 'tool_response');
+      expect(callBlock).toBeDefined();
+      expect(responseBlock).toBeDefined();
+      expect(typeof callBlock?.['id']).toBe('string');
+      expect(responseBlock?.['callId']).toBe(callBlock?.['id']);
     });
   });
 

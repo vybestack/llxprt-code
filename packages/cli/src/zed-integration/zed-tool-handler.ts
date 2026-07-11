@@ -352,6 +352,12 @@ const TOOL_KIND_BY_NAME = new Map<string, acp.ToolKind>([
   ...['run_shell_command', 'execute_command', 'exec'].map(
     (name) => [name, 'execute'] as const,
   ),
+  ...['direct_web_fetch', 'exa_web_search', 'web_fetch', 'web_search'].map(
+    (name) => [name, 'fetch'] as const,
+  ),
+  ...['todo_write', 'todo_read', 'todo_pause', 'save_memory'].map(
+    (name) => [name, 'think'] as const,
+  ),
 ]);
 
 export function inferToolKind(name: string): acp.ToolKind | undefined {

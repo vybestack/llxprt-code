@@ -292,3 +292,30 @@ export function describeSessionUpdateForLog(update: acp.SessionUpdate): string {
       : '';
   return `sendUpdate: ${update.sessionUpdate} ${chars}`;
 }
+
+/**
+ * Builds the usage_update session notification for a turn's usage metadata
+ * (issue #1607): `used` is the total tokens now in context (the response's
+ * cumulative totalTokenCount) and `size` is the configured context-window
+ * limit, so the client can render consumption against the real window rather
+ * than against itself. Returns null when the event carries no usable counts
+ * (nothing meaningful to report). `size` is clamped up to `used` so a
+ * mid-flight limit change can never report used > size on the wire.
+ */
+export function buildUsageUpdate(
+  usage: {
+    readonly totalTokenCount?: number;
+    readonly candidatesTokenCount?: number;
+  },
+  contextWindowSize: number,
+): acp.SessionUpdate | null {
+  const used = usage.totalTokenCount ?? usage.candidatesTokenCount ?? 0;
+  if (used === 0) {
+    return null;
+  }
+  return {
+    sessionUpdate: 'usage_update',
+    used,
+    size: Math.max(contextWindowSize, used),
+  };
+}
