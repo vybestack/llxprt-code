@@ -1,0 +1,300 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  clearQuotaGuard,
+  detectQuotaSignal,
+  getQuotaGuardTrip,
+  tripQuotaGuard,
+} from './quota-guard.js';
+
+const SENTINEL_FILENAME = 'quota-guard-tripped.json';
+const ANNOTATION_MARKER = '::error title=E2E quota guard tripped::';
+
+const tempDirs: string[] = [];
+
+function makeTempDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'quota-guard-'));
+  tempDirs.push(dir);
+  return dir;
+}
+
+function callsIncludeAnnotation(
+  calls: ReadonlyArray<readonly unknown[]>,
+): boolean {
+  return calls.some(
+    (call) =>
+      typeof call[0] === 'string' && call[0].includes(ANNOTATION_MARKER),
+  );
+}
+
+/**
+ * Return the first `::error ...::` workflow-command line written to the stdout
+ * spy, or `null` when none was emitted. Used to assert on the exact escaped
+ * payload of the GitHub Actions annotation.
+ */
+function findAnnotationLine(
+  calls: ReadonlyArray<readonly unknown[]>,
+): string | null {
+  for (const call of calls) {
+    if (typeof call[0] === 'string' && call[0].includes(ANNOTATION_MARKER)) {
+      return call[0];
+    }
+  }
+  return null;
+}
+
+describe('quota-guard', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    for (const dir of tempDirs) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+    tempDirs.length = 0;
+  });
+
+  describe('detectQuotaSignal', () => {
+    const positiveCases: readonly string[] = [
+      'Process exited with code 1: something (Status: 429)',
+      'HTTP 429 Too Many Requests',
+      // camelCase and snake_case status-code fields carry no other quota
+      // keyword, so they genuinely exercise the extended status(_)?code branch.
+      'Provider rejected the request with statusCode: 429',
+      'openai.APIStatusError status_code: 429',
+      '{"type":"error","error":{"type":"rate_limit_error","message":"Rate limited"}}',
+      'Rate limit exceeded. Please wait a moment and retry',
+      // Contextual rate-limit forms: an error-context word ("limited",
+      // "_error", "exceeded", "reached", "hit") disambiguates a genuine
+      // provider wall from prose that merely mentions rate limits.
+      'Rate limited',
+      'rate_limit_error',
+      'Rate limit exceeded',
+      'rate limit reached',
+      // Classic OpenAI 429 body wording that carries no status/code context.
+      'You exceeded your current quota, please check your plan and billing details.',
+      'You have reached your daily gemini-2.5-pro quota limit',
+      'RESOURCE_EXHAUSTED',
+      'insufficient_quota',
+    ];
+
+    for (const input of positiveCases) {
+      it(`detects a quota signal in: ${input.slice(0, 48)}`, () => {
+        expect(detectQuotaSignal(input)).not.toBeNull();
+      });
+    }
+
+    const negativeCases: readonly string[] = [
+      'Error: expected 2 to be 3\n    at file.test.ts:10',
+      'Expected to find list_directory tool call(s). Found: none.',
+      'Processed 429 items successfully',
+      // Bare, non-contextual mentions of rate limiting are prose a failing test
+      // could legitimately echo — they must NOT trip the guard and mask a real
+      // regression.
+      'Expected the CLI to explain rate limit behavior',
+      'tests for rate limits',
+      // "quota" without exhaustion context must stay green.
+      'quota check passed',
+      '',
+    ];
+
+    for (const input of negativeCases) {
+      it(`ignores non-quota output: ${input.slice(0, 48) || '(empty)'}`, () => {
+        expect(detectQuotaSignal(input)).toBeNull();
+      });
+    }
+  });
+
+  describe('quota guard sentinel lifecycle', () => {
+    it('round-trips a trip reason through the sentinel file', () => {
+      const dir = makeTempDir();
+      vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
+      vi.stubEnv('GITHUB_ACTIONS', 'false');
+
+      tripQuotaGuard('quota exhausted for provider X');
+
+      expect(getQuotaGuardTrip()).toStrictEqual({
+        reason: 'quota exhausted for provider X',
+      });
+    });
+
+    it('is idempotent and keeps the first reason', () => {
+      const dir = makeTempDir();
+      vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
+      vi.stubEnv('GITHUB_ACTIONS', 'false');
+
+      tripQuotaGuard('first');
+      tripQuotaGuard('second');
+
+      expect(getQuotaGuardTrip()).toStrictEqual({ reason: 'first' });
+    });
+
+    it('returns null after the guard is cleared', () => {
+      const dir = makeTempDir();
+      vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
+      vi.stubEnv('GITHUB_ACTIONS', 'false');
+
+      tripQuotaGuard('boom');
+      expect(getQuotaGuardTrip()).not.toBeNull();
+
+      clearQuotaGuard();
+      expect(getQuotaGuardTrip()).toBeNull();
+    });
+
+    it('is inactive when INTEGRATION_TEST_FILE_DIR is unset', () => {
+      vi.stubEnv('INTEGRATION_TEST_FILE_DIR', undefined);
+
+      expect(() => tripQuotaGuard('ignored')).not.toThrow();
+      expect(getQuotaGuardTrip()).toBeNull();
+    });
+
+    it('writes nothing and reads null when explicitly disabled', () => {
+      const dir = makeTempDir();
+      vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
+      vi.stubEnv('LLXPRT_QUOTA_GUARD_DISABLED', 'true');
+
+      tripQuotaGuard('should not persist');
+
+      const sentinelPath = join(dir, SENTINEL_FILENAME);
+      expect(existsSync(sentinelPath)).toBe(false);
+
+      writeFileSync(
+        sentinelPath,
+        JSON.stringify({
+          reason: 'manual',
+          timestamp: new Date().toISOString(),
+        }),
+      );
+      expect(getQuotaGuardTrip()).toBeNull();
+    });
+
+    it('clears a sentinel even while the guard is disabled', () => {
+      const dir = makeTempDir();
+      vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
+      vi.stubEnv('LLXPRT_QUOTA_GUARD_DISABLED', 'true');
+
+      const sentinelPath = join(dir, SENTINEL_FILENAME);
+      writeFileSync(
+        sentinelPath,
+        JSON.stringify({
+          reason: 'manual',
+          timestamp: new Date().toISOString(),
+        }),
+      );
+      expect(existsSync(sentinelPath)).toBe(true);
+
+      clearQuotaGuard();
+      expect(existsSync(sentinelPath)).toBe(false);
+    });
+
+    it('returns null for a malformed sentinel file', () => {
+      const dir = makeTempDir();
+      vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
+      vi.stubEnv('GITHUB_ACTIONS', 'false');
+
+      const sentinelPath = join(dir, SENTINEL_FILENAME);
+      writeFileSync(sentinelPath, 'not-json{{');
+
+      expect(getQuotaGuardTrip()).toBeNull();
+    });
+
+    it('returns null when the persisted reason is not a string', () => {
+      const dir = makeTempDir();
+      vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
+      vi.stubEnv('GITHUB_ACTIONS', 'false');
+
+      const sentinelPath = join(dir, SENTINEL_FILENAME);
+      writeFileSync(sentinelPath, JSON.stringify({ reason: 42 }));
+
+      expect(getQuotaGuardTrip()).toBeNull();
+    });
+  });
+
+  describe('GitHub Actions integration', () => {
+    it('emits an error annotation and step summary in CI', () => {
+      const dir = makeTempDir();
+      const summaryPath = join(dir, 'summary.md');
+      vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
+      vi.stubEnv('GITHUB_ACTIONS', 'true');
+      vi.stubEnv('GITHUB_STEP_SUMMARY', summaryPath);
+
+      const spy = vi
+        .spyOn(process.stdout, 'write')
+        .mockImplementation(() => true);
+
+      tripQuotaGuard('provider quota exhausted');
+
+      expect(callsIncludeAnnotation(spy.mock.calls)).toBe(true);
+
+      spy.mockRestore();
+
+      const summary = readFileSync(summaryPath, 'utf8');
+      expect(summary).toContain('provider quota exhausted');
+    });
+
+    it('escapes newlines and percent signs in the annotation payload', () => {
+      const dir = makeTempDir();
+      vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
+      vi.stubEnv('GITHUB_ACTIONS', 'true');
+      vi.stubEnv('GITHUB_STEP_SUMMARY', undefined);
+
+      const spy = vi
+        .spyOn(process.stdout, 'write')
+        .mockImplementation(() => true);
+
+      // A reason containing the characters GitHub treats specially in a
+      // workflow-command message: percent, carriage return and newline. Raw,
+      // the newline would prematurely terminate the `::error::` command and the
+      // second line would leak as plain log output.
+      const cr = String.fromCharCode(13);
+      const lf = String.fromCharCode(10);
+      tripQuotaGuard(`boom 50% off${cr}${lf}second line`);
+
+      const annotation = findAnnotationLine(spy.mock.calls);
+      spy.mockRestore();
+
+      expect(annotation).not.toBeNull();
+      const line = annotation ?? '';
+      // The single workflow command must be one physical line: the special
+      // characters are percent-encoded, so only the writer's trailing newline
+      // remains raw.
+      expect(line).toBe(
+        `::error title=E2E quota guard tripped::boom 50%25 off%0D%0Asecond line${lf}`,
+      );
+      expect(line).toContain('%25');
+      expect(line).toContain('%0A');
+      expect(line).toContain('%0D');
+      // The escaped payload itself must not contain a raw CR, nor a raw LF
+      // before the writer's trailing newline.
+      expect(line.slice(0, -1)).not.toContain(lf);
+      expect(line).not.toContain(cr);
+    });
+
+    it('does not emit an annotation outside of CI', () => {
+      const dir = makeTempDir();
+      vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
+      vi.stubEnv('GITHUB_ACTIONS', 'false');
+
+      const spy = vi
+        .spyOn(process.stdout, 'write')
+        .mockImplementation(() => true);
+
+      tripQuotaGuard('provider quota exhausted');
+
+      expect(callsIncludeAnnotation(spy.mock.calls)).toBe(false);
+    });
+  });
+});
