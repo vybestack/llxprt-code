@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
 import type {
   Counter,
   Meter,
@@ -13,7 +13,13 @@ import type {
   Histogram,
 } from '@opentelemetry/api';
 import type { TelemetryConfig } from '../internal/interfaces.js';
-import { FileOperation } from './metrics.js';
+import {
+  FileOperation,
+  initializeMetrics,
+  recordFileOperationMetric,
+  recordTokenUsageMetrics,
+  resetMetricsForTesting,
+} from './metrics.js';
 
 const mockCounterAddFn: Mock<
   (value: number, attributes?: Attributes, context?: Context) => void
@@ -41,48 +47,15 @@ const mockMeterInstance = {
   createHistogram: mockCreateHistogramFn.mockReturnValue(mockHistogramInstance),
 } as unknown as Meter;
 
-function originalOtelMockFactory() {
-  return {
-    metrics: {
-      getMeter: vi.fn(),
-    },
-    ValueType: {
-      INT: 1,
-    },
-  };
-}
-
-vi.mock('@opentelemetry/api', originalOtelMockFactory);
-
 describe('Telemetry Metrics', () => {
-  let initializeMetricsModule: typeof import('./metrics.js').initializeMetrics;
-  let recordTokenUsageMetricsModule: typeof import('./metrics.js').recordTokenUsageMetrics;
-  let recordFileOperationMetricModule: typeof import('./metrics.js').recordFileOperationMetric;
-
-  beforeEach(async () => {
-    vi.resetModules();
-    vi.doMock('@opentelemetry/api', () => {
-      const actualApi = originalOtelMockFactory();
-      actualApi.metrics.getMeter.mockReturnValue(mockMeterInstance);
-      return actualApi;
-    });
-
-    const metricsJsModule = await import('./metrics.js');
-    initializeMetricsModule = metricsJsModule.initializeMetrics;
-    recordTokenUsageMetricsModule = metricsJsModule.recordTokenUsageMetrics;
-    recordFileOperationMetricModule = metricsJsModule.recordFileOperationMetric;
-
-    const otelApiModule = await import('@opentelemetry/api');
-
+  beforeEach(() => {
     mockCounterAddFn.mockClear();
     mockCreateCounterFn.mockClear();
     mockCreateHistogramFn.mockClear();
     mockHistogramRecordFn.mockClear();
-    (otelApiModule.metrics.getMeter as Mock).mockClear();
-
-    (otelApiModule.metrics.getMeter as Mock).mockReturnValue(mockMeterInstance);
     mockCreateCounterFn.mockReturnValue(mockCounterInstance);
     mockCreateHistogramFn.mockReturnValue(mockHistogramInstance);
+    resetMetricsForTesting(mockMeterInstance);
   });
 
   describe('recordTokenUsageMetrics', () => {
@@ -91,13 +64,13 @@ describe('Telemetry Metrics', () => {
     } as unknown as TelemetryConfig;
 
     it('should not record metrics if not initialized', () => {
-      recordTokenUsageMetricsModule(mockConfig, 'gemini-pro', 100, 'input');
+      recordTokenUsageMetrics(mockConfig, 'gemini-pro', 100, 'input');
       expect(mockCounterAddFn).not.toHaveBeenCalled();
     });
 
     it('should record token usage with the correct attributes', () => {
-      initializeMetricsModule(mockConfig);
-      recordTokenUsageMetricsModule(mockConfig, 'gemini-pro', 100, 'input');
+      initializeMetrics(mockConfig);
+      recordTokenUsageMetrics(mockConfig, 'gemini-pro', 100, 'input');
       expect(mockCounterAddFn).toHaveBeenCalledTimes(2);
       expect(mockCounterAddFn).toHaveBeenNthCalledWith(1, 1, {
         'session.id': 'test-session-id',
@@ -110,31 +83,31 @@ describe('Telemetry Metrics', () => {
     });
 
     it('should record token usage for different types', () => {
-      initializeMetricsModule(mockConfig);
+      initializeMetrics(mockConfig);
       mockCounterAddFn.mockClear();
 
-      recordTokenUsageMetricsModule(mockConfig, 'gemini-pro', 50, 'output');
+      recordTokenUsageMetrics(mockConfig, 'gemini-pro', 50, 'output');
       expect(mockCounterAddFn).toHaveBeenCalledWith(50, {
         'session.id': 'test-session-id',
         model: 'gemini-pro',
         type: 'output',
       });
 
-      recordTokenUsageMetricsModule(mockConfig, 'gemini-pro', 25, 'thought');
+      recordTokenUsageMetrics(mockConfig, 'gemini-pro', 25, 'thought');
       expect(mockCounterAddFn).toHaveBeenCalledWith(25, {
         'session.id': 'test-session-id',
         model: 'gemini-pro',
         type: 'thought',
       });
 
-      recordTokenUsageMetricsModule(mockConfig, 'gemini-pro', 75, 'cache');
+      recordTokenUsageMetrics(mockConfig, 'gemini-pro', 75, 'cache');
       expect(mockCounterAddFn).toHaveBeenCalledWith(75, {
         'session.id': 'test-session-id',
         model: 'gemini-pro',
         type: 'cache',
       });
 
-      recordTokenUsageMetricsModule(mockConfig, 'gemini-pro', 125, 'tool');
+      recordTokenUsageMetrics(mockConfig, 'gemini-pro', 125, 'tool');
       expect(mockCounterAddFn).toHaveBeenCalledWith(125, {
         'session.id': 'test-session-id',
         model: 'gemini-pro',
@@ -143,10 +116,10 @@ describe('Telemetry Metrics', () => {
     });
 
     it('should handle different models', () => {
-      initializeMetricsModule(mockConfig);
+      initializeMetrics(mockConfig);
       mockCounterAddFn.mockClear();
 
-      recordTokenUsageMetricsModule(mockConfig, 'gemini-ultra', 200, 'input');
+      recordTokenUsageMetrics(mockConfig, 'gemini-ultra', 200, 'input');
       expect(mockCounterAddFn).toHaveBeenCalledWith(200, {
         'session.id': 'test-session-id',
         model: 'gemini-ultra',
@@ -161,7 +134,7 @@ describe('Telemetry Metrics', () => {
     } as unknown as TelemetryConfig;
 
     it('should not record metrics if not initialized', () => {
-      recordFileOperationMetricModule(
+      recordFileOperationMetric(
         mockConfig,
         FileOperation.CREATE,
         10,
@@ -172,8 +145,8 @@ describe('Telemetry Metrics', () => {
     });
 
     it('should record file creation with all attributes', () => {
-      initializeMetricsModule(mockConfig);
-      recordFileOperationMetricModule(
+      initializeMetrics(mockConfig);
+      recordFileOperationMetric(
         mockConfig,
         FileOperation.CREATE,
         10,
@@ -195,10 +168,10 @@ describe('Telemetry Metrics', () => {
     });
 
     it('should record file read with minimal attributes', () => {
-      initializeMetricsModule(mockConfig);
+      initializeMetrics(mockConfig);
       mockCounterAddFn.mockClear();
 
-      recordFileOperationMetricModule(mockConfig, FileOperation.READ);
+      recordFileOperationMetric(mockConfig, FileOperation.READ);
       expect(mockCounterAddFn).toHaveBeenCalledWith(1, {
         'session.id': 'test-session-id',
         operation: FileOperation.READ,
@@ -206,10 +179,10 @@ describe('Telemetry Metrics', () => {
     });
 
     it('should record file update with some attributes', () => {
-      initializeMetricsModule(mockConfig);
+      initializeMetrics(mockConfig);
       mockCounterAddFn.mockClear();
 
-      recordFileOperationMetricModule(
+      recordFileOperationMetric(
         mockConfig,
         FileOperation.UPDATE,
         undefined,
@@ -223,7 +196,7 @@ describe('Telemetry Metrics', () => {
     });
 
     it('should include diffStat when provided', () => {
-      initializeMetricsModule(mockConfig);
+      initializeMetrics(mockConfig);
       mockCounterAddFn.mockClear();
 
       const diffStat = {
@@ -233,7 +206,7 @@ describe('Telemetry Metrics', () => {
         user_removed_lines: 1,
       };
 
-      recordFileOperationMetricModule(
+      recordFileOperationMetric(
         mockConfig,
         FileOperation.UPDATE,
         undefined,
@@ -253,10 +226,10 @@ describe('Telemetry Metrics', () => {
     });
 
     it('should not include diffStat attributes when diffStat is not provided', () => {
-      initializeMetricsModule(mockConfig);
+      initializeMetrics(mockConfig);
       mockCounterAddFn.mockClear();
 
-      recordFileOperationMetricModule(
+      recordFileOperationMetric(
         mockConfig,
         FileOperation.UPDATE,
         10,
@@ -275,7 +248,7 @@ describe('Telemetry Metrics', () => {
     });
 
     it('should handle diffStat with all zero values', () => {
-      initializeMetricsModule(mockConfig);
+      initializeMetrics(mockConfig);
       mockCounterAddFn.mockClear();
 
       const diffStat = {
@@ -285,7 +258,7 @@ describe('Telemetry Metrics', () => {
         user_removed_lines: 0,
       };
 
-      recordFileOperationMetricModule(
+      recordFileOperationMetric(
         mockConfig,
         FileOperation.UPDATE,
         undefined,

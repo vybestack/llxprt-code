@@ -43,6 +43,17 @@ let tokenUsageCounter: Counter | undefined;
 let fileOperationCounter: Counter | undefined;
 let isMetricsInitialized = false;
 
+export function resetMetricsForTesting(meter?: Meter): void {
+  cliMeter = meter;
+  toolCallCounter = undefined;
+  toolCallLatencyHistogram = undefined;
+  apiRequestCounter = undefined;
+  apiRequestLatencyHistogram = undefined;
+  tokenUsageCounter = undefined;
+  fileOperationCounter = undefined;
+  isMetricsInitialized = false;
+}
+
 function getCommonAttributes(config: ISessionConfig): Attributes {
   return {
     'session.id': config.getSessionId(),

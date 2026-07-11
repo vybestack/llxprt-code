@@ -11,6 +11,11 @@ const isMacCi = process.platform === 'darwin' && process.env.CI === 'true';
 const shouldUseForkPool = isWindows || isMacCi;
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      'bun:test': 'vitest',
+    },
+  },
   test: {
     passWithNoTests: true,
     reporters: ['default', 'junit'],
