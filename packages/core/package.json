@@ -327,6 +327,10 @@
       "bun": "./src/scheduler/types.ts",
       "import": "./dist/src/scheduler/types.js"
     },
+    "./scheduler/liveOutput.js": {
+      "bun": "./src/scheduler/liveOutput.ts",
+      "import": "./dist/src/scheduler/liveOutput.js"
+    },
     "./code_assist/types.js": {
       "bun": "./src/code_assist/types.ts",
       "import": "./dist/src/code_assist/types.js"

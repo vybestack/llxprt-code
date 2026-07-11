@@ -35,6 +35,7 @@ const EPHEMERAL_DEFAULTS = {
     includeInResponse: true, // REQ-THINK-006.3
     format: 'field' as const, // REQ-THINK-006.4
     stripFromContext: 'none' as const, // REQ-THINK-006.5
+    fieldName: 'reasoning_content' as const, // issue #2488
   },
 } as const;
 
@@ -292,6 +293,11 @@ function buildReasoningEphemerals(
         'reasoning.stripFromContext',
         options.settings['reasoning.stripFromContext'],
       ) ?? EPHEMERAL_DEFAULTS.reasoning.stripFromContext,
+    fieldName: (): string =>
+      getLiveSetting(
+        'reasoning.fieldName',
+        options.settings['reasoning.fieldName'],
+      ) ?? EPHEMERAL_DEFAULTS.reasoning.fieldName,
     effort: (): 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | undefined =>
       getLiveSetting('reasoning.effort', options.settings['reasoning.effort']),
     maxTokens: (): number | undefined => {

@@ -234,8 +234,12 @@ export interface ThinkingBlock {
   /** Whether this thinking should be hidden from the user */
   isHidden?: boolean;
 
-  /** Source field name for round-trip serialization */
-  sourceField?: 'reasoning_content' | 'thinking' | 'thought' | 'think_tags';
+  /**
+   * Source field name for round-trip serialization.
+   * Known values: 'reasoning_content', 'reasoning', 'thinking', 'thought', 'think_tags'.
+   * May also contain arbitrary user-configured field names (issue #2488).
+   */
+  sourceField?: string;
 
   /** Signature for Anthropic extended thinking */
   signature?: string;

@@ -46,6 +46,8 @@ export interface ReadonlySettingsSnapshot {
   'reasoning.format'?: 'native' | 'field';
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.5 */
   'reasoning.stripFromContext'?: 'all' | 'allButLast' | 'none';
+  /** Configurable reasoning field name for streaming delta capture (issue #2488) */
+  'reasoning.fieldName'?: string;
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.6 */
   'reasoning.effort'?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.7 */
@@ -246,6 +248,7 @@ export interface AgentRuntimeContext {
       effort(): 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | undefined;
       maxTokens(): number | undefined;
       adaptiveThinking(): boolean | undefined;
+      fieldName(): string;
     };
   };
 

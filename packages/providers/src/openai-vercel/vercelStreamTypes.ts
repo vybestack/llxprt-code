@@ -24,6 +24,7 @@ export interface ReasoningSettings {
   includeInContext: boolean;
   stripFromContext: StripPolicy;
   format: 'native' | 'field';
+  fieldName: string;
 }
 
 export interface ModelCallParams {

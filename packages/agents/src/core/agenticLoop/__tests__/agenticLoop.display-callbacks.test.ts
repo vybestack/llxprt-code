@@ -487,4 +487,68 @@ describe('AgenticLoop with caller display callbacks', () => {
       });
     expect(streamContents).toContain('survived-async');
   });
+
+  it('accumulates string output chunks into liveOutput instead of replacing (fixes #2008)', async () => {
+    const tool = new MockTool({
+      name: 'delta_streaming_tool',
+      canUpdateOutput: true,
+    });
+    tool.executeFn.mockImplementation(
+      async (
+        _params: Record<string, unknown>,
+        _signal: AbortSignal,
+        updateOutput?: (output: string) => void,
+      ) => {
+        updateOutput?.('Hello ');
+        updateOutput?.('world');
+        updateOutput?.('!');
+        return { llmContent: 'done', returnDisplay: 'done' };
+      },
+    );
+
+    const toolRegistry = createToolRegistryForTest([tool]);
+    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+    const config = createTestConfig({
+      messageBus,
+      toolRegistry,
+      policyEngine: createAllowPolicyEngine(),
+      interactive: false,
+      approvalMode: ApprovalMode.YOLO,
+    });
+
+    const toolUpdatesByStatus: ToolCall[] = [];
+
+    const { client } = createScriptedAgentClient([
+      [
+        toolCallRequestEvent('delta_streaming_tool', 'call-acc', { x: 1 }),
+        finishedEvent(),
+      ],
+      [contentEvent('final'), finishedEvent()],
+    ]);
+
+    const loop = new AgenticLoop({
+      agentClient: client,
+      config,
+      messageBus,
+      displayCallbacks: {
+        onToolCallsUpdate: (toolCalls) => {
+          toolUpdatesByStatus.push(...toolCalls);
+        },
+        getPreferredEditor: () => undefined,
+      },
+    });
+
+    await collectEvents(loop, 'go', new AbortController().signal);
+
+    const executingUpdates = toolUpdatesByStatus.filter(
+      (tc) => tc.request.callId === 'call-acc' && tc.status === 'executing',
+    );
+    expect(executingUpdates.length).toBeGreaterThanOrEqual(1);
+
+    // The last executing update (after all three chunks) must contain the
+    // full accumulated string, proving deltas are appended not replaced.
+    expect(executingUpdates[executingUpdates.length - 1]).toMatchObject({
+      liveOutput: 'Hello world!',
+    });
+  });
 });

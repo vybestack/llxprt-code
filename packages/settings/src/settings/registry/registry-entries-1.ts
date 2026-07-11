@@ -195,6 +195,14 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     persistToProfile: true,
   },
   {
+    key: 'reasoning.fieldName',
+    category: 'cli-behavior',
+    description:
+      'Reasoning field name in streaming delta (reasoning_content for OpenAI/vLLM, reasoning for Ollama)',
+    type: 'string',
+    persistToProfile: true,
+  },
+  {
     key: 'reasoning.summary',
     category: 'model-behavior',
     description:
