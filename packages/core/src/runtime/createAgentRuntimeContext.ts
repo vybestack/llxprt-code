@@ -292,7 +292,14 @@ function buildReasoningEphemerals(
         'reasoning.stripFromContext',
         options.settings['reasoning.stripFromContext'],
       ) ?? EPHEMERAL_DEFAULTS.reasoning.stripFromContext,
-    effort: (): 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | undefined =>
+    effort: ():
+      | 'minimal'
+      | 'low'
+      | 'medium'
+      | 'high'
+      | 'xhigh'
+      | 'max'
+      | undefined =>
       getLiveSetting('reasoning.effort', options.settings['reasoning.effort']),
     maxTokens: (): number | undefined => {
       const maxTokensValue = getLiveSetting(

@@ -47,7 +47,7 @@ export interface ReadonlySettingsSnapshot {
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.5 */
   'reasoning.stripFromContext'?: 'all' | 'allButLast' | 'none';
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.6 */
-  'reasoning.effort'?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  'reasoning.effort'?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.7 */
   'reasoning.maxTokens'?: number;
   /** @issue #1307 - Anthropic adaptive thinking toggle for Opus 4.6+ */
@@ -243,7 +243,14 @@ export interface AgentRuntimeContext {
       includeInResponse(): boolean;
       format(): 'native' | 'field';
       stripFromContext(): 'all' | 'allButLast' | 'none';
-      effort(): 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | undefined;
+      effort():
+        | 'minimal'
+        | 'low'
+        | 'medium'
+        | 'high'
+        | 'xhigh'
+        | 'max'
+        | undefined;
       maxTokens(): number | undefined;
       adaptiveThinking(): boolean | undefined;
     };

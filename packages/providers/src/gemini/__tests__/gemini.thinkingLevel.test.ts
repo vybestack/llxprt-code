@@ -262,6 +262,7 @@ describe('Gemini provider thinkingLevel tests', () => {
       { effort: 'medium', expected: 'MEDIUM' },
       { effort: 'high', expected: 'HIGH' },
       { effort: 'xhigh', expected: 'HIGH' },
+      { effort: 'max', expected: 'HIGH' },
     ];
 
     const authMock = mockDetermineBestAuth([
