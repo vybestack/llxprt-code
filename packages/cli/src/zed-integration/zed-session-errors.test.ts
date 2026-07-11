@@ -67,6 +67,24 @@ describe('mapResumeError (issue #1604 FINDING 4)', () => {
     },
   );
 
+  it.each([
+    'Failed to replay session: session content not found in cache',
+    'Failed to replay session: value out of range while decoding event',
+    'Corrupt session: header not found in file',
+  ])(
+    'maps a corrupt/replay reason %j that merely CONTAINS "not found"/"out of range" to internalError (-32603), NOT resourceNotFound (FINDING F1)',
+    (detail) => {
+      const error = mapResumeError(SESSION_ID, resumeError(detail));
+      expect(error).toBeInstanceOf(RequestError);
+      // The substring "not found"/"out of range" appears, but the message is NOT
+      // one of the EXACT core not-found sentences, so it must surface as an
+      // internal error carrying the detail rather than a misleading "not found".
+      expect(error.code).toBe(-32603);
+      expect(error.message).toContain(detail);
+      expect((error.data as { reason: string }).reason).toContain(detail);
+    },
+  );
+
   it('handles a non-Error thrown value by stringifying it (still internalError with detail)', () => {
     const error = mapResumeError(SESSION_ID, 'raw string failure');
     expect(error.code).toBe(-32603);

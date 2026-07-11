@@ -34,9 +34,33 @@
  */
 
 import * as acp from '@agentclientprotocol/sdk';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 /** JSON-RPC code ACP assigns to resourceNotFound (-32002). */
 const RESOURCE_NOT_FOUND_CODE = acp.RequestError.resourceNotFound('').code;
+
+/**
+ * Module logger (mirroring the zedIntegration.ts / sessionControl.ts precedent
+ * of a namespaced core DebugLogger) used to surface the otherwise-silent
+ * corrupt-vs-missing probe failure (FINDING F6) so a swallowed readdir error is
+ * diagnosable. Debug-level only: it never changes the fallback behavior.
+ */
+const logger = new DebugLogger('llxprt:zed-integration:session-errors');
+
+/**
+ * The EXACT not-found sentences the core resume flow emits, matched verbatim so
+ * an unrelated message that merely CONTAINS the words "not found" (e.g. "Replay
+ * failed: session content not found in cache") is NOT misclassified as a missing
+ * session (FINDING F1). Sourced from:
+ *  - resumeSession.ts: `No sessions found for this project`
+ *  - SessionDiscovery.resolveSessionRef: `Session not found for this project: <ref>`
+ *  - SessionDiscovery.resolveSessionRef: `Session index <n> out of range (1-<m>)`
+ * Each is carried inside the `Failed to resume session: <detail>` envelope that
+ * SessionControl.resume adds, so a substring match against that envelope is used.
+ */
+const NO_SESSIONS_FOUND = 'No sessions found for this project';
+const SESSION_NOT_FOUND_PREFIX = 'Session not found for this project:';
+const SESSION_INDEX_OUT_OF_RANGE = /Session index \d+ out of range/;
 
 /**
  * Maps a resume rejection to the closest ACP {@link acp.RequestError}. A
@@ -119,7 +143,18 @@ async function probeMatchingSessionFile(
   let entries: readonly string[];
   try {
     entries = await probe();
-  } catch {
+  } catch (error) {
+    // A probe (readdir) failure must NOT mask the original resume failure, so
+    // the caller falls back to the plain not-found mapping. Log at debug level
+    // (FINDING F6) so the swallowed directory-read error stays diagnosable
+    // instead of vanishing silently.
+    logger.debug(
+      () =>
+        `probeMatchingSessionFile: session-file probe failed for ${sessionId}; ` +
+        `falling back to plain mapping: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+    );
     return null;
   }
   const suffix = sessionFileSuffix(sessionId);
@@ -173,17 +208,22 @@ function errorMessage(error: unknown): string {
 
 /**
  * True when the resume detail indicates the session could not be found (as
- * opposed to being locked, corrupt, or otherwise unreadable). Matches the core
- * not-found strings case-insensitively: "No sessions found for this project",
- * "Session not found for this project: <ref>", and an out-of-range index
- * reference. Lock/corrupt/replay reasons deliberately fall through to
- * internalError.
+ * opposed to being locked, corrupt, or otherwise unreadable). Matches ONLY the
+ * EXACT core not-found vocabulary (FINDING F1) — the three sentences the core
+ * discovery/resume layer emits — rather than any message that merely contains
+ * the substring "not found" or "out of range":
+ *   - "No sessions found for this project"        (resumeSession.ts)
+ *   - "Session not found for this project: <ref>" (SessionDiscovery)
+ *   - "Session index <n> out of range (1-<m>)"    (SessionDiscovery)
+ * A corrupt/replay message such as "Failed to replay session: ... content not
+ * found in cache" therefore falls through to internalError instead of being
+ * misreported as a missing session. Lock/corrupt/replay/hash reasons all fall
+ * through to internalError.
  */
 function isNotFoundResumeReason(detail: string): boolean {
-  const normalized = detail.toLowerCase();
   return (
-    normalized.includes('not found') ||
-    normalized.includes('no sessions found') ||
-    normalized.includes('out of range')
+    detail.includes(NO_SESSIONS_FOUND) ||
+    detail.includes(SESSION_NOT_FOUND_PREFIX) ||
+    SESSION_INDEX_OUT_OF_RANGE.test(detail)
   );
 }

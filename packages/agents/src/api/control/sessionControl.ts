@@ -219,11 +219,24 @@ export class SessionControl implements AgentSessionControl {
         await priorLockHandle.release();
       }
     });
+    // FINDING F7: surface any prior-teardown failure BEFORE the restoreHistory
+    // await. Previously teardownErrors were only checked AFTER restoreHistory,
+    // so a restoreHistory throw silently discarded a collected prior-teardown
+    // error (a leaked prior lock/recording that could not be released would go
+    // unreported). Surfacing teardown first is safe: the resumed recording +
+    // lock are already adopted into the instance fields, so on this throw path
+    // dispose()/teardownActiveSession() still release them (nothing leaks), and
+    // a restoreHistory failure would throw on its own anyway. The now-empty
+    // teardownErrors array is reused below for the post-restore subscribe.
+    if (teardownErrors.length > 0) {
+      throw teardownErrors[0];
+    }
     await this.deps.resolveClient().restoreHistory(result.history);
     // Subscribe a fresh integration AFTER restoreHistory so the client's chat
     // (and thus its HistoryService) is materialized; post-resume turns now
-    // append to the resumed file. Guarded so a subscription failure does not
-    // mask a prior-teardown failure surfaced below.
+    // append to the resumed file. Guarded (FINDING F8) so a subscription failure
+    // does not orphan the adopted recording/lock — the fields still own them, so
+    // teardown releases them — and the failure is surfaced after.
     this.guardSync(teardownErrors, () =>
       this.subscribeIntegration(result.recording),
     );
@@ -384,9 +397,23 @@ export class SessionControl implements AgentSessionControl {
       service.recordContent(item);
     }
     await service.flush();
+    // FINDING F8: build + subscribe the integration BEFORE committing
+    // this.recording and the Config recording service, so a subscribe failure
+    // cannot leave recording PARTIALLY enabled (fields/Config set with no live
+    // integration). On failure dispose the integration AND the freshly built
+    // service (neither is referenced by any field yet) and rethrow; the instance
+    // fields stay untouched so recording remains cleanly disabled.
+    const integration = new RecordingIntegration(service);
+    try {
+      this.attachIntegrationToHistory(integration);
+    } catch (error) {
+      integration.dispose();
+      await service.dispose();
+      throw error;
+    }
     this.recording = service;
     this.deps.config.setSessionRecordingService(service);
-    this.subscribeIntegration(service);
+    this.integration = integration;
   }
 
   /**
@@ -397,7 +424,9 @@ export class SessionControl implements AgentSessionControl {
    * HistoryService is not yet available, the integration is still created +
    * stored but left unsubscribed; a later start/resume re-attempts the
    * subscription. Idempotent per call: any prior integration is disposed first
-   * so no duplicate listeners accumulate.
+   * so no duplicate listeners accumulate. Used by the resume path (guarded by
+   * the teardown-error accumulator); a subscribe throw disposes the just-built
+   * integration before propagating so no half-subscribed integration leaks.
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
@@ -407,21 +436,40 @@ export class SessionControl implements AgentSessionControl {
       this.integration = null;
     }
     const integration = new RecordingIntegration(service);
+    try {
+      this.attachIntegrationToHistory(integration);
+    } catch (error) {
+      integration.dispose();
+      throw error;
+    }
+    this.integration = integration;
+  }
+
+  /**
+   * Subscribes `integration` to the client's HistoryService so future
+   * 'contentAdded'/compression events are appended continuously; when no
+   * HistoryService is available yet the integration is left unsubscribed and a
+   * warning is logged (a later start/resume re-attempts the subscription). Pure
+   * attach step shared by startRecording and subscribeIntegration; it commits NO
+   * instance state so callers control ownership/rollback.
+   * @plan:PLAN-20260617-COREAPI.P20
+   * @requirement:REQ-010
+   */
+  private attachIntegrationToHistory(integration: RecordingIntegration): void {
     const historyService = this.deps.resolveClient().getHistoryService();
     if (historyService !== null) {
       integration.subscribeToHistory(historyService);
     } else {
-      // No HistoryService yet: the integration is created + stored but left
-      // unsubscribed, so NO subsequent turn is appended until a later
-      // start/resume re-attempts the subscription. Left silent this is an
-      // invisible continuous-recording loss; warn so it is diagnosable.
+      // No HistoryService yet: the integration is left unsubscribed, so NO
+      // subsequent turn is appended until a later start/resume re-attempts the
+      // subscription. Left silent this is an invisible continuous-recording
+      // loss; warn so it is diagnosable.
       logger.warn(
         () =>
           `subscribeIntegration: HistoryService unavailable for session ${this.deps.sessionId()}; ` +
           `recording integration left unsubscribed (subsequent turns will not be recorded until re-subscribed)`,
       );
     }
-    this.integration = integration;
   }
 
   /**

@@ -254,8 +254,10 @@ function buildToolCallStart(block: ToolCallBlock): acp.SessionUpdate {
 /**
  * tool tool_response -> terminal tool_call_update. Status is 'failed' when the
  * block carries an error (ToolResponseBlock.error) OR its result is an object
- * with a string `error` property (the { error } failure shape produced by
- * createErrorResponse), else 'completed'. The displayed text is extracted with a
+ * with a non-empty string `error` property OR a nested `error.message` string
+ * (the { error } and { error: { message } } failure shapes produced by
+ * createErrorResponse, FINDING F3), else 'completed'. The displayed text is
+ * extracted with a
  * precedence that mirrors how results are actually recorded: result.output
  * (the { output } success shape), then a string result.content, then an
  * MCP-style result.content array (joined text elements), then the failure error
@@ -287,8 +289,12 @@ function mapToolResponseBlock(block: ToolResponseBlock): acp.SessionUpdate {
 
 /**
  * A recorded tool response is a failure when its block carries a non-empty
- * error string OR its result object exposes a non-empty string `error` property
- * (the { error } shape emitted by the core createErrorResponse path).
+ * error string OR its result object exposes an `error` property that is either a
+ * non-empty string (the `{ error: string }` shape) OR an object with a non-empty
+ * string `message` (the `{ error: { message } }` shape the core
+ * createErrorResponse path can produce, FINDING F3). Both error shapes must mark
+ * the update 'failed' so an object-shaped error is not silently rendered as a
+ * completed call.
  */
 function isFailedResponse(
   block: ToolResponseBlock,
@@ -297,7 +303,28 @@ function isFailedResponse(
   if (typeof block.error === 'string' && block.error.length > 0) {
     return true;
   }
-  return typeof record?.error === 'string' && record.error.length > 0;
+  return resultErrorText(record) !== null;
+}
+
+/**
+ * Extracts the failure text carried by a result object's `error` property,
+ * supporting BOTH the `{ error: string }` shape and the `{ error: { message:
+ * string } }` object shape (FINDING F3). Returns the non-empty error/message
+ * string, or null when there is no representable error text.
+ */
+function resultErrorText(record: Dict | null): string | null {
+  const resultError = record?.error;
+  if (typeof resultError === 'string' && resultError.length > 0) {
+    return resultError;
+  }
+  const nested = asRecord(resultError);
+  if (nested !== null) {
+    const message = nested.message;
+    if (typeof message === 'string' && message.length > 0) {
+      return message;
+    }
+  }
+  return null;
 }
 
 /**
@@ -354,22 +381,26 @@ function extractContentArrayText(value: unknown): string | null {
 
 /**
  * Narrows a single MCP-style content-array element to its text: returns the
- * `text` string for a non-empty `{ type: 'text', text: string }` element, else
- * null (skipping images/resources and malformed entries).
+ * `text` string for a `{ type: 'text', text: string }` element whose text is
+ * non-whitespace, else null (skipping images/resources, malformed entries, and
+ * whitespace-only text elements, FINDING F11). Whitespace-only elements are
+ * dropped so a content array of only blank text yields an empty content array on
+ * the update rather than passing blank text through.
  */
 function textOfContentElement(element: unknown): string | null {
   const record = asRecord(element);
   if (record === null || record.type !== 'text') {
     return null;
   }
-  return typeof record.text === 'string' && record.text.length > 0
+  return typeof record.text === 'string' && record.text.trim().length > 0
     ? record.text
     : null;
 }
 
 /**
  * Returns the failure text for a failed response: the block-level error string
- * when present, else a string result.error property, else null.
+ * when present, else the result object's error text (string `error` OR nested
+ * `error.message`, via {@link resultErrorText}, FINDING F3), else null.
  */
 function failureText(
   block: ToolResponseBlock,
@@ -378,11 +409,7 @@ function failureText(
   if (typeof block.error === 'string' && block.error.length > 0) {
     return block.error;
   }
-  const resultError = record?.error;
-  if (typeof resultError === 'string' && resultError.length > 0) {
-    return resultError;
-  }
-  return null;
+  return resultErrorText(record);
 }
 
 /**

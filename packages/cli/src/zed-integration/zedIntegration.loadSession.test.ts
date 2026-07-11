@@ -30,6 +30,7 @@ import type * as acp from '@agentclientprotocol/sdk';
 import { RequestError } from '@agentclientprotocol/sdk';
 import type { Config, IContent } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { LoadedSettings } from '../config/settings.js';
 
 import { RecordingConnection } from './zed-test-helpers.js';
 
@@ -103,19 +104,37 @@ function buildBaseConfig(): Config {
   } as unknown as Config;
 }
 
+/**
+ * Minimal typed LoadedSettings stub (F14): the ZedAgent constructor only stores
+ * the settings arg (it is unused by the loadSession/newSession orchestration
+ * paths under test), so a typed empty projection avoids an `as never` cast while
+ * staying honest about what the code touches.
+ */
+function buildStubSettings(): LoadedSettings {
+  return {} as LoadedSettings;
+}
+
+/** Typed InitializeRequest for a client that advertises no capabilities. */
+function buildInitializeRequest(): acp.InitializeRequest {
+  return { protocolVersion: 1, clientCapabilities: {} };
+}
+
+/**
+ * Constructs a ZedAgent over the RecordingConnection with typed stub args (no
+ * `as never`, F14) and initializes it. Shared by every orchestration test,
+ * including the initialize()-advertises-loadSession assertion (F15) so the
+ * makeZedAgent setup is not duplicated.
+ */
 async function makeZedAgent(
   connection: RecordingConnection,
 ): Promise<InstanceType<typeof import('./zedIntegration.js').ZedAgent>> {
   const mod = await import('./zedIntegration.js');
   const zedAgent = new mod.ZedAgent(
     buildBaseConfig(),
-    { debug: () => {} } as never,
+    buildStubSettings(),
     connection as unknown as acp.AgentSideConnection,
   );
-  await zedAgent.initialize({
-    protocolVersion: '1',
-    clientCapabilities: {},
-  } as never);
+  await zedAgent.initialize(buildInitializeRequest());
   return zedAgent;
 }
 
@@ -123,15 +142,14 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
   it('initialize() advertises loadSession: true', async () => {
     const connection = new RecordingConnection();
     const mod = await import('./zedIntegration.js');
+    // Reuse the shared typed constructor args (F15) rather than re-inlining the
+    // ZedAgent setup; assert the capability from a fresh initialize() call.
     const zedAgent = new mod.ZedAgent(
       buildBaseConfig(),
-      { debug: () => {} } as never,
+      buildStubSettings(),
       connection as unknown as acp.AgentSideConnection,
     );
-    const response = await zedAgent.initialize({
-      protocolVersion: '1',
-      clientCapabilities: {},
-    } as never);
+    const response = await zedAgent.initialize(buildInitializeRequest());
     expect(response.agentCapabilities?.loadSession).toBe(true);
   });
 
@@ -462,6 +480,16 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     // Full cleanup even on partial delivery: fresh agent disposed once.
     expect(failingStub.dispose).toHaveBeenCalledTimes(1);
 
+    // Pre-retry proof of cleanup (F16): prompting the failed id throws
+    // "Session not found" because the partially-replayed load removed its
+    // this.sessions entry (no stale/half-dead session survived the failure).
+    await expect(
+      zedAgent.prompt({
+        sessionId: 'partial-fail-session',
+        prompt: [{ type: 'text', text: 'still there?' }],
+      } as acp.PromptRequest),
+    ).rejects.toThrow(/Session not found/);
+
     // Transport recovers before the retry.
     connection.clearSessionUpdateFailure();
 
@@ -475,5 +503,112 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
       .map((u) => (u as { content: { text: string } }).content.text);
     // 'a1' from the failed load, then 'retry ok' from the successful retry.
     expect(agentTexts).toStrictEqual(['a1', 'retry ok']);
+  });
+
+  // ─── FINDING F5: concurrent same-id loadSession serialization ─────────────
+
+  it('serializes two CONCURRENT loadSession calls for the SAME id so exactly one live session remains and neither agent is double-disposed (FINDING F5)', async () => {
+    // The FIRST load's resume is gated so it resolves AFTER the second load has
+    // already been dispatched: without per-id serialization both loads would
+    // build agents and race to install, the later overwriting the earlier and
+    // orphaning its recording lock. With serialization the second load runs only
+    // after the first fully installs, then disposes it (replace semantics) and
+    // installs itself — leaving exactly one live session, each agent disposed at
+    // most once.
+    let releaseFirstResume!: () => void;
+    const firstResumeGate = new Promise<void>((resolve) => {
+      releaseFirstResume = resolve;
+    });
+    const firstResume = vi.fn(async () => {
+      await firstResumeGate;
+      return [
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'first' }] },
+      ] as readonly IContent[];
+    });
+    const firstDispose = vi.fn(async () => undefined);
+    const firstAgent = {
+      getApprovalMode: () => 'default',
+      setApprovalMode: vi.fn(),
+      dispose: firstDispose,
+      async *stream() {},
+      session: { resume: firstResume, setRecording: vi.fn() },
+      tools: { respondToConfirmation: vi.fn() },
+    } as unknown as Agent;
+
+    const secondStub = buildStubAgent({
+      resumeHistory: [
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'second' }] },
+      ],
+    });
+
+    // The module-level fromConfig mock accumulates calls across tests (no
+    // beforeEach reset in this file); reset it so this test's build-count
+    // assertion has a clean baseline and its two agents are returned in order.
+    mockFromConfig.mockReset();
+    mockFromConfig
+      .mockResolvedValueOnce(firstAgent)
+      .mockResolvedValueOnce(secondStub.agent);
+
+    const connection = new RecordingConnection();
+    const zedAgent = await makeZedAgent(connection);
+
+    const params: acp.LoadSessionRequest = {
+      sessionId: 'concurrent-session',
+      cwd: '/project',
+      mcpServers: [],
+    } as acp.LoadSessionRequest;
+
+    // Fire both loads concurrently; the second is dispatched while the first is
+    // still awaiting its gated resume.
+    const firstLoad = zedAgent.loadSession(params);
+    const secondLoad = zedAgent.loadSession(params);
+
+    // Flush to a macrotask boundary so ALL runnable microtasks settle: the first
+    // load progresses until it parks on the gated resume, and the second load
+    // parks behind the first's queue entry (serialization). A macrotask flush is
+    // robust to the exact number of intermediate awaits, unlike a single
+    // Promise.resolve() tick.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // The first load built its agent and called resume (now parked on the gate);
+    // the second is serialized behind it, so it has NOT built an agent and its
+    // resume has NOT been called — proving the two same-id loads do not race.
+    expect(mockFromConfig).toHaveBeenCalledTimes(1);
+    expect(firstResume).toHaveBeenCalledTimes(1);
+    expect(secondStub.resume).toHaveBeenCalledTimes(0);
+
+    // Release the first resume; both loads now settle in order.
+    releaseFirstResume();
+    const [firstResult, secondResult] = await Promise.all([
+      firstLoad,
+      secondLoad,
+    ]);
+
+    // Both settled sanely with modes advertised.
+    expect(firstResult.modes?.currentModeId).toBe('default');
+    expect(secondResult.modes?.currentModeId).toBe('default');
+
+    // The first session was disposed exactly once (replaced by the second); the
+    // second remains live and was never disposed. No double-dispose occurred.
+    expect(firstDispose).toHaveBeenCalledTimes(1);
+    expect(secondStub.dispose).toHaveBeenCalledTimes(0);
+
+    // Exactly one live session remains: prompting the id reaches the SECOND
+    // (live) agent's stream and completes rather than throwing "Session not
+    // found".
+    await expect(
+      zedAgent.prompt({
+        sessionId: 'concurrent-session',
+        prompt: [{ type: 'text', text: 'who is live?' }],
+      } as acp.PromptRequest),
+    ).resolves.toBeDefined();
+
+    // Both transcripts streamed in order: first load's 'first', then the second
+    // load's 'second'.
+    const agentTexts = connection
+      .onlySessionUpdates()
+      .filter((u) => u.sessionUpdate === 'agent_message_chunk')
+      .map((u) => (u as { content: { text: string } }).content.text);
+    expect(agentTexts).toStrictEqual(['first', 'second']);
   });
 });

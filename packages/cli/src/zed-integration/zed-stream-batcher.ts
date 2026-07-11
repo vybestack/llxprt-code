@@ -17,7 +17,7 @@
  */
 
 import type * as acp from '@agentclientprotocol/sdk';
-import type { EmojiFilter } from '@vybestack/llxprt-code-core';
+import { type EmojiFilter, DebugLogger } from '@vybestack/llxprt-code-core';
 
 const BATCH_INTERVAL_MS = 100;
 
@@ -25,17 +25,38 @@ export class StreamBatcher {
   private pendingChunks: Array<{ kind: 'text' | 'thought'; text: string }> = [];
   private batchTimer: ReturnType<typeof setTimeout> | null = null;
   private flushChain: Promise<void> = Promise.resolve();
+  private readonly logger: DebugLogger;
 
   constructor(
     private readonly emojiFilter: EmojiFilter,
     private readonly sendUpdate: (update: acp.SessionUpdate) => Promise<void>,
-  ) {}
+    logger?: DebugLogger,
+  ) {
+    // Injectable for testability; defaults to the shared zed-integration
+    // namespace so the otherwise-silent flush-chain / per-chunk failures
+    // (FINDING F4/F17) are diagnosable.
+    this.logger =
+      logger ?? new DebugLogger('llxprt:zed-integration:stream-batcher');
+  }
 
   append(text: string, isThought: boolean): void {
     const filterResult = isThought
       ? this.emojiFilter.filterText(text)
       : this.emojiFilter.filterStreamChunk(text);
     if (filterResult.blocked) {
+      // FINDING F10: flush the EmojiFilter's residual buffer SYNCHRONOUSLY, right
+      // now — NOT later in the async flushChain. The content that triggered the
+      // block is still in the filter's internal buffer; if it is not cleared
+      // before this append() returns, the NEXT synchronous append() re-combines
+      // it with the following chunk and re-blocks the (otherwise clean) content.
+      // flushBuffer() is synchronous. Any emittable residual is queued in order
+      // ahead of the error update; in error mode (the only mode that blocks
+      // stream chunks) the offending emoji content yields no emittable text and
+      // is simply discarded, leaving the buffer clean for subsequent chunks.
+      const residual = this.emojiFilter.flushBuffer();
+      if (residual.length > 0) {
+        this.appendPendingChunk('text', residual);
+      }
       const pending = this.flushChain
         .then(() => this.doFlush())
         .then(() =>
@@ -47,7 +68,7 @@ export class StreamBatcher {
             },
           }),
         );
-      this.flushChain = pending.catch(() => undefined);
+      this.flushChain = this.settleChainLink(pending);
       return;
     }
     const filteredText =
@@ -70,8 +91,22 @@ export class StreamBatcher {
     const pending = this.flushChain
       .then(() => this.doFlush())
       .then(() => this.flushEmojiBuffer());
-    this.flushChain = pending.catch(() => undefined);
+    this.flushChain = this.settleChainLink(pending);
     await pending;
+  }
+
+  /**
+   * Clears any pending batch timer and drops buffered chunks so no timer fires
+   * after the owning prompt completes/aborts (FINDING F9). Idempotent and safe
+   * to call after {@link flush}; it does NOT emit, so any pending chunks must be
+   * flushed first (the prompt path flushes then disposes).
+   */
+  dispose(): void {
+    if (this.batchTimer !== null) {
+      clearTimeout(this.batchTimer);
+      this.batchTimer = null;
+    }
+    this.pendingChunks = [];
   }
 
   private async flushEmojiBuffer(): Promise<void> {
@@ -95,14 +130,55 @@ export class StreamBatcher {
   private async doFlush(): Promise<void> {
     const chunks = this.pendingChunks;
     this.pendingChunks = [];
+    let firstError: unknown = null;
+    let failureCount = 0;
+    // FINDING F4: iterate a detached local copy and CONTINUE past a per-chunk
+    // send failure so a single rejecting sendUpdate does not drop every later
+    // chunk. The injected sendUpdate is best-effort today (Session.sendUpdate
+    // swallows), so this cannot reject in practice — but the injected contract
+    // is not guaranteed, so no chunk is silently lost if it ever does. The first
+    // error is collected + logged (not rethrown) to keep the flushChain intact.
     for (const chunk of chunks) {
-      await this.sendUpdate({
-        sessionUpdate:
-          chunk.kind === 'thought'
-            ? 'agent_thought_chunk'
-            : 'agent_message_chunk',
-        content: { type: 'text', text: chunk.text },
-      });
+      try {
+        await this.sendUpdate({
+          sessionUpdate:
+            chunk.kind === 'thought'
+              ? 'agent_thought_chunk'
+              : 'agent_message_chunk',
+          content: { type: 'text', text: chunk.text },
+        });
+      } catch (error) {
+        failureCount += 1;
+        if (firstError === null) {
+          firstError = error;
+        }
+      }
     }
+    if (firstError !== null) {
+      this.logger.debug(
+        () =>
+          `doFlush: ${failureCount} chunk update(s) failed to send; the remaining chunks were still attempted (no chunk dropped). First error: ${
+            firstError instanceof Error
+              ? firstError.message
+              : String(firstError)
+          }`,
+      );
+    }
+  }
+
+  /**
+   * Terminates a flush-chain link so a rejection cannot poison the serialized
+   * chain for subsequent appends, while still surfacing the swallowed error via
+   * the logger (FINDING F17) instead of discarding it silently.
+   */
+  private settleChainLink(pending: Promise<void>): Promise<void> {
+    return pending.catch((error: unknown) => {
+      this.logger.debug(
+        () =>
+          `flush chain link failed (swallowed to keep the batch chain alive): ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+    });
   }
 }

@@ -124,6 +124,39 @@ describe('Zed Session.prompt (Agent API) - streaming output', () => {
     };
     expect(update.content.text).toContain('blocked due to emoji detection');
   });
+
+  it('flushes the emoji buffer on a blocked chunk so a following clean chunk is emitted (not re-blocked) (FINDING F10)', async () => {
+    // Error mode: the first chunk carries an emoji and is blocked. The blocking
+    // content stays in the EmojiFilter's internal buffer; without flushing it on
+    // the blocked path, the NEXT (clean) chunk would be concatenated with the
+    // stale emoji buffer, re-detected, and blocked again — losing the clean text.
+    const { agent } = buildFakeAgent([
+      { type: 'text', text: 'blocked \u{1F600}' },
+      { type: 'text', text: 'all clean now.' },
+      { type: 'done', reason: 'stop' },
+    ]);
+    const connection = new RecordingConnection();
+    const config = {
+      ...buildMinimalConfig(),
+      getEphemeralSetting: (key: string) =>
+        key === 'emojifilter' ? 'error' : undefined,
+    } as unknown as Config;
+    const session = createSession(agent, connection, config);
+    createdSessions.push(session);
+
+    await runPrompt(session);
+
+    // Exactly ONE blocked error, THEN the clean follow-up text — proving the
+    // buffer was flushed so the clean chunk filtered cleanly instead of being
+    // re-blocked (which would produce a second error and drop 'all clean now.').
+    const texts = connection
+      .onlySessionUpdates()
+      .map((u) => (u as { content: { text: string } }).content.text);
+    expect(texts).toStrictEqual([
+      '[Error: Response blocked due to emoji detection]',
+      'all clean now.',
+    ]);
+  });
 });
 
 describe('Zed Session.prompt (Agent API) - tool-call status progression', () => {

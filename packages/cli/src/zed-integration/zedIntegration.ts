@@ -9,7 +9,6 @@ import {
   getErrorStatus,
   todoEvents,
   DEFAULT_AGENT_ID,
-  isWithinRoot,
   debugLogger,
   createInkStdio,
   type ContractPart,
@@ -20,7 +19,6 @@ import {
   type TodoUpdateEvent,
   type Todo,
   type ApprovalMode,
-  type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import * as acp from '@agentclientprotocol/sdk';
 import {
@@ -31,7 +29,6 @@ import {
   type ThoughtSummary,
 } from '@vybestack/llxprt-code-agents';
 import { Readable, Writable } from 'node:stream';
-import * as path from 'node:path';
 import { type LoadedSettings } from '../config/settings.js';
 import { randomUUID } from 'crypto';
 import {
@@ -57,8 +54,13 @@ import {
   toLoadRequestError,
 } from './zed-session-loader.js';
 import { StreamBatcher } from './zed-stream-batcher.js';
+import {
+  createSessionScopedConfig,
+  resolveSessionTargetDir,
+} from './zed-session-config.js';
 
 export { parseZedAuthMethodId } from './zed-helpers.js';
+export { createSessionScopedConfig } from './zed-session-config.js';
 
 export async function runZedIntegration(
   config: Config,
@@ -105,60 +107,18 @@ export async function runZedIntegration(
   }
 }
 
-function resolveSessionTargetDir(
-  config: Config,
-  cwd: string | undefined,
-): string {
-  if (cwd === undefined || cwd.trim().length === 0) {
-    return config.getTargetDir();
-  }
-  const candidate = path.isAbsolute(cwd)
-    ? cwd
-    : path.resolve(config.getTargetDir(), cwd);
-  return isWithinRoot(candidate, config.getTargetDir())
-    ? candidate
-    : config.getTargetDir();
-}
-
-export function createSessionScopedConfig(
-  config: Config,
-  initialFileSystemService: ReturnType<Config['getFileSystemService']>,
-  targetDir: string = config.getTargetDir(),
-): Config {
-  let fileSystemService = initialFileSystemService;
-  let providerManager: RuntimeProviderManager | undefined =
-    config.getProviderManager();
-  return new Proxy(config, {
-    get(target, property, receiver) {
-      if (property === 'getFileSystemService') {
-        return () => fileSystemService;
-      }
-      if (property === 'setFileSystemService') {
-        return (nextFileSystemService: typeof fileSystemService) => {
-          fileSystemService = nextFileSystemService;
-        };
-      }
-      if (property === 'getProviderManager') {
-        return () => providerManager;
-      }
-      if (property === 'setProviderManager') {
-        return (nextProviderManager: RuntimeProviderManager) => {
-          providerManager = nextProviderManager;
-        };
-      }
-      if (property === 'getProjectRoot') {
-        return () => targetDir;
-      }
-      if (property === 'getTargetDir') {
-        return () => targetDir;
-      }
-      return Reflect.get(target, property, receiver);
-    },
-  });
-}
-
 export class ZedAgent {
   private sessions: Map<string, Session> = new Map();
+  /**
+   * Per-sessionId serialization of in-flight loadSession calls (FINDING F5).
+   * Two concurrent session/load calls for the SAME id must not both build agents
+   * and race to install (the later install would overwrite the earlier, orphaning
+   * its recording lock). Each load chains after any in-flight load for the same
+   * id; distinct ids stay fully parallel. The entry is cleared in finally only
+   * when it is still the same promise (a later chained load may have replaced it).
+   */
+  private loadSessionQueues: Map<string, Promise<acp.LoadSessionResponse>> =
+    new Map();
   private clientCapabilities: acp.ClientCapabilities | undefined;
   private logger: DebugLogger;
 
@@ -224,11 +184,10 @@ export class ZedAgent {
       // a startup failure is logged and swallowed.
       await this.enableRecording(agent, sessionId);
 
-      const session = new Session(
+      const session = await this.buildSessionForAgent(
         sessionId,
         agent,
         sessionConfig,
-        this.connection,
       );
       this.sessions.set(sessionId, session);
 
@@ -241,6 +200,33 @@ export class ZedAgent {
       };
     } catch (error) {
       this.logger.debug(() => `ERROR in newSession: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Constructs the Session wrapper for a freshly built agent, disposing the
+   * agent (releasing its recording lock) if the Session constructor throws
+   * (FINDING F12), so a ctor failure never leaks the agent — mirroring the
+   * loadSession-side guard in buildAndResumeSession. A dispose failure during
+   * cleanup is logged and swallowed so the ORIGINAL ctor error is rethrown.
+   */
+  private async buildSessionForAgent(
+    sessionId: string,
+    agent: Agent,
+    sessionConfig: Config,
+  ): Promise<Session> {
+    try {
+      return new Session(sessionId, agent, sessionConfig, this.connection);
+    } catch (error) {
+      try {
+        await agent.dispose();
+      } catch (disposeError) {
+        this.logger.debug(
+          () =>
+            `newSession - dispose after Session ctor failure also failed (original error rethrown): ${disposeError}`,
+        );
+      }
       throw error;
     }
   }
@@ -270,8 +256,45 @@ export class ZedAgent {
    * resume + replay) rather than short-circuiting, because Zed expects a complete
    * history replay on every session/load (e.g. a client reconnect rebuilding its
    * transcript). The in-memory Session is not a substitute for that replay.
+   *
+   * Concurrency: same-id loads are SERIALIZED (FINDING F5) via loadSessionQueues
+   * so two concurrent session/load calls for one id cannot both build agents and
+   * race to install (which would orphan the earlier load's recording lock);
+   * distinct ids remain fully parallel.
    */
   async loadSession(
+    params: acp.LoadSessionRequest,
+  ): Promise<acp.LoadSessionResponse> {
+    const { sessionId } = params;
+    // Chain this load after any in-flight load for the SAME id so the
+    // dispose-prior -> build -> resume -> install sequence runs to completion
+    // before the next same-id load begins (FINDING F5). We chain off the prior
+    // load's settlement (ignoring its outcome) rather than awaiting it directly
+    // so a rejected prior load does not reject this one.
+    const prior = this.loadSessionQueues.get(sessionId);
+    const run = (prior ?? Promise.resolve()).then(
+      () => this.performLoadSession(params),
+      () => this.performLoadSession(params),
+    );
+    this.loadSessionQueues.set(sessionId, run);
+    try {
+      return await run;
+    } finally {
+      // Clear the queue entry only if it is still THIS load (a later chained
+      // same-id load may have replaced it); deleting unconditionally could drop
+      // a newer in-flight load's entry.
+      if (this.loadSessionQueues.get(sessionId) === run) {
+        this.loadSessionQueues.delete(sessionId);
+      }
+    }
+  }
+
+  /**
+   * Performs a single (already-serialized, see {@link loadSession}) session/load:
+   * disposes any prior same-id Session to release its on-disk lock, then builds +
+   * resumes + installs the replacement and streams the restored transcript.
+   */
+  private async performLoadSession(
     params: acp.LoadSessionRequest,
   ): Promise<acp.LoadSessionResponse> {
     const { sessionId } = params;
@@ -324,7 +347,18 @@ export class ZedAgent {
       await session.streamHistory(history);
     } catch (error) {
       this.sessions.delete(sessionId);
-      await session.dispose();
+      // FINDING F13: guard the cleanup dispose so a dispose failure does not
+      // mask the ORIGINAL replay error. The replay error is the actionable one
+      // the client must see; a dispose failure is logged and swallowed, and the
+      // original error is rethrown.
+      try {
+        await session.dispose();
+      } catch (disposeError) {
+        this.logger.debug(
+          () =>
+            `loadSession - dispose after replay failure also failed (original error rethrown): ${disposeError}`,
+        );
+      }
       this.logger.debug(() => `loadSession - replay failed: ${error}`);
       throw error;
     }
@@ -647,7 +681,12 @@ export class Session {
         }
         throw error;
       } finally {
+        // Flush any buffered chunks, THEN dispose so the batch timer is cleared
+        // on completion/abort and no delayed flush fires after the turn ends
+        // (FINDING F9). The batcher is per-prompt, so disposing here bounds its
+        // timer to the prompt lifecycle.
         await batcher.flush();
+        batcher.dispose();
       }
 
       if (pendingSend.signal.aborted && terminalStopReason !== 'cancelled') {

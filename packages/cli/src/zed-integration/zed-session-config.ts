@@ -1,0 +1,87 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Session-scoped Config construction for the Zed integration (issue #1604).
+ * Extracted from zedIntegration.ts so that near-cap file stays within its
+ * max-lines budget; the behavior is unchanged and exercised by
+ * zedIntegration.test.ts (createSessionScopedConfig) and the loadSession/prompt
+ * suites.
+ */
+
+import * as path from 'node:path';
+import {
+  type Config,
+  isWithinRoot,
+  type RuntimeProviderManager,
+} from '@vybestack/llxprt-code-core';
+
+/**
+ * Resolves the effective target directory for a session from an optional
+ * client-supplied cwd: an empty/whitespace cwd falls back to the config target
+ * dir; an absolute or config-relative cwd is accepted only when it resolves
+ * WITHIN the config target dir (otherwise the target dir is used), so a session
+ * can never escape the project root.
+ */
+export function resolveSessionTargetDir(
+  config: Config,
+  cwd: string | undefined,
+): string {
+  if (cwd === undefined || cwd.trim().length === 0) {
+    return config.getTargetDir();
+  }
+  const candidate = path.isAbsolute(cwd)
+    ? cwd
+    : path.resolve(config.getTargetDir(), cwd);
+  return isWithinRoot(candidate, config.getTargetDir())
+    ? candidate
+    : config.getTargetDir();
+}
+
+/**
+ * Builds a per-session Config proxy that overrides the file-system service,
+ * provider manager, and project/target dir for a single session WITHOUT
+ * mutating the shared base Config. getFileSystemService/getProviderManager
+ * return the session-scoped instances (swappable via their setters), and
+ * getProjectRoot/getTargetDir return the resolved session target dir; every
+ * other access falls through to the base Config.
+ */
+export function createSessionScopedConfig(
+  config: Config,
+  initialFileSystemService: ReturnType<Config['getFileSystemService']>,
+  targetDir: string = config.getTargetDir(),
+): Config {
+  let fileSystemService = initialFileSystemService;
+  let providerManager: RuntimeProviderManager | undefined =
+    config.getProviderManager();
+  return new Proxy(config, {
+    get(target, property, receiver) {
+      if (property === 'getFileSystemService') {
+        return () => fileSystemService;
+      }
+      if (property === 'setFileSystemService') {
+        return (nextFileSystemService: typeof fileSystemService) => {
+          fileSystemService = nextFileSystemService;
+        };
+      }
+      if (property === 'getProviderManager') {
+        return () => providerManager;
+      }
+      if (property === 'setProviderManager') {
+        return (nextProviderManager: RuntimeProviderManager) => {
+          providerManager = nextProviderManager;
+        };
+      }
+      if (property === 'getProjectRoot') {
+        return () => targetDir;
+      }
+      if (property === 'getTargetDir') {
+        return () => targetDir;
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}

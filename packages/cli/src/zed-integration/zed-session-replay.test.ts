@@ -207,6 +207,41 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
     });
   });
 
+  it('maps an OBJECT-shaped { error: { message } } result to a FAILED tool_call_update carrying the message text (FINDING F3)', () => {
+    const history: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'call-obj-err',
+            name: 'run_shell_command',
+            parameters: {},
+          },
+        ],
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call-obj-err',
+            toolName: 'run_shell_command',
+            result: { error: { message: 'boom' } },
+          },
+        ],
+      },
+    ];
+    // createErrorResponse can persist an object-shaped error ({ error: { message } });
+    // it must be detected as a failure AND surface the nested message text.
+    expect(mapHistoryToSessionUpdates(history)[1]).toStrictEqual({
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'call-obj-err',
+      status: 'failed',
+      content: [{ type: 'content', content: { type: 'text', text: 'boom' } }],
+    });
+  });
+
   it('maps a tool_response whose block.error is set to a FAILED tool_call_update carrying the error text (FINDING 3)', () => {
     const history: IContent[] = [
       {
@@ -717,7 +752,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
     });
   });
 
-  it('emits empty content for an MCP content array with NO text elements (no crash, FINDING D)', () => {
+  it('emits empty content for an MCP content array with NO usable text: non-text elements AND whitespace-only text are BOTH skipped (no crash, FINDING D + FINDING F11)', () => {
     const history: IContent[] = [
       {
         speaker: 'ai',
@@ -739,14 +774,22 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
             toolName: 'some_tool',
             result: {
               content: [
+                // Non-text elements are skipped (FINDING D)...
                 { type: 'image', data: 'AAAA', mimeType: 'image/png' },
                 { type: 'resource', uri: 'file:///x' },
+                // ...and whitespace-only text elements are trimmed + skipped
+                // (FINDING F11), so they do NOT pass blank text through. Both
+                // spaces and a newline+tab element must be dropped.
+                { type: 'text', text: '   ' },
+                { type: 'text', text: '\n\t' },
               ],
             },
           },
         ],
       },
     ];
+    // With no usable text, the update carries an empty content array (no blank
+    // text leaks from the whitespace-only elements).
     const updates = mapHistoryToSessionUpdates(history);
     expect(updates[1]).toStrictEqual({
       sessionUpdate: 'tool_call_update',
