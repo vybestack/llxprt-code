@@ -367,9 +367,7 @@ export function clearQuotaGuard(): void {
     return;
   }
   try {
-    if (existsSync(sentinelPath)) {
-      rmSync(sentinelPath, { force: true });
-    }
+    rmSync(sentinelPath, { force: true });
   } catch {
     // Best-effort cleanup; never fail the run because of sentinel I/O.
   }
