@@ -28,7 +28,10 @@ import {
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import {
+  ApprovalMode,
+  DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+} from '@vybestack/llxprt-code-core/config/configTypes.js';
 import {
   AgentEventType,
   DEFAULT_AGENT_ID,
@@ -254,6 +257,7 @@ export function createTestConfig(options: {
   policyEngine: PolicyEngine;
   interactive: boolean;
   approvalMode?: ApprovalMode;
+  imagePayloadBudgetBytes?: number;
 }): Config {
   const { messageBus, toolRegistry, policyEngine, interactive } = options;
   const approvalMode = options.approvalMode ?? ApprovalMode.YOLO;
@@ -262,6 +266,8 @@ export function createTestConfig(options: {
     getSessionId: () => 'agentic-loop-test-session',
     getUsageStatisticsEnabled: () => false,
     getDebugMode: () => false,
+    getImagePayloadBudgetBytes: () =>
+      options.imagePayloadBudgetBytes ?? DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
     getApprovalMode: () => approvalMode,
     getEphemeralSettings: () => ({}),
     getEphemeralSetting: () => undefined,

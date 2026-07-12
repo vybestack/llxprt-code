@@ -26,6 +26,7 @@ import {
   SubagentTerminateMode,
   type OutputObject,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from '@vybestack/llxprt-code-core/config/configTypes.js';
 
 describe('subagentToolProcessing', () => {
   // --- Pure helpers ---
@@ -543,7 +544,9 @@ describe('subagentToolProcessing', () => {
           getOrCreateScheduler: vi.fn(),
           disposeScheduler: vi.fn(),
         },
-        config: {} as never,
+        config: {
+          getImagePayloadBudgetBytes: () => DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+        } as never,
       };
     }
 

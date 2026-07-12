@@ -211,6 +211,8 @@ export function normalizeShellReplacement(
 export const DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD = 4_000_000;
 export const DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES = 1000;
 
+export const DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES = 15 * 1024 * 1024;
+
 export class MCPServerConfig {
   constructor(
     // For stdio transport
@@ -449,6 +451,7 @@ export interface ConfigParameters {
   truncateToolOutputLines?: number;
   enableToolOutputTruncation?: boolean;
   continueOnFailedApiCall?: boolean;
+  imagePayloadBudgetBytes?: number;
   enableShellOutputEfficiency?: boolean;
   continueSession?: boolean | string;
   disableYoloMode?: boolean;

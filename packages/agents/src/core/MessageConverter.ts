@@ -23,6 +23,7 @@ import type {
   ToolCallBlock,
   ToolResponseBlock,
   ThinkingBlock,
+  MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
@@ -503,6 +504,26 @@ export function classifyMixedParts(parts: Part[]): {
   return { blocks, hasAIContent, hasToolContent };
 }
 
+function convertMediaBlockToPart(block: MediaBlock): Part | null {
+  if (!block.data || !block.mimeType) {
+    return null;
+  }
+  if (block.encoding === 'url') {
+    return {
+      fileData: {
+        mimeType: block.mimeType,
+        fileUri: block.data,
+      },
+    };
+  }
+  return {
+    inlineData: {
+      mimeType: block.mimeType,
+      data: block.data,
+    },
+  };
+}
+
 /**
  * Converts IContent blocks to Gemini Parts array.
  */
@@ -534,6 +555,13 @@ export function convertBlocksToParts(blocks: ContentBlock[]): Part[] {
             response: toolResponse.result as Record<string, unknown>,
           },
         });
+        break;
+      }
+      case 'media': {
+        const mediaPart = convertMediaBlockToPart(block);
+        if (mediaPart !== null) {
+          parts.push(mediaPart);
+        }
         break;
       }
       case 'thinking': {
