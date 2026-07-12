@@ -18,28 +18,17 @@ import { TodoRead } from '../tools/todo-read.js';
 import { TodoPause } from '../tools/todo-pause.js';
 
 describe('neutral Type enum runtime values', () => {
-  it('Type.STRING serializes to the string "STRING"', () => {
-    expect(Type.STRING).toBe('STRING');
-  });
-
-  it('Type.OBJECT serializes to the string "OBJECT"', () => {
-    expect(Type.OBJECT).toBe('OBJECT');
-  });
-
-  it('Type.ARRAY serializes to the string "ARRAY"', () => {
-    expect(Type.ARRAY).toBe('ARRAY');
-  });
-
-  it('Type.NUMBER serializes to the string "NUMBER"', () => {
-    expect(Type.NUMBER).toBe('NUMBER');
-  });
-
-  it('Type.INTEGER serializes to the string "INTEGER"', () => {
-    expect(Type.INTEGER).toBe('INTEGER');
-  });
-
-  it('Type.BOOLEAN serializes to the string "BOOLEAN"', () => {
-    expect(Type.BOOLEAN).toBe('BOOLEAN');
+  it.each([
+    ['TYPE_UNSPECIFIED', Type.TYPE_UNSPECIFIED, 'TYPE_UNSPECIFIED'],
+    ['STRING', Type.STRING, 'STRING'],
+    ['NUMBER', Type.NUMBER, 'NUMBER'],
+    ['INTEGER', Type.INTEGER, 'INTEGER'],
+    ['BOOLEAN', Type.BOOLEAN, 'BOOLEAN'],
+    ['ARRAY', Type.ARRAY, 'ARRAY'],
+    ['OBJECT', Type.OBJECT, 'OBJECT'],
+    ['NULL', Type.NULL, 'NULL'],
+  ])('Type.%s serializes to the expected wire value', (_name, value, wire) => {
+    expect(value).toBe(wire);
   });
 });
 

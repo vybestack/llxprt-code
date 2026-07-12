@@ -4,26 +4,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { describe, it, expect } from 'vitest';
 import {
   type CallableTool,
   type GeminiFunctionCall,
   type GeminiPart,
   type GeminiTool,
-  type GeminiFunctionDeclaration,
 } from '../types/gemini-neutral.js';
 import { McpCallableTool } from './mcp-callable-tool.js';
+
+function acceptCallableTool(tool: CallableTool): CallableTool {
+  return tool;
+}
 
 describe('neutral MCP CallableTool interface structural assignability', () => {
   it('McpCallableTool satisfies the neutral CallableTool interface', () => {
     const tool = new McpCallableTool(
-      {} as never,
+      new Client({ name: 'neutral-types-test', version: '1.0.0' }),
       { name: 'test', description: 'test', inputSchema: {} },
       5000,
     );
-    // If this compiles, McpCallableTool is structurally compatible.
-    const _check: CallableTool = tool;
-    expect(_check).toBeDefined();
+
+    expect(acceptCallableTool(tool)).toBe(tool);
   });
 });
 
@@ -45,14 +48,23 @@ describe('neutral GeminiPart is usable in MCP response transformation', () => {
 });
 
 describe('neutral GeminiTool shape for McpCallableTool.tool()', () => {
-  it('produces a structurally valid GeminiTool', () => {
-    const decl: GeminiFunctionDeclaration = {
+  it('maps the MCP input schema to parametersJsonSchema', async () => {
+    const callableTool = new McpCallableTool(
+      new Client({ name: 'neutral-types-test', version: '1.0.0' }),
+      {
+        name: 'test_tool',
+        description: 'A test tool',
+        inputSchema: { type: 'object' },
+      },
+      5000,
+    );
+
+    const tool: GeminiTool = await callableTool.tool();
+    expect(tool.functionDeclarations?.[0]).toStrictEqual({
       name: 'test_tool',
       description: 'A test tool',
       parametersJsonSchema: { type: 'object' },
-    };
-    const tool: GeminiTool = { functionDeclarations: [decl] };
-    expect(tool.functionDeclarations?.[0]?.name).toBe('test_tool');
+    });
   });
 });
 

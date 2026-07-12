@@ -22,7 +22,6 @@ export interface GeminiFunctionCall {
   args?: Record<string, unknown>;
   partialArgs?: Array<Record<string, unknown>>;
   willContinue?: boolean;
-  [key: string]: unknown;
 }
 
 /**
@@ -70,7 +69,6 @@ export interface GeminiPart {
   codeExecutionResult?: Record<string, unknown>;
   mediaResolution?: unknown;
   videoMetadata?: Record<string, unknown>;
-  [key: string]: unknown;
 }
 
 /**

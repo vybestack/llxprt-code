@@ -50,6 +50,18 @@ describe('ApiResponseEvent with neutral UsageMetadata', () => {
     expect(event.total_token_count).toBe(185);
   });
 
+  it('defaults missing counts to 0 for partial usage data', () => {
+    const event = new ApiResponseEvent('gemini-pro', 500, 'prompt-1', {
+      promptTokenCount: 7,
+    });
+    expect(event.input_token_count).toBe(7);
+    expect(event.output_token_count).toBe(0);
+    expect(event.cached_content_token_count).toBe(0);
+    expect(event.thoughts_token_count).toBe(0);
+    expect(event.tool_token_count).toBe(0);
+    expect(event.total_token_count).toBe(0);
+  });
+
   it('defaults all counts to 0 when usage is undefined', () => {
     const event = new ApiResponseEvent('gemini-pro', 500, 'prompt-1');
     expect(event.input_token_count).toBe(0);

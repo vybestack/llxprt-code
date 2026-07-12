@@ -31,5 +31,4 @@ export interface UsageMetadata {
   promptTokensDetails?: Array<Record<string, unknown>>;
   toolUsePromptTokensDetails?: Array<Record<string, unknown>>;
   trafficType?: string;
-  [key: string]: unknown;
 }
