@@ -28,14 +28,16 @@ const TITLE_MAX_LENGTH = 120;
 export function deriveSessionTitle(
   prompt: readonly acp.ContentBlock[],
 ): string | null {
-  const text = prompt
+  return extractTitleText(prompt);
+}
+
+function extractTitleText(
+  blocks: ReadonlyArray<{ readonly type: string; readonly text?: unknown }>,
+): string | null {
+  const text = blocks
     .filter(
-      (
-        block,
-      ): block is acp.ContentBlock & {
-        type: 'text';
-        text: string;
-      } => block.type === 'text',
+      (block): block is { readonly type: 'text'; readonly text: string } =>
+        block.type === 'text' && typeof block.text === 'string',
     )
     .map((block) => block.text)
     .join('');
@@ -61,17 +63,9 @@ export function deriveTitleFromHistory(
     if (item.speaker !== 'human') {
       continue;
     }
-    const text = item.blocks
-      .filter(
-        (block): block is { type: 'text'; text: string } =>
-          block.type === 'text',
-      )
-      .map((block) => block.text)
-      .join('');
-    if (text.length > 0) {
-      return text.length > TITLE_MAX_LENGTH
-        ? text.slice(0, TITLE_MAX_LENGTH)
-        : text;
+    const title = extractTitleText(item.blocks);
+    if (title !== null) {
+      return title;
     }
   }
   return null;
@@ -116,9 +110,8 @@ export interface TitleEligibilityResult {
 
 export interface SessionInfoRecordResult {
   /**
-   * The session_info_update notification to emit for this turn: always an
-   * updatedAt update (title is emitted via consumeTitleEligibility). Empty only
-   * if updatedAt is unchanged.
+   * The session_info_update notifications to emit for this turn: always an
+   * updatedAt update, optionally preceded by a pending title retry.
    */
   readonly updates: ReadonlyArray<
     acp.SessionInfoUpdate & { sessionUpdate: 'session_info_update' }

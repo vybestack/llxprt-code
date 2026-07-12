@@ -51,7 +51,7 @@ describe('Zed Session.streamHistory - restored-session title hydration (issue #1
 
     expect(session.getLifecycleInfo().title).toBe('Restored session title');
 
-    connection.messages.length = 0;
+    connection.clearSessionInfoUpdates();
     await session.prompt({
       sessionId: 'test-session-id',
       prompt: [{ type: 'text', text: 'New prompt after restore' }],
