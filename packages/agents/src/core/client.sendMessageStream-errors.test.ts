@@ -381,7 +381,7 @@ describe('Gemini Client (client.ts)', () => {
           ),
         );
 
-        expect(events).toContainEqual(terminalEvent);
+        expect(events.slice(-1)).toStrictEqual([terminalEvent]);
         expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
       },
     );
