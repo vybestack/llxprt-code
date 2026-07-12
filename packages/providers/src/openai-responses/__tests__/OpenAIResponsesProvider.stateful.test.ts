@@ -112,7 +112,13 @@ async function captureRequestBody(
   if (capturedBody === undefined) {
     throw new Error('Request body was not captured');
   }
-  return JSON.parse(capturedBody) as Record<string, unknown>;
+  try {
+    return JSON.parse(capturedBody) as Record<string, unknown>;
+  } catch (error) {
+    throw new Error('Captured request body was not valid JSON', {
+      cause: error,
+    });
+  }
 }
 
 function inputItems(body: Record<string, unknown>): ResponsesInputItem[] {
@@ -164,7 +170,6 @@ function assistantMessages(items: ResponsesInputItem[]): string[] {
 describe('OpenAIResponsesProvider stateful conversations @issue:207', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFetch.mockClear();
     global.fetch = mockFetch as unknown as typeof fetch;
 
     setActiveProviderRuntimeContext(

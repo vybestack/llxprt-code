@@ -119,8 +119,8 @@ describe('parseResponsesStream captures response.id @issue:207', () => {
       messages.push(message);
     }
 
-    const usageMessage = messages.find((m) => m.metadata?.usage);
-    expect(usageMessage?.metadata?.responsesStored).toBe(true);
+    const metadataMessage = messages.find((m) => m.metadata?.usage);
+    expect(metadataMessage?.metadata?.responsesStored).toBe(true);
   });
 
   it('does not tag metadata chunk with responsesStored when option is false', async () => {
@@ -138,7 +138,7 @@ describe('parseResponsesStream captures response.id @issue:207', () => {
       messages.push(message);
     }
 
-    const usageMessage = messages.find((m) => m.metadata?.usage);
-    expect(usageMessage?.metadata?.responsesStored).toBeUndefined();
+    const metadataMessage = messages.find((m) => m.metadata?.usage);
+    expect(metadataMessage?.metadata?.responsesStored).toBeUndefined();
   });
 });

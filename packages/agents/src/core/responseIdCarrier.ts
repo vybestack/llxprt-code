@@ -55,9 +55,9 @@ export function setResponseId(
  * the field).
  */
 export function getResponseId(
-  response: GenerateContentResponse | undefined,
+  response: GenerateContentResponse | null | undefined,
 ): string | undefined {
-  if (response === undefined) {
+  if (response === undefined || response === null) {
     return undefined;
   }
   const value = (response as ResponseWithProviderResponseId).providerResponseId;
@@ -70,10 +70,12 @@ export function getResponseId(
  * (store=true) and is safe to reference via previous_response_id.
  */
 export function getResponsesStored(
-  response: GenerateContentResponse | undefined,
+  response: GenerateContentResponse | null | undefined,
 ): boolean | undefined {
-  if (response === undefined) {
+  if (response === undefined || response === null) {
     return undefined;
   }
-  return (response as ResponseWithProviderResponseId).providerResponsesStored;
+  const value = (response as ResponseWithProviderResponseId)
+    .providerResponsesStored;
+  return typeof value === 'boolean' ? value : undefined;
 }
