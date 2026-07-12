@@ -253,7 +253,7 @@ export class ASTEditToolInvocation
       this.validateASTSyntax(this.params.file_path, editData.newContent);
     const preEditValidation: AstValidationResult | undefined =
       editData.preEditValidation ??
-      (editData.currentContent != null
+      (editData.currentContent !== null
         ? this.validateASTSyntax(this.params.file_path, editData.currentContent)
         : undefined);
     const lineDelta = computeLineDelta(
@@ -419,6 +419,8 @@ export class ASTEditToolInvocation
         DEFAULT_CREATE_PATCH_OPTIONS,
       );
 
+      const { astValidation, preEditValidation, lineDelta, editStartLine } =
+        this.computeValidationContext(editData);
       const displayResult = {
         fileDiff,
         fileName,
@@ -426,13 +428,10 @@ export class ASTEditToolInvocation
         newContent: editData.newContent,
         applied: true,
         metadata: {
-          astValidation: editData.astValidation,
-          preEditValidation: editData.preEditValidation,
+          astValidation,
+          preEditValidation,
         },
       };
-
-      const { astValidation, preEditValidation, lineDelta, editStartLine } =
-        this.computeValidationContext(editData);
       const summary = summarizeAstValidation(
         preEditValidation,
         astValidation,

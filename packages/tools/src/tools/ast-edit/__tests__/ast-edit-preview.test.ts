@@ -271,6 +271,15 @@ describe('ASTEditTool pre-existing vs newly-introduced error categorization (iss
     );
     expect(content).not.toContain('new error introduced');
     expect(content).toContain('Pre-existing syntax errors: Yes');
+    const display = result.returnDisplay as {
+      metadata?: {
+        astValidation?: { valid: boolean; errors: string[] };
+        preEditValidation?: { valid: boolean; errors: string[] };
+      };
+    };
+    expect(display.metadata?.preEditValidation).toBeDefined();
+    expect(display.metadata?.preEditValidation?.valid).toBe(false);
+    expect(display.metadata?.astValidation?.valid).toBe(false);
     // Verify the file was actually written despite the pre-existing error.
     expect(readFileSync(filePath, 'utf-8')).toContain(
       'return `world ${name}`;',
