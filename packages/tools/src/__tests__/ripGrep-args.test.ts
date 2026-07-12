@@ -126,6 +126,11 @@ describe('buildRipgrepArgs', () => {
     expect(positiveGlobs).toEqual([]);
   });
 
+  it('uses an unambiguous separator for paths containing colons', () => {
+    const args = buildRipgrepArgs(PATTERN, ABS_PATH, undefined, defaultIgnore);
+    expect(pairValue(args, '--field-match-separator')).toBe('\\x1f');
+  });
+
   it('places the pattern after --regexp', () => {
     const args = buildRipgrepArgs(PATTERN, ABS_PATH, undefined, defaultIgnore);
     expect(pairValue(args, '--regexp')).toBe(PATTERN);

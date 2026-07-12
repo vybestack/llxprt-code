@@ -31,6 +31,8 @@ import { debugLogger } from '../utils/debugLogger.js';
 export const ripGrepDebugLogger = debugLogger;
 
 const DEFAULT_TOTAL_MAX_MATCHES = 20000;
+const RIPGREP_FIELD_SEPARATOR = '\x1f';
+const RIPGREP_FIELD_SEPARATOR_ARGUMENT = '\\x1f';
 
 /**
  * Parameters for the GrepTool
@@ -87,6 +89,8 @@ export function buildRipgrepArgs(
     '--line-number',
     '--no-heading',
     '--with-filename',
+    '--field-match-separator',
+    RIPGREP_FIELD_SEPARATOR_ARGUMENT,
     '--ignore-case',
     '--regexp',
     pattern,
@@ -649,19 +653,27 @@ function parseRipgrepLine(line: string, basePath: string): GrepMatch | null {
     return null;
   }
 
-  const firstColonIndex = line.indexOf(':');
-  if (firstColonIndex === -1) {
+  const firstSeparatorIndex = line.indexOf(RIPGREP_FIELD_SEPARATOR);
+  if (firstSeparatorIndex === -1) {
     return null;
   }
 
-  const secondColonIndex = line.indexOf(':', firstColonIndex + 1);
-  if (secondColonIndex === -1) {
+  const secondSeparatorIndex = line.indexOf(
+    RIPGREP_FIELD_SEPARATOR,
+    firstSeparatorIndex + RIPGREP_FIELD_SEPARATOR.length,
+  );
+  if (secondSeparatorIndex === -1) {
     return null;
   }
 
-  const filePathRaw = line.substring(0, firstColonIndex);
-  const lineNumberStr = line.substring(firstColonIndex + 1, secondColonIndex);
-  const lineContent = line.substring(secondColonIndex + 1);
+  const filePathRaw = line.substring(0, firstSeparatorIndex);
+  const lineNumberStr = line.substring(
+    firstSeparatorIndex + RIPGREP_FIELD_SEPARATOR.length,
+    secondSeparatorIndex,
+  );
+  const lineContent = line.substring(
+    secondSeparatorIndex + RIPGREP_FIELD_SEPARATOR.length,
+  );
 
   const lineNumber = parseInt(lineNumberStr, 10);
   if (isNaN(lineNumber)) {
