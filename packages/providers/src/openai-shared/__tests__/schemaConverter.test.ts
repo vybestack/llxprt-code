@@ -507,7 +507,7 @@ describe('convertToolDeclarations — description strategy', () => {
 
     expect(() =>
       convertToolDeclarations(badTools, { descriptionStrategy: 'preserve' }),
-    ).toThrow('Tool "no_schema" is missing parametersJsonSchema');
+    ).toThrow('no_schema');
   });
 
   it('throws when parametersJsonSchema is a non-object value', () => {
@@ -525,7 +525,7 @@ describe('convertToolDeclarations — description strategy', () => {
 
     expect(() =>
       convertToolDeclarations(badTools, { descriptionStrategy: 'preserve' }),
-    ).toThrow('Tool "null_schema" is missing parametersJsonSchema');
+    ).toThrow('null_schema');
   });
 
   it('returns undefined when there are no tools', () => {
@@ -534,6 +534,47 @@ describe('convertToolDeclarations — description strategy', () => {
         descriptionStrategy: 'always-string',
       }),
     ).toBeUndefined();
+  });
+
+  it('returns undefined when functionDeclarations is an empty array', () => {
+    expect(
+      convertToolDeclarations([{ functionDeclarations: [] }], {
+        descriptionStrategy: 'preserve',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('passes through a declaration missing the name property', () => {
+    // documents current behavior
+    const result = convertToolDeclarations(
+      [
+        {
+          functionDeclarations: [
+            {
+              description: 'no name',
+              parametersJsonSchema: { type: 'object', properties: {} },
+            },
+          ],
+        },
+      ],
+      { descriptionStrategy: 'preserve' },
+    );
+
+    expect(result).toBeDefined();
+    expect(result![0].function.name).toBeUndefined();
+  });
+
+  it('throws when functionDeclarations is not an array', () => {
+    expect(() =>
+      convertToolDeclarations(
+        [
+          {
+            functionDeclarations: 'not-an-array' as unknown as never[],
+          },
+        ],
+        { descriptionStrategy: 'preserve' },
+      ),
+    ).toThrow('undefined');
   });
 });
 

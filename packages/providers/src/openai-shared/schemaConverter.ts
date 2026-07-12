@@ -416,6 +416,10 @@ export type DescriptionStrategy = 'always-string' | 'preserve';
  * Shared core that both provider wrappers delegate to. Iterates Gemini-style
  * tool groups, validates each declaration has a parametersJsonSchema, and
  * converts it to OpenAI format. Returns undefined when there are no tools.
+ *
+ * @throws {Error} when any tool declaration lacks a valid
+ *   `parametersJsonSchema` object. The error names the offending tool so
+ *   callers can identify the misconfigured declaration.
  */
 export function convertToolDeclarations(
   geminiTools: Array<{ functionDeclarations?: ToolDeclaration[] }> | undefined,
