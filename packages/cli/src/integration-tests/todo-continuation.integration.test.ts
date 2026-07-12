@@ -14,7 +14,6 @@ import {
   createRuntimeStateFromConfig,
   type TodoUpdateEvent,
   type ServerAgentStreamEvent,
-  type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
 import {
   AgentClient,
@@ -256,15 +255,22 @@ describe('Task-list Continuation Integration Tests', () => {
 
       const originalSendMessageStream = agentClient.sendMessageStream;
       agentClient.sendMessageStream = vi.fn(async function* (
-        request: AgentRequestInput,
+        request: Parameters<typeof agentClient.sendMessageStream>[0],
         signal: AbortSignal,
         prompt_id: string,
         turns?: number,
         isInvalidStreamRetry?: boolean,
+        is413Retry?: boolean,
       ): AsyncGenerator<ServerAgentStreamEvent, Turn> {
         capturedMessage =
           typeof request === 'string' ? request : JSON.stringify(request);
-        capturedOptions = { signal, prompt_id, turns, isInvalidStreamRetry };
+        capturedOptions = {
+          signal,
+          prompt_id,
+          turns,
+          isInvalidStreamRetry,
+          is413Retry,
+        };
         // Yield a mock stream event
         yield {
           type: 'content',
@@ -290,6 +296,7 @@ describe('Task-list Continuation Integration Tests', () => {
         prompt_id: 'test-prompt-id',
         turns: undefined,
         isInvalidStreamRetry: undefined,
+        is413Retry: undefined,
       });
 
       // Restore original method

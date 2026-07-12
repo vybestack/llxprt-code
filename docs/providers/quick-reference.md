@@ -33,6 +33,18 @@ For providers without aliases, use the OpenAI protocol:
 /model model-name
 ```
 
+## Where Model Limits Live
+
+Default model limits are data-driven and layered — each layer takes precedence over the one below it:
+
+1. **User override** — `/set context-limit <N>` or a profile `ephemeralSettings.context-limit`. Always wins; config never silently overrides an explicit user value.
+2. **Provider alias config** — `packages/providers/src/composition/aliases/*.config`. The primary source for models that have an alias:
+   - **Codex** (`codex.config`): provider-wide `ephemeralSettings.context-limit: 262144`; per-model `contextWindow` on each `staticModels` entry (e.g. `gpt-5.3-codex-spark` → `131072`).
+   - **Anthropic** (`anthropic.config`): provider-wide `ephemeralSettings.maxOutputTokens: 40000`; per-model `context-limit` via `modelDefaults` (e.g. `claude-opus-4-8` → `200000`, `claude-sonnet-4-6` → `200000`, `claude-fable-5` → `200000`).
+3. **Core fallback catalog** — `packages/core/src/core/model-limits.json` (Zod-validated by `model-limits.schema.ts`). The safety-net for any model not covered by an alias config. `tokenLimit()` reads this catalog at module load; its signature and resolution order are unchanged.
+
+Adding or updating a limit is a data edit — no limit-logic code changes needed. The core fallback catalog is imported as a JSON module: in development Bun resolves it at runtime from `src/`, and the built `@vybestack/llxprt-code-core` package copies the JSON asset adjacent to the compiled JS (`dist/src/core/model-limits.json`) via `scripts/copy_files.ts`, so changes to `model-limits.json` require a rebuild to take effect (same as any source change). Provider alias `.config` files are always read at runtime. See `model-limits.json` for the full fallback table.
+
 ## Model Geometry and Budgeting (all providers)
 
 When you set a model, configure both context-limit (ephemeral) and max_tokens (model param):
