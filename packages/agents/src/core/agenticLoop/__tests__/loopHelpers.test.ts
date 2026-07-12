@@ -5,37 +5,38 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { Content, Part } from '@google/genai';
-import { filterEagerlyRecordedToolResponses } from '../loopHelpers.js';
+import type {
+  ContentBlock,
+  IContent,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { filterEagerlyRecordedToolResponses } from '../../streamResponseHelpers.js';
 
-const alreadyRecordedResponse: Part = {
-  functionResponse: {
-    id: 'toolu_already_recorded',
-    name: 'read_file',
-    response: { output: 'old' },
-  },
+const alreadyRecordedResponse: ContentBlock = {
+  type: 'tool_response',
+  callId: 'toolu_already_recorded',
+  toolName: 'read_file',
+  result: { output: 'old' },
 };
 
-const newResponse: Part = {
-  functionResponse: {
-    id: 'toolu_new',
-    name: 'read_file',
-    response: { output: 'new' },
-  },
+const newResponse: ContentBlock = {
+  type: 'tool_response',
+  callId: 'toolu_new',
+  toolName: 'read_file',
+  result: { output: 'new' },
 };
 
-const responseWithoutId: Part = {
-  functionResponse: {
-    name: 'read_file',
-    response: { output: 'no_id' },
-  },
+const responseWithoutId: ContentBlock = {
+  type: 'tool_response',
+  callId: '',
+  toolName: 'read_file',
+  result: { output: 'no_id' },
 };
 
-const followupText: Part = { text: 'continue' };
+const followupText: ContentBlock = { type: 'text', text: 'continue' };
 
-const contentWithResponses: Content = {
-  role: 'user',
-  parts: [
+const contentWithResponses: IContent = {
+  speaker: 'tool',
+  blocks: [
     alreadyRecordedResponse,
     newResponse,
     responseWithoutId,
@@ -64,38 +65,22 @@ describe('filterEagerlyRecordedToolResponses', () => {
     expect(result.matchedCallIds).toStrictEqual([]);
   });
 
-  it('handles content with null parts gracefully', () => {
-    const contentWithNullParts: Content = {
-      role: 'user',
-      // Simulate runtime null: SDK data can violate the declared Part[] shape.
-      parts: null as unknown as Part[],
+  it('handles content with an empty blocks array gracefully', () => {
+    const contentWithEmptyBlocks: IContent = {
+      speaker: 'tool',
+      blocks: [],
     };
 
     const result = filterEagerlyRecordedToolResponses(
-      contentWithNullParts,
+      contentWithEmptyBlocks,
       new Set(['toolu_already_recorded']),
     );
 
-    expect(result.content).toBe(contentWithNullParts);
+    expect(result.content).toBe(contentWithEmptyBlocks);
     expect(result.matchedCallIds).toStrictEqual([]);
   });
 
-  it('handles content with an empty parts array gracefully', () => {
-    const contentWithEmptyParts: Content = {
-      role: 'user',
-      parts: [],
-    };
-
-    const result = filterEagerlyRecordedToolResponses(
-      contentWithEmptyParts,
-      new Set(['toolu_already_recorded']),
-    );
-
-    expect(result.content).toBe(contentWithEmptyParts);
-    expect(result.matchedCallIds).toStrictEqual([]);
-  });
-
-  it('removes only the already-recorded function responses', () => {
+  it('removes only the already-recorded tool responses', () => {
     const result = filterEagerlyRecordedToolResponses(
       contentWithResponses,
       new Set(['toolu_already_recorded']),
@@ -103,15 +88,15 @@ describe('filterEagerlyRecordedToolResponses', () => {
 
     expect(result.matchedCallIds).toStrictEqual(['toolu_already_recorded']);
     expect(result.content).not.toBeNull();
-    expect(result.content?.role).toBe('user');
-    expect(result.content?.parts).toStrictEqual([
+    expect(result.content?.speaker).toBe('tool');
+    expect(result.content?.blocks).toStrictEqual([
       newResponse,
       responseWithoutId,
       followupText,
     ]);
   });
 
-  it('removes multiple already-recorded function responses and preserves match order', () => {
+  it('removes multiple already-recorded tool responses and preserves match order', () => {
     const result = filterEagerlyRecordedToolResponses(
       contentWithResponses,
       new Set(['toolu_already_recorded', 'toolu_new']),
@@ -121,25 +106,23 @@ describe('filterEagerlyRecordedToolResponses', () => {
       'toolu_already_recorded',
       'toolu_new',
     ]);
-    expect(result.content?.role).toBe('user');
-    expect(result.content?.parts).toStrictEqual([
+    expect(result.content?.speaker).toBe('tool');
+    expect(result.content?.blocks).toStrictEqual([
       responseWithoutId,
       followupText,
     ]);
   });
 
-  it('does not match functionResponse parts with a non-string id', () => {
-    const nonStringIdResponse: Part = {
-      functionResponse: {
-        // Simulate malformed SDK data to exercise the runtime type guard.
-        id: 123 as unknown as string,
-        name: 'read_file',
-        response: { output: 'bad_id' },
-      },
+  it('does not match tool response blocks with a non-string id', () => {
+    const nonStringIdResponse: ContentBlock = {
+      type: 'tool_response',
+      callId: 123 as unknown as string,
+      toolName: 'read_file',
+      result: { output: 'bad_id' },
     };
-    const content: Content = {
-      role: 'user',
-      parts: [nonStringIdResponse, newResponse],
+    const content: IContent = {
+      speaker: 'tool',
+      blocks: [nonStringIdResponse, newResponse],
     };
 
     const result = filterEagerlyRecordedToolResponses(
@@ -148,13 +131,13 @@ describe('filterEagerlyRecordedToolResponses', () => {
     );
 
     expect(result.matchedCallIds).toStrictEqual(['toolu_new']);
-    expect(result.content?.parts).toStrictEqual([nonStringIdResponse]);
+    expect(result.content?.blocks).toStrictEqual([nonStringIdResponse]);
   });
 
-  it('drops the whole content item when all parts were already recorded', () => {
-    const content: Content = {
-      role: 'user',
-      parts: [alreadyRecordedResponse],
+  it('drops the whole content item when all blocks were already recorded', () => {
+    const content: IContent = {
+      speaker: 'tool',
+      blocks: [alreadyRecordedResponse],
     };
 
     const result = filterEagerlyRecordedToolResponses(

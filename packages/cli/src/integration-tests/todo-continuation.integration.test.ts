@@ -14,7 +14,7 @@ import {
   createRuntimeStateFromConfig,
   type TodoUpdateEvent,
   type ServerAgentStreamEvent,
-  type ContractPartListUnion,
+  type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
 import {
   AgentClient,
@@ -256,7 +256,7 @@ describe('Task-list Continuation Integration Tests', () => {
 
       const originalSendMessageStream = agentClient.sendMessageStream;
       agentClient.sendMessageStream = vi.fn(async function* (
-        request: ContractPartListUnion,
+        request: AgentRequestInput,
         signal: AbortSignal,
         prompt_id: string,
         turns?: number,

@@ -16,7 +16,7 @@
  * for errors that escape the stream loop in TurnProcessor._runStreamAttempt.
  */
 
-import type { SendMessageParameters } from '@google/genai';
+import type { SendMessageParams } from './chatSession.js';
 import {
   InvalidStreamError,
   EmptyStreamError,
@@ -39,7 +39,7 @@ import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry
  */
 export function isAbortError(
   error: unknown,
-  params: SendMessageParameters,
+  params: SendMessageParams,
 ): boolean {
   if (
     typeof error === 'object' &&
@@ -68,7 +68,7 @@ export function isAbortError(
  */
 export function shouldRetryStreamAttempt(
   error: unknown,
-  params: SendMessageParameters,
+  params: SendMessageParams,
   attempt: number,
 ): boolean {
   const withinBudget = attempt < INVALID_CONTENT_RETRY_OPTIONS.maxAttempts - 1;

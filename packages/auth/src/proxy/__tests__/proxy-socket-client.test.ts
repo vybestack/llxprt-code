@@ -23,9 +23,13 @@ import {
 import { encodeFrame, FrameDecoder } from '../framing.js';
 
 /**
- * Creates a temporary Unix socket path for testing.
+ * Creates a temporary IPC endpoint for testing.
  */
 function createTempSocketPath(): string {
+  if (process.platform === 'win32') {
+    return `\\\\.\\pipe\\llxprt-proxy-test-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'proxy-test-'));
   return path.join(tmpDir, 'test.sock');
 }
@@ -79,8 +83,10 @@ describe('ProxySocketClient', () => {
       }
     });
 
-    const socketDir = path.dirname(socketPath);
-    fs.rmSync(socketDir, { recursive: true, force: true });
+    if (process.platform !== 'win32') {
+      const socketDir = path.dirname(socketPath);
+      fs.rmSync(socketDir, { recursive: true, force: true });
+    }
   });
 
   /**

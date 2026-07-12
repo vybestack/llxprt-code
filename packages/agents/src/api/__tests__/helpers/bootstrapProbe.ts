@@ -42,6 +42,13 @@ import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
 export { ToolConfirmationOutcome };
 
+// Re-export the neutral history types so the consumer spec avoids a deep
+// core import (helpers/ is exempt from the boundary deep-import scan).
+export type {
+  IContent,
+  ContentBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
 export {
   resolveAuthType,
   generateRuntimeId,

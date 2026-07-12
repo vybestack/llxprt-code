@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DEFAULT_GEMINI_MODEL, DebugLogger } from '@vybestack/llxprt-code-core';
+import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { loadProviderAliasEntries } from '@vybestack/llxprt-code-providers/composition.js';
 import { firstNonEmptyString } from '../utils/coalesce.js';
 

@@ -8,9 +8,35 @@
  * @fileoverview Defines the core configuration interfaces and types for the agent architecture.
  */
 
-import type { Content, FunctionDeclaration } from '@google/genai';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import { type z } from 'zod';
+
+/**
+ * Provider-neutral type alias for a model-requested function call.
+ *
+ * Structurally compatible with the Google `FunctionCall` shape so that the
+ * agent executor can interoperate with the (not-yet-migrated) runtime layer
+ * without importing the Gemini SDK.
+ */
+export type FunctionCall = {
+  id?: string;
+  name: string;
+  args?: Record<string, unknown>;
+};
+
+/**
+ * Provider-neutral type alias for a tool/function declaration.
+ *
+ * Structurally compatible with the Google `FunctionDeclaration` shape used by
+ * the runtime layer (all fields optional to match the SDK).
+ */
+export type FunctionDeclaration = {
+  name?: string;
+  description?: string;
+  parameters?: unknown;
+  parametersJsonSchema?: unknown;
+};
 
 /**
  * Describes the possible termination modes for an agent.
@@ -92,7 +118,7 @@ export interface PromptConfig {
   /**
    * An array of user/model content pairs for few-shot prompting.
    */
-  initialMessages?: Content[];
+  initialMessages?: IContent[];
 
   /**
    * The specific task or question to trigger the agent's execution loop.

@@ -22,11 +22,15 @@ const {
   sendRequestMock: vi.fn(),
 }));
 
-const createWhichProcess = () => {
+const createLocatorProcess = () => {
   const proc = new EventEmitter() as EventEmitter & { stdout: PassThrough };
   proc.stdout = new PassThrough();
   setImmediate(() => {
-    proc.stdout.write('/usr/bin/bun\n');
+    proc.stdout.write(
+      process.platform === 'win32'
+        ? 'C:\\tools\\bun.exe\r\nC:\\tools\\bun.cmd\r\n'
+        : '/usr/bin/bun\n',
+    );
     proc.emit('exit', 0, null);
   });
   return proc;
@@ -103,8 +107,8 @@ describe('LspServiceClient unit contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     spawnMock.mockImplementation((command: string) => {
-      if (command === 'which') {
-        return createWhichProcess();
+      if (command === 'which' || command === 'where') {
+        return createLocatorProcess();
       }
       return createLspProcess();
     });
@@ -165,6 +169,9 @@ describe('LspServiceClient unit contract', () => {
     const client = makeClient(liveConfig);
     await client.start();
     expect(spawnMock).toHaveBeenCalledTimes(2);
+    expect(spawnMock.mock.calls[1][0]).toBe(
+      process.platform === 'win32' ? 'C:\\tools\\bun.exe' : '/usr/bin/bun',
+    );
   });
 
   it('start should build jsonrpc connection via createMessageConnection', async () => {
@@ -254,7 +261,7 @@ describe('LspServiceClient unit contract', () => {
     // Find the LSP subprocess spawn call (not the 'which' call)
     // spawn is called with (command, args, options) — env is at index 2
     const lspSpawnCalls = spawnMock.mock.calls.filter(
-      (call) => call[0] !== 'which',
+      (call) => call[0] !== 'which' && call[0] !== 'where',
     );
     expect(lspSpawnCalls.length).toBeGreaterThan(0);
     const spawnOptions = lspSpawnCalls[0][2] as Record<string, unknown>;
@@ -274,7 +281,7 @@ describe('LspServiceClient unit contract', () => {
 
     // Find the LSP subprocess spawn call (not the 'which' call)
     const lspSpawnCalls = spawnMock.mock.calls.filter(
-      (call) => call[0] !== 'which',
+      (call) => call[0] !== 'which' && call[0] !== 'where',
     );
     expect(lspSpawnCalls.length).toBeGreaterThan(0);
     const spawnOptions = lspSpawnCalls[0][2] as Record<string, unknown>;
@@ -297,7 +304,7 @@ describe('LspServiceClient unit contract', () => {
     await client.start();
 
     const lspSpawnCalls = spawnMock.mock.calls.filter(
-      (call) => call[0] !== 'which',
+      (call) => call[0] !== 'which' && call[0] !== 'where',
     );
     expect(lspSpawnCalls.length).toBeGreaterThan(0);
     const spawnOptions = lspSpawnCalls[0][2] as Record<string, unknown>;
@@ -316,7 +323,7 @@ describe('LspServiceClient unit contract', () => {
     await client.start();
 
     const lspSpawnCalls = spawnMock.mock.calls.filter(
-      (call) => call[0] !== 'which',
+      (call) => call[0] !== 'which' && call[0] !== 'where',
     );
     expect(lspSpawnCalls.length).toBeGreaterThan(0);
     const spawnOptions = lspSpawnCalls[0][2] as Record<string, unknown>;
@@ -340,7 +347,7 @@ describe('LspServiceClient unit contract', () => {
     await client.start();
 
     const lspSpawnCalls = spawnMock.mock.calls.filter(
-      (call) => call[0] !== 'which',
+      (call) => call[0] !== 'which' && call[0] !== 'where',
     );
     expect(lspSpawnCalls.length).toBeGreaterThan(0);
     const spawnOptions = lspSpawnCalls[0][2] as Record<string, unknown>;
@@ -365,7 +372,7 @@ describe('LspServiceClient unit contract', () => {
     await client.start();
 
     const lspSpawnCalls = spawnMock.mock.calls.filter(
-      (call) => call[0] !== 'which',
+      (call) => call[0] !== 'which' && call[0] !== 'where',
     );
     expect(lspSpawnCalls.length).toBeGreaterThan(0);
     const spawnOptions = lspSpawnCalls[0][2] as Record<string, unknown>;

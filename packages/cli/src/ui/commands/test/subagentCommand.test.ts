@@ -663,7 +663,10 @@ describe('subagentCommand', () => {
       // Mock AgentClient
       mockAgentClient = {
         generateDirectMessage: vi.fn().mockResolvedValue({
-          text: 'Auto generated prompt',
+          content: {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'Auto generated prompt' }],
+          },
         }),
       };
 
@@ -684,7 +687,15 @@ describe('subagentCommand', () => {
     it('should generate system prompt using LLM', async () => {
       // Mock LLM response
       mockAgentClient.generateDirectMessage.mockResolvedValue({
-        text: 'You are an expert Python debugger specializing in finding and fixing bugs.',
+        content: {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'text',
+              text: 'You are an expert Python debugger specializing in finding and fixing bugs.',
+            },
+          ],
+        },
       });
 
       const args = 'testagent testprofile auto "expert Python debugger"';
@@ -747,7 +758,10 @@ describe('subagentCommand', () => {
     it('should handle empty LLM response', async () => {
       // Mock empty response
       mockAgentClient.generateDirectMessage.mockResolvedValue({
-        text: '',
+        content: {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: '' }],
+        },
       });
 
       const args = 'testagent testprofile auto "expert debugger"';
@@ -809,7 +823,10 @@ describe('subagentCommand', () => {
 
     it('should use correct prompt template for LLM', async () => {
       mockAgentClient.generateDirectMessage.mockResolvedValue({
-        text: 'Generated prompt',
+        content: {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Generated prompt' }],
+        },
       });
 
       const description = 'expert code reviewer';

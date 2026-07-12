@@ -31,8 +31,6 @@ import { debugLogger } from '../utils/debugLogger.js';
 export const ripGrepDebugLogger = debugLogger;
 
 const DEFAULT_TOTAL_MAX_MATCHES = 20000;
-const RIPGREP_FIELD_SEPARATOR = '\x1f';
-const RIPGREP_FIELD_SEPARATOR_ARGUMENT = '\\x1f';
 
 /**
  * Parameters for the GrepTool
@@ -89,8 +87,7 @@ export function buildRipgrepArgs(
     '--line-number',
     '--no-heading',
     '--with-filename',
-    '--field-match-separator',
-    RIPGREP_FIELD_SEPARATOR_ARGUMENT,
+    '--null',
     '--ignore-case',
     '--regexp',
     pattern,
@@ -648,32 +645,33 @@ export class RipGrepTool extends BaseDeclarativeTool<
  * Parses a single ripgrep output line into a GrepMatch, or returns null
  * if the line is blank or malformed.
  */
-function parseRipgrepLine(line: string, basePath: string): GrepMatch | null {
+export function parseRipgrepLine(
+  line: string,
+  basePath: string,
+): GrepMatch | null {
   if (!line.trim()) {
     return null;
   }
 
-  const firstSeparatorIndex = line.indexOf(RIPGREP_FIELD_SEPARATOR);
-  if (firstSeparatorIndex === -1) {
+  const nullSeparatorIndex = line.indexOf('\0');
+  const pathSeparatorIndex =
+    nullSeparatorIndex === -1 ? line.indexOf(':') : nullSeparatorIndex;
+  if (pathSeparatorIndex === -1) {
     return null;
   }
 
-  const secondSeparatorIndex = line.indexOf(
-    RIPGREP_FIELD_SEPARATOR,
-    firstSeparatorIndex + RIPGREP_FIELD_SEPARATOR.length,
-  );
-  if (secondSeparatorIndex === -1) {
+  const lineNumberStartIndex = pathSeparatorIndex + 1;
+  const contentSeparatorIndex = line.indexOf(':', lineNumberStartIndex);
+  if (contentSeparatorIndex === -1) {
     return null;
   }
 
-  const filePathRaw = line.substring(0, firstSeparatorIndex);
+  const filePathRaw = line.substring(0, pathSeparatorIndex);
   const lineNumberStr = line.substring(
-    firstSeparatorIndex + RIPGREP_FIELD_SEPARATOR.length,
-    secondSeparatorIndex,
+    lineNumberStartIndex,
+    contentSeparatorIndex,
   );
-  const lineContent = line.substring(
-    secondSeparatorIndex + RIPGREP_FIELD_SEPARATOR.length,
-  );
+  const lineContent = line.substring(contentSeparatorIndex + 1);
 
   const lineNumber = parseInt(lineNumberStr, 10);
   if (isNaN(lineNumber)) {

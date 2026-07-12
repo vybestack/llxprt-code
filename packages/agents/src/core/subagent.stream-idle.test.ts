@@ -18,7 +18,7 @@ import {
   type SubAgentRuntimeOverrides,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { ChatSession, StreamEventType } from './chatSession.js';
-import { mockResponseToChunk } from './turn-test-helpers.js';
+import { mockChunk } from './turn-test-helpers.js';
 import {
   createContentGenerator,
   type ContentGenerator,
@@ -236,25 +236,13 @@ describe('subagent.ts', () => {
               async function* slowStream() {
                 yield {
                   type: StreamEventType.CHUNK,
-                  value: mockResponseToChunk({
-                    candidates: [
-                      {
-                        content: { parts: [{ text: 'Starting...' }] },
-                      },
-                    ],
-                  }),
+                  value: mockChunk({ text: 'Starting...' }),
                 };
                 // Wait past the custom timeout
                 await vi.advanceTimersByTimeAsync(25_000);
                 yield {
                   type: StreamEventType.CHUNK,
-                  value: mockResponseToChunk({
-                    candidates: [
-                      {
-                        content: { parts: [{ text: 'Late response' }] },
-                      },
-                    ],
-                  }),
+                  value: mockChunk({ text: 'Late response' }),
                 };
               }
               return slowStream();
@@ -332,25 +320,13 @@ describe('subagent.ts', () => {
               async function* stalledStream() {
                 yield {
                   type: StreamEventType.CHUNK,
-                  value: mockResponseToChunk({
-                    candidates: [
-                      {
-                        content: { parts: [{ text: 'Starting...' }] },
-                      },
-                    ],
-                  }),
+                  value: mockChunk({ text: 'Starting...' }),
                 };
                 // Wait indefinitely until manually resolved
                 await iteratorPromise;
                 yield {
                   type: StreamEventType.CHUNK,
-                  value: mockResponseToChunk({
-                    candidates: [
-                      {
-                        content: { parts: [{ text: 'Finally done' }] },
-                      },
-                    ],
-                  }),
+                  value: mockChunk({ text: 'Finally done' }),
                 };
               }
               return stalledStream();
@@ -436,25 +412,13 @@ describe('subagent.ts', () => {
               async function* slowStream() {
                 yield {
                   type: StreamEventType.CHUNK,
-                  value: mockResponseToChunk({
-                    candidates: [
-                      {
-                        content: { parts: [{ text: 'Starting...' }] },
-                      },
-                    ],
-                  }),
+                  value: mockChunk({ text: 'Starting...' }),
                 };
                 // Wait past the env timeout but before config timeout
                 await vi.advanceTimersByTimeAsync(15_000);
                 yield {
                   type: StreamEventType.CHUNK,
-                  value: mockResponseToChunk({
-                    candidates: [
-                      {
-                        content: { parts: [{ text: 'Late response' }] },
-                      },
-                    ],
-                  }),
+                  value: mockChunk({ text: 'Late response' }),
                 };
               }
               return slowStream();

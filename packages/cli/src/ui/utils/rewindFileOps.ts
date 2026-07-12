@@ -12,10 +12,10 @@ import fs from 'node:fs/promises';
 import * as Diff from 'diff';
 import {
   coreEvents,
-  debugLogger,
   getFileDiffFromResultDisplay,
   computeAddedAndRemovedLines,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 export interface FileChangeDetail {
   fileName: string;

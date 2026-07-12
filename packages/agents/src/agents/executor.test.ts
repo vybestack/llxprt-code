@@ -10,7 +10,8 @@ import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils
 import { LSTool } from '@vybestack/llxprt-code-tools';
 import { ReadFileTool } from '@vybestack/llxprt-code-tools';
 import { ChatSession, StreamEventType } from '../core/chatSession.js';
-import { type FunctionCall } from '@google/genai';
+import type { FunctionCall } from './types.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import {
   setupExecutorFixture,
@@ -127,7 +128,14 @@ describe('AgentExecutor', () => {
         id: 'blocked-call',
       };
       const blockedResponse = createMockResponseChunk(
-        [{ functionCall: blockedCall }],
+        [
+          {
+            type: 'tool_call',
+            id: 'blocked-call',
+            name: 'run_shell_command',
+            parameters: { command: 'echo blocked' },
+          } as ContentBlock,
+        ],
         [blockedCall],
         ['read_file'],
       );
@@ -142,7 +150,7 @@ describe('AgentExecutor', () => {
             yield {
               type: StreamEventType.CHUNK,
               value: createMockResponseChunk([
-                { text: 'Still no executable tool calls' },
+                { type: 'text', text: 'Still no executable tool calls' },
               ]),
             };
           })(),
@@ -179,7 +187,20 @@ describe('AgentExecutor', () => {
         id: 'blocked-call',
       };
       const mixedResponse = createMockResponseChunk(
-        [{ functionCall: allowedCall }, { functionCall: blockedCall }],
+        [
+          {
+            type: 'tool_call',
+            id: 'allowed-call',
+            name: LSTool.Name,
+            parameters: { path: '/allowed' },
+          } as ContentBlock,
+          {
+            type: 'tool_call',
+            id: 'blocked-call',
+            name: 'run_shell_command',
+            parameters: { command: 'echo blocked' },
+          } as ContentBlock,
+        ],
         [allowedCall, blockedCall],
         [LSTool.Name],
       );

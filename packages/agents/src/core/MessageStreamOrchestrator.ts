@@ -4,16 +4,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type PartListUnion, type Part, type Content } from '@google/genai';
+import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { AgentRequestInput } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   Turn,
-  type ServerAgentStreamEvent,
   AgentEventType,
   DEFAULT_AGENT_ID,
+  type ServerAgentStreamEvent,
   type ServerFinishedOutcome,
   type ModelInfo,
 } from './turn.js';
+import {
+  buildModelInfo,
+  modelIdentityKey,
+  resolveProviderName,
+} from './modelInfoHelpers.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  iContentFromBlocks,
+  iContentFromAgentMessageInput,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ChatSession } from './chatSession.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { LoopDetectionService } from '@vybestack/llxprt-code-core/services/loopDetectionService.js';
@@ -40,12 +52,12 @@ export interface MessageStreamDeps {
   ideContextTracker: IdeContextTracker;
   agentHookManager: AgentHookManager;
   getEffectiveModel: () => string;
-  getHistory: () => Promise<Content[]>;
+  getHistory: () => Promise<IContent[]>;
   getSessionTurnCount: () => number;
   incrementSessionTurnCount: () => void;
   lazyInitialize: () => Promise<void>;
-  startChat: (extraHistory?: Content[]) => Promise<ChatSession>;
-  getPreviousHistory: () => Content[] | undefined;
+  startChat: (extraHistory?: IContent[]) => Promise<ChatSession>;
+  getPreviousHistory: () => IContent[] | undefined;
   setChat: (chat: ChatSession) => void;
   hasChat: () => boolean;
   complexityAnalyzer: ComplexityAnalyzer;
@@ -54,7 +66,7 @@ export interface MessageStreamDeps {
   resetCurrentSequenceModel: () => void;
   updateTelemetryTokenCount: () => void;
   sendMessageStream: (
-    initialRequest: PartListUnion,
+    initialRequest: AgentMessageInput,
     signal: AbortSignal,
     prompt_id: string,
     turns?: number,
@@ -86,13 +98,9 @@ export interface IterationResult {
 interface PostTurnResult {
   done: boolean;
   retryCount: number;
-  newBaseRequest: PartListUnion | undefined;
+  newBaseRequest: AgentMessageInput | undefined;
 }
 
-/**
- * Normalizes a runtime task-list entry for snapshot storage. Provider/tool-call
- * payloads can omit or null out fields despite the declared type.
- */
 function normalizeTodoSnapshotEntry(todo: Todo): Todo {
   const raw = todo as Partial<Todo>;
   return {
@@ -105,13 +113,22 @@ function normalizeTodoSnapshotEntry(todo: Todo): Todo {
 export const MAX_TURNS = 100;
 const MAX_RETRIES = 3;
 
+/**
+ * Narrows the contract-level {@link AgentRequestInput} to the neutral
+ * {@link AgentMessageInput} expected by the internal stream pipeline. Since
+ * AgentRequestInput is now typed as AgentMessageInput, this is a direct
+ * identity function — no cast or runtime check is needed.
+ */
+function toAgentMessageInput(input: AgentRequestInput): AgentMessageInput {
+  return input;
+}
+
 export class MessageStreamOrchestrator {
   #lastModelIdentity: string | null = null;
-
   constructor(private readonly deps: MessageStreamDeps) {}
 
   async *execute(
-    initialRequest: PartListUnion,
+    initialRequest: AgentRequestInput,
     signal: AbortSignal,
     prompt_id: string,
     turns: number,
@@ -123,7 +140,8 @@ export class MessageStreamOrchestrator {
     await this.deps.lazyInitialize();
     await this._ensureChatInitialized();
 
-    const promptText = extractPromptText(initialRequest);
+    const narrowedRequest = toAgentMessageInput(initialRequest);
+    const promptText = extractPromptText(narrowedRequest);
     const ctx: StreamContext = {
       prompt_id,
       promptText,
@@ -134,10 +152,10 @@ export class MessageStreamOrchestrator {
       is413Retry,
     };
 
-    const request = yield* this._preflight(initialRequest, ctx);
+    const request = yield* this._preflight(narrowedRequest, ctx);
     if (request instanceof Turn) return request;
 
-    const earlyTurn = yield* this._checkSessionLimits(initialRequest, ctx);
+    const earlyTurn = yield* this._checkSessionLimits(narrowedRequest, ctx);
     if (earlyTurn) return earlyTurn;
 
     await this._injectIdeContext();
@@ -161,9 +179,9 @@ export class MessageStreamOrchestrator {
   }
 
   private async *_preflight(
-    initialRequest: PartListUnion,
+    initialRequest: AgentMessageInput,
     ctx: StreamContext,
-  ): AsyncGenerator<ServerAgentStreamEvent, PartListUnion | Turn> {
+  ): AsyncGenerator<ServerAgentStreamEvent, AgentMessageInput | Turn> {
     const {
       agentHookManager,
       loopDetector,
@@ -179,7 +197,7 @@ export class MessageStreamOrchestrator {
       agentHookManager.cleanupOldHookState(ctx.prompt_id, lastPromptId);
     }
 
-    let request: PartListUnion = initialRequest;
+    let request: AgentMessageInput = initialRequest;
     const isNewPrompt = getLastPromptId() !== ctx.prompt_id;
 
     if (isNewPrompt) {
@@ -217,8 +235,19 @@ export class MessageStreamOrchestrator {
 
       const additionalContext = hookOutput?.getAdditionalContext();
       if (additionalContext) {
-        const requestArray = Array.isArray(request) ? request : [request];
-        request = [...requestArray, { text: additionalContext }];
+        const additionalBlock: ContentBlock = {
+          type: 'text',
+          text: additionalContext,
+        };
+        // Normalize the request to ContentBlock[] so the resulting array is
+        // a valid AgentMessageInput (ContentBlock[]). Mixing a raw string
+        // with ContentBlock in a plain array produces an invalid union that
+        // iContentFromAgentMessageInput cannot classify, causing the context
+        // to be dropped ("unsupported legacy input: empty conversion").
+        const blocks = iContentFromAgentMessageInput(request).flatMap(
+          (c) => c.blocks,
+        );
+        request = [...blocks, additionalBlock] as AgentMessageInput;
       }
     } else {
       // Continuation / retry of the same prompt — emit ModelInfo only when
@@ -235,7 +264,7 @@ export class MessageStreamOrchestrator {
   }
 
   private async *_checkSessionLimits(
-    initialRequest: PartListUnion,
+    initialRequest: AgentMessageInput,
     ctx: StreamContext,
   ): AsyncGenerator<ServerAgentStreamEvent, Turn | undefined> {
     const { config, getChat, getSessionTurnCount, getEffectiveModel } =
@@ -288,15 +317,16 @@ export class MessageStreamOrchestrator {
     // tokenizer-backed methods (e.g. a minimal test double), or the tokenizer
     // throws (e.g. uninitialized internals during early preflight), fall back
     // to the structured payload-aware estimate so the guard still functions
-    // while counting functionResponse/functionCall JSON payloads.
-    const { estimatePendingTokens: est, convertPartListUnionToIContent: conv } =
-      chat;
+    // while counting tool-response/tool-call JSON payloads.
+    const { estimatePendingTokens: est } = chat;
     const fallback = estimateRequestTokensStructured(initialRequest);
     const estimatedRequestTokenCount =
-      typeof est === 'function' && typeof conv === 'function'
+      typeof est === 'function'
         ? await Promise.resolve()
-            .then(() => conv.call(chat, initialRequest))
-            .then((content) => est.call(chat, [content]))
+            .then(() => {
+              const contents = iContentFromAgentMessageInput(initialRequest);
+              return est.call(chat, contents);
+            })
             .catch(() => fallback)
         : fallback;
 
@@ -322,49 +352,60 @@ export class MessageStreamOrchestrator {
     );
   }
 
+  /**
+   * Pending-tool-call detection on neutral blocks (P15).
+   *
+   * @plan:PLAN-20260707-AGENTNEUTRAL.P15
+   * @requirement:REQ-005.4
+   */
   private async _injectIdeContext(): Promise<void> {
     const { config, ideContextTracker, getChat, getHistory } = this.deps;
     const history = await getHistory();
     const lastMessage =
       history.length > 0 ? history[history.length - 1] : undefined;
+    const lastIContent = lastMessage;
     const hasPendingToolCall =
-      !!lastMessage &&
-      lastMessage.role === 'model' &&
-      (lastMessage.parts?.some((p) => 'functionCall' in p) ?? false);
+      !!lastIContent &&
+      lastIContent.speaker === 'ai' &&
+      lastIContent.blocks.some((b) => b.type === 'tool_call');
 
     if (config.getIdeMode() && !hasPendingToolCall) {
       const { contextParts, newIdeContext } = ideContextTracker.getContextParts(
         history.length === 0,
       );
       if (contextParts.length > 0) {
-        getChat().addHistory({
-          role: 'user',
-          parts: [{ text: contextParts.join('\n') }],
-        });
+        getChat().addHistory(
+          iContentFromBlocks(
+            [{ type: 'text', text: contextParts.join('\n') }],
+            'human',
+          ),
+        );
       }
       ideContextTracker.recordSentContext(newIdeContext);
     }
   }
 
   private async *_runRetryLoop(
-    initialRequest: PartListUnion,
+    initialRequest: AgentMessageInput,
     signal: AbortSignal,
     ctx: StreamContext,
   ): AsyncGenerator<ServerAgentStreamEvent, Turn> {
     const { todoContinuationService, complexityAnalyzer, getSessionTurnCount } =
       this.deps;
 
-    let baseRequest: PartListUnion = Array.isArray(initialRequest)
-      ? [...(initialRequest as Part[])]
-      : initialRequest;
+    let baseRequest: AgentMessageInput =
+      iContentFromAgentMessageInput(initialRequest);
     let retryCount = 0;
     let lastTurn: Turn | undefined;
     let hadToolCallsThisTurn = false;
 
     while (retryCount < MAX_RETRIES) {
-      let iterRequest: PartListUnion = Array.isArray(baseRequest)
-        ? [...(baseRequest as Part[])]
-        : baseRequest;
+      let iterRequest: AgentMessageInput = iContentFromAgentMessageInput(
+        baseRequest,
+      ).map((content) => ({
+        ...content,
+        blocks: [...content.blocks],
+      }));
 
       if (retryCount === 0) {
         const analyzed = this._applyComplexityAnalysis(
@@ -401,7 +442,7 @@ export class MessageStreamOrchestrator {
       if (iterResult.earlyReturn) return turn;
       hadToolCallsThisTurn = iterResult.hadToolCallsThisTurn;
 
-      const postTurnResult = yield* this._evaluatePostTurn(
+      const postTurnResult: PostTurnResult = yield* this._evaluatePostTurn(
         iterResult,
         baseRequest,
         retryCount,
@@ -419,12 +460,12 @@ export class MessageStreamOrchestrator {
   }
 
   private async *_processStreamIteration(
-    iterRequest: PartListUnion,
+    iterRequest: AgentMessageInput,
     signal: AbortSignal,
     turn: Turn,
     ctx: StreamContext,
     hadToolCallsPrior: boolean,
-    initialRequest: PartListUnion,
+    initialRequest: AgentMessageInput,
   ): AsyncGenerator<ServerAgentStreamEvent, IterationResult> {
     const { loopDetector, todoContinuationService, updateTelemetryTokenCount } =
       this.deps;
@@ -521,7 +562,7 @@ export class MessageStreamOrchestrator {
 
   private async *_evaluatePostTurn(
     iter: IterationResult,
-    baseRequest: PartListUnion,
+    baseRequest: AgentMessageInput,
     retryCount: number,
     ctx: StreamContext,
   ): AsyncGenerator<ServerAgentStreamEvent, PostTurnResult> {
@@ -569,7 +610,7 @@ export class MessageStreamOrchestrator {
         newBaseRequest: [
           {
             text: 'System: Continue and take the next concrete action now. Use tools if needed.',
-          } as Part,
+          } as ContentBlock,
         ],
       };
     }
@@ -584,7 +625,7 @@ export class MessageStreamOrchestrator {
 
   private async *_evaluateTodoContinuation(
     iter: IterationResult,
-    baseRequest: PartListUnion,
+    baseRequest: AgentMessageInput,
     retryCount: number,
     ctx: StreamContext,
   ): AsyncGenerator<ServerAgentStreamEvent, PostTurnResult> {
@@ -616,7 +657,7 @@ export class MessageStreamOrchestrator {
         afterOut?.shouldStopExecution() === true
       ) {
         yield* sendMessageStream(
-          [{ text: afterOut.getEffectiveReason() }],
+          [{ type: 'text', text: afterOut.getEffectiveReason() }],
           ctx.signal,
           ctx.prompt_id,
           getBoundedTurns() - 1,
@@ -679,7 +720,7 @@ export class MessageStreamOrchestrator {
       afterOut?.shouldStopExecution() === true
     ) {
       yield* sendMessageStream(
-        [{ text: afterOut.getEffectiveReason() }],
+        [{ type: 'text', text: afterOut.getEffectiveReason() }],
         ctx.signal,
         ctx.prompt_id,
         getBoundedTurns() - 1,
@@ -693,10 +734,10 @@ export class MessageStreamOrchestrator {
     todoContinuationService: TodoContinuationService,
     latestSnapshot: Todo[],
     activeTodos: Todo[],
-    baseRequest: PartListUnion,
+    baseRequest: AgentMessageInput,
     _deferredEvents: ServerAgentStreamEvent[],
     _ctx: StreamContext,
-  ): Promise<PartListUnion | undefined> {
+  ): Promise<AgentMessageInput | undefined> {
     const previousSnapshot = todoContinuationService.lastTodoSnapshot ?? [];
     const snapshotUnchanged = todoContinuationService.areTodoSnapshotsEqual(
       previousSnapshot,
@@ -719,32 +760,25 @@ export class MessageStreamOrchestrator {
       return undefined;
     }
 
-    const textOnlyBase = Array.isArray(baseRequest)
-      ? (baseRequest as Part[]).filter(
-          (part) =>
-            typeof part === 'object' &&
-            !('functionCall' in part) &&
-            !('functionResponse' in part),
-        )
-      : [];
     return todoContinuationService.appendSystemReminderToRequest(
-      textOnlyBase,
+      iContentFromAgentMessageInput(baseRequest),
       followUpReminder,
     );
   }
 
   private _applyComplexityAnalysis(
-    request: PartListUnion,
+    request: IContent[],
     todoContinuationService: TodoContinuationService,
     complexityAnalyzer: ComplexityAnalyzer,
     getSessionTurnCount: () => number,
-  ): { request: PartListUnion; baseRequest: PartListUnion } {
+  ): { request: AgentMessageInput; baseRequest: AgentMessageInput } {
     let shouldAppendTodoSuffix = false;
 
-    if (Array.isArray(request) && request.length > 0) {
-      const userMessage = request
-        .filter((part) => typeof part === 'object' && 'text' in part)
-        .map((part) => (part as { text: string }).text)
+    if (request.length > 0) {
+      const userMessage = iContentFromAgentMessageInput(request)
+        .flatMap((content) => content.blocks)
+        .filter((block) => block.type === 'text')
+        .map((block) => block.text)
         .join(' ')
         .trim();
 
@@ -764,12 +798,12 @@ export class MessageStreamOrchestrator {
     }
 
     if (shouldAppendTodoSuffix) {
-      request = todoContinuationService.appendTodoSuffixToRequest(request);
+      request = iContentFromAgentMessageInput(
+        todoContinuationService.appendTodoSuffixToRequest(request),
+      );
     }
 
-    const baseRequest = Array.isArray(request)
-      ? [...(request as Part[])]
-      : request;
+    const baseRequest = iContentFromAgentMessageInput(request);
     return { request, baseRequest };
   }
 
@@ -803,113 +837,33 @@ export class MessageStreamOrchestrator {
   }
 
   private _getProviderName(): string {
-    const contentGenConfig = this.deps.config.getContentGeneratorConfig();
-    const providerManager = contentGenConfig?.providerManager;
-    const activeName = providerManager?.getActiveProviderName();
-    return activeName && activeName.length > 0 ? activeName : 'backend';
-  }
-
-  /**
-   * Resolves the effective model for ModelInfo, preferring the provider
-   * manager's active provider model where available. Falls back to the active
-   * provider's default model before the config-level model so providers that
-   * own a meaningful default (e.g. load-balancer pools) are not masked by a
-   * generic config default.
-   */
-  private _resolveModelForInfo(): string {
-    const contentGenConfig = this.deps.config.getContentGeneratorConfig();
-    const providerManager = contentGenConfig?.providerManager;
-    const activeProvider = providerManager?.getActiveProvider();
-
-    if (activeProvider !== undefined) {
-      const activeModel: unknown = activeProvider.getCurrentModel?.();
-      if (typeof activeModel === 'string' && activeModel.trim() !== '') {
-        return activeModel;
-      }
-
-      // getDefaultModel is optional on the core RuntimeProvider contract; the
-      // optional-call operator short-circuits when it is absent. Some wider
-      // structural provider shapes type the return as `string | null |
-      // undefined`, so verify it is a non-empty string before trimming rather
-      // than assuming a bare `string`.
-      const defaultModel: unknown = activeProvider.getDefaultModel?.();
-      if (typeof defaultModel === 'string' && defaultModel.trim() !== '') {
-        return defaultModel;
-      }
-    }
-
-    return this.deps.getEffectiveModel();
+    return resolveProviderName(this.deps.config);
   }
 
   private _buildModelInfo(): ModelInfo {
-    const model = this._resolveModelForInfo();
-    const providerName = this._getProviderName();
-    const profileName = this._getProfileName();
-    const hasProfile = typeof profileName === 'string' && profileName !== '';
-    const displayLabel = hasProfile ? `${profileName}:${model}` : model;
-    return { model, providerName, profileName, displayLabel };
+    return buildModelInfo(this.deps.config, this.deps.getEffectiveModel());
   }
 
-  /**
-   * Computes a collision-safe composite identity key from provider, profile,
-   * and model. Uses JSON.stringify to guarantee unambiguous delimiting — a
-   * null-byte-joined approach can still collide when a field value itself
-   * contains a null byte.
-   */
-  private _modelIdentityKey(info: ModelInfo): string {
-    return JSON.stringify([
-      info.providerName ?? '',
-      info.profileName ?? '',
-      info.model,
-    ]);
+  private *_modelInfoEvents(force: boolean): Generator<ServerAgentStreamEvent> {
+    const info = this._buildModelInfo();
+    const key = modelIdentityKey(info);
+    if (!force && key === this.#lastModelIdentity) return;
+    this.#lastModelIdentity = key;
+    yield { type: AgentEventType.ModelInfo, value: info };
   }
 
   private async *_emitModelInfoForNewSequence(): AsyncGenerator<
     ServerAgentStreamEvent,
     void
   > {
-    const info = this._buildModelInfo();
-    this.#lastModelIdentity = this._modelIdentityKey(info);
-    yield { type: AgentEventType.ModelInfo, value: info };
+    yield* this._modelInfoEvents(true);
   }
 
-  /**
-   * Emits a ModelInfo event only when the current composite identity
-   * (model/provider/profile) differs from the last emission.
-   * Suppresses duplicates for the same identity.
-   */
   private async *_emitModelInfoIfChanged(): AsyncGenerator<
     ServerAgentStreamEvent,
     void
   > {
-    const info = this._buildModelInfo();
-    const key = this._modelIdentityKey(info);
-    if (key === this.#lastModelIdentity) return;
-    this.#lastModelIdentity = key;
-    yield { type: AgentEventType.ModelInfo, value: info };
-  }
-
-  private _getProfileName(): string | null {
-    try {
-      const settingsService = (
-        this.deps.config as unknown as {
-          getSettingsService?: () => {
-            getCurrentProfileName?: () => string | null;
-            get?: (key: string) => unknown;
-          };
-        }
-      ).getSettingsService?.();
-      if (settingsService?.getCurrentProfileName) {
-        return settingsService.getCurrentProfileName();
-      }
-      if (settingsService?.get) {
-        const profile = settingsService.get('currentProfile');
-        return typeof profile === 'string' ? profile : null;
-      }
-    } catch {
-      // Settings service unavailable — no profile info
-    }
-    return null;
+    yield* this._modelInfoEvents(false);
   }
 
   private _resetTodoState(
@@ -924,19 +878,18 @@ export class MessageStreamOrchestrator {
   private async _fireAfterHook(
     ctx: StreamContext,
   ): Promise<AfterAgentHookOutput | undefined> {
-    const responseText = ctx.responseChunks.join('');
     return this.deps.agentHookManager.fireAfterAgentHookSafe(
       ctx.prompt_id,
       ctx.promptText,
-      responseText,
+      ctx.responseChunks.join(''),
       false,
     );
   }
 
   /**
    * If the AfterAgent hook requested context clearing, emit an
-   * AgentExecutionStopped event with contextCleared=true so the UI
-   * can react. Returns the hook output for further caller checks.
+   * AgentExecutionStopped event with contextCleared=true so the UI can react.
+   * Returns the hook output for further caller checks.
    */
   private async *_fireAfterHookAndEmitClearContext(
     ctx: StreamContext,

@@ -4,8 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20270110-ISSUE2378.P01
+ * @requirement:REQ-2378-001
+ *
+ * BEHAVIORAL suite for the foreground-Agent composition helper.
+ *
+ * #2378 Phase A makes the Agent own the single session MessageBus and
+ * Config.initialize: `createForegroundAgent` no longer accepts (or threads) a
+ * caller-constructed session bus. It adopts the resolved Config through the
+ * public `fromConfig` entrypoint — which builds exactly one bus from the
+ * Config's policy engine — and exposes that bus via `agent.getMessageBus()`.
+ * These assertions observe the OUTCOME (the exact call shape, the returned
+ * instance, cleanup disposal) via public surfaces only.
+ */
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { Config, MessageBus } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
 const { fromConfigMock } = vi.hoisted(() => ({
@@ -50,23 +65,14 @@ function makeConfig(
   } as unknown as Config;
 }
 
-function makeMessageBus(): MessageBus {
-  return {
-    publish: vi.fn(),
-    subscribe: vi.fn(),
-  } as unknown as MessageBus;
-}
-
-describe('createForegroundAgent', () => {
+describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:REQ-2378-001', () => {
   let config: Config;
-  let sessionMessageBus: MessageBus;
   let fakeAgent: FakeAgent;
 
   beforeEach(() => {
     __resetCleanupStateForTesting();
     fromConfigMock.mockReset();
     config = makeConfig();
-    sessionMessageBus = makeMessageBus();
     fakeAgent = {
       dispose: vi.fn().mockResolvedValue(undefined),
       getConfig: () => config,
@@ -81,17 +87,19 @@ describe('createForegroundAgent', () => {
     vi.restoreAllMocks();
   });
 
-  it('calls fromConfig exactly once with the existing config, sessionMessageBus, and an activation intent', async () => {
-    await createForegroundAgent({ config, sessionMessageBus });
+  it('calls fromConfig exactly once with the existing config and an activation intent, and NO caller messageBus (the Agent owns its bus)', async () => {
+    await createForegroundAgent({ config });
 
     expect(fromConfigMock).toHaveBeenCalledTimes(1);
     const options = fromConfigMock.mock.calls[0][0] as {
       config: Config;
-      messageBus: MessageBus;
+      messageBus?: unknown;
       activation: unknown;
     };
     expect(options.config).toBe(config);
-    expect(options.messageBus).toBe(sessionMessageBus);
+    // #2378: the foreground helper never threads a caller-constructed bus —
+    // fromConfig builds the single session bus from the Config's policy engine.
+    expect(options.messageBus).toBeUndefined();
     expect(options.activation).toStrictEqual({
       provider: undefined,
       model: 'gemini-2.5-pro',
@@ -100,7 +108,7 @@ describe('createForegroundAgent', () => {
   });
 
   it('returns the agent produced by fromConfig and it is disposed on cleanup', async () => {
-    const agent = await createForegroundAgent({ config, sessionMessageBus });
+    const agent = await createForegroundAgent({ config });
 
     // Observable outcome: the exact fakeAgent instance is returned (not a
     // wrapper), and it is registered for cleanup so runExitCleanup disposes it.
@@ -111,7 +119,7 @@ describe('createForegroundAgent', () => {
   });
 
   it('disposes the agent on normal exit alongside the interactive UI cleanup', async () => {
-    await createForegroundAgent({ config, sessionMessageBus });
+    await createForegroundAgent({ config });
 
     const uiCleanup = vi.fn();
     registerCleanup(uiCleanup);
@@ -125,7 +133,7 @@ describe('createForegroundAgent', () => {
   });
 
   it('disposes the agent when startup is interrupted before the UI registers cleanup', async () => {
-    await createForegroundAgent({ config, sessionMessageBus });
+    await createForegroundAgent({ config });
 
     await runExitCleanup();
 
@@ -137,29 +145,25 @@ describe('createForegroundAgent', () => {
     fromConfigMock.mockReset();
     fromConfigMock.mockRejectedValue(failure);
 
-    await expect(
-      createForegroundAgent({ config, sessionMessageBus }),
-    ).rejects.toThrow(failure);
+    await expect(createForegroundAgent({ config })).rejects.toThrow(failure);
 
     await runExitCleanup();
 
     expect(fakeAgent.dispose).not.toHaveBeenCalled();
   });
 
-  it('forwards the exact existing instances to fromConfig (no duplicate runtime construction)', async () => {
-    await createForegroundAgent({ config, sessionMessageBus });
+  it('forwards the exact existing Config to fromConfig (no duplicate runtime construction)', async () => {
+    await createForegroundAgent({ config });
 
     const options = fromConfigMock.mock.calls[0][0] as {
       config: Config;
-      messageBus: MessageBus;
     };
     expect(options.config).toBe(config);
-    expect(options.messageBus).toBe(sessionMessageBus);
   });
 
   it('declares the configured provider and model in the activation intent', async () => {
     config = makeConfig({ provider: 'glm', model: 'glm-4' });
-    await createForegroundAgent({ config, sessionMessageBus });
+    await createForegroundAgent({ config });
 
     const options = fromConfigMock.mock.calls[0][0] as {
       activation: { provider?: string; model?: string; authMode: string };
@@ -173,7 +177,7 @@ describe('createForegroundAgent', () => {
 
   it('omits the model from the intent when the config model is the placeholder', async () => {
     config = makeConfig({ provider: 'glm', model: 'placeholder-model' });
-    await createForegroundAgent({ config, sessionMessageBus });
+    await createForegroundAgent({ config });
 
     const options = fromConfigMock.mock.calls[0][0] as {
       activation: { provider?: string; model?: string; authMode: string };

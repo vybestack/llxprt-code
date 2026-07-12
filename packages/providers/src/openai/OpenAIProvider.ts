@@ -586,6 +586,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     mergedHeaders: Record<string, string> | undefined,
     baseURL: string | undefined,
     logger: DebugLogger,
+    reasoningFieldName: string | undefined,
   ): AsyncGenerator<IContent, void, unknown> {
     const { processStreamingResponse } = await import(
       './OpenAIStreamProcessor.js'
@@ -599,6 +600,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         textToolParser: this.textToolParser,
         logger,
         getBaseURL: () => this.getBaseURL(),
+        reasoningFieldName,
       };
       yield* processStreamingResponse(
         response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
@@ -682,6 +684,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       getBaseURL: () => this.getBaseURL(),
     });
 
+    const reasoningFieldName = options.settings.get('reasoning.fieldName') as
+      | string
+      | undefined;
+
     yield* this.dispatchResponse(
       response,
       model,
@@ -694,6 +700,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       mergedHeaders,
       baseURL,
       logger,
+      reasoningFieldName,
     );
   }
 

@@ -14,7 +14,7 @@ import type { SettingDefinition as _SettingDefinition } from '../../config/setti
 import type { getSettingDefinition } from '../../utils/settingsUtils.js';
 import { Colors } from '../colors.js';
 import type { PendingValue, SettingItem } from './settingsDialogTypes.js';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 type SettingValueType = _SettingDefinition['type'];
 

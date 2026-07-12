@@ -161,7 +161,11 @@ describe('buildToolDeclarationsFromView', () => {
     } as unknown as ToolRegistry;
     const view = makeView(['bash']);
     const result = buildToolDeclarationsFromView(registry, view);
-    expect(result).toStrictEqual([decl1]);
+    // toToolDeclaration normalizes to a neutral ToolDeclaration, defaulting
+    // parametersJsonSchema to {} when no schema is present on the source.
+    expect(result).toStrictEqual([
+      { name: 'bash', description: 'Run bash', parametersJsonSchema: {} },
+    ]);
   });
 
   it('falls back to getAllTools when getFunctionDeclarations not available', () => {

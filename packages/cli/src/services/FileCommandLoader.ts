@@ -11,7 +11,7 @@ import { glob } from 'glob';
 import { z } from 'zod';
 import type { CliUiRuntime } from '../ui/cliUiRuntime.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { ICommandLoader } from './types.js';
 import type {
   CommandContext,

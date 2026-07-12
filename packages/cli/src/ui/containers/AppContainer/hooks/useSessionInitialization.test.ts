@@ -8,19 +8,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act } from 'react';
 import { renderHook } from '../../../../test-utils/render.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
-import { SessionStartSource } from '@vybestack/llxprt-code-core';
 import type { IContent } from '@vybestack/llxprt-code-core';
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-core')
-  >('@vybestack/llxprt-code-core');
-  return {
-    ...actual,
-    triggerSessionStartHook: vi.fn().mockResolvedValue(null),
-    SessionStartSource: actual.SessionStartSource,
-  };
-});
+// #2378: the hook drives SessionStart through the Agent's own hooks surface
+// (agent.hooks.triggerSessionStart), so the raw core triggerSessionStartHook is
+// no longer imported by the SUT and does not need to be mocked here.
 
 const iContentToHistoryItemsMock = vi.hoisted(() =>
   vi.fn().mockReturnValue([]),
@@ -57,6 +49,27 @@ const makeConfig = (
   };
 };
 
+interface SessionStartOutput {
+  systemMessage?: string;
+  additionalContext?: string;
+}
+
+// Build a fake Agent whose hooks.triggerSessionStart resolves to the given
+// SessionStart output. The captured spy is returned alongside so tests can
+// assert the hook was driven through the Agent surface (#2378) rather than the
+// raw core trigger. Cast to `never` matches the stub convention already used
+// for uiRuntime in this file.
+const makeAgentWithSpy = (output: SessionStartOutput = {}) => {
+  const triggerSessionStart = vi.fn().mockResolvedValue(output);
+  return {
+    agent: { hooks: { triggerSessionStart } } as never,
+    triggerSessionStart,
+  };
+};
+
+const makeAgent = (output: SessionStartOutput = {}) =>
+  makeAgentWithSpy(output).agent;
+
 describe('useSessionInitialization', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -74,6 +87,7 @@ describe('useSessionInitialization', () => {
     const { result } = renderHook(() =>
       useSessionInitialization({
         uiRuntime: config as never,
+        agent: makeAgent(),
         addItem,
         loadHistory,
       }),
@@ -101,6 +115,7 @@ describe('useSessionInitialization', () => {
     renderHook(() =>
       useSessionInitialization({
         uiRuntime: config as never,
+        agent: makeAgent(),
         addItem,
         loadHistory,
         resumedHistory,
@@ -122,6 +137,7 @@ describe('useSessionInitialization', () => {
     renderHook(() =>
       useSessionInitialization({
         uiRuntime: config as never,
+        agent: makeAgent(),
         addItem,
         loadHistory,
         resumedHistory: [],
@@ -139,13 +155,12 @@ describe('useSessionInitialization', () => {
     const config = makeConfig();
     const loadHistory = vi.fn();
     const addItem = vi.fn();
-    const { triggerSessionStartHook } = await import(
-      '@vybestack/llxprt-code-core'
-    );
+    const { agent, triggerSessionStart } = makeAgentWithSpy();
 
     renderHook(() =>
       useSessionInitialization({
         uiRuntime: config as never,
+        agent,
         addItem,
         loadHistory,
       }),
@@ -155,10 +170,49 @@ describe('useSessionInitialization', () => {
       await Promise.resolve();
     });
 
-    expect(triggerSessionStartHook).toHaveBeenCalledWith(
-      config.hooks,
-      SessionStartSource.Startup,
+    // #2378: SessionStart is driven through the Agent's own hooks surface
+    // exactly once (the idempotency guard ref prevents duplicate triggers),
+    // NOT via the raw core triggerSessionStartHook.
+    expect(triggerSessionStart).toHaveBeenCalledTimes(1);
+    expect(triggerSessionStart).toHaveBeenCalledWith();
+  });
+
+  it('injects SessionStart output into history via the agent client', async () => {
+    const config = makeConfig();
+    const loadHistory = vi.fn();
+    const addItem = vi.fn();
+    const addHistory = vi.fn().mockResolvedValue(undefined);
+    config.agentClientSource.getAgentClient.mockReturnValue({ addHistory });
+    const { agent, triggerSessionStart } = makeAgentWithSpy({
+      systemMessage: 'welcome message',
+      additionalContext: 'extra context',
+    });
+
+    renderHook(() =>
+      useSessionInitialization({
+        uiRuntime: config as never,
+        agent,
+        addItem,
+        loadHistory,
+      }),
     );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // The Agent hook is the single source of SessionStart output; its
+    // systemMessage is surfaced as an info item and its additionalContext is
+    // injected into agent-client history.
+    expect(triggerSessionStart).toHaveBeenCalledTimes(1);
+    expect(addItem).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'info', text: 'welcome message' }),
+      expect.any(Number),
+    );
+    expect(addHistory).toHaveBeenCalledWith({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'extra context' }],
+    });
   });
 
   it('aborts session initialization on unmount', async () => {
@@ -169,6 +223,7 @@ describe('useSessionInitialization', () => {
     const { unmount } = renderHook(() =>
       useSessionInitialization({
         uiRuntime: config as never,
+        agent: makeAgent(),
         addItem,
         loadHistory,
       }),
@@ -202,6 +257,7 @@ describe('useSessionInitialization', () => {
     const { rerender } = renderHook(() =>
       useSessionInitialization({
         uiRuntime: config as never,
+        agent: makeAgent(),
         addItem,
         loadHistory,
         resumedHistory,

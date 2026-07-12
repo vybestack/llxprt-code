@@ -192,7 +192,7 @@ describe('AgenticLoop with caller display callbacks', () => {
     expect(completedEvents[0].completed[0].status).toBe('success');
     expect(turnMessages).toHaveLength(2);
     const turn2Parts = partListUnionToParts(turnMessages[1]);
-    expect(turn2Parts.some((p) => 'functionResponse' in p)).toBe(true);
+    expect(turn2Parts.some((p) => p.type === 'tool_response')).toBe(true);
     const streamContents = events
       .filter(isStream)
       .filter((e) => e.event.type === AgentEventType.Content)

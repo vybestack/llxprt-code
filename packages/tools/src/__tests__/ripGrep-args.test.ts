@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildRipgrepArgs,
+  parseRipgrepLine,
   type RipgrepIgnoreOptions,
 } from '../tools/ripGrep.js';
 
@@ -126,11 +127,6 @@ describe('buildRipgrepArgs', () => {
     expect(positiveGlobs).toEqual([]);
   });
 
-  it('uses an unambiguous separator for paths containing colons', () => {
-    const args = buildRipgrepArgs(PATTERN, ABS_PATH, undefined, defaultIgnore);
-    expect(pairValue(args, '--field-match-separator')).toBe('\\x1f');
-  });
-
   it('places the pattern after --regexp', () => {
     const args = buildRipgrepArgs(PATTERN, ABS_PATH, undefined, defaultIgnore);
     expect(pairValue(args, '--regexp')).toBe(PATTERN);
@@ -139,5 +135,42 @@ describe('buildRipgrepArgs', () => {
   it('appends the absolute path as the final positional argument', () => {
     const args = buildRipgrepArgs(PATTERN, ABS_PATH, undefined, defaultIgnore);
     expect(args[args.length - 1]).toBe(ABS_PATH);
+  });
+
+  it('uses null-delimited file paths', () => {
+    const args = buildRipgrepArgs(PATTERN, ABS_PATH, undefined, defaultIgnore);
+    expect(hasFlag(args, '--null')).toBe(true);
+  });
+});
+
+describe('parseRipgrepLine', () => {
+  it.runIf(process.platform === 'win32')(
+    'parses null-delimited Windows drive-letter paths',
+    () => {
+      const basePath = 'C:\\repo';
+      const match = parseRipgrepLine(
+        `C:\\repo\\src\\keep.ts${String.fromCharCode(0)}1:needle found`,
+        basePath,
+      );
+
+      expect(match).toEqual({
+        filePath: 'src\\keep.ts',
+        lineNumber: 1,
+        line: 'needle found',
+      });
+    },
+  );
+
+  it('preserves colons in matched content', () => {
+    const match = parseRipgrepLine(
+      `/tmp/search-root/keep.ts${String.fromCharCode(0)}3:value: with: colons`,
+      '/tmp/search-root',
+    );
+
+    expect(match).toEqual({
+      filePath: 'keep.ts',
+      lineNumber: 3,
+      line: 'value: with: colons',
+    });
   });
 });

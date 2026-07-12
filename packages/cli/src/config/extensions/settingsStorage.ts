@@ -20,7 +20,7 @@ import * as path from 'path';
 import * as crypto from 'node:crypto';
 import type { ExtensionSetting } from './extensionSettings.js';
 import { SecureStore } from '@vybestack/llxprt-code-storage';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { getWorkspaceIdentity } from '../../utils/gitUtils.js';
 
 /**

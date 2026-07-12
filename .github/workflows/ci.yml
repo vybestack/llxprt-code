@@ -264,6 +264,10 @@ jobs:
         run: |-
           npm run lint:cli-boundary
 
+      - name: 'Run agents neutral gate (anti-#2424 enforcement)'
+        run: |-
+          npm run gate:agents-neutral
+
       # Build must run BEFORE the type-aware lint: several workspace tsconfigs
       # map cross-workspace imports to `dist/*.d.ts` (e.g. storage, settings),
       # so tsserver (projectService) needs the compiled declarations on disk to

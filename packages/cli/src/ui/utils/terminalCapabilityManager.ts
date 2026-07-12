@@ -12,8 +12,8 @@ import {
   disableModifyOtherKeys,
   enableBracketedPasteMode,
   disableBracketedPasteMode,
-  DebugLogger,
 } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 const debugLogger = new DebugLogger('llxprt:terminal-capability');
 

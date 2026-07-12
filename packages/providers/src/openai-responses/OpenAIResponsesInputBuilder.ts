@@ -40,6 +40,8 @@ export interface ResponsesInputBuildContext {
   debug: (messageFactory: () => string) => void;
 }
 
+const OPENAI_RESPONSES_REASONING_ID_KEY = 'openai.responses.reasoningId';
+
 export function buildOpenAIResponsesInput(
   patchedContent: IContent[],
   context: ResponsesInputBuildContext,
@@ -47,7 +49,7 @@ export function buildOpenAIResponsesInput(
   const input: ResponsesInputItem[] = [];
   let reasoningIdCounter = 0;
   const nextReasoningId = () => {
-    const id = `reasoning_${Date.now()}_${reasoningIdCounter}`;
+    const id = `rs_${Date.now()}_${reasoningIdCounter}`;
     reasoningIdCounter += 1;
     return id;
   };
@@ -120,9 +122,15 @@ function appendAssistantInput(
       (block) => block.type === 'thinking',
     )) {
       if (thinkingBlock.encryptedContent) {
+        const providerReasoningId =
+          thinkingBlock.providerMetadata?.[OPENAI_RESPONSES_REASONING_ID_KEY];
         input.push({
           type: 'reasoning',
-          id: nextReasoningId(),
+          id:
+            typeof providerReasoningId === 'string' &&
+            providerReasoningId.startsWith('rs')
+              ? providerReasoningId
+              : nextReasoningId(),
           summary: [
             {
               type: 'summary_text',

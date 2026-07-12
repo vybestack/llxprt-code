@@ -49,14 +49,23 @@ import {
   isTextEvent,
 } from './helpers/agentHarness.js';
 
-/** Builds a public AgentMessage (Content) with role + a single text part. */
-function textMessage(role: 'user' | 'model', text: string): AgentMessage {
-  return { role, parts: [{ text }] };
+/**
+ * Builds a neutral IContent (speaker/blocks) with a single text block.
+ * Post-P21, the client contract stores and returns IContent, so all history
+ * seeding must use this neutral shape.
+ */
+function textMessage(speaker: 'human' | 'ai', text: string): AgentHistoryItem {
+  return { speaker, blocks: [{ type: 'text', text }] };
 }
 
-/** Extracts the concatenated text of a message's parts. */
-function messageText(msg: AgentMessage): string {
-  return msg.parts.map((p) => ('text' in p ? p.text : '')).join('');
+/**
+ * Extracts the concatenated text of a message's blocks (neutral IContent).
+ * Accepts AgentMessage at the type level (the public getHistory return type)
+ * even though the runtime objects are IContent post-P21.
+ */
+function messageText(msg: AgentMessage | AgentHistoryItem): string {
+  const blocks = msg.blocks;
+  return blocks.map((b) => (b.type === 'text' ? b.text : '')).join('');
 }
 
 describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @requirement:REQ-011', () => {
@@ -64,8 +73,8 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
       const seeded = [
-        textMessage('user', 'remember the magic word: quokka'),
-        textMessage('model', 'got it, the magic word is quokka'),
+        textMessage('human', 'remember the magic word: quokka'),
+        textMessage('ai', 'got it, the magic word is quokka'),
       ];
       await agent.setHistory(seeded);
 
@@ -87,8 +96,8 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
       await agent.setHistory([
-        textMessage('user', 'to be forgotten'),
-        textMessage('model', 'also forgotten'),
+        textMessage('human', 'to be forgotten'),
+        textMessage('ai', 'also forgotten'),
       ]);
       await agent.resetChat();
 
@@ -112,9 +121,9 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
     try {
       // seed enough history for compression to be meaningful
       await agent.setHistory([
-        textMessage('user', 'a'.repeat(2000)),
-        textMessage('model', 'b'.repeat(2000)),
-        textMessage('user', 'c'.repeat(2000)),
+        textMessage('human', 'a'.repeat(2000)),
+        textMessage('ai', 'b'.repeat(2000)),
+        textMessage('human', 'c'.repeat(2000)),
       ]);
 
       // A caller-supplied promptId must be echoed back verbatim on the result
@@ -252,7 +261,7 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
       // addHistory appends a message visible to the next turn
       const before = await agent.getHistory();
       await agent.addHistory(
-        textMessage('user', 'injected context for the next turn'),
+        textMessage('human', 'injected context for the next turn'),
       );
       const after = await agent.getHistory();
       expect(after.length).toBe(before.length + 1);
@@ -342,7 +351,7 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
   it('T6s restoreHistory replaces any prior history rather than appending to it @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      await agent.setHistory([textMessage('user', 'original seeded message')]);
+      await agent.setHistory([textMessage('human', 'original seeded message')]);
 
       await agent.restoreHistory([
         {
@@ -418,7 +427,7 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
   it('T6p property: setHistory then getHistory round-trips an arbitrary generated message list @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010', async () => {
     const msgArb = fc.array(
       fc.record({
-        role: fc.constantFrom('user' as const, 'model' as const),
+        speaker: fc.constantFrom('human' as const, 'ai' as const),
         text: fc.string({ minLength: 1, maxLength: 80 }),
       }),
       { maxLength: 6 },
@@ -431,7 +440,7 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
         }: { agent: Agent; cleanup: () => Promise<void> } =
           await buildAgent('plain-text.jsonl');
         try {
-          const seeded = msgs.map((m) => textMessage(m.role, m.text));
+          const seeded = msgs.map((m) => textMessage(m.speaker, m.text));
           await agent.setHistory(seeded);
           const got = await agent.getHistory();
           expect(got.length).toBe(seeded.length);

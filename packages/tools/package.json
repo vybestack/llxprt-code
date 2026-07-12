@@ -84,7 +84,6 @@
   "dependencies": {
     "@ast-grep/napi": "^0.40.5",
     "ajv": "^8.17.1",
-    "@google/genai": "1.30.0",
     "cheerio": "^1.1.2",
     "diff": "^8.0.3",
     "fast-glob": "^3.3.3",

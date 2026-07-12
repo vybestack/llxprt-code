@@ -8,7 +8,7 @@ import type { Mocked } from 'vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DiscoveredMCPTool } from './mcp-tool.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import type { CallableTool } from '@google/genai';
+import type { CallableTool } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 
 // DiscoveredMCPToolInvocation stores an allowlist on its constructor (static).

@@ -404,6 +404,279 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       expect(stdout).toContain('extract-escape.ts');
     });
 
+    // ── banned runtime-assembly symbols/patterns (#2378) ────────────────────
+    //
+    // The CLI must not import or use runtime-construction primitives, construct
+    // a MessageBus directly, or call Config.initialize({ messageBus }). These
+    // are owned by the core/providers/agents packages behind the public
+    // agent-bootstrap / provider-composition surface. Detection is AST-based so
+    // comments and string literals mentioning a banned name do NOT trip it.
+
+    it('flags a static import of createSessionMessageBus (banned runtime-assembly symbol)', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/assembles-bus.ts',
+          "import { createSessionMessageBus } from '@vybestack/llxprt-code-core';\nexport const bus = createSessionMessageBus();\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('assembles-bus.ts');
+      expect(stdout).toContain('createSessionMessageBus');
+      expect(stdout).toContain('runtime-assembly');
+    });
+
+    it('flags an import of executeProviderActivation (must use the public preflight instead)', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/activates.ts',
+          "import { executeProviderActivation } from '@vybestack/llxprt-code-agents';\nexport const run = executeProviderActivation;\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('activates.ts');
+      expect(stdout).toContain('executeProviderActivation');
+    });
+
+    it('flags each remaining banned runtime-construction symbol', () => {
+      for (const symbol of [
+        'createAgentRuntimeState',
+        'createRuntimeStateFromConfig',
+        'createProviderRuntimeContext',
+        'createAgentRuntimeContext',
+        'activateSettingsRuntimeContext',
+      ]) {
+        const { code, stdout } = withCliFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/uses-primitive.ts',
+            `import { ${symbol} } from '@vybestack/llxprt-code-core';\nexport const used = ${symbol};\n`,
+          );
+          write(...thinIndex());
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('uses-primitive.ts');
+        expect(stdout).toContain(symbol);
+      }
+    });
+
+    it('flags a literal new MessageBus() construction', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/new-bus.ts',
+          "import { MessageBus } from '@vybestack/llxprt-code-core';\nexport function make(engine: unknown) { return new MessageBus(engine); }\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('new-bus.ts');
+      expect(stdout).toContain('new MessageBus');
+    });
+
+    it('flags a Config.initialize({ messageBus }) call', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/init-bus.ts',
+          "import type { Config } from '@vybestack/llxprt-code-core';\nexport async function go(config: Config, messageBus: unknown) { await config.initialize({ messageBus }); }\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('init-bus.ts');
+      expect(stdout).toContain('messageBus');
+    });
+
+    it('flags an aliased import of a banned symbol and its aliased usage', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/aliased.ts',
+          "import { createSessionMessageBus as mkBus } from '@vybestack/llxprt-code-core';\nexport const bus = mkBus();\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('aliased.ts');
+      expect(stdout).toContain('createSessionMessageBus');
+    });
+
+    it('flags banned symbols accessed through namespace imports', () => {
+      for (const access of [
+        'core.createSessionMessageBus()',
+        "core['createSessionMessageBus']()",
+      ]) {
+        const { code, stdout } = withCliFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/namespace-bypass.ts',
+            `import * as core from '@vybestack/llxprt-code-core';\nexport const bus = ${access};\n`,
+          );
+          write(...thinIndex());
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('namespace-bypass.ts');
+        expect(stdout).toContain('createSessionMessageBus');
+      }
+    });
+
+    it('does NOT flag a banned name that appears only in comments or string literals', () => {
+      // AST-based detection: a doc-comment or string mentioning a banned
+      // primitive is not a real import/usage and must not trip the guard. This
+      // is why cliProviderInit.ts / postConfigRuntime.ts can reference
+      // executeProviderActivation by name in prose while staying compliant.
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/mentions-only.ts',
+          [
+            '// This module used to call executeProviderActivation and',
+            '// createSessionMessageBus directly; it now uses the public surface.',
+            "const doc = 'see executeProviderActivation and new MessageBus notes';",
+            'export const value = doc.length;',
+            '',
+          ].join('\n'),
+        );
+        write(...cleanProductionFile());
+        write(...thinIndex());
+        return runScript(root, 0);
+      });
+      expect(stdout).toContain('CLI import boundary check PASSED.');
+      expect(code).toBe(0);
+    });
+
+    it('does NOT flag a benign initialize() call without a messageBus property', () => {
+      // Only .initialize({ messageBus: ... }) is banned; an unrelated
+      // initialize() call (no messageBus) is a normal API and must pass.
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/benign-init.ts',
+          'export async function go(x: { initialize(o: unknown): Promise<void> }) { await x.initialize({ verbose: true }); }\n',
+        );
+        write(...cleanProductionFile());
+        write(...thinIndex());
+        return runScript(root, 0);
+      });
+      expect(stdout).toContain('CLI import boundary check PASSED.');
+      expect(code).toBe(0);
+    });
+
+    it('excludes test files from the banned runtime-assembly scan', () => {
+      // Test infrastructure may freely import/use construction primitives to
+      // build fixtures; the banned-symbol rule governs PRODUCTION source only.
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/__tests__/demo.test.ts',
+          "import { createSessionMessageBus } from '@vybestack/llxprt-code-core';\nexport const bus = createSessionMessageBus();\n",
+        );
+        write(...cleanProductionFile());
+        write(...thinIndex());
+        return runScript(root, 0);
+      });
+      expect(stdout).toContain('CLI import boundary check PASSED.');
+      expect(code).toBe(0);
+    });
+
+    // ── dynamic import()/require() banned-symbol coverage (#2378) ────────────
+    //
+    // The static-import banned-symbol scan is not enough: a runtime-assembly
+    // primitive can also be pulled in via a dynamic `import()` or a CommonJS
+    // `require()` of the BARE runtime package root and destructured/awaited.
+    // Because the specifier is the public bare root, the deep-import scan does
+    // NOT flag it, so the banned-symbol scan must catch the destructured
+    // primitive itself. Otherwise dynamic import/require is a silent bypass of
+    // the whole #2378 boundary.
+
+    it('flags a banned symbol destructured from a dynamic import() of the bare core root', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/dyn-banned.ts',
+          "export async function f() {\n  const { createSessionMessageBus } = await import('@vybestack/llxprt-code-core');\n  return createSessionMessageBus();\n}\n",
+        );
+        write(...cleanProductionFile());
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('dyn-banned.ts');
+      expect(stdout).toContain('createSessionMessageBus');
+      expect(stdout).toContain('runtime-assembly');
+    });
+
+    it('flags a banned symbol destructured from a require() of the bare core root', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/req-banned.ts',
+          "export function g() {\n  const { createAgentRuntimeState } = require('@vybestack/llxprt-code-core');\n  return createAgentRuntimeState();\n}\n",
+        );
+        write(...cleanProductionFile());
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('req-banned.ts');
+      expect(stdout).toContain('createAgentRuntimeState');
+      expect(stdout).toContain('runtime-assembly');
+    });
+
+    it('flags an aliased banned symbol destructured from a dynamic import()', () => {
+      // `import()` destructuring supports renaming: the ORIGINAL exported name
+      // is what is banned, so an aliased destructure must still be flagged.
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/dyn-aliased.ts',
+          "export async function f() {\n  const { createSessionMessageBus: mkBus } = await import('@vybestack/llxprt-code-core');\n  return mkBus();\n}\n",
+        );
+        write(...cleanProductionFile());
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('dyn-aliased.ts');
+      expect(stdout).toContain('createSessionMessageBus');
+    });
+
+    it('does NOT flag a benign symbol destructured from a dynamic import() of the bare core root', () => {
+      // Only the banned runtime-assembly primitives are forbidden; a normal
+      // public export pulled in dynamically must pass.
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/dyn-ok.ts',
+          "export async function f() {\n  const { Config } = await import('@vybestack/llxprt-code-core');\n  return Config;\n}\n",
+        );
+        write(...cleanProductionFile());
+        write(...thinIndex());
+        return runScript(root, 0);
+      });
+      expect(stdout).toContain('CLI import boundary check PASSED.');
+      expect(code).toBe(0);
+    });
+
+    // ── banned runtime-assembly metric reporting (#2378) ────────────────────
+    //
+    // The banned-symbol scan must emit an aggregate count of hits (a scanned
+    // metric) so CI logs surface how many boundary violations were found in a
+    // single line, not just a per-file breakdown.
+
+    it('reports the aggregate banned-symbol hit count in the failure output', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/two-hits.ts',
+          "import { createSessionMessageBus, createAgentRuntimeState } from '@vybestack/llxprt-code-core';\nexport const a = createSessionMessageBus;\nexport const b = createAgentRuntimeState;\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      // Aggregate metric line: two imports + two usages = 4 hits.
+      expect(stdout).toContain(
+        'FAIL: 4 banned runtime-assembly symbol/pattern usage(s) found:',
+      );
+    });
+
     it('flags a bloated index.ts entrypoint exceeding the thin-entry threshold', () => {
       const { code, stdout } = withCliFixture(({ root, write }) => {
         // index.ts over 200 lines

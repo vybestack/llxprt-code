@@ -18,8 +18,13 @@
  * original termination reason is preserved and the loop ends immediately.
  */
 
-import type { Content, FunctionCall } from '@google/genai';
-import { AgentTerminateMode, type SubagentActivityEventType } from './types.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import {
+  AgentTerminateMode,
+  type FunctionCall,
+  type SubagentActivityEventType,
+} from './types.js';
 
 /** Tool name used to signal task completion. */
 export const TASK_COMPLETE_TOOL_NAME = 'complete_task';
@@ -96,10 +101,12 @@ export function markRecoveryResponseUsed(
 }
 
 /**
- * Build the warning `Content` message sent to the model at the start of a
+ * Build the warning `IContent` message sent to the model at the start of a
  * recovery turn, instructing it to call `complete_task` immediately.
  */
-export function getRecoveryWarningMessage(reason: AgentTerminateMode): Content {
+export function getRecoveryWarningMessage(
+  reason: AgentTerminateMode,
+): IContent {
   const isProtocolViolation =
     reason === AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL;
 
@@ -114,10 +121,7 @@ export function getRecoveryWarningMessage(reason: AgentTerminateMode): Content {
     TASK_COMPLETE_TOOL_NAME +
     '` tool with the best partial answer you can provide. Explain that the investigation was interrupted. Do NOT call any other tools. This is your final turn.';
 
-  return {
-    role: 'user',
-    parts: [{ text: prefix + suffix }],
-  };
+  return iContentFromBlocks([{ type: 'text', text: prefix + suffix }], 'human');
 }
 
 /**
@@ -131,7 +135,7 @@ export function enterRecovery(
     type: SubagentActivityEventType,
     data: Record<string, unknown>,
   ) => void,
-): { state: RecoveryActive; warningMessage: Content } {
+): { state: RecoveryActive; warningMessage: IContent } {
   const deadlineMs = Date.now() + gracePeriodSeconds * 1000;
 
   emitActivity('THOUGHT_CHUNK', {
@@ -264,7 +268,7 @@ export function checkRecoveryToolCalls(
 
 /** Result when a termination reason is handled (either enter recovery or finish). */
 export type TerminationHandlingResult =
-  | { handled: true; newState: RecoveryActive; currentMessage: Content }
+  | { handled: true; newState: RecoveryActive; currentMessage: IContent }
   | {
       handled: false;
       result: {
@@ -316,7 +320,7 @@ export function handleTerminationReason(
 
 /** Result when a protocol violation is handled. */
 export type ProtocolViolationResult =
-  | { entered: true; state: RecoveryActive; warningMessage: Content }
+  | { entered: true; state: RecoveryActive; warningMessage: IContent }
   | {
       entered: false;
       result: { terminateReason: AgentTerminateMode; finalResult: string };

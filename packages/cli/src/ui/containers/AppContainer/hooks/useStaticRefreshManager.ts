@@ -18,7 +18,7 @@
 import { useEffect, useRef } from 'react';
 import { StreamingState } from '../../../types.js';
 import { appEvents, AppEvent } from '../../../../utils/events.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 const debug = new DebugLogger('llxprt:ui:staticrefresh');
 

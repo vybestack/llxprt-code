@@ -5,7 +5,7 @@
  */
 
 import { useRef, useEffect } from 'react';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 interface RenderInfo {
   count: number;

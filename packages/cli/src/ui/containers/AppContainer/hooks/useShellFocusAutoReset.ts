@@ -7,10 +7,8 @@
 import { useEffect, useMemo } from 'react';
 import { ToolCallStatus, type HistoryItemWithoutId } from '../../../types.js';
 import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../../constants.js';
-import {
-  DebugLogger,
-  ShellExecutionService,
-} from '@vybestack/llxprt-code-core';
+import { ShellExecutionService } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 const debug = new DebugLogger('llxprt:ui:appcontainer');
 

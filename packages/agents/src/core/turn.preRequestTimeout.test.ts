@@ -7,14 +7,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ServerAgentStreamEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
-import type { GenerateContentResponse, Part } from '@google/genai';
-import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
-import {
-  type MockedChatInstance,
-  mockResponseToChunk,
-} from './turn-test-helpers.js';
+import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
 import { DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
@@ -22,61 +18,23 @@ const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockGetHistory: vi.fn(),
 }));
 
-vi.mock('@google/genai', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@google/genai')>();
-  const MockChat = vi.fn().mockImplementation(() => ({
-    sendMessageStream: mockSendMessageStream,
-    getHistory: mockGetHistory,
-  }));
-  return {
-    ...actual,
-    Chat: MockChat,
-  };
-});
-
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
 
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
-  () => ({
-    getResponseText: (resp: GenerateContentResponse) =>
-      resp.candidates?.[0]?.content?.parts
-        ?.filter((part) => (part as { thought?: boolean }).thought !== true)
-        .map((part) => part.text)
-        .join('') ?? undefined,
-    getFunctionCalls: (resp: GenerateContentResponse) =>
-      resp.functionCalls ?? [],
-    getFunctionCallsFromParts: (parts: Part[]) => {
-      const functionCalls = parts
-        .filter((part) => part.functionCall !== undefined)
-        .map((part) => part.functionCall!);
-      return functionCalls.length > 0 ? functionCalls : undefined;
-    },
-    analyzeResponseOutcome: (parts: Part[]) => {
-      let hasVisibleText = false;
-      let hasThinking = false;
-      let hasToolCalls = false;
-      for (const part of parts) {
-        const isThinking = (part as { thought?: boolean }).thought === true;
-        if (isThinking) hasThinking = true;
-        if (part.functionCall !== undefined) hasToolCalls = true;
-        if (
-          !isThinking &&
-          typeof part.text === 'string' &&
-          part.text.trim() !== ''
-        )
-          hasVisibleText = true;
-      }
-      return {
-        hasVisibleText,
-        hasThinking,
-        hasToolCalls,
-        isActionable: hasVisibleText || hasToolCalls,
-      };
-    },
-  }),
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js')
+      >();
+    return {
+      // analyzeResponseOutcome now operates on ContentBlock[]; delegate to the
+      // real implementation so thinking/tool_call/text detection is correct.
+      analyzeResponseOutcome: actual.analyzeResponseOutcome,
+    };
+  },
 );
 
 /**
@@ -144,9 +102,7 @@ function createStreamWithStalledFirstNext(): AsyncGenerator<{
     await new Promise<void>(() => {});
     yield {
       type: StreamEventType.CHUNK,
-      value: mockResponseToChunk({
-        candidates: [{ content: { parts: [{ text: 'never' }] } }],
-      }),
+      value: mockChunk({ text: 'never' }),
     };
   })();
 }
@@ -319,9 +275,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
           done: false,
           value: {
             type: StreamEventType.CHUNK,
-            value: mockResponseToChunk({
-              candidates: [{ content: { parts: [{ text: 'late' }] } }],
-            }),
+            value: mockChunk({ text: 'late' }),
           },
         };
       },
@@ -407,9 +361,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [{ content: { parts: [{ text: 'Hello' }] } }],
-        }),
+        value: mockChunk({ text: 'Hello' }),
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -441,16 +393,12 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [{ content: { parts: [{ text: 'Hel' }] } }],
-        }),
+        value: mockChunk({ text: 'Hel' }),
       };
       await new Promise((resolve) => setTimeout(resolve, 60));
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [{ content: { parts: [{ text: 'lo' }] } }],
-        }),
+        value: mockChunk({ text: 'lo' }),
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -514,9 +462,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
           });
           yield {
             type: StreamEventType.CHUNK,
-            value: mockResponseToChunk({
-              candidates: [{ content: { parts: [{ text: 'never' }] } }],
-            }),
+            value: mockChunk({ text: 'never' }),
           };
         })();
         return Promise.resolve(stream);

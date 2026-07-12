@@ -6,29 +6,31 @@
 
 import {
   type Config,
-  shutdownTelemetry,
-  isTelemetrySdkInitialized,
   parseAndFormatApiError,
   FatalInputError,
   EmojiFilter,
   OutputFormat,
   JsonStreamEventType,
   StreamJsonFormatter,
-  uiTelemetryService,
   coreEvents,
   CoreEvent,
   type UserFeedbackPayload,
   type EmojiFilterMode,
   type MessageBus,
-  debugLogger,
-  type ContractPart,
+  type AgentRequestInput,
   PLACEHOLDER_MODEL,
 } from '@vybestack/llxprt-code-core';
-import { activateSettingsRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
+import {
+  shutdownTelemetry,
+  isTelemetrySdkInitialized,
+  uiTelemetryService,
+  debugLogger,
+} from '@vybestack/llxprt-code-telemetry';
 import {
   fromConfig,
   type Agent,
   type AgentToolHandle,
+  type AgentInput,
   type ProviderActivationIntent,
 } from '@vybestack/llxprt-code-agents';
 
@@ -58,6 +60,17 @@ interface RunNonInteractiveParams {
   prompt_id: string;
   runtimeMessageBus?: MessageBus;
   deferTelemetryShutdown?: boolean;
+  /**
+   * The single session Agent created at the CLI composition root (#2378). When
+   * supplied, runNonInteractive REUSES it (and does NOT dispose it — the
+   * composition root owns its lifecycle via registerCleanup) instead of
+   * building a second Agent via fromConfig. When omitted (direct callers /
+   * tests), runNonInteractive builds its own Agent from the activation intent
+   * and disposes it in the finally block, preserving the previous contract.
+   * @plan:PLAN-20270110-ISSUE2378.P02
+   * @requirement:REQ-2378-002
+   */
+  agent?: Agent;
 }
 
 export function createProfileNameWriter(
@@ -210,7 +223,7 @@ async function resolveSlashQuery(
   abortController: AbortController,
   config: Config,
   settings: LoadedSettings,
-): Promise<ContractPart[] | undefined> {
+): Promise<AgentRequestInput | undefined> {
   if (!isSlashCommand(input)) {
     return undefined;
   }
@@ -224,7 +237,7 @@ async function resolveSlashQuery(
     slashCommandResult !== undefined &&
     (typeof slashCommandResult !== 'string' || slashCommandResult.length > 0)
   ) {
-    return slashCommandResult as ContractPart[];
+    return slashCommandResult as AgentRequestInput;
   }
   return undefined;
 }
@@ -234,7 +247,7 @@ async function resolveAtQuery(
   abortController: AbortController,
   config: Config,
   getToolHandle: (name: string) => AgentToolHandle | undefined,
-): Promise<ContractPart[]> {
+): Promise<AgentRequestInput> {
   const { processedQuery, error } = await handleAtCommand({
     query: input,
     config,
@@ -253,7 +266,7 @@ async function resolveAtQuery(
         : 'Exiting due to an error processing the @ command.';
     throw new FatalInputError(fatalMessage);
   }
-  return processedQuery as ContractPart[];
+  return processedQuery;
 }
 
 function emitUserMessage(
@@ -326,7 +339,7 @@ function collectActivationModelParams(
 }
 
 async function processQuery(
-  query: ContractPart[],
+  query: AgentRequestInput,
   agent: Agent,
   params: RunNonInteractiveParams,
   options: {
@@ -338,7 +351,7 @@ async function processQuery(
     startTime: number;
   },
 ): Promise<void> {
-  const eventStream = agent.stream(query, {
+  const eventStream = agent.stream(query as AgentInput, {
     signal: options.abortController.signal,
     promptId: params.prompt_id,
     maxTurns: params.config.getMaxSessionTurns(),
@@ -430,12 +443,19 @@ async function resolveAndStream(
     config,
     settings,
   );
-  const agent = await fromConfig({
-    config,
-    messageBus: params.runtimeMessageBus,
-    sessionId: config.getSessionId(),
-    activation: buildNonInteractiveActivationIntent(params),
-  });
+  // #2378: reuse the composition-root Agent when supplied. The composition
+  // root owns its lifecycle (registerCleanup disposes it), so a reused Agent
+  // must NOT be disposed here. Only an Agent this function built (the direct-
+  // caller / test path) is disposed in the finally below.
+  const reusedAgent = params.agent;
+  const agent =
+    reusedAgent ??
+    (await fromConfig({
+      config,
+      messageBus: params.runtimeMessageBus,
+      sessionId: config.getSessionId(),
+      activation: buildNonInteractiveActivationIntent(params),
+    }));
   try {
     const query =
       slashQuery ??
@@ -445,16 +465,18 @@ async function resolveAndStream(
     emitUserMessage(options.streamFormatter, input);
     await processQuery(query, agent, params, options);
   } finally {
-    try {
-      await agent.dispose();
-    } catch (disposeError) {
-      debugLogger.error(
-        `Failed to dispose agent: ${
-          disposeError instanceof Error
-            ? disposeError.message
-            : String(disposeError)
-        }`,
-      );
+    if (reusedAgent === undefined) {
+      try {
+        await agent.dispose();
+      } catch (disposeError) {
+        debugLogger.error(
+          `Failed to dispose agent: ${
+            disposeError instanceof Error
+              ? disposeError.message
+              : String(disposeError)
+          }`,
+        );
+      }
     }
   }
 }
@@ -484,14 +506,6 @@ export async function runNonInteractive(
         process.exit(0);
       }
     });
-    activateSettingsRuntimeContext(
-      config.getSettingsService(),
-      config.getSessionId(),
-      {
-        config,
-        metadata: { source: 'nonInteractiveCli' },
-      },
-    );
     emitStreamInit(streamFormatter, config);
     stdinCancellation.setup();
     await resolveAndStream(params, {

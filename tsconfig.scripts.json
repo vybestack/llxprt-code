@@ -7,6 +7,11 @@
     "noEmit": true
   },
   "include": [
+    "scripts/agents-neutral-gate.ts",
+    "scripts/agents-neutral-gate-config.ts",
+    "scripts/agents-neutral-gate-ast.ts",
+    "scripts/agents-neutral-gate-checks.ts",
+    "scripts/agents-neutral-gate-provenance.ts",
     "scripts/bind-release-deps.ts",
     "scripts/build.ts",
     "scripts/build_package.ts",

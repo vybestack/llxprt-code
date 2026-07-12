@@ -6,7 +6,7 @@
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { GenerateContentConfig } from '@google/genai';
+import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { estimateTokens as estimateTextTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -67,7 +67,7 @@ export function extractCompletionBudgetFromParams(
  * @plan PLAN-20260220-DECOMPOSE.P03
  */
 export function getCompletionBudget(
-  generationConfig: GenerateContentConfig,
+  generationConfig: ModelGenerationSettings,
   _model: string,
   provider?: IProvider,
   settingsService?: { get: (key: string) => unknown },

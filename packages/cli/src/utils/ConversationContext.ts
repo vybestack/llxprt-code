@@ -5,7 +5,7 @@
  */
 
 import { randomBytes } from 'crypto';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 export interface IConversationContext {
   conversationId?: string;

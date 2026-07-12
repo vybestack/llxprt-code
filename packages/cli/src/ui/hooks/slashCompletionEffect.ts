@@ -12,8 +12,8 @@ import {
   isNodeError,
   getErrorMessage,
   DEFAULT_FILE_FILTERING_OPTIONS,
-  DebugLogger,
 } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Suggestion } from '../components/SuggestionsDisplay.js';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import { toCodePoints } from '../utils/textUtils.js';

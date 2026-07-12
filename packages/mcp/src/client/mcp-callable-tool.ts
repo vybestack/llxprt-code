@@ -6,11 +6,16 @@
 
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Tool as McpTool } from '@modelcontextprotocol/sdk/types.js';
-import type { CallableTool, FunctionCall, Part, Tool } from '@google/genai';
+import type {
+  CallableTool,
+  ToolCallRequest as FunctionCall,
+  ContentPart as Part,
+  ToolDeclarations as Tool,
+} from '@vybestack/llxprt-code-tools';
 
 /**
- * Adapts an MCP tool definition to the genai CallableTool interface so it can
- * be invoked through DiscoveredMCPTool.
+ * Adapts an MCP tool definition to the neutral CallableTool interface so it
+ * can be invoked through DiscoveredMCPTool.
  */
 export class McpCallableTool implements CallableTool {
   constructor(
@@ -37,12 +42,15 @@ export class McpCallableTool implements CallableTool {
       throw new Error('McpCallableTool only supports single function call');
     }
     const call = functionCalls[0];
+    if (typeof call.name !== 'string' || call.name.length === 0) {
+      throw new Error('McpCallableTool requires a non-empty function name');
+    }
 
     try {
       const result = await this.client.callTool(
         {
-          name: call.name!,
-          arguments: call.args as Record<string, unknown>,
+          name: call.name,
+          arguments: call.args ?? {},
         },
         undefined,
         { timeout: this.timeout },

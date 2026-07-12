@@ -5,7 +5,8 @@
  */
 
 import { useCallback } from 'react';
-import { getErrorMessage, debugLogger } from '@vybestack/llxprt-code-core';
+import { getErrorMessage } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { type HistoryItem, MessageType } from '../../../types.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import { loadHierarchicalLlxprtMemory } from '../../../../config/environmentLoader.js';

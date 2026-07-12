@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { MessageBus } from './message-bus.js';
+import { MessageBus, createSessionMessageBus } from './message-bus.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { PolicyDecision, type PolicyEngineConfig } from '../policy/types.js';
 import { MessageBusType, type ToolConfirmationRequest } from './types.js';
@@ -568,6 +568,52 @@ describe('MessageBus', () => {
       expect(consoleSpy).not.toHaveBeenCalled();
 
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe('createSessionMessageBus', () => {
+    it('returns a MessageBus instance', () => {
+      const bus = createSessionMessageBus();
+      expect(bus).toBeInstanceOf(MessageBus);
+    });
+
+    it('accepts policyEngine and debugMode arguments', () => {
+      const engine = new PolicyEngine();
+      const bus = createSessionMessageBus(engine, true);
+      expect(bus).toBeInstanceOf(MessageBus);
+
+      const handler = vi.fn();
+      bus.subscribe(MessageBusType.TOOL_CONFIRMATION_REQUEST, handler);
+
+      const message: ToolConfirmationRequest = {
+        type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
+        toolCall: { name: 'edit', args: {} },
+        correlationId: 'factory-test',
+      };
+      bus.publish(message);
+
+      expect(handler).toHaveBeenCalledWith(message);
+    });
+
+    it('works with no arguments (defaults)', () => {
+      const bus = createSessionMessageBus();
+      const handler = vi.fn();
+      bus.subscribe(MessageBusType.TOOL_CONFIRMATION_RESPONSE, handler);
+
+      bus.respondToConfirmation(
+        'factory-id',
+        ToolConfirmationOutcome.ProceedOnce,
+      );
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({ correlationId: 'factory-id' }),
+      );
+    });
+
+    it('produces an independent bus per call', () => {
+      const bus1 = createSessionMessageBus();
+      const bus2 = createSessionMessageBus();
+      expect(bus1).not.toBe(bus2);
     });
   });
 });

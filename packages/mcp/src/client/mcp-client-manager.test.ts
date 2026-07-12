@@ -5,7 +5,10 @@
  */
 
 import { vi, describe, it, expect, afterEach } from 'vitest';
-import { McpClientManager } from './mcp-client-manager.js';
+import {
+  McpClientManager,
+  DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS,
+} from './mcp-client-manager.js';
 import { McpClient } from './mcp-client.js';
 import { MCPDiscoveryState } from './mcp-client.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -519,51 +522,52 @@ describe('McpClientManager', () => {
     });
   });
 
-  describe('startExtension background discovery (issue #2325)', () => {
-    const createExtensionManager = (
-      mockedMcpClient: Record<string, ReturnType<typeof vi.fn>>,
-    ) => {
+  // Shared helpers for extension-based discovery tests (issue #2325 + #2516).
+  const createExtensionManager = (
+    mockedMcpClient?: Record<string, ReturnType<typeof vi.fn>>,
+    servers: Record<string, unknown> = {},
+  ) => {
+    if (mockedMcpClient !== undefined) {
       vi.mocked(McpClient).mockReturnValue(
         mockedMcpClient as unknown as McpClient,
       );
-      const mockConfig = {
-        isTrustedFolder: () => true,
-        getMcpServers: () => ({}),
-        getMcpServerCommand: () => '',
-        getPromptRegistry: () => ({}) as PromptRegistry,
-        getResourceRegistry: () => ({}) as ResourceRegistry,
-        getDebugMode: () => false,
-        getWorkspaceContext: () => ({}) as WorkspaceContext,
-        getEnableExtensionReloading: () => false,
-        getExtensionEvents: () => undefined,
-        getAllowedMcpServers: () => undefined,
-        getBlockedMcpServers: () => undefined,
-        getAgentClient: () => ({
-          isInitialized: () => false,
-        }),
-        refreshMcpContext: vi.fn(),
-      } as unknown as Config;
-      const manager = new McpClientManager(
-        '0.0.1',
-        {} as ToolRegistry,
-        mockConfig,
-      );
-      return { manager, mockConfig };
-    };
+    }
+    const mockConfig = {
+      isTrustedFolder: () => true,
+      getMcpServers: () => servers,
+      getMcpServerCommand: () => '',
+      getPromptRegistry: () => ({}) as PromptRegistry,
+      getResourceRegistry: () => ({}) as ResourceRegistry,
+      getDebugMode: () => false,
+      getWorkspaceContext: () => ({}) as WorkspaceContext,
+      getEnableExtensionReloading: () => false,
+      getExtensionEvents: () => undefined,
+      getAllowedMcpServers: () => undefined,
+      getBlockedMcpServers: () => undefined,
+      getAgentClient: () => ({
+        isInitialized: () => false,
+      }),
+      refreshMcpContext: vi.fn(),
+    } as unknown as Config;
+    const manager = new McpClientManager(
+      '0.0.1',
+      {} as ToolRegistry,
+      mockConfig,
+    );
+    return { manager, mockConfig };
+  };
 
-    // Partial mock — only fields relevant to MCP discovery are populated.
-    // LlxprtExtension has many internal fields (hooks, commands, etc.) that
-    // are not exercised by startExtension, so a full stub is unnecessary.
-    const makeTestExtension = (): LlxprtExtension =>
-      ({
-        name: 'test-ext',
-        version: '1.0.0',
-        isActive: true,
-        path: '/path/to/ext',
-        contextFiles: [],
-        mcpServers: { 'ext-server': {} },
-      }) as unknown as LlxprtExtension;
+  const makeTestExtension = (): LlxprtExtension =>
+    ({
+      name: 'test-ext',
+      version: '1.0.0',
+      isActive: true,
+      path: '/path/to/ext',
+      contextFiles: [],
+      mcpServers: { 'ext-server': {} },
+    }) as unknown as LlxprtExtension;
 
+  describe('startExtension background discovery (issue #2325)', () => {
     it('should not block startExtension on MCP server discovery (issue #2325)', async () => {
       let resolveConnect: () => void;
       const connectPromise = new Promise<void>((resolve) => {
@@ -627,6 +631,109 @@ describe('McpClientManager', () => {
       expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
       expect(mockedMcpClient.discover).not.toHaveBeenCalled();
       expect(manager.getDiscoveryState()).toBe(MCPDiscoveryState.COMPLETED);
+    });
+  });
+
+  describe('discovery failure tracking (issue #2516)', () => {
+    it('records a per-server discovery failure when connect rejects with a non-auth error', async () => {
+      const mockedMcpClient = {
+        connect: vi.fn().mockRejectedValue(new Error('ECONNREFUSED')),
+        discover: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        getStatus: vi.fn(),
+        getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
+      };
+      const { manager } = createExtensionManager(mockedMcpClient);
+
+      await manager.startExtension(makeTestExtension());
+      await manager.whenDiscoverySettled();
+
+      const failures = manager.getDiscoveryFailures();
+      expect(failures.has('ext-server')).toBe(true);
+      expect(failures.get('ext-server')).toContain('ECONNREFUSED');
+    });
+
+    it('resolves whenDiscoverySettled via bounded timeout for a never-settling server', async () => {
+      vi.useFakeTimers();
+      try {
+        // A connect promise that NEVER resolves — simulates a hung server.
+        const neverResolvingConnect = new Promise<void>(() => {});
+        const mockedMcpClient = {
+          connect: vi.fn().mockReturnValue(neverResolvingConnect),
+          discover: vi.fn().mockResolvedValue(undefined),
+          disconnect: vi.fn().mockResolvedValue(undefined),
+          getStatus: vi.fn(),
+          getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
+        };
+        const { manager } = createExtensionManager(mockedMcpClient);
+
+        await manager.startExtension(makeTestExtension());
+
+        // Start the bounded wait before advancing fake timers so its timeout is
+        // registered. The never-settling connect means discoveryPromise never
+        // resolves, so only the timeout can settle the gate.
+        const settled = manager.whenDiscoverySettled();
+        await vi.advanceTimersByTimeAsync(
+          DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS + 1,
+        );
+
+        // whenDiscoverySettled must resolve despite the never-settling connect.
+        await expect(settled).resolves.toBeUndefined();
+
+        // The pending server must appear in discovery failures.
+        const failures = manager.getDiscoveryFailures();
+        expect(failures.has('ext-server')).toBe(true);
+        expect(failures.get('ext-server')).toMatch(/Timed out/i);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('records partial failure: failing server in failures map, successful server not, both reach COMPLETED', async () => {
+      const goodClient = {
+        connect: vi.fn().mockResolvedValue(undefined),
+        discover: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        getStatus: vi.fn(),
+        getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
+        getInstructions: vi.fn().mockReturnValue('good-server instructions'),
+      };
+      const badClient = {
+        connect: vi.fn().mockRejectedValue(new Error('server crashed')),
+        discover: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        getStatus: vi.fn(),
+        getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
+        getInstructions: vi.fn().mockReturnValue(''),
+      };
+
+      let callCount = 0;
+      vi.mocked(McpClient).mockImplementation(() => {
+        const client = callCount === 0 ? goodClient : badClient;
+        callCount++;
+        return client as unknown as McpClient;
+      });
+
+      const { manager } = createExtensionManager(undefined, {
+        'good-server': {},
+        'bad-server': {},
+      });
+
+      await manager.startConfiguredMcpServers();
+      await manager.whenDiscoverySettled();
+
+      const failures = manager.getDiscoveryFailures();
+      expect(failures.has('bad-server')).toBe(true);
+      expect(failures.get('bad-server')).toContain('server crashed');
+      expect(failures.has('good-server')).toBe(false);
+
+      // Aggregate discovery state reaches COMPLETED even with a partial failure.
+      expect(manager.getDiscoveryState()).toBe(MCPDiscoveryState.COMPLETED);
+
+      // The good server's instructions and count are still usable.
+      expect(manager.getMcpServerCount()).toBe(2);
+      const instructions = manager.getMcpInstructions();
+      expect(instructions).toContain('good-server instructions');
     });
   });
 });

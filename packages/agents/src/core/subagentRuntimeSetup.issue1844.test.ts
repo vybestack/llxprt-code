@@ -35,9 +35,9 @@ describe('issue #1844 – subagent tool schema regression', () => {
       name: 'read_file',
       description: 'Read a file',
       parameterSchema: {
-        type: 'OBJECT',
+        type: 'object',
         properties: {
-          path: { type: 'STRING', description: 'File path' },
+          path: { type: 'string', description: 'File path' },
         },
         required: ['path'],
       },

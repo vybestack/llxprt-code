@@ -13,13 +13,13 @@
 
 import type {
   CompletedToolCall,
-  ContractPart,
+  ContentBlock,
 } from '@vybestack/llxprt-code-core';
 import { classifyCompletedTools as classifyCompletedToolsEngine } from '@vybestack/llxprt-code-agents';
 import type { TrackedToolCall } from '../useReactToolScheduler.js';
 
 type ToolCallWithRuntimeResponseParts = CompletedToolCall & {
-  response: { responseParts: ContractPart[] };
+  response: { responseParts: ContentBlock[] };
 };
 
 function isToolCallWithResponseParts(

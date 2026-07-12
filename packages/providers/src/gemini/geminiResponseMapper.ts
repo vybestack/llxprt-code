@@ -4,13 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type Part, type FunctionCall } from '@google/genai';
+import { type Part, type FunctionCall, type Content } from '@google/genai';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   type IContent,
   type ToolCallBlock,
   type ThinkingBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
+import { extractAfcHistory } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { GenerateContentResponse } from '@google/genai';
 
 /** Subset of Gemini usage metadata consumed by chunk mapping. */
@@ -161,6 +163,69 @@ function pushFallbackChunks(
 }
 
 /**
+ * Converts the Gemini SDK automatic-function-calling (AFC) history into
+ * neutral IContent[] and stamps it onto the FIRST emitted chunk's
+ * `metadata.providerMetadata.automaticFunctionCallingHistory` so that the core
+ * conversion boundary (`toModelStreamChunk`) can promote it into the neutral
+ * first-class `afcHistory` field (and strip the raw key).
+ *
+ * Provider boundary responsibility: this is the ONLY place Gemini's
+ * `Content[]` AFC shape is translated to neutral IContent. After this point,
+ * downstream consumers see neutral IContent exclusively.
+ *
+ * Behavior:
+ *  - No-op when there is no AFC history (undefined/empty).
+ *  - Converts each Gemini `Content` via `ContentConverters.toIContent`.
+ *  - Validates the neutral sequence through the core boundary helper
+ *    (`extractAfcHistory`). Malformed histories are NOT attached — the
+ *    carrier chunk's metadata is left untouched.
+ *  - Attaches EXACTLY ONCE to the first chunk, preserving any existing
+ *    metadata (e.g. usage) and provider metadata.
+ */
+function attachAfcHistory(
+  chunks: IContent[],
+  afcHistory: Content[] | undefined,
+): void {
+  if (afcHistory === undefined || afcHistory.length === 0) {
+    return;
+  }
+  if (chunks.length === 0) {
+    return;
+  }
+
+  const neutralHistory = afcHistory.map((content: Content) =>
+    ContentConverters.toIContent(content),
+  );
+
+  // Validate each entry via the core AFC boundary helper by constructing a
+  // carrier whose provider metadata holds the neutral history. Cross-entry
+  // pairing is intentionally not enforced; structurally invalid entries cause
+  // the helper to return undefined and nothing is attached.
+  const validationCarrier: IContent = {
+    speaker: 'ai',
+    blocks: [],
+    metadata: {
+      providerMetadata: {
+        automaticFunctionCallingHistory: neutralHistory,
+      },
+    },
+  };
+  const validated = extractAfcHistory(validationCarrier);
+  if (validated === undefined) {
+    return;
+  }
+
+  const target = chunks[0];
+  target.metadata = {
+    ...target.metadata,
+    providerMetadata: {
+      ...target.metadata?.providerMetadata,
+      automaticFunctionCallingHistory: validated,
+    },
+  };
+}
+
+/**
  * Creates the response-to-chunks mapper used by streaming and non-streaming
  * generation paths.
  */
@@ -201,6 +266,7 @@ export function createGeminiResponseMapper(): ResponseToChunksMapper {
     }
     pushTextAndToolCallChunks(chunks, text, functionCalls, usageMetadata);
     pushFallbackChunks(chunks, text, functionCalls, usageMetadata);
+    attachAfcHistory(chunks, response.automaticFunctionCallingHistory);
     return chunks;
   };
 }

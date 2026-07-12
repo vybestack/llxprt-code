@@ -7,7 +7,7 @@
 import { execSync } from 'child_process';
 import * as path from 'path';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 /**
  * Checks if a directory is within a git repository hosted on GitHub.

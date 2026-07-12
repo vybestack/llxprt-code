@@ -9,7 +9,7 @@ import {
   loadExtensionByName,
   loadExtensionConfig,
 } from '../../config/extension.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 const debugLogger = DebugLogger.getLogger('llxprt:extensions:utils');
 

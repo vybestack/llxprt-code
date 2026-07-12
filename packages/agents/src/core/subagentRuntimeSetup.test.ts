@@ -19,7 +19,7 @@ describe('convertMetadataToFunctionDeclaration', () => {
     const metadata = {
       name: 'my_tool',
       description: 'A test tool',
-      parameterSchema: { type: 'OBJECT', properties: {} },
+      parameterSchema: { type: 'object', properties: {} },
     };
     const decl = convertMetadataToFunctionDeclaration('fallback', metadata);
     expect(decl.name).toBe('my_tool');
@@ -29,7 +29,7 @@ describe('convertMetadataToFunctionDeclaration', () => {
   it('should use fallbackName when metadata.name is absent', () => {
     const metadata = {
       description: 'No name tool',
-      parameterSchema: { type: 'OBJECT', properties: {} },
+      parameterSchema: { type: 'object', properties: {} },
     };
     const decl = convertMetadataToFunctionDeclaration(
       'fallback_name',
@@ -43,8 +43,8 @@ describe('convertMetadataToFunctionDeclaration', () => {
       name: 'tool_with_params',
       description: 'Has params',
       parameterSchema: {
-        type: 'OBJECT',
-        properties: { foo: { type: 'STRING' } },
+        type: 'object',
+        properties: { foo: { type: 'string' } },
       },
     };
     const decl = convertMetadataToFunctionDeclaration('fallback', metadata);
@@ -205,7 +205,7 @@ describe('buildRuntimeFunctionDeclarations', () => {
           ? {
               name,
               description: '',
-              parameterSchema: { type: 'OBJECT', properties: {} },
+              parameterSchema: { type: 'object', properties: {} },
             }
           : undefined),
     };
@@ -217,7 +217,7 @@ describe('buildRuntimeFunctionDeclarations', () => {
       getToolMetadata: (name: string) => ({
         name,
         description: `Description of ${name}`,
-        parameterSchema: { type: 'OBJECT', properties: {} },
+        parameterSchema: { type: 'object', properties: {} },
       }),
     };
     const toolConfig = { tools: ['tool_a', 'tool_b'] };
@@ -232,7 +232,7 @@ describe('buildRuntimeFunctionDeclarations', () => {
       getToolMetadata: (name: string) => ({
         name,
         description: '',
-        parameterSchema: { type: 'OBJECT', properties: {} },
+        parameterSchema: { type: 'object', properties: {} },
       }),
     };
     const toolConfig = { tools: ['tool_a'] };
@@ -257,7 +257,7 @@ describe('buildRuntimeFunctionDeclarations', () => {
       getToolMetadata: (name: string) => ({
         name,
         description: `Description of ${name}`,
-        parameterSchema: { type: 'OBJECT', properties: {} },
+        parameterSchema: { type: 'object', properties: {} },
       }),
     };
     const decls = buildRuntimeFunctionDeclarations(toolsView, undefined);
@@ -276,7 +276,7 @@ describe('buildRuntimeFunctionDeclarations', () => {
       getToolMetadata: (name: string) => ({
         name,
         description: '',
-        parameterSchema: { type: 'OBJECT', properties: {} },
+        parameterSchema: { type: 'object', properties: {} },
       }),
     };
     const decls = buildRuntimeFunctionDeclarations(toolsView, {
@@ -292,7 +292,7 @@ describe('buildRuntimeFunctionDeclarations', () => {
       getToolMetadata: (name: string) => ({
         name,
         description: '',
-        parameterSchema: { type: 'OBJECT', properties: {} },
+        parameterSchema: { type: 'object', properties: {} },
       }),
     };
     const decls = buildRuntimeFunctionDeclarations(toolsView, {
@@ -361,7 +361,7 @@ describe('buildRuntimeFunctionDeclarations', () => {
       getToolMetadata: (name: string) => ({
         name,
         description: '',
-        parameterSchema: { type: 'OBJECT', properties: {} },
+        parameterSchema: { type: 'object', properties: {} },
       }),
     };
     const decls = buildRuntimeFunctionDeclarations(toolsView, undefined);
@@ -380,7 +380,7 @@ describe('buildRuntimeFunctionDeclarations', () => {
       getToolMetadata: (name: string) => ({
         name,
         description: '',
-        parameterSchema: { type: 'OBJECT', properties: {} },
+        parameterSchema: { type: 'object', properties: {} },
       }),
     };
     const taskDecl = { name: 'task', description: 'nested task' };
@@ -397,7 +397,7 @@ describe('buildRuntimeFunctionDeclarations', () => {
       getToolMetadata: (name: string) => ({
         name,
         description: '',
-        parameterSchema: { type: 'OBJECT', properties: {} },
+        parameterSchema: { type: 'object', properties: {} },
       }),
     };
     const listSubagentsDecl = {
@@ -417,7 +417,7 @@ describe('buildRuntimeFunctionDeclarations', () => {
       getToolMetadata: (name: string) => ({
         name,
         description: '',
-        parameterSchema: { type: 'OBJECT', properties: {} },
+        parameterSchema: { type: 'object', properties: {} },
       }),
     };
     const taskDecl = { name: 'Task', description: 'nested task' };
@@ -435,7 +435,7 @@ describe('buildRuntimeFunctionDeclarations', () => {
       custom_tool: {
         name: 'custom_tool',
         description: 'custom',
-        parameterSchema: { type: 'OBJECT' },
+        parameterSchema: { type: 'object' },
       },
     });
 
@@ -451,7 +451,7 @@ describe('buildRuntimeFunctionDeclarations', () => {
       custom_tool: {
         name: 'custom_tool',
         description: 'custom',
-        parameterSchema: { type: 'OBJECT' },
+        parameterSchema: { type: 'object' },
       },
     });
 

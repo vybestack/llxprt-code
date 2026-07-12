@@ -9,7 +9,6 @@ import chalk from 'chalk';
 import type { LoadedSettings } from './config/settings.js';
 import {
   type Config,
-  sessionId,
   SessionRecordingService,
   RecordingIntegration,
   resumeSession,
@@ -18,9 +17,8 @@ import {
   getProjectHash,
   type IContent,
   type LockHandle,
-  MessageBus,
-  debugLogger,
 } from '@vybestack/llxprt-code-core';
+import { sessionId, debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   ProfileManager,
   SettingsService,
@@ -97,7 +95,6 @@ export interface SessionRecordingSetup extends ResolvedRecording {
 
 export interface RuntimeConfigBootstrap {
   config: Config;
-  sessionMessageBus: MessageBus;
   extensions: ReturnType<typeof loadExtensions>;
   runtimeSettingsService: SettingsService;
 }
@@ -105,9 +102,15 @@ export interface RuntimeConfigBootstrap {
 /**
  * @plan:PLAN-20250218-STATELESSPROVIDER.P06
  * @requirement:REQ-SP-005
+ * @plan:PLAN-20270110-ISSUE2378.P02
+ * @requirement:REQ-2378-002
  * Seed the CLI runtime context with a scoped SettingsService, load extensions,
- * construct Config, create the session MessageBus, and re-seed the runtime
- * context post-config with a ProfileManager.
+ * construct Config, and re-seed the runtime context post-config with a
+ * ProfileManager. Per #2378 this NO LONGER constructs the session MessageBus —
+ * agent construction (fromConfig/createForegroundAgent) now owns the single
+ * session bus (built from the Config's policy engine) and exposes it via
+ * agent.getMessageBus(); Config.initialize() likewise runs behind agent
+ * construction rather than here.
  */
 export async function bootstrapRuntimeAndConfig(
   settings: LoadedSettings,
@@ -140,10 +143,6 @@ export async function bootstrapRuntimeAndConfig(
     workspaceRoot,
     { settingsService: runtimeSettingsService },
   );
-  const sessionMessageBus = new MessageBus(
-    config.getPolicyEngine(),
-    config.getDebugMode(),
-  );
   const profileManager = new ProfileManager();
   setCliRuntimeContext(runtimeSettingsService, config, {
     runtimeId,
@@ -151,7 +150,7 @@ export async function bootstrapRuntimeAndConfig(
     profileManager,
   });
 
-  return { config, sessionMessageBus, extensions, runtimeSettingsService };
+  return { config, extensions, runtimeSettingsService };
 }
 
 /**

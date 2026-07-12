@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 interface Logger {
   getPreviousUserMessages(): Promise<string[] | null | undefined>;

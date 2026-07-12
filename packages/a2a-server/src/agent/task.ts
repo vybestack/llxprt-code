@@ -48,7 +48,10 @@ import type {
   TaskMetadata,
   ThoughtSummary,
 } from '../types.js';
-import type { PartUnion } from '@google/genai';
+import type {
+  ContentBlock,
+  TextBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   createToolStatusMessage,
   isInformationalAgentEvent,
@@ -76,8 +79,6 @@ import {
   createCheckpointsForRestorableTools,
   buildServerAndToolMetadata,
 } from './task-runtime-helpers.js';
-import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 export class Task {
   id: string;
@@ -645,15 +646,9 @@ export class Task {
       (toolCall) => toolCall.response.responseParts,
     );
 
-    const geminiParts =
-      ContentConverters.toGeminiContent({
-        speaker: 'tool',
-        blocks: responsesToAdd,
-      }).parts ?? [];
-
     void this.agentClient.addHistory({
-      role: 'user',
-      parts: geminiParts,
+      speaker: 'tool',
+      blocks: responsesToAdd,
     });
   }
 
@@ -694,7 +689,7 @@ export class Task {
     aborted: AbortSignal,
   ): AsyncGenerator<ServerAgentStreamEvent> {
     const userMessage = requestContext.userMessage;
-    const llmParts: PartUnion[] = [];
+    const llmParts: ContentBlock[] = [];
     let anyConfirmationHandled = false;
     let hasContentForLlm = false;
 
@@ -711,14 +706,12 @@ export class Task {
       });
       if (confirmationHandled) {
         anyConfirmationHandled = true;
-        // If a confirmation was handled, the scheduler will now run the tool (or cancel it).
-        // We don't send anything to the LLM for this part.
-        // The subsequent tool execution will eventually lead to resolveToolCall.
         continue;
       }
 
       if (part.kind === 'text') {
-        llmParts.push({ text: part.text });
+        const textBlock: TextBlock = { type: 'text', text: part.text };
+        llmParts.push(textBlock);
         hasContentForLlm = true;
       }
     }

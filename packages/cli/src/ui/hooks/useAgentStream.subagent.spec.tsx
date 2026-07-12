@@ -20,9 +20,9 @@ import type {
   AnyDeclarativeTool,
   AnyToolInvocation,
   Config,
-  ContractPartListUnion,
   EditorType,
   ToolRegistry,
+  AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
@@ -302,7 +302,7 @@ describe('useAgentStream subagent isolation', () => {
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
-          cmd: ContractPartListUnion,
+          cmd: AgentRequestInput,
         ) => Promise<SlashCommandProcessorResult | false>,
         false,
         () => 'vscode' as EditorType,
@@ -412,7 +412,7 @@ describe('useAgentStream subagent isolation', () => {
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
-          cmd: ContractPartListUnion,
+          cmd: AgentRequestInput,
         ) => Promise<SlashCommandProcessorResult | false>,
         false,
         () => 'vscode' as EditorType,
@@ -481,7 +481,7 @@ describe('useAgentStream subagent isolation', () => {
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
-          cmd: ContractPartListUnion,
+          cmd: AgentRequestInput,
         ) => Promise<SlashCommandProcessorResult | false>,
         false,
         () => 'vscode' as EditorType,
@@ -533,7 +533,7 @@ describe('useAgentStream subagent isolation', () => {
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
-          cmd: ContractPartListUnion,
+          cmd: AgentRequestInput,
         ) => Promise<SlashCommandProcessorResult | false>,
         false,
         () => 'vscode' as EditorType,

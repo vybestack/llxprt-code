@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 const selectionLogger = new DebugLogger('llxprt:ui:selection');
 

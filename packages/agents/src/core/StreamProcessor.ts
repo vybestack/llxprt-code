@@ -3,15 +3,19 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { GenerateContentResponse } from '@google/genai';
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
+import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { SendMessageParams } from './chatSession.js';
+import type {
+  ModelStreamChunk,
+  ModelOutput,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
-  type Content,
-  type SendMessageParameters,
-  type Part,
-  type FinishReason,
-  type GenerateContentConfig,
-} from '@google/genai';
+  emptyModelOutput,
+  accumulateModelStreamChunk,
+  toModelStreamChunk,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   isRetryableError,
   retryWithBackoff,
@@ -21,7 +25,6 @@ import { prependAsyncGenerator } from '@vybestack/llxprt-code-core/utils/asyncIt
 import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
   RuntimeGenerateChatOptions as GenerateChatOptions,
@@ -31,27 +34,25 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ConversationManager } from './ConversationManager.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
-import { convertIContentToResponse } from './MessageConverter.js';
 import { logApiResponse, logApiError } from './turnLogging.js';
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
-import type { ResponseOutcome } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
+import {
+  extractResponseTextFromBlocks,
+  analyzeBlocksOutcome,
+  validateStreamCompletion,
+  recordHistoryWithUsage,
+} from './streamValidationHelpers.js';
 import {
   AgentExecutionStoppedError,
   AgentExecutionBlockedError,
 } from './chatSession.js';
-import {
-  attachHookRestrictedAllowedTools,
-  filterHookRestrictedContent,
-  getHookRestrictedAllowedTools,
-} from './hookToolRestrictions.js';
+import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import {
   buildRequestContentsResult,
   selectRequestTools,
   prepareRequestPayload,
   buildRuntimeContext,
-  patchMissingFinishReason,
   applyRequestModifications,
   resolveUserMemory,
   logOutgoingRequest,
@@ -66,18 +67,16 @@ import {
 } from './boundaryRecovery.js';
 import { enforceBeforeModelHookDecision } from './beforeModelHookDecision.js';
 import {
-  createStreamAccumulator,
-  accumulateChunkMetadata,
-  consolidateTextParts,
-  extractResponseText,
-  validateStreamCompletion,
-  recordHistoryWithUsage,
-  prepareHistoryUserInput,
-  clearMatchedEagerToolResponseCallIds,
   trackPromptTokens,
   isMissingFinishReason,
-  type StreamAccumulator,
+  prepareHistoryUserInput,
+  clearMatchedEagerToolResponseCallIds,
 } from './streamResponseHelpers.js';
+import {
+  afterModelModifiedToChunk,
+  afterModelBlockingToModelOutput,
+} from './hookWireAdapter.js';
+import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 import { withCompressionCallbackCleanup } from './streamCleanup.js';
 
@@ -118,7 +117,7 @@ export class StreamProcessor {
       extras?: Record<string, unknown>,
     ) => ProviderRuntimeContext,
     private readonly historyService: HistoryService,
-    private readonly generationConfig: GenerateContentConfig,
+    private readonly generationConfig: AgentClientGenerateConfig,
   ) {}
 
   markToolResponsesRecorded(callIds: readonly string[]): void {
@@ -131,10 +130,10 @@ export class StreamProcessor {
 
   /** Resolves the provider, sends the request with retry, and returns a response stream. */
   async makeApiCallAndProcessStream(
-    params: SendMessageParameters,
+    params: SendMessageParams,
     promptId: string,
-    userContent: Content | Content[],
-  ): Promise<AsyncGenerator<GenerateContentResponse>> {
+    userContent: IContent | IContent[],
+  ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const provider = this.providerResolver('stream');
 
     const providerBaseUrl = this.runtimeContext.state.baseUrl;
@@ -167,28 +166,23 @@ export class StreamProcessor {
   }
 
   private _createCancellableStream(
-    streamResponse: AsyncGenerator<GenerateContentResponse>,
-    userContent: Content | Content[],
-  ): AsyncGenerator<GenerateContentResponse> {
-    let processedStream: AsyncGenerator<GenerateContentResponse> | undefined;
-    const ensureProcessedStream =
-      (): AsyncGenerator<GenerateContentResponse> => {
-        processedStream ??= this.processStreamResponse(
-          streamResponse,
-          userContent,
-        );
-        return processedStream;
-      };
+    streamResponse: AsyncGenerator<ModelStreamChunk>,
+    userContent: IContent | IContent[],
+  ): AsyncGenerator<ModelStreamChunk> {
+    let processedStream: AsyncGenerator<ModelStreamChunk> | undefined;
+    const ensureProcessedStream = (): AsyncGenerator<ModelStreamChunk> => {
+      processedStream ??= this.processStreamResponse(
+        streamResponse,
+        userContent,
+      );
+      return processedStream;
+    };
 
     const cancellableStream = {
-      async next(
-        value?: unknown,
-      ): Promise<IteratorResult<GenerateContentResponse>> {
+      async next(value?: unknown): Promise<IteratorResult<ModelStreamChunk>> {
         return ensureProcessedStream().next(value);
       },
-      async return(
-        value?: unknown,
-      ): Promise<IteratorResult<GenerateContentResponse>> {
+      async return(value?: unknown): Promise<IteratorResult<ModelStreamChunk>> {
         if (processedStream) {
           return typeof processedStream.return === 'function'
             ? processedStream.return(value)
@@ -201,9 +195,7 @@ export class StreamProcessor {
 
         return { done: true, value: undefined };
       },
-      async throw(
-        error?: unknown,
-      ): Promise<IteratorResult<GenerateContentResponse>> {
+      async throw(error?: unknown): Promise<IteratorResult<ModelStreamChunk>> {
         if (processedStream) {
           if (typeof processedStream.throw === 'function') {
             return processedStream.throw(error);
@@ -221,12 +213,12 @@ export class StreamProcessor {
 
         throw error;
       },
-      [Symbol.asyncIterator](): AsyncGenerator<GenerateContentResponse> {
-        return this as AsyncGenerator<GenerateContentResponse>;
+      [Symbol.asyncIterator](): AsyncGenerator<ModelStreamChunk> {
+        return this as AsyncGenerator<ModelStreamChunk>;
       },
     };
 
-    return cancellableStream as AsyncGenerator<GenerateContentResponse>;
+    return cancellableStream as AsyncGenerator<ModelStreamChunk>;
   }
 
   /**
@@ -234,11 +226,11 @@ export class StreamProcessor {
    * Split from makeApiCallAndProcessStream to keep methods under 80 lines.
    */
   private async _executeStreamApiCall(
-    params: SendMessageParameters,
+    params: SendMessageParams,
     promptId: string,
-    userContent: Content | Content[],
+    userContent: IContent | IContent[],
     provider: IProvider,
-  ): Promise<AsyncGenerator<GenerateContentResponse>> {
+  ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const apiCall = () =>
       this._buildAndSendStreamRequest(params, promptId, userContent, provider);
 
@@ -251,11 +243,11 @@ export class StreamProcessor {
   }
 
   private async _buildAndSendStreamRequest(
-    params: SendMessageParameters,
+    params: SendMessageParams,
     promptId: string,
-    userContent: Content | Content[],
+    userContent: IContent | IContent[],
     provider: IProvider,
-  ): Promise<AsyncGenerator<GenerateContentResponse>> {
+  ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const { contents: requestContents, pending: pendingUserIContents } =
       this._buildRequestContents(userContent);
 
@@ -372,7 +364,6 @@ export class StreamProcessor {
     enforceBeforeModelHookDecision(
       beforeModelResult,
       hookRestrictedAllowedTools,
-      (resp, candidate) => this._patchMissingFinishReason(resp, candidate),
     );
 
     const contents = this._applyRequestModifications(
@@ -380,13 +371,6 @@ export class StreamProcessor {
       requestContents,
     );
     return { contents, hookOutput: beforeModelResult ?? undefined, snapshot };
-  }
-
-  private _patchMissingFinishReason(
-    syntheticResponse: GenerateContentResponse,
-    candidate: NonNullable<GenerateContentResponse['candidates']>[0],
-  ): GenerateContentResponse {
-    return patchMissingFinishReason(syntheticResponse, candidate);
   }
 
   private _applyRequestModifications(
@@ -402,8 +386,8 @@ export class StreamProcessor {
 
   private _prepareRequestPayload(
     requestContents: IContent[],
-    tools: GenerateContentConfig['tools'],
-    params: SendMessageParameters,
+    tools: AgentClientGenerateConfig['tools'],
+    params: SendMessageParams,
   ): {
     requestPayload: { contents: IContent[]; tools: unknown };
     baseRuntimeContext: ProviderRuntimeContext;
@@ -431,7 +415,7 @@ export class StreamProcessor {
   // @requirement:REQ-001
   private _buildRuntimeContext(
     baseRuntimeContext: ProviderRuntimeContext,
-    params: SendMessageParameters,
+    params: SendMessageParams,
   ): ProviderRuntimeContext {
     // The runtime context's `config` MUST stay the live llxprt `Config`
     // class instance so provider-side resolution (ProviderManager
@@ -447,10 +431,10 @@ export class StreamProcessor {
     requestPayload: { contents: IContent[]; tools: unknown },
     runtimeContext: ProviderRuntimeContext,
     baseRuntimeContext: ProviderRuntimeContext,
-    params: SendMessageParameters,
+    params: SendMessageParams,
     promptId: string,
     hookRestrictedAllowedTools: string[] | undefined,
-  ): Promise<AsyncGenerator<GenerateContentResponse>> {
+  ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const startTime = Date.now();
     try {
       const userMemory = resolveUserMemory(baseRuntimeContext.config);
@@ -501,7 +485,7 @@ export class StreamProcessor {
     promptId: string,
     startTime: number,
     hookRestrictedAllowedTools: string[] | undefined,
-  ): Promise<AsyncGenerator<GenerateContentResponse>> {
+  ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const convertedStream = this._convertIContentStream(
       streamResponse,
       requestPayload,
@@ -520,14 +504,14 @@ export class StreamProcessor {
     return prependAsyncGenerator(firstChunk.value, convertedStream);
   }
   private _selectRequestTools(
-    params: SendMessageParameters,
-  ): GenerateContentConfig['tools'] {
+    params: SendMessageParams,
+  ): AgentClientGenerateConfig['tools'] {
     return selectRequestTools(params, this.generationConfig.tools);
   }
 
   private async _applyToolSelectionHook(
     configForHooks: AgentRuntimeContext['providerRuntime']['config'],
-    tools: GenerateContentConfig['tools'],
+    tools: AgentClientGenerateConfig['tools'],
   ): Promise<ToolSelectionHookResult> {
     if (configForHooks === undefined) {
       return { tools, allowedFunctionNames: undefined };
@@ -583,15 +567,11 @@ export class StreamProcessor {
     return { tools: toolsFromConfig, allowedFunctionNames: undefined };
   }
 
-  private _buildRequestContents(userContent: Content | Content[]): {
+  private _buildRequestContents(userContent: IContent | IContent[]): {
     contents: IContent[];
     pending: IContent[];
   } {
-    return buildRequestContentsResult(
-      userContent,
-      this.conversationManager,
-      this.historyService,
-    );
+    return buildRequestContentsResult(userContent, this.historyService);
   }
 
   private async _handleBucketFailover(): Promise<boolean | null> {
@@ -621,91 +601,98 @@ export class StreamProcessor {
   }
 
   /**
-   * Convert IContent stream to GenerateContentResponse stream.
+   * Convert IContent stream to ModelStreamChunk stream.
    * Tracks token usage metadata from IContent format.
    * Triggers AfterModel hook per streamed chunk.
+   *
+   * @plan PLAN-20260707-AGENTNEUTRAL.P07 — neutral streaming pipeline
    */
   private async *_convertIContentStream(
     streamResponse: AsyncIterable<IContent>,
     llmRequest?: Record<string, unknown>,
     telemetryContext?: { promptId: string; startTime: number },
     hookRestrictedAllowedTools?: string[],
-  ): AsyncGenerator<GenerateContentResponse> {
-    let lastConvertedChunk: GenerateContentResponse | undefined;
+  ): AsyncGenerator<ModelStreamChunk> {
+    let lastIContent: IContent | undefined;
 
     for await (const iContent of streamResponse) {
       this._trackPromptTokens(iContent);
 
-      const convertedChunk = attachHookRestrictedAllowedTools(
-        convertIContentToResponse(iContent),
-        hookRestrictedAllowedTools,
-      );
-      lastConvertedChunk = convertedChunk;
+      const chunk = toModelStreamChunk(iContent);
 
-      const hookResult = await this._processAfterModelHook(
-        iContent,
-        llmRequest,
-        convertedChunk,
-        hookRestrictedAllowedTools,
-      );
-
-      if (hookResult.type === 'modified') {
-        const restrictedResponse = attachHookRestrictedAllowedTools(
-          hookResult.response,
-          hookRestrictedAllowedTools,
-        );
-        lastConvertedChunk = restrictedResponse;
-        yield restrictedResponse;
-        continue;
+      // Stamp hook restrictions onto the chunk so downstream consumers
+      // (Turn) can filter blocks without object-identity WeakMap lookups.
+      if (hookRestrictedAllowedTools !== undefined) {
+        chunk.hookRestrictions = {
+          allowedToolNames: [...hookRestrictedAllowedTools],
+        };
       }
 
-      yield convertedChunk;
+      const modifiedChunk = await this._processAfterModelHook(
+        iContent,
+        llmRequest,
+        chunk,
+        hookRestrictedAllowedTools,
+      );
+      const yieldedChunk = modifiedChunk ?? chunk;
+      lastIContent = this._contentForTelemetry(yieldedChunk);
+      yield yieldedChunk;
     }
 
-    this._logTelemetry(telemetryContext, lastConvertedChunk);
+    this._logTelemetry(telemetryContext, lastIContent);
   }
 
   private _trackPromptTokens(iContent: IContent): void {
     trackPromptTokens(iContent, this.compressionHandler, this.logger);
   }
 
+  /**
+   * Process AfterModel hook for a single streamed chunk.
+   *
+   * Returns a neutral ModelStreamChunk when the hook modifies the response,
+   * or `undefined` for passthrough (yield the original chunk).
+   *
+   * Throws AgentExecutionStoppedError / AgentExecutionBlockedError on
+   * stop/block decisions.
+   *
+   * @plan:PLAN-20260707-AGENTNEUTRAL.P13
+   * @requirement:REQ-002.6
+   */
   private async _processAfterModelHook(
     iContent: IContent,
     llmRequest: Record<string, unknown> | undefined,
-    convertedChunk: GenerateContentResponse,
+    chunk: ModelStreamChunk,
     hookRestrictedAllowedTools: string[] | undefined,
-  ): Promise<
-    | { type: 'modified'; response: GenerateContentResponse }
-    | { type: 'passthrough' }
-  > {
+  ): Promise<ModelStreamChunk | undefined> {
     const hookConfig = this.runtimeContext.providerRuntime.config;
     if (
       hookConfig === undefined ||
       typeof hookConfig.getEnableHooks !== 'function' ||
       hookConfig.getEnableHooks() !== true
     ) {
-      return { type: 'passthrough' };
+      return undefined;
     }
 
     const hookSystem =
       typeof hookConfig.getHookSystem === 'function'
         ? hookConfig.getHookSystem()
         : undefined;
-    if (hookSystem === undefined) return { type: 'passthrough' };
+    if (hookSystem === undefined) return undefined;
 
     if (!hookSystem.isInitialized()) {
       await hookSystem.initialize();
     }
-    const filteredContent = filterHookRestrictedContent(
-      convertIContentToResponse(iContent).candidates?.[0]?.content ?? {
-        role: 'model',
-        parts: [],
-      },
+
+    // Build the hook-visible IContent with restricted tool blocks filtered.
+    const filteredBlocks = filterHookRestrictedBlocks(
+      iContent.blocks,
       hookRestrictedAllowedTools,
     );
+    const hookIContent = iContentFromBlocks(filteredBlocks, iContent.speaker);
+
     const afterModelResult = await hookSystem.fireAfterModelEvent(
       llmRequest ?? {},
-      ContentConverters.toIContent(filteredContent),
+      hookIContent,
     );
 
     if (afterModelResult?.shouldStopExecution() === true) {
@@ -719,47 +706,65 @@ export class StreamProcessor {
     }
 
     if (afterModelResult?.isBlockingDecision() === true) {
-      const modifiedResponse = afterModelResult.getModifiedResponse() as
-        | GenerateContentResponse
-        | undefined;
-      const syntheticResponse = attachHookRestrictedAllowedTools(
-        modifiedResponse ?? convertedChunk,
-        hookRestrictedAllowedTools,
-      );
       const effectiveReason = afterModelResult.getEffectiveReason() as
         | string
         | undefined;
+      // P13: BLOCK branch now neutral — build a ModelOutput from the
+      // hook-modified response or the current chunk, carrying the block
+      // reason text. No synthetic GenerateContentResponse.
+      const modifiedResponse = afterModelResult.getModifiedResponse();
+      const blockedOutput: ModelOutput = modifiedResponse
+        ? (afterModelModifiedToChunk(modifiedResponse, chunk) ?? { ...chunk })
+        : { ...chunk };
+      // P13: Use the neutral blocking adapter for the block reason text.
+      const finalBlockedOutput = afterModelBlockingToModelOutput(
+        effectiveReason,
+        blockedOutput,
+      );
       throw new AgentExecutionBlockedError(
         effectiveReason ?? 'Execution blocked by AfterModel hook',
-        syntheticResponse,
+        finalBlockedOutput,
         afterModelResult.systemMessage,
       );
     }
 
-    const modifiedResponse = afterModelResult?.getModifiedResponse() as
-      | GenerateContentResponse
-      | undefined;
+    // MODIFY branch: convert hook's response to neutral chunk.
+    const modifiedResponse = afterModelResult?.getModifiedResponse();
     if (modifiedResponse) {
-      return { type: 'modified', response: modifiedResponse };
+      return afterModelModifiedToChunk(modifiedResponse, chunk);
     }
 
-    return { type: 'passthrough' };
+    return undefined;
+  }
+
+  private _contentForTelemetry(chunk: ModelStreamChunk): IContent {
+    if (chunk.usage === undefined) {
+      return chunk.content;
+    }
+    return {
+      ...chunk.content,
+      metadata: {
+        ...(chunk.content.metadata ?? {}),
+        usage: chunk.usage,
+      },
+    };
   }
 
   private _logTelemetry(
     telemetryContext: { promptId: string; startTime: number } | undefined,
-    lastConvertedChunk: GenerateContentResponse | undefined,
+    lastIContent: IContent | undefined,
   ): void {
-    if (telemetryContext && lastConvertedChunk) {
+    if (telemetryContext && lastIContent) {
       const durationMs = Date.now() - telemetryContext.startTime;
+      const usage = lastIContent.metadata?.usage;
       logApiResponse(
         this.runtimeContext,
         this.runtimeContext.state,
         this.runtimeContext.state.model,
         telemetryContext.promptId,
         durationMs,
-        lastConvertedChunk.usageMetadata,
-        JSON.stringify(lastConvertedChunk),
+        usage ? { ...usage } : undefined,
+        JSON.stringify(lastIContent),
       );
     }
   }
@@ -770,136 +775,95 @@ export class StreamProcessor {
    * CRITICAL: yield chunks inline during the for-await loop. Collecting all
    * chunks first blocks user output, abort checks, and stalled provider streams.
    * See issue #1846.
+   *
+   * @plan PLAN-20260707-AGENTNEUTRAL.P07 — accumulates neutral ModelStreamChunk
    */
   async *processStreamResponse(
-    streamResponse: AsyncGenerator<GenerateContentResponse>,
-    userInput: Content | Content[],
-  ): AsyncGenerator<GenerateContentResponse> {
-    const acc = this._createStreamAccumulator();
+    streamResponse: AsyncGenerator<ModelStreamChunk>,
+    userInput: IContent | IContent[],
+  ): AsyncGenerator<ModelStreamChunk> {
+    let acc = emptyModelOutput();
     const includeThoughts =
       this.runtimeContext.ephemerals.reasoning.includeInContext();
 
     for await (const chunk of streamResponse) {
-      const filteredChunk = attachHookRestrictedAllowedTools(
-        chunk,
-        getHookRestrictedAllowedTools(chunk),
-      );
-      this._accumulateChunkMetadata(filteredChunk, acc, includeThoughts);
+      // Apply hook restrictions from the chunk's hookRestrictions field
+      const allowedToolNames = chunk.hookRestrictions?.allowedToolNames;
+      const filteredChunk: ModelStreamChunk = {
+        ...chunk,
+        content: {
+          ...chunk.content,
+          blocks: filterHookRestrictedBlocks(
+            chunk.content.blocks,
+            allowedToolNames,
+          ),
+        },
+      };
+      acc = accumulateModelStreamChunk(acc, filteredChunk);
       yield filteredChunk;
     }
 
-    await this._finalizeStreamProcessing(acc, userInput);
-  }
-
-  private _createStreamAccumulator(): StreamAccumulator {
-    return createStreamAccumulator();
-  }
-
-  private _accumulateChunkMetadata(
-    chunk: GenerateContentResponse,
-    acc: StreamAccumulator,
-    includeThoughts: boolean,
-  ): void {
-    accumulateChunkMetadata(
-      chunk,
-      acc,
-      includeThoughts,
-      this.logger,
-      this.compressionHandler,
-    );
+    await this._finalizeStreamProcessing(acc, userInput, includeThoughts);
   }
 
   private async _finalizeStreamProcessing(
-    acc: {
-      modelResponseParts: Part[];
-      outcome: ResponseOutcome;
-      finishReason: FinishReason | undefined;
-      allChunks: GenerateContentResponse[];
-    },
-    userInput: Content | Content[],
+    acc: ModelOutput,
+    userInput: IContent | IContent[],
+    includeThoughts: boolean,
   ): Promise<void> {
-    const consolidatedParts = this._consolidateTextParts(
-      acc.modelResponseParts,
-    );
-    const responseText = this._extractResponseText(consolidatedParts);
+    const finishReason = acc.finishReason;
+    const responseText = extractResponseTextFromBlocks(acc.content.blocks);
+    const outcome = analyzeBlocksOutcome(acc.content.blocks, includeThoughts);
 
-    if (isMissingFinishReason(acc.finishReason)) {
+    if (isMissingFinishReason(finishReason)) {
       this.logger.debug(
         () =>
-          `[stream:terminal] stream ended without finishReason (hasToolCall=${String(acc.outcome.hasToolCalls)}, hasTextResponse=${String(acc.outcome.hasVisibleText)}, hasThinkingResponse=${String(acc.outcome.hasThinking)}, responseTextLength=${responseText.length})`,
+          `[stream:terminal] stream ended without finishReason (hasToolCall=${String(outcome.hasToolCalls)}, hasTextResponse=${String(outcome.hasVisibleText)}, hasThinkingResponse=${String(outcome.hasThinking)}, responseTextLength=${responseText.length})`,
       );
     } else {
       this.logger.debug(
         () => `[stream:terminal] finalized stream with finishReason`,
         {
-          finishReason: acc.finishReason,
-          hasToolCall: acc.outcome.hasToolCalls,
-          hasTextResponse: acc.outcome.hasVisibleText,
-          hasThinkingResponse: acc.outcome.hasThinking,
+          finishReason,
+          hasToolCall: outcome.hasToolCalls,
+          hasTextResponse: outcome.hasVisibleText,
+          hasThinkingResponse: outcome.hasThinking,
           responseTextLength: responseText.length,
-          chunkCount: acc.allChunks.length,
         },
       );
     }
 
-    this._validateStreamCompletion(
-      userInput,
-      acc.outcome,
-      acc.finishReason,
-      responseText,
-    );
-
-    await this._recordHistoryWithUsage(
-      userInput,
-      consolidatedParts,
-      acc.allChunks,
-    );
-  }
-
-  private _consolidateTextParts(modelResponseParts: Part[]): Part[] {
-    return consolidateTextParts(modelResponseParts);
-  }
-
-  private _extractResponseText(consolidatedParts: Part[]): string {
-    return extractResponseText(consolidatedParts);
-  }
-
-  private _validateStreamCompletion(
-    userInput: Content | Content[],
-    outcome: ResponseOutcome,
-    finishReason: FinishReason | undefined,
-    responseText: string,
-  ): void {
     validateStreamCompletion(
+      this.logger,
       userInput,
       outcome,
       finishReason,
       responseText,
-      this.logger,
+      acc.rawStopReason,
     );
-  }
 
-  private async _recordHistoryWithUsage(
-    userInput: Content | Content[],
-    consolidatedParts: Part[],
-    allChunks: GenerateContentResponse[],
-  ): Promise<void> {
     const preparedHistoryUserInput = prepareHistoryUserInput(
       userInput,
       this.eagerlyRecordedToolResponseCallIds,
     );
 
+    if (acc.afcHistory !== undefined) {
+      acc.afcHistory = acc.afcHistory.filter(
+        (content: IContent) => content.blocks.length > 0,
+      );
+    }
+
     try {
-      await recordHistoryWithUsage({
-        userInput: preparedHistoryUserInput.historyUserInput,
-        consolidatedParts,
-        allChunks,
-        conversationManager: this.conversationManager,
-        historyService: this.historyService,
-        compressionHandler: this.compressionHandler,
-        logger: this.logger,
-        userInputFlags: preparedHistoryUserInput.userInputFlags,
-      });
+      await recordHistoryWithUsage(
+        this.logger,
+        this.conversationManager,
+        this.historyService,
+        this.compressionHandler,
+        this.runtimeContext,
+        preparedHistoryUserInput.historyUserInput,
+        acc,
+        preparedHistoryUserInput.userInputFlags,
+      );
     } finally {
       clearMatchedEagerToolResponseCallIds(
         preparedHistoryUserInput.filteredResults,

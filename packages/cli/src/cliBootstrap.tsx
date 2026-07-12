@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { loadCliConfig } from './config/config.js';
 import { parseArguments } from './config/cliArgParser.js';
 import { parseBootstrapArgs } from './config/profileBootstrap.js';
 import { coerceDebugFlag } from './config/yargsOptions.js';
@@ -14,48 +13,23 @@ import {
 } from './utils/dynamicSettings.js';
 import type { SettingDefinition } from './config/settingsSchema.js';
 import { readStdin } from './utils/readStdin.js';
-import dns from 'node:dns';
-import { start_sandbox } from './utils/sandbox.js';
-import {
-  shouldRelaunchForMemory,
-  isDebugMode,
-  computeSandboxMemoryArgs,
-  parseDockerMemoryToMB,
-} from './utils/bootstrap.js';
+import { shouldRelaunchForMemory, isDebugMode } from './utils/bootstrap.js';
 import { relaunchAppInChildProcess } from './utils/relaunch.js';
 import type { DnsResolutionOrder, LoadedSettings } from './config/settings.js';
 import {
-  type Config,
-  sessionId,
-  setGitStatsService,
   FatalConfigError,
-  OutputFormat,
-  uiTelemetryService,
-  DebugLogger,
+  ExitCodes,
   writeToStderr,
   writeToStdout,
-  ExitCodes,
-  type MessageBus,
+  type Config,
+} from '@vybestack/llxprt-code-core';
+import {
   debugLogger,
   ConfigurationManager,
-} from '@vybestack/llxprt-code-core';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
-import { ExtensionStorage } from './config/extension.js';
-import { registerCleanup, runExitCleanup } from './utils/cleanup.js';
+  DebugLogger,
+} from '@vybestack/llxprt-code-telemetry';
+import { runExitCleanup } from './utils/cleanup.js';
 import { getCliVersion } from './utils/version.js';
-import { setupTerminalAndTheme } from './utils/terminalTheme.js';
-import { drainStdinBuffer } from './ui/utils/terminalContract.js';
-import { StdinRawModeManager } from './utils/stdinSafety.js';
-import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
-import { appEvents, AppEvent } from './utils/events.js';
-import { loadProfileByName } from '@vybestack/llxprt-code-providers/runtime.js';
-import {
-  executeProviderActivation,
-  type ProviderActivationIntent,
-} from '@vybestack/llxprt-code-agents';
-import { writeFileSync } from 'node:fs';
-import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 
 export function validateDnsResolutionOrder(
   order: string | undefined,
@@ -67,7 +41,6 @@ export function validateDnsResolutionOrder(
   if (order === 'ipv4first' || order === 'verbatim') {
     return order;
   }
-  // We don't want to throw here, just warn and use the default.
   debugLogger.warn(
     `Invalid value for dnsResolutionOrder in settings: "${order}". Using default "${defaultValue}".`,
   );
@@ -75,9 +48,6 @@ export function validateDnsResolutionOrder(
 }
 
 export function configureEarlyDebugLogging(): void {
-  // Handle debug mode as early as possible so that early logs are captured.
-  // Reuse the shared yargs coercion so the bootstrap path normalizes false-like
-  // values (false, 0, no, off) identically to the parsed `--debug` flag.
   const bootstrapParsed = parseBootstrapArgs();
   const debugArg = coerceDebugFlag(
     bootstrapParsed.bootstrapArgs.debug ?? undefined,
@@ -96,10 +66,6 @@ export function configureEarlyDebugLogging(): void {
   });
 }
 
-// Handle --version and --help before patchStdio() redirects stdout.
-// patchStdio() redirects process.stdout.write to an internal event bus,
-// but no listeners are registered yet, so yargs output would be lost.
-// Returns true if a flag was handled and the process is exiting.
 export async function handleVersionAndHelpFlags(
   rawArgs: string[],
 ): Promise<void> {
@@ -109,267 +75,12 @@ export async function handleVersionAndHelpFlags(
     process.exit(0);
   }
   if (rawArgs.includes('--help') || rawArgs.includes('-h')) {
-    // Show help without loading settings — help should always work even if
-    // the user's configuration file is invalid (fixes #1667).
     await parseArguments({});
     process.exit(0);
   }
 }
 
 export type ParsedCliArgs = Awaited<ReturnType<typeof parseArguments>>;
-
-export type CliProviderManager = NonNullable<
-  ReturnType<Config['getProviderManager']>
->;
-
-/**
- * Compute the merged model params (profile + CLI) that should be applied
- * before the first request for the configured provider.
- */
-export function collectProviderModelParams(
-  config: Config,
-  argv: ParsedCliArgs,
-): Record<string, unknown> {
-  const configWithParams = config as Config & {
-    _profileModelParams?: Record<string, unknown>;
-    _cliModelParams?: Record<string, unknown>;
-  };
-  const mergedModelParams: Record<string, unknown> = {};
-
-  if (!argv.provider && configWithParams._profileModelParams) {
-    Object.assign(mergedModelParams, configWithParams._profileModelParams);
-  }
-  if (configWithParams._cliModelParams) {
-    Object.assign(mergedModelParams, configWithParams._cliModelParams);
-  }
-  return mergedModelParams;
-}
-
-/**
- * Build the declarative CLI credential/model-override bundle for the
- * activation intent. Mirrors the previous two-argument
- * `applyCliArgumentOverrides(argv, bootstrapArgs)` call by merging the
- * bootstrap-parsed overrides (preferred by the providers runtime) with the
- * yargs-parsed argv (fallback). Each field is omitted when neither source
- * supplies a value so the executor's conditional-spread adapters produce an
- * empty shape.
- */
-function buildActivationCliOverrides(
-  config: Config,
-  argv: ParsedCliArgs,
-): NonNullable<ProviderActivationIntent['cliOverrides']> {
-  const configWithBootstrapArgs = config as Config & {
-    _bootstrapArgs?: BootstrapOverrideShape;
-  };
-  const bootstrap = configWithBootstrapArgs._bootstrapArgs;
-
-  const overrides: {
-    key?: string;
-    keyfile?: string;
-    keyName?: string;
-    baseUrl?: string;
-    set?: string[];
-  } = {};
-
-  const key = bootstrap?.keyOverride ?? argv.key;
-  if (key !== undefined) {
-    overrides.key = key;
-  }
-
-  const keyfile = bootstrap?.keyfileOverride ?? argv.keyfile;
-  if (keyfile !== undefined) {
-    overrides.keyfile = keyfile;
-  }
-
-  const keyName = bootstrap?.keyNameOverride ?? undefined;
-  if (keyName !== undefined) {
-    overrides.keyName = keyName;
-  }
-
-  const baseUrl = bootstrap?.baseurlOverride ?? argv.baseurl;
-  if (baseUrl !== undefined) {
-    overrides.baseUrl = baseUrl;
-  }
-
-  const set = bootstrap?.setOverrides ?? argv.set;
-  if (set !== undefined) {
-    overrides.set = [...set];
-  }
-
-  return overrides;
-}
-
-interface BootstrapOverrideShape {
-  keyOverride?: string | null;
-  keyfileOverride?: string | null;
-  keyNameOverride?: string | null;
-  setOverrides?: string[] | null;
-  baseurlOverride?: string | null;
-}
-
-/**
- * Activate the provider that the resolved config points at (or the default
- * provider when none was explicitly requested). Returns true if the initial
- * authentication attempt failed.
- *
- * WHY THIS RUNS PRE-AGENT (#2374 round-3 Fix 3): the interactive CLI bootstrap
- * needs the auth outcome BEFORE the Agent is constructed — the sandbox-hop
- * decision (maybeHopIntoSandbox) and the fatal-exit path
- * (FATAL_AUTHENTICATION_ERROR) depend on whether auth succeeded. Constructing
- * the Agent first and then checking auth would defer the fatal-exit past agent
- * construction, changing the observable process lifecycle. This function only
- * assembles a ProviderActivationIntent and delegates to
- * executeProviderActivation; new interactive code should prefer passing the
- * activation intent to agent construction (fromConfig/createAgent) instead of
- * calling this directly.
- *
- * Declarative activation (#2374): assembles a {@link ProviderActivationIntent}
- * from the resolved config + CLI argv + bootstrap credential overrides and
- * delegates the imperative switch/auth/override sequence to
- * `executeProviderActivation` in the agents package.
- */
-export async function activateConfiguredProvider(
-  config: Config,
-  providerManager: CliProviderManager,
-  argv: ParsedCliArgs,
-): Promise<boolean> {
-  const configProvider = config.getProvider();
-  const cliModelOverride = (config as Config & { _cliModelOverride?: string })
-    ._cliModelOverride;
-  const intent: ProviderActivationIntent = {
-    ...(configProvider !== undefined && configProvider !== ''
-      ? { provider: configProvider }
-      : {
-          defaultProvider: providerManager.getActiveProviderName() ?? 'gemini',
-        }),
-    ...(typeof cliModelOverride === 'string' &&
-    cliModelOverride.trim().length > 0
-      ? { model: cliModelOverride.trim() }
-      : {}),
-    modelParams: collectProviderModelParams(config, argv),
-    cliOverrides: buildActivationCliOverrides(config, argv),
-    authMode: 'auto',
-  };
-  let result;
-  try {
-    result = await executeProviderActivation(config, intent);
-  } catch (error) {
-    // The executor's auto authMode catches auth failures internally and
-    // returns { authFailed: true }, but a synchronous error in intent
-    // assembly or a non-auto authMode path bug would throw. Preserve the
-    // old contract (return true = auth failed) so bootstrap does not crash.
-    const bootstrapLogger = new DebugLogger('llxprt:bootstrap');
-    bootstrapLogger.error(
-      () =>
-        `[bootstrap] activateConfiguredProvider executor threw: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-    );
-    return true;
-  }
-  return result.authFailed;
-}
-
-/**
- * Resolve the container memory (in MB) requested via sandbox-related env vars.
- * Preserves the historical empty-string-is-absent behavior.
- */
-export function resolveContainerMemoryMB(): number | undefined {
-  const containerMemoryStr =
-    process.env.LLXPRT_SANDBOX_MEMORY ?? process.env.SANDBOX_MEMORY;
-  if (typeof containerMemoryStr === 'string' && containerMemoryStr.length > 0) {
-    return parseDockerMemoryToMB(containerMemoryStr);
-  }
-  const sandboxFlags = process.env.SANDBOX_FLAGS;
-  if (typeof sandboxFlags === 'string' && sandboxFlags.length > 0) {
-    const match = sandboxFlags.match(/--memory[= ](\S+)/);
-    if (match !== null) {
-      return parseDockerMemoryToMB(match[1]);
-    }
-  }
-  return undefined;
-}
-
-/**
- * Compute the memory args to pass when relaunching into the sandbox.
- * Always returns args (the sandbox starts fresh with Node's default heap),
- * unlike the host-relaunch heuristic at the top of main().
- */
-export function computeSandboxMemoryArgsFromEnv(
-  config: Config,
-  settings: LoadedSettings,
-): string[] {
-  if (settings.merged.ui.autoConfigureMaxOldSpaceSize !== true) {
-    return [];
-  }
-  return computeSandboxMemoryArgs(
-    config.getDebugMode(),
-    resolveContainerMemoryMB(),
-    settings.merged.ui.maxHeapSizeMB,
-  );
-}
-
-/**
- * Locate the first positional argument (one not consumed as a flag value),
- * scanning from index 2 (after `node` and the script path). Returns -1 when
- * there are no positional arguments.
- */
-export function findFirstPositionalArgIndex(args: string[]): number {
-  let i = 2;
-  while (i < args.length) {
-    const arg = args[i];
-    if (!arg.startsWith('-')) {
-      return i;
-    }
-    // Combined flag like --model=gpt4 carries its value inline; otherwise the
-    // following non-flag token is this flag's value and must be skipped.
-    const consumesNextValue =
-      !arg.includes('=') &&
-      Boolean(args[i + 1]) &&
-      !args[i + 1].startsWith('-');
-    i += consumesNextValue ? 2 : 1;
-  }
-  return -1;
-}
-
-/**
- * Inject stdin data into args for the sandbox by prepending it to the existing
- * prompt (positional or --prompt flag). Avoids the "Cannot use both positional
- * and --prompt" conflict.
- */
-export function injectStdinIntoArgs(
-  args: string[],
-  stdinData?: string,
-): string[] {
-  if (!stdinData) {
-    return [...args];
-  }
-
-  const finalArgs = [...args];
-
-  // Check for --prompt or -p flag first
-  const promptFlagIndex = finalArgs.findIndex(
-    (arg) => arg === '--prompt' || arg === '-p',
-  );
-  if (promptFlagIndex > -1 && finalArgs.length > promptFlagIndex + 1) {
-    finalArgs[promptFlagIndex + 1] = `${stdinData}
-
-${finalArgs[promptFlagIndex + 1]}`;
-    return finalArgs;
-  }
-
-  const positionalStartIndex = findFirstPositionalArgIndex(finalArgs);
-  if (positionalStartIndex > -1) {
-    finalArgs[positionalStartIndex] = `${stdinData}
-
-${finalArgs[positionalStartIndex]}`;
-    return finalArgs;
-  }
-
-  // No existing prompt - add stdin as a positional argument (not --prompt)
-  finalArgs.push(stdinData);
-  return finalArgs;
-}
 
 /** Throw a FatalConfigError if any settings files failed to load/parse. */
 export function throwIfSettingsErrors(settings: LoadedSettings): void {
@@ -384,10 +95,6 @@ export function throwIfSettingsErrors(settings: LoadedSettings): void {
   );
 }
 
-/**
- * In ACP mode, redirect console output to stderr IMMEDIATELY so config loading
- * cannot corrupt the stdout protocol pipe.
- */
 export function redirectConsoleForAcp(argv: ParsedCliArgs): void {
   if (argv.experimentalAcp === true) {
     globalThis.console.log = globalThis.console.error;
@@ -396,11 +103,6 @@ export function redirectConsoleForAcp(argv: ParsedCliArgs): void {
   }
 }
 
-/**
- * When heap autosizing is enabled (and not sandboxed), relaunch the CLI in a
- * child process with a larger old-space size. Exits the current process when a
- * relaunch occurs; otherwise returns so startup can continue.
- */
 export async function maybeRelaunchForMemory(
   settings: LoadedSettings,
 ): Promise<void> {
@@ -416,59 +118,6 @@ export async function maybeRelaunchForMemory(
   if (memoryArgs.length > 0) {
     const exitCode = await relaunchAppInChildProcess(memoryArgs);
     process.exit(exitCode);
-  }
-}
-
-/**
- * Reapply a bootstrap profile (from --profile-load or LLXPRT_BOOTSTRAP_PROFILE)
- * after provider-manager initialization, unless a provider was given on the CLI
- * or a profile was already loaded during config construction.
- */
-export async function reapplyBootstrapProfile(
-  argv: ParsedCliArgs,
-  runtimeSettingsService: SettingsService,
-): Promise<void> {
-  const envProfile = process.env.LLXPRT_BOOTSTRAP_PROFILE;
-  const bootstrapProfileName =
-    argv.profileLoad?.trim() ??
-    (typeof envProfile === 'string' ? envProfile.trim() : '');
-  // Only reload profile if it wasn't already loaded in config.ts. If the
-  // profile was already loaded, don't reload - especially important for load
-  // balancer profiles where reloading advances the round-robin counter.
-  const currentProfileName = runtimeSettingsService.getCurrentProfileName();
-  if (
-    argv.provider ||
-    bootstrapProfileName === '' ||
-    currentProfileName !== null
-  ) {
-    return;
-  }
-  try {
-    await loadProfileByName(bootstrapProfileName);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    debugLogger.warn(
-      `[bootstrap] Failed to reapply profile '${bootstrapProfileName}' after provider manager initialization: ${message}`,
-    );
-  }
-}
-
-/**
- * Ensure the Gemini server-tools provider has the active Config attached even
- * when it is not the active provider.
- */
-export function configureServerToolsProvider(
-  providerManager: CliProviderManager,
-  config: Config,
-): void {
-  const serverToolsProvider = providerManager.getServerToolsProvider();
-  if (
-    serverToolsProvider &&
-    serverToolsProvider.name === 'gemini' &&
-    'setConfig' in serverToolsProvider &&
-    typeof serverToolsProvider.setConfig === 'function'
-  ) {
-    serverToolsProvider.setConfig(config);
   }
 }
 
@@ -490,10 +139,6 @@ export function registerDynamicToolSettings(config: Config): void {
   }
 }
 
-/**
- * Reject the invalid combination of --prompt-interactive with piped stdin,
- * which would otherwise crash. Exits the process on violation.
- */
 export async function rejectPromptInteractiveWithPipedStdin(
   argv: ParsedCliArgs,
 ): Promise<void> {
@@ -506,37 +151,6 @@ export async function rejectPromptInteractiveWithPipedStdin(
   }
 }
 
-/** Register a cleanup hook that writes session metrics to --session-summary. */
-export function registerSessionSummaryWriter(argv: ParsedCliArgs): void {
-  const summaryPath = argv.sessionSummary;
-  if (!summaryPath) {
-    return;
-  }
-  registerCleanup(() => {
-    const metrics = uiTelemetryService.getMetrics();
-    writeFileSync(
-      summaryPath,
-      JSON.stringify({ sessionMetrics: metrics }, null, 2),
-    );
-  });
-}
-
-/** Install the console patcher for this run and register its cleanup. */
-export function patchConsoleForRun(config: Config): void {
-  const isJsonNonInteractive =
-    config.getOutputFormat() === OutputFormat.JSON && !config.isInteractive();
-  const consolePatcher = new ConsolePatcher({
-    stderr: !isJsonNonInteractive,
-    debugMode: isJsonNonInteractive ? false : config.getDebugMode(),
-  });
-  consolePatcher.patch();
-  registerCleanup(consolePatcher.cleanup);
-}
-
-/**
- * Create a memoized stdin reader that reads the piped input at most once and
- * returns the cached value (empty string when nothing was piped) thereafter.
- */
 export function createMemoizedStdinReader(): () => Promise<string> {
   let cachedStdinData: string | null = null;
   let stdinWasRead = false;
@@ -549,10 +163,6 @@ export function createMemoizedStdinReader(): () => Promise<string> {
   };
 }
 
-/**
- * For piped (non-TTY) input, ensure either stdin data or a prompt argument is
- * present; otherwise emit guidance and exit. No-op when input is interactive.
- */
 export async function ensureStdinOrPromptProvided(
   hasPipedInput: boolean,
   readStdinData: () => Promise<string>,
@@ -569,306 +179,4 @@ export async function ensureStdinOrPromptProvided(
     );
     process.exit(1);
   }
-}
-
-/**
- * Initialize Config, showing an MCP initialization spinner when interactive and
- * MCP servers are configured. Registers dynamic tool settings afterwards.
- */
-async function renderInitializingSpinner(initialTotal: number): Promise<
-  | {
-      clear(): void;
-      unmount(): void;
-    }
-  | undefined
-> {
-  try {
-    const [reactModule, inkModule, spinnerModule, colorsModule] =
-      await Promise.all([
-        import('react'),
-        import('ink'),
-        import('ink-spinner'),
-        import('./ui/colors.js'),
-      ]);
-    const React = reactModule.default;
-    const { Box, Text, render } = inkModule;
-    const Spinner = spinnerModule.default;
-    const { theme } = colorsModule;
-
-    const InitializingComponent = () => {
-      const [total, setTotal] = React.useState(initialTotal);
-      const [connected, setConnected] = React.useState(0);
-
-      React.useEffect(() => {
-        const onStart = ({ count }: { count: number }) => setTotal(count);
-        const onChange = () => {
-          setConnected((val) => val + 1);
-        };
-
-        appEvents.on(AppEvent.McpServersDiscoveryStart, onStart);
-        appEvents.on(AppEvent.McpServerConnected, onChange);
-        appEvents.on(AppEvent.McpServerError, onChange);
-
-        return () => {
-          appEvents.off(AppEvent.McpServersDiscoveryStart, onStart);
-          appEvents.off(AppEvent.McpServerConnected, onChange);
-          appEvents.off(AppEvent.McpServerError, onChange);
-        };
-      }, []);
-
-      const message = `Connecting to MCP servers... (${connected}/${total})`;
-
-      return React.createElement(
-        Box,
-        null,
-        React.createElement(
-          Text,
-          { color: theme.text.primary },
-          React.createElement(Spinner),
-          ' ',
-          message,
-        ),
-      );
-    };
-
-    return render(React.createElement(InitializingComponent));
-  } catch (error) {
-    debugLogger.warn('MCP initialization spinner unavailable', error);
-    return undefined;
-  }
-}
-
-export async function initializeConfigWithSpinner(
-  config: Config,
-  sessionMessageBus: MessageBus,
-): Promise<void> {
-  const mcpServers = config.getMcpServers();
-  const mcpServersCount = mcpServers ? Object.keys(mcpServers).length : 0;
-
-  const showSpinner =
-    typeof config.isInteractive === 'function' &&
-    config.isInteractive() &&
-    mcpServersCount > 0;
-  const spinnerInstance = showSpinner
-    ? await renderInitializingSpinner(mcpServersCount)
-    : undefined;
-
-  try {
-    await (
-      config as typeof config & {
-        initialize(dependencies?: { messageBus?: MessageBus }): Promise<void>;
-      }
-    ).initialize({ messageBus: sessionMessageBus });
-  } finally {
-    if (spinnerInstance) {
-      // Small UX detail to show the completion message for a bit before unmounting.
-      await new Promise((f) => setTimeout(f, 100));
-      spinnerInstance.clear();
-      spinnerInstance.unmount();
-    }
-  }
-
-  registerDynamicToolSettings(config);
-}
-
-/**
- * Retrieve the provider manager created by loadCliConfig, re-apply the bootstrap
- * profile, initialize the git stats service when conversation logging is on,
- * configure the server-tools provider, and set the DNS resolution order.
- */
-export async function configureProvidersAndServices(
-  config: Config,
-  settings: LoadedSettings,
-  argv: ParsedCliArgs,
-  runtimeSettingsService: SettingsService,
-): Promise<CliProviderManager> {
-  // Note: loadCliConfig() already creates and configures the provider manager with CLI args
-  // We just need to retrieve it from the config, not recreate it (which would lose CLI arg auth)
-  const providerManager = config.getProviderManager();
-  if (!providerManager) {
-    throw new Error(
-      '[cli] Provider manager should have been initialized by loadCliConfig',
-    );
-  }
-
-  await reapplyBootstrapProfile(argv, runtimeSettingsService);
-
-  // Initialize git stats service for tracking file changes when logging is enabled
-  if (config.getConversationLoggingEnabled()) {
-    const gitStatsService = new GitStatsServiceImpl(config);
-    setGitStatsService(gitStatsService);
-  }
-
-  configureServerToolsProvider(providerManager, config);
-
-  // Set DNS resolution order (prefer IPv4 by default)
-  dns.setDefaultResultOrder(
-    validateDnsResolutionOrder(settings.merged.dnsResolutionOrder),
-  );
-
-  return providerManager;
-}
-
-/**
- * Prepare the interactive terminal session: enable raw mode when needed, set up
- * the terminal title/theme, register the session-summary writer, and patch the
- * console for the run.
- */
-export async function prepareTerminalSession(
-  config: Config,
-  settings: LoadedSettings,
-  argv: ParsedCliArgs,
-): Promise<void> {
-  const wasRaw = process.stdin.isRaw;
-  // Issue #1020: Create stdin manager with error handling to prevent EIO crashes
-  const stdinManager = new StdinRawModeManager({
-    debug: config.getDebugMode(),
-  });
-  await enableInteractiveRawModeIfNeeded(config, stdinManager, wasRaw);
-
-  await setupTerminalAndTheme(config, settings);
-
-  registerSessionSummaryWriter(argv);
-  patchConsoleForRun(config);
-}
-
-/** Connect the IDE companion client when IDE mode is enabled. */
-export async function connectIdeClientIfEnabled(config: Config): Promise<void> {
-  if (!config.getIdeMode()) {
-    return;
-  }
-  const ideClient = config.getIdeClient();
-  if (ideClient) {
-    await ideClient.connect();
-    // IDE connection logging removed - telemetry disabled in llxprt
-  }
-}
-
-export interface SandboxHopOptions {
-  config: Config;
-  settings: LoadedSettings;
-  argv: ParsedCliArgs;
-  workspaceRoot: string;
-  runtimeSettingsService: SettingsService;
-  initialAuthFailed: boolean;
-  readStdin: () => Promise<string>;
-  hasPipedInput: boolean;
-}
-
-/**
- * When running outside the sandbox and sandboxing is configured, relaunch the
- * CLI inside the sandbox (forwarding stdin/prompt). Exits the current process
- * when a hop occurs; returns otherwise so startup can continue in-process.
- */
-export async function maybeHopIntoSandbox(
-  options: SandboxHopOptions,
-): Promise<void> {
-  const {
-    config,
-    settings,
-    argv,
-    workspaceRoot,
-    runtimeSettingsService,
-    initialAuthFailed,
-    readStdin: readStdinData,
-    hasPipedInput,
-  } = options;
-
-  if (process.env.SANDBOX) {
-    return;
-  }
-  const sandboxConfig = config.getSandbox();
-  if (!sandboxConfig) {
-    return;
-  }
-  if (initialAuthFailed) {
-    await runExitCleanup();
-    process.exit(ExitCodes.FATAL_AUTHENTICATION_ERROR);
-  }
-
-  const sandboxMemoryArgs = computeSandboxMemoryArgsFromEnv(config, settings);
-  // We intentionally omit the list of extensions here because extensions
-  // should not impact auth or setting up the sandbox.
-  // Follow-up (#1569, jacobr): refactor loadCliConfig so there is a minimal
-  // version that only initializes enough config to enable authentication or
-  // find another way to decouple authentication from requiring a config.
-  const partialConfig = await loadCliConfig(
-    settings.merged,
-    [],
-    new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
-    sessionId,
-    argv,
-    workspaceRoot,
-    { settingsService: runtimeSettingsService },
-  );
-
-  const stdinData = hasPipedInput ? await readStdinData() : '';
-  const sandboxArgs = injectStdinIntoArgs(process.argv, stdinData);
-
-  const exitCode = await start_sandbox(
-    sandboxConfig,
-    sandboxMemoryArgs,
-    partialConfig,
-    sandboxArgs,
-  );
-  process.exit(exitCode);
-}
-
-/**
- * In ACP/Zed mode authentication happens through the protocol; just ensure the
- * configured provider is set as active when one is available. Best-effort.
- */
-export function ensureAcpProviderActivated(config: Config): void {
-  const providerManagerForAcp = config.getProviderManager();
-  const configProvider = config.getProvider();
-  if (!configProvider || !providerManagerForAcp) {
-    return;
-  }
-  try {
-    if (!providerManagerForAcp.hasActiveProvider()) {
-      void providerManagerForAcp.setActiveProvider(configProvider);
-    }
-  } catch {
-    // Non-fatal - continue without provider; auth can still happen via ACP.
-  }
-}
-
-export async function enableInteractiveRawModeIfNeeded(
-  config: Config,
-  stdinManager: StdinRawModeManager,
-  wasRaw: boolean,
-): Promise<void> {
-  if (!(config.isInteractive() && !wasRaw && process.stdin.isTTY)) {
-    return;
-  }
-  // Drain any garbage ANSI sequences that may be in the stdin buffer
-  // before we start processing input. This addresses #199 where garbage
-  // ANSI on startup can disrupt theme selection on some terminals (e.g., OCI).
-  await drainStdinBuffer(process.stdin, 50);
-
-  // Set this as early as possible to avoid spurious characters from
-  // input showing up in the output.
-  // Use stdinManager to safely enable raw mode with EIO error handling (Issue #1020)
-  stdinManager.enable();
-
-  // This cleanup isn't strictly needed but may help in certain situations.
-  process.on('SIGTERM', () => {
-    stdinManager.disable(true); // Restore to wasRaw
-    void (async () => {
-      await runExitCleanup();
-      process.exit(0);
-    })();
-  });
-  process.on('SIGINT', () => {
-    stdinManager.disable(true); // Restore to wasRaw
-    void (async () => {
-      await runExitCleanup();
-      process.exit(130); // Standard exit code for SIGINT
-    })();
-  });
-
-  // Register cleanup for the stdin manager to ensure error handler is removed
-  registerCleanup(() => {
-    stdinManager.disable(true);
-  });
 }

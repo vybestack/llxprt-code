@@ -5,20 +5,24 @@
  */
 
 /**
- * #2374 round-3 Fix 5: these tests assert activateConfiguredProvider's
+ * #2374 round-3 Fix 5 / #2378: these tests assert activateConfiguredProvider's
  * OBSERVABLE CONTRACT (return value: false=non-fatal, true=auth-failed) and the
  * assembled intent as a VALUE (deep-equal on the full intent object), NOT
- * fragmented arg-matching or call counts. The executor is mocked because
- * activateConfiguredProvider's real job is intent ASSEMBLY + delegation.
+ * fragmented arg-matching or call counts. The public preflight boundary
+ * (preflightAgentActivation) is mocked because activateConfiguredProvider's
+ * real job is intent ASSEMBLY + delegation to that agent-bootstrap entrypoint
+ * — the CLI no longer imports/executes the runtime activation primitive
+ * directly (#2378).
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { ProviderActivationIntent } from '@vybestack/llxprt-code-agents';
-import type { CliProviderManager, ParsedCliArgs } from './cliBootstrap.js';
+import type { CliProviderManager } from './cliProviderInit.js';
+import type { ParsedCliArgs } from './cliBootstrap.js';
 
-const { executeProviderActivationMock } = vi.hoisted(() => ({
-  executeProviderActivationMock: vi.fn(),
+const { preflightAgentActivationMock } = vi.hoisted(() => ({
+  preflightAgentActivationMock: vi.fn(),
 }));
 
 vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
@@ -26,11 +30,11 @@ vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
     await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
   return {
     ...actual,
-    executeProviderActivation: executeProviderActivationMock,
+    preflightAgentActivation: preflightAgentActivationMock,
   };
 });
 
-import { activateConfiguredProvider } from './cliBootstrap.js';
+import { activateConfiguredProvider } from './cliProviderInit.js';
 
 function makeConfig(
   provider: string | undefined,
@@ -79,8 +83,8 @@ function makeArgs(): ParsedCliArgs {
 
 describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => {
   beforeEach(() => {
-    executeProviderActivationMock.mockReset();
-    executeProviderActivationMock.mockResolvedValue({
+    preflightAgentActivationMock.mockReset();
+    preflightAgentActivationMock.mockResolvedValue({
       authFailed: false,
       infoMessages: [],
     });
@@ -89,7 +93,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
   // ── Observable contract: return value ─────────────────────────────────
 
   it('returns false (non-fatal) when the executor reports authFailed false', async () => {
-    executeProviderActivationMock.mockResolvedValue({
+    preflightAgentActivationMock.mockResolvedValue({
       authFailed: false,
       activeProvider: 'anthropic',
       infoMessages: ['switched'],
@@ -103,11 +107,11 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       makeArgs(),
     );
 
-    expect(failed).toBe(false);
+    expect(failed.authFailed).toBe(false);
   });
 
   it('returns true (fatal) when the executor reports authFailed true', async () => {
-    executeProviderActivationMock.mockResolvedValue({
+    preflightAgentActivationMock.mockResolvedValue({
       authFailed: true,
       infoMessages: [],
     });
@@ -120,7 +124,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       makeArgs(),
     );
 
-    expect(failed).toBe(true);
+    expect(failed.authFailed).toBe(true);
   });
 
   // ── Assembled intent as a VALUE (deep-equal) ──────────────────────────
@@ -132,7 +136,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
     await activateConfiguredProvider(config, providerManager, makeArgs());
 
     const intent: ProviderActivationIntent =
-      executeProviderActivationMock.mock.calls[0][1];
+      preflightAgentActivationMock.mock.calls[0][1];
     expect(intent).toStrictEqual({
       provider: 'anthropic',
       modelParams: {},
@@ -148,7 +152,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
     await activateConfiguredProvider(config, providerManager, makeArgs());
 
     const intent: ProviderActivationIntent =
-      executeProviderActivationMock.mock.calls[0][1];
+      preflightAgentActivationMock.mock.calls[0][1];
     expect(intent).toStrictEqual({
       defaultProvider: 'gemini',
       modelParams: {},
@@ -166,7 +170,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
     await activateConfiguredProvider(config, providerManager, makeArgs());
 
     const intent: ProviderActivationIntent =
-      executeProviderActivationMock.mock.calls[0][1];
+      preflightAgentActivationMock.mock.calls[0][1];
     expect(intent).toStrictEqual({
       provider: 'anthropic',
       model: 'claude-3.5-sonnet',
@@ -189,7 +193,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
     await activateConfiguredProvider(config, providerManager, makeArgs());
 
     const intent: ProviderActivationIntent =
-      executeProviderActivationMock.mock.calls[0][1];
+      preflightAgentActivationMock.mock.calls[0][1];
     expect(intent).toStrictEqual({
       provider: 'anthropic',
       modelParams: { temperature: 0.2 },
@@ -199,5 +203,27 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       },
       authMode: 'auto',
     });
+  });
+
+  // ── Preflight error contract (#2378) ─────────────────────────────────
+  //
+  // The pre-existing contract (introduced in #2374, preserved by #2378)
+  // catches a preflight throw and returns true (auth-failed) so bootstrap does
+  // not crash on a synchronous error in the preflight path.
+
+  it('returns true (auth-failed) when the preflight throws, preserving the non-crash contract', async () => {
+    preflightAgentActivationMock.mockRejectedValue(
+      new Error('preflight blew up'),
+    );
+    const config = makeConfig('anthropic');
+    const providerManager = makeProviderManager('anthropic');
+
+    const failed = await activateConfiguredProvider(
+      config,
+      providerManager,
+      makeArgs(),
+    );
+
+    expect(failed.authFailed).toBe(true);
   });
 });

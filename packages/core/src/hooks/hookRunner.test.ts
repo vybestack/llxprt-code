@@ -299,11 +299,13 @@ describe('HookRunner', () => {
 
         // SECURITY: Verify spawn is called with shell executable and expanded path
         // Note: Safe paths without metacharacters may not be quoted
+        const expectedPath =
+          process.platform === 'win32'
+            ? /'\/test\/project'\/hooks\/test\.sh/
+            : /\/test\/project\/hooks\/test\.sh/;
         expect(spawn).toHaveBeenCalledWith(
           expect.stringMatching(/bash|powershell/),
-          expect.arrayContaining([
-            expect.stringMatching(/\/test\/project\/hooks\/test\.sh/),
-          ]),
+          expect.arrayContaining([expect.stringMatching(expectedPath)]),
           expect.objectContaining({
             shell: false,
             env: expect.objectContaining({

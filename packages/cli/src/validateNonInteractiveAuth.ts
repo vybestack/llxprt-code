@@ -15,8 +15,8 @@ import {
   ExitCodes,
   JsonFormatter,
   OutputFormat,
-  debugLogger,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { LoadedSettings } from './config/settings.js';
 
 /**

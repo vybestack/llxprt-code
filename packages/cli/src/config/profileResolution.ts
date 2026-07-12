@@ -5,7 +5,7 @@
  */
 
 import process from 'node:process';
-import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import type { MergedSettings, Settings } from './settings.js';

@@ -6,7 +6,7 @@
 
 import path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import type { GenerateContentConfig } from '@google/genai';
+import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
@@ -91,7 +91,7 @@ export class CompressionHandler {
   constructor(
     private readonly runtimeContext: AgentRuntimeContext,
     private readonly historyService: HistoryService,
-    private readonly generationConfig: GenerateContentConfig,
+    private readonly generationConfig: ModelGenerationSettings,
     private readonly providerResolver: (
       compressionProfileName: string | undefined,
     ) => CompressionProviderResult | Promise<CompressionProviderResult>,

@@ -300,18 +300,21 @@ describe('getPathSuggestions', () => {
     ]);
   });
 
-  it('should handle permission errors gracefully', async () => {
-    const restrictedDir = path.join(testRootDir, 'restricted');
-    await fs.mkdir(restrictedDir);
-    await fs.writeFile(path.join(restrictedDir, 'secret.txt'), '');
-    await fs.chmod(restrictedDir, 0o000);
-    try {
-      const results = await getPathSuggestions('./restricted/', testRootDir);
-      expect(results).toStrictEqual([]);
-    } finally {
-      await fs.chmod(restrictedDir, 0o755);
-    }
-  });
+  it.skipIf(process.platform === 'win32')(
+    'should handle permission errors gracefully',
+    async () => {
+      const restrictedDir = path.join(testRootDir, 'restricted');
+      await fs.mkdir(restrictedDir);
+      await fs.writeFile(path.join(restrictedDir, 'secret.txt'), '');
+      await fs.chmod(restrictedDir, 0o000);
+      try {
+        const results = await getPathSuggestions('./restricted/', testRootDir);
+        expect(results).toStrictEqual([]);
+      } finally {
+        await fs.chmod(restrictedDir, 0o755);
+      }
+    },
+  );
 
   describe('shell special character escaping', () => {
     let spacesDir: string;

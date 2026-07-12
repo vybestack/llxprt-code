@@ -13,7 +13,8 @@ import { promisify } from 'node:util';
 import { quote } from 'shell-quote';
 import { exec } from 'node:child_process';
 import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
-import { FatalSandboxError, debugLogger } from '@vybestack/llxprt-code-core';
+import { FatalSandboxError } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { SETTINGS_DIRECTORY_NAME } from '../config/settings.js';
 import {
   getPassthroughEnvVars,

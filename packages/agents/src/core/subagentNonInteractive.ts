@@ -19,11 +19,11 @@
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import {
-  type FunctionCall,
-  type FunctionDeclaration,
-  type Content,
-} from '@google/genai';
+import type {
+  IContent,
+  ToolCallBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import {
   nextStreamEventWithIdleTimeout,
@@ -34,14 +34,8 @@ import {
   type StreamEvent,
   type ChatSession,
 } from './chatSession.js';
-import {
-  filterHookRestrictedParts,
-  filterHookRestrictedFunctionCalls,
-  getHookRestrictedFunctionCallsFromParts,
-  mergeHookRestrictedFunctionCalls,
-} from './hookToolRestrictions.js';
-import { getFunctionCallsFromParts } from './googlePartHelpers.js';
-import { chunkToParts } from './streamChunkWrapper.js';
+import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
+import { getToolCallBlocks } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import type { ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -90,7 +84,7 @@ export interface NonInteractiveRunContext {
 type LoopIterationResult =
   | { action: 'stop' }
   | { action: 'abort' }
-  | { action: 'continue'; messages: Content[] };
+  | { action: 'continue'; messages: IContent[] };
 
 // ---------------------------------------------------------------------------
 // Stream consumption helpers
@@ -133,27 +127,16 @@ export async function readNextNonInteractiveEvent(
  */
 export function collectNonInteractiveChunk(
   resp: StreamEvent & { type: StreamEventType.CHUNK },
-  functionCalls: FunctionCall[],
+  functionCalls: ToolCallBlock[],
   currentTurn: number,
   logger: DebugLogger,
   subagentId: string,
 ): { text: string; hookRestrictedAllowedTools: string[] | undefined } {
   const chunk = resp.value;
   const allowedTools = chunk.hookRestrictions?.allowedToolNames;
-  const parts = chunkToParts(chunk);
-  const partCalls = getHookRestrictedFunctionCallsFromParts(
-    parts,
-    allowedTools,
-  );
-  const topLevelCalls = getFunctionCallsFromParts(parts) ?? [];
-  const filteredTopCalls = filterHookRestrictedFunctionCalls(
-    topLevelCalls,
-    allowedTools,
-  );
-  const chunkCalls = mergeHookRestrictedFunctionCalls(
-    partCalls,
-    filteredTopCalls,
-  );
+  const blocks = chunk.content.blocks;
+  const filteredBlocks = filterHookRestrictedBlocks(blocks, allowedTools);
+  const chunkCalls = getToolCallBlocks(filteredBlocks);
   if (chunkCalls.length > 0) {
     functionCalls.push(...chunkCalls);
     logger.debug(
@@ -161,7 +144,7 @@ export function collectNonInteractiveChunk(
         `Subagent ${subagentId} received ${chunkCalls.length} function calls on turn ${currentTurn}`,
     );
   }
-  const chunkText = chunk.content.blocks
+  const chunkText = blocks
     .filter((b) => b.type === 'text' && typeof b.text === 'string')
     .map((b) => (b as { text: string }).text)
     .join('');
@@ -171,17 +154,16 @@ export function collectNonInteractiveChunk(
       hookRestrictedAllowedTools: undefined,
     };
   }
-  const filteredParts = filterHookRestrictedParts(parts, allowedTools);
-  const filteredText = filteredParts
-    .map((part) => part.text)
-    .filter((text): text is string => typeof text === 'string')
+  const filteredText = filteredBlocks
+    .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
+    .map((b) => b.text)
     .join('');
   return { text: filteredText, hookRestrictedAllowedTools: allowedTools };
 }
 
 /** Aggregated result of consuming the full non-interactive stream. */
 export interface NonInteractiveStreamResult {
-  functionCalls: FunctionCall[];
+  functionCalls: ToolCallBlock[];
   textResponse: string;
   parseableTextResponse: string;
   hookRestrictedAllowedTools: string[] | undefined;
@@ -220,7 +202,7 @@ export async function consumeNonInteractiveStream(
     return emptyStreamResult();
   }
 
-  const functionCalls: FunctionCall[] = [];
+  const functionCalls: ToolCallBlock[] = [];
   let textResponse = '';
   let parseableTextResponse = '';
   let hookRestrictedAllowedTools: string[] | undefined;
@@ -276,7 +258,7 @@ async function readStreamToCompletion(
   timeoutSignal: AbortSignal,
   effectiveTimeoutMs: number,
   currentTurn: number,
-  functionCalls: FunctionCall[],
+  functionCalls: ToolCallBlock[],
   logger: DebugLogger,
   subagentId: string,
   output: OutputObject,
@@ -350,8 +332,8 @@ async function readStreamToCompletion(
  */
 export async function runNonInteractiveTurn(
   chat: ChatSession,
-  currentMessages: Content[],
-  toolsList: FunctionDeclaration[],
+  currentMessages: IContent[],
+  toolsList: ToolDeclaration[],
   abortController: AbortController,
   currentTurn: number,
   sessionId: string,
@@ -360,14 +342,15 @@ export async function runNonInteractiveTurn(
   config: Config,
   logger: DebugLogger,
   output: OutputObject,
-): Promise<{ functionCalls: FunctionCall[]; textResponse: string }> {
+): Promise<{ functionCalls: ToolCallBlock[]; textResponse: string }> {
+  const blocks = currentMessages[0]?.blocks ?? [];
   const messageParams = {
-    message: currentMessages[0]?.parts ?? [],
+    message: blocks,
     config: {
       abortSignal: abortController.signal,
       tools: [{ functionDeclarations: toolsList }],
     },
-  };
+  } as unknown as Parameters<typeof chat.sendMessageStream>[0];
 
   const responseStream = await chat.sendMessageStream(
     messageParams,
@@ -412,13 +395,13 @@ export async function runNonInteractiveTurn(
  * calls or run the goal-completion check.
  */
 export async function dispatchNonInteractiveTurnResult(
-  functionCalls: FunctionCall[],
+  functionCalls: ToolCallBlock[],
   abortController: AbortController,
   promptId: string,
   currentTurn: number,
   execCtx: ExecutionLoopContext,
   ctx: NonInteractiveRunContext,
-): Promise<Content[] | null> {
+): Promise<IContent[] | null> {
   if (functionCalls.length > 0) {
     return processFunctionCalls(functionCalls, abortController, promptId, {
       output: ctx.output,
@@ -452,8 +435,8 @@ export async function dispatchNonInteractiveTurnResult(
  * can be unit-tested in isolation.
  */
 export function hasNonInteractiveMessages(
-  nextMessages: Content[] | null,
-): nextMessages is Content[] {
+  nextMessages: IContent[] | null,
+): nextMessages is IContent[] {
   return nextMessages !== null && nextMessages.length > 0;
 }
 
@@ -463,9 +446,9 @@ export function hasNonInteractiveMessages(
  */
 async function runNonInteractiveLoopIteration(
   chat: ChatSession,
-  toolsList: FunctionDeclaration[],
+  toolsList: ToolDeclaration[],
   abortController: AbortController,
-  currentMessages: Content[],
+  currentMessages: IContent[],
   turnCounter: { value: number },
   startTime: number,
   execCtx: ExecutionLoopContext,
@@ -535,9 +518,9 @@ async function runNonInteractiveLoopIteration(
  */
 export async function executeNonInteractiveRun(
   chat: ChatSession,
-  toolsList: FunctionDeclaration[],
+  toolsList: ToolDeclaration[],
   abortController: AbortController,
-  initialMessages: Content[],
+  initialMessages: IContent[],
   startTime: number,
   execCtx: ExecutionLoopContext,
   ctx: NonInteractiveRunContext,

@@ -1,6 +1,7 @@
 [
   "AdapterError",
   "Agent",
+  "AgentActivationPreflightResult",
   "AgentAuth",
   "AgentAuthControl",
   "AgentAuthKeysControl",
@@ -38,6 +39,8 @@
   "AgentMemoryControl",
   "AgentMessage",
   "AgentModelInfoEvent",
+  "ActivationPreflightToken",
+  "AgentSessionStartResult",
   "AgentModelParams",
   "AgentNoticeEvent",
   "AgentOAuthUIEvent",
@@ -180,6 +183,7 @@
   "listTools",
   "mapLoopStream",
   "mapStreamEvent",
+  "preflightAgentActivation",
   "splitPartsByRole",
   "toConfigParameters"
 ]

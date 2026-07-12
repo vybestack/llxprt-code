@@ -16,8 +16,10 @@ import {
   type ToolResult,
   type PolicyUpdateOptions,
   ToolErrorType,
+  type CallableTool,
+  type ToolCallRequest as FunctionCall,
+  type ContentPart as Part,
 } from '@vybestack/llxprt-code-tools';
-import { type CallableTool, type FunctionCall, type Part } from '@google/genai';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { firstTruthyString } from '../utils/string-fallback.js';

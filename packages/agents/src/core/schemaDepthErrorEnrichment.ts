@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ApiError } from '@google/genai';
+import { isProviderApiError } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { isSchemaDepthError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { hasCycleInSchema } from '@vybestack/llxprt-code-tools';
@@ -20,7 +20,7 @@ export function enrichSchemaDepthError(
   logger: DebugLogger,
 ): void {
   if (
-    !(error instanceof ApiError) ||
+    !isProviderApiError(error) ||
     error.message === '' ||
     !isSchemaDepthError(error.message)
   ) {

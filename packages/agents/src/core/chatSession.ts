@@ -7,13 +7,41 @@
 // ChatSession — thin coordinator that wires up the decomposed modules.
 
 import type {
-  Content,
-  GenerateContentConfig,
-  GenerateContentResponse,
-  SendMessageParameters,
-  Tool,
-  PartListUnion,
-} from '@google/genai';
+  ModelGenerationSettings,
+  ModelOutput,
+  AgentMessageInput,
+  ToolDeclaration,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { ToolGroupArray } from './streamRequestHelpers.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
+/**
+ * Neutral generation config carried by ChatSession. Extends the neutral
+ * {@link ModelGenerationSettings} with the request-scoped fields the
+ * turn/stream pipeline references (abortSignal, tools, toolConfig).
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P27
+ * @requirement:REQ-005.5c
+ */
+export interface ChatSessionConfig extends ModelGenerationSettings {
+  abortSignal?: AbortSignal;
+  tools?: ToolGroupArray;
+  toolConfig?: unknown;
+}
+
+/**
+ * Neutral send-message DTO replacing the provider-shaped
+ * `SendMessageParameters`. Carries a neutral {@link AgentMessageInput}
+ * message and an optional per-request config — never a provider Part/role
+ * shape.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P27
+ * @requirement:REQ-005.5c
+ */
+export interface SendMessageParams {
+  message: AgentMessageInput;
+  config?: ChatSessionConfig;
+}
 import type { CompletedToolCall } from './coreToolScheduler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -38,8 +66,6 @@ import { StreamProcessor } from './StreamProcessor.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import {
   convertPartListUnionToIContent,
-  convertIContentToResponse,
-  convertBlocksToParts,
   validateHistory,
 } from './MessageConverter.js';
 import { splitPartsByRole } from './agenticLoop/loopHelpers.js';
@@ -94,16 +120,19 @@ export class AgentExecutionStoppedError extends Error {
 
 /**
  * Error thrown when agent execution is blocked by a hook.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P13
+ * @requirement:REQ-002.6
  */
 export class AgentExecutionBlockedError extends Error {
   readonly reason: string;
   readonly systemMessage?: string;
-  readonly syntheticResponse?: GenerateContentResponse;
+  readonly blockedOutput?: ModelOutput;
   readonly contextCleared?: boolean;
 
   constructor(
     reason: string,
-    syntheticResponse?: GenerateContentResponse,
+    blockedOutput?: ModelOutput,
     systemMessage?: string,
     contextCleared?: boolean,
   ) {
@@ -114,7 +143,7 @@ export class AgentExecutionBlockedError extends Error {
     this.name = 'AgentExecutionBlockedError';
     this.reason = reason;
     this.systemMessage = systemMessage;
-    this.syntheticResponse = syntheticResponse;
+    this.blockedOutput = blockedOutput;
     this.contextCleared = contextCleared;
   }
 }
@@ -133,7 +162,7 @@ export class ChatSession {
   private readonly runtimeState: AgentRuntimeState;
   private readonly historyService: HistoryService;
   private readonly runtimeContext: AgentRuntimeContext;
-  private readonly generationConfig: GenerateContentConfig;
+  private readonly generationConfig: ChatSessionConfig;
 
   // Composed modules
   private readonly compressionHandler: CompressionHandler;
@@ -149,8 +178,8 @@ export class ChatSession {
   constructor(
     view: AgentRuntimeContext,
     contentGenerator: ContentGenerator,
-    generationConfig: GenerateContentConfig = {},
-    initialHistory: Content[] = [],
+    generationConfig: ChatSessionConfig = {},
+    initialHistory: IContent[] = [],
   ) {
     this.runtimeContext = view;
     this.runtimeState = view.state;
@@ -176,7 +205,6 @@ export class ChatSession {
       this.resolveProviderForRuntime(ctx);
     const providerRuntimeBuilder = (s: string, m?: Record<string, unknown>) =>
       this.buildProviderRuntime(s, m);
-    const makePositionMatcher = () => this._makePositionMatcher();
     const resolveBaseUrl = (p: IProvider) => this.resolveProviderBaseUrl(p);
 
     this.compressionHandler = new CompressionHandler(
@@ -220,7 +248,6 @@ export class ChatSession {
         view,
         providerResolver,
         providerRuntimeBuilder,
-        makePositionMatcher,
         resolveBaseUrl,
       );
     this.turnProcessor = turnProcessor;
@@ -234,9 +261,6 @@ export class ChatSession {
       s: string,
       m?: Record<string, unknown>,
     ) => ProviderRuntimeContext,
-    makePositionMatcher: () =>
-      | (() => { historyId: string; toolName?: string })
-      | undefined,
     resolveBaseUrl: (p: IProvider) => string | undefined,
   ): {
     turnProcessor: TurnProcessor;
@@ -250,7 +274,6 @@ export class ChatSession {
       this.generationConfig,
       this.historyService,
       this.streamProcessor,
-      makePositionMatcher,
       resolveBaseUrl,
     );
 
@@ -259,9 +282,7 @@ export class ChatSession {
       providerResolver,
       providerRuntimeBuilder,
       this.generationConfig,
-
       this.historyService,
-      makePositionMatcher,
     );
 
     return { turnProcessor, directMessageProcessor };
@@ -446,34 +467,26 @@ export class ChatSession {
     };
   }
 
-  // ── Position matcher (used by multiple modules) ──────────────────
-
-  private _makePositionMatcher():
-    | (() => { historyId: string; toolName?: string })
-    | undefined {
-    return this.conversationManager.makePositionMatcher();
-  }
-
   // ── Public API — thin delegation ─────────────────────────────────
 
   async sendMessage(
-    params: SendMessageParameters,
+    params: SendMessageParams,
     prompt_id: string,
-  ): Promise<GenerateContentResponse> {
+  ): Promise<ModelOutput> {
     return this.turnProcessor.sendMessage(params, prompt_id);
   }
 
   async sendMessageStream(
-    params: SendMessageParameters,
+    params: SendMessageParams,
     prompt_id: string,
   ): Promise<AsyncGenerator<StreamEvent>> {
     return this.turnProcessor.sendMessageStream(params, prompt_id);
   }
 
   async generateDirectMessage(
-    params: SendMessageParameters,
+    params: SendMessageParams,
     prompt_id: string,
-  ): Promise<GenerateContentResponse> {
+  ): Promise<ModelOutput> {
     return this.directMessageProcessor.generateDirectMessage(params, prompt_id);
   }
 
@@ -493,15 +506,15 @@ export class ChatSession {
     return this.runtimeContext.tools;
   }
 
-  setTools(tools: Tool[]): void {
-    this.generationConfig.tools = tools;
+  setTools(tools: ToolDeclaration[]): void {
+    this.generationConfig.tools = [{ functionDeclarations: tools }];
   }
 
   clearTools(): void {
     this.generationConfig.tools = undefined;
   }
 
-  getHistory(curated: boolean = false): Content[] {
+  getHistory(curated: boolean = false): IContent[] {
     return this.conversationManager.getHistory(curated);
   }
 
@@ -509,11 +522,11 @@ export class ChatSession {
     this.conversationManager.clearHistory();
   }
 
-  addHistory(content: Content): void {
+  addHistory(content: IContent): void {
     this.conversationManager.addHistory(content);
   }
 
-  setHistory(history: Content[]): void {
+  setHistory(history: IContent[]): void {
     this.conversationManager.setHistory(history);
   }
 
@@ -551,7 +564,7 @@ export class ChatSession {
     _model: string,
     toolCalls: CompletedToolCall[],
   ): void {
-    const allParts = toolCalls.flatMap((toolCall) => {
+    const allBlocks = toolCalls.flatMap((toolCall): ContentBlock[] => {
       // Defensive for deserialized/test-cast tool responses that bypass the
       // static ToolCallResponseInfo contract.
       const response = toolCall.response as
@@ -565,9 +578,9 @@ export class ChatSession {
         );
         return [];
       }
-      return convertBlocksToParts(responseParts);
+      return responseParts as ContentBlock[];
     });
-    const { functionResponses } = splitPartsByRole(allParts);
+    const { functionResponses } = splitPartsByRole(allBlocks);
 
     // Only persist the tool-response side eagerly. The assistant tool_call is
     // already recorded by the preceding model stream, and any non-tool-response
@@ -577,11 +590,13 @@ export class ChatSession {
     // turns or continuation text when the next stream succeeds.
     if (functionResponses.length > 0) {
       this.addHistory({
-        role: 'user',
-        parts: functionResponses,
+        speaker: 'tool',
+        blocks: functionResponses,
       });
       const responseCallIds = functionResponses
-        .map((response) => response.functionResponse?.id)
+        .map((response) =>
+          response.type === 'tool_response' ? response.callId : undefined,
+        )
         .filter((id): id is string => typeof id === 'string' && id.length > 0);
       this.turnProcessor.markToolResponsesRecorded(responseCallIds);
       this.streamProcessor.markToolResponsesRecorded(responseCallIds);
@@ -589,12 +604,8 @@ export class ChatSession {
   }
 
   // Public conversion methods — delegated to standalone functions
-  convertPartListUnionToIContent(input: PartListUnion): IContent {
+  convertPartListUnionToIContent(input: AgentMessageInput): IContent {
     return convertPartListUnionToIContent(input);
-  }
-
-  convertIContentToResponse(input: IContent): GenerateContentResponse {
-    return convertIContentToResponse(input);
   }
 
   async estimatePendingTokens(contents: IContent[]): Promise<number> {

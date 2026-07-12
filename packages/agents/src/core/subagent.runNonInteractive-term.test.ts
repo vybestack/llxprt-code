@@ -19,7 +19,7 @@ import {
   type RunConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { ChatSession, StreamEventType } from './chatSession.js';
-import { mockResponseToChunk } from './turn-test-helpers.js';
+import { mockChunk } from './turn-test-helpers.js';
 import {
   createContentGenerator,
   type ContentGenerator,
@@ -252,11 +252,7 @@ describe('subagent.ts', () => {
           return (async function* () {
             yield {
               type: StreamEventType.CHUNK,
-              value: mockResponseToChunk({
-                candidates: [
-                  { content: { parts: [{ text: 'partial output' }] } },
-                ],
-              }),
+              value: mockChunk({ text: 'partial output' }),
             };
 
             await new Promise<void>((_resolve, reject) => {
@@ -448,21 +444,9 @@ describe('subagent.ts', () => {
       const interactiveResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [
-              {
-                content: {
-                  parts: [
-                    {
-                      functionCall: {
-                        id: 'call-timeout',
-                        name: 'external_tool',
-                        args: {},
-                      },
-                    },
-                  ],
-                },
-              },
+          value: mockChunk({
+            toolCalls: [
+              { id: 'call-timeout', name: 'external_tool', args: {} },
             ],
           }),
         };
@@ -667,22 +651,8 @@ describe('subagent.ts', () => {
       const interactiveResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [
-              {
-                content: {
-                  parts: [
-                    {
-                      functionCall: {
-                        id: 'call-hang',
-                        name: 'hanging_tool',
-                        args: {},
-                      },
-                    },
-                  ],
-                },
-              },
-            ],
+          value: mockChunk({
+            toolCalls: [{ id: 'call-hang', name: 'hanging_tool', args: {} }],
           }),
         };
       })();

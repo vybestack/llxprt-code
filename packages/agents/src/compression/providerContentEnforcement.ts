@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { GenerateContentConfig } from '@google/genai';
+import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -24,7 +24,7 @@ type CompletionSettingsService = { get: (key: string) => unknown };
 export interface ProviderContentEnforcementDeps {
   historyService: HistoryService;
   runtimeContext: AgentRuntimeContext;
-  generationConfig: GenerateContentConfig;
+  generationConfig: ModelGenerationSettings;
   providerRuntimeNullable:
     | { settingsService?: CompletionSettingsService }
     | null

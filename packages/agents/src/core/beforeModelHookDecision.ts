@@ -4,20 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { FinishReason, GenerateContentResponse } from '@google/genai';
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
+import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   AgentExecutionStoppedError,
   AgentExecutionBlockedError,
 } from './chatSession.js';
-import { attachHookRestrictedAllowedTools } from './hookToolRestrictions.js';
-import { isMissingFinishReason } from './streamResponseHelpers.js';
-
-/** Callback to patch a missing finish reason on a synthetic response. */
-export type PatchFinishReasonFn = (
-  response: GenerateContentResponse,
-  candidate: NonNullable<GenerateContentResponse['candidates']>[0],
-) => GenerateContentResponse;
 
 /** Extract the effective reason from a hook result, else fallback. */
 function effectiveReason(
@@ -29,16 +21,43 @@ function effectiveReason(
 }
 
 /**
+ * Build a neutral blocking ModelOutput from a BeforeModel hook's
+ * synthetic response or reason.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P13
+ * @requirement:REQ-004.1
+ * @pseudocode lines 20-22
+ */
+function buildBlockingModelOutput(
+  beforeModelResult: BeforeModelHookOutput,
+): ModelOutput {
+  const reason = effectiveReason(
+    beforeModelResult,
+    'Request blocked by BeforeModel hook',
+  );
+  return {
+    content: {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: reason }],
+    },
+    finishReason: 'stop',
+    rawStopReason: beforeModelResult.getEffectiveReason() || undefined,
+  };
+}
+
+/**
  * Enforce the BeforeModel hook's stop/block decision. Throws an
  * AgentExecutionStoppedError if the hook requests execution stop, or an
- * AgentExecutionBlockedError if it returns a blocking decision (with an
- * optional synthetic response). No-ops when the hook result is absent or
+ * AgentExecutionBlockedError if it returns a blocking decision (with a
+ * neutral ModelOutput payload). No-ops when the hook result is absent or
  * neither stop nor block is requested.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P13
+ * @requirement:REQ-004.1
  */
 export function enforceBeforeModelHookDecision(
   beforeModelResult: BeforeModelHookOutput | undefined,
-  hookRestrictedAllowedTools: string[] | undefined,
-  patchFinishReason: PatchFinishReasonFn,
+  _hookRestrictedAllowedTools: string[] | undefined,
 ): void {
   if (beforeModelResult?.shouldStopExecution() === true) {
     throw new AgentExecutionStoppedError(
@@ -51,27 +70,9 @@ export function enforceBeforeModelHookDecision(
   }
   if (beforeModelResult?.isBlockingDecision() !== true) return;
 
-  let syntheticResponse = beforeModelResult.getSyntheticResponse() as
-    | GenerateContentResponse
-    | undefined;
-  if (syntheticResponse) {
-    const candidate = syntheticResponse.candidates?.[0];
-    const candidateFinishReason = candidate?.finishReason as
-      | FinishReason
-      | ''
-      | null
-      | undefined;
-    if (candidate && isMissingFinishReason(candidateFinishReason)) {
-      syntheticResponse = patchFinishReason(syntheticResponse, candidate);
-    }
-  }
+  const blockedOutput = buildBlockingModelOutput(beforeModelResult);
   throw new AgentExecutionBlockedError(
     effectiveReason(beforeModelResult, 'Request blocked by BeforeModel hook'),
-    syntheticResponse === undefined
-      ? undefined
-      : attachHookRestrictedAllowedTools(
-          syntheticResponse,
-          hookRestrictedAllowedTools,
-        ),
+    blockedOutput,
   );
 }
