@@ -7,26 +7,24 @@
 import { describe, it, expect } from 'vitest';
 import { Type } from '../types/schema-type.js';
 import {
-  type GeminiFunctionDeclaration,
-  type PartUnion,
-  type PartListUnion,
-  type GeminiPart,
-  type GeminiFunctionCall,
-} from '../types/gemini-neutral.js';
+  type FunctionDeclaration,
+  type ContentPartUnion,
+  type ContentPartListUnion,
+  type ToolCallRequest,
+  type ContentPart,
+} from '../types/wire-types.js';
 import { TodoWrite } from '../tools/todo-write.js';
 import { TodoRead } from '../tools/todo-read.js';
 import { TodoPause } from '../tools/todo-pause.js';
 
-describe('neutral Type enum runtime values', () => {
+describe('Type enum runtime values', () => {
   it.each([
-    ['TYPE_UNSPECIFIED', Type.TYPE_UNSPECIFIED, 'TYPE_UNSPECIFIED'],
     ['STRING', Type.STRING, 'STRING'],
     ['NUMBER', Type.NUMBER, 'NUMBER'],
     ['INTEGER', Type.INTEGER, 'INTEGER'],
     ['BOOLEAN', Type.BOOLEAN, 'BOOLEAN'],
     ['ARRAY', Type.ARRAY, 'ARRAY'],
     ['OBJECT', Type.OBJECT, 'OBJECT'],
-    ['NULL', Type.NULL, 'NULL'],
   ])('Type.%s serializes to the expected wire value', (_name, value, wire) => {
     expect(value).toBe(wire);
   });
@@ -70,29 +68,28 @@ describe('schema is JSON-serializable (no enum symbols leak)', () => {
   });
 });
 
-describe('neutral GeminiFunctionDeclaration structural assignability', () => {
+describe('FunctionDeclaration structural assignability', () => {
   it('accepts the shape produced by DeclarativeTool.schema', () => {
     const tool = new TodoRead(undefined);
     const schema = tool.schema;
-    // If this compiles, the neutral type is structurally compatible.
-    const _check: GeminiFunctionDeclaration = schema;
+    const _check: FunctionDeclaration = schema;
     expect(_check.name).toBe(TodoRead.Name);
   });
 });
 
-describe('neutral Part types are usable as ToolResult.llmContent', () => {
-  it('a string is assignable to PartListUnion', () => {
-    const content: PartListUnion = 'hello world';
+describe('wire types are usable as ToolResult.llmContent', () => {
+  it('a string is assignable to ContentPartListUnion', () => {
+    const content: ContentPartListUnion = 'hello world';
     expect(content).toBe('hello world');
   });
 
-  it('a GeminiPart is assignable to PartUnion', () => {
-    const part: PartUnion = { text: 'hello' } satisfies GeminiPart;
+  it('a ContentPart is assignable to ContentPartUnion', () => {
+    const part: ContentPartUnion = { text: 'hello' } satisfies ContentPart;
     expect(part).toEqual({ text: 'hello' });
   });
 
-  it('a FunctionCall shape is structurally compatible', () => {
-    const call: GeminiFunctionCall = { name: 'test', args: { a: 1 } };
+  it('a ToolCallRequest shape is structurally compatible', () => {
+    const call: ToolCallRequest = { name: 'test', args: { a: 1 } };
     expect(call.name).toBe('test');
   });
 });

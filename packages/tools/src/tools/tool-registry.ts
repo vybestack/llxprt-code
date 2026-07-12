@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type GeminiFunctionDeclaration as FunctionDeclaration } from '../types/gemini-neutral.js';
+import { type FunctionDeclaration } from '../types/wire-types.js';
 import {
   type AnyDeclarativeTool,
   Kind,

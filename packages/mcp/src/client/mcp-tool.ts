@@ -16,12 +16,10 @@ import {
   type ToolResult,
   type PolicyUpdateOptions,
   ToolErrorType,
-} from '@vybestack/llxprt-code-tools';
-import {
   type CallableTool,
-  type GeminiFunctionCall as FunctionCall,
-  type GeminiPart as Part,
-} from '../types/gemini-neutral.js';
+  type ToolCallRequest as FunctionCall,
+  type ContentPart as Part,
+} from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { firstTruthyString } from '../utils/string-fallback.js';

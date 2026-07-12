@@ -5,10 +5,10 @@
  */
 
 import {
-  type GeminiFunctionCall as FunctionCall,
-  type GeminiFunctionDeclaration as FunctionDeclaration,
-  type PartListUnion,
-} from '../types/gemini-neutral.js';
+  type ToolCallRequest as FunctionCall,
+  type FunctionDeclaration,
+  type ContentPartListUnion,
+} from '../types/wire-types.js';
 import { randomUUID } from 'node:crypto';
 import {
   type IToolMessageBus,
@@ -708,7 +708,7 @@ export interface ToolResult {
    * Content meant to be included in LLM history.
    * This should represent the factual outcome of the tool execution.
    */
-  llmContent: PartListUnion;
+  llmContent: ContentPartListUnion;
 
   /**
    * Markdown string for user display.
