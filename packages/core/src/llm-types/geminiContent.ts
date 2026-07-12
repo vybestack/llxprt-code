@@ -55,11 +55,12 @@ export interface GeminiInlineData {
  * source field name survives a Gemini round-trip.
  */
 export interface GeminiPartExtension {
-  llxprtSourceField?:
-    | 'reasoning_content'
-    | 'thinking'
-    | 'thought'
-    | 'think_tags';
+  /**
+   * Source field name for round-trip serialization.
+   * Known values: 'reasoning_content', 'reasoning', 'thinking', 'thought', 'think_tags'.
+   * May also contain arbitrary user-configured field names (issue #2488).
+   */
+  llxprtSourceField?: string;
 }
 
 /**

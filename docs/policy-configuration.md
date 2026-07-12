@@ -41,8 +41,8 @@ toolName = "edit"
 
 **Built-in tool names:**
 
-- Read-only: `glob`, `grep`, `ls`, `read_file`, `read_many_files`, `ripgrep`, `web_search`
-- Write: `edit`, `write_file`, `shell`, `memory`, `web_fetch`
+- Read-only: `glob`, `grep`, `ls`, `read_file`, `read_many_files`, `ripgrep`, `exa_web_search`
+- Write: `edit`, `write_file`, `shell`, `memory`, `direct_web_fetch`
 - Other: `task`, `write_todos`, `list_subagents`, `notebook_edit`, `slash_command`, `skill`, `mcp_tool`
 
 **MCP tool names:**

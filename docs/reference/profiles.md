@@ -95,7 +95,7 @@ The `ephemeralSettings` object contains everything set via `/set` during the ses
     "reasoning.includeInContext": true,
     "reasoning.stripFromContext": "none",
     "context-limit": 200000,
-    "tools.disabled": ["google_web_fetch"]
+    "tools.disabled": ["read_file"]
   }
 }
 ```

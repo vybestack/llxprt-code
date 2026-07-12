@@ -9,10 +9,10 @@ import path from 'node:path';
 import { PromptRegistry } from '../prompts/prompt-registry.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { ActivateSkillTool } from '@vybestack/llxprt-code-tools/tools/activate-skill.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { CoreSkillServiceAdapter } from '../tools-adapters/CoreSkillServiceAdapter.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import { getErrorMessage } from '../utils/errors.js';
 
 import type { AgentClientContract } from '../core/clientContract.js';
 import { HookSystem } from '../hooks/hookSystem.js';
@@ -109,10 +109,17 @@ import type { ShellExecutionConfig } from '../services/shellExecutionService.js'
 import type { ToolSchedulerContract } from '../core/toolSchedulerContract.js';
 
 export class Config extends ConfigBase {
+  private static readonly logger = new DebugLogger('llxprt:config');
+
   constructor(params: ConfigParameters) {
     super();
     applyConfigParams(this as unknown as ConfigConstructorTarget, params);
   }
+
+  // Issue #2325: Background MCP discovery promise started in initialize() so
+  // startup is not blocked. Awaited in dispose() to avoid tearing down servers
+  // mid-discovery.
+  private mcpDiscoveryPromise: Promise<void> | undefined;
 
   /**
    * Must only be called once, throws if called again.
@@ -143,10 +150,11 @@ export class Config extends ConfigBase {
       this,
       this.eventEmitter,
     );
-    await Promise.all([
-      this.mcpClientManager.startConfiguredMcpServers(),
-      this.getExtensionLoader().start(this),
-    ]);
+    // Issue #2325: Fire MCP discovery in the background — don't block startup.
+    // Tools are gated before model turns via McpClientManager.whenDiscoverySettled().
+    this.mcpDiscoveryPromise =
+      this.mcpClientManager.startConfiguredMcpServers();
+    await this.getExtensionLoader().start(this);
 
     await initializeLsp(this._lspState, this);
 
@@ -158,15 +166,17 @@ export class Config extends ConfigBase {
       );
       this.getSkillManager().setDisabledSkills(this.disabledSkills);
 
-      // Re-register ActivateSkillTool to update its schema with the discovered enabled skill enums
+      // Re-register ActivateSkillTool via the injected registrar hook
+      // (eliminates the inverted core->tools dependency — issue #2417)
       if (this.getSkillManager().getSkills().length > 0) {
-        this.getToolRegistry().unregisterTool(ActivateSkillTool.Name);
-        this.getToolRegistry().registerTool(
-          new ActivateSkillTool(
+        const registrar = this.getPostSkillDiscoveryToolRegistrar();
+        if (registrar) {
+          registrar(
+            this.getToolRegistry(),
             new CoreSkillServiceAdapter(this),
             initializationMessageBus,
-          ),
-        );
+          );
+        }
       }
     }
 
@@ -773,7 +783,20 @@ export class Config extends ConfigBase {
     if (client !== undefined) {
       client.dispose();
     }
+    if (this.mcpDiscoveryPromise !== undefined) {
+      try {
+        await this.mcpDiscoveryPromise;
+      } catch (error) {
+        Config.logger.warn(
+          `MCP discovery rejected during dispose: ${getErrorMessage(error)}`,
+        );
+      }
+    }
+    // Issue #2325: Extension server discoveries fired by startExtension are
+    // tracked by whenDiscoverySettled(). Await it to avoid tearing down
+    // clients mid-connection.
     if (this.mcpClientManager !== undefined) {
+      await this.mcpClientManager.whenDiscoverySettled();
       await this.mcpClientManager.stop();
     }
   }

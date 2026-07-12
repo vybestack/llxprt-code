@@ -116,7 +116,6 @@ export type { ToolConfirmationPayload } from './types/tool-confirmation-types.js
 export { ToolErrorType, isFatalToolError } from './types/tool-error.js';
 
 export {
-  GOOGLE_WEB_SEARCH_TOOL,
   EXA_WEB_SEARCH_TOOL,
   EDIT_TOOL_NAME,
   GREP_TOOL_NAME,
@@ -138,7 +137,6 @@ export {
   LS_TOOL,
   LIST_DIRECTORY_TOOL,
   CODE_SEARCH_TOOL,
-  GOOGLE_WEB_FETCH_TOOL,
   DIRECT_WEB_FETCH_TOOL,
   TASK_TOOL,
   MEMORY_TOOL,
@@ -326,12 +324,6 @@ export {
   type ExaWebSearchToolParams,
 } from './tools/exa-web-search.js';
 export {
-  GoogleWebSearchTool,
-  type WebSearchToolParams,
-  type WebSearchToolResult,
-} from './tools/google-web-search.js';
-
-export {
   ApplyPatchTool,
   classifyPatchOperations,
   type ApplyPatchToolParams,
@@ -391,12 +383,6 @@ export {
   ripGrepDebugLogger,
   type RipGrepToolParams,
 } from './tools/ripGrep.js';
-
-export {
-  GoogleWebFetchTool,
-  parsePrompt,
-  type GoogleWebFetchToolParams,
-} from './tools/google-web-fetch.js';
 
 export { AstGrepTool, type AstGrepToolParams } from './tools/ast-grep.js';
 

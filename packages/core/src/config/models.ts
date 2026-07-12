@@ -10,6 +10,8 @@ export const DEFAULT_GEMINI_FLASH_LITE_MODEL = 'gemini-2.5-flash-lite';
 
 export const DEFAULT_GEMINI_EMBEDDING_MODEL = 'gemini-embedding-001';
 
+export const PLACEHOLDER_MODEL = 'placeholder-model';
+
 /**
  * Returns true if the model string indicates a Gemini 2.x model.
  */

@@ -19,27 +19,38 @@ describe('Profile Save/Load Cycle Integration Tests', () => {
   let tempDir: string;
   let profileManager: ProfileManager;
   let originalHome: string | undefined;
+  let originalConfigHome: string | undefined;
 
   beforeEach(async () => {
-    // Store original HOME environment variable
+    // Store original env vars
     originalHome = process.env.HOME;
+    originalConfigHome = process.env.LLXPRT_CONFIG_HOME;
 
     // Create a temporary directory for our test
     tempDir = await createTempDirectory();
 
-    // Set HOME to our temp directory so ProfileManager uses it
+    // Point the storage config root at our temp directory so ProfileManager
+    // uses it. ProfileManager resolves Storage.getGlobalConfigDir()/profiles,
+    // which honors LLXPRT_CONFIG_HOME (setting HOME alone is NOT enough and
+    // previously made these tests write into the real user profiles dir).
     process.env.HOME = tempDir;
+    process.env.LLXPRT_CONFIG_HOME = path.join(tempDir, '.llxprt');
 
-    // Create a new ProfileManager instance (will use our temp HOME)
+    // Create a new ProfileManager instance (will use our temp config root)
     profileManager = new ProfileManager();
   });
 
   afterEach(async () => {
-    // Restore original HOME
+    // Restore original env vars
     if (originalHome !== undefined) {
       process.env.HOME = originalHome;
     } else {
       delete process.env.HOME;
+    }
+    if (originalConfigHome !== undefined) {
+      process.env.LLXPRT_CONFIG_HOME = originalConfigHome;
+    } else {
+      delete process.env.LLXPRT_CONFIG_HOME;
     }
 
     // Clean up temp directory

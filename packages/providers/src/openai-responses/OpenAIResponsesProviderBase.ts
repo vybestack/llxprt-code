@@ -27,6 +27,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type IModel } from '../IModel.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
+import { OPENAI_TRANSPORT_SELECTOR_KEYS } from '../openai/openaiModelPolicy.js';
 import { BaseProvider, type BaseProviderConfig } from '../BaseProvider.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
@@ -206,10 +207,10 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
 
   override getDefaultModel(): string {
     // @plan PLAN-20251213-ISSUE160.P04
-    // Return gpt-5.5 as default when in Codex mode (issue #1308 / #2037)
+    // Return gpt-5.6-sol as default when in Codex mode (issue #2483)
     const baseURL = this.getBaseURL();
     if (this.isCodexMode(baseURL)) {
-      return 'gpt-5.5';
+      return 'gpt-5.6-sol';
     }
     // Return the default model for responses API
     return 'o3-mini';
@@ -339,8 +340,18 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
         apiKey: _apiKey,
         baseUrl: _baseUrl,
         model: _model,
+        apiMode: _apiMode,
+        responsesMode: _responsesMode,
+        'responses-mode': _responsesModeGlobal,
+        openaiResponsesEnabled: _openaiResponsesEnabled,
         ...custom
       } = providerSettings;
+
+      // Defensive: strip any remaining selector keys that slipped through
+      // destructuring (e.g. future variants or aliases)
+      for (const selectorKey of OPENAI_TRANSPORT_SELECTOR_KEYS) {
+        delete (custom as Record<string, unknown>)[selectorKey];
+      }
 
       const params: Record<string, unknown> = { ...custom };
       if (temperature !== undefined) {

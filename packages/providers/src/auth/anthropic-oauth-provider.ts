@@ -24,9 +24,9 @@ import {
 import {
   openBrowserSecurely,
   shouldLaunchBrowser,
-  DebugLogger,
-  debugLogger,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import { ClipboardService } from './ClipboardService.js';
 import type { LocalOAuthCallbackServer } from './local-oauth-callback.js';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';

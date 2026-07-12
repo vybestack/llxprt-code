@@ -13,11 +13,9 @@
  * Tools-owned interface for tool key storage.
  *
  * Provides API key management operations needed by
- * tool-key-storage, codesearch, exa-web-search, and
- * google-web-search tools.
+ * tool-key-storage, codesearch, and exa-web-search tools.
  *
- * Consumed by: tool-key-storage, codesearch, exa-web-search,
- * google-web-search.
+ * Consumed by: tool-key-storage, codesearch, and exa-web-search.
  * Implemented by: CoreToolKeyStorageAdapter in packages/core.
  */
 

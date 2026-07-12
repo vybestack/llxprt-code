@@ -502,6 +502,7 @@ export class SubAgentScope {
     const toolMessages = await this.handleInteractiveToolCalls(
       responseParts,
       scheduler,
+      chat,
       abortController,
       execCtx,
     );
@@ -628,6 +629,7 @@ export class SubAgentScope {
         signal?: AbortSignal,
       ) => Promise<CompletedToolCall[]>;
     },
+    chat: ChatSession,
     abortController: AbortController,
     execCtx: ExecutionLoopContext,
   ): Promise<Content[] | null> {
@@ -647,6 +649,16 @@ export class SubAgentScope {
       completionPromise.catch(() => {});
       await scheduler.schedule(schedulerRequests, abortController.signal);
       const completedCalls = await completionPromise;
+      try {
+        chat.recordCompletedToolCalls(this.modelConfig.model, completedCalls);
+      } catch (error) {
+        this.logger.debug(
+          () =>
+            `Subagent ${this.subagentId} recordCompletedToolCalls best-effort persistence failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+        );
+      }
 
       responseParts = responseParts.concat(
         buildPartsFromCompletedCalls(completedCalls, {

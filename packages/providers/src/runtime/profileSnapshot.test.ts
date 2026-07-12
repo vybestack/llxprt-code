@@ -302,7 +302,7 @@ describe('buildRuntimeProfileSnapshot', () => {
         getEphemeralSettings: () => ({
           activeProvider: 'gemini',
           currentProfile: 'glm',
-          tools: { disabled: ['google_web_fetch'] },
+          tools: { disabled: ['read_file'] },
           'context-limit': 190000,
         }),
       },

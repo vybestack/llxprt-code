@@ -9,6 +9,11 @@ import { DebugLogger } from '../debug/index.js';
 import { delay, createAbortError } from './delay.js';
 import { RetryableQuotaError } from './googleQuotaErrors.js';
 
+// Re-exported so downstream packages (e.g. providers) can import it from the
+// public `utils/retry.js` entry point, since `googleQuotaErrors.js` is not in
+// the package export map. (issue #2450)
+export { RetryableQuotaError };
+
 export interface HttpError extends Error {
   status?: number;
 }
@@ -224,6 +229,9 @@ export function isNetworkTransientError(error: unknown): boolean {
  * @requirement REQ-R13-002 isRetryableError exported for reuse
  *
  * Decision precedence (CRITICAL - do not reorder):
+ * 0. Self-classifying aggregate errors (a `failures` array plus a boolean
+ *    `isRetryable`, e.g. the load balancer LoadBalancerFailoverError) →
+ *    authoritative, honored FIRST in both directions
  * 1. Network transient conditions (ETIMEDOUT, ECONNRESET, "fetch failed", etc.) → ALWAYS retry
  *    (centralized in isNetworkTransientError)
  * 2. RetryableQuotaError → retry
@@ -235,6 +243,25 @@ export function isNetworkTransientError(error: unknown): boolean {
  * @returns True if the error is retryable, false otherwise.
  */
 export function isRetryableError(error: Error | unknown): boolean {
+  // PRIORITY 0: Self-classifying aggregate errors (e.g. the load balancer
+  // LoadBalancerFailoverError). An aggregate-of-failures has already computed
+  // its own retryability from EACH underlying backend failure, so it is
+  // authoritative. Its human-readable message flattens the child messages,
+  // which means the message-based heuristics below (network-transient, overload)
+  // would otherwise re-interpret a sibling backend's text and override the
+  // precise per-child decision (e.g. a mixed "socket hang up" + HTTP 400
+  // aggregate must NOT be retried). Identified structurally — a `failures`
+  // array plus a boolean `isRetryable` — so core does not import from
+  // providers. (issue #2450)
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    Array.isArray((error as { failures?: unknown }).failures) &&
+    typeof (error as { isRetryable?: unknown }).isRetryable === 'boolean'
+  ) {
+    return (error as { isRetryable: boolean }).isRetryable;
+  }
+
   // PRIORITY 1: Network error codes are ALWAYS retryable (transient infrastructure failures)
   if (isNetworkTransientError(error)) {
     return true;

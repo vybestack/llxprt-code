@@ -14,8 +14,8 @@
  * Task 1.7 – End-to-end provider/profile/override ordering parity test
  *
  * Guards the critical ordering of steps 10-14 in loadCliConfig:
- *   10. setCliRuntimeContext — MUST complete before step 11
- *   11. registerCliProviderInfrastructure (conditional, via runtimeSettings dynamic import)
+ *   10. setCliRuntimeContext — MUST complete before provider infra registration
+ *   11. registerCliProviderInfrastructure
  *   12. applyProfileToRuntime (applyProfileSnapshot)
  *   13. switchActiveProvider
  *   14. reapplyCliOverrides (CLI model override must survive provider switch)
@@ -115,7 +115,7 @@ vi.mock('../profileBootstrap.js', async () => {
         getActiveProvider: vi.fn(() => null),
         getAvailableModels: vi.fn(async () => []),
       },
-      oauthManager: undefined,
+      oauthManager: {},
     })),
   };
 });
@@ -166,6 +166,7 @@ vi.mock('@vybestack/llxprt-code-providers/runtime/providerSwitch.js', () => ({
 
 // Mock setCliRuntimeContext (static import in config.ts from runtimeLifecycle.js)
 vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js', () => ({
+  resetCliProviderInfrastructure: vi.fn(),
   setCliRuntimeContext: vi.fn(
     (
       svc: SettingsService,
@@ -179,6 +180,21 @@ vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js', () => ({
         runtimeId: opts.runtimeId ?? 'mock-runtime',
         metadata: opts.metadata ?? {},
       };
+    },
+  ),
+  registerCliProviderInfrastructure: vi.fn(
+    (
+      mgr: ProviderManager,
+      oauth: unknown,
+      _options?: {
+        messageBus?: unknown;
+        runtimeId?: string;
+        metadata?: Record<string, unknown>;
+      },
+    ) => {
+      callLog.entries.push('registerCliProviderInfrastructure');
+      runtimeSettingsState.providerManager = mgr;
+      runtimeSettingsState.oauthManager = oauth ?? null;
     },
   ),
 }));
@@ -205,7 +221,10 @@ vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeAccessors.js', () => ({
   })),
   getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
   getCliOAuthManager: vi.fn(() => {
-    throw new Error('OAuthManager missing from runtime registration');
+    if (runtimeSettingsState.oauthManager === null) {
+      throw new Error('OAuthManager missing from runtime registration');
+    }
+    return runtimeSettingsState.oauthManager;
   }),
   getActiveProviderStatus: vi.fn(() => ({ name: null })),
   listProviders: vi.fn(() => []),
@@ -245,6 +264,7 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
         };
       },
     ),
+    resetCliProviderInfrastructure: vi.fn(),
     getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
     setCliRuntimeContext: vi.fn(
       (
@@ -271,7 +291,15 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
       };
     }),
     registerCliProviderInfrastructure: vi.fn(
-      (mgr: ProviderManager, oauth: unknown) => {
+      (
+        mgr: ProviderManager,
+        oauth: unknown,
+        _options?: {
+          messageBus?: unknown;
+          runtimeId?: string;
+          metadata?: Record<string, unknown>;
+        },
+      ) => {
         callLog.entries.push('registerCliProviderInfrastructure');
         runtimeSettingsState.providerManager = mgr;
         runtimeSettingsState.oauthManager = oauth ?? null;
@@ -426,6 +454,16 @@ describe('e2eOrderingParity: step ordering constraints', () => {
     expect(setIdx).toBeGreaterThanOrEqual(0);
     expect(switchIdx).toBeGreaterThanOrEqual(0);
     expect(setIdx).toBeLessThan(switchIdx);
+  });
+
+  it('registerCliProviderInfrastructure happens after setCliRuntimeContext', async () => {
+    await runConfig({});
+    const entries = callLog.entries;
+    const setIdx = entries.indexOf('setCliRuntimeContext');
+    const registerIdx = entries.indexOf('registerCliProviderInfrastructure');
+    expect(setIdx).toBeGreaterThanOrEqual(0);
+    expect(registerIdx).toBeGreaterThanOrEqual(0);
+    expect(setIdx).toBeLessThan(registerIdx);
   });
 
   it('switchActiveProvider is called exactly once', async () => {

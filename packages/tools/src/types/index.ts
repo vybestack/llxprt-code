@@ -30,7 +30,6 @@ export {
 } from './tool-confirmation-types.js';
 export { ToolErrorType, isFatalToolError } from './tool-error.js';
 export {
-  GOOGLE_WEB_SEARCH_TOOL,
   EXA_WEB_SEARCH_TOOL,
   EDIT_TOOL_NAME,
   GREP_TOOL_NAME,
@@ -52,7 +51,6 @@ export {
   LS_TOOL,
   LIST_DIRECTORY_TOOL,
   CODE_SEARCH_TOOL,
-  GOOGLE_WEB_FETCH_TOOL,
   DIRECT_WEB_FETCH_TOOL,
   TASK_TOOL,
   MEMORY_TOOL,

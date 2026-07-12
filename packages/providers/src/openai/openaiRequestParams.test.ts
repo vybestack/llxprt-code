@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { filterOpenAIRequestParams } from './openaiRequestParams.js';
+import { MAX_PROMPT_CACHE_KEY_LENGTH } from '../openai-responses/sanitizePromptCacheKey.js';
 
 describe('filterOpenAIRequestParams', () => {
   it('keeps supported OpenAI parameters and normalizes aliases', () => {
@@ -50,5 +51,53 @@ describe('filterOpenAIRequestParams', () => {
         effort: 'xhigh',
       },
     });
+  });
+
+  it('passes short prompt_cache_key values through unchanged', () => {
+    const filtered = filterOpenAIRequestParams({
+      prompt_cache_key: 'session-abc123',
+    });
+
+    expect(filtered).toStrictEqual({
+      prompt_cache_key: 'session-abc123',
+    });
+  });
+
+  it('clamps prompt_cache_key values longer than 64 chars (issue #2135)', () => {
+    // Mirrors a real subagent runtimeId: <uuid>#<subagent-name>#<8-char id>
+    const overlongKey =
+      '0d4429a9-79b0-4b64-a63e-d5d7a45f1878#fallbacktypescriptcoder#a1b2c3d4';
+    expect(overlongKey.length).toBeGreaterThan(MAX_PROMPT_CACHE_KEY_LENGTH);
+
+    const filtered = filterOpenAIRequestParams({
+      prompt_cache_key: overlongKey,
+    });
+
+    const clamped = filtered?.prompt_cache_key as string;
+    expect(clamped.length).toBeLessThanOrEqual(MAX_PROMPT_CACHE_KEY_LENGTH);
+    expect(clamped.startsWith('rk:')).toBe(true);
+
+    // Deterministic: the same overlong key maps to the same clamped key
+    const filteredAgain = filterOpenAIRequestParams({
+      prompt_cache_key: overlongKey,
+    });
+    expect(filteredAgain?.prompt_cache_key).toBe(clamped);
+  });
+
+  it('still drops empty prompt_cache_key values', () => {
+    const filtered = filterOpenAIRequestParams({
+      prompt_cache_key: '   ',
+    });
+
+    expect(filtered).toBeUndefined();
+  });
+
+  it('drops non-string prompt_cache_key values instead of forwarding them', () => {
+    const filtered = filterOpenAIRequestParams({
+      prompt_cache_key: 12345,
+      temperature: 0.5,
+    });
+
+    expect(filtered).toStrictEqual({ temperature: 0.5 });
   });
 });
