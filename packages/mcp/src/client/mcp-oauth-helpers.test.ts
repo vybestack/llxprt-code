@@ -107,6 +107,13 @@ describe('detectDeprecatedSSEEndpoint', () => {
     expect(result).toBe('https://mcp.example.com/mcp');
   });
 
+  it('should prefer an MCP replacement endpoint over a documentation URL after the signal', () => {
+    const result = detectDeprecatedSSEEndpoint(
+      'SSE is deprecated. See https://docs.example.com/migration then use https://mcp.example.com/mcp',
+    );
+    expect(result).toBe('https://mcp.example.com/mcp');
+  });
+
   it('should preserve trailing comma in URL query string', () => {
     const result = detectDeprecatedSSEEndpoint(
       'SSE is no longer supported. Use https://mcp.example.com/mcp?scopes=a,b,',
@@ -186,5 +193,35 @@ describe('handleAutomaticOAuth', () => {
       ),
     ).resolves.toBe(true);
     expect(authenticate).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps server and URL tuple identities distinct even when they contain null characters', async () => {
+    vi.spyOn(OAuthUtils, 'discoverOAuthConfig').mockResolvedValue(oauthConfig);
+
+    let finishAuthentications: (() => void) | undefined;
+    const authentications = new Promise<void>((resolve) => {
+      finishAuthentications = resolve;
+    });
+    const authenticate = vi
+      .spyOn(MCPOAuthProvider, 'authenticate')
+      .mockReturnValue(authentications);
+
+    const first = handleAutomaticOAuth(
+      'a\0b',
+      { url: 'https://c.example.com' },
+      '',
+    );
+    const second = handleAutomaticOAuth(
+      'a',
+      { url: 'b\0https://c.example.com' },
+      'resource_metadata="https://auth.example.com/resource"',
+    );
+
+    await vi.waitFor(() => expect(authenticate).toHaveBeenCalledTimes(2));
+    finishAuthentications?.();
+    await expect(Promise.all([first, second])).resolves.toStrictEqual([
+      true,
+      true,
+    ]);
   });
 });

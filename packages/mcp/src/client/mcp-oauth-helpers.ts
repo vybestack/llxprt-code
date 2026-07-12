@@ -114,14 +114,52 @@ export function extractWWWAuthenticateHeader(
  * deprecation signal was detected but no URL was embedded, or null if no
  * deprecation signal was found.
  */
+function extractUrlAt(errorString: string, urlStart: number): string {
+  let urlEnd = errorString.length;
+  for (let i = urlStart; i < errorString.length; i++) {
+    if (errorString.charCodeAt(i) <= 32) {
+      urlEnd = i;
+      break;
+    }
+  }
+
+  const url = errorString.slice(urlStart, urlEnd);
+  const hasQueryOrFragment = url.includes('?') || url.includes('#');
+  let trimmedLength = url.length;
+  while (trimmedLength > 0) {
+    const lastCharacter = url.charAt(trimmedLength - 1);
+    if (
+      '.;:!?)]"\''.includes(lastCharacter) ||
+      (!hasQueryOrFragment && lastCharacter === ',')
+    ) {
+      trimmedLength--;
+    } else {
+      break;
+    }
+  }
+  return url.slice(0, trimmedLength);
+}
+
+function findUrlStarts(lower: string, start: number): number[] {
+  const starts: number[] = [];
+  let cursor = start;
+  while (cursor < lower.length) {
+    const httpIndex = lower.indexOf('http://', cursor);
+    const httpsIndex = lower.indexOf('https://', cursor);
+    const candidates = [httpIndex, httpsIndex].filter((index) => index !== -1);
+    if (candidates.length === 0) break;
+    const urlStart = Math.min(...candidates);
+    starts.push(urlStart);
+    cursor = urlStart + 1;
+  }
+  return starts;
+}
+
 export function detectDeprecatedSSEEndpoint(
   errorString: string,
 ): string | null {
   const lower = errorString.toLowerCase();
 
-  // Find the latest-ending deprecation signal so we anchor the URL search
-  // after it. This avoids picking up unrelated URLs (e.g. documentation links)
-  // that may appear before the deprecation message.
   let signalEnd = -1;
   for (const signal of SSE_DEPRECATION_SIGNALS) {
     const idx = lower.indexOf(signal);
@@ -131,39 +169,19 @@ export function detectDeprecatedSSEEndpoint(
   }
   if (signalEnd === -1) return null;
 
-  // Search for an HTTP(S) URL in the text after the deprecation signal.
-  const httpIndex = lower.indexOf('http://', signalEnd);
-  const httpsIndex = lower.indexOf('https://', signalEnd);
-  const urlIndexes = [httpIndex, httpsIndex].filter((index) => index !== -1);
-  if (urlIndexes.length === 0) return '';
-  const lowerHttpIdx = Math.min(...urlIndexes);
-  const rest = errorString.slice(lowerHttpIdx);
-  const lowerRest = lower.slice(lowerHttpIdx);
-  let endIdx = rest.length;
-  for (let i = 0; i < lowerRest.length; i++) {
-    if (lowerRest.charCodeAt(i) <= 32) {
-      endIdx = i;
-      break;
-    }
-  }
-  const url = rest.slice(0, endIdx);
-  // Trim trailing punctuation that may be part of the sentence, not the URL.
-  // Comma is only trimmed when the URL has no query string or fragment, since
-  // commas are valid in query parameters and fragments (RFC 3986).
-  const hasQueryOrFragment = url.includes('?') || url.includes('#');
-  let trimmedLen = url.length;
-  while (trimmedLen > 0) {
-    const lastChar = url.charAt(trimmedLen - 1);
-    if (
-      '.;:!?)]"\''.includes(lastChar) ||
-      (!hasQueryOrFragment && lastChar === ',')
-    ) {
-      trimmedLen--;
-    } else {
-      break;
-    }
-  }
-  return url.slice(0, trimmedLen);
+  const urls = findUrlStarts(lower, signalEnd).map((urlStart) =>
+    extractUrlAt(errorString, urlStart),
+  );
+  if (urls.length === 0) return '';
+  return (
+    urls.find((url) => {
+      try {
+        return new URL(url).pathname.endsWith('/mcp');
+      } catch {
+        return false;
+      }
+    }) ?? urls[0]
+  );
 }
 
 /**
@@ -192,7 +210,10 @@ export async function handleAutomaticOAuth(
   mcpServerConfig: MCPServerConfig,
   wwwAuthenticate: string,
 ): Promise<boolean> {
-  const guardKey = `${mcpServerName}\0${mcpServerConfig.httpUrl ?? mcpServerConfig.url ?? ''}`;
+  const guardKey = JSON.stringify([
+    mcpServerName,
+    mcpServerConfig.httpUrl ?? mcpServerConfig.url ?? '',
+  ]);
   const existing = inFlightAuthentications.get(guardKey);
   if (existing) {
     debugLogger.log(
