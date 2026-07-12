@@ -55,6 +55,13 @@ export interface ContentMetadata {
   /** Unique identifier for this content */
   id?: string;
 
+  /**
+   * Whether this AI turn was persisted server-side (e.g. OpenAI Responses
+   * API store=true). When true the id is safe to reference via
+   * previous_response_id for stateful conversations (#207).
+   */
+  responsesStored?: boolean;
+
   /** Provider that generated this content */
   provider?: string;
 
@@ -243,6 +250,12 @@ export interface ThinkingBlock {
 
   /** Signature for Anthropic extended thinking */
   signature?: string;
+
+  /** Provider-scoped stream identity for replacing incremental thinking updates */
+  streamId?: string;
+
+  /** Whether this block is an incremental update or the completed thinking block */
+  streamStatus?: 'delta' | 'complete';
 
   /** Base64-encoded reasoning content (for OpenAI Codex/Responses API) */
   encryptedContent?: string;

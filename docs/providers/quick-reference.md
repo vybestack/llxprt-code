@@ -70,7 +70,7 @@ Use your ChatGPT Plus or Pro subscription directly — no API key needed:
 ```bash
 /auth codex enable
 /provider codex
-/model gpt-5.5
+/model gpt-5.6-sol
 ```
 
 This uses OAuth to authenticate with your ChatGPT subscription.
@@ -79,7 +79,7 @@ This uses OAuth to authenticate with your ChatGPT subscription.
 
 - Context: 262,144 tokens (Codex OAuth)
 - gpt-5.x reasoning models do NOT support temperature — use `/set reasoning.effort` instead
-- Reasoning effort: `low`, `medium`, `high`, `xhigh`
+- Reasoning effort: `minimal`, `low`, `medium`, `high`, `xhigh`, `max`
 
 ```bash
 /set context-limit 262144
@@ -87,7 +87,7 @@ This uses OAuth to authenticate with your ChatGPT subscription.
 /set reasoning.effort high
 ```
 
-**Common models:** `gpt-5.5`, `gpt-5.3-codex`, `gpt-5.2-codex`
+**Common models:** `gpt-5.6-sol` (default), `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`
 
 ### Anthropic (Claude)
 
@@ -229,17 +229,20 @@ Guidance:
 ```bash
 /provider openai
 /keyfile ~/.openai_key
-/model gpt-5.5
+/model gpt-5.6-sol
 ```
 
 #### Model geometry & recommended settings (OpenAI)
 
-Common models: `gpt-5.5`, `gpt-5.4`, `gpt-5.2`
+Common models: `gpt-5.6` (Sol alias), `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`
+
+GPT-5.6+ models automatically use the Responses API on canonical OpenAI (`api.openai.com`); custom OpenAI-compatible base URLs stay on Chat Completions.
 
 Guidance:
 
+- Context: up to 1,048,576 tokens on the OpenAI API (vs. 262,144 via Codex OAuth — see the Codex section above)
 - gpt-5.x reasoning models do NOT support temperature — use `/set reasoning.effort` instead
-- Reasoning effort: `low`, `medium`, `high`, `xhigh`
+- Reasoning effort: `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. `max` is model/provider-specific; project `minimal` maps to wire `none` for GPT-5.6 Responses.
 
 ```bash
 /set context-limit 400000 # adjust to your model's actual window (check provider docs)
@@ -288,6 +291,38 @@ Kimi offers the K2-family models with deep reasoning and multi-step tool orchest
   }
 }
 ```
+
+#### Multimodal support (Kimi)
+
+Kimi K2.7 is a native multimodal model. The `kimi` alias declares the following
+media capabilities via its `mediaSupport` config:
+
+| Capability          | Status                        | Notes                                                                                                                                                       |
+| ------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Inline images       | Enabled                       | Images in user messages and tool responses flow as `image_url` content parts.                                                                               |
+| PDF/document upload | Enabled                       | PDFs are uploaded via the Files API (`POST /v1/files`, `purpose: file-extract`) and referenced by file id, keeping large documents out of the token budget. |
+| Video               | Experimental (off by default) | Videos are uploaded with `purpose: video`, then sent as `video_url` with an `ms://<file-id>` URL. Only available on the official Moonshot endpoint.         |
+
+**PDF handling:** When a PDF media block (base64-encoded) is present in a user
+message or tool response, it is uploaded to Kimi's Files API before the chat
+request. The uploaded file id is injected into the system message and the
+inline PDF is replaced with a short text reference. Uploads are de-duplicated
+across turns per Moonshot endpoint and account via an in-memory content-hash cache. If an upload fails, the PDF
+falls back to inline `file_data` so the request still proceeds.
+
+**Experimental video:** To enable native video forwarding (official Moonshot
+endpoint only), set:
+
+```bash
+/set kimi.experimental-video true
+```
+
+This is gated behind both the `kimi.experimental-video` setting and the
+`mediaSupport.videoSupport` capability flag. When enabled, base64 video blocks
+from user or tool messages are uploaded to Moonshot and referenced in chat with
+the native `video_url`/`ms://<file-id>` format. Supported formats include MP4,
+MPEG, MOV, AVI, FLV, MPG, WebM, WMV, and 3GPP. Third-party deployments (Chutes,
+Synthetic) do not support video and keep the default placeholder behavior.
 
 #### Kimi K2 via Synthetic/Chutes
 

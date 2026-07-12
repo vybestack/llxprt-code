@@ -211,6 +211,8 @@ export function normalizeShellReplacement(
 export const DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD = 4_000_000;
 export const DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES = 1000;
 
+export const DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES = 15 * 1024 * 1024;
+
 export class MCPServerConfig {
   constructor(
     // For stdio transport
@@ -229,6 +231,7 @@ export class MCPServerConfig {
      * Transport type for URL-based servers.
      * When set, disables automatic HTTP→SSE fallback.
      * - 'http' → StreamableHTTPClientTransport
+     * - 'streamable-http' → alias for 'http' (StreamableHTTPClientTransport)
      * - 'sse'  → SSEClientTransport
      * - omitted → defaults to HTTP with SSE fallback (deprecated; add type explicitly)
      *
@@ -236,7 +239,7 @@ export class MCPServerConfig {
      * @plan PLAN-20250219-GMERGE021.R3.P03
      * @requirement REQ-GMERGE021-R3-001
      */
-    readonly type?: 'sse' | 'http',
+    readonly type?: 'sse' | 'http' | 'streamable-http',
     // Common
     readonly timeout?: number,
     readonly trust?: boolean,
@@ -373,6 +376,7 @@ export interface ConfigParameters {
   debugMode: boolean;
   outputFormat?: OutputFormat;
   question?: string;
+  quiet?: boolean;
 
   coreTools?: string[];
   allowedTools?: string[];
@@ -447,6 +451,7 @@ export interface ConfigParameters {
   truncateToolOutputLines?: number;
   enableToolOutputTruncation?: boolean;
   continueOnFailedApiCall?: boolean;
+  imagePayloadBudgetBytes?: number;
   enableShellOutputEfficiency?: boolean;
   continueSession?: boolean | string;
   disableYoloMode?: boolean;

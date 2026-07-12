@@ -38,6 +38,14 @@ export interface ResponsesInputBuildContext {
   includeReasoningInContext: boolean;
   outputLimiterConfig: ToolOutputSettingsProvider;
   debug: (messageFactory: () => string) => void;
+  /**
+   * Whether a server-side conversation parent is active for this request
+   * (i.e. previous_response_id will be sent). Only then may function_call_output
+   * items lack a local matching function_call, because the call lives
+   * server-side. Distinct from the user-facing "responses-stateful" setting,
+   * which may be on without an active parent (#207).
+   */
+  serverSideParentActive?: boolean;
 }
 
 export function buildOpenAIResponsesInput(
@@ -171,7 +179,13 @@ function appendToolInput(
     (block) => block.type === 'tool_response',
   )) {
     const outputCallId = normalizeToOpenAIToolId(toolResponseBlock.callId);
-    if (!hasMatchingToolCall(patchedContent, outputCallId)) {
+    // When a server-side parent is active, the matching function_call lives
+    // server-side (stored via previous_response_id), so the orphan guard would
+    // wrongly drop the function_call_output for the new turn.
+    if (
+      context.serverSideParentActive !== true &&
+      !hasMatchingToolCall(patchedContent, outputCallId)
+    ) {
       context.debug(
         () =>
           `Dropping orphan function_call_output with call_id=${outputCallId} (no matching tool_call in history)`,

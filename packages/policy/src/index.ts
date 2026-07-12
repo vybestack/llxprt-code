@@ -5,6 +5,7 @@ export type {
   PolicySettings,
 } from './types.js';
 export { PolicyEngine } from './policy-engine.js';
+export { isDestructiveCommand } from './destructive-commands.js';
 export { stableStringify, stableParse } from './stable-stringify.js';
 export {
   loadPoliciesFromToml,

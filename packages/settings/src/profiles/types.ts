@@ -115,7 +115,7 @@ export interface EphemeralSettings {
   dumponerror?: 'enabled' | 'disabled';
   emojifilter?: 'allowed' | 'auto' | 'warn' | 'error';
   'reasoning.enabled'?: boolean;
-  'reasoning.effort'?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  'reasoning.effort'?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   'reasoning.maxTokens'?: number;
   'reasoning.budgetTokens'?: number;
   'reasoning.adaptiveThinking'?: boolean;
@@ -124,6 +124,7 @@ export interface EphemeralSettings {
   'reasoning.stripFromContext'?: 'all' | 'allButLast' | 'none';
   'reasoning.format'?: 'native' | 'field';
   'reasoning.fieldName'?: string;
+  'responses-stateful'?: boolean;
   'compression.strategy'?: string;
   'compression.profile'?: string;
   'compression.density.readWritePruning'?: boolean;

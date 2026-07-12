@@ -34,6 +34,11 @@ import {
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import { TASK_COMPLETE_TOOL_NAME } from './recovery.js';
 import type { AgentDefinition, SubagentActivityEventType } from './types.js';
+import {
+  DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+  enforceImageBudget,
+  buildOmissionFeedback,
+} from '../core/imagePayloadBudget.js';
 
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
@@ -157,6 +162,8 @@ export async function processFunctionCalls(
     toolExecutionPromises,
     submittedOutput,
     taskCompleted,
+    emitActivity,
+    runtimeContext.getImagePayloadBudgetBytes(),
   );
 }
 
@@ -485,6 +492,8 @@ async function assembleToolResponses(
   toolExecutionPromises: Array<Promise<ToolExecutionResult | void>>,
   submittedOutput: string | null,
   taskCompleted: boolean,
+  emitActivity: EmitActivityFn,
+  budgetBytes: number = DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
 ): Promise<FunctionCallProcessingResult> {
   const asyncResults = await Promise.all(toolExecutionPromises);
 
@@ -509,8 +518,25 @@ async function assembleToolResponses(
     });
   }
 
+  let finalParts = toolResponseParts;
+  if (budgetBytes > 0) {
+    const { parts: budgeted, omitted } = enforceImageBudget(
+      toolResponseParts,
+      budgetBytes,
+    );
+    if (omitted.length > 0) {
+      budgeted.push({ text: buildOmissionFeedback(omitted) });
+      emitActivity('ERROR', {
+        context: 'image_budget',
+        omittedCount: omitted.length,
+        toolNames: omitted.map((img) => img.toolName),
+      });
+    }
+    finalParts = budgeted;
+  }
+
   return {
-    nextMessage: { role: 'user', parts: toolResponseParts },
+    nextMessage: { role: 'user', parts: finalParts },
     submittedOutput,
     taskCompleted,
     partialResult,

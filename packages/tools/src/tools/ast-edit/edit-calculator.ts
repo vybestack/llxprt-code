@@ -26,6 +26,7 @@ export interface CalculatedEdit {
   error?: { display: string; raw: string; type: ToolErrorType };
   isNewFile: boolean;
   astValidation?: { valid: boolean; errors: string[] };
+  preEditValidation?: { valid: boolean; errors: string[] };
   fileFreshness?: number | null;
 }
 
@@ -86,6 +87,14 @@ export async function calculateEdit(
     params.file_path,
   );
 
+  // Validate the original (pre-edit) content so post-edit errors can be
+  // categorized as pre-existing vs newly-introduced (issue #2124).
+  // Skipped for new files where there is no prior content to baseline.
+  const preEditValidation =
+    !noChangeError && currentContent !== null
+      ? validateASTSyntax(params.file_path, currentContent)
+      : undefined;
+
   let astValidation: { valid: boolean; errors: string[] } | undefined;
   if (!noChangeError) {
     astValidation = validateASTSyntax(params.file_path, newContent);
@@ -98,6 +107,7 @@ export async function calculateEdit(
     error: noChangeError,
     isNewFile,
     astValidation,
+    preEditValidation,
     fileFreshness: currentMtime,
   };
 }
@@ -164,6 +174,7 @@ function checkFreshness(
       },
       isNewFile: false,
       astValidation: undefined,
+      preEditValidation: undefined,
       fileFreshness: currentMtime,
     };
   }
@@ -203,6 +214,12 @@ function validateEditParams(
         raw: `Failed to edit, 0 occurrences found for old_string in ${params.file_path}. No edits made.`,
         type: ToolErrorType.EDIT_NO_OCCURRENCE_FOUND,
       };
+    } else if (occurrences > 1) {
+      error = {
+        display: `old_string appears ${occurrences} times. Include more surrounding context to target a specific occurrence.`,
+        raw: `old_string appears ${occurrences} times in ${params.file_path}. Provide more surrounding context to disambiguate.`,
+        type: ToolErrorType.EDIT_EXPECTED_OCCURRENCE_MISMATCH,
+      };
     } else if (normalizedOldString === normalizedNewString) {
       error = {
         display: `No changes to apply. The old_string and new_string are identical.`,
@@ -234,12 +251,11 @@ function checkNoChange(
 }
 
 /**
- * Counts occurrences that will be replaced (0 or 1).
- * Returns 0/1 not true count, aligned with String.replace() single-replacement semantics.
+ * Returns the true number of occurrences of searchString in content.
  *
  * @param content - File content
  * @param searchString - String to search for
- * @returns 0 if not found, 1 if found
+ * @returns Number of occurrences (0 if not found)
  */
 export function countOccurrences(
   content: string,
@@ -247,9 +263,13 @@ export function countOccurrences(
 ): number {
   if (!searchString) return 0;
 
-  // Since applyReplacement uses String.replace (single replacement),
-  // count occurrences that will actually be replaced (0 or 1)
-  return content.includes(searchString) ? 1 : 0;
+  let count = 0;
+  let idx = content.indexOf(searchString);
+  while (idx !== -1) {
+    count++;
+    idx = content.indexOf(searchString, idx + searchString.length);
+  }
+  return count;
 }
 
 /**

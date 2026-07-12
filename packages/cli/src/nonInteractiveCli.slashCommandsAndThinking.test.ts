@@ -157,6 +157,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       getModel: vi.fn().mockReturnValue(PLACEHOLDER_MODEL),
       getProviderManager: vi.fn().mockReturnValue(undefined),
       getOutputFormat: vi.fn().mockReturnValue('text'),
+      getQuiet: vi.fn().mockReturnValue(false),
       getFolderTrust: vi.fn().mockReturnValue(false),
       isTrustedFolder: vi.fn().mockReturnValue(false),
       getProjectRoot: vi.fn().mockReturnValue('/tmp/test-project'),

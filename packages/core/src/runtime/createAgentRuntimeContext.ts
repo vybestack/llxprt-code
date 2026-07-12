@@ -298,7 +298,14 @@ function buildReasoningEphemerals(
         'reasoning.fieldName',
         options.settings['reasoning.fieldName'],
       ) ?? EPHEMERAL_DEFAULTS.reasoning.fieldName,
-    effort: (): 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | undefined =>
+    effort: ():
+      | 'minimal'
+      | 'low'
+      | 'medium'
+      | 'high'
+      | 'xhigh'
+      | 'max'
+      | undefined =>
       getLiveSetting('reasoning.effort', options.settings['reasoning.effort']),
     maxTokens: (): number | undefined => {
       const maxTokensValue = getLiveSetting(

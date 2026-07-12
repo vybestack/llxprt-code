@@ -31,6 +31,7 @@ import {
   getAnthropicUsageInfo,
   getAllAnthropicUsageInfo,
   getAllCodexUsageInfo,
+  getAllCodexRateLimitResetCredits,
   getHigherPriorityAuth,
 } from './provider-usage-info.js';
 
@@ -458,6 +459,17 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    */
   async getAllCodexUsageInfo(): Promise<Map<string, Record<string, unknown>>> {
     return getAllCodexUsageInfo(this.tokenStore, this.config);
+  }
+
+  /**
+   * Get Codex rate-limit-reset credits for all authenticated buckets.
+   * Returns a map of bucket name to reset-credits info for all buckets that
+   * have valid OAuth tokens with account_id.
+   */
+  async getAllCodexRateLimitResetCredits(): ReturnType<
+    typeof getAllCodexRateLimitResetCredits
+  > {
+    return getAllCodexRateLimitResetCredits(this.tokenStore, this.config);
   }
 
   private async getCurrentProfileSessionMetadata(

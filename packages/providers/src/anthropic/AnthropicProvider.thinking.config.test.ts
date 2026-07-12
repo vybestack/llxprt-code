@@ -353,6 +353,38 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       expect(request.output_config?.effort).toBe('max');
     });
 
+    it('should preserve max effort for adaptive-capable models @issue:2483', async () => {
+      settingsService.set('reasoning.enabled', true);
+      settingsService.set('reasoning.effort', 'max');
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-opus-4-6',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+      expect(request.output_config?.effort).toBe('max');
+    });
+
     it('should downgrade xhigh effort to high for non-Opus-4.6 models @issue:1307', async () => {
       settingsService.set('reasoning.enabled', true);
       settingsService.set('reasoning.effort', 'xhigh');
@@ -387,7 +419,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
 
     it('should downgrade max effort to high for non-Opus-4.6 models @issue:1307', async () => {
       settingsService.set('reasoning.enabled', true);
-      settingsService.set('reasoning.effort', 'max' as unknown as 'xhigh');
+      settingsService.set('reasoning.effort', 'max');
 
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'response' }],
@@ -736,7 +768,9 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       );
       expect(thinkingChunks.length).toBeGreaterThan(0);
 
-      const thinkingBlock = thinkingChunks[0].blocks.find(
+      // #1723: signature is on the last thinking chunk (from content_block_stop)
+      const lastThinkingChunk = thinkingChunks[thinkingChunks.length - 1];
+      const thinkingBlock = lastThinkingChunk.blocks.find(
         (b) => b.type === 'thinking',
       ) as ThinkingBlock;
       expect(thinkingBlock.signature).toBe(mockSignature);

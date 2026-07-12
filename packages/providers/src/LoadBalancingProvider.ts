@@ -47,6 +47,7 @@ import {
 } from './loadBalancing/subProfileHelpers.js';
 import type { TokenAccountingDiagnostics } from './loadBalancing/tokenAccountingDiagnostics.js';
 import { validateLoadBalancerConfig } from './loadBalancing/configValidation.js';
+import { FailoverState } from './loadBalancing/failoverState.js';
 import {
   isResolvedSubProfile,
   type BackendMetrics,
@@ -86,7 +87,7 @@ export class LoadBalancingProvider implements IProvider {
   private circuitBreakerStates: Map<string, CircuitBreakerState> = new Map();
   private tpmBuckets: Map<number, Map<string, number>> = new Map();
   private backendMetrics: Map<string, BackendMetrics> = new Map();
-  private currentFailoverIndex = 0;
+  private readonly failoverState = new FailoverState();
   private compressionCallback: CompressionCallback | null = null;
   private accountingSource: string | null = null;
   private lastEstimatedTokens: number | null = null;
@@ -385,7 +386,7 @@ export class LoadBalancingProvider implements IProvider {
         chunks.push(chunk);
         yield chunk;
       }
-      const tokensUsed = this.extractTokenCount(chunks);
+      const tokensUsed = BackendMetricsCollector.extractTokenCount(chunks);
       if (tokensUsed > 0) {
         this.updateTPM(subProfile.name, tokensUsed);
       }
@@ -524,7 +525,7 @@ export class LoadBalancingProvider implements IProvider {
       this.circuitBreakerStates,
       this.backendMetrics,
       this.config.subProfiles,
-      (name) => this.calculateTPM(name),
+      (name) => this.tpmTracker.calculateTPM(name),
     );
   }
 
@@ -577,7 +578,7 @@ export class LoadBalancingProvider implements IProvider {
    * @plan PLAN-20251217issue902 - Sticky failover behavior
    */
   getCurrentFailoverIndex(): number {
-    return this.currentFailoverIndex;
+    return this.failoverState.getIndex();
   }
 
   /**
@@ -585,7 +586,7 @@ export class LoadBalancingProvider implements IProvider {
    * @plan PLAN-20251217issue902 - Sticky failover behavior
    */
   resetFailoverIndex(): void {
-    this.currentFailoverIndex = 0;
+    this.failoverState.reset();
   }
 
   /**
@@ -618,34 +619,10 @@ export class LoadBalancingProvider implements IProvider {
     return this.buildDelegateResolvedOptions(subProfile, options);
   }
 
-  /**
-   * Initialize circuit breaker state for a backend
-   * @plan PLAN-20251212issue489 - Phase 2
-   */
-
   private readonly circuitBreaker: CircuitBreakerManager;
   private readonly tpmTracker: TPMTracker;
   private readonly metricsCollector: BackendMetricsCollector;
 
-  private isBackendHealthy(profileName: string): boolean {
-    return this.circuitBreaker.isBackendHealthy(profileName);
-  }
-
-  private canAttemptBackend(profileName: string): boolean {
-    return this.circuitBreaker.canAttemptBackend(profileName);
-  }
-  private recordBackendSuccess(profileName: string): void {
-    this.circuitBreaker.recordBackendSuccess(profileName);
-  }
-
-  private recordBackendFailure(profileName: string, error: Error): void {
-    this.circuitBreaker.recordBackendFailure(profileName, error);
-  }
-
-  /**
-   * Wrap iterator with timeout for first chunk
-   * @plan PLAN-20251212issue489 - Phase 3
-   */
   private async *wrapWithTimeout(
     iterator: AsyncIterableIterator<IContent>,
     timeoutMs: number | undefined,
@@ -659,31 +636,8 @@ export class LoadBalancingProvider implements IProvider {
     );
   }
 
-  private isTimeoutError(error: unknown): boolean {
-    return isTimeoutError(error);
-  }
-
-  /**
-   * Update TPM tracking with new tokens
-   * @plan PLAN-20251212issue489 - Phase 4
-   */
   private updateTPM(profileName: string, tokensUsed: number): void {
     this.tpmTracker.updateTPM(profileName, tokensUsed);
-  }
-
-  private calculateTPM(profileName: string): number {
-    return this.tpmTracker.calculateTPM(profileName);
-  }
-
-  private shouldSkipOnTPM(
-    profileName: string,
-    tpmThreshold: number | undefined,
-  ): boolean {
-    return this.tpmTracker.shouldSkipOnTPM(profileName, tpmThreshold);
-  }
-
-  private extractTokenCount(chunks: IContent[]): number {
-    return BackendMetricsCollector.extractTokenCount(chunks);
   }
 
   private recordRequestStart(profileName: string): number {
@@ -710,7 +664,7 @@ export class LoadBalancingProvider implements IProvider {
     this.metricsCollector.recordRequestFailure(
       profileName,
       startTime,
-      this.isTimeoutError(error),
+      isTimeoutError(error),
     );
   }
 
@@ -723,17 +677,23 @@ export class LoadBalancingProvider implements IProvider {
   private async *executeWithFailover(
     options: GenerateChatOptions,
   ): AsyncGenerator<IContent> {
+    const { owner: requestOwner, startIndex } = this.failoverState.claim();
     const settings = this.extractFailoverSettings();
     const errors: Array<{ profile: string; error: Error }> = [];
     const numProfiles = this.config.subProfiles.length;
     const contextLimitErrors: Array<{ profile: string; error: Error }> = [];
+
+    this.logger.debug(
+      () =>
+        `[LB:failover] Starting failover rotation from index ${startIndex} (${this.config.subProfiles[startIndex]?.name ?? 'unknown'}) with ${numProfiles} backends`,
+    );
 
     // Check if all backends are unhealthy (circuit breakers open)
     this.validateNotAllUnhealthy(settings, numProfiles);
 
     // Start from currentFailoverIndex and iterate through all backends (Issue #902)
     let visitedCount = 0;
-    let currentIndex = this.currentFailoverIndex;
+    let currentIndex = startIndex;
 
     while (visitedCount < numProfiles) {
       const subProfile = this.config.subProfiles[currentIndex];
@@ -745,6 +705,11 @@ export class LoadBalancingProvider implements IProvider {
         continue;
       }
 
+      this.logger.debug(
+        () =>
+          `[LB:failover] Attempting backend at index ${currentIndex}: ${subProfile.name}`,
+      );
+
       const succeeded = yield* this.tryBackendWithRetries(
         subProfile,
         options,
@@ -753,6 +718,7 @@ export class LoadBalancingProvider implements IProvider {
         contextLimitErrors,
         currentIndex,
         numProfiles,
+        requestOwner,
       );
       if (succeeded) {
         return;
@@ -761,6 +727,8 @@ export class LoadBalancingProvider implements IProvider {
       // Move to next backend (circular iteration)
       currentIndex = (currentIndex + 1) % numProfiles;
     }
+
+    this.failoverState.setIfOwner(requestOwner, 0);
 
     if (errors.length === 0 && contextLimitErrors.length > 0) {
       throw new LoadBalancerAllContextLimitsExceededError({
@@ -782,7 +750,7 @@ export class LoadBalancingProvider implements IProvider {
     profileName: string,
     settings: FailoverSettings,
   ): boolean {
-    if (!this.isBackendHealthy(profileName)) {
+    if (!this.circuitBreaker.isBackendHealthy(profileName)) {
       this.logger.debug(
         () =>
           `[LB:failover] Skipping unhealthy backend: ${profileName} (circuit breaker open)`,
@@ -790,7 +758,7 @@ export class LoadBalancingProvider implements IProvider {
       return true;
     }
 
-    if (this.shouldSkipOnTPM(profileName, settings.tpmThreshold)) {
+    if (this.tpmTracker.shouldSkipOnTPM(profileName, settings.tpmThreshold)) {
       this.logger.debug(
         () =>
           `[LB:failover] Skipping backend: ${profileName} (TPM below threshold)`,
@@ -801,9 +769,6 @@ export class LoadBalancingProvider implements IProvider {
     return false;
   }
 
-  /**
-   * Validate that not all backends are unhealthy (circuit breakers open).
-   */
   private validateNotAllUnhealthy(
     settings: FailoverSettings,
     numProfiles: number,
@@ -811,7 +776,7 @@ export class LoadBalancingProvider implements IProvider {
     if (settings.circuitBreakerEnabled) {
       const allUnhealthy = this.config.subProfiles
         .slice(0, numProfiles)
-        .every((sp) => !this.canAttemptBackend(sp.name));
+        .every((sp) => !this.circuitBreaker.canAttemptBackend(sp.name));
       if (allUnhealthy) {
         throw new Error(
           'All backends are currently unhealthy (circuit breakers open). Please wait for recovery or check backend configurations.',
@@ -820,10 +785,6 @@ export class LoadBalancingProvider implements IProvider {
     }
   }
 
-  /**
-   * Try a single backend with retry logic, yielding chunks on success.
-   * Handles immediate failover errors and retryable errors.
-   */
   private async *tryBackendWithRetries(
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
     options: GenerateChatOptions,
@@ -832,10 +793,10 @@ export class LoadBalancingProvider implements IProvider {
     contextLimitErrors: Array<{ profile: string; error: Error }>,
     currentIndex: number,
     numProfiles: number,
+    requestOwner: symbol,
   ): AsyncGenerator<IContent, boolean> {
     let attempts = 0;
     const maxAttempts = Math.max(1, settings.retryCount);
-
     while (attempts < maxAttempts) {
       attempts++;
       let startTime = 0;
@@ -855,7 +816,7 @@ export class LoadBalancingProvider implements IProvider {
           startTime,
           chunksYielded,
         );
-        this.currentFailoverIndex = currentIndex;
+        this.failoverState.setIfOwner(requestOwner, currentIndex);
         return true;
       } catch (error) {
         if (
@@ -863,16 +824,22 @@ export class LoadBalancingProvider implements IProvider {
           error instanceof LoadBalancerContextLimitError
         ) {
           contextLimitErrors.push({ profile: subProfile.name, error });
-          this.currentFailoverIndex = (currentIndex + 1) % numProfiles;
-          return false;
+          return this.failoverState.advanceFrom(
+            requestOwner,
+            currentIndex,
+            numProfiles,
+          );
         }
         if (!requestStarted) {
           errors.push({
             profile: subProfile.name,
             error: error instanceof Error ? error : new Error(String(error)),
           });
-          this.currentFailoverIndex = (currentIndex + 1) % numProfiles;
-          return false;
+          return this.failoverState.advanceFrom(
+            requestOwner,
+            currentIndex,
+            numProfiles,
+          );
         }
         const handled = this.handleFailoverError(
           error,
@@ -885,18 +852,10 @@ export class LoadBalancingProvider implements IProvider {
           chunksYielded.value,
           currentIndex,
           numProfiles,
+          requestOwner,
         );
-        if (handled === 'immediate-throw') {
-          throw error;
-        }
-        if (handled === 'break') {
-          // Exit the retry while-loop. This generator returns,
-          // causing the outer executeWithFailover while-loop's
-          // yield* to complete normally. Control then continues
-          // with the next backend in the outer loop.
-          break;
-        }
-        // 'retry' — apply delay then loop
+        if (handled === 'immediate-throw') throw error;
+        if (handled === 'break') break;
         if (settings.retryDelayMs > 0) {
           await new Promise((resolve) =>
             setTimeout(resolve, settings.retryDelayMs),
@@ -907,9 +866,6 @@ export class LoadBalancingProvider implements IProvider {
     return false;
   }
 
-  /**
-   * Execute a single request attempt against a backend, yielding chunks.
-   */
   private async *attemptBackendRequest(
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
     options: GenerateChatOptions,
@@ -951,25 +907,19 @@ export class LoadBalancingProvider implements IProvider {
       yield chunk;
     }
 
-    const tokensUsed = this.extractTokenCount(chunks);
+    const tokensUsed = BackendMetricsCollector.extractTokenCount(chunks);
     if (tokensUsed > 0) {
       this.updateTPM(subProfile.name, tokensUsed);
     }
 
     this.recordRequestSuccess(subProfile.name, startTime, tokensUsed);
     this.incrementStats(subProfile.name);
-    this.recordBackendSuccess(subProfile.name);
+    this.circuitBreaker.recordBackendSuccess(subProfile.name);
     this.logger.debug(
       () => `[LB:failover] Success on backend: ${subProfile.name}`,
     );
   }
 
-  /**
-   * Handle error during failover attempt. Returns action:
-   * - 'immediate-throw': re-throw the error (chunks already yielded or abort)
-   * - 'break': stop retrying this backend, move to next
-   * - 'retry': continue the retry loop
-   */
   private handleFailoverError(
     error: unknown,
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
@@ -981,6 +931,7 @@ export class LoadBalancingProvider implements IProvider {
     chunksYielded: boolean,
     currentIndex: number,
     numProfiles: number,
+    requestOwner: symbol,
   ): 'immediate-throw' | 'break' | 'retry' {
     if (this.isImmediateFailoverError(error)) {
       if (chunksYielded) {
@@ -989,7 +940,10 @@ export class LoadBalancingProvider implements IProvider {
             `[LB:failover] ${subProfile.name} returned immediate failover error after yielding chunks, aborting stream`,
         );
         this.recordRequestFailure(subProfile.name, startTime, error as Error);
-        this.recordBackendFailure(subProfile.name, error as Error);
+        this.circuitBreaker.recordBackendFailure(
+          subProfile.name,
+          error as Error,
+        );
         return 'immediate-throw';
       }
 
@@ -998,9 +952,9 @@ export class LoadBalancingProvider implements IProvider {
           `[LB:failover] ${subProfile.name} returned immediate failover error (${getErrorStatus(error)}), skipping retries`,
       );
       this.recordRequestFailure(subProfile.name, startTime, error as Error);
-      this.recordBackendFailure(subProfile.name, error as Error);
+      this.circuitBreaker.recordBackendFailure(subProfile.name, error as Error);
       errors.push({ profile: subProfile.name, error: error as Error });
-      this.currentFailoverIndex = (currentIndex + 1) % numProfiles;
+      this.failoverState.advanceFrom(requestOwner, currentIndex, numProfiles);
       return 'break';
     }
 
@@ -1022,9 +976,9 @@ export class LoadBalancingProvider implements IProvider {
         `[LB:failover] ${subProfile.name} failed after ${attempts} attempts: ${(error as Error).message}`,
     );
     this.recordRequestFailure(subProfile.name, startTime, error as Error);
-    this.recordBackendFailure(subProfile.name, error as Error);
+    this.circuitBreaker.recordBackendFailure(subProfile.name, error as Error);
     errors.push({ profile: subProfile.name, error: error as Error });
-    this.currentFailoverIndex = (currentIndex + 1) % numProfiles;
+    this.failoverState.advanceFrom(requestOwner, currentIndex, numProfiles);
     return 'break';
   }
 
