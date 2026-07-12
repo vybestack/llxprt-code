@@ -226,6 +226,7 @@ describe('processAgentStream — quiet mode', () => {
         type: 'thinking',
         thought: {
           subject: 'First',
+          description: '',
           streamId: 'reasoning-1',
           streamStatus: 'delta',
         },
@@ -234,6 +235,7 @@ describe('processAgentStream — quiet mode', () => {
         type: 'thinking',
         thought: {
           subject: 'First complete',
+          description: '',
           streamId: 'reasoning-1',
           streamStatus: 'complete',
         },
