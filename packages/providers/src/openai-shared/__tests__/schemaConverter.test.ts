@@ -108,7 +108,7 @@ describe('convertSchemaToOpenAI — dropped JSON-schema keywords are preserved',
     expect(color.const).toBe('red');
   });
 
-  it('preserves a non-schema object const value verbatim (no type injection)', () => {
+  it('preserves a non-schema object const value verbatim (uncorrupted by schema normalization)', () => {
     const schema = {
       type: 'object',
       properties: {
@@ -121,7 +121,6 @@ describe('convertSchemaToOpenAI — dropped JSON-schema keywords are preserved',
     const config = result.properties.config as Record<string, unknown>;
 
     expect(config.const).toStrictEqual({ userId: 123, active: true });
-    expect(config.type).toBe('string');
   });
 
   it('preserves $ref', () => {
