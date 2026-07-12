@@ -102,6 +102,62 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
     expect(lastStream).toBeDefined();
   });
 
+  it('keeps budget feedback before steer text at the completed-tool boundary', async () => {
+    const tool = new MockTool({
+      name: 'image_tool',
+      execute: async () => ({
+        llmContent: [
+          {
+            inlineData: {
+              mimeType: 'image/png',
+              data: 'AA',
+            },
+          },
+        ],
+        returnDisplay: 'image',
+      }),
+    });
+
+    const toolRegistry = createToolRegistryForTest([tool]);
+    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+    const config = createTestConfig({
+      messageBus,
+      toolRegistry,
+      policyEngine: createAllowPolicyEngine(),
+      interactive: true,
+      approvalMode: ApprovalMode.YOLO,
+      imagePayloadBudgetBytes: 1,
+    });
+    const { client, turnMessages } = createScriptedAgentClient([
+      [toolCallRequestEvent('image_tool', 'call-1'), finishedEvent()],
+      [contentEvent('final-response'), finishedEvent()],
+    ]);
+    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+
+    const eventsPromise = collectEvents(
+      loop,
+      'go',
+      new AbortController().signal,
+    );
+    loop.injectSteer('use a smaller image');
+    await eventsPromise;
+
+    const turn2Parts = partListUnionToParts(turnMessages[1]);
+    const responseIndex = turn2Parts.findIndex((part) => part.functionResponse);
+    const feedbackIndex = turn2Parts.findIndex(
+      (part) => part.text?.includes('image(s) were omitted') === true,
+    );
+    const steerIndex = turn2Parts.findIndex(
+      (part) => part.text === 'use a smaller image',
+    );
+    expect(turn2Parts.some((part) => part.inlineData !== undefined)).toBe(
+      false,
+    );
+    expect(responseIndex).toBeGreaterThanOrEqual(0);
+    expect(feedbackIndex).toBeGreaterThan(responseIndex);
+    expect(steerIndex).toBeGreaterThan(feedbackIndex);
+  });
+
   it('forces one more turn when steer arrives during a final-answer stream (no tool calls)', async () => {
     const toolRegistry = createToolRegistryForTest([]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);

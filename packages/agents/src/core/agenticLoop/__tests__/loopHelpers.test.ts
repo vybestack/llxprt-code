@@ -207,6 +207,15 @@ describe('convertBlocksToParts media block handling', () => {
     expect(parts[0]?.fileData?.fileUri).toBe('https://example.com/image.png');
   });
 
+  it('skips malformed media blocks without throwing', () => {
+    const blocks = [
+      { type: 'media', mimeType: 'image/png', encoding: 'base64' },
+      { type: 'media', data: 'AA', encoding: 'base64' },
+    ] as unknown as ContentBlock[];
+
+    expect(convertBlocksToParts(blocks)).toStrictEqual([]);
+  });
+
   it('preserves media blocks alongside tool_response blocks', () => {
     const blocks: ContentBlock[] = [
       {

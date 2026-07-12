@@ -440,8 +440,13 @@ function applySessionFlags(
   params: ConfigParameters,
 ): void {
   config.continueOnFailedApiCall = params.continueOnFailedApiCall ?? true;
+  const imagePayloadBudgetBytes = params.imagePayloadBudgetBytes;
   config.imagePayloadBudgetBytes =
-    params.imagePayloadBudgetBytes ?? DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES;
+    typeof imagePayloadBudgetBytes === 'number' &&
+    Number.isSafeInteger(imagePayloadBudgetBytes) &&
+    imagePayloadBudgetBytes >= 0
+      ? imagePayloadBudgetBytes
+      : DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES;
   config.continueSession = params.continueSession ?? false;
   config.storage = new Storage(config.targetDir);
   config.fileExclusions = new FileExclusions(config as unknown as Config);

@@ -43,6 +43,13 @@ describe('getImageInlineDataSize', () => {
     expect(getImageInlineDataSize(functionResponsePart('read_file'))).toBe(0);
   });
 
+  it.each(['application/pdf', 'video/mp4', 'audio/mpeg'])(
+    'returns 0 for non-image inlineData with MIME type %s',
+    (mimeType) => {
+      expect(getImageInlineDataSize(inlineDataPart(mimeType, 500))).toBe(0);
+    },
+  );
+
   it('returns 0 for a part with empty inlineData.data', () => {
     const part: Part = { inlineData: { mimeType: 'image/png', data: '' } };
     expect(getImageInlineDataSize(part)).toBe(0);
@@ -90,6 +97,21 @@ describe('enforceImageBudget', () => {
       (p) => getImageInlineDataSize(p) === 0,
     );
     expect(nonImageParts).toHaveLength(3);
+  });
+
+  it('does not budget PDF, video, or audio data needed by media-aware providers', () => {
+    const parts = [
+      inlineDataPart('application/pdf', 5000),
+      inlineDataPart('video/mp4', 5000),
+      inlineDataPart('audio/mpeg', 5000),
+      inlineDataPart('image/png', 1000),
+    ];
+
+    const result = enforceImageBudget(parts, 1000);
+
+    expect(result.parts).toStrictEqual(parts);
+    expect(result.omitted).toHaveLength(0);
+    expect(result.totalImageBytes).toBe(1000);
   });
 
   it('omits images that would exceed the budget, keeping the earliest that fit', () => {

@@ -257,6 +257,7 @@ export function createTestConfig(options: {
   policyEngine: PolicyEngine;
   interactive: boolean;
   approvalMode?: ApprovalMode;
+  imagePayloadBudgetBytes?: number;
 }): Config {
   const { messageBus, toolRegistry, policyEngine, interactive } = options;
   const approvalMode = options.approvalMode ?? ApprovalMode.YOLO;
@@ -265,7 +266,8 @@ export function createTestConfig(options: {
     getSessionId: () => 'agentic-loop-test-session',
     getUsageStatisticsEnabled: () => false,
     getDebugMode: () => false,
-    getImagePayloadBudgetBytes: () => DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+    getImagePayloadBudgetBytes: () =>
+      options.imagePayloadBudgetBytes ?? DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
     getApprovalMode: () => approvalMode,
     getEphemeralSettings: () => ({}),
     getEphemeralSetting: () => undefined,
