@@ -27,9 +27,6 @@ export interface AstValidationSummary {
   label: string;
 }
 
-/** Tolerance (in lines) for matching pre/post error locations after a shift. */
-const LINE_MATCH_TOLERANCE = 3;
-
 /**
  * Extracts the leading line number from a validation error message such as
  * "Syntax error at line 173, column 5". Returns null when no line is found.
@@ -37,6 +34,20 @@ const LINE_MATCH_TOLERANCE = 3;
 export function extractErrorLineNumber(error: string): number | null {
   const match = /line (\d+)/i.exec(error);
   return match ? parseInt(match[1], 10) : null;
+}
+
+interface ErrorLocation {
+  line: number;
+  column: number;
+}
+
+function extractErrorLocation(error: string): ErrorLocation | null {
+  const match = /line (\d+), column (\d+)/i.exec(error);
+  if (!match) return null;
+  return {
+    line: parseInt(match[1], 10),
+    column: parseInt(match[2], 10),
+  };
 }
 
 /**
@@ -87,36 +98,34 @@ export function computeLineDelta(
  *
  * When the edit's start line is known, errors at or below the edit must have
  * shifted by `lineDelta`, while errors above it did not shift — this avoids the
- * false positive of matching a newly-introduced error to a pre-existing one
- * simply because they happen to be within tolerance without the shift.
+ * false positive of matching a newly-introduced error to a nearby pre-existing
+ * one. The validator emits deterministic line and column coordinates, so both
+ * must match exactly after applying the known line shift.
  *
  * When the edit position is unknown, the two cases are made mutually exclusive
  * based on whether `lineDelta` is zero, which is the safest fallback.
  */
-function linesMatch(
-  preLine: number,
-  postLine: number,
+function locationsMatch(
+  pre: ErrorLocation,
+  post: ErrorLocation,
   lineDelta: number,
   editStartLine: number | null,
 ): boolean {
+  if (pre.column !== post.column) return false;
+
   if (editStartLine !== null) {
     // Whether the PRE-EDIT error was at/below the edit determines whether it
-    // shifted. Checking postLine instead causes false positives: a new error
-    // below the edit can numerically align with a shifted pre-edit error that
-    // was actually above the edit and never moved.
-    if (preLine >= editStartLine) {
-      // Error was at/below edit start → shifted by lineDelta.
-      return Math.abs(preLine + lineDelta - postLine) <= LINE_MATCH_TOLERANCE;
+    // shifted. Checking the post-edit location instead causes false positives.
+    if (pre.line >= editStartLine) {
+      return pre.line + lineDelta === post.line;
     }
-    // Error was above edit start → did not shift.
-    return Math.abs(preLine - postLine) <= LINE_MATCH_TOLERANCE;
+    return pre.line === post.line;
   }
 
-  // Fallback: pick the correct case based on whether the edit changed line count.
   if (lineDelta === 0) {
-    return Math.abs(preLine - postLine) <= LINE_MATCH_TOLERANCE;
+    return pre.line === post.line;
   }
-  return Math.abs(preLine - (postLine - lineDelta)) <= LINE_MATCH_TOLERANCE;
+  return pre.line + lineDelta === post.line;
 }
 
 /**
@@ -180,19 +189,23 @@ export function summarizeAstValidation(
   // raw error strings (not just those with parseable line numbers) so that
   // unparseable post-edit errors are conservatively treated as unmatched
   // rather than silently dropped.
-  const preLines = extractErrorLineNumbers(preEdit.errors);
+  const unmatchedPreLocations = preEdit.errors
+    .map(extractErrorLocation)
+    .filter((location): location is ErrorLocation => location !== null);
   let allMatched = postErrors.length > 0;
   for (const postErr of postErrors) {
-    const postLine = extractErrorLineNumber(postErr);
-    if (
-      postLine === null ||
-      !preLines.some((prel) =>
-        linesMatch(prel, postLine, lineDelta, editStartLine),
-      )
-    ) {
+    const postLocation = extractErrorLocation(postErr);
+    const matchingIndex =
+      postLocation === null
+        ? -1
+        : unmatchedPreLocations.findIndex((preLocation) =>
+            locationsMatch(preLocation, postLocation, lineDelta, editStartLine),
+          );
+    if (matchingIndex === -1) {
       allMatched = false;
       break;
     }
+    unmatchedPreLocations.splice(matchingIndex, 1);
   }
 
   if (allMatched) {
@@ -207,11 +220,25 @@ export function summarizeAstValidation(
   // File was already broken, but the post-edit errors don't line up with the
   // pre-existing ones. They may be cascading from the same root cause or newly
   // introduced; surface both for the LLM to judge.
+  return formatMixedValidationSummary(preEdit.errors, postErrors);
+}
+
+function formatMixedValidationSummary(
+  preErrors: string[],
+  postErrors: string[],
+): AstValidationSummary {
+  const preErrorNoun = preErrors.length === 1 ? 'error' : 'errors';
+  let postErrorDescription =
+    'post-edit validation failed without error details';
+  if (postErrors.length > 0) {
+    const postErrorNoun = postErrors.length === 1 ? 'error' : 'errors';
+    postErrorDescription = `post-edit ${postErrorNoun}${formatLineLabel(postErrors)} may be newly introduced`;
+  }
   return {
     status: 'FAILED',
     preExisting: true,
     newlyIntroduced: true,
-    label: `FAILED (file had pre-existing errors${formatLineLabel(preEdit.errors)}; verify post-edit error${formatLineLabel(postErrors)} is not newly introduced)`,
+    label: `FAILED (file had pre-existing ${preErrorNoun}${formatLineLabel(preErrors)}; ${postErrorDescription})`,
   };
 }
 

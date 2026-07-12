@@ -90,7 +90,9 @@ describe('summarizeAstValidation', () => {
     expect(summary.status).toBe('FAILED');
     expect(summary.preExisting).toBe(true);
     expect(summary.newlyIntroduced).toBe(true);
-    expect(summary.label).toContain('pre-existing errors');
+    expect(summary.label).toBe(
+      'FAILED (file had pre-existing error at line 173; post-edit error at line 4977 may be newly introduced)',
+    );
   });
 
   it('returns SKIPPED when post-edit is undefined', () => {
@@ -103,23 +105,21 @@ describe('summarizeAstValidation', () => {
     expect(summary.preExisting).toBe(false);
   });
 
-  it('matches pre-existing error within LINE_MATCH_TOLERANCE (3 lines off)', () => {
-    // Post-edit error is 3 lines off from the exact shifted position — matches.
+  it('flags as mixed when a post-edit error is one line off the exact shifted location', () => {
     const summary = summarizeAstValidation(
       { valid: false, errors: ['Syntax error at line 173, column 5'] },
-      { valid: false, errors: ['Syntax error at line 186, column 5'] },
+      { valid: false, errors: ['Syntax error at line 184, column 5'] },
       10,
     );
     expect(summary.preExisting).toBe(true);
-    expect(summary.newlyIntroduced).toBe(false);
+    expect(summary.newlyIntroduced).toBe(true);
   });
 
-  it('flags as mixed when post-edit error exceeds tolerance (4 lines off)', () => {
-    // Post-edit error is 4 lines off from the exact shifted position — no match.
+  it('flags as mixed when an error remains on the same line but moves columns', () => {
     const summary = summarizeAstValidation(
       { valid: false, errors: ['Syntax error at line 173, column 5'] },
-      { valid: false, errors: ['Syntax error at line 187, column 5'] },
-      10,
+      { valid: false, errors: ['Syntax error at line 173, column 9'] },
+      0,
     );
     expect(summary.preExisting).toBe(true);
     expect(summary.newlyIntroduced).toBe(true);
@@ -237,6 +237,19 @@ describe('summarizeAstValidation', () => {
     expect(summary.preExisting).toBe(true);
     expect(summary.newlyIntroduced).toBe(true);
   });
+
+  it('reports missing post-edit error details explicitly', () => {
+    const summary = summarizeAstValidation(
+      { valid: false, errors: ['Syntax error at line 173, column 5'] },
+      { valid: false, errors: [] },
+    );
+
+    expect(summary.preExisting).toBe(true);
+    expect(summary.newlyIntroduced).toBe(true);
+    expect(summary.label).toBe(
+      'FAILED (file had pre-existing error at line 173; post-edit validation failed without error details)',
+    );
+  });
 });
 
 describe('computeLineDelta', () => {
@@ -334,5 +347,9 @@ describe('formatValidationLineLabel', () => {
 
   it('returns empty string when no line numbers', () => {
     expect(formatValidationLineLabel(['unknown error'])).toBe('');
+  });
+
+  it('returns empty string for an empty error list', () => {
+    expect(formatValidationLineLabel([])).toBe('');
   });
 });

@@ -166,7 +166,7 @@ describe('ASTEditTool preview phase validation (issue #1755)', () => {
   });
 });
 
-const NL = String.fromCharCode(10);
+const NL = '\n';
 
 function makeBrokenFile(): string {
   return [
@@ -206,7 +206,9 @@ describe('ASTEditTool pre-existing vs newly-introduced error categorization (iss
 
     expect(result.error).toBeUndefined();
     const content = String(result.llmContent);
-    expect(content).toContain('pre-existing');
+    expect(content).toMatch(
+      /AST validation: FAILED \(pre-existing error at line \d+ — present before this edit\)/,
+    );
     expect(content).not.toContain('new error introduced');
     expect(content).toContain('Pre-existing syntax errors: Yes');
   });
@@ -264,7 +266,9 @@ describe('ASTEditTool pre-existing vs newly-introduced error categorization (iss
 
     expect(result.error).toBeUndefined();
     const content = String(result.llmContent);
-    expect(content).toContain('pre-existing');
+    expect(content).toMatch(
+      /AST validation: FAILED \(pre-existing error at line \d+ — present before this edit\)/,
+    );
     expect(content).not.toContain('new error introduced');
     expect(content).toContain('Pre-existing syntax errors: Yes');
     // Verify the file was actually written despite the pre-existing error.
@@ -297,10 +301,8 @@ describe('ASTEditTool pre-existing vs newly-introduced error categorization (iss
 
   it('reports mixed pre-existing and newly-introduced errors in preview', async () => {
     // File has a pre-existing syntax error (unclosed function at line 7) and
-    // the edit introduces a new error (@@@ at line 1). The errors are far
-    // enough apart (> tolerance) to trigger the mixed categorization.
+    // the edit introduces a new error (@@@ at line 1).
     const filePath = join(tempDir, 'mixed-errors.ts');
-    const NL = String.fromCharCode(10);
     const brokenContent = [
       'const greeting = "hello";',
       'const a = 1;',
@@ -313,24 +315,20 @@ describe('ASTEditTool pre-existing vs newly-introduced error categorization (iss
     writeFileSync(filePath, brokenContent, 'utf-8');
 
     const tool = new ASTEditTool(createFakeToolHost(tempDir));
-    const result = await tool
-      .build({
-        file_path: filePath,
-        old_string: 'const greeting = "hello";',
-        new_string: 'const greeting = @@@;',
-        force: false,
-      })
-      .execute(new AbortController().signal);
+    const result = await executePreview(tool, {
+      file_path: filePath,
+      old_string: 'const greeting = "hello";',
+      new_string: 'const greeting = @@@;',
+      force: false,
+    });
 
     expect(result.error).toBeUndefined();
     const content = String(result.llmContent);
-    // The baseline was already broken.
     expect(content).toContain('Pre-existing syntax errors: Yes');
-    // Post-edit still has errors.
-    expect(content).toContain('FAILED');
-    // Must NOT be classified as purely pre-existing — the edit introduced a
-    // new error at a different location, so the output should not claim it
-    // was "present before this edit".
+    expect(content).toMatch(
+      /AST validation: FAILED \(file had pre-existing errors? at line \d+; post-edit error at line \d+ may be newly introduced\)/,
+    );
+    expect(content).toMatch(/AST errors: Syntax error at line \d+, column \d+/);
     expect(content).not.toContain('present before this edit');
   });
 });
