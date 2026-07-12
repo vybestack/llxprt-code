@@ -47,7 +47,7 @@ jobs:
   code-review:
     name: OpenCodeReview
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     # Infrastructure failures are intentionally non-blocking for PR checks, but
     # this output lets downstream jobs distinguish a completed OCR review from a
     # review that could not run because of provider, install, or script issues.
