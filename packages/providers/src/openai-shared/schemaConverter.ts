@@ -133,55 +133,74 @@ function isSchemaObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * JSON-schema keywords whose values are themselves schema objects (or arrays
- * of schema objects). Used to decide whether a passthrough object should be
- * normalized as a sub-schema or left untouched as plain data.
+ * JSON-schema keywords whose values are arrays of sub-schemas. Each element is
+ * normalized so types inside unions (anyOf/oneOf/allOf) are lowercased.
  */
-const SCHEMA_VALUE_KEYS: ReadonlySet<string> = new Set([
-  'type',
-  'properties',
-  'items',
-  'additionalProperties',
+const SCHEMA_ARRAY_KEYS: ReadonlySet<string> = new Set([
   'anyOf',
   'oneOf',
   'allOf',
+]);
+
+/**
+ * JSON-schema keywords whose values are a single sub-schema. The value is
+ * normalized so its type is lowercased.
+ */
+const SCHEMA_OBJECT_KEYS: ReadonlySet<string> = new Set([
   'not',
   'if',
   'then',
   'else',
-  '$ref',
 ]);
 
 /**
- * Determine whether a plain object looks like a JSON-schema node (i.e. it
- * declares a type or carries a keyword whose value is itself a schema). This
- * guards passthrough so that arbitrary data objects embedded in keywords like
- * `const`, `default`, or `examples` are preserved verbatim instead of being
- * corrupted by schema normalization.
+ * Normalize an array of sub-schemas (the value of anyOf/oneOf/allOf). Each
+ * element that is a schema object is normalized; non-schema elements (and
+ * non-array values) are returned verbatim so malformed input is not corrupted.
  */
-function isLikelySchemaNode(node: Record<string, unknown>): boolean {
-  for (const key of Object.keys(node)) {
-    if (SCHEMA_VALUE_KEYS.has(key)) {
-      return true;
-    }
+function normalizeSchemaArray(value: unknown): unknown {
+  if (!Array.isArray(value)) {
+    return value;
   }
-  return false;
+  return value.map((element) => {
+    if (isSchemaObject(element)) {
+      return normalizeSchemaNode(element);
+    }
+    return element;
+  });
 }
 
 /**
- * Normalize an arbitrary passthrough value:
- * - arrays are mapped element-wise (so anyOf/oneOf/allOf sub-schemas are
- *   normalized),
- * - objects that look like schema nodes are normalized recursively,
- * - everything else (including plain data objects in `const`/`default`/...) is
- *   returned unchanged.
+ * Normalize a single sub-schema (the value of not/if/then/else). Returns the
+ * value verbatim when it is not a schema object.
  */
-function normalizePassthroughValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(normalizePassthroughValue);
-  }
-  if (isSchemaObject(value) && isLikelySchemaNode(value)) {
+function normalizeSchemaValue(value: unknown): unknown {
+  if (isSchemaObject(value)) {
     return normalizeSchemaNode(value);
+  }
+  return value;
+}
+
+/**
+ * Normalize a passthrough keyword value by its known JSON-schema position.
+ * - anyOf/oneOf/allOf hold arrays of sub-schemas → each element normalized.
+ * - anyOf/oneOf/allOf hold arrays of sub-schemas → each element normalized.
+ * - not/if/then/else hold a single sub-schema → normalized.
+ * - additionalProperties holds a sub-schema or a boolean → normalized.
+ * - every other keyword (const, default, examples, format, pattern, $ref,
+ *   title, ...) is copied VERBATIM. This is intentional: those values are
+ *   arbitrary data, never schemas, so recursively normalizing them would
+ *   corrupt plain data objects that merely happen to use schema-ish key names.
+ */
+function normalizePassthroughField(key: string, value: unknown): unknown {
+  if (SCHEMA_ARRAY_KEYS.has(key)) {
+    return normalizeSchemaArray(value);
+  }
+  if (SCHEMA_OBJECT_KEYS.has(key)) {
+    return normalizeSchemaValue(value);
+  }
+  if (key === 'additionalProperties') {
+    return normalizeAdditionalProperties(value);
   }
   return value;
 }
@@ -261,7 +280,7 @@ function normalizeSchemaNode(
     if (NORMALIZED_KEYS.has(key)) {
       continue;
     }
-    result[key] = normalizePassthroughValue(value);
+    result[key] = normalizePassthroughField(key, value);
   }
 
   return result;
@@ -364,7 +383,7 @@ export function convertSchemaToOpenAI(
     if (TOP_LEVEL_HANDLED_KEYS.has(key)) {
       continue;
     }
-    result[key] = normalizePassthroughValue(value);
+    result[key] = normalizePassthroughField(key, value);
   }
 
   return result;

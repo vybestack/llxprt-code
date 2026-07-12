@@ -72,6 +72,32 @@ describe('convertSchemaToOpenAI — dropped JSON-schema keywords are preserved',
     expect(branches[0].properties).toStrictEqual({ a: { type: 'string' } });
   });
 
+  it('preserves and normalizes not/if/then/else single-sub-schema keywords', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        conditional: {
+          if: { type: 'STRING' },
+          then: { type: 'INTEGER' },
+          else: { type: 'BOOLEAN' },
+          not: { type: 'NULL' },
+        },
+      },
+      required: [],
+    };
+
+    const result = convertSchemaToOpenAI(schema);
+    const conditional = result.properties.conditional as Record<
+      string,
+      unknown
+    >;
+
+    expect((conditional.if as Record<string, unknown>).type).toBe('string');
+    expect((conditional.then as Record<string, unknown>).type).toBe('integer');
+    expect((conditional.else as Record<string, unknown>).type).toBe('boolean');
+    expect((conditional.not as Record<string, unknown>).type).toBe('null');
+  });
+
   it('preserves format and pattern alongside a normalized type', () => {
     const schema = {
       type: 'object',
@@ -121,6 +147,41 @@ describe('convertSchemaToOpenAI — dropped JSON-schema keywords are preserved',
     const config = result.properties.config as Record<string, unknown>;
 
     expect(config.const).toStrictEqual({ userId: 123, active: true });
+  });
+
+  it('preserves a const object that uses schema-ish key names verbatim', () => {
+    // A plain data object whose keys happen to match JSON-schema keyword names
+    // (type, properties). It must NOT be mistaken for a schema node and
+    // re-normalized, which would corrupt the data.
+    const descriptor = {
+      type: 'widget',
+      properties: ['a', 'b'],
+      title: 'my widget',
+    };
+    const schema = {
+      type: 'object',
+      properties: { descriptor: { const: descriptor } },
+      required: [],
+    };
+
+    const result = convertSchemaToOpenAI(schema);
+    const prop = result.properties.descriptor as Record<string, unknown>;
+
+    expect(prop.const).toStrictEqual(descriptor);
+  });
+
+  it('preserves a default object that uses schema-ish key names verbatim', () => {
+    const fallback = { type: 'number', properties: { x: 1 } };
+    const schema = {
+      type: 'object',
+      properties: { value: { type: 'object', default: fallback } },
+      required: [],
+    };
+
+    const result = convertSchemaToOpenAI(schema);
+    const value = result.properties.value as Record<string, unknown>;
+
+    expect(value.default).toStrictEqual(fallback);
   });
 
   it('preserves $ref', () => {
