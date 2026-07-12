@@ -112,6 +112,16 @@ export class RecordingConnection {
     this.sessionUpdateError = null;
     this.sessionUpdateCalls = 0;
   }
+
+  clearSessionInfoUpdates(): void {
+    const retained = this.messages.filter(
+      (message) =>
+        message.kind !== 'sessionUpdate' ||
+        message.update.sessionUpdate !== 'session_info_update',
+    );
+    this.messages.splice(0, this.messages.length, ...retained);
+  }
+
   private gatedDeferred: {
     resolve: (o: acp.RequestPermissionOutcome) => void;
     promise: Promise<acp.RequestPermissionOutcome>;

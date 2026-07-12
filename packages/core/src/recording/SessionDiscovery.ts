@@ -24,8 +24,10 @@
  * for the resume flow.
  */
 
+import { createReadStream } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import * as readline from 'node:readline';
 import { type SessionSummary, type SessionStartPayload } from './types.js';
 import { readSessionHeader } from './ReplayEngine.js';
 import {
@@ -300,10 +302,12 @@ export class SessionDiscovery {
     filePath: string,
   ): Promise<string | null | undefined> {
     try {
-      const fileContent = await fs.readFile(filePath, 'utf-8');
-      const lines = fileContent.split('\n');
+      const lines = readline.createInterface({
+        input: createReadStream(filePath, { encoding: 'utf8' }),
+        crlfDelay: Infinity,
+      });
       let title: string | null | undefined;
-      for (const line of lines) {
+      for await (const line of lines) {
         const result = extractSessionMetadataTitle(line);
         if (result !== undefined) {
           title = result;

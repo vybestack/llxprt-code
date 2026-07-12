@@ -78,8 +78,8 @@ describe('session lifecycle pagination', () => {
   });
 
   it('updatedAt changes cannot omit sessions: immutable createdAt ordering (issue #1611)', () => {
-    // Two sessions with the SAME createdAt but different updatedAt (simulating
-    // a session that was updated mid-pagination). Ordering must be stable by
+    // Two sessions with different createdAt and updatedAt values. Ordering must
+    // remain stable when a session is updated mid-pagination because it uses
     // createdAt + sessionId, so the cursor is not invalidated.
     const stable: LifecycleSession[] = [
       {

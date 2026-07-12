@@ -85,7 +85,7 @@ describe('Zed Session - session_info_update findings (issue #1611 remediation)',
       sessionId: 'test-session-id',
       prompt: [{ type: 'resource_link', uri: 'file:///p', name: 'p.ts' }],
     });
-    connection.messages.length = 0;
+    connection.clearSessionInfoUpdates();
 
     await session.prompt({
       sessionId: 'test-session-id',
