@@ -233,7 +233,7 @@ import { readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tripQuotaGuard } from ${JSON.stringify(QUOTA_GUARD_MODULE_URL)};
 
-// Synchronous cross-process barrier sleep (no async in a sync test body).
+// Local blocking sleep while filesystem ready files implement the barrier.
 const sab = new Int32Array(new SharedArrayBuffer(4));
 function sleep(ms: number) {
   Atomics.wait(sab, 0, 0, ms);
