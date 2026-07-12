@@ -19,6 +19,24 @@ export interface BrowserProfileAssociation {
 }
 
 /**
+ * The set of browser kinds supported by the secure browser launcher.
+ * Mirrors the {@link BrowserKind} union so persisted values can be validated
+ * on read and rejected if they do not name a supported browser.
+ */
+const SUPPORTED_BROWSER_KINDS: readonly BrowserKind[] = [
+  'chrome',
+  'firefox',
+  'safari',
+];
+
+function isSupportedBrowserKind(value: unknown): value is BrowserKind {
+  return (
+    typeof value === 'string' &&
+    (SUPPORTED_BROWSER_KINDS as readonly string[]).includes(value)
+  );
+}
+
+/**
  * Injectable filesystem accessors for testability.
  */
 export interface AssociationStoreFs {
@@ -102,7 +120,7 @@ function isAssociationEntry(value: unknown): boolean {
   }
   const entry = value as Record<string, unknown>;
   return (
-    typeof entry.browser === 'string' &&
+    isSupportedBrowserKind(entry.browser) &&
     typeof entry.profileDirectory === 'string' &&
     (entry.displayName === undefined || typeof entry.displayName === 'string')
   );

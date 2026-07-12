@@ -23,7 +23,9 @@ function createStore(fs: InMemoryFs): BrowserProfileAssociationStore {
       readFile: (p: string) => {
         const content = fs.files.get(p);
         if (content === undefined) {
-          throw new Error(`ENOENT: ${p}`);
+          const err: NodeJS.ErrnoException = new Error(`ENOENT: ${p}`);
+          err.code = 'ENOENT';
+          throw err;
         }
         return content;
       },
@@ -199,11 +201,33 @@ describe('BrowserProfileAssociationStore', () => {
     });
 
     it('rejects persisted data missing the required version field', () => {
+      const path = '/fake/path/oauth-browser-profiles.json';
+      const originalContent = JSON.stringify({
+        associations: {
+          'anthropic:default': {
+            browser: 'chrome',
+            profileDirectory: 'Default',
+          },
+        },
+      });
+      const fs = createInMemoryFs({ [path]: originalContent });
+      const store = createStore(fs);
+
+      // Without a numeric version the file does not satisfy the schema and
+      // must be treated as empty rather than partially consumed.
+      expect(store.getAssociation('anthropic', 'default')).toBeUndefined();
+      // The invalid file must not be overwritten or corrupted by the read.
+      expect(fs.files.get(path)).toBe(originalContent);
+    });
+
+    it('rejects persisted data with an unsupported browser kind', () => {
+      const path = '/fake/path/oauth-browser-profiles.json';
       const fs = createInMemoryFs({
-        '/fake/path/oauth-browser-profiles.json': JSON.stringify({
+        [path]: JSON.stringify({
+          version: 1,
           associations: {
             'anthropic:default': {
-              browser: 'chrome',
+              browser: 'invalid-browser',
               profileDirectory: 'Default',
             },
           },
@@ -211,8 +235,8 @@ describe('BrowserProfileAssociationStore', () => {
       });
       const store = createStore(fs);
 
-      // Without a numeric version the file does not satisfy the schema and
-      // must be treated as empty rather than partially consumed.
+      // An unknown browser would fail later at launch time; the type guard
+      // must reject it on read so callers never receive an invalid value.
       expect(store.getAssociation('anthropic', 'default')).toBeUndefined();
     });
   });

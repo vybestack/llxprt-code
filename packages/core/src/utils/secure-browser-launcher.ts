@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { execFile } from 'node:child_process';
+import { execFile, type ExecFileOptions } from 'node:child_process';
 import { promisify } from 'node:util';
 import { platform } from 'node:os';
 import { URL } from 'node:url';
@@ -12,10 +12,22 @@ import { URL } from 'node:url';
 const execFileAsync = promisify(execFile);
 
 /**
+ * Type for the options object passed to execFileAsync for browser launches.
+ * Node's ExecFileOptions does not declare `detached` or `stdio` (they live on
+ * SpawnOptions), but execFile forwards them to spawn at runtime. Declaring
+ * them explicitly here keeps TypeScript checking of the known keys while
+ * permitting the spawn-only fields we rely on.
+ */
+type BrowserExecOptions = ExecFileOptions & {
+  detached?: boolean;
+  stdio?: 'ignore' | 'pipe' | 'inherit';
+};
+
+/**
  * Shared exec options for browser launches. Both the default-browser path
  * and the specific-browser path use these so behavior stays consistent.
  */
-const browserExecOptions: Record<string, unknown> = {
+const browserExecOptions: BrowserExecOptions = {
   env: { ...process.env, SHELL: undefined },
   detached: true,
   stdio: 'ignore',
@@ -44,6 +56,19 @@ const LINUX_FIREFOX_BINARIES = ['firefox', 'firefox-esr'];
  * Supported browser kinds for targeted launching.
  */
 export type BrowserKind = 'chrome' | 'firefox' | 'safari';
+
+/**
+ * Whether the platform is Linux or a BSD variant. Centralized so the
+ * default-browser path and the specific-browser fallback path agree on which
+ * platforms count as "Linux-like".
+ */
+function isLinuxLike(platformName: NodeJS.Platform): boolean {
+  return (
+    platformName === 'linux' ||
+    platformName === 'freebsd' ||
+    platformName === 'openbsd'
+  );
+}
 
 /**
  * Options for launching a specific browser binary with an optional profile.
@@ -189,11 +214,7 @@ async function openDefaultBrowser(url: string): Promise<void> {
   try {
     await execFileAsync(command, args, browserExecOptions);
   } catch (error) {
-    const isLinuxLike =
-      platformName === 'linux' ||
-      platformName === 'freebsd' ||
-      platformName === 'openbsd';
-    if (isLinuxLike && command === 'xdg-open') {
+    if (isLinuxLike(platformName) && command === 'xdg-open') {
       const fallbackCommands = [
         'gnome-open',
         'kde-open',
@@ -273,7 +294,7 @@ export function shouldLaunchBrowser(
 async function tryFallbackBrowserCommands(
   fallbackCommands: string[],
   url: string,
-  options: Record<string, unknown>,
+  options: BrowserExecOptions,
 ): Promise<boolean> {
   for (const fallbackCommand of fallbackCommands) {
     try {
@@ -365,11 +386,7 @@ async function tryLinuxFallbackBinaries(
   primaryCommand: string,
   args: string[],
 ): Promise<boolean> {
-  const isLinuxLike =
-    platformName === 'linux' ||
-    platformName === 'freebsd' ||
-    platformName === 'openbsd';
-  if (!isLinuxLike) {
+  if (!isLinuxLike(platformName)) {
     return false;
   }
   const fallbacks = linuxBrowserFallbacks(browser);
@@ -404,35 +421,6 @@ function linuxBrowserFallbacks(browser: BrowserKind): string[] {
 }
 
 /**
- * Single-quote a value for safe embedding in a PowerShell single-quoted
- * string literal. PowerShell escapes a literal single quote by doubling it.
- */
-function powershellQuote(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`;
-}
-
-/**
- * Build a `Start-Process` PowerShell command that passes each browser
- * argument and the URL as separate elements of a PowerShell array
- * (`-ArgumentList @('a','b',...)`). Array elements are individually
- * single-quoted so values containing spaces (e.g. a Chrome profile
- * directory named "Profile 1") are preserved instead of being split on
- * whitespace.
- */
-function buildStartProcessCommand(
-  executable: string,
-  browserArgs: string[],
-  url: string,
-): string {
-  const quotedUrl = powershellQuote(url);
-  const argList =
-    browserArgs.length > 0
-      ? `@(${browserArgs.join(',')},${quotedUrl})`
-      : quotedUrl;
-  return `Start-Process ${powershellQuote(executable)} -ArgumentList ${argList}`;
-}
-
-/**
  * Build the command and arguments to launch Chrome/Chromium with a profile.
  */
 function buildChromeLaunchArgs(
@@ -451,28 +439,16 @@ function buildChromeLaunchArgs(
     }
 
     case 'win32': {
-      // Use Start-Process with chrome.exe and the profile arg.
-      // Pass -ArgumentList as a PowerShell array of separately single-quoted
-      // strings so spaces in the profile directory (e.g. "Profile 1") are
-      // preserved. A single unquoted string would be split on whitespace by
-      // PowerShell, truncating --profile-directory=Profile 1 to =Profile.
-      const chromeArgs: string[] = [];
+      // Invoke the Chrome executable directly via execFileAsync — no shell,
+      // no PowerShell -Command string. Each argument is passed as a distinct
+      // argv element so spaces in the profile directory are preserved and
+      // there is no command-string boundary to inject through.
+      const args: string[] = [];
       if (profileDirectory) {
-        chromeArgs.push(
-          powershellQuote(`--profile-directory=${profileDirectory}`),
-        );
+        args.push(`--profile-directory=${profileDirectory}`);
       }
-      return [
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-NonInteractive',
-          '-WindowStyle',
-          'Hidden',
-          '-Command',
-          buildStartProcessCommand('chrome.exe', chromeArgs, url),
-        ],
-      ];
+      args.push(url);
+      return ['chrome.exe', args];
     }
 
     case 'linux':
@@ -510,26 +486,15 @@ function buildFirefoxLaunchArgs(
     }
 
     case 'win32': {
-      // Pass -ArgumentList as a PowerShell array so spaces in the profile
-      // name are preserved (see buildChromeLaunchArgs win32 note).
-      const firefoxArgs: string[] = [];
+      // Invoke the Firefox executable directly via execFileAsync — no shell,
+      // no PowerShell -Command string. Profile names with spaces are safe
+      // because each argument is a distinct argv element.
+      const args: string[] = [];
       if (profileDirectory) {
-        firefoxArgs.push(
-          powershellQuote('-P'),
-          powershellQuote(profileDirectory),
-        );
+        args.push('-P', profileDirectory);
       }
-      return [
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-NonInteractive',
-          '-WindowStyle',
-          'Hidden',
-          '-Command',
-          buildStartProcessCommand('firefox', firefoxArgs, url),
-        ],
-      ];
+      args.push(url);
+      return ['firefox.exe', args];
     }
 
     case 'linux':

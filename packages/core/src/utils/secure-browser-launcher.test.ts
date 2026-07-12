@@ -335,12 +335,12 @@ describe('secure-browser-launcher', () => {
         profileDirectory: 'Default',
       });
 
-      const commandArg = mockExecFile.mock.calls[0][1] as string[];
-      const startProcessArg = commandArg.find((a) =>
-        a.includes('Start-Process'),
-      );
-      expect(startProcessArg).toBe(
-        "Start-Process 'chrome.exe' -ArgumentList @('--profile-directory=Default','https://example.com')",
+      // Windows invokes the Chrome binary directly via execFileAsync — no
+      // PowerShell, no Start-Process command string.
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'chrome.exe',
+        ['--profile-directory=Default', 'https://example.com'],
+        expect.any(Object),
       );
     });
 
@@ -351,14 +351,12 @@ describe('secure-browser-launcher', () => {
         profileDirectory: 'Profile 1',
       });
 
-      const commandArg = mockExecFile.mock.calls[0][1] as string[];
-      const startProcessArg = commandArg.find((a) =>
-        a.includes('Start-Process'),
-      );
-      // Each browser arg is a separate single-quoted array element so the
-      // space in "Profile 1" is not split by PowerShell into two args.
-      expect(startProcessArg).toBe(
-        "Start-Process 'chrome.exe' -ArgumentList @('--profile-directory=Profile 1','https://example.com')",
+      // Each argument is a distinct argv element, so the space in
+      // "Profile 1" is preserved without any shell quoting.
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'chrome.exe',
+        ['--profile-directory=Profile 1', 'https://example.com'],
+        expect.any(Object),
       );
     });
 
@@ -397,12 +395,12 @@ describe('secure-browser-launcher', () => {
         profileDirectory: 'dev-profile',
       });
 
-      const commandArg = mockExecFile.mock.calls[0][1] as string[];
-      const startProcessArg = commandArg.find((a) =>
-        a.includes('Start-Process'),
-      );
-      expect(startProcessArg).toBe(
-        "Start-Process 'firefox' -ArgumentList @('-P','dev-profile','https://example.com')",
+      // Windows invokes the Firefox binary directly via execFileAsync — no
+      // PowerShell, no Start-Process command string.
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'firefox.exe',
+        ['-P', 'dev-profile', 'https://example.com'],
+        expect.any(Object),
       );
     });
 
@@ -413,11 +411,19 @@ describe('secure-browser-launcher', () => {
         profileDirectory: 'ignored',
       });
 
-      expect(mockExecFile).toHaveBeenCalledWith(
-        'open',
-        expect.arrayContaining(['-a', 'Safari', 'https://example.com']),
-        expect.any(Object),
+      const callArgs = mockExecFile.mock.calls[0];
+      expect(callArgs[0]).toBe('open');
+      expect(callArgs[1]).toStrictEqual([
+        '-a',
+        'Safari',
+        'https://example.com',
+      ]);
+      // Safari does not support profile directories: assert the launch args
+      // never leak a profile flag even when one was requested.
+      expect(callArgs[1]).not.toContain(
+        expect.stringContaining('profile-directory'),
       );
+      expect(callArgs[1]).not.toContain(expect.stringContaining('-profile'));
     });
 
     it('throws on Safari on non-darwin platforms', async () => {
