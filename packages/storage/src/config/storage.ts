@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import envPaths from 'env-paths';
 
 export const LLXPRT_DIR = '.llxprt';
+export const AGENTS_DIR = '.agents';
 export const PROVIDER_ACCOUNTS_FILENAME = 'provider_accounts.json';
 export const OAUTH_FILE = 'oauth_creds.json';
 const TMP_DIR_NAME = 'tmp';
@@ -183,6 +184,33 @@ export class Storage {
     return path.join(Storage.getGlobalConfigDir(), 'skills');
   }
 
+  /**
+   * Returns the global `.agents/` directory under the user's home directory,
+   * matching the cross-tool Agent Skills open standard
+   * (https://agentskills.io). Always resolved against `os.homedir()` so it
+   * never falls back to a world-writable temp directory. If the home
+   * directory cannot be determined, this throws rather than silently
+   * resolving to a relative or temp path (fail-closed for security).
+   */
+  static getGlobalAgentsDir(): string {
+    const homeDir = os.homedir();
+    if (!homeDir || !path.isAbsolute(homeDir)) {
+      throw new Error(
+        'Unable to resolve user home directory for .agents skills; refusing to fall back to a relative or temp path.',
+      );
+    }
+    return path.join(homeDir, AGENTS_DIR);
+  }
+
+  /**
+   * Returns the user-level skills directory under the cross-tool
+   * `.agents/skills/` standard (https://agentskills.io), enabling
+   * interoperability with tools like `npx skills add`.
+   */
+  static getUserAgentSkillsDir(): string {
+    return path.join(Storage.getGlobalAgentsDir(), 'skills');
+  }
+
   static getUserPoliciesDir(): string {
     return path.join(Storage.getGlobalConfigDir(), 'policies');
   }
@@ -282,6 +310,23 @@ export class Storage {
 
   getProjectSkillsDir(): string {
     return path.join(this.getLlxprtDir(), 'skills');
+  }
+
+  /**
+   * Returns the workspace-local `.agents/` directory, matching the cross-tool
+   * Agent Skills open standard (https://agentskills.io).
+   */
+  getAgentsDir(): string {
+    return path.join(this.targetDir, AGENTS_DIR);
+  }
+
+  /**
+   * Returns the workspace-local skills directory under the cross-tool
+   * `.agents/skills/` standard (https://agentskills.io), enabling
+   * interoperability with tools like `npx skills add`.
+   */
+  getProjectAgentSkillsDir(): string {
+    return path.join(this.getAgentsDir(), 'skills');
   }
 
   getProjectTempCheckpointsDir(): string {
