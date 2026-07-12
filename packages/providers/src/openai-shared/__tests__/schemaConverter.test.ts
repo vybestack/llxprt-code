@@ -98,6 +98,58 @@ describe('convertSchemaToOpenAI — dropped JSON-schema keywords are preserved',
     expect((conditional.not as Record<string, unknown>).type).toBe('null');
   });
 
+  it('normalizes uppercase types recursively inside array items', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        tags: { type: 'ARRAY', items: { type: 'STRING' } },
+      },
+      required: [],
+    };
+
+    const result = convertSchemaToOpenAI(schema);
+    const tags = result.properties.tags as Record<string, unknown>;
+
+    expect(tags.type).toBe('array');
+    expect((tags.items as Record<string, unknown>).type).toBe('string');
+  });
+
+  it('preserves primitive const/default values that coincidentally match keyword names', () => {
+    // The literal strings 'string' and 'object' are valid JSON-schema type
+    // names but here they are plain const/default DATA and must survive
+    // verbatim (not be mistaken for schema structure).
+    const schema = {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', const: 'string' },
+        fallback: { type: 'string', default: 'object' },
+      },
+      required: [],
+    };
+
+    const result = convertSchemaToOpenAI(schema);
+    const kind = result.properties.kind as Record<string, unknown>;
+    const fallback = result.properties.fallback as Record<string, unknown>;
+
+    expect(kind.const).toBe('string');
+    expect(fallback.default).toBe('object');
+  });
+
+  it('preserves required on a nested object schema that has no inline properties', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        nested: { type: 'object', required: ['ref'] },
+      },
+      required: [],
+    };
+
+    const result = convertSchemaToOpenAI(schema);
+    const nested = result.properties.nested as Record<string, unknown>;
+
+    expect(nested.required).toStrictEqual(['ref']);
+  });
+
   it('preserves format and pattern alongside a normalized type', () => {
     const schema = {
       type: 'object',
@@ -331,16 +383,34 @@ describe('convertSchemaToOpenAI — existing normalizations still apply', () => 
     expect(count.maxLength).toBe(3);
   });
 
-  it('maps the Gemini numeric Type enum to a lowercase string', () => {
-    const schema = {
+  it('maps the Gemini numeric Type enum to a lowercase string for all values', () => {
+    const cases: Array<[unknown, string]> = [
+      [1, 'string'],
+      [2, 'number'],
+      [3, 'integer'],
+      [4, 'boolean'],
+      [5, 'array'],
+      [6, 'object'],
+    ];
+
+    for (const [enumValue, expected] of cases) {
+      const result = convertSchemaToOpenAI({
+        type: 'object',
+        properties: { f: { type: enumValue } },
+        required: [],
+      });
+      expect(result.properties.f.type).toBe(expected);
+    }
+  });
+
+  it('falls back to string for an unknown numeric Type enum value', () => {
+    const result = convertSchemaToOpenAI({
       type: 'object',
-      properties: { flag: { type: 4 } },
+      properties: { f: { type: 999 } },
       required: [],
-    };
+    });
 
-    const result = convertSchemaToOpenAI(schema);
-
-    expect(result.properties.flag.type).toBe('boolean');
+    expect(result.properties.f.type).toBe('string');
   });
 
   it('returns an empty object schema for any non-object input', () => {
@@ -464,5 +534,71 @@ describe('convertToolDeclarations — description strategy', () => {
         descriptionStrategy: 'always-string',
       }),
     ).toBeUndefined();
+  });
+});
+
+describe('convertToolDeclarations — full output mapping', () => {
+  it('converts a complex nested tool declaration end-to-end', () => {
+    const tools = [
+      {
+        functionDeclarations: [
+          {
+            name: 'search',
+            description: 'Search things',
+            parametersJsonSchema: {
+              type: 'object',
+              properties: {
+                query: { type: 'string', description: 'Query text' },
+                filters: {
+                  type: 'object',
+                  properties: {
+                    region: { type: 'STRING' },
+                    tags: { type: 'ARRAY', items: { type: 'STRING' } },
+                  },
+                  required: ['region'],
+                },
+                mode: { anyOf: [{ type: 'STRING' }, { type: 'NULL' }] },
+              },
+              required: ['query'],
+            },
+          },
+        ],
+      },
+    ];
+
+    const result = convertToolDeclarations(tools, {
+      descriptionStrategy: 'always-string',
+    });
+
+    expect(result).toBeDefined();
+    expect(result).toHaveLength(1);
+
+    const tool = result![0];
+    expect(tool.type).toBe('function');
+    expect(tool.function.name).toBe('search');
+    expect(tool.function.description).toBe('Search things');
+
+    const params = tool.function.parameters;
+    expect(params.type).toBe('object');
+    expect(params.required).toStrictEqual(['query']);
+
+    const filters = params.properties.filters as Record<string, unknown>;
+    expect(filters.required).toStrictEqual(['region']);
+    expect(
+      (filters.properties as Record<string, unknown>).region,
+    ).toStrictEqual({
+      type: 'string',
+    });
+    const tags = (filters.properties as Record<string, unknown>).tags as Record<
+      string,
+      unknown
+    >;
+    expect(tags.type).toBe('array');
+    expect((tags.items as Record<string, unknown>).type).toBe('string');
+
+    const mode = params.properties.mode as Record<string, unknown>;
+    const branches = mode.anyOf as Array<Record<string, unknown>>;
+    expect(branches[0].type).toBe('string');
+    expect(branches[1].type).toBe('null');
   });
 });

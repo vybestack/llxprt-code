@@ -184,7 +184,6 @@ function normalizeSchemaValue(value: unknown): unknown {
 /**
  * Normalize a passthrough keyword value by its known JSON-schema position.
  * - anyOf/oneOf/allOf hold arrays of sub-schemas → each element normalized.
- * - anyOf/oneOf/allOf hold arrays of sub-schemas → each element normalized.
  * - not/if/then/else hold a single sub-schema → normalized.
  * - additionalProperties holds a sub-schema or a boolean → normalized.
  * - every other keyword (const, default, examples, format, pattern, $ref,
@@ -236,11 +235,15 @@ function applyHandledNormalizations(
     result.properties = convertProperties(
       node.properties as Record<string, unknown>,
     );
-    if (Array.isArray(node.required)) {
-      result.required = node.required.map((r) => String(r));
-    } else if (result.type === 'object') {
-      result.required = [];
-    }
+  }
+
+  // `required` is handled independently of `properties` so that a nested
+  // object schema declaring `required` without an inline `properties` block
+  // (e.g. one referencing $defs) does not silently drop its required fields.
+  if (Array.isArray(node.required)) {
+    result.required = node.required.map((r) => String(r));
+  } else if (result.type === 'object' && result.properties !== undefined) {
+    result.required = [];
   }
 
   if (node.minimum !== undefined) {
