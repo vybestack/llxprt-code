@@ -36,17 +36,10 @@ import {
   buildSessionModes,
   buildUsageUpdate,
   describeSessionUpdateForLog,
-  mapDoneReasonToStopReason,
-  extractThoughtText,
-  translateErrorEvent,
-  translateIdleTimeout,
 } from './zed-helpers.js';
 import { ZedPathResolver } from './zed-path-resolver.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
-  emitToolCallStart,
-  emitToolStatus,
-  emitToolResult,
   requestToolConfirmation,
   type PermissionRoundTripResult,
 } from './zed-tool-handler.js';
@@ -82,7 +75,12 @@ import {
   buildZedSession,
   enableZedSessionRecording,
 } from './zed-agent-setup.js';
+import { handleZedAgentEvent } from './zed-agent-event-handler.js';
 import { buildZedPlanUpdate } from './zed-plan-update.js';
+import {
+  SessionTitleTracker,
+  buildSessionInfoUpdate,
+} from './zed-session-info.js';
 export { parseZedAuthMethodId } from './zed-helpers.js';
 export { createSessionScopedConfig } from './zed-session-config.js';
 export async function runZedIntegration(
@@ -388,7 +386,13 @@ export class Session {
   private promptGeneration = 0;
   private readonly todoListener: (event: TodoUpdateEvent) => void;
   private readonly stopConfigUpdates: () => void;
-  private updatedAt = new Date().toISOString();
+  private readonly sessionInfo = new SessionTitleTracker();
+  /**
+   * Stable timestamp captured once at construction so getLifecycleInfo returns
+   * a consistent updatedAt before the first turn completes (issue #1611
+   * finding 4) rather than generating a new value per getter call.
+   */
+  private readonly createdAt = new Date().toISOString();
   constructor(
     private readonly id: string,
     private readonly agent: Agent,
@@ -399,6 +403,12 @@ export class Session {
     this.pathResolver = new ZedPathResolver(this.config, (msg) =>
       this.debug(msg),
     );
+    const recordedTitle = config
+      .getSessionRecordingService()
+      ?.getSessionMetadataTitle();
+    if (recordedTitle !== undefined) {
+      this.sessionInfo.hydrateFromMetadata(recordedTitle);
+    }
     this.todoListener = (event: TodoUpdateEvent) => {
       const eventAgentId = event.agentId ?? DEFAULT_AGENT_ID;
       if (event.sessionId === this.id && eventAgentId === DEFAULT_AGENT_ID) {
@@ -434,10 +444,13 @@ export class Session {
   }
   getConfigOptions = () => buildZedConfigOptions(this.agent, this.config);
   getLifecycleInfo(): LifecycleSession {
+    const title = this.sessionInfo.getTitle();
     return {
       sessionId: this.id,
       cwd: this.config.getProjectRoot(),
-      updatedAt: this.updatedAt,
+      updatedAt: this.sessionInfo.getUpdatedAt() ?? this.createdAt,
+      createdAt: this.createdAt,
+      ...(title === undefined ? {} : { title }),
     };
   }
   async cancelPendingPrompt(): Promise<void> {
@@ -484,83 +497,169 @@ export class Session {
     }
   }
   async prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {
-    this.updatedAt = new Date().toISOString();
     await this.cancelPendingPrompt();
-    const commandResult = await tryHandleZedCommand(
-      params.prompt,
-      this.agent,
-      (update) => this.sendUpdateStrict(update),
-    );
-    if (commandResult !== null) return commandResult.response;
-    const pendingSend = new AbortController();
-    this.pendingPrompt = pendingSend;
-    this.promptGeneration += 1;
-    const promptGeneration = this.promptGeneration;
-    const promptId = Math.random().toString(16).slice(2);
+    // Finding 1: consume title eligibility SYNCHRONOUSLY at acceptance time,
+    // before any async work, so overlapping prompts cannot both claim the title.
+    const eligibility = this.sessionInfo.consumeTitleEligibility(params.prompt);
+    // Issue #1611: record session_metadata immediately at acceptance so the
+    // title persists even for slash/failure sessions that never emit a content
+    // event. session_metadata materializes the recording file.
+    this.recordMetadataTitle(eligibility.title);
     try {
-      let parts: ContractPart[];
-      try {
-        parts = await this.pathResolver.resolvePrompt(
-          params.prompt,
-          pendingSend.signal,
-        );
-      } catch (error) {
-        if (
-          pendingSend.signal.aborted ||
-          (error instanceof Error && error.name === 'AbortError')
-        ) {
-          return { stopReason: 'cancelled' };
-        }
-        throw error;
-      }
-      const emojiMode = (this.config.getEphemeralSetting('emojifilter') ??
-        'auto') as FilterConfiguration['mode'];
-      const batcher = new StreamBatcher(
-        new EmojiFilter({ mode: emojiMode }),
-        (u) => this.sendUpdate(u),
+      const commandResult = await tryHandleZedCommand(
+        params.prompt,
+        this.agent,
+        (update) => this.sendUpdateStrict(update),
       );
-      let terminalStopReason: acp.StopReason | null = null;
+      if (commandResult !== null) {
+        return commandResult.response;
+      }
+      const pendingSend = new AbortController();
+      this.pendingPrompt = pendingSend;
+      this.promptGeneration += 1;
+      const promptGeneration = this.promptGeneration;
+      const promptId = Math.random().toString(16).slice(2);
       try {
-        terminalStopReason = await this.consumeAgentStream(
-          parts,
+        return await this.runPromptTurn(
+          params,
           pendingSend,
           promptId,
           promptGeneration,
-          batcher,
         );
-      } catch (error) {
-        if (getErrorStatus(error) === 429) {
-          throw new acp.RequestError(
-            429,
-            'Rate limit exceeded. Try again later.',
-          );
-        }
-        if (
-          pendingSend.signal.aborted ||
-          (error instanceof Error && error.name === 'AbortError')
-        ) {
-          return { stopReason: 'cancelled' };
-        }
-        throw error;
       } finally {
-        try {
-          await batcher.flush();
-        } finally {
-          batcher.dispose();
+        if (this.pendingPrompt === pendingSend) {
+          this.pendingPrompt = null;
         }
       }
-      if (pendingSend.signal.aborted && terminalStopReason !== 'cancelled') {
+    } finally {
+      // Finding 3: exact-once metadata finally shared by command and prompt
+      // paths (success, cancel, or error). Best-effort transport — sendUpdate
+      // swallows transient errors so metadata never replaces the turn outcome.
+      await this.emitTurnMetadata(eligibility);
+    }
+  }
+
+  private async runPromptTurn(
+    params: acp.PromptRequest,
+    pendingSend: AbortController,
+    promptId: string,
+    promptGeneration: number,
+  ): Promise<acp.PromptResponse> {
+    let parts: ContractPart[];
+    try {
+      parts = await this.pathResolver.resolvePrompt(
+        params.prompt,
+        pendingSend.signal,
+      );
+    } catch (error) {
+      if (
+        pendingSend.signal.aborted ||
+        (error instanceof Error && error.name === 'AbortError')
+      ) {
         return { stopReason: 'cancelled' };
       }
-      if (terminalStopReason !== null) {
-        return { stopReason: terminalStopReason };
+      throw error;
+    }
+    const emojiMode = (this.config.getEphemeralSetting('emojifilter') ??
+      'auto') as FilterConfiguration['mode'];
+    const batcher = new StreamBatcher(
+      new EmojiFilter({ mode: emojiMode }),
+      (u) => this.sendUpdate(u),
+    );
+    let terminalStopReason: acp.StopReason | null = null;
+    try {
+      terminalStopReason = await this.consumeAgentStream(
+        parts,
+        pendingSend,
+        promptId,
+        promptGeneration,
+        batcher,
+      );
+    } catch (error) {
+      if (getErrorStatus(error) === 429) {
+        throw new acp.RequestError(
+          429,
+          'Rate limit exceeded. Try again later.',
+        );
       }
-      return { stopReason: 'end_turn' };
+      if (
+        pendingSend.signal.aborted ||
+        (error instanceof Error && error.name === 'AbortError')
+      ) {
+        return { stopReason: 'cancelled' };
+      }
+      throw error;
     } finally {
-      if (this.pendingPrompt === pendingSend) {
-        this.pendingPrompt = null;
+      try {
+        await batcher.flush();
+      } finally {
+        batcher.dispose();
       }
     }
+    if (pendingSend.signal.aborted && terminalStopReason !== 'cancelled') {
+      return { stopReason: 'cancelled' };
+    }
+    if (terminalStopReason !== null) {
+      return { stopReason: terminalStopReason };
+    }
+    return { stopReason: 'end_turn' };
+  }
+
+  private async emitTurnMetadata(eligibility: {
+    readonly wonTitle: boolean;
+    readonly title: string | undefined;
+  }): Promise<void> {
+    const { updates } = this.sessionInfo.recordTurn(new Date().toISOString());
+    const updatedAt = updates[0]?.updatedAt ?? undefined;
+    if (eligibility.wonTitle && eligibility.title !== undefined) {
+      await this.sendTitleUpdate(
+        buildSessionInfoUpdate({ title: eligibility.title, updatedAt }),
+        eligibility.title,
+      );
+      return;
+    }
+    for (const update of updates) {
+      const title = update.title;
+      if (typeof title === 'string') {
+        await this.sendTitleUpdate(update, title);
+      } else {
+        await this.sendUpdate(update);
+      }
+    }
+  }
+
+  /**
+   * Sends a title-bearing session_info_update, retrying on transport failure
+   * (issue #1611). Uses sendUpdateStrict (not the swallowing sendUpdate) so a
+   * transport error is detected; the title is then marked pending so the next
+   * turn's metadata emission re-sends it.
+   */
+  private async sendTitleUpdate(
+    update: acp.SessionInfoUpdate & { sessionUpdate: 'session_info_update' },
+    title: string,
+  ): Promise<void> {
+    try {
+      await this.sendUpdateStrict(update);
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `sendTitleUpdate ERROR (will retry next turn): ${error instanceof Error ? error.message : String(error)}`,
+      );
+      this.sessionInfo.markPendingTitle(title);
+    }
+  }
+
+  /**
+   * Records the session_metadata title to the durable recording service.
+   * Called at prompt-acceptance time (issue #1611) so the title persists
+   * immediately, materializing the recording for slash/failure sessions.
+   */
+  private recordMetadataTitle(title: string | undefined): void {
+    const recording = this.config.getSessionRecordingService();
+    if (recording?.isActive() !== true) {
+      return;
+    }
+    recording.recordSessionMetadata(title ?? null);
   }
   private async consumeAgentStream(
     parts: ContractPart[],
@@ -582,96 +681,21 @@ export class Session {
         }
         continue;
       }
-      const stopReason = await this.handleAgentEvent(
-        event,
-        batcher,
-        promptGeneration,
-        pendingSend,
-      );
+      const stopReason = await handleZedAgentEvent(event, batcher, {
+        sendUpdate: (update) => this.sendUpdate(update),
+        sendUsage: (usage) => this.sendUsageUpdate(usage),
+        handleConfirmation: (confirmation) =>
+          this.handleToolConfirmation(
+            confirmation,
+            promptGeneration,
+            pendingSend,
+          ),
+      });
       if (stopReason !== null) {
         terminalStopReason = stopReason;
       }
     }
     return terminalStopReason;
-  }
-  private async handleAgentEvent(
-    event: AgentEvent,
-    batcher: StreamBatcher,
-    promptGeneration: number,
-    pendingSend: AbortController,
-  ): Promise<acp.StopReason | null> {
-    switch (event.type) {
-      case 'text':
-        batcher.append(event.text, false);
-        return null;
-      case 'thinking': {
-        const thoughtText = extractThoughtText(event.thought);
-        if (thoughtText.length > 0) {
-          batcher.append(thoughtText, true);
-        }
-        return null;
-      }
-      case 'tool-call':
-        await batcher.flush();
-        await emitToolCallStart(event.call, (u) => this.sendUpdate(u));
-        return null;
-      case 'tool-status':
-        await batcher.flush();
-        await emitToolStatus(event.update, (u) => this.sendUpdate(u));
-        return null;
-      case 'tool-result':
-        await batcher.flush();
-        await emitToolResult(event.result, (u) => this.sendUpdate(u));
-        return null;
-      case 'tool-confirmation':
-        await batcher.flush();
-        await this.handleToolConfirmation(event, promptGeneration, pendingSend);
-        return null;
-      case 'done':
-        await batcher.flush();
-        return mapDoneReasonToStopReason(event.reason);
-      case 'error':
-        await batcher.flush();
-        throw translateErrorEvent(event);
-      case 'idle-timeout':
-        await batcher.flush();
-        throw translateIdleTimeout(event);
-      case 'invalid-stream':
-        await batcher.flush();
-        throw new Error(
-          'Agent produced an invalid stream that could not be recovered.',
-        );
-      case 'hook-blocked':
-        await batcher.flush();
-        throw new Error(
-          event.info.systemMessage ?? 'Agent stopped by a hook blocker.',
-        );
-      case 'loop-detected':
-        await batcher.flush();
-        return 'end_turn';
-      case 'notice':
-        await batcher.flush();
-        await this.sendUpdate({
-          sessionUpdate: 'agent_message_chunk',
-          content: { type: 'text', text: event.message },
-        });
-        return null;
-      case 'usage': {
-        await batcher.flush();
-        await this.sendUsageUpdate(event.usage);
-        return null;
-      }
-      case 'context-warning':
-      case 'compression':
-      case 'model-info':
-      case 'retry':
-      case 'citation':
-        return null;
-      default: {
-        const exhaustive: never = event;
-        throw new Error(`Unhandled agent event: ${String(exhaustive)}`);
-      }
-    }
   }
   private async sendUsageUpdate(
     usage: Extract<AgentEvent, { type: 'usage' }>['usage'],
@@ -784,6 +808,9 @@ export class Session {
         throw wrapReplayFailure(this.id, error);
       }
     }
+    // Finding 2: hydrate title from restored history so later prompts never
+    // retitle a restored session. Idempotent — a no-op if already titled.
+    this.sessionInfo.hydrateFromHistory(items);
   }
   async replayLiveHistory() {
     await this.streamHistory(

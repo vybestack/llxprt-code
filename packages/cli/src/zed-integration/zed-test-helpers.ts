@@ -204,7 +204,27 @@ export class RecordingConnection {
     return this.messages
       .filter((m) => m.kind === 'sessionUpdate')
       .map((m) => (m as { update: acp.SessionUpdate }).update)
-      .filter((update) => update.sessionUpdate !== 'available_commands_update');
+      .filter(
+        (update) =>
+          update.sessionUpdate !== 'available_commands_update' &&
+          update.sessionUpdate !== 'session_info_update',
+      );
+  }
+
+  sessionInfoUpdates(): Array<
+    Extract<acp.SessionUpdate, { sessionUpdate: 'session_info_update' }>
+  > {
+    return this.messages
+      .filter((m) => m.kind === 'sessionUpdate')
+      .map((m) => (m as { update: acp.SessionUpdate }).update)
+      .filter(
+        (
+          update,
+        ): update is Extract<
+          acp.SessionUpdate,
+          { sessionUpdate: 'session_info_update' }
+        > => update.sessionUpdate === 'session_info_update',
+      );
   }
 
   availableCommandUpdates(): acp.AvailableCommandsUpdate[] {
@@ -232,6 +252,7 @@ export function buildMinimalConfig(): Config {
     getApprovalMode: () => 'default' as ApprovalMode,
     setApprovalMode: () => {},
     getTargetDir: () => '/project',
+    getProjectRoot: () => '/project',
     getFileService: () => ({ shouldIgnoreFile: () => false }),
     getFileFilteringOptions: () => ({
       respectGitIgnore: true,
@@ -244,6 +265,7 @@ export function buildMinimalConfig(): Config {
     // window via getTokenLimitForConfiguredContext(model, config).
     getModel: () => 'test-model',
     getContentGeneratorConfig: () => undefined,
+    getSessionRecordingService: () => undefined,
   } as unknown as Config;
 }
 

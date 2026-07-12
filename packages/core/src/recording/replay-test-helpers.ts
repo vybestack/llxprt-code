@@ -200,6 +200,20 @@ export function _directoriesChangedLine(
 }
 
 /**
+ * Build a valid JSONL line for a session_metadata event (issue #1611).
+ * The title is tri-state: string, null, or undefined (omitted from payload).
+ */
+export function sessionMetadataLine(seq: number, title: string | null): string {
+  return JSON.stringify({
+    v: 1,
+    seq,
+    ts: new Date().toISOString(),
+    type: 'session_metadata',
+    payload: { title },
+  });
+}
+
+/**
  * Write raw JSONL lines to a file.
  */
 export async function writeJsonlFile(

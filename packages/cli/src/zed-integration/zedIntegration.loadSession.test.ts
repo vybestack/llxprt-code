@@ -163,6 +163,7 @@ function buildBaseConfig(): Config {
     getTargetDir: () => '/project',
     getProjectRoot: () => '/project',
     getMaxSessionTurns: () => 50,
+    getSessionRecordingService: () => undefined,
     // The re-attach + corrupt-vs-missing probes derive the chats dir from
     // storage.getProjectChatsDir(); point it at a dir that never exists so the
     // disk-resume probe's REAL readdir hits ENOENT (falling back to the plain

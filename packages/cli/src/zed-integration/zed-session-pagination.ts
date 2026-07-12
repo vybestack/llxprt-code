@@ -11,12 +11,25 @@ export interface LifecycleSession {
   readonly cwd: string;
   readonly updatedAt: string;
   readonly title?: string;
+  /**
+   * Immutable creation timestamp used for stable ordering (issue #1611).
+   * Falls back to updatedAt for legacy sessions without a persisted createdAt.
+   */
+  readonly createdAt?: string;
 }
 
+/**
+ * Self-contained, process-independent snapshot cursor (issue #1611).
+ *
+ * The cursor encodes the full (createdAt, sessionId) tuple of the last item on
+ * the previous page so the next page can be computed from the cursor alone,
+ * without any shared in-process state. The `v` field distinguishes v1 (legacy
+ * updatedAt-based, unstable) from v2 (createdAt-based, immutable).
+ */
 interface CursorPayload {
-  readonly version: 1;
+  readonly v: 2;
   readonly cwd: string | null;
-  readonly updatedAt: string;
+  readonly createdAt: string;
   readonly sessionId: string;
 }
 
@@ -60,11 +73,21 @@ export function paginateSessions(
   return { sessions: page, nextCursor: encodeCursor(last, request.cwd) };
 }
 
+/**
+ * Orders sessions by createdAt DESC then sessionId DESC.
+ *
+ * createdAt is the immutable session_start timestamp — it never changes when
+ * a session is updated (issue #1611). Falls back to updatedAt when createdAt
+ * is absent (legacy sessions recorded before this change) so they still sort
+ * deterministically. Using updatedAt as a fallback is acceptable because legacy
+ * sessions are static (no new writes), so their updatedAt is effectively
+ * immutable too.
+ */
 function compareSessions(a: LifecycleSession, b: LifecycleSession): number {
-  return compareByUpdatedAtAndId(
-    a.updatedAt,
+  return compareByCreatedAtAndId(
+    a.createdAt ?? a.updatedAt,
     a.sessionId,
-    b.updatedAt,
+    b.createdAt ?? b.updatedAt,
     b.sessionId,
   );
 }
@@ -73,21 +96,21 @@ function compareWithCursor(
   session: LifecycleSession,
   cursor: CursorPayload,
 ): number {
-  return compareByUpdatedAtAndId(
-    session.updatedAt,
+  return compareByCreatedAtAndId(
+    session.createdAt ?? session.updatedAt,
     session.sessionId,
-    cursor.updatedAt,
+    cursor.createdAt,
     cursor.sessionId,
   );
 }
 
-function compareByUpdatedAtAndId(
-  aUpdatedAt: string,
+function compareByCreatedAtAndId(
+  aCreatedAt: string,
   aId: string,
-  bUpdatedAt: string,
+  bCreatedAt: string,
   bId: string,
 ): number {
-  const timestamp = compareDescending(aUpdatedAt, bUpdatedAt);
+  const timestamp = compareDescending(aCreatedAt, bCreatedAt);
   return timestamp === 0 ? compareDescending(aId, bId) : timestamp;
 }
 
@@ -100,9 +123,9 @@ function compareDescending(a: string, b: string): number {
 
 function encodeCursor(session: LifecycleSession, cwd: string | null): string {
   const payload: CursorPayload = {
-    version: 1,
+    v: 2,
     cwd,
-    updatedAt: session.updatedAt,
+    createdAt: session.createdAt ?? session.updatedAt,
     sessionId: session.sessionId,
   };
   return Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -138,10 +161,22 @@ function isCursorPayload(value: unknown): value is CursorPayload {
   }
   const record = value as Record<string, unknown>;
   const hasValidCwd = record.cwd === null || typeof record.cwd === 'string';
+  const hasValidSessionId =
+    typeof record.sessionId === 'string' && record.sessionId.length > 0;
   return (
-    record.version === 1 &&
+    record.v === 2 &&
     hasValidCwd &&
-    typeof record.updatedAt === 'string' &&
-    typeof record.sessionId === 'string'
+    isCanonicalTimestamp(record.createdAt) &&
+    hasValidSessionId
+  );
+}
+
+function isCanonicalTimestamp(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length === 0) {
+    return false;
+  }
+  const timestamp = Date.parse(value);
+  return (
+    Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value
   );
 }

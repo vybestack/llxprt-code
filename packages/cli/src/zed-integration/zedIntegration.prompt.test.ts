@@ -423,6 +423,7 @@ describe('Zed Session.prompt (Agent API) - tool permission round-trip', () => {
       'sessionUpdate',
       'requestPermission',
       'sessionUpdate',
+      'sessionUpdate',
     ]);
     expect(confirmations).toStrictEqual([
       { confirmationId, decision: ToolConfirmationOutcome.ProceedOnce },
@@ -736,5 +737,119 @@ describe('Zed Session (Agent API) - lifecycle', () => {
     });
     await new Promise((r) => setImmediate(r));
     expect(connection.sessionUpdateKinds()).not.toContain('plan');
+  });
+});
+
+describe('Zed Session.prompt (Agent API) - session_info_update (issue #1611)', () => {
+  afterEach(disposeCreatedSessions);
+
+  it('emits a session_info_update with a title derived from the first prompt', async () => {
+    const { agent } = buildFakeAgent([{ type: 'done', reason: 'stop' }]);
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    await session.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'text', text: 'Investigate session lifecycle' }],
+    });
+
+    const infoUpdates = connection.sessionInfoUpdates();
+    expect(infoUpdates).toHaveLength(1);
+    expect(infoUpdates[0].title).toBe('Investigate session lifecycle');
+    expect(infoUpdates[0].updatedAt).toStrictEqual(expect.any(String));
+  });
+
+  it('emits updatedAt on a subsequent prompt without regenerating the title', async () => {
+    const { agent } = buildFakeAgent([{ type: 'done', reason: 'stop' }]);
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    await session.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'text', text: 'First prompt here' }],
+    });
+    connection.messages.length = 0;
+
+    await session.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'text', text: 'Second prompt here' }],
+    });
+
+    const infoUpdates = connection.sessionInfoUpdates();
+    expect(infoUpdates).toHaveLength(1);
+    expect(infoUpdates[0].updatedAt).toStrictEqual(expect.any(String));
+    expect(infoUpdates[0].title).toBeUndefined();
+  });
+
+  it('emits updatedAt after a cancelled turn', async () => {
+    const { agent } = buildFakeAgent([{ type: 'done', reason: 'aborted' }]);
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    const response = await session.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'text', text: 'A prompt that gets cancelled' }],
+    });
+
+    expect(response.stopReason).toBe('cancelled');
+    const infoUpdates = connection.sessionInfoUpdates();
+    expect(infoUpdates).toHaveLength(1);
+    expect(infoUpdates[0].updatedAt).toStrictEqual(expect.any(String));
+  });
+
+  it('emits updatedAt after a failed turn (error event)', async () => {
+    const { agent } = buildFakeAgent([
+      { type: 'error', error: { message: 'kaboom' } },
+    ]);
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    await expect(
+      session.prompt({
+        sessionId: 'test-session-id',
+        prompt: [{ type: 'text', text: 'A prompt that errors' }],
+      }),
+    ).rejects.toThrow(/kaboom/);
+
+    const infoUpdates = connection.sessionInfoUpdates();
+    expect(infoUpdates).toHaveLength(1);
+    expect(infoUpdates[0].updatedAt).toStrictEqual(expect.any(String));
+  });
+
+  it('does not emit a title when the first prompt has no text content', async () => {
+    const { agent } = buildFakeAgent([{ type: 'done', reason: 'stop' }]);
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    await session.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'resource_link', uri: 'file:///p', name: 'p.ts' }],
+    });
+
+    const infoUpdates = connection.sessionInfoUpdates();
+    expect(infoUpdates).toHaveLength(1);
+    expect(infoUpdates[0].updatedAt).toStrictEqual(expect.any(String));
+    expect(infoUpdates[0].title).toBeUndefined();
+  });
+
+  it('exposes the derived title and updatedAt via getLifecycleInfo for the session listing', async () => {
+    const { agent } = buildFakeAgent([{ type: 'done', reason: 'stop' }]);
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    await session.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'text', text: 'Listing title here' }],
+    });
+
+    const info = session.getLifecycleInfo();
+    expect(info.title).toBe('Listing title here');
+    expect(info.updatedAt).toStrictEqual(expect.any(String));
   });
 });

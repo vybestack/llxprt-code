@@ -51,6 +51,11 @@ export async function listRecordedSessions(
     }
     return {
       ...live,
+      // createdAt is immutable — durable recording wins (live sessions may not
+      // have it until the session_start is persisted). Issue #1611.
+      ...(durable.createdAt !== undefined
+        ? { createdAt: durable.createdAt }
+        : {}),
       updatedAt:
         durable.updatedAt > live.updatedAt ? durable.updatedAt : live.updatedAt,
       ...(durable.title === undefined ? {} : { title: durable.title }),
@@ -58,16 +63,33 @@ export async function listRecordedSessions(
   }
 }
 
+/**
+ * Resolves the tri-state title for a durable session.
+ *
+ * Issue #1611: a persisted `session_metadata` event is the source of truth.
+ * For legacy files without one (title === undefined), fall back to the first
+ * human message (which returns null for no-human-text sessions, omitted from
+ * the output). A null metadata title (explicit untitled) is preserved.
+ */
 async function toLifecycleSession(
   summary: SessionSummary,
   fallbackCwd: string,
 ): Promise<LifecycleSession> {
-  const title = await SessionDiscovery.readFirstUserMessage(summary.filePath);
+  const metadataTitle = await SessionDiscovery.readSessionMetadataTitle(
+    summary.filePath,
+  );
+  const resolvedTitle =
+    metadataTitle === undefined
+      ? await SessionDiscovery.readFirstUserMessage(summary.filePath)
+      : metadataTitle;
   return {
     sessionId: summary.sessionId,
     cwd: summary.cwd ?? fallbackCwd,
     updatedAt: summary.lastModified.toISOString(),
-    ...(title === null ? {} : { title }),
+    ...(summary.createdAt !== undefined
+      ? { createdAt: summary.createdAt }
+      : {}),
+    ...(typeof resolvedTitle === 'string' ? { title: resolvedTitle } : {}),
   };
 }
 

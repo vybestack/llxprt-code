@@ -288,6 +288,32 @@ export class SessionDiscovery {
       return null;
     }
   }
+
+  /**
+   * Read the tri-state title from the last valid `session_metadata` event in a
+   * session file (issue #1611). Returns:
+   * - `undefined` when no `session_metadata` event exists (legacy fallback).
+   * - `null` when the event explicitly asserts untitled.
+   * - `string` when the event carries a concrete title.
+   */
+  static async readSessionMetadataTitle(
+    filePath: string,
+  ): Promise<string | null | undefined> {
+    try {
+      const fileContent = await fs.readFile(filePath, 'utf-8');
+      const lines = fileContent.split('\n');
+      let title: string | null | undefined;
+      for (const line of lines) {
+        const result = extractSessionMetadataTitle(line);
+        if (result !== undefined) {
+          title = result;
+        }
+      }
+      return title;
+    } catch {
+      return undefined;
+    }
+  }
 }
 
 async function readSessionSummary(
@@ -315,6 +341,9 @@ async function readSessionSummary(
     provider: header.provider,
     model: header.model,
     ...(typeof header.cwd === 'string' ? { cwd: header.cwd } : {}),
+    ...(typeof header.startTime === 'string'
+      ? { createdAt: header.startTime }
+      : {}),
   };
 }
 
@@ -371,4 +400,42 @@ function extractUserMessageText(line: string): string | null {
     .join('');
 
   return text || null;
+}
+
+/**
+ * Extract the title from a `session_metadata` JSONL line.
+ * Returns:
+ * - `undefined` when the line is not a valid `session_metadata` event (so
+ *   callers can continue scanning).
+ * - `null` when title is explicitly null (untitled).
+ * - `string` when a concrete title is present.
+ */
+function extractSessionMetadataTitle(line: string): string | null | undefined {
+  if (!line.trim()) {
+    return undefined;
+  }
+  let event: Record<string, unknown>;
+  try {
+    event = JSON.parse(line) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+  if (event.type !== 'session_metadata') {
+    return undefined;
+  }
+  const payload = event.payload as Record<string, unknown> | undefined;
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+  if (!('title' in payload)) {
+    return undefined;
+  }
+  const title = payload.title;
+  if (title === null) {
+    return null;
+  }
+  if (typeof title === 'string') {
+    return title;
+  }
+  return undefined;
 }
