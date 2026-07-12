@@ -13,6 +13,10 @@ import { SecureStore, SecureStoreError } from './secure-store.js';
 
 const MACHINE_SECRET = Buffer.alloc(32, 0x21);
 
+function isFileSystemError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
+}
+
 describe('SecureStore encrypted-file fallback', () => {
   let tempDir: string;
 
@@ -92,7 +96,10 @@ describe('SecureStore encrypted-file fallback', () => {
     await store.set('delete-me', 'delete-value');
 
     expect(await store.delete('delete-me')).toBe(true);
-    await expect(fs.access(filePath)).rejects.toThrow('ENOENT');
+    const accessError = await fs
+      .access(filePath)
+      .catch((error: unknown) => error);
+    expect(isFileSystemError(accessError) && accessError.code).toBe('ENOENT');
     expect(await store.get('delete-me')).toBeNull();
   });
 

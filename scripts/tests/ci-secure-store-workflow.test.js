@@ -102,6 +102,7 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
     expect(secureStoreJob.name).toBe(
       'SecureStore Backend (${{ matrix.os }}, ${{ matrix.secure-store-mode }})',
     );
+    expect(secureStoreJob['timeout-minutes']).toBe(15);
   });
 
   it('keyring rows select the native-keyring vitest config on both Ubuntu and macOS', () => {
@@ -119,6 +120,13 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
     for (const row of keyringRows) {
       expect(row['test-config']).toBe('vitest.config.native-keyring.ts');
     }
+
+    const nativeConfig = readRootFile(
+      'packages/storage/vitest.config.native-keyring.ts',
+    );
+    expect(nativeConfig).toContain(
+      "'src/secure-store/secure-store.native-keyring.test.ts'",
+    );
   });
 
   it('runs the focused encrypted fallback and ProviderKeyStorage persistence suite on Ubuntu', () => {

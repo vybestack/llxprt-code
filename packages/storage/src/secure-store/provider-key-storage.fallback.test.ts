@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { isValidEnvelope } from './envelope.js';
 import { ProviderKeyStorage } from './provider-key-storage.js';
 import { SecureStore } from './secure-store.js';
 
@@ -37,8 +38,17 @@ describe('ProviderKeyStorage encrypted fallback', () => {
     return new ProviderKeyStorage({ secureStore });
   }
 
-  it('persists provider keys across storage instances', async () => {
+  it('persists provider keys across storage instances in an encrypted v2 envelope', async () => {
     await createStorage().saveKey('persisted-key', 'sk-persisted-value');
+
+    const content = await fs.readFile(
+      path.join(tempDir, 'persisted-key.enc'),
+      'utf8',
+    );
+    const envelope: unknown = JSON.parse(content);
+    expect(isValidEnvelope(envelope)).toBe(true);
+    expect(envelope).toMatchObject({ v: 2 });
+    expect(content).not.toContain('sk-persisted-value');
 
     const reader = createStorage();
     expect(await reader.getKey('persisted-key')).toBe('sk-persisted-value');

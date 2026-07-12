@@ -764,6 +764,7 @@ jobs:
   secure_store_backend:
     name: 'SecureStore Backend (${{ matrix.os }}, ${{ matrix.secure-store-mode }})'
     runs-on: '${{ matrix.os }}'
+    timeout-minutes: 15
     needs:
       - 'lint'
       - 'doc_change_filter'
