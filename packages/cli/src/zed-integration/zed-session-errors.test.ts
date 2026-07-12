@@ -199,6 +199,15 @@ describe('classifyResumeFailure (issue #1604 FINDING B: corrupt vs missing)', ()
     expect(error.message).toContain('disk exploded');
   });
 
+  it('maps a non-array probe result to internalError instead of leaking a TypeError', async () => {
+    const error = await classifyResumeFailure(
+      CORRUPT_ID,
+      resumeError('No sessions found for this project'),
+      async () => undefined as unknown as readonly string[],
+    );
+    expect(error.code).toBe(-32603);
+    expect(error.message).toContain('non-array');
+  });
   it('does NOT probe (and returns internalError) for a non-not-found reason even if a file would match', async () => {
     let probed = false;
     const error = await classifyResumeFailure(

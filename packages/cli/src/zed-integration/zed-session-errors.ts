@@ -175,6 +175,9 @@ async function probeMatchingSessionFile(
   let entries: readonly string[];
   try {
     entries = await probe();
+    if (!Array.isArray(entries)) {
+      throw new TypeError('session-file probe returned a non-array result');
+    }
   } catch (error) {
     const message = errorMessage(error);
     if (isEnoent(error)) {

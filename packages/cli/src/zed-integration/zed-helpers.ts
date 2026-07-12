@@ -298,9 +298,12 @@ export function describeSessionUpdateForLog(update: acp.SessionUpdate): string {
  * (issue #1607): `used` is the total tokens now in context (the response's
  * cumulative totalTokenCount) and `size` is the configured context-window
  * limit, so the client can render consumption against the real window rather
- * than against itself. Returns null when the usage metadata carries no usable
- * counts (nothing meaningful to report). `size` is clamped up to `used` so a
- * mid-flight limit change can never report used > size on the wire.
+ * than against itself. When a provider omits cumulative `totalTokenCount`, the
+ * candidate count is retained as a lower-bound fallback rather than suppressing
+ * usage entirely; it represents only this completion, so it may under-report
+ * context consumption but never overstates it. Returns null when the metadata
+ * carries no usable count. `size` is clamped up to `used` so a mid-flight limit
+ * change can never report used > size on the wire.
  */
 export function buildUsageUpdate(
   usage: {
