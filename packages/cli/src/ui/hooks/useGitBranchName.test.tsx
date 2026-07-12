@@ -170,7 +170,7 @@ describe('useGitBranchName', () => {
         { mtimeMs: 2000 } as fs.Stats,
         { mtimeMs: 1000 } as fs.Stats,
       );
-      vi.advanceTimersByTime(FETCH_DEBOUNCE_MS + 100);
+      vi.advanceTimersByTime(FETCH_DEBOUNCE_MS);
       rerender();
     });
 
@@ -247,7 +247,7 @@ describe('useGitBranchName', () => {
         { mtimeMs: 1000, size: 42 } as fs.Stats,
         { mtimeMs: 1000, size: 42 } as fs.Stats,
       );
-      vi.advanceTimersByTime(FETCH_DEBOUNCE_MS + 100);
+      vi.advanceTimersByTime(FETCH_DEBOUNCE_MS);
       rerender();
     });
 
@@ -276,7 +276,7 @@ describe('useGitBranchName', () => {
         { mtimeMs: 1000, size: 99 } as fs.Stats,
         { mtimeMs: 1000, size: 42 } as fs.Stats,
       );
-      vi.advanceTimersByTime(FETCH_DEBOUNCE_MS + 100);
+      vi.advanceTimersByTime(FETCH_DEBOUNCE_MS);
       rerender();
     });
 
@@ -304,7 +304,7 @@ describe('useGitBranchName', () => {
         { mtimeMs: 2000, size: 42 } as fs.Stats,
         { mtimeMs: 1000, size: 42 } as fs.Stats,
       );
-      vi.advanceTimersByTime(FETCH_DEBOUNCE_MS + 100);
+      vi.advanceTimersByTime(FETCH_DEBOUNCE_MS);
       rerender();
     });
 
@@ -396,12 +396,12 @@ describe('useGitBranchName', () => {
         { mtimeMs: 1000, size: 50 } as fs.Stats,
       );
       // Advance fake timers so the debounce fires the first fetch
-      vi.advanceTimersByTime(FETCH_DEBOUNCE_MS + 100);
+      vi.advanceTimersByTime(FETCH_DEBOUNCE_MS);
       capture.getCallback()(
         { mtimeMs: 3000, size: 150 } as fs.Stats,
         { mtimeMs: 2000, size: 100 } as fs.Stats,
       );
-      vi.advanceTimersByTime(FETCH_DEBOUNCE_MS + 100);
+      vi.advanceTimersByTime(FETCH_DEBOUNCE_MS);
       rerender();
     });
 
@@ -458,7 +458,7 @@ describe('useGitBranchName', () => {
 
     // Advance past debounce window
     await act(async () => {
-      vi.advanceTimersByTime(FETCH_DEBOUNCE_MS + 100);
+      vi.advanceTimersByTime(FETCH_DEBOUNCE_MS);
       rerender();
     });
 
