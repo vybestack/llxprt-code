@@ -405,7 +405,7 @@ export class Session {
   >();
   private promptGeneration = 0;
   private readonly todoListener: (event: TodoUpdateEvent) => void;
-  private readonly createdAt = new Date().toISOString();
+  private updatedAt = new Date().toISOString();
   constructor(
     private readonly id: string,
     private readonly agent: Agent,
@@ -453,7 +453,7 @@ export class Session {
     return {
       sessionId: this.id,
       cwd: this.config.getProjectRoot(),
-      updatedAt: this.createdAt,
+      updatedAt: this.updatedAt,
     };
   }
   async cancelPendingPrompt(): Promise<void> {
@@ -504,6 +504,7 @@ export class Session {
     }
   }
   async prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {
+    this.updatedAt = new Date().toISOString();
     await this.cancelPendingPrompt();
     const pendingSend = new AbortController();
     this.pendingPrompt = pendingSend;
