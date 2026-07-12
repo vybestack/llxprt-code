@@ -353,17 +353,18 @@ describe('Gemini Client (client.ts)', () => {
           client['config'],
           'getContinueOnFailedApiCall',
         ).mockReturnValue(true);
+        const toolCallEvent = {
+          type: AgentEventType.ToolCallRequest,
+          value: {
+            callId: 'call-1',
+            name: 'read_file',
+            args: { file_path: 'README.md' },
+            isClientInitiated: false,
+            prompt_id: 'prompt-id-after-tool-call',
+          },
+        };
         const mockStream = (async function* () {
-          yield {
-            type: AgentEventType.ToolCallRequest,
-            value: {
-              callId: 'call-1',
-              name: 'read_file',
-              args: { file_path: 'README.md' },
-              isClientInitiated: false,
-              prompt_id: 'prompt-id-after-tool-call',
-            },
-          };
+          yield toolCallEvent;
           yield terminalEvent;
         })();
         mockTurnRunFn.mockReturnValueOnce(mockStream);
@@ -381,7 +382,7 @@ describe('Gemini Client (client.ts)', () => {
           ),
         );
 
-        expect(events.slice(-1)).toStrictEqual([terminalEvent]);
+        expect(events.slice(-2)).toStrictEqual([toolCallEvent, terminalEvent]);
         expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
       },
     );
