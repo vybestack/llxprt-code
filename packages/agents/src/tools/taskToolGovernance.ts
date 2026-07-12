@@ -223,10 +223,6 @@ export function normalizeTaskParams(
     .map((tool) => tool.trim())
     .filter((tool): tool is string => Boolean(tool));
 
-  const outputError = validateOutputParams(params);
-  if (outputError !== null) {
-    throw new Error(outputError);
-  }
   const outputSpec = resolveOutputSpec(params);
 
   const context =
@@ -282,19 +278,16 @@ function resolveOutputSpec(
     params.expected_outputs ?? params.expectedOutputs ?? undefined;
   const legacy = params.output_spec ?? params.outputSpec ?? undefined;
 
+  const error = validateOutputParams(params);
+  if (error !== null) {
+    throw new Error(error);
+  }
+
   if (preferred !== undefined) {
-    const error = validateOutputSpec(preferred, 'expected_outputs');
-    if (error !== null) {
-      throw new Error(error);
-    }
     return preferred;
   }
 
   if (legacy !== undefined) {
-    const error = validateOutputSpec(legacy, 'output_spec');
-    if (error !== null) {
-      throw new Error(error);
-    }
     return legacy;
   }
 
