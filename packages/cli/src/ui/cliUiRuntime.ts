@@ -365,7 +365,7 @@ export interface EphemeralSettingsRuntime {
 }
 
 /**
- * MCP-discovery capability for stream-gating on MCP readiness.
+ * MCP discovery and configured-server state exposed to CLI consumers.
  */
 export interface McpDiscoveryRuntime {
   getMcpClientManager(): UiMcpClientManager | undefined;

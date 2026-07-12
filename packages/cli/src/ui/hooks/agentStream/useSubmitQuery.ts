@@ -6,8 +6,8 @@
 
 /**
  * useSubmitQuery — extracted submit query orchestration from useAgentStream.
- * Contains the submitQuery callback, the MCP discovery gate, queued-submission
- * scheduling, submitQueryRef update effect, idle-queue-drain effect, and
+ * Contains the submitQuery callback, queued-submission scheduling,
+ * submitQueryRef update effect, idle-queue-drain effect, and
  * async-task-auto-trigger effect.
  */
 
