@@ -340,11 +340,12 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   override getCurrentModel(): string {
-    // Always return from getDefaultModel - providers must not cache model state
-    // @plan PLAN-20251023-STATELESS-HARDENING.P08 @requirement REQ-SP4-002
-    const defaultModel = this.getDefaultModel();
-    this.getLogger().debug(() => `Using default model: ${defaultModel}`);
-    return defaultModel;
+    // Tool-format detection must use the active per-call model, not the
+    // provider default, so Anthropic-compatible GLM/Qwen profiles serialize
+    // tools with the expected dialect.
+    const model = this.getModel();
+    this.getLogger().debug(() => `Resolved current model: ${model}`);
+    return model;
   }
 
   override getDefaultModel(): string {
@@ -717,6 +718,7 @@ export class AnthropicProvider extends BaseProvider {
           logger: this.getStreamingLogger(),
           cacheLogger: requestContext.cacheLogger,
           rateLimitLogger,
+          includeThinkingInResponse: requestContext.includeThinkingInResponse,
         },
       );
     } else {
@@ -726,6 +728,7 @@ export class AnthropicProvider extends BaseProvider {
         unprefixToolName: (name, oauth) => this.unprefixToolName(name, oauth),
         findToolSchema: (t, name, oauth) => this.findToolSchema(t, name, oauth),
         cacheLogger: requestContext.cacheLogger,
+        includeThinkingInResponse: requestContext.includeThinkingInResponse,
       });
     }
   }

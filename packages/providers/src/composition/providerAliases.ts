@@ -33,6 +33,7 @@ export interface StaticModelEntry {
   id: string;
   name: string;
   contextWindow?: number;
+  maxOutputTokens?: number;
 }
 
 export interface ModelDefaultRule {
@@ -247,6 +248,15 @@ function sanitizeMediaSupport(
   }
 
   const rawRecord = raw as Record<string, unknown>;
+  const supportedKeys = new Set(['inlineImages', 'fileUpload', 'videoSupport']);
+  for (const key of Object.keys(rawRecord)) {
+    if (!supportedKeys.has(key)) {
+      debugLogger.warn(
+        `[ProviderAliases] Ignoring unknown mediaSupport.${key} in ${filePath}`,
+      );
+    }
+  }
+
   const coerced: ProviderMediaSupport = {};
   for (const key of ['inlineImages', 'fileUpload', 'videoSupport'] as const) {
     const value = rawRecord[key];

@@ -450,6 +450,88 @@ describe('buildMessagesWithReasoning', () => {
     });
   });
 
+  it('forwards uploaded Kimi video references using video_url', () => {
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          { type: 'text', text: 'Describe this video' },
+          {
+            type: 'media',
+            mimeType: 'video/mp4',
+            data: 'ms://video-file',
+            encoding: 'url',
+          },
+        ],
+      },
+    ];
+    const options = createMockOptions({
+      'reasoning.includeInContext': false,
+      'reasoning.stripFromContext': 'none',
+    });
+
+    const messages = buildMessagesWithReasoning(contents, options);
+    expect(messages).toHaveLength(1);
+    const message = messages[0] as OpenAI.Chat.ChatCompletionUserMessageParam;
+    expect(message.content).toStrictEqual([
+      { type: 'text', text: 'Describe this video' },
+      { type: 'video_url', video_url: { url: 'ms://video-file' } },
+    ]);
+  });
+
+  it('flushes uploaded Kimi videos from tool responses as video_url parts', () => {
+    const contents: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'call_video',
+            name: 'record',
+            parameters: {},
+          } as ToolCallBlock,
+        ],
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call_video',
+            toolName: 'record',
+            result: 'captured',
+          } as ToolResponseBlock,
+          {
+            type: 'media',
+            mimeType: 'video/mp4',
+            data: 'ms://video-tool',
+            encoding: 'url',
+          },
+        ],
+      },
+    ];
+    const options = createMockOptions({
+      'reasoning.includeInContext': false,
+      'reasoning.stripFromContext': 'none',
+    });
+
+    const messages = buildMessagesWithReasoning(contents, options);
+    expect(messages).toHaveLength(3);
+    expect(messages[0].role).toBe('assistant');
+    expect(messages[1].role).toBe('tool');
+    expect(messages[2].role).toBe('user');
+    const toolMessage =
+      messages[1] as OpenAI.Chat.ChatCompletionToolMessageParam;
+    expect(String(toolMessage.content)).toContain('captured');
+    expect(String(toolMessage.content)).not.toContain('ms://video-tool');
+    const mediaMessage =
+      messages[2] as OpenAI.Chat.ChatCompletionUserMessageParam;
+    expect(mediaMessage.content).toStrictEqual([
+      { type: 'text', text: '[Media from tool response]' },
+      { type: 'video_url', video_url: { url: 'ms://video-tool' } },
+    ]);
+  });
+
   it('flushes pending tool images as image_url content array parts', () => {
     const contents: IContent[] = [
       {

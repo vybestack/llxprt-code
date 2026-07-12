@@ -28,18 +28,17 @@ function createMockClient(
     body: FileCreateBody,
   ) => Promise<{ id: string; bytes: number }>,
 ) {
-  const defaultImpl = async (body: FileCreateBody) => {
-    expect(body.purpose).toBe('file-extract');
-    return {
-      id: `file-${Math.random().toString(36).slice(2, 10)}`,
-      bytes: 1024,
-    };
-  };
+  const defaultImpl = async (_body: FileCreateBody) => ({
+    id: `file-${Math.random().toString(36).slice(2, 10)}`,
+    bytes: 1024,
+  });
   const filesCreate = vi.fn(fileCreateImpl ?? defaultImpl);
   return {
-    client: { files: { create: filesCreate } } as unknown as Parameters<
-      typeof processKimiMedia
-    >[0],
+    client: {
+      apiKey: 'test-key',
+      baseURL: 'https://api.kimi.com/coding/v1',
+      files: { create: filesCreate },
+    } as unknown as Parameters<typeof processKimiMedia>[0],
     filesCreate,
   };
 }
@@ -60,6 +59,16 @@ function makeImageBlock(data: string): MediaBlock {
     mimeType: 'image/png',
     data,
     encoding: 'base64',
+  };
+}
+
+function makeVideoBlock(data: string, filename = 'clip.mp4'): MediaBlock {
+  return {
+    type: 'media',
+    mimeType: 'video/mp4',
+    data,
+    encoding: 'base64',
+    filename,
   };
 }
 
@@ -181,6 +190,66 @@ describe('processKimiMedia', () => {
     expect(first.fileReferenceText).toContain('file-once');
     expect(second.fileReferenceText).toContain('file-once');
     expect(second.contents[0].blocks[0].type).toBe('text');
+  });
+
+  it('uploads enabled videos and replaces them with Moonshot references', async () => {
+    const { client, filesCreate } = createMockClient(async () => ({
+      id: 'video-file',
+      bytes: 100,
+    }));
+    const contents: IContent[] = [
+      { speaker: 'human', blocks: [makeVideoBlock('VIDEO')] },
+    ];
+
+    const result = await processKimiMedia(client, contents, undefined, {
+      allowVideo: true,
+    });
+
+    expect(filesCreate).toHaveBeenCalledTimes(1);
+    expect(filesCreate.mock.calls[0][0].purpose).toBe('video');
+    expect(result.fileReferenceText).toBe('');
+    expect(result.contents[0].blocks[0]).toMatchObject({
+      type: 'media',
+      mimeType: 'video/mp4',
+      encoding: 'url',
+      data: 'ms://video-file',
+    });
+  });
+
+  it('does not upload PDFs when only video upload is enabled', async () => {
+    const { client, filesCreate } = createMockClient(async (body) => ({
+      id: body.purpose === 'video' ? 'video-only' : 'unexpected-pdf',
+      bytes: 10,
+    }));
+    const pdf = makePdfBlock('PDFDATA', 'disabled.pdf');
+    const video = makeVideoBlock('VIDEODATA', 'enabled.mp4');
+    const contents: IContent[] = [{ speaker: 'human', blocks: [pdf, video] }];
+
+    const result = await processKimiMedia(client, contents, undefined, {
+      allowFileUpload: false,
+      allowVideo: true,
+    });
+
+    expect(filesCreate).toHaveBeenCalledTimes(1);
+    expect(filesCreate.mock.calls[0][0].purpose).toBe('video');
+    expect(result.contents[0].blocks[0]).toBe(pdf);
+    expect(result.contents[0].blocks[1]).toStrictEqual({
+      ...video,
+      data: 'ms://video-only',
+      encoding: 'url',
+    });
+  });
+
+  it('leaves video unchanged when video upload is disabled', async () => {
+    const { client, filesCreate } = createMockClient();
+    const contents: IContent[] = [
+      { speaker: 'human', blocks: [makeVideoBlock('VIDEO')] },
+    ];
+
+    const result = await processKimiMedia(client, contents);
+
+    expect(filesCreate).not.toHaveBeenCalled();
+    expect(result.contents).toBe(contents);
   });
 
   it('falls back to original contents when all uploads fail', async () => {

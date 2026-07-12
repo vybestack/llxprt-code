@@ -73,77 +73,92 @@ export class ContentConverters {
     return 'model';
   }
 
+  private static toolCallBlockToPart(
+    toolCall: Extract<ContentBlock, { type: 'tool_call' }>,
+  ): GeminiContentPart {
+    this.logger.debug('Converting tool_call block to functionCall:', {
+      id: toolCall.id,
+      name: toolCall.name,
+      hasParameters: ContentConverters.hasLegacyTruthyValue(
+        toolCall.parameters,
+      ),
+    });
+    return {
+      functionCall: {
+        name: toolCall.name,
+        args: toolCall.parameters as Record<string, unknown>,
+        id: toolCall.id,
+      },
+    };
+  }
+
+  private static toolResponseBlockToPart(
+    toolResponse: Extract<ContentBlock, { type: 'tool_response' }>,
+  ): GeminiContentPart {
+    this.logger.debug('Converting tool_response block to functionResponse:', {
+      callId: toolResponse.callId,
+      toolName: toolResponse.toolName,
+      hasResult: ContentConverters.hasLegacyTruthyValue(toolResponse.result),
+      hasError: ContentConverters.hasLegacyTruthyValue(toolResponse.error),
+    });
+    return {
+      functionResponse: {
+        name: toolResponse.toolName,
+        response: toolResponse.result as Record<string, unknown>,
+        id: toolResponse.callId,
+      },
+    };
+  }
+
+  private static thinkingBlockToPart(
+    thinkingBlock: Extract<ContentBlock, { type: 'thinking' }>,
+  ): GeminiContentPart {
+    const thinkingPart: GeminiContentPart = {
+      thought: true,
+      text: thinkingBlock.thought,
+    };
+    if (ContentConverters.hasLegacyTruthyValue(thinkingBlock.signature)) {
+      thinkingPart.thoughtSignature = thinkingBlock.signature;
+    }
+    if (ContentConverters.hasLegacyTruthyValue(thinkingBlock.sourceField)) {
+      thinkingPart.llxprtSourceField = thinkingBlock.sourceField;
+    }
+    if (ContentConverters.hasLegacyTruthyValue(thinkingBlock.streamId)) {
+      thinkingPart.llxprtThoughtBlockId = thinkingBlock.streamId;
+    }
+    if (ContentConverters.hasLegacyTruthyValue(thinkingBlock.streamStatus)) {
+      thinkingPart.llxprtThoughtBlockStatus = thinkingBlock.streamStatus;
+    }
+    if (thinkingBlock.isHidden !== undefined) {
+      thinkingPart.llxprtThoughtIsHidden = thinkingBlock.isHidden;
+    }
+    return thinkingPart;
+  }
+
+  private static codeBlockToPart(
+    codeBlock: Extract<ContentBlock, { type: 'code' }>,
+  ): GeminiContentPart {
+    const codeText = codeBlock.language
+      ? `\`\`\`${codeBlock.language}\n${codeBlock.code}\n\`\`\``
+      : codeBlock.code;
+    return { text: codeText };
+  }
+
   /** Convert a single IContent block to a Gemini Part. */
   private static blockToPart(block: ContentBlock): GeminiContentPart | null {
     switch (block.type) {
-      case 'text': {
-        const textBlock = block;
-        return { text: textBlock.text };
-      }
-      case 'tool_call': {
-        const toolCall = block;
-        this.logger.debug('Converting tool_call block to functionCall:', {
-          id: toolCall.id,
-          name: toolCall.name,
-          hasParameters: ContentConverters.hasLegacyTruthyValue(
-            toolCall.parameters,
-          ),
-        });
-        return {
-          functionCall: {
-            name: toolCall.name,
-            args: toolCall.parameters as Record<string, unknown>,
-            id: toolCall.id,
-          },
-        };
-      }
-      case 'tool_response': {
-        const toolResponse = block;
-        this.logger.debug(
-          'Converting tool_response block to functionResponse:',
-          {
-            callId: toolResponse.callId,
-            toolName: toolResponse.toolName,
-            hasResult: ContentConverters.hasLegacyTruthyValue(
-              toolResponse.result,
-            ),
-            hasError: ContentConverters.hasLegacyTruthyValue(
-              toolResponse.error,
-            ),
-          },
-        );
-        return {
-          functionResponse: {
-            name: toolResponse.toolName,
-            response: toolResponse.result as Record<string, unknown>,
-            id: toolResponse.callId,
-          },
-        };
-      }
-      case 'thinking': {
-        const thinkingBlock = block;
-        const thinkingPart: GeminiContentPart = {
-          thought: true,
-          text: thinkingBlock.thought,
-        };
-        if (ContentConverters.hasLegacyTruthyValue(thinkingBlock.signature)) {
-          thinkingPart.thoughtSignature = thinkingBlock.signature;
-        }
-        if (ContentConverters.hasLegacyTruthyValue(thinkingBlock.sourceField)) {
-          thinkingPart.llxprtSourceField = thinkingBlock.sourceField;
-        }
-        return thinkingPart;
-      }
-      case 'media': {
+      case 'text':
+        return { text: block.text };
+      case 'tool_call':
+        return this.toolCallBlockToPart(block);
+      case 'tool_response':
+        return this.toolResponseBlockToPart(block);
+      case 'thinking':
+        return this.thinkingBlockToPart(block);
+      case 'media':
         return null;
-      }
-      case 'code': {
-        const codeBlock = block;
-        const codeText = codeBlock.language
-          ? `\`\`\`${codeBlock.language}\n${codeBlock.code}\n\`\`\``
-          : codeBlock.code;
-        return { text: codeText };
-      }
+      case 'code':
+        return this.codeBlockToPart(block);
       default:
         return null;
     }
@@ -201,11 +216,19 @@ export class ContentConverters {
     const thinkingBlock: ThinkingBlock = {
       type: 'thinking',
       thought: part.text ?? '',
-      isHidden: true,
       sourceField,
     };
+    if (part.llxprtThoughtIsHidden !== undefined) {
+      thinkingBlock.isHidden = part.llxprtThoughtIsHidden;
+    }
     if (part.thoughtSignature) {
       thinkingBlock.signature = part.thoughtSignature;
+    }
+    if (part.llxprtThoughtBlockId) {
+      thinkingBlock.streamId = part.llxprtThoughtBlockId;
+    }
+    if (part.llxprtThoughtBlockStatus) {
+      thinkingBlock.streamStatus = part.llxprtThoughtBlockStatus;
     }
     return thinkingBlock;
   }

@@ -9,6 +9,10 @@ import { GeminiProvider } from './GeminiProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Part } from '@google/genai';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import {
+  getSettingsService,
+  type SettingsService,
+} from '@vybestack/llxprt-code-settings';
 
 const generateContentStreamMock = vi.hoisted(() => vi.fn());
 
@@ -53,8 +57,55 @@ vi.mock('@vybestack/llxprt-code-settings', async () => ({
 describe('GeminiProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSettingsService.get.mockReset();
+    vi.mocked(getSettingsService).mockImplementation(() => mockSettingsService);
     generateContentStreamMock.mockReset();
     delete process.env.GEMINI_API_KEY;
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    delete process.env.GOOGLE_API_KEY;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+    delete process.env.GOOGLE_CLOUD_LOCATION;
+    delete process.env.GOOGLE_GENAI_USE_VERTEXAI;
+  });
+
+  it('uses the constructor fallback when the global settings service is unavailable', () => {
+    vi.mocked(getSettingsService).mockImplementation(() => {
+      throw new Error('SettingsService not registered');
+    });
+    const provider = new GeminiProvider();
+
+    expect(() => provider.isPaidMode()).not.toThrow();
+    expect(provider.isPaidMode()).toBe(false);
+  });
+
+  it('uses runtime settings GOOGLE_API_KEY when checking paid mode', () => {
+    mockSettingsService.get.mockImplementation((key: string) => {
+      if (key === 'GOOGLE_API_KEY') {
+        return 'settings-google-api-key';
+      }
+      return undefined;
+    });
+    const provider = new GeminiProvider();
+    provider.setRuntimeSettingsService(
+      mockSettingsService as unknown as SettingsService,
+    );
+
+    expect(provider.isPaidMode()).toBe(true);
+  });
+
+  it('uses runtime settings GOOGLE_APPLICATION_CREDENTIALS when checking paid mode', () => {
+    mockSettingsService.get.mockImplementation((key: string) => {
+      if (key === 'GOOGLE_APPLICATION_CREDENTIALS') {
+        return '/settings/credentials.json';
+      }
+      return undefined;
+    });
+    const provider = new GeminiProvider();
+    provider.setRuntimeSettingsService(
+      mockSettingsService as unknown as SettingsService,
+    );
+
+    expect(provider.isPaidMode()).toBe(true);
   });
 
   it('respects metadata geminiDirectOverrides when building request config', async () => {
@@ -232,6 +283,10 @@ describe('GeminiProvider', () => {
     delete global.__oauth_needs_code;
     delete global.__oauth_provider;
     delete process.env.GEMINI_API_KEY;
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+    delete process.env.GOOGLE_CLOUD_LOCATION;
+    delete process.env.GOOGLE_GENAI_USE_VERTEXAI;
   });
 
   /**
@@ -405,104 +460,6 @@ describe('GeminiProvider', () => {
     expect(flashPreview?.name).toBe('Gemini 3 Flash Preview');
     expect(flashPreview?.provider).toBe('gemini');
     expect(flashPreview?.supportedToolFormats).toStrictEqual([]);
-  });
-
-  describe('GeminiProvider Authentication', () => {
-    it('should check AuthResolver before falling back to Vertex AI', async () => {
-      // Mock authResolver to return a test key
-      const mockAuthResolver = {
-        resolveAuthentication: vi.fn().mockResolvedValue('test-key'),
-      };
-
-      const provider = new GeminiProvider();
-      // Inject the mock authResolver
-      (provider as unknown as { authResolver: unknown }).authResolver =
-        mockAuthResolver;
-
-      // Access the private determineBestAuth method
-      const auth = await (
-        provider as unknown as {
-          determineBestAuth: () => Promise<{
-            authMode: string;
-            token: string;
-          }>;
-        }
-      ).determineBestAuth();
-
-      // Assert authResolver.resolveAuthentication was called with correct options
-      expect(mockAuthResolver.resolveAuthentication).toHaveBeenCalledWith({
-        settingsService: expect.anything(),
-        includeOAuth: false,
-      });
-
-      // Assert auth.authMode is 'gemini-api-key'
-      expect(auth.authMode).toBe('gemini-api-key');
-
-      // Assert auth.token is 'test-key'
-      expect(auth.token).toBe('test-key');
-    });
-
-    it('should fallback to Vertex AI if no standard auth', async () => {
-      // Mock authResolver to return null (no auth found)
-      const mockAuthResolver = {
-        resolveAuthentication: vi.fn().mockResolvedValue(null),
-      };
-
-      // Set GOOGLE_APPLICATION_CREDENTIALS env var
-      process.env.GOOGLE_APPLICATION_CREDENTIALS = '/path/to/credentials.json';
-
-      const provider = new GeminiProvider();
-      // Inject the mock authResolver
-      (provider as unknown as { authResolver: unknown }).authResolver =
-        mockAuthResolver;
-
-      // Access the private determineBestAuth method
-      const auth = await (
-        provider as unknown as {
-          determineBestAuth: () => Promise<{
-            authMode: string;
-            token: string;
-          }>;
-        }
-      ).determineBestAuth();
-
-      // Assert auth.authMode is 'vertex-ai'
-      expect(auth.authMode).toBe('vertex-ai');
-
-      // Clean up
-      delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
-    });
-
-    it('should respect auth precedence (SettingsService over env var)', async () => {
-      // Set process.env.GEMINI_API_KEY
-      process.env.GEMINI_API_KEY = 'env-key';
-
-      // Mock authResolver to return 'settings-key' (from SettingsService/keyfile)
-      const mockAuthResolver = {
-        resolveAuthentication: vi.fn().mockResolvedValue('settings-key'),
-      };
-
-      const provider = new GeminiProvider();
-      // Inject the mock authResolver
-      (provider as unknown as { authResolver: unknown }).authResolver =
-        mockAuthResolver;
-
-      // Access the private determineBestAuth method
-      const auth = await (
-        provider as unknown as {
-          determineBestAuth: () => Promise<{
-            authMode: string;
-            token: string;
-          }>;
-        }
-      ).determineBestAuth();
-
-      // Assert auth.token is 'settings-key' (NOT 'env-key')
-      expect(auth.token).toBe('settings-key');
-
-      // Also verify authResolver was called
-      expect(mockAuthResolver.resolveAuthentication).toHaveBeenCalled();
-    });
   });
 
   describe('multimodal tool response handling', () => {

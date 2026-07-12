@@ -48,6 +48,15 @@ import { resolveToolFormat } from '../utils/toolFormatDetection.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
 import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
 import { createBoundedCache } from '../kimi/kimiFileUpload.js';
+import {
+  resolveOpenAITransport,
+  resolveExplicitTransportModeFromSources,
+  OPENAI_TRANSPORT_SELECTOR_KEYS,
+} from './openaiModelPolicy.js';
+import {
+  executeOpenAIResponsesRequest,
+  type ResponsesExecutorDeps,
+} from '../openai-responses/openAIResponsesExecutor.js';
 
 import { buildContinuationMessages } from './OpenAIRequestBuilder.js';
 import { extractSanitizedChunkText } from './OpenAIStreamChunkText.js';
@@ -104,6 +113,66 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    */
   private createToolFormatter(): ToolFormatter {
     return new ToolFormatter();
+  }
+
+  private buildResponsesExecutorDeps(): ResponsesExecutorDeps {
+    return {
+      providerName: this.name,
+      logger: new DebugLogger('llxprt:provider:openai'),
+      getProviderBaseURL: () => this.getBaseURL(),
+      getCustomHeaders: (options) => this.getCustomHeaders(options),
+      isCodexBaseURL: () => false,
+      getCodexAccountId: async () => {
+        throw new Error('Codex account ID not available for OpenAIProvider');
+      },
+      resolveAuthTokenForPrompt: async () => this.getAuthTokenForPrompt(),
+      generateSyntheticCallId: () => {
+        const randomSuffix = Math.random().toString(36).substring(2, 10);
+        return `call_synthetic_${randomSuffix}`;
+      },
+      shouldRetryOnError: (error) => this.shouldRetryResponse(error),
+      getDefaultModel: () => this.getDefaultModel(),
+      getGlobalConfig: () => undefined,
+    };
+  }
+
+  private resolveOpenAIResponsesEnabled(): boolean | undefined {
+    const settingsService = this.resolveSettingsService();
+    const providerValue = settingsService.getProviderSettings(this.name)[
+      'openaiResponsesEnabled'
+    ];
+    if (typeof providerValue === 'boolean') {
+      return providerValue;
+    }
+
+    const globalValue = settingsService.get('openaiResponsesEnabled');
+    if (typeof globalValue === 'boolean') {
+      return globalValue;
+    }
+
+    return this.providerConfig?.openaiResponsesEnabled;
+  }
+
+  private resolveTransport(
+    model: string,
+    baseURL: string | undefined,
+  ): { useResponses: boolean } {
+    const settingsService = this.resolveSettingsService();
+    const providerSettings = settingsService.getProviderSettings(this.name);
+    const explicitMode = resolveExplicitTransportModeFromSources(
+      providerSettings,
+      () => settingsService.get('responses-mode') as string | undefined,
+    );
+    return resolveOpenAITransport({
+      model,
+      baseURL,
+      explicitMode,
+      openaiResponsesEnabled: this.resolveOpenAIResponsesEnabled(),
+    });
+  }
+
+  getOpenaiResponsesEnabled(): boolean | undefined {
+    return this.resolveOpenAIResponsesEnabled();
   }
 
   protected async getClient(
@@ -209,6 +278,30 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Return commonly available OpenAI models as fallback
     // Use this.name so it works for providers that extend OpenAIProvider (e.g., Chutes.ai)
     return [
+      {
+        id: 'gpt-5.6',
+        name: 'GPT-5.6',
+        provider: this.name,
+        supportedToolFormats: ['openai'],
+      },
+      {
+        id: 'gpt-5.6-sol',
+        name: 'GPT-5.6 Sol',
+        provider: this.name,
+        supportedToolFormats: ['openai'],
+      },
+      {
+        id: 'gpt-5.6-terra',
+        name: 'GPT-5.6 Terra',
+        provider: this.name,
+        supportedToolFormats: ['openai'],
+      },
+      {
+        id: 'gpt-5.6-luna',
+        name: 'GPT-5.6 Luna',
+        provider: this.name,
+        supportedToolFormats: ['openai'],
+      },
       {
         id: 'gpt-5.5',
         name: 'GPT-5.5',
@@ -335,6 +428,18 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
+    const model = options.resolved.model || this.getModel();
+    const baseURL = options.resolved.baseURL ?? this.baseProviderConfig.baseURL;
+
+    const decision = this.resolveTransport(model, baseURL);
+    if (decision.useResponses) {
+      yield* executeOpenAIResponsesRequest(
+        options,
+        this.buildResponsesExecutorDeps(),
+      );
+      return;
+    }
+
     const callFormatter = this.createToolFormatter();
     const client = await this.getClient(options);
     const runtimeKey = resolveRuntimeKey(options);
@@ -395,6 +500,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         'toolFormatOverride',
         'tool-format-override',
         'defaultModel',
+        // Transport selectors are control-plane settings, not model params
+        ...OPENAI_TRANSPORT_SELECTOR_KEYS,
       ]);
 
       const params: Record<string, unknown> = {};
@@ -537,7 +644,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     logger: DebugLogger,
   ): Promise<NormalizedGenerateChatOptions> {
     const mediaSupport = this.readMediaSupport();
-    if (mediaSupport?.fileUpload !== true) {
+    const providerVideoSetting = options.settings.getProviderSettings(
+      this.name,
+    )['kimi.experimental-video'];
+    const globalVideoSetting = options.settings.get('kimi.experimental-video');
+    const allowVideo =
+      mediaSupport?.videoSupport === true &&
+      (providerVideoSetting === true || globalVideoSetting === true);
+    const allowFileUpload = mediaSupport?.fileUpload === true;
+    if (!allowFileUpload && !allowVideo) {
       return options;
     }
 
@@ -549,9 +664,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         client,
         options.contents,
         kimiFileUploadCache,
+        { allowFileUpload, allowVideo },
       );
 
-      if (result.fileReferenceText === '') {
+      if (
+        result.fileReferenceText === '' &&
+        result.contents === options.contents
+      ) {
         return options;
       }
 
@@ -560,6 +679,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           `[OpenAIProvider] Kimi file-upload pre-pass replaced PDF blocks; file reference injected into system instruction`,
         { fileReferenceText: result.fileReferenceText },
       );
+
+      if (result.fileReferenceText === '') {
+        return { ...options, contents: result.contents };
+      }
 
       const existingInstruction = options.systemInstruction ?? '';
       const combinedInstruction =

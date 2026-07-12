@@ -37,9 +37,11 @@ function createMockClient(
   };
   const filesCreate = vi.fn(fileCreateImpl ?? defaultImpl);
   return {
-    client: { files: { create: filesCreate } } as unknown as Parameters<
-      typeof uploadKimiFiles
-    >[0],
+    client: {
+      apiKey: 'test-key',
+      baseURL: 'https://api.kimi.com/coding/v1',
+      files: { create: filesCreate },
+    } as unknown as Parameters<typeof uploadKimiFiles>[0],
     filesCreate,
   };
 }
@@ -48,6 +50,16 @@ function makePdfBlock(data: string, filename = 'doc.pdf'): MediaBlock {
   return {
     type: 'media',
     mimeType: 'application/pdf',
+    data,
+    encoding: 'base64',
+    filename,
+  };
+}
+
+function makeVideoBlock(data: string, filename = 'clip.mp4'): MediaBlock {
+  return {
+    type: 'media',
+    mimeType: 'video/mp4',
     data,
     encoding: 'base64',
     filename,
@@ -87,6 +99,33 @@ describe('uploadKimiFiles', () => {
     expect(body.purpose).toBe('file-extract');
   });
 
+  it('uploads videos with Moonshot video purpose when enabled', async () => {
+    const { client, filesCreate } = createMockClient(async () => ({
+      id: 'video-1',
+      bytes: 20,
+    }));
+
+    const results = await uploadKimiFiles(
+      client,
+      [makeVideoBlock('AAAA')],
+      undefined,
+      { allowVideo: true },
+    );
+
+    expect(filesCreate).toHaveBeenCalledTimes(1);
+    expect(filesCreate.mock.calls[0][0].purpose).toBe('video');
+    expect(results[0].fileId).toBe('video-1');
+  });
+
+  it('does not upload videos unless explicitly enabled', async () => {
+    const { client, filesCreate } = createMockClient();
+
+    const results = await uploadKimiFiles(client, [makeVideoBlock('AAAA')]);
+
+    expect(filesCreate).not.toHaveBeenCalled();
+    expect(results[0].failed).toBe(true);
+  });
+
   it('de-duplicates identical blocks via the cache', async () => {
     const { client, filesCreate } = createMockClient(async () => ({
       id: 'file-dedup',
@@ -102,6 +141,53 @@ describe('uploadKimiFiles', () => {
     expect(first[0].fileId).toBe('file-dedup');
     expect(second[0].fileId).toBe('file-dedup');
     expect(second[0].failed).toBe(false);
+  });
+
+  it('does not reuse file ids across API credentials', async () => {
+    const first = createMockClient(async () => ({ id: 'file-a', bytes: 10 }));
+    const second = createMockClient(async () => ({ id: 'file-b', bytes: 10 }));
+    Object.assign(first.client, {
+      baseURL: 'https://api.moonshot.ai/v1',
+      apiKey: 'account-a',
+    });
+    Object.assign(second.client, {
+      baseURL: 'https://api.moonshot.ai/v1',
+      apiKey: 'account-b',
+    });
+    const cache = createBoundedCache<string>(10);
+    const block = makePdfBlock('SAMECONTENT');
+
+    const firstResult = await uploadKimiFiles(first.client, [block], cache);
+    const secondResult = await uploadKimiFiles(second.client, [block], cache);
+
+    expect(first.filesCreate).toHaveBeenCalledTimes(1);
+    expect(second.filesCreate).toHaveBeenCalledTimes(1);
+    expect(firstResult[0].fileId).toBe('file-a');
+    expect(secondResult[0].fileId).toBe('file-b');
+  });
+
+  it('hashes the full payload rather than only matching prefix and suffix', async () => {
+    let uploadCount = 0;
+    const { client, filesCreate } = createMockClient(async () => ({
+      id: `file-${++uploadCount}`,
+      bytes: 10,
+    }));
+    const cache = createBoundedCache<string>(10);
+    const prefix = 'A'.repeat(512);
+    const suffix = 'Z'.repeat(512);
+
+    await uploadKimiFiles(
+      client,
+      [makePdfBlock(`${prefix}MIDDLE-ONE${suffix}`)],
+      cache,
+    );
+    await uploadKimiFiles(
+      client,
+      [makePdfBlock(`${prefix}MIDDLE-TWO${suffix}`)],
+      cache,
+    );
+
+    expect(filesCreate).toHaveBeenCalledTimes(2);
   });
 
   it('marks blocks as failed when upload throws', async () => {
@@ -164,6 +250,38 @@ describe('uploadKimiFiles', () => {
     expect(Buffer.from(arrayBuffer).toString('utf8')).toBe('%PDF-1.4');
   });
 
+  it('preserves input order for uploadable and unsupported blocks', async () => {
+    const { client, filesCreate } = createMockClient(async () => ({
+      id: 'file-pdf',
+      bytes: 10,
+    }));
+    const pdf = makePdfBlock('PDFDATA', 'first.pdf');
+    const video = makeVideoBlock('VIDEODATA', 'second.mp4');
+
+    const results = await uploadKimiFiles(client, [pdf, video]);
+
+    expect(filesCreate).toHaveBeenCalledTimes(1);
+    expect(results.map((result) => result.block)).toStrictEqual([pdf, video]);
+    expect(results[0].failed).toBe(false);
+    expect(results[1].failed).toBe(true);
+  });
+
+  it('marks URL media failed without uploading it', async () => {
+    const { client, filesCreate } = createMockClient();
+    const urlBlock: MediaBlock = {
+      type: 'media',
+      mimeType: 'application/pdf',
+      data: 'https://example.com/document.pdf',
+      encoding: 'url',
+      filename: 'remote.pdf',
+    };
+
+    const results = await uploadKimiFiles(client, [urlBlock]);
+
+    expect(filesCreate).not.toHaveBeenCalled();
+    expect(results).toStrictEqual([{ block: urlBlock, failed: true }]);
+  });
+
   it('returns empty array for empty input', async () => {
     const { client, filesCreate } = createMockClient();
     const results = await uploadKimiFiles(client, []);
@@ -191,6 +309,12 @@ describe('buildKimiFileReferenceText', () => {
 });
 
 describe('createBoundedCache', () => {
+  it('rejects non-positive and non-integer capacities', () => {
+    expect(() => createBoundedCache<string>(0)).toThrow(RangeError);
+    expect(() => createBoundedCache<string>(-1)).toThrow(RangeError);
+    expect(() => createBoundedCache<string>(1.5)).toThrow(RangeError);
+  });
+
   it('evicts oldest entry when maxSize is exceeded', () => {
     const cache = createBoundedCache<string>(2);
     cache.set('a', '1');
@@ -200,6 +324,18 @@ describe('createBoundedCache', () => {
     expect(cache.has('b')).toBe(true);
     expect(cache.has('c')).toBe(true);
     expect(cache.size).toBe(2);
+  });
+
+  it('evicts the least recently used entry', () => {
+    const cache = createBoundedCache<string>(2);
+    cache.set('a', '1');
+    cache.set('b', '2');
+
+    expect(cache.get('a')).toBe('1');
+    cache.set('c', '3');
+
+    expect(cache.has('a')).toBe(true);
+    expect(cache.has('b')).toBe(false);
   });
 
   it('supports get/set/has/delete', () => {

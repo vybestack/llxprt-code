@@ -181,6 +181,39 @@ Type checking uses `tsc --noEmit`:
 bun run typecheck
 ```
 
+#### Bun-backed Test Orchestration
+
+The project also provides a Bun-backed root test entry point that preserves
+the same coverage and setup guarantees as `npm run test` (issue #2463):
+
+```bash
+bun run test:bun
+```
+
+This script (`scripts/test.ts`) orchestrates testing across all workspace
+packages using Bun as the runtime. Each workspace's tests still run under
+Vitest — not Bun's native test runner — so all Vitest-specific APIs
+(`vi.stubEnv`, `vi.unstubAllEnvs`, `vi.mocked`, `vi.setSystemTime`,
+`it.runIf`, etc.) and per-package `vitest.config.ts` configuration remain
+fully available.
+
+The script explicitly runs each workspace's `pretest` lifecycle hook before
+its test phase (npm does this automatically; Bun does not), so the agents
+API-surface guard and other pretest checks are preserved. It also runs the
+script harness tests (`scripts/tests/`) by default.
+
+Supported flags:
+
+```bash
+bun run test:bun -- --workspace core   # run only one workspace
+bun run test:bun -- --skip-scripts     # skip script harness tests
+bun run test:bun -- --skip-pretest     # skip pretest hooks
+bun run test:bun -- --continue-on-error # run all even if some fail
+```
+
+The `--workspace` flag accepts a package directory name (`core`), a relative
+path (`packages/core`), or a package name (`@vybestack/llxprt-code-core`).
+
 #### Integration Tests
 
 The integration tests are designed to validate the end-to-end functionality of LLxprt Code. They are not run as part of the default `bun run test` command.

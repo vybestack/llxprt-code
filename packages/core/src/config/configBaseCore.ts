@@ -22,6 +22,7 @@ import type {
 } from '../core/clientContract.js';
 import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
 import type { TaskToolRegistration } from './toolRegistryFactory.js';
+import type { PostSkillDiscoveryToolRegistrar } from './configTypes.js';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import type { ResourceRegistry } from '../resources/resource-registry.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
@@ -99,6 +100,7 @@ export abstract class ConfigBaseCore {
   protected workspaceContext!: WorkspaceContext;
   protected readonly debugMode!: boolean;
   protected readonly outputFormat!: OutputFormat;
+  protected readonly quiet!: boolean;
   protected readonly question: string | undefined;
   /**
    * @plan PLAN-20250212-LSP.P33
@@ -291,6 +293,9 @@ export abstract class ConfigBaseCore {
    * @requirement REQ-INV-003
    */
   protected taskToolRegistration: TaskToolRegistration | undefined;
+  protected postSkillDiscoveryToolRegistrar:
+    | PostSkillDiscoveryToolRegistrar
+    | undefined;
   protected initialized = false;
 
   // ---- Simple field accessors ----
@@ -450,6 +455,9 @@ export abstract class ConfigBaseCore {
   }
   getOutputFormat(): OutputFormat {
     return this.outputFormat;
+  }
+  getQuiet(): boolean {
+    return this.quiet;
   }
   getQuestion(): string | undefined {
     return this.question;
@@ -765,6 +773,16 @@ export abstract class ConfigBaseCore {
    */
   getTaskToolRegistration(): TaskToolRegistration | undefined {
     return this.taskToolRegistration;
+  }
+  getPostSkillDiscoveryToolRegistrar():
+    | PostSkillDiscoveryToolRegistrar
+    | undefined {
+    return this.postSkillDiscoveryToolRegistrar;
+  }
+  setPostSkillDiscoveryToolRegistrar(
+    registrar: PostSkillDiscoveryToolRegistrar | undefined,
+  ): void {
+    this.postSkillDiscoveryToolRegistrar = registrar;
   }
   getEnableHooksUI(): boolean {
     return this.enableHooksUI;

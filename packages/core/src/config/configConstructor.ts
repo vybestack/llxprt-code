@@ -73,6 +73,7 @@ import type { Config } from './config.js';
 import type { AgentClientFactory } from '../core/clientContract.js';
 import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
 import type { TaskToolRegistration } from './toolRegistryFactory.js';
+import type { PostSkillDiscoveryToolRegistrar } from './configTypes.js';
 
 /**
  * Typed target interface for applyConfigParams — lists every field
@@ -95,6 +96,7 @@ export interface ConfigConstructorTarget {
   debugMode: boolean;
   outputFormat: OutputFormat;
   question: string | undefined;
+  quiet: boolean;
 
   // Tool governance
   coreTools: string[] | undefined;
@@ -219,6 +221,7 @@ export interface ConfigConstructorTarget {
    * @requirement REQ-INV-003
    */
   taskToolRegistration: TaskToolRegistration | undefined;
+  postSkillDiscoveryToolRegistrar: PostSkillDiscoveryToolRegistrar | undefined;
 
   // Called at end of applyConfigParams
   getProxy(): string | undefined;
@@ -254,6 +257,7 @@ function applyCoreIdentity(
   config.debugMode = params.debugMode;
   config.outputFormat = params.outputFormat ?? OutputFormat.TEXT;
   config.question = params.question;
+  config.quiet = params.quiet ?? false;
 }
 
 function applyToolGovernance(
@@ -474,6 +478,8 @@ function applyPolicyAndLifecycle(
   config.agentClientFactory = params.agentClientFactory;
   config.toolSchedulerFactory = params.toolSchedulerFactory;
   config.taskToolRegistration = params.taskToolRegistration;
+  config.postSkillDiscoveryToolRegistrar =
+    params.postSkillDiscoveryToolRegistrar;
 
   if (params.contextFileName !== undefined && params.contextFileName !== '') {
     setLlxprtMdFilename(params.contextFileName);

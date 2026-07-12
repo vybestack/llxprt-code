@@ -21,11 +21,11 @@ const logger = new DebugLogger('llxprt:kimi:fileUpload');
  */
 type SdkFilePurpose = Parameters<OpenAI['files']['create']>[0]['purpose'];
 const KIMI_FILE_EXTRACT_PURPOSE = 'file-extract' as unknown as SdkFilePurpose;
+const KIMI_VIDEO_PURPOSE = 'video' as unknown as SdkFilePurpose;
 
 /**
- * A simple bounded LRU-ish cache backed by a Map. When the max size is reached,
- * the oldest inserted entry (Map iteration order) is evicted before inserting
- * a new one. This prevents unbounded memory growth in long-running processes.
+ * A bounded least-recently-used cache backed by a Map. Reads and updates move
+ * entries to the newest position; insertion evicts the least recently used entry.
  *
  * Implements only the subset of Map methods used by the upload pipeline.
  */
@@ -38,16 +38,26 @@ export interface BoundedCache<V> {
 }
 
 export function createBoundedCache<V>(maxSize: number): BoundedCache<V> {
+  if (!Number.isInteger(maxSize) || maxSize <= 0) {
+    throw new RangeError('maxSize must be a positive integer');
+  }
   const map = new Map<string, V>();
   return {
     get(key: string) {
-      return map.get(key);
+      const value = map.get(key);
+      if (value !== undefined) {
+        map.delete(key);
+        map.set(key, value);
+      }
+      return value;
     },
     set(key: string, value: V) {
-      if (map.size >= maxSize && !map.has(key)) {
-        const oldestKey = map.keys().next().value;
-        if (oldestKey !== undefined) {
-          map.delete(oldestKey);
+      if (map.has(key)) {
+        map.delete(key);
+      } else if (map.size >= maxSize) {
+        const leastRecentlyUsedKey = map.keys().next().value;
+        if (leastRecentlyUsedKey !== undefined) {
+          map.delete(leastRecentlyUsedKey);
         }
       }
       map.set(key, value);
@@ -79,23 +89,22 @@ export interface KimiFileUploadResult {
  * Build a stable cache key from a media block's content so that repeated
  * turns referencing the same document are not re-uploaded.
  *
- * Uses length + bounded prefix/suffix hashing instead of hashing the entire
- * base64 payload, which can be many megabytes for large PDFs. This keeps the
- * event loop responsive while still producing a collision-resistant key for
- * the common case of identical documents reappearing across turns.
+ * The key includes the endpoint and a one-way digest of the API credential because
+ * Moonshot file ids are scoped to an account. The complete payload is hashed so
+ * distinct files cannot alias merely because their length and edges match.
  */
-const BOUNDED_HASH_SLICE = 512;
-function buildCacheKey(block: MediaBlock): string {
-  const mime = block.mimeType;
-  const raw = block.data;
+function buildCacheKey(client: OpenAI, block: MediaBlock): string {
   const hash = createHash('sha256');
-  hash.update(`${mime}:${raw.length}:`);
-  if (raw.length <= BOUNDED_HASH_SLICE * 2) {
-    hash.update(raw);
-  } else {
-    hash.update(raw.slice(0, BOUNDED_HASH_SLICE));
-    hash.update(raw.slice(-BOUNDED_HASH_SLICE));
-  }
+  const credentialDigest = createHash('sha256')
+    .update(client.apiKey)
+    .digest('hex');
+  hash.update(client.baseURL);
+  hash.update('\0');
+  hash.update(credentialDigest);
+  hash.update('\0');
+  hash.update(block.mimeType);
+  hash.update('\0');
+  hash.update(block.data);
   return hash.digest('hex');
 }
 
@@ -110,6 +119,9 @@ function decodeMediaToBuffer(block: MediaBlock): Buffer {
     );
   }
   const raw = block.data;
+  if (raw.length === 0) {
+    throw new Error('Media block data is empty');
+  }
   const commaIdx = raw.indexOf(',');
   const base64 =
     commaIdx >= 0 && raw.startsWith('data:') ? raw.slice(commaIdx + 1) : raw;
@@ -126,6 +138,9 @@ function resolveFilename(block: MediaBlock): string {
   }
   if (classifyMediaBlock(block) === 'pdf') {
     return 'document.pdf';
+  }
+  if (classifyMediaBlock(block) === 'video') {
+    return 'video.mp4';
   }
   return 'document.bin';
 }
@@ -146,71 +161,72 @@ function resolveFilename(block: MediaBlock): string {
  *   can persist de-dup across multiple invocations within a session.
  * @returns One {@link KimiFileUploadResult} per input block, in order.
  */
+export interface KimiUploadOptions {
+  allowFileUpload?: boolean;
+  allowVideo?: boolean;
+}
+
+export function isKimiUploadable(
+  block: MediaBlock,
+  options: KimiUploadOptions,
+): boolean {
+  if (block.encoding !== 'base64') {
+    return false;
+  }
+  const category = classifyMediaBlock(block);
+  return (
+    (category === 'pdf' && options.allowFileUpload !== false) ||
+    (category === 'video' && options.allowVideo === true)
+  );
+}
+
 export async function uploadKimiFiles(
   client: OpenAI,
   blocks: MediaBlock[],
   cache?: BoundedCache<string>,
+  options: KimiUploadOptions = {},
 ): Promise<KimiFileUploadResult[]> {
   const results: KimiFileUploadResult[] = [];
 
-  // Partition blocks: only base64-encoded PDFs are uploadable. Non-PDF or
-  // URL-encoded blocks are immediately marked as failed so the upload loop
-  // has a single continue (cache-hit) path.
-  const uploadable: MediaBlock[] = [];
+  // Uploads are sequential because Kimi applies Files API rate limits during
+  // peak periods. Preserving the input loop also preserves the result order.
   for (const block of blocks) {
-    if (block.encoding === 'url' || classifyMediaBlock(block) !== 'pdf') {
+    const category = classifyMediaBlock(block);
+    if (!isKimiUploadable(block, options)) {
       results.push({ block, failed: true });
+      continue;
+    }
+
+    const cacheKey = buildCacheKey(client, block);
+    const cached = cache?.get(cacheKey);
+    if (cached) {
+      logger.debug(() => `Reusing cached Kimi file id ${cached} for block`);
+      results.push({ block, fileId: cached, failed: false });
     } else {
-      uploadable.push(block);
-    }
-  }
-
-  // Uploads are sequential rather than parallel because Kimi's Files API
-  // applies rate limiting during peak periods (per issue #1679). Parallel
-  // uploads risk triggering 429s that would fail the entire batch.
-  for (const block of uploadable) {
-    const cacheKey = buildCacheKey(block);
-
-    if (cache) {
-      const cached = cache.get(cacheKey);
-      if (cached) {
-        logger.debug(() => `Reusing cached Kimi file id ${cached} for block`);
-        results.push({ block, fileId: cached, failed: false });
-        continue;
-      }
-    }
-
-    try {
-      const buffer = decodeMediaToBuffer(block);
       const filename = resolveFilename(block);
-      const file = await toFile(buffer, filename, {
-        type: block.mimeType,
-      });
+      try {
+        const buffer = decodeMediaToBuffer(block);
+        const file = await toFile(buffer, filename, {
+          type: block.mimeType,
+        });
 
-      // Kimi's Files API uses purpose "file-extract" (not in the SDK union).
-      const body = {
-        file,
-        purpose: KIMI_FILE_EXTRACT_PURPOSE,
-      };
-
-      const uploaded = await client.files.create(body);
-      logger.debug(
-        () => `Uploaded Kimi file ${uploaded.id} (${uploaded.bytes} bytes)`,
-      );
-
-      if (cache) {
-        cache.set(cacheKey, uploaded.id);
+        const purpose =
+          category === 'video' ? KIMI_VIDEO_PURPOSE : KIMI_FILE_EXTRACT_PURPOSE;
+        const uploaded = await client.files.create({ file, purpose });
+        logger.debug(
+          () => `Uploaded Kimi file ${uploaded.id} (${uploaded.bytes} bytes)`,
+        );
+        cache?.set(cacheKey, uploaded.id);
+        results.push({ block, fileId: uploaded.id, failed: false });
+      } catch (error) {
+        logger.warn(
+          () =>
+            `Kimi file upload failed for ${filename} (${block.mimeType}), falling back to inline behavior: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+        );
+        results.push({ block, failed: true });
       }
-
-      results.push({ block, fileId: uploaded.id, failed: false });
-    } catch (error) {
-      logger.warn(
-        () =>
-          `Kimi file upload failed, falling back to inline behavior: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-      );
-      results.push({ block, failed: true });
     }
   }
 

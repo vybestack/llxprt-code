@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 import {
   loadProviderAliasEntries,
@@ -54,9 +54,7 @@ describe('providerAliases mediaSupport sanitization', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alias-media-'));
-    warnSpy = vi
-      .spyOn(DebugLogger.prototype, 'warn')
-      .mockImplementation(() => {});
+    warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -103,6 +101,9 @@ describe('providerAliases mediaSupport sanitization', () => {
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('non-boolean mediaSupport.fileUpload'),
     );
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('unknown mediaSupport.extraField'),
+    );
   });
 
   it('removes mediaSupport when it is not an object', async () => {
@@ -132,6 +133,9 @@ describe('providerAliases mediaSupport sanitization', () => {
 
     const entry = entries.find((e) => e.alias === 'testalias');
     expect(entry?.config.mediaSupport).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('non-boolean mediaSupport.inlineImages'),
+    );
   });
 
   it('defaults mediaSupport to undefined when not present', async () => {

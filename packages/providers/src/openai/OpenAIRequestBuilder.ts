@@ -120,6 +120,14 @@ type ToolMessageWithName = OpenAI.Chat.ChatCompletionToolMessageParam & {
   name?: string;
 };
 
+function isForwardableKimiVideo(block: MediaBlock): boolean {
+  return (
+    classifyMediaBlock(block) === 'video' &&
+    block.encoding === 'url' &&
+    block.data.startsWith('ms://')
+  );
+}
+
 function convertBlockToPart(
   block: ContentBlock,
 ): OpenAI.Chat.ChatCompletionContentPart | null {
@@ -135,6 +143,13 @@ function convertBlockToPart(
       type: 'image_url',
       image_url: { url: normalizeMediaToDataUri(block) },
     };
+  }
+  if (isForwardableKimiVideo(block)) {
+    // Moonshot extends OpenAI chat content with uploaded video references.
+    return {
+      type: 'video_url',
+      video_url: { url: block.data },
+    } as unknown as OpenAI.Chat.ChatCompletionContentPart;
   }
   if (category === 'pdf') {
     const fileData = normalizeMediaToDataUri(block);
@@ -281,18 +296,20 @@ function processToolResponses(
     (b): b is MediaBlock => b.type === 'media',
   );
 
-  const imageBlocks = mediaBlocks.filter(
-    (mb) => classifyMediaBlock(mb) === 'image',
-  );
-  const nonImageMediaBlocks = mediaBlocks.filter(
-    (mb) => classifyMediaBlock(mb) !== 'image',
+  const forwardableMediaBlocks = mediaBlocks.filter((mediaBlock) => {
+    const category = classifyMediaBlock(mediaBlock);
+    return category === 'image' || isForwardableKimiVideo(mediaBlock);
+  });
+  const forwardableMediaSet = new Set(forwardableMediaBlocks);
+  const fallbackMediaBlocks = mediaBlocks.filter(
+    (mediaBlock) => !forwardableMediaSet.has(mediaBlock),
   );
 
-  if (imageBlocks.length > 0) {
-    pendingToolImages.push(...imageBlocks);
+  if (forwardableMediaBlocks.length > 0) {
+    pendingToolImages.push(...forwardableMediaBlocks);
   }
 
-  const mediaFallback = nonImageMediaBlocks
+  const mediaFallback = fallbackMediaBlocks
     .map((mb) =>
       buildUnsupportedMediaPlaceholder(mb, 'OpenAI Chat Completions'),
     )
@@ -326,16 +343,26 @@ function flushPendingToolImages(
 ): void {
   if (pendingToolImages.length === 0) return;
 
-  const imageParts: OpenAI.Chat.ChatCompletionContentPart[] = [
-    { type: 'text', text: '[Images from tool response]' },
-    ...pendingToolImages.map((mb) => ({
-      type: 'image_url' as const,
-      image_url: { url: normalizeMediaToDataUri(mb) },
-    })),
+  const containsVideo = pendingToolImages.some(
+    (mediaBlock) => classifyMediaBlock(mediaBlock) === 'video',
+  );
+  const mediaParts = pendingToolImages
+    .map((mediaBlock) => convertBlockToPart(mediaBlock))
+    .filter(
+      (part): part is OpenAI.Chat.ChatCompletionContentPart => part !== null,
+    );
+  const mediaContentParts: OpenAI.Chat.ChatCompletionContentPart[] = [
+    {
+      type: 'text',
+      text: containsVideo
+        ? '[Media from tool response]'
+        : '[Images from tool response]',
+    },
+    ...mediaParts,
   ];
   messages.push({
     role: 'user',
-    content: imageParts,
+    content: mediaContentParts,
   });
   pendingToolImages.length = 0;
 }
