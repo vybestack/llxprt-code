@@ -347,7 +347,7 @@ describe('Gemini Client (client.ts)', () => {
         terminalEvent: { type: AgentEventType.InvalidStream },
       },
     ])(
-      'does not retry a $name after a tool call was emitted',
+      'does not retry after a $name follows a tool call',
       async ({ terminalEvent }) => {
         vi.spyOn(
           client['config'],
