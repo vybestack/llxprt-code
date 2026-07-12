@@ -63,6 +63,7 @@ import {
 } from './chatSession.js';
 import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
 import { responseToModelStreamChunk } from './streamChunkWrapper.js';
+import { hasVisibleOrThinkingContent } from './streamChunkVisibility.js';
 import { enrichSchemaDepthError } from './schemaDepthErrorEnrichment.js';
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{ name: string }>;
@@ -251,6 +252,7 @@ export class TurnProcessor {
       yield { type: StreamEventType.RETRY };
     }
 
+    let hasYieldedChunk = false;
     try {
       const currentParams = this._applyRetryTemperature(params, attempt);
       const stream = await this.streamProcessor.makeApiCallAndProcessStream(
@@ -259,6 +261,7 @@ export class TurnProcessor {
         userContent,
       );
       for await (const chunk of stream) {
+        hasYieldedChunk ||= hasVisibleOrThinkingContent(chunk);
         yield wrapChunk(chunk);
       }
       return { error: null, action: 'stop' };
@@ -285,7 +288,10 @@ export class TurnProcessor {
         }
         return { error: null, action: 'stop' };
       }
-      if (shouldRetryStreamAttempt(error, params, attempt)) {
+      if (
+        !hasYieldedChunk &&
+        shouldRetryStreamAttempt(error, params, attempt)
+      ) {
         return { error, action: 'retry' };
       }
       return { error, action: 'stop' };
