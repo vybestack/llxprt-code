@@ -593,6 +593,7 @@ export class Session {
           event.info.systemMessage ?? 'Agent stopped by a hook blocker.',
         );
       case 'loop-detected':
+        await batcher.flush();
         return 'end_turn';
       case 'notice':
         await batcher.flush();
@@ -602,6 +603,7 @@ export class Session {
         });
         return null;
       case 'usage':
+        await batcher.flush();
         await this.sendUsageUpdate(event.usage);
         return null;
       default: {

@@ -129,6 +129,9 @@ function handleThinking(
       thoughtText = filterResult.filtered;
     }
   }
+  if (!thoughtText.trim()) {
+    return thoughtBuffer;
+  }
   if (thought.streamId === undefined) {
     return [...thoughtBuffer, { text: thoughtText }];
   }

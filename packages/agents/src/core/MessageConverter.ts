@@ -465,7 +465,7 @@ export function classifyMixedParts(parts: Part[]): {
       if (part.llxprtThoughtIsHidden !== undefined) {
         thinkingBlock.isHidden = part.llxprtThoughtIsHidden;
       }
-      if (part.thoughtSignature) {
+      if (part.thoughtSignature !== undefined) {
         thinkingBlock.signature = part.thoughtSignature;
       }
       if (part.llxprtThoughtBlockId !== undefined) {

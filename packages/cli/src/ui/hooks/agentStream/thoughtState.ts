@@ -79,7 +79,9 @@ export function applyThoughtToState(
         ? {
             ...existingBlock,
             thought: updatedThought,
-            streamStatus: thoughtSummary.streamStatus,
+            ...(thoughtSummary.streamStatus !== undefined
+              ? { streamStatus: thoughtSummary.streamStatus }
+              : {}),
           }
         : block,
     );

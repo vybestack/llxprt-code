@@ -254,7 +254,7 @@ describe('processAgentStream', () => {
     expect(output).not.toContain('First First second');
   });
 
-  it('keeps different thinking streams separate before flushing to stdout', async () => {
+  it('concatenates different thinking streams when flushing to stdout', async () => {
     const events: AgentEvent[] = [
       {
         type: 'thinking',
@@ -288,6 +288,50 @@ describe('processAgentStream', () => {
     const output = processStdoutSpy.mock.calls.map(([value]) => value).join('');
     expect(output).toContain('<think>Stream A Stream B</think>');
   });
+
+  it('preserves same-stream thinking when a filtered update becomes empty', async () => {
+    const events: AgentEvent[] = [
+      {
+        type: 'thinking',
+        thought: {
+          subject: 'Keep this',
+          description: '',
+          streamId: 'reasoning-1',
+          streamStatus: 'delta',
+        },
+      },
+      {
+        type: 'thinking',
+        thought: {
+          subject: 'filtered',
+          description: '',
+          streamId: 'reasoning-1',
+          streamStatus: 'complete',
+        },
+      },
+      { type: 'done', reason: 'stop' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({
+        config: createMockConfig({ includeInResponse: true }),
+        emojiFilter: {
+          filterText: (text: string) => ({
+            filtered: text === 'filtered' ? '' : text,
+            blocked: false,
+          }),
+          flushBuffer: () => '',
+        },
+      }),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    const output = processStdoutSpy.mock.calls.map(([value]) => value).join('');
+    expect(output).toContain('<think>Keep this</think>');
+  });
+
   it('emits a tool-use record and prints successful tool display output', async () => {
     const events: AgentEvent[] = [
       {

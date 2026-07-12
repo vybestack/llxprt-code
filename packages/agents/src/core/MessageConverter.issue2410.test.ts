@@ -67,6 +67,25 @@ describe('issue #1723 – ThinkingBlock stream metadata round-trip', () => {
 
     expect(classified).toStrictEqual(blocks);
   });
+
+  it('preserves an explicitly empty thought signature', () => {
+    const { blocks } = classifyMixedParts([
+      {
+        thought: true,
+        text: 'thinking text',
+        thoughtSignature: '',
+      },
+    ]);
+
+    expect(blocks).toStrictEqual([
+      {
+        type: 'thinking',
+        thought: 'thinking text',
+        sourceField: 'thought',
+        signature: '',
+      },
+    ]);
+  });
 });
 
 describe('issue #2410 – empty message arrays must not create zero-part Content', () => {

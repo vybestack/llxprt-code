@@ -244,6 +244,26 @@ describe('applyThoughtToState identity-aware streaming updates', () => {
     ]);
   });
 
+  it('preserves stream status when a same-stream update omits it', () => {
+    const args = createArgs({
+      getContentPrefixIdentity: () => null,
+    });
+
+    applyThought(args, {
+      subject: '',
+      description: 'Start',
+      streamId: 'thinking:0',
+      streamStatus: 'delta',
+    });
+    applyThought(args, {
+      subject: '',
+      description: 'Continue',
+      streamId: 'thinking:0',
+    });
+
+    expect(args.thinkingBlocksRef.current[0]?.streamStatus).toBe('delta');
+  });
+
   it('suppresses exact duplicate thoughts only when providers omit stream ids', () => {
     const args = createArgs({
       getContentPrefixIdentity: () => null,
