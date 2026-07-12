@@ -36,6 +36,7 @@ import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-util
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResponsesInputItem } from '../OpenAIResponsesTypes.js';
 
+const TEST_RUNTIME_ID = 'stateful-test-runtime';
 const originalFetch = global.fetch;
 const mockFetch = vi.fn();
 
@@ -82,7 +83,7 @@ async function captureRequestBody(
 
   const runtime = createProviderRuntimeContext({
     settingsService: settings,
-    runtimeId: 'stateful-test-runtime',
+    runtimeId: TEST_RUNTIME_ID,
     config: createRuntimeConfigStub(settings),
   });
 
@@ -169,7 +170,7 @@ describe('OpenAIResponsesProvider stateful conversations @issue:207', () => {
     setActiveProviderRuntimeContext(
       createProviderRuntimeContext({
         settingsService: new SettingsService(),
-        runtimeId: 'stateful-test-runtime',
+        runtimeId: TEST_RUNTIME_ID,
       }),
     );
   });
