@@ -176,7 +176,7 @@ async function probeMatchingSessionFile(
   try {
     entries = await probe();
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorMessage(error);
     if (isEnoent(error)) {
       // The chats dir does not exist yet: the session is genuinely missing, not
       // a probe failure. Keep the plain not-found mapping.
