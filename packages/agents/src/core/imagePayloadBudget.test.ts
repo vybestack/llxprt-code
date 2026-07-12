@@ -60,6 +60,11 @@ describe('getImageInlineDataSize', () => {
     expect(getImageInlineDataSize(part)).toBe(0);
   });
 
+  it('returns 0 when inlineData exists but mimeType is undefined', () => {
+    const part: Part = { inlineData: { data: 'AA' } };
+    expect(getImageInlineDataSize(part)).toBe(0);
+  });
+
   it('returns 0 when inlineData is undefined', () => {
     const part: Part = { text: 'not an image' };
     expect(getImageInlineDataSize(part)).toBe(0);
@@ -80,6 +85,19 @@ describe('enforceImageBudget', () => {
     expect(result.parts).toHaveLength(4);
     expect(result.omitted).toHaveLength(0);
     expect(result.totalImageBytes).toBe(2000);
+  });
+
+  it('retains images whose cumulative size exactly equals the budget', () => {
+    const parts = [
+      inlineDataPart('image/png', 500),
+      inlineDataPart('image/jpeg', 500),
+    ];
+
+    const result = enforceImageBudget(parts, 1000);
+
+    expect(result.parts).toStrictEqual(parts);
+    expect(result.omitted).toHaveLength(0);
+    expect(result.totalImageBytes).toBe(1000);
   });
 
   it('retains text and functionResponse parts even when images are omitted', () => {
