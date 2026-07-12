@@ -74,6 +74,7 @@ describe('summarizeAstValidation', () => {
       { valid: false, errors: ['Syntax error at line 173, column 5'] },
       { valid: false, errors: ['Syntax error at line 183, column 5'] },
       10,
+      1,
     );
     expect(summary.status).toBe('FAILED');
     expect(summary.preExisting).toBe(true);
@@ -88,7 +89,7 @@ describe('summarizeAstValidation', () => {
       0,
     );
     expect(summary.status).toBe('FAILED');
-    expect(summary.preExisting).toBe(true);
+    expect(summary.preExisting).toBe(false);
     expect(summary.newlyIntroduced).toBe(true);
     expect(summary.label).toBe(
       'FAILED (file had pre-existing error at line 173; post-edit error at line 4977 may be newly introduced)',
@@ -110,8 +111,9 @@ describe('summarizeAstValidation', () => {
       { valid: false, errors: ['Syntax error at line 173, column 5'] },
       { valid: false, errors: ['Syntax error at line 184, column 5'] },
       10,
+      1,
     );
-    expect(summary.preExisting).toBe(true);
+    expect(summary.preExisting).toBe(false);
     expect(summary.newlyIntroduced).toBe(true);
   });
 
@@ -121,7 +123,7 @@ describe('summarizeAstValidation', () => {
       { valid: false, errors: ['Syntax error at line 173, column 9'] },
       0,
     );
-    expect(summary.preExisting).toBe(true);
+    expect(summary.preExisting).toBe(false);
     expect(summary.newlyIntroduced).toBe(true);
   });
 
@@ -135,7 +137,7 @@ describe('summarizeAstValidation', () => {
       10,
       1,
     );
-    expect(summary.preExisting).toBe(true);
+    expect(summary.preExisting).toBe(false);
     expect(summary.newlyIntroduced).toBe(true);
   });
 
@@ -163,6 +165,27 @@ describe('summarizeAstValidation', () => {
     );
     expect(summary.preExisting).toBe(true);
     expect(summary.newlyIntroduced).toBe(false);
+  });
+
+  it('treats an error on the edit start line as unmatched', () => {
+    const summary = summarizeAstValidation(
+      { valid: false, errors: ['Syntax error at line 50, column 5'] },
+      { valid: false, errors: ['Syntax error at line 60, column 5'] },
+      10,
+      50,
+    );
+    expect(summary.preExisting).toBe(false);
+    expect(summary.newlyIntroduced).toBe(true);
+  });
+
+  it('does not infer shifted matches when the edit position is unknown', () => {
+    const summary = summarizeAstValidation(
+      { valid: false, errors: ['Syntax error at line 50, column 5'] },
+      { valid: false, errors: ['Syntax error at line 60, column 5'] },
+      10,
+    );
+    expect(summary.preExisting).toBe(false);
+    expect(summary.newlyIntroduced).toBe(true);
   });
 
   it('matches multiple pre-existing errors when all shift correctly', () => {
@@ -219,7 +242,7 @@ describe('summarizeAstValidation', () => {
       10,
       10,
     );
-    expect(summary.preExisting).toBe(true);
+    expect(summary.preExisting).toBe(false);
     expect(summary.newlyIntroduced).toBe(true);
   });
 
@@ -244,7 +267,7 @@ describe('summarizeAstValidation', () => {
       { valid: false, errors: [] },
     );
 
-    expect(summary.preExisting).toBe(true);
+    expect(summary.preExisting).toBe(false);
     expect(summary.newlyIntroduced).toBe(true);
     expect(summary.label).toBe(
       'FAILED (file had pre-existing error at line 173; post-edit validation failed without error details)',
@@ -266,21 +289,19 @@ describe('computeLineDelta', () => {
   });
 
   it('handles undefined inputs', () => {
-    expect(computeLineDelta(undefined, 'a\nb')).toBe(2);
-    expect(computeLineDelta('a\nb', undefined)).toBe(-2);
+    expect(computeLineDelta(undefined, 'a\nb')).toBe(1);
+    expect(computeLineDelta('a\nb', undefined)).toBe(-1);
   });
 
   it('handles empty string inputs', () => {
-    // Empty string counts as 0 lines (falsy guard), so delta from '' to 'a\nb' is 2.
-    expect(computeLineDelta('', 'a\nb')).toBe(2);
+    expect(computeLineDelta('', 'a\nb')).toBe(1);
     expect(computeLineDelta('', '')).toBe(0);
   });
 
-  it('does not inflate delta for trailing newlines', () => {
-    // A trailing newline terminates a line; 'abc\n' is 1 line, not 2.
+  it('counts trailing newline insertion and removal as line shifts', () => {
     expect(computeLineDelta('abc\n', 'abc\n')).toBe(0);
-    expect(computeLineDelta('abc', 'abc\n')).toBe(0);
-    expect(computeLineDelta('abc\n', 'abc')).toBe(0);
+    expect(computeLineDelta('abc', 'abc\n')).toBe(1);
+    expect(computeLineDelta('abc\n', 'abc')).toBe(-1);
   });
 });
 

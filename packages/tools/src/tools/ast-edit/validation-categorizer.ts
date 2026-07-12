@@ -71,14 +71,10 @@ export function findEditStartLine(
   return content.substring(0, firstIdx).split('\n').length;
 }
 
-/**
- * Counts the number of lines in a string, treating a single trailing newline
- * as a line terminator (not an extra empty line) so that "abc\n" counts as 1
- * line, matching "abc".
- */
-function countLines(s: string | undefined): number {
+/** Counts newline delimiters, which determine shifts below an edit. */
+function countLineBreaks(s: string | undefined): number {
   if (!s) return 0;
-  return s.replace(/\n$/, '').split('\n').length;
+  return s.split('\n').length - 1;
 }
 
 /**
@@ -89,7 +85,7 @@ export function computeLineDelta(
   oldString: string | undefined,
   newString: string | undefined,
 ): number {
-  return countLines(newString) - countLines(oldString);
+  return countLineBreaks(newString) - countLineBreaks(oldString);
 }
 
 /**
@@ -114,18 +110,16 @@ function locationsMatch(
   if (pre.column !== post.column) return false;
 
   if (editStartLine !== null) {
-    // Whether the PRE-EDIT error was at/below the edit determines whether it
-    // shifted. Checking the post-edit location instead causes false positives.
-    if (pre.line >= editStartLine) {
+    if (pre.line > editStartLine) {
       return pre.line + lineDelta === post.line;
+    }
+    if (pre.line === editStartLine) {
+      return false;
     }
     return pre.line === post.line;
   }
 
-  if (lineDelta === 0) {
-    return pre.line === post.line;
-  }
-  return pre.line + lineDelta === post.line;
+  return lineDelta === 0 && pre.line === post.line;
 }
 
 /**
@@ -192,6 +186,7 @@ export function summarizeAstValidation(
   const unmatchedPreLocations = preEdit.errors
     .map(extractErrorLocation)
     .filter((location): location is ErrorLocation => location !== null);
+  let matchedCount = 0;
   let allMatched = postErrors.length > 0;
   for (const postErr of postErrors) {
     const postLocation = extractErrorLocation(postErr);
@@ -205,6 +200,7 @@ export function summarizeAstValidation(
       allMatched = false;
       break;
     }
+    matchedCount++;
     unmatchedPreLocations.splice(matchingIndex, 1);
   }
 
@@ -220,12 +216,17 @@ export function summarizeAstValidation(
   // File was already broken, but the post-edit errors don't line up with the
   // pre-existing ones. They may be cascading from the same root cause or newly
   // introduced; surface both for the LLM to judge.
-  return formatMixedValidationSummary(preEdit.errors, postErrors);
+  return formatMixedValidationSummary(
+    preEdit.errors,
+    postErrors,
+    matchedCount > 0,
+  );
 }
 
 function formatMixedValidationSummary(
   preErrors: string[],
   postErrors: string[],
+  hasMatchedError: boolean,
 ): AstValidationSummary {
   const preErrorNoun = preErrors.length === 1 ? 'error' : 'errors';
   let postErrorDescription =
@@ -236,7 +237,7 @@ function formatMixedValidationSummary(
   }
   return {
     status: 'FAILED',
-    preExisting: true,
+    preExisting: hasMatchedError,
     newlyIntroduced: true,
     label: `FAILED (file had pre-existing ${preErrorNoun}${formatLineLabel(preErrors)}; ${postErrorDescription})`,
   };
