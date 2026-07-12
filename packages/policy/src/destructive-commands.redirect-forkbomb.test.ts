@@ -596,6 +596,16 @@ describe('top-level substitutions are not function definitions', () => {
   });
 });
 
+describe('quoted function-name mentions are not recursive calls', () => {
+  it('allows a background pipeline that only logs its function name', () => {
+    expect(
+      isDestructiveCommand(
+        'log() { echo "log: $1" | tee -a /var/log/app.log & }; log',
+      ),
+    ).toBe(false);
+  });
+});
+
 describe('Fix H: brace matcher ignores unbalanced braces inside substitutions (false negative)', () => {
   it.each<[string, boolean]>([
     // A lone `}` inside $(...) must not be treated as the body-closing brace.

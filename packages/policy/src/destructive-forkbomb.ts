@@ -12,14 +12,6 @@ function isNameChar(ch: string | undefined): boolean {
   return ch !== undefined && ch !== '' && NAME_IDENTIFIER.test(ch);
 }
 
-/**
- * A NEGATED character class matching a function-name token BOUNDARY: any
- * character that is NOT part of the function-name identifier set
- * `[A-Za-z0-9_:]`. Used as a left/right boundary anchor in whole-token
- * matching so `log` does not match inside `catalog`.
- */
-const NAME_BOUNDARY = '[^A-Za-z0-9_:]';
-
 /** The newline character, preserved through whitespace collapse as a separator. */
 const NEWLINE = String.fromCharCode(10);
 
@@ -108,7 +100,7 @@ function isBombDefinition(def: FunctionDefinition): boolean {
   if (!hasPipeAndBg) {
     return false;
   }
-  if (!containsNameToken(def.body, def.name)) {
+  if (!containsUnquotedNameToken(def.body, def.name)) {
     return false;
   }
   return tailStartsWithNameToken(def.originalTail, def.name);
@@ -190,26 +182,27 @@ function isStandaloneBackgroundAmp(
   return next !== '>';
 }
 
-/**
- * Escapes regex metacharacters in a literal string so it can be embedded in a
- * RegExp pattern. Linear-time, character-by-character.
- */
-function escapeRegex(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/**
- * Returns true iff `name` appears in `text` as a whole token bounded on BOTH
- * sides by either string start/end OR a character NOT in the function-name
- * identifier set `[A-Za-z0-9_:]`. This prevents substring false positives like
- * `log` matching inside `catalog`. Uses a bounded, linear-time regex (no
- * backtracking — simple anchored character-class boundaries).
- */
-function containsNameToken(text: string, name: string): boolean {
-  const pattern = new RegExp(
-    `(^|${NAME_BOUNDARY})${escapeRegex(name)}($|${NAME_BOUNDARY})`,
-  );
-  return pattern.test(text);
+function containsUnquotedNameToken(text: string, name: string): boolean {
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < text.length; i++) {
+    if (isEscapedChar(text, i, inSingle)) {
+      i++;
+    } else if (text[i] === "'" && !inDouble) {
+      inSingle = !inSingle;
+    } else if (text[i] === '"' && !inSingle) {
+      inDouble = !inDouble;
+    } else if (!inSingle && !inDouble && text.startsWith(name, i)) {
+      const previous = text[i - 1];
+      const commandPosition =
+        i === 0 || previous === ';' || previous === '&' || previous === '|';
+      const rightBoundary = !isNameChar(text[i + name.length]);
+      if (commandPosition && rightBoundary) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /**
