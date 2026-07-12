@@ -120,17 +120,26 @@ type ToolMessageWithName = OpenAI.Chat.ChatCompletionToolMessageParam & {
   name?: string;
 };
 
+type KimiVideoContentPart = {
+  type: 'video_url';
+  video_url: { url: string };
+};
+
+type ExtendedContentPart =
+  | OpenAI.Chat.ChatCompletionContentPart
+  | KimiVideoContentPart;
+
+const MOONSHOT_STORAGE_URL_PREFIX = 'ms://';
+
 function isForwardableKimiVideo(block: MediaBlock): boolean {
   return (
     classifyMediaBlock(block) === 'video' &&
     block.encoding === 'url' &&
-    block.data.startsWith('ms://')
+    block.data.startsWith(MOONSHOT_STORAGE_URL_PREFIX)
   );
 }
 
-function convertBlockToPart(
-  block: ContentBlock,
-): OpenAI.Chat.ChatCompletionContentPart | null {
+function convertBlockToPart(block: ContentBlock): ExtendedContentPart | null {
   if (block.type === 'text' && block.text) {
     return { type: 'text', text: block.text };
   }
@@ -145,11 +154,10 @@ function convertBlockToPart(
     };
   }
   if (isForwardableKimiVideo(block)) {
-    // Moonshot extends OpenAI chat content with uploaded video references.
     return {
       type: 'video_url',
       video_url: { url: block.data },
-    } as unknown as OpenAI.Chat.ChatCompletionContentPart;
+    };
   }
   if (category === 'pdf') {
     const fileData = normalizeMediaToDataUri(block);
@@ -182,7 +190,7 @@ function processUserMessage(
   const hasMedia = content.blocks.some((b) => b.type === 'media');
 
   if (hasMedia) {
-    const parts: OpenAI.Chat.ChatCompletionContentPart[] = [];
+    const parts: ExtendedContentPart[] = [];
 
     for (const block of content.blocks) {
       const part = convertBlockToPart(block);
@@ -194,7 +202,7 @@ function processUserMessage(
     if (parts.length > 0) {
       return {
         role: 'user',
-        content: parts,
+        content: parts as OpenAI.Chat.ChatCompletionContentPart[],
       };
     }
   } else {
@@ -351,7 +359,7 @@ function flushPendingToolImages(
     .filter(
       (part): part is OpenAI.Chat.ChatCompletionContentPart => part !== null,
     );
-  const mediaContentParts: OpenAI.Chat.ChatCompletionContentPart[] = [
+  const mediaContentParts: ExtendedContentPart[] = [
     {
       type: 'text',
       text: containsVideo
@@ -362,7 +370,7 @@ function flushPendingToolImages(
   ];
   messages.push({
     role: 'user',
-    content: mediaContentParts,
+    content: mediaContentParts as OpenAI.Chat.ChatCompletionContentPart[],
   });
   pendingToolImages.length = 0;
 }

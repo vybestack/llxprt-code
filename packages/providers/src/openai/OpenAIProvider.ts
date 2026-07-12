@@ -961,4 +961,7 @@ function resolveAgentSettings(
  * Prevents re-uploading the same PDF across turns within a session.
  * Bounded via the wrapper to avoid unbounded memory growth.
  */
-const kimiFileUploadCache = createBoundedCache<string>(100);
+const KIMI_FILE_UPLOAD_CACHE_CAPACITY = 100;
+const kimiFileUploadCache = createBoundedCache<string>(
+  KIMI_FILE_UPLOAD_CACHE_CAPACITY,
+);

@@ -522,8 +522,9 @@ describe('buildMessagesWithReasoning', () => {
     expect(messages[2].role).toBe('user');
     const toolMessage =
       messages[1] as OpenAI.Chat.ChatCompletionToolMessageParam;
-    expect(String(toolMessage.content)).toContain('captured');
-    expect(String(toolMessage.content)).not.toContain('ms://video-tool');
+    expect(typeof toolMessage.content).toBe('string');
+    expect(toolMessage.content as string).toContain('captured');
+    expect(toolMessage.content as string).not.toContain('ms://video-tool');
     const mediaMessage =
       messages[2] as OpenAI.Chat.ChatCompletionUserMessageParam;
     expect(mediaMessage.content).toStrictEqual([

@@ -46,6 +46,7 @@ function collectUploadableMedia(
 }
 
 export interface KimiMediaProcessingResult {
+  /** Original reference when unchanged; a cloned array when media was replaced. */
   contents: IContent[];
   fileReferenceText: string;
 }

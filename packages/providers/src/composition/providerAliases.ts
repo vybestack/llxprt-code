@@ -262,7 +262,7 @@ function sanitizeMediaSupport(
     const value = rawRecord[key];
     if (typeof value === 'boolean') {
       coerced[key] = value;
-    } else if (value !== undefined && value !== null) {
+    } else if (Object.prototype.hasOwnProperty.call(rawRecord, key)) {
       debugLogger.warn(
         `[ProviderAliases] Ignoring non-boolean mediaSupport.${key} in ${filePath}`,
       );

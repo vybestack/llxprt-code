@@ -136,6 +136,9 @@ describe('providerAliases mediaSupport sanitization', () => {
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('non-boolean mediaSupport.inlineImages'),
     );
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('non-boolean mediaSupport.fileUpload'),
+    );
   });
 
   it('defaults mediaSupport to undefined when not present', async () => {
