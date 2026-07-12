@@ -64,11 +64,14 @@ discovers skills from the cross-tool
 This enables interoperability with other tools that install skills into the
 `.agents/skills/` standard directory, such as `npx skills add`.
 
-Within the same tier, `.llxprt/skills/` **takes precedence over**
-`.agents/skills/`. Tool-specific skills are more deliberate than cross-tool
-standard skills, so they win for the same name. The overall tier precedence
-(Workspace > User > Extension) is preserved regardless of which alias each
-skill comes from.
+Within the same tier, `.agents/skills/` **takes precedence over**
+`.llxprt/skills/`, matching the Agent Skills interoperability behavior. The
+overall tier precedence (Workspace > User > Extension) is preserved regardless
+of which alias each skill comes from.
+
+Because `.agents/skills/` is shared across tools and can override a same-named
+LLxprt-specific skill, only install skills from trusted sources and review
+changes made to this directory by other tools.
 
 ## Managing Skills
 

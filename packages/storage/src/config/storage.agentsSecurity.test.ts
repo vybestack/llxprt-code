@@ -45,6 +45,9 @@ describe('Storage - .agents security: fail-closed home resolution', () => {
     expect(() => Storage.getGlobalAgentsDir()).toThrow(
       'Unable to resolve user home directory for .agents skills',
     );
+    expect(() => Storage.getUserAgentSkillsDir()).toThrow(
+      'Unable to resolve user home directory for .agents skills',
+    );
   });
 
   it('throws when os.homedir() returns undefined', () => {

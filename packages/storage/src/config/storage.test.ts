@@ -623,14 +623,16 @@ describe('Storage – agents-standard (.agents) paths', () => {
   });
 
   it('getAgentsDir returns project/.agents for a workspace instance', () => {
-    const storage = new Storage('/tmp/project');
-    expect(storage.getAgentsDir()).toBe('/tmp/project/.agents');
+    const projectDir = path.join(os.tmpdir(), 'project');
+    const storage = new Storage(projectDir);
+    expect(storage.getAgentsDir()).toBe(path.join(projectDir, AGENTS_DIR));
   });
 
   it('getProjectAgentSkillsDir returns project/.agents/skills for a workspace instance', () => {
-    const storage = new Storage('/tmp/project');
+    const projectDir = path.join(os.tmpdir(), 'project');
+    const storage = new Storage(projectDir);
     expect(storage.getProjectAgentSkillsDir()).toBe(
-      '/tmp/project/.agents/skills',
+      path.join(projectDir, AGENTS_DIR, 'skills'),
     );
   });
 });

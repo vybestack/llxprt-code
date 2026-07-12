@@ -112,14 +112,13 @@ export class SkillManager {
    * Load order (later loads win for same-named skills):
    * 1. Built-in
    * 2. Extensions
-   * 3. User `~/.agents/skills/` (cross-tool standard, https://agentskills.io)
-   * 4. User `<OS-standard-config-dir>/skills/` (tool-specific, wins over #3)
-   * 5. Workspace `.agents/skills/` (wins over all user tiers)
-   * 6. Workspace `.llxprt/skills/` (highest precedence)
+   * 3. User `<OS-standard-config-dir>/skills/`
+   * 4. User `~/.agents/skills/` (cross-tool standard, https://agentskills.io)
+   * 5. Workspace `.llxprt/skills/`
+   * 6. Workspace `.agents/skills/` (highest precedence)
    *
-   * Rationale: tool-specific paths are more deliberate than cross-tool
-   * standard paths, so they take precedence within a tier. The overall
-   * Workspace > User > Extension > Built-in precedence is preserved.
+   * The overall Workspace > User > Extension > Built-in precedence is
+   * preserved, while `.agents/skills/` wins within each user or workspace tier.
    */
   async discoverSkills(
     storage: Storage,
@@ -148,41 +147,34 @@ export class SkillManager {
       }
     }
 
-    // 3. User skills — .agents/skills first (lower), then .llxprt/skills (wins)
-    // .agents/skills is the cross-tool standard (~/.agents/skills/); .llxprt/skills
-    // is the OS-standard config dir (e.g. ~/.config/llxprt-code/skills on Linux).
-    // The .agents path may throw if os.homedir() is unavailable (fail-closed
-    // security design); we catch and skip so the rest of discovery proceeds.
-    let userAgentSkills: SkillDefinition[] = [];
-    try {
-      userAgentSkills = await loadSkillsFromDir(
-        Storage.getUserAgentSkillsDir(),
-        'user',
-      );
-    } catch (err) {
-      debugLogger.warn(
-        `Skipping user .agents/skills discovery: ${(err as Error).message}`,
-      );
-    }
-    this.addSkillsWithPrecedence(userAgentSkills);
+    // 3. User skills
     const userSkills = await loadSkillsFromDir(
       Storage.getUserSkillsDir(),
       'user',
     );
     this.addSkillsWithPrecedence(userSkills);
+    try {
+      const userAgentSkills = await loadSkillsFromDir(
+        Storage.getUserAgentSkillsDir(),
+        'user',
+      );
+      this.addSkillsWithPrecedence(userAgentSkills);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      debugLogger.warn(`Skipping user .agents/skills discovery: ${reason}`);
+    }
 
-    // 4. Workspace skills (highest precedence) — .agents/skills first (lower),
-    // then .llxprt/skills (wins).
-    const projectAgentSkills = await loadSkillsFromDir(
-      storage.getProjectAgentSkillsDir(),
-      'project',
-    );
-    this.addSkillsWithPrecedence(projectAgentSkills);
+    // 4. Workspace skills (highest precedence)
     const projectSkills = await loadSkillsFromDir(
       storage.getProjectSkillsDir(),
       'project',
     );
     this.addSkillsWithPrecedence(projectSkills);
+    const projectAgentSkills = await loadSkillsFromDir(
+      storage.getProjectAgentSkillsDir(),
+      'project',
+    );
+    this.addSkillsWithPrecedence(projectAgentSkills);
   }
 
   /**

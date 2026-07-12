@@ -43,7 +43,7 @@ description: ${description}
   );
 }
 
-describe('SkillManager – .agents/skills alias discovery', () => {
+describe('SkillManager - .agents/skills alias discovery', () => {
   let testRootDir: string;
 
   beforeEach(async () => {
@@ -125,9 +125,8 @@ describe('SkillManager – .agents/skills alias discovery', () => {
     expect(skill!.description).toBe('agents-project-desc');
   });
 
-  it('at the user tier, .llxprt/skills overrides .agents/skills for the same skill name', async () => {
+  it('at the user tier, .agents/skills overrides .llxprt/skills for the same skill name', async () => {
     // Arrange: same-named skill in BOTH user tiers; project tiers are empty.
-    // Tool-specific .llxprt/skills should win over cross-tool .agents/skills.
     const userLlxprtDir = path.join(testRootDir, 'user-llxprt');
     const userAgentDir = path.join(testRootDir, 'user-agents');
     await writeSkillFile(userLlxprtDir, 'shared', 'shared', 'llxprt-user-desc');
@@ -150,13 +149,13 @@ describe('SkillManager – .agents/skills alias discovery', () => {
     );
     await service.discoverSkills(storage);
 
-    // Assert: the .llxprt/skills version wins within the user tier.
+    // Assert: the .agents/skills version wins within the user tier.
     const skill = service.getSkills().find((s) => s.name === 'shared');
     expect(skill).toBeDefined();
-    expect(skill!.description).toBe('llxprt-user-desc');
+    expect(skill!.description).toBe('agents-user-desc');
   });
 
-  it('at the project tier, .llxprt/skills overrides .agents/skills for the same skill name', async () => {
+  it('at the project tier, .agents/skills overrides .llxprt/skills for the same skill name', async () => {
     // Arrange: same-named skill in BOTH project tiers; a differently-named
     // user skill is also present to ensure the user tier still loads.
     const userLlxprtDir = path.join(testRootDir, 'user-llxprt');
@@ -195,12 +194,12 @@ describe('SkillManager – .agents/skills alias discovery', () => {
     );
     await service.discoverSkills(storage);
 
-    // Assert: the project .llxprt/skills version wins within the project tier,
+    // Assert: the project .agents/skills version wins within the project tier,
     // and the unrelated user skill is still discovered.
     const skills = service.getSkills();
     const shared = skills.find((s) => s.name === 'shared');
     expect(shared).toBeDefined();
-    expect(shared!.description).toBe('llxprt-project-desc');
+    expect(shared!.description).toBe('agents-project-desc');
 
     const other = skills.find((s) => s.name === 'other');
     expect(other).toBeDefined();
