@@ -24,8 +24,7 @@ import type { GenerateContentResponse } from '@google/genai';
  *
  * @issue:207
  */
-export interface ResponseWithProviderResponseId
-  extends GenerateContentResponse {
+interface ResponseWithProviderResponseId extends GenerateContentResponse {
   providerResponseId?: string;
   providerResponsesStored?: boolean;
 }
@@ -65,9 +64,10 @@ export function getResponseId(
 }
 
 /**
- * Reads the provider-responses-stored flag from a response, returning
- * undefined when absent. When true, the prior turn was persisted server-side
- * (store=true) and is safe to reference via previous_response_id.
+ * Reads the provider-responses-stored flag from a response. `true` means the
+ * turn was persisted server-side and can be used as a previous_response_id;
+ * `false` means it was explicitly not stored; `undefined` means no storage
+ * status was carried.
  */
 export function getResponsesStored(
   response: GenerateContentResponse | null | undefined,
