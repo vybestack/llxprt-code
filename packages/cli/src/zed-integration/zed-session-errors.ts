@@ -39,22 +39,11 @@ import {
   RESUME_NO_SESSIONS_FOUND,
   RESUME_SESSION_NOT_FOUND_PREFIX,
   RESUME_SESSION_INDEX_OUT_OF_RANGE_RE,
+  SESSION_FILE_ID_PREFIX_LENGTH,
 } from '@vybestack/llxprt-code-core';
 
 /** JSON-RPC code ACP assigns to resourceNotFound (-32002). */
 const RESOURCE_NOT_FOUND_CODE = acp.RequestError.resourceNotFound('').code;
-
-/**
- * Length of the session-id prefix embedded in a recorded session filename
- * (FINDING B1). SessionRecordingService.materialize (packages/core) names files
- * `session-<timestamp>-<first-N-of-id>.jsonl` using `sessionId.substring(0, 12)`
- * — that call is the SOURCE OF TRUTH for this contract. Core does not export the
- * constant, so it is duplicated here (the single place the zed layer reconstructs
- * the filename) rather than left as a bare magic `12`; if core ever changes the
- * prefix length, update it here to keep the corrupt-vs-missing + re-attach probes
- * matching real recorded filenames.
- */
-export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
 
 /**
  * Module logger (mirroring the zedIntegration.ts / sessionControl.ts precedent

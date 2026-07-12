@@ -83,8 +83,8 @@ async function withIsolatedAgent(
   const workingDir = mkdtempSync(join(tmpdir(), 'llxprt-rec-spec-'));
   // The temp dirs must be removed on EVERY exit path, including a buildAgent
   // rejection (which would otherwise leak the just-created workingDir), a
-  // scenario failure, and — FINDING F1 — a cleanup() rejection, which must NOT
-  // skip the rmSync calls. Note that only ONE error can ultimately propagate:
+  // scenario failure, and a cleanup() rejection, which must NOT skip the rmSync
+  // calls. Note that only ONE error can ultimately propagate:
   // if fn() throws AND cleanup() then also rejects in the finally, cleanup()'s
   // error replaces fn()'s. That is the standard try/finally trade-off and
   // acceptable here — either failure fails the test loudly; the invariant this

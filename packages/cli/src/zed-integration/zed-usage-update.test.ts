@@ -39,6 +39,17 @@ describe('buildUsageUpdate (issue #1607: usage_update size/used semantics)', () 
     });
   });
 
+  it('treats an explicit zero totalTokenCount as authoritative (no fallback to candidates)', () => {
+    // `??` intentionally distinguishes absent from zero: a provider explicitly
+    // reporting total=0 wins, even if it also supplies a candidate count.
+    expect(
+      buildUsageUpdate(
+        { totalTokenCount: 0, candidatesTokenCount: 450 },
+        64000,
+      ),
+    ).toBeNull();
+  });
+
   it('returns null when the event carries no usable token counts (nothing to report)', () => {
     expect(buildUsageUpdate({}, 128000)).toBeNull();
     expect(

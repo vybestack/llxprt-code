@@ -26,6 +26,8 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
+
 import { mkdirSync, existsSync, watch, type FSWatcher } from 'node:fs';
 import { type IContent } from '../services/history/IContent.js';
 import { debugLogger } from '../utils/debugLogger.js';
@@ -142,7 +144,7 @@ export class SessionRecordingService {
   private materialize(): void {
     const now = new Date();
     const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
-    const prefix = this.sessionId.substring(0, 12);
+    const prefix = this.sessionId.substring(0, SESSION_FILE_ID_PREFIX_LENGTH);
     const fileName = `session-${timestamp}-${prefix}.jsonl`;
     this.filePath = path.join(this.chatsDir, fileName);
     mkdirSync(this.chatsDir, { recursive: true });
