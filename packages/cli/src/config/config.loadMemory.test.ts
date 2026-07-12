@@ -39,6 +39,8 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         }),
         getProviderManager: vi.fn(),
         setProviderManager: vi.fn(),
+        setRuntimeMessageBus: vi.fn(),
+        setRuntimeOAuthManager: vi.fn(),
         initialize: vi.fn(),
         getModel: vi.fn(() => model),
         setModel: vi.fn((next: string) => {
@@ -273,6 +275,24 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
     getLoadBalancerStats: vi.fn(() => undefined),
     getLoadBalancerLastSelected: vi.fn(() => undefined),
     getAllLoadBalancerStats: vi.fn(() => ({})),
+    assembleCliProviderRuntime: vi.fn(
+      (input: {
+        settingsService: unknown;
+        config: unknown;
+        runtimeId: string;
+        metadata?: Record<string, unknown>;
+      }) => ({
+        runtime: {
+          settingsService: input.settingsService,
+          config: input.config,
+          runtimeId: input.runtimeId,
+          metadata: input.metadata,
+        },
+        runtimeMessageBus: { kind: 'session-bus' },
+        providerManager: getProviderManager(),
+        oauthManager: { id: 'oauth-manager' },
+      }),
+    ),
   };
 });
 
