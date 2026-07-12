@@ -17,27 +17,34 @@
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 /**
- * Buffer that accumulates reasoning_content chunks captured from the
+ * Buffer that accumulates reasoning chunks captured from the
  * raw SSE stream while Vercel AI SDK processes its own copy.
+ *
+ * The delta field name is configurable via captureBuffer.fieldName
+ * (default: reasoning_content; auto-fallback to reasoning for Ollama).
  */
 export interface CaptureBuffer {
   reasoningChunks: string[];
   finalized: boolean;
   headers?: Headers;
   parsePromise?: Promise<void>;
+  fieldName?: string;
+  actualFieldName?: string;
 }
 
-export function createCaptureBuffer(): CaptureBuffer {
+export function createCaptureBuffer(fieldName?: string): CaptureBuffer {
   return {
     reasoningChunks: [],
     finalized: false,
     headers: undefined,
     parsePromise: undefined,
+    fieldName,
   };
 }
 
 /**
- * Parses a single SSE `data:` JSON line and extracts reasoning_content.
+ * Parses a single SSE `data:` JSON line and extracts reasoning from
+ * the configured delta field (default: reasoning_content).
  */
 function captureReasoningFromJson(
   jsonStr: string,
@@ -45,7 +52,7 @@ function captureReasoningFromJson(
   logger: DebugLogger,
 ): void {
   let parsed: {
-    choices?: Array<{ delta?: { reasoning_content?: string } }>;
+    choices?: Array<{ delta?: Record<string, unknown> }>;
   };
   try {
     parsed = JSON.parse(jsonStr) as typeof parsed;
@@ -57,19 +64,37 @@ function captureReasoningFromJson(
   if (parsed.choices === undefined || parsed.choices.length === 0) {
     return;
   }
-  const reasoningContent = parsed.choices[0]?.delta?.reasoning_content;
-  if (reasoningContent && typeof reasoningContent === 'string') {
+  const delta = parsed.choices[0]?.delta;
+  if (delta === undefined) return;
+
+  const fieldName = captureBuffer.fieldName ?? 'reasoning_content';
+  let actualFieldName = fieldName;
+  let reasoningContent: unknown = delta[fieldName];
+
+  // Auto-fallback: when fieldName was not explicitly set (undefined), also
+  // check 'reasoning' for Ollama compatibility (issue #2488)
+  if (
+    (reasoningContent === undefined || reasoningContent === null) &&
+    captureBuffer.fieldName === undefined
+  ) {
+    reasoningContent = delta['reasoning'];
+    actualFieldName = 'reasoning';
+  }
+
+  if (typeof reasoningContent === 'string' && reasoningContent !== '') {
     captureBuffer.reasoningChunks.push(reasoningContent);
+    captureBuffer.actualFieldName = actualFieldName;
     logger.debug(
       () =>
-        `[ReasoningCaptureFetch] Captured reasoning_content chunk: ${reasoningContent.length} chars`,
+        `[ReasoningCaptureFetch] Captured ${actualFieldName} chunk: ${reasoningContent.length} chars`,
     );
   }
 }
 
 /**
- * Parses an SSE stream reader to extract reasoning_content from chunks.
- * Runs in the background while the SDK processes the other tee'd stream.
+ * Parses an SSE stream reader to extract reasoning from chunks using the
+ * configured field name. Runs in the background while the SDK processes
+ * the other tee'd stream.
  */
 export async function parseReasoningFromSseStream(
   reader: ReadableStreamDefaultReader<Uint8Array>,
@@ -117,11 +142,11 @@ export async function parseReasoningFromSseStream(
 
 /**
  * Creates a custom fetch function that intercepts streaming responses
- * and extracts reasoning_content from SSE chunks.
+ * and extracts reasoning from SSE chunks using the configured field name.
  *
- * This is necessary because Vercel AI SDK doesn't expose reasoning_content
- * from the OpenAI-compatible API response. Kimi K2 and similar models
- * send reasoning via this field.
+ * This is necessary because Vercel AI SDK doesn't expose reasoning
+ * from the OpenAI-compatible API response. Models like Kimi K2 send
+ * reasoning via the reasoning_content field; Ollama uses reasoning.
  */
 export function createReasoningCaptureFetch(
   captureBuffer: CaptureBuffer,

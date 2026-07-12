@@ -40,6 +40,30 @@ function appendTextContentParts(lastContent: Content, content: Content): void {
   }
 }
 
+interface RecordHistoryOptions {
+  userInputWasArray?: boolean;
+  userInputWasFunctionResponse?: boolean;
+  responseId?: string | null;
+  responsesStored?: boolean | null;
+}
+
+function mergeTurnMetadata(
+  iContent: IContent,
+  usageMetadata: UsageStats | null | undefined,
+  options: RecordHistoryOptions | undefined,
+): void {
+  const responseId = options?.responseId;
+  const responsesStored = options?.responsesStored === true;
+  if (usageMetadata || responseId || responsesStored) {
+    iContent.metadata = {
+      ...iContent.metadata,
+      ...(usageMetadata ? { usage: usageMetadata } : {}),
+      ...(responseId ? { id: responseId } : {}),
+      ...(responsesStored ? { responsesStored: true } : {}),
+    };
+  }
+}
+
 /**
  * ConversationManager handles conversation history management for ChatSession.
  * It provides methods for recording turns, converting Content to IContent,
@@ -144,19 +168,28 @@ export class ConversationManager {
    * @param modelOutput - Model's output Content array
    * @param automaticFunctionCallingHistory - Optional AFC history from Gemini SDK
    * @param usageMetadata - Optional usage statistics
+   * @param options - Optional overrides for user-input characteristics when the
+   *   recorded `userInput` has been filtered/transformed and no longer reflects
+   *   the original input shape (for example after eagerly recorded tool
+   *   responses are removed before history finalization).
    */
   recordHistory(
     userInput: Content | Content[],
     modelOutput: Content[],
     automaticFunctionCallingHistory?: Content[],
     usageMetadata?: UsageStats | null,
+    options?: RecordHistoryOptions,
   ): void {
     const newHistoryEntries: IContent[] = [];
 
     // Capture user input characteristics for model turn logic
-    const userInputWasArray = Array.isArray(userInput);
+    const userInputWasArray =
+      options?.userInputWasArray ?? Array.isArray(userInput);
+    const singleUserInput =
+      !userInputWasArray && !Array.isArray(userInput) ? userInput : undefined;
     const userInputWasFunctionResponse =
-      !userInputWasArray && isFunctionResponse(userInput);
+      options?.userInputWasFunctionResponse ??
+      (singleUserInput !== undefined && isFunctionResponse(singleUserInput));
     const hasAfc = !!(
       automaticFunctionCallingHistory &&
       automaticFunctionCallingHistory.length > 0
@@ -173,6 +206,7 @@ export class ConversationManager {
     this._recordModelTurn(
       modelOutput,
       usageMetadata,
+      options,
       newHistoryEntries,
       userInputWasArray,
       userInputWasFunctionResponse,
@@ -260,6 +294,7 @@ export class ConversationManager {
   private _recordModelTurn(
     modelOutput: Content[],
     usageMetadata: UsageStats | null | undefined,
+    options: RecordHistoryOptions | undefined,
     newHistoryEntries: IContent[],
     userInputWasArray: boolean,
     userInputWasFunctionResponse: boolean,
@@ -319,6 +354,7 @@ export class ConversationManager {
       consolidatedOutputContents,
       thoughtBlocks,
       usageMetadata,
+      options,
       newHistoryEntries,
     );
   }
@@ -353,6 +389,7 @@ export class ConversationManager {
     consolidatedOutputContents: Content[],
     thoughtBlocks: ThinkingBlock[],
     usageMetadata: UsageStats | null | undefined,
+    options: RecordHistoryOptions | undefined,
     newHistoryEntries: IContent[],
   ): void {
     let didAttachThoughtBlocks = false;
@@ -372,13 +409,7 @@ export class ConversationManager {
         didAttachThoughtBlocks = true;
       }
 
-      // Add usage metadata if available
-      if (usageMetadata !== undefined && usageMetadata !== null) {
-        iContent.metadata = {
-          ...iContent.metadata,
-          usage: usageMetadata,
-        };
-      }
+      mergeTurnMetadata(iContent, usageMetadata, options);
 
       // Stamp the generating model so downstream consumers can detect
       // cross-model turns (issue #2335). this.model is the model that produced
@@ -395,12 +426,7 @@ export class ConversationManager {
         blocks: thoughtBlocks,
         metadata: { turnId: turnKey },
       };
-      if (usageMetadata !== undefined && usageMetadata !== null) {
-        iContent.metadata = {
-          ...iContent.metadata,
-          usage: usageMetadata,
-        };
-      }
+      mergeTurnMetadata(iContent, usageMetadata, options);
       newHistoryEntries.push(stampAiTurnModel(iContent, this.model));
     }
   }

@@ -33,6 +33,9 @@ export type ThoughtPart = Part & {
   text?: string;
   thoughtSignature?: string;
   llxprtSourceField?: ThinkingBlock['sourceField'];
+  llxprtThoughtBlockId?: string;
+  llxprtThoughtBlockStatus?: 'delta' | 'complete';
+  llxprtThoughtIsHidden?: boolean;
 };
 
 export function isThoughtPart(part: Part | undefined): part is ThoughtPart {

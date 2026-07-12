@@ -41,13 +41,37 @@ LLxprt Code discovers skills from three primary locations:
 
 1.  **Workspace Skills** (`.llxprt/skills/`): Workspace-specific skills that are
     typically committed to version control and shared with the team.
-2.  **User Skills** (`~/.llxprt/skills/`): Personal skills available across all
-    your workspaces.
+2.  **User Skills** (`<OS-config-dir>/llxprt-code/skills/`): Personal skills
+    available across all your workspaces. On Linux this resolves to
+    `~/.config/llxprt-code/skills/`, on macOS to
+    `~/Library/Preferences/llxprt-code/skills/`, and on Windows to
+    `%APPDATA%\llxprt-code\Config\skills`.
 3.  **Extension Skills**: Skills bundled within installed
     [extensions](../extensions/index.md).
 
 **Precedence:** If multiple skills share the same name, higher-precedence
 locations override lower ones: **Workspace > User > Extension**.
+
+### Cross-tool `.agents/skills/` standard
+
+In addition to the `.llxprt/skills/` locations above, LLxprt Code also
+discovers skills from the cross-tool
+[Agent Skills](https://agentskills.io) open standard locations:
+
+- **Workspace**: `.agents/skills/`
+- **User**: `~/.agents/skills/`
+
+This enables interoperability with other tools that install skills into the
+`.agents/skills/` standard directory, such as `npx skills add`.
+
+Within the same tier, `.agents/skills/` **takes precedence over**
+`.llxprt/skills/`, matching the Agent Skills interoperability behavior. The
+overall tier precedence (Workspace > User > Extension) is preserved regardless
+of which alias each skill comes from.
+
+Because `.agents/skills/` is shared across tools and can override a same-named
+LLxprt-specific skill, only install skills from trusted sources and review
+changes made to this directory by other tools.
 
 ## Managing Skills
 

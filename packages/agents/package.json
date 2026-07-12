@@ -25,6 +25,11 @@
       "types": "./dist/src/app-service.d.ts",
       "bun": "./src/app-service.ts",
       "import": "./dist/src/app-service.js"
+    },
+    "./constants.js": {
+      "types": "./dist/src/constants.d.ts",
+      "bun": "./src/constants.ts",
+      "import": "./dist/src/constants.js"
     }
   },
   "scripts": {

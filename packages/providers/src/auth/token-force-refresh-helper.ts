@@ -16,10 +16,10 @@
  */
 
 import {
-  DebugLogger,
   mergeRefreshedToken,
   type OAuthTokenWithExtras,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-auth';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { invalidateProviderRuntimeCache } from '@vybestack/llxprt-code-auth';
 import type { OAuthToken, TokenStore } from './types.js';
 import type { ProviderRegistry } from './provider-registry.js';

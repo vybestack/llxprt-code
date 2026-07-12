@@ -55,15 +55,26 @@ function emitStreamError(
   });
 }
 
+type ThoughtBufferEntry = {
+  streamId?: string;
+  text: string;
+};
+
+type ThoughtBuffer = ThoughtBufferEntry[];
+
 function flushThoughtBuffer(
-  thoughtBuffer: string,
+  thoughtBuffer: ThoughtBuffer,
   includeThinking: boolean,
-): string {
-  if (!includeThinking || !thoughtBuffer.trim()) {
-    return '';
+): ThoughtBuffer {
+  const thoughtText = thoughtBuffer
+    .map((entry) => entry.text.trim())
+    .filter(Boolean)
+    .join(' ');
+  if (!includeThinking || !thoughtText) {
+    return [];
   }
-  process.stdout.write(`<think>${thoughtBuffer.trim()}</think>\n`);
-  return '';
+  process.stdout.write(`<think>${thoughtText}</think>\n`);
+  return [];
 }
 
 function flushEmojiBuffer(
@@ -92,12 +103,16 @@ function flushEmojiBuffer(
 }
 
 function handleThinking(
-  thought: { subject?: string; description?: string },
+  thought: {
+    subject?: string;
+    description?: string;
+    streamId?: string;
+  },
   context: StreamConsumerContext,
   writeProfileName: () => void,
-  thoughtBuffer: string,
+  thoughtBuffer: ThoughtBuffer,
   includeThinking: boolean,
-): string {
+): ThoughtBuffer {
   if (!includeThinking) {
     return thoughtBuffer;
   }
@@ -115,7 +130,24 @@ function handleThinking(
       thoughtText = filterResult.filtered;
     }
   }
-  return thoughtBuffer ? `${thoughtBuffer} ${thoughtText}` : thoughtText;
+  if (!thoughtText.trim()) {
+    return thoughtBuffer;
+  }
+  if (thought.streamId === undefined) {
+    return [...thoughtBuffer, { text: thoughtText }];
+  }
+  const existingIndex = thoughtBuffer.findIndex(
+    (entry) => entry.streamId === thought.streamId,
+  );
+  if (existingIndex < 0) {
+    return [
+      ...thoughtBuffer,
+      { streamId: thought.streamId, text: thoughtText },
+    ];
+  }
+  return thoughtBuffer.map((entry, index) =>
+    index === existingIndex ? { ...entry, text: thoughtText } : entry,
+  );
 }
 
 function handleText(
@@ -370,8 +402,8 @@ function handleDone(
 }
 
 function finalizeStream(
-  thoughtBuffer: string,
-  streamedText: string,
+  thoughtBuffer: ThoughtBuffer,
+  responseText: string,
   quietTextBuffer: string,
   pendingDone: Extract<AgentEvent, { type: 'done' }> | null,
   context: StreamConsumerContext,
@@ -380,17 +412,13 @@ function finalizeStream(
   getMetrics: () => SessionMetrics,
 ): void {
   flushThoughtBuffer(thoughtBuffer, includeThinking);
-  // In quiet mode, streamedText is empty (text events are buffered into
-  // quietTextBuffer instead), so flushEmojiBuffer's result is intentionally
-  // unused — the quiet response comes from filterQuietText(quietTextBuffer).
-  const finalText = flushEmojiBuffer(context, streamedText);
-  const responseText = context.quiet
+  const finalText = context.quiet
     ? filterQuietText(quietTextBuffer, context)
-    : finalText;
+    : flushEmojiBuffer(context, responseText);
   if (pendingDone !== null) {
-    handleDone(pendingDone, context, responseText, startTime, getMetrics);
+    handleDone(pendingDone, context, finalText, startTime, getMetrics);
   } else {
-    emitFinalResult(context, responseText, startTime, getMetrics());
+    emitFinalResult(context, finalText, startTime, getMetrics());
   }
 }
 
@@ -412,8 +440,8 @@ function filterQuietText(text: string, context: StreamConsumerContext): string {
 }
 
 interface StreamState {
-  thoughtBuffer: string;
-  streamedText: string;
+  thoughtBuffer: ThoughtBuffer;
+  responseText: string;
   quietTextBuffer: string;
   pendingDone: Extract<AgentEvent, { type: 'done' }> | null;
 }
@@ -469,11 +497,11 @@ function dispatchAgentEvent(
         state.thoughtBuffer,
         includeThinking,
       );
-      state.streamedText = handleText(
+      state.responseText = handleText(
         event.text,
         context,
         writeProfileName,
-        state.streamedText,
+        state.responseText,
       );
       return;
     case 'tool-call':
@@ -551,8 +579,8 @@ export async function processAgentStream(
     !context.streamJsonOutput &&
     context.config.getEphemeralSetting('reasoning.includeInResponse') !== false;
   const state: StreamState = {
-    thoughtBuffer: '',
-    streamedText: '',
+    thoughtBuffer: [],
+    responseText: '',
     quietTextBuffer: '',
     pendingDone: null,
   };
@@ -567,7 +595,7 @@ export async function processAgentStream(
   }
   finalizeStream(
     state.thoughtBuffer,
-    state.streamedText,
+    state.responseText,
     state.quietTextBuffer,
     state.pendingDone,
     context,

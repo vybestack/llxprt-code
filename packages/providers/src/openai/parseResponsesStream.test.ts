@@ -377,8 +377,9 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
   });
 
   /**
-   * response.incomplete without usage should NOT throw and should complete
-   * normally, yielding the text delta but no usage metadata message.
+   * response.incomplete without usage should NOT throw. Since the event
+   * carries a response.id, the stream now yields a metadata chunk carrying
+   * that id so stateful conversations can thread it as previous_response_id.
    */
   it('completes normally for response.incomplete with no usage object', async () => {
     const chunks = [
@@ -394,11 +395,12 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
       messages.push(message);
     }
 
-    // The text delta was yielded; no usage metadata message is present.
-    expect(messages).toHaveLength(1);
+    // The text delta plus a metadata chunk carrying the response id.
+    expect(messages).toHaveLength(2);
     expect(messages[0].blocks).toStrictEqual([
       { type: 'text', text: 'partial' },
     ]);
     expect(messages.find((m) => m.metadata?.usage)).toBeUndefined();
+    expect(messages.find((m) => m.metadata?.id === 'r1')).toBeDefined();
   });
 });

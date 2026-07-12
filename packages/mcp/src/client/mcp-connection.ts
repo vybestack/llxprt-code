@@ -32,6 +32,7 @@ import { LenientJsonSchemaValidator } from './mcp-schema-validator.js';
 import {
   connectWithOAuthToken,
   connectWithSSETransport,
+  detectDeprecatedSSEEndpoint,
   extractWWWAuthenticateHeader,
   fetchWwwAuthenticateHeader,
   handleAutomaticOAuth,
@@ -39,8 +40,6 @@ import {
   showAuthRequiredMessage,
 } from './mcp-oauth-helpers.js';
 import { hasNetworkTransport } from './mcp-discovery-helpers.js';
-import { OAuthUtils } from '../auth/oauth-utils.js';
-import { MCPOAuthProvider } from '../auth/oauth-provider.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 
@@ -99,8 +98,29 @@ function initializeMcpClient(
   return mcpClient;
 }
 
-function throwConnectionError(mcpServerName: string, error: unknown): never {
+function throwConnectionError(
+  mcpServerName: string,
+  mcpServerConfig: MCPServerConfig,
+  error: unknown,
+): never {
   const errorMessage = (error as Error).message || String(error);
+
+  const deprecatedUrl = hasNetworkTransport(mcpServerConfig)
+    ? detectDeprecatedSSEEndpoint(errorMessage)
+    : null;
+  if (deprecatedUrl !== null) {
+    const suggestedUrl =
+      deprecatedUrl !== '' ? deprecatedUrl : '(check your MCP provider docs)';
+    throw new Error(
+      `MCP server '${mcpServerName}' is configured with an SSE endpoint that is no longer supported by the server.
+The server recommends switching to a Streamable HTTP endpoint.
+Update your configuration to use:
+  "url": "${suggestedUrl}",
+  "type": "streamable-http"
+(or "type": "http") instead of the SSE endpoint.`,
+    );
+  }
+
   const isNetworkError =
     errorMessage.includes('ENOTFOUND') || errorMessage.includes('ECONNREFUSED');
 
@@ -163,11 +183,6 @@ async function retryWithWwwAuthenticate(
   );
 }
 
-function resolveDiscoveryScopes(scopes: string[] | undefined): string[] {
-  if (scopes !== undefined && scopes.length > 0) return scopes;
-  return [];
-}
-
 async function retryWithOAuthDiscovery(
   mcpClient: Client,
   mcpServerName: string,
@@ -185,10 +200,16 @@ async function retryWithOAuthDiscovery(
   debugLogger.log(`Attempting OAuth discovery for '${mcpServerName}'...`);
 
   if (hasNetworkTransport(mcpServerConfig)) {
-    return connectWithDiscoveredOAuth(
-      mcpClient,
+    const oauthSuccess = await handleAutomaticOAuth(
       mcpServerName,
       mcpServerConfig,
+      '',
+    );
+    if (oauthSuccess) {
+      return connectWithOAuthToken(mcpClient, mcpServerName, mcpServerConfig);
+    }
+    throw new Error(
+      `OAuth configuration failed for '${mcpServerName}'. Please authenticate manually with /mcp auth ${mcpServerName}`,
     );
   }
 
@@ -198,59 +219,6 @@ async function retryWithOAuthDiscovery(
   throw new Error(
     `MCP server '${mcpServerName}' requires authentication. Please configure OAuth or check server settings.`,
   );
-}
-
-async function connectWithDiscoveredOAuth(
-  mcpClient: Client,
-  mcpServerName: string,
-  mcpServerConfig: MCPServerConfig,
-): Promise<Client> {
-  const serverUrl = new URL(mcpServerConfig.httpUrl ?? mcpServerConfig.url!);
-  const baseUrl = `${serverUrl.protocol}//${serverUrl.host}`;
-
-  try {
-    const oauthConfig = await OAuthUtils.discoverOAuthConfig(baseUrl);
-    if (oauthConfig) {
-      debugLogger.log(
-        `Discovered OAuth configuration from base URL for server '${mcpServerName}'`,
-      );
-
-      const oauthAuthConfig = {
-        enabled: true,
-        authorizationUrl: oauthConfig.authorizationUrl,
-        tokenUrl: oauthConfig.tokenUrl,
-        scopes: resolveDiscoveryScopes(oauthConfig.scopes),
-      };
-
-      const authServerUrl = mcpServerConfig.httpUrl ?? mcpServerConfig.url;
-      debugLogger.log(
-        `Starting OAuth authentication for server '${mcpServerName}'...`,
-      );
-      await MCPOAuthProvider.authenticate(
-        mcpServerName,
-        oauthAuthConfig,
-        authServerUrl,
-      );
-
-      return await connectWithOAuthToken(
-        mcpClient,
-        mcpServerName,
-        mcpServerConfig,
-      );
-    }
-
-    debugLogger.error(
-      `[ERROR] Could not configure OAuth for '${mcpServerName}' - please authenticate manually with /mcp auth ${mcpServerName}`,
-    );
-    throw new Error(
-      `OAuth configuration failed for '${mcpServerName}'. Please authenticate manually with /mcp auth ${mcpServerName}`,
-    );
-  } catch (discoveryError) {
-    debugLogger.error(
-      `[ERROR] OAuth discovery failed for '${mcpServerName}' - please authenticate manually with /mcp auth ${mcpServerName}`,
-    );
-    throw discoveryError;
-  }
 }
 
 async function trySSEFallback(
@@ -356,7 +324,7 @@ async function handleConnectionError(
     );
   }
 
-  return throwConnectionError(mcpServerName, error);
+  return throwConnectionError(mcpServerName, mcpServerConfig, error);
 }
 
 /**

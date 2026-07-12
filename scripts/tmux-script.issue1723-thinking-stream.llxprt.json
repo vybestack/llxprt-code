@@ -1,0 +1,188 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 50,
+    "historyLimit": 100000,
+    "scrollbackLines": 20000,
+    "initialWaitMs": 8000
+  },
+  "yolo": true,
+  "macros": {
+    "loadProfile": [
+      {
+        "type": "line",
+        "text": "/profile load ${profile}",
+        "submitKeys": []
+      },
+      {
+        "type": "key",
+        "key": "Enter"
+      },
+      {
+        "type": "wait",
+        "ms": 250
+      },
+      {
+        "type": "key",
+        "key": "Enter"
+      },
+      {
+        "type": "wait",
+        "ms": 250
+      },
+      {
+        "type": "waitFor",
+        "scope": "screen",
+        "regex": "Profile '${profile}' loaded",
+        "timeoutMs": 30000
+      },
+      {
+        "type": "line",
+        "text": "/set reasoning.includeInResponse true",
+        "submitKeys": []
+      },
+      {
+        "type": "key",
+        "key": "Enter"
+      },
+      {
+        "type": "wait",
+        "ms": 250
+      },
+      {
+        "type": "key",
+        "key": "Enter"
+      },
+      {
+        "type": "wait",
+        "ms": 500
+      },
+      {
+        "type": "line",
+        "text": "/set reasoning.effort xhigh",
+        "submitKeys": []
+      },
+      {
+        "type": "key",
+        "key": "Enter"
+      },
+      {
+        "type": "wait",
+        "ms": 250
+      },
+      {
+        "type": "key",
+        "key": "Enter"
+      },
+      {
+        "type": "wait",
+        "ms": 500
+      },
+      {
+        "type": "capture",
+        "label": "profile-${profile}-loaded",
+        "scope": "screen"
+      }
+    ],
+    "askThinkingQuestion": [
+      {
+        "type": "line",
+        "text": "${question}",
+        "submitKeys": ["Enter"]
+      },
+      {
+        "type": "wait",
+        "ms": "${streamingProbeMs}"
+      },
+      {
+        "type": "capture",
+        "label": "${label}-during-stream",
+        "scope": "screen"
+      },
+      {
+        "type": "capture",
+        "label": "${label}-during-stream",
+        "scope": "scrollback"
+      },
+      {
+        "type": "expectCount",
+        "scope": "screen",
+        "contains": "esc to cancel",
+        "atLeast": 1
+      },
+      {
+        "type": "expectCount",
+        "scope": "screen",
+        "regex": "\\S+ \\(esc to cancel, [0-9]+s\\)",
+        "atLeast": 1
+      },
+      {
+        "type": "waitForNot",
+        "scope": "screen",
+        "contains": "esc to cancel",
+        "timeoutMs": "${completionTimeoutMs}"
+      },
+      {
+        "type": "waitFor",
+        "scope": "screen",
+        "contains": "Type your message",
+        "timeoutMs": 60000
+      },
+      {
+        "type": "capture",
+        "label": "${label}-after-complete",
+        "scope": "screen"
+      },
+      {
+        "type": "capture",
+        "label": "${label}-after-complete",
+        "scope": "scrollback"
+      },
+      {
+        "type": "expectCount",
+        "scope": "scrollback",
+        "contains": "[API Error",
+        "equals": 0
+      }
+    ]
+  },
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "capture",
+      "label": "initial",
+      "scope": "screen"
+    },
+    {
+      "type": "macro",
+      "name": "loadProfile",
+      "args": {
+        "profile": "opusthinking"
+      }
+    },
+    {
+      "type": "macro",
+      "name": "askThinkingQuestion",
+      "args": {
+        "question": "Without using tools, explain three tradeoffs between event-driven and request-response architectures. Think step by step before giving a concise answer.",
+        "label": "opusthinking-architecture",
+        "streamingProbeMs": 8000,
+        "completionTimeoutMs": 120000
+      }
+    },
+    {
+      "type": "line",
+      "text": "/quit",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitForExit",
+      "timeoutMs": 15000
+    }
+  ]
+}

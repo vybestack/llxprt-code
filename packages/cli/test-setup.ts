@@ -7,6 +7,10 @@
 // Set NODE_ENV to test if not already set
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 
+// Isolate storage roots (profiles/settings/secure-store) to a temp dir so
+// tests never write into the real user config/data dirs.
+import './test-setup-storage-isolation.js';
+
 // Unset NO_COLOR environment variable to ensure consistent theme behavior between local and CI test runs
 if (process.env.NO_COLOR !== undefined) {
   delete process.env.NO_COLOR;

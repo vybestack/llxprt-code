@@ -187,7 +187,7 @@ describe('buildSettingsSnapshot', () => {
     const config = makeConfig({
       getEphemeralSetting: vi.fn().mockImplementation((key: string) => {
         if (key === 'reasoning.enabled') return true;
-        if (key === 'reasoning.effort') return 'high';
+        if (key === 'reasoning.effort') return 'max';
         if (key === 'reasoning.maxTokens') return 8192;
         return undefined;
       }),
@@ -196,7 +196,7 @@ describe('buildSettingsSnapshot', () => {
     const snapshot = buildSettingsSnapshot(config);
 
     expect(snapshot['reasoning.enabled']).toBe(true);
-    expect(snapshot['reasoning.effort']).toBe('high');
+    expect(snapshot['reasoning.effort']).toBe('max');
     expect(snapshot['reasoning.maxTokens']).toBe(8192);
   });
 

@@ -220,6 +220,44 @@ describe('processAgentStream — quiet mode', () => {
     expect(stdoutContent).toBe('Result\n');
   });
 
+  it('emits only final content when streamed thinking updates are interleaved', async () => {
+    const events: AgentEvent[] = [
+      {
+        type: 'thinking',
+        thought: {
+          subject: 'First',
+          streamId: 'reasoning-1',
+          streamStatus: 'delta',
+        },
+      },
+      {
+        type: 'thinking',
+        thought: {
+          subject: 'First complete',
+          streamId: 'reasoning-1',
+          streamStatus: 'complete',
+        },
+      },
+      { type: 'text', text: 'Final response' },
+      { type: 'done', reason: 'stop' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({
+        quiet: true,
+        config: createMockConfig({ includeInResponse: true }),
+      }),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    const stdoutContent = processStdoutSpy.mock.calls
+      .map(([value]) => String(value))
+      .join('');
+    expect(stdoutContent).toBe('Final response\n');
+  });
+
   it('suppresses tool errors from stdout while allowing the model to continue', async () => {
     const events: AgentEvent[] = [
       {
