@@ -54,10 +54,11 @@ describe('AnthropicOAuthProvider local callback flow', () => {
         interval: 5,
       })),
       getState: vi.fn().mockReturnValue('generated-state'),
-      buildAuthorizationUrl: vi.fn((redirectUri: string) =>
-        `https://claude.ai/oauth/authorize?redirect_uri=${encodeURIComponent(
-          redirectUri,
-        )}&code=true`,
+      buildAuthorizationUrl: vi.fn(
+        (redirectUri: string) =>
+          `https://claude.ai/oauth/authorize?redirect_uri=${encodeURIComponent(
+            redirectUri,
+          )}&code=true`,
       ),
       exchangeCodeForToken: vi.fn(async () => ({
         token_type: 'Bearer' as const,

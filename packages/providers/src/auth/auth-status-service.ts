@@ -40,8 +40,7 @@ export class AuthStatusService {
     private readonly proactiveRenewalManager: ProactiveRenewalManager,
     private readonly bucketManager: OAuthBucketManager,
     private readonly tokenAccessCoordinator: TokenAccessCoordinator,
-    private readonly flushAuthScope: typeof flushRuntimeAuthScope =
-      flushRuntimeAuthScope,
+    private readonly flushAuthScope: typeof flushRuntimeAuthScope = flushRuntimeAuthScope,
   ) {}
 
   // --------------------------------------------------------------------------

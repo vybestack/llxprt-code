@@ -71,7 +71,9 @@ describe('AnthropicOAuthProvider', () => {
             scope: 'openid profile email',
           }),
           getState: vi.fn().mockReturnValue('mock-state'),
-          buildAuthorizationUrl: vi.fn().mockReturnValue('https://anthropic.com/authorize'),
+          buildAuthorizationUrl: vi
+            .fn()
+            .mockReturnValue('https://anthropic.com/authorize'),
         }) as unknown as AnthropicDeviceFlow,
       shouldLaunchBrowser: vi.fn().mockReturnValue(true),
       openBrowserSecurely: vi.fn().mockResolvedValue(undefined),

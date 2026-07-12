@@ -42,12 +42,13 @@ export interface OAuthManagerUsageDependencies {
   getHigherPriorityAuth: typeof getHigherPriorityAuth;
 }
 
-export const defaultOAuthManagerUsageDependencies: OAuthManagerUsageDependencies = {
-  getAnthropicUsageInfo,
-  getAllAnthropicUsageInfo,
-  getAllCodexUsageInfo,
-  getHigherPriorityAuth,
-};
+export const defaultOAuthManagerUsageDependencies: OAuthManagerUsageDependencies =
+  {
+    getAnthropicUsageInfo,
+    getAllAnthropicUsageInfo,
+    getAllCodexUsageInfo,
+    getHigherPriorityAuth,
+  };
 
 export interface OAuthManagerComponentFactories {
   createProviderRegistry(settings?: IOAuthSettingsProvider): ProviderRegistry;
@@ -83,14 +84,17 @@ export interface OAuthManagerComponentFactories {
   ): AuthStatusService;
 }
 
-export const defaultOAuthManagerComponentFactories: OAuthManagerComponentFactories = {
-  createProviderRegistry: (settings) => new ProviderRegistry(settings),
-  createBucketManager: (tokenStore) => new OAuthBucketManager(tokenStore),
-  createProactiveRenewalManager: (...args) => new ProactiveRenewalManager(...args),
-  createAuthFlowOrchestrator: (...args) => new AuthFlowOrchestrator(...args),
-  createTokenAccessCoordinator: (...args) => new TokenAccessCoordinator(...args),
-  createAuthStatusService: (...args) => new AuthStatusService(...args),
-};
+export const defaultOAuthManagerComponentFactories: OAuthManagerComponentFactories =
+  {
+    createProviderRegistry: (settings) => new ProviderRegistry(settings),
+    createBucketManager: (tokenStore) => new OAuthBucketManager(tokenStore),
+    createProactiveRenewalManager: (...args) =>
+      new ProactiveRenewalManager(...args),
+    createAuthFlowOrchestrator: (...args) => new AuthFlowOrchestrator(...args),
+    createTokenAccessCoordinator: (...args) =>
+      new TokenAccessCoordinator(...args),
+    createAuthStatusService: (...args) => new AuthStatusService(...args),
+  };
 
 /**
  * Compile-time structural compatibility marker: ensures the auth package's
@@ -153,10 +157,8 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     runtimeDeps?: OAuthManagerRuntimeMessageBusDeps,
     profileBucketDependencies?: ProfileBucketResolverDependencies,
     fetchAnthropicUsage?: FetchAnthropicUsage,
-    componentFactories: OAuthManagerComponentFactories =
-      defaultOAuthManagerComponentFactories,
-    usageDependencies: OAuthManagerUsageDependencies =
-      defaultOAuthManagerUsageDependencies,
+    componentFactories: OAuthManagerComponentFactories = defaultOAuthManagerComponentFactories,
+    usageDependencies: OAuthManagerUsageDependencies = defaultOAuthManagerUsageDependencies,
   ) {
     this.usageDependencies = usageDependencies;
     this.providerRegistry = componentFactories.createProviderRegistry(settings);
@@ -167,12 +169,11 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     this.bucketManager = componentFactories.createBucketManager(tokenStore);
     this.proactiveRenewalManager =
       componentFactories.createProactiveRenewalManager(
-      tokenStore,
-      (name: string) => this.providerRegistry.getProvider(name),
-      (name: string) => this.isOAuthEnabled(name),
-    );
-    this.authFlowOrchestrator =
-      componentFactories.createAuthFlowOrchestrator(
+        tokenStore,
+        (name: string) => this.providerRegistry.getProvider(name),
+        (name: string) => this.isOAuthEnabled(name),
+      );
+    this.authFlowOrchestrator = componentFactories.createAuthFlowOrchestrator(
       tokenStore,
       this.providerRegistry,
       this, // facadeRef — satisfies BucketFailoverOAuthManagerLike
@@ -185,17 +186,17 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     this.runtimeMessageBus = runtimeDeps?.messageBus;
     this.tokenAccessCoordinator =
       componentFactories.createTokenAccessCoordinator(
-      tokenStore,
-      this.providerRegistry,
-      this.proactiveRenewalManager,
-      this.bucketManager,
-      this, // facadeRef — satisfies BucketFailoverOAuthManagerLike
-      settings,
-      // Pass a getter so the coordinator always reads the live config value,
-      // even if tests mutate manager.config after construction.
-      () => this.config,
-      profileBucketDependencies,
-    );
+        tokenStore,
+        this.providerRegistry,
+        this.proactiveRenewalManager,
+        this.bucketManager,
+        this, // facadeRef — satisfies BucketFailoverOAuthManagerLike
+        settings,
+        // Pass a getter so the coordinator always reads the live config value,
+        // even if tests mutate manager.config after construction.
+        () => this.config,
+        profileBucketDependencies,
+      );
     // Wire getProfileBuckets delegate so that test spies on the private
     // manager.getProfileBuckets method correctly intercept internal calls
     // made by the coordinator (coordinator calls the delegate → facade method

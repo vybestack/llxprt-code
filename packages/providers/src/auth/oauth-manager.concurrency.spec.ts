@@ -26,10 +26,9 @@ function makeToken(accessToken: string, expiryOffset = 3600): OAuthToken {
     scope: '',
   };
 }
-  beforeEach(() => {
-    oauthRuntimeBridge.setAccessors(undefined);
-  });
-
+beforeEach(() => {
+  oauthRuntimeBridge.setAccessors(undefined);
+});
 
 describe('OAuthManager concurrency', () => {
   it('serializes bucket resolution for concurrent getOAuthToken calls (same provider)', async () => {

@@ -31,7 +31,11 @@ import {
   afterEach,
   setSystemTime,
 } from 'bun:test';
-import { StubRegistry, waitFor, isMockFunction } from '../../test-setup/stub-helpers.js';
+import {
+  StubRegistry,
+  waitFor,
+  isMockFunction,
+} from '../../test-setup/stub-helpers.js';
 import { setSimulate429 } from './src/utils/testUtils.js';
 import { clearActiveProviderRuntimeContext } from './src/runtime/providerRuntimeContext.js';
 import { initializeTestProviderRuntime } from './src/test-utils/runtime.js';

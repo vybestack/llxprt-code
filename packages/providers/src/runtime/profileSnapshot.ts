@@ -266,7 +266,8 @@ const defaultProfileSnapshotDependencies: ProfileSnapshotDependencies = {
   getRuntimeServices: getCliRuntimeServices,
   getOAuthManager: maybeGetCliOAuthManager,
   applyProfile: applyProfileWithGuards,
-  loadProfile: async (profileName) => new ProfileManager().loadProfile(profileName),
+  loadProfile: async (profileName) =>
+    new ProfileManager().loadProfile(profileName),
   saveProfile: async (profileName, profile) => {
     await new ProfileManager().saveProfile(profileName, profile);
   },

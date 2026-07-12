@@ -316,15 +316,19 @@ export class MCPOAuthProvider {
   private static generatePKCEParams(
     dependencies: MCPOAuthProviderDependencies,
   ): PKCEParams {
-    const codeVerifier = (dependencies.randomBytes ?? crypto.randomBytes)(64)
-      .toString('base64url');
+    const codeVerifier = (dependencies.randomBytes ?? crypto.randomBytes)(
+      64,
+    ).toString('base64url');
 
-    const codeChallenge = (dependencies.createHash ?? crypto.createHash)('sha256')
+    const codeChallenge = (dependencies.createHash ?? crypto.createHash)(
+      'sha256',
+    )
       .update(codeVerifier)
       .digest('base64url');
 
-    const state = (dependencies.randomBytes ?? crypto.randomBytes)(16)
-      .toString('base64url');
+    const state = (dependencies.randomBytes ?? crypto.randomBytes)(16).toString(
+      'base64url',
+    );
 
     return { codeVerifier, codeChallenge, state };
   }

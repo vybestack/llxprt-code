@@ -28,7 +28,6 @@ function createStubSecureStore(): ISecureStore {
   };
 }
 
-
 function createLoadedSettings(
   overrides: {
     oauthEnabledProviders?: Record<string, boolean>;

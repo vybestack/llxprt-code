@@ -27,10 +27,7 @@ const googleGenAIConstructor = vi.fn(
     }) as unknown as GoogleGenAI,
 );
 
-const createProvider = (
-  apiKey?: string,
-  baseURL?: string,
-): GeminiProvider =>
+const createProvider = (apiKey?: string, baseURL?: string): GeminiProvider =>
   new GeminiProvider(apiKey, baseURL, undefined, async (options) =>
     googleGenAIConstructor(options),
   );
