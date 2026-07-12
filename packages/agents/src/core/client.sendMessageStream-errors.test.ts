@@ -327,6 +327,59 @@ describe('Gemini Client (client.ts)', () => {
       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
     });
 
+    it.each([
+      {
+        name: '413 error',
+        terminalEvent: {
+          type: AgentEventType.Error,
+          value: {
+            error: { message: 'Payload too large', status: 413 },
+          },
+        },
+      },
+      {
+        name: 'InvalidStream',
+        terminalEvent: { type: AgentEventType.InvalidStream },
+      },
+    ])(
+      'does not retry a $name after a tool call was emitted',
+      async ({ terminalEvent }) => {
+        vi.spyOn(
+          client['config'],
+          'getContinueOnFailedApiCall',
+        ).mockReturnValue(true);
+        const mockStream = (async function* () {
+          yield {
+            type: AgentEventType.ToolCallRequest,
+            value: {
+              callId: 'call-1',
+              name: 'read_file',
+              args: { file_path: 'README.md' },
+              isClientInitiated: false,
+              prompt_id: 'prompt-id-after-tool-call',
+            },
+          };
+          yield terminalEvent;
+        })();
+        mockTurnRunFn.mockReturnValueOnce(mockStream);
+        client['chat'] = {
+          addHistory: vi.fn(),
+          getHistory: vi.fn().mockReturnValue([]),
+          getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+        } as unknown as ChatSession;
+
+        await fromAsync(
+          client.sendMessageStream(
+            [{ text: 'Hi' }],
+            new AbortController().signal,
+            'prompt-id-after-tool-call',
+          ),
+        );
+
+        expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+      },
+    );
+
     it('should not retry on 413 when getContinueOnFailedApiCall returns false', async () => {
       vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
         false,

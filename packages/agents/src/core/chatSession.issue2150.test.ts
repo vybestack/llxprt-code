@@ -195,6 +195,73 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });
 
+  it('does not retry a connection error after a tool call was emitted', async () => {
+    let attempt = 0;
+    const generateChatCompletionMock = vi.fn(async function* (
+      _options: GenerateChatOptions,
+    ) {
+      attempt++;
+      yield {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'call-1',
+            name: 'read_file',
+            parameters: { file_path: 'README.md' },
+          },
+        ],
+      };
+      throw createConnectionError();
+    });
+    registerProvider(generateChatCompletionMock);
+
+    const chat = buildChatSession();
+    const stream = await chat.sendMessageStream(
+      { message: 'trigger a tool call before a connection error' },
+      'prompt-issue-2150-tool-call',
+    );
+
+    await expect(collectEvents(stream)).rejects.toThrow('Connection error.');
+    expect(attempt).toBe(1);
+    expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry after hidden thinking metadata was emitted', async () => {
+    let attempt = 0;
+    const generateChatCompletionMock = vi.fn(async function* (
+      _options: GenerateChatOptions,
+    ) {
+      attempt++;
+      yield {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'thinking',
+            thought: '',
+            sourceField: 'thinking',
+            signature: 'state-token',
+            streamId: 'reasoning-1',
+            streamStatus: 'complete',
+            isHidden: true,
+          },
+        ],
+      };
+      throw createConnectionError();
+    });
+    registerProvider(generateChatCompletionMock);
+
+    const chat = buildChatSession();
+    const stream = await chat.sendMessageStream(
+      { message: 'trigger hidden thinking metadata before a connection error' },
+      'prompt-issue-2150-thinking-metadata',
+    );
+
+    await expect(collectEvents(stream)).rejects.toThrow('Connection error.');
+    expect(attempt).toBe(1);
+    expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
+  });
+
   it('does NOT retry a non-transient error thrown mid-stream and stops the loop', async () => {
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (

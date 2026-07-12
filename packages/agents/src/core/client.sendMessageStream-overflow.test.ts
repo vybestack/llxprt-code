@@ -838,11 +838,10 @@ describe('Gemini Client (client.ts)', () => {
         ),
       );
 
-      expect(events).toContainEqual({
-        type: AgentEventType.Content,
-        value: 'Partial content',
-      });
-      expect(events).toContainEqual({ type: AgentEventType.InvalidStream });
+      expect(events.slice(-2)).toStrictEqual([
+        { type: AgentEventType.Content, value: 'Partial content' },
+        { type: AgentEventType.InvalidStream },
+      ]);
       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
     });
 

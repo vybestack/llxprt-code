@@ -13,6 +13,7 @@ export function hasVisibleOrThinkingContent(
   return parts.some(
     (part) =>
       (typeof part.text === 'string' && part.text.length > 0) ||
-      part.thought === true,
+      part.thought === true ||
+      part.functionCall !== undefined,
   );
 }

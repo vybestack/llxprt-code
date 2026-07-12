@@ -370,12 +370,13 @@ describe('MessageStreamOrchestrator — todo_pause loop break (issue #2287)', ()
     releaseSecondChunk();
     const remaining: ServerAgentStreamEvent[] = [];
     for await (const event of iterator) remaining.push(event);
-    expect(
-      remaining.filter((event) => event.type === AgentEventType.Content),
-    ).toStrictEqual([{ type: AgentEventType.Content, value: ' world' }]);
-    expect(
-      remaining.filter((event) => event.type === AgentEventType.Finished),
-    ).toHaveLength(1);
+    expect(remaining).toStrictEqual([
+      { type: AgentEventType.Content, value: ' world' },
+      {
+        type: AgentEventType.Finished,
+        value: { outcome: { hadVisibleOutput: true } },
+      },
+    ]);
   });
 
   describe('successful pause breaks the loop via the explicit pause branch', () => {

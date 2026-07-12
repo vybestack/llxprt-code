@@ -20,6 +20,10 @@ interface TerminalState {
   hadContent: boolean;
 }
 
+function canRetryFailedStream(state: TerminalState): boolean {
+  return !state.hadToolCallsThisTurn && !state.hadContent && !state.hadThinking;
+}
+
 function earlyIterResult(
   hadToolCalls: boolean,
   overrides?: Partial<
@@ -179,8 +183,7 @@ async function* handleErrorEvent(
   if (
     errorStatus === 413 &&
     config.getContinueOnFailedApiCall() &&
-    !state.hadContent &&
-    !state.hadThinking
+    canRetryFailedStream(state)
   ) {
     const result = yield* handle413Error(
       deps,
@@ -233,8 +236,7 @@ async function* handleInvalidStreamEvent(
   if (
     config.getContinueOnFailedApiCall() &&
     !ctx.isInvalidStreamRetry &&
-    !state.hadContent &&
-    !state.hadThinking
+    canRetryFailedStream(state)
   ) {
     yield* deps.sendMessageStream(
       [{ text: 'System: Please continue.' }],
