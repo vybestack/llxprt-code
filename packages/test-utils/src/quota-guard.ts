@@ -99,6 +99,40 @@ export function detectQuotaSignal(output: string): string | null {
   return null;
 }
 
+/**
+ * Uniform `[QUOTA/RATE-LIMIT]` prefix for quota-guard rejection errors.
+ *
+ * Both the interactive (PTY) and non-interactive (spawn) failure-classification
+ * paths label a detected quota wall with this exact prefix so tests and humans
+ * can recognise it regardless of the run mode.
+ */
+export const QUOTA_ERROR_PREFIX = '[QUOTA/RATE-LIMIT]';
+
+/**
+ * Format a quota-guard rejection error message with one stable, human/machine-
+ * readable layout.
+ *
+ * Both {@link InteractiveRun} (interactive-run.ts) and the process-run.ts
+ * spawn helpers surface detected quota walls as labelled `Error`s. Without a
+ * shared formatter the two paths drifted — interactive produced
+ * `[QUOTA/RATE-LIMIT] <context>; <reason>` while process-run produced
+ * `[QUOTA/RATE-LIMIT] <reason>\n<context>` — making test assertions and log
+ * grepping fragile. This centralises the layout as:
+ *
+ *   [QUOTA/RATE-LIMIT] <reason>
+ *   <context>
+ *
+ * The reason (the machine-classified quota signal) comes first for at-a-glance
+ * triage; the context (the caller's human-readable failure-path description)
+ * follows on its own line for full detail.
+ *
+ * @param reason The classified quota signal string (from {@link detectQuotaSignal}).
+ * @param context Human-readable description of the failure path (timeout, exit code, etc.).
+ */
+export function formatQuotaError(reason: string, context: string): string {
+  return `${QUOTA_ERROR_PREFIX} ${reason}\n${context}`;
+}
+
 function getStateDir(): string | null {
   const dir = process.env['INTEGRATION_TEST_FILE_DIR'];
   if (dir === undefined || dir === '') {

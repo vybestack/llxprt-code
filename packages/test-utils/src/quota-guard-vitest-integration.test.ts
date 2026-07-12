@@ -182,24 +182,31 @@ export default defineConfig({
 }
 
 /**
- * Materialize a self-contained vitest project in an OS temp dir. The repo's
- * node_modules is symlinked in so the child `vitest` (and `vitest/config`)
- * resolves without a local install. Returns the fixture root and its sentinel
- * state dir.
+ * Link the real install's node_modules into a fixture root so the child vitest
+ * (and `vitest/config`) resolves without a local install.
+ *
+ * On Windows a 'dir' symlink needs administrator privileges or developer mode
+ * and fails EPERM in ordinary CI/contributor shells; a 'junction' needs neither
+ * and works for an ABSOLUTE target — which {@link REPO_NODE_MODULES} always is
+ * (it comes from require.resolve, not a relative guess) — so it is the correct
+ * cross-platform choice here. Elsewhere a directory symlink is retained.
+ * Centralised so both {@link createFixture} and {@link createRaceFixture} share
+ * one definition of the target, destination, and platform-specific link type.
+ */
+function linkNodeModules(root: string): void {
+  const linkType = process.platform === 'win32' ? 'junction' : 'dir';
+  symlinkSync(REPO_NODE_MODULES, join(root, 'node_modules'), linkType);
+}
+
+/**
+ * Materialize a self-contained vitest project in an OS temp dir. Returns the
+ * fixture root and its sentinel state dir.
  */
 function createFixture(): { root: string; stateDir: string } {
   const root = mkdtempSync(join(tmpdir(), 'quota-guard-vitest-'));
   fixtureRoots.push(root);
 
-  // Link the real install's node_modules into the fixture so the child vitest
-  // (and `vitest/config`) resolves without a local install. On Windows a 'dir'
-  // symlink needs administrator privileges or developer mode and fails EPERM in
-  // ordinary CI/contributor shells; a 'junction' needs neither and works for an
-  // ABSOLUTE target — which REPO_NODE_MODULES always is (it comes from
-  // require.resolve, not a relative guess) — so it is the correct cross-platform
-  // choice here. Elsewhere a directory symlink is retained.
-  const linkType = process.platform === 'win32' ? 'junction' : 'dir';
-  symlinkSync(REPO_NODE_MODULES, join(root, 'node_modules'), linkType);
+  linkNodeModules(root);
 
   const stateDir = join(root, 'state');
   mkdirSync(stateDir, { recursive: true });
@@ -228,7 +235,7 @@ import { tripQuotaGuard } from ${JSON.stringify(QUOTA_GUARD_MODULE_URL)};
 
 // Synchronous cross-process barrier sleep (no async in a sync test body).
 const sab = new Int32Array(new SharedArrayBuffer(4));
-function sleep(ms) {
+function sleep(ms: number) {
   Atomics.wait(sab, 0, 0, ms);
 }
 
@@ -285,8 +292,7 @@ function createRaceFixture(): { root: string; stateDir: string } {
   const root = mkdtempSync(join(tmpdir(), 'quota-guard-race-'));
   fixtureRoots.push(root);
 
-  const linkType = process.platform === 'win32' ? 'junction' : 'dir';
-  symlinkSync(REPO_NODE_MODULES, join(root, 'node_modules'), linkType);
+  linkNodeModules(root);
 
   const stateDir = join(root, 'state');
   mkdirSync(stateDir, { recursive: true });
@@ -343,18 +349,60 @@ function childEnv(stateDir: string): NodeJS.ProcessEnv {
   return next;
 }
 
+/**
+ * Remove a fixture root, best-effort, with a short retry for transient
+ * EBUSY/EPERM (an orphaned vitest worker may briefly hold the fixture cwd
+ * after a SIGKILL timeout). A transient retry that eventually succeeds is
+ * silent. Only an error that persists (or is not a known transient code)
+ * produces a test-diagnostics warning so a genuinely broken cleanup is
+ * visible rather than silently swallowed. The remaining fixture roots are
+ * always processed regardless of any individual failure.
+ */
+const CLEANUP_RETRY_COUNT = 3;
+const CLEANUP_RETRY_DELAY_MS = 200;
+
+// Synchronous sleep for the cleanup retry backoff (no async in afterEach).
+// Atomics.wait blocks the thread efficiently (no busy-wait CPU burn).
+const cleanupSab = new Int32Array(new SharedArrayBuffer(4));
+
+function sleepSync(ms: number): void {
+  Atomics.wait(cleanupSab, 0, 0, ms);
+}
+
+function isTransientCleanupError(error: unknown): boolean {
+  if (error === null || typeof error !== 'object') {
+    return false;
+  }
+  const code = (error as { code?: unknown }).code;
+  return code === 'EBUSY' || code === 'EPERM' || code === 'ENOTEMPTY';
+}
+
+function removeFixtureRoot(root: string): void {
+  for (let attempt = 0; attempt <= CLEANUP_RETRY_COUNT; attempt++) {
+    try {
+      rmSync(root, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (attempt < CLEANUP_RETRY_COUNT && isTransientCleanupError(error)) {
+        sleepSync(CLEANUP_RETRY_DELAY_MS);
+        continue;
+      }
+      // Non-transient error or retries exhausted — surface a diagnostic
+      // warning so the failure is visible rather than silently swallowed.
+      const detail = error instanceof Error ? error.message : String(error);
+      process.stderr.write(
+        `[quota-guard-vitest-integration] WARNING: failed to clean up fixture root ${root}: ${detail}
+`,
+      );
+      return;
+    }
+  }
+}
+
 describe('quota guard vitest acceptance semantics', () => {
   afterEach(() => {
     for (const root of fixtureRoots) {
-      // Best-effort: an orphaned vitest worker may still hold the fixture cwd
-      // for a beat after a SIGKILL timeout, so a rmSync can hit EBUSY/EPERM.
-      // Swallow it so the remaining fixture roots are still cleaned up; the OS
-      // temp dir is reclaimed regardless.
-      try {
-        rmSync(root, { recursive: true, force: true });
-      } catch {
-        // Ignore — leftover temp dirs are harmless and OS-reclaimed.
-      }
+      removeFixtureRoot(root);
     }
     fixtureRoots.length = 0;
   });

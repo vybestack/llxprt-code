@@ -13,6 +13,7 @@ import type { DiagnosticsSink } from './diagnostics.js';
 import { getDefaultTimeout, poll } from './util.js';
 import {
   detectQuotaSignal,
+  formatQuotaError,
   isQuotaGuardActive,
   tripQuotaGuard,
 } from './quota-guard.js';
@@ -106,8 +107,9 @@ export class InteractiveRun {
    * when the guard is disabled or no signal is present.
    *
    * Scanning trips the shared sentinel as a side effect (via
-   * {@link detectAndTripQuota}). The `[QUOTA/RATE-LIMIT]` prefix mirrors the
-   * non-interactive paths in process-run.ts so both surface identically.
+   * {@link detectAndTripQuota}). Uses the shared {@link formatQuotaError}
+   * formatter so the error layout is identical to the non-interactive paths in
+   * process-run.ts.
    *
    * @param context Short description of the failure path, embedded in the error.
    */
@@ -116,7 +118,7 @@ export class InteractiveRun {
     if (reason === null) {
       return null;
     }
-    return new Error(`[QUOTA/RATE-LIMIT] ${context}; ${reason}`);
+    return new Error(formatQuotaError(reason, context));
   }
 
   /**

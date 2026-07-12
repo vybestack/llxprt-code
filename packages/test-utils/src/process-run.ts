@@ -9,6 +9,7 @@ import { env } from 'node:process';
 import type { Writable } from 'node:stream';
 import {
   detectQuotaSignal,
+  formatQuotaError,
   getQuotaGuardTrip,
   isQuotaGuardActive,
   tripQuotaGuard,
@@ -160,7 +161,7 @@ function buildExitFailureError(
   const baseMessage = `${detail}:\n${accumulator.stderr}`;
   const reason = detectAndTripQuota(ctx, accumulator);
   if (reason !== null) {
-    return new Error(`[QUOTA/RATE-LIMIT] ${reason}\n${baseMessage}`);
+    return new Error(formatQuotaError(reason, baseMessage));
   }
   return new Error(baseMessage);
 }
@@ -178,7 +179,7 @@ function buildTimeoutError(
   const reason = detectAndTripQuota(ctx, accumulator);
   if (reason !== null) {
     return new Error(
-      `[QUOTA/RATE-LIMIT] TestRig.run() timed out after ${timeoutMs}ms; output contained quota/rate-limit signal: ${reason}`,
+      formatQuotaError(reason, `TestRig.run() timed out after ${timeoutMs}ms`),
     );
   }
   return new Error(`TestRig.run() timed out after ${timeoutMs}ms`);
