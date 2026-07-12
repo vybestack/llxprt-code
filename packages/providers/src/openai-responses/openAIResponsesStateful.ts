@@ -35,10 +35,13 @@ export function computeStatefulConversation(
   explicitUserStore: boolean | undefined,
   logger: DebugLogger,
 ): StatefulConversation {
+  const ephemeralValue = invocationEphemerals[RESPONSES_STATEFUL_KEY];
   const requested =
-    ((invocationEphemerals[RESPONSES_STATEFUL_KEY] as boolean | undefined) ??
-      options.invocation.getModelBehavior<boolean>(RESPONSES_STATEFUL_KEY) ??
-      false) === true;
+    (typeof ephemeralValue === 'boolean'
+      ? ephemeralValue
+      : options.invocation.getModelBehavior<boolean>(
+          RESPONSES_STATEFUL_KEY,
+        )) === true;
   if (!requested || explicitUserStore === false) {
     return { enabled: false, parentId: undefined, content };
   }

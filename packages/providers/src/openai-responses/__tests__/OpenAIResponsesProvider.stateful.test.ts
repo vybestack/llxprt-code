@@ -128,7 +128,8 @@ function extractContent(content: unknown): string {
     return content
       .map((part: unknown) => {
         if (typeof part === 'object' && part !== null && 'text' in part) {
-          return String((part as { text: unknown }).text);
+          const text = (part as { text: unknown }).text;
+          return text === null || text === undefined ? '' : String(text);
         }
         return '';
       })
