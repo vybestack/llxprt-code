@@ -320,10 +320,15 @@ describe('Gemini Client (client.ts)', () => {
         ),
       );
 
-      expect(events).toContainEqual({
-        type: AgentEventType.Content,
-        value: 'Partial content',
-      });
+      expect(events.slice(-2)).toStrictEqual([
+        { type: AgentEventType.Content, value: 'Partial content' },
+        {
+          type: AgentEventType.Error,
+          value: {
+            error: { message: 'Payload too large', status: 413 },
+          },
+        },
+      ]);
       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
     });
 
@@ -368,7 +373,7 @@ describe('Gemini Client (client.ts)', () => {
           getLastPromptTokenCount: vi.fn().mockReturnValue(0),
         } as unknown as ChatSession;
 
-        await fromAsync(
+        const events = await fromAsync(
           client.sendMessageStream(
             [{ text: 'Hi' }],
             new AbortController().signal,
@@ -376,6 +381,7 @@ describe('Gemini Client (client.ts)', () => {
           ),
         );
 
+        expect(events).toContainEqual(terminalEvent);
         expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
       },
     );
