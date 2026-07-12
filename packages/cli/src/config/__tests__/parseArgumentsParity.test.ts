@@ -325,6 +325,24 @@ describe('parseArgumentsParity: boolean defaults', () => {
     expect(argv.yolo).toBe(true);
   });
 
+  it('--quiet defaults to false when not provided', async () => {
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.quiet).toBe(false);
+  });
+
+  it('--quiet flag sets quiet to true', async () => {
+    process.argv = ['node', 'script.js', '--quiet'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.quiet).toBe(true);
+  });
+
+  it('-q short alias sets quiet to true', async () => {
+    process.argv = ['node', 'script.js', '-q'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.quiet).toBe(true);
+  });
+
   it('--approval-mode defaults to undefined when not provided', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);

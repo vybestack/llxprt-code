@@ -94,6 +94,7 @@ describe('processAgentStream', () => {
     streamFormatter?: StreamJsonFormatter | null;
     emojiFilter?: EmojiFilter | undefined;
     config?: Config;
+    quiet?: boolean;
   }) {
     const streamFormatter =
       overrides?.streamFormatter === undefined
@@ -106,6 +107,7 @@ describe('processAgentStream', () => {
       // together; derive streamJsonOutput from the formatter unless a test
       // explicitly overrides it, so the test context matches production.
       streamJsonOutput: overrides?.streamJsonOutput ?? streamFormatter !== null,
+      quiet: overrides?.quiet ?? false,
       streamFormatter,
       emojiFilter: overrides?.emojiFilter,
       createProfileNameWriter: () => () => {},
