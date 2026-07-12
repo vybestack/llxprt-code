@@ -70,12 +70,15 @@ function createMockConfig(overrides?: {
 
 describe('processAgentStream — quiet mode', () => {
   let processStdoutSpy: MockInstance<typeof process.stdout.write>;
+  let processStderrSpy: MockInstance<typeof process.stderr.write>;
 
   beforeEach(() => {
     processStdoutSpy = vi
       .spyOn(process.stdout, 'write')
       .mockImplementation(() => true);
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    processStderrSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
   });
 
   afterEach(() => {
@@ -511,9 +514,6 @@ describe('processAgentStream — quiet mode', () => {
   });
 
   it('suppresses hook-blocked stderr writes in quiet mode', async () => {
-    const stderrSpy = vi
-      .spyOn(process.stderr, 'write')
-      .mockImplementation(() => true);
     const events: AgentEvent[] = [
       {
         type: 'hook-blocked',
@@ -530,7 +530,7 @@ describe('processAgentStream — quiet mode', () => {
       () => uiTelemetryService.getMetrics(),
     );
 
-    const stderrContent = stderrSpy.mock.calls
+    const stderrContent = processStderrSpy.mock.calls
       .map(([value]) => String(value))
       .join('');
     expect(stderrContent).not.toContain('blocked');
@@ -566,9 +566,6 @@ describe('processAgentStream — quiet mode', () => {
   });
 
   it('suppresses refusal stderr warning in quiet text mode', async () => {
-    const stderrSpy = vi
-      .spyOn(process.stderr, 'write')
-      .mockImplementation(() => true);
     const events: AgentEvent[] = [
       { type: 'text', text: 'Partial.' },
       { type: 'done', reason: 'refusal' },
@@ -581,7 +578,7 @@ describe('processAgentStream — quiet mode', () => {
       () => uiTelemetryService.getMetrics(),
     );
 
-    const stderrContent = stderrSpy.mock.calls
+    const stderrContent = processStderrSpy.mock.calls
       .map(([value]) => String(value))
       .join('');
     expect(stderrContent).not.toContain('WARNING');
@@ -589,9 +586,6 @@ describe('processAgentStream — quiet mode', () => {
   });
 
   it('suppresses hook-stopped stderr message in quiet mode', async () => {
-    const stderrSpy = vi
-      .spyOn(process.stderr, 'write')
-      .mockImplementation(() => true);
     const events: AgentEvent[] = [
       { type: 'text', text: 'Partial.' },
       {
@@ -608,7 +602,7 @@ describe('processAgentStream — quiet mode', () => {
       () => uiTelemetryService.getMetrics(),
     );
 
-    const stderrContent = stderrSpy.mock.calls
+    const stderrContent = processStderrSpy.mock.calls
       .map(([value]) => String(value))
       .join('');
     expect(stderrContent).not.toContain('stopped');
