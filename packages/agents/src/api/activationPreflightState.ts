@@ -93,16 +93,17 @@ function stableStringify(value: unknown, seen?: WeakSet<object>): string {
     return 'undefined';
   }
   if (typeof value === 'object') {
-    if (seen !== undefined && seen.has(value as object)) {
+    if (seen?.has(value) === true) {
       return '[Circular]';
     }
     const next = seen ?? new WeakSet<object>();
-    next.add(value as object);
+    next.add(value);
     if (Array.isArray(value)) {
       return `[${value.map((v) => stableStringify(v, next)).join(',')}]`;
     }
-    const keys = Object.keys(value as Record<string, unknown>).sort();
-    return `{${keys.map((k) => `${k}:${stableStringify((value as Record<string, unknown>)[k], next)}`).join(',')}}`;
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj).sort();
+    return `{${keys.map((k) => `${k}:${stableStringify(obj[k], next)}`).join(',')}}`;
   }
   return String(value);
 }

@@ -105,6 +105,10 @@ import type { AuthWinner } from './control/authState.js';
 import type { AgentSchedulerHandle } from './config-types.js';
 import { toRuntimeSwitchOptions } from './providerSwitchOptionsAdapter.js';
 import {
+  projectSessionStats,
+  readCompressionTokenCount,
+} from './agentStatsProjector.js';
+import {
   disposeOAuthManager,
   collectActiveExtensions,
   unloadExtensionSafely,
@@ -946,10 +950,10 @@ export class AgentImpl implements Agent {
     // before the first turn (startChat is otherwise lazy on first turn).
     await this.restoreChatVisibility();
     const chat = this.deps.resolveClient().getChat();
-    const originalTokenCount = this.readCompressionTokenCount();
+    const originalTokenCount = readCompressionTokenCount(this.historyService);
     const raw = await chat.performCompression(promptId);
     if (raw === PerformCompressionResult.COMPRESSED) {
-      const newTokenCount = this.readCompressionTokenCount();
+      const newTokenCount = readCompressionTokenCount(this.historyService);
       return {
         status: 'compressed',
         originalTokenCount: Math.max(originalTokenCount, newTokenCount),
@@ -970,7 +974,7 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-010
    */
   getStats(): SessionStats {
-    return this.projectStats();
+    return projectSessionStats(this.historyService);
   }
 
   /**
@@ -984,9 +988,9 @@ export class AgentImpl implements Agent {
    */
   onStats(cb: (stats: SessionStats) => void): Unsubscribe {
     const handler = (): void => {
-      cb(this.projectStats());
+      cb(projectSessionStats(this.historyService));
     };
-    cb(this.projectStats());
+    cb(projectSessionStats(this.historyService));
     uiTelemetryService.on('update', handler);
     return () => {
       uiTelemetryService.off('update', handler);
@@ -1078,85 +1082,6 @@ export class AgentImpl implements Agent {
       this.deps.initialHistoryService ??
       null
     );
-  }
-
-  // ─── P20 stats/compression projection helpers ────────────────────────────
-
-  /**
-   * Projects the in-process uiTelemetryService singleton metrics + HistoryService
-   * into the public SessionStats shape. Token fields are summed across per-model
-   * metrics, falling back to tokenTracking.sessionTokenUsage when the per-model
-   * sums are zero; contextWindowUsed reads uiTelemetryService.getLastPromptTokenCount();
-   * turnCount is derived from the HistoryService message count when reachable.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
-  private projectStats(): SessionStats {
-    const metrics = uiTelemetryService.getMetrics();
-    let promptTokens = 0;
-    let candidateTokens = 0;
-    let totalTokens = 0;
-    let cachedTokens = 0;
-    for (const modelName of Object.keys(metrics.models)) {
-      const t = metrics.models[modelName].tokens;
-      promptTokens += t.prompt;
-      candidateTokens += t.candidates;
-      totalTokens += t.total;
-      cachedTokens += t.cached;
-    }
-    const sessionUsage = metrics.tokenTracking.sessionTokenUsage;
-    const promptTokensFinal =
-      promptTokens > 0 ? promptTokens : sessionUsage.input;
-    const candidateTokensFinal =
-      candidateTokens > 0 ? candidateTokens : sessionUsage.output;
-    const totalTokensFinal = totalTokens > 0 ? totalTokens : sessionUsage.total;
-    const cachedTokensFinal =
-      cachedTokens > 0 ? cachedTokens : sessionUsage.cache;
-    return {
-      promptTokens: promptTokensFinal,
-      candidateTokens: candidateTokensFinal,
-      totalTokens: totalTokensFinal,
-      cachedTokens: cachedTokensFinal,
-      contextWindowSize: 0,
-      contextWindowUsed: uiTelemetryService.getLastPromptTokenCount(),
-      turnCount: this.readTurnCount(),
-    };
-  }
-
-  /**
-   * Reads a defensive token count from the HistoryService for compression
-   * before/after snapshots. Returns 0 when the HistoryService is unavailable.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-011
-   */
-  private readCompressionTokenCount(): number {
-    const service = this.historyService;
-    if (service === null) {
-      return 0;
-    }
-    try {
-      return service.getTotalTokens();
-    } catch {
-      return 0;
-    }
-  }
-
-  /**
-   * Reads the conversation turn/message count from the HistoryService. Returns 0
-   * when the HistoryService is unavailable.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
-  private readTurnCount(): number {
-    const service = this.historyService;
-    if (service === null) {
-      return 0;
-    }
-    try {
-      return service.getStatistics().totalMessages;
-    } catch {
-      return 0;
-    }
   }
 
   // ─── P16 switch/context-preservation helpers ─────────────────────────────
