@@ -31,6 +31,7 @@ describe('Provider alias integration', () => {
   let originalHome: string | undefined;
   let originalUserProfile: string | undefined;
   let originalConfigHome: string | undefined;
+  let originalDataHome: string | undefined;
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-alias-test-'));
@@ -64,9 +65,14 @@ describe('Provider alias integration', () => {
     originalHome = process.env.HOME;
     originalUserProfile = process.env.USERPROFILE;
     originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
+    originalDataHome = process.env['LLXPRT_DATA_HOME'];
     process.env.HOME = tempDir;
     process.env.USERPROFILE = tempDir;
     process.env['LLXPRT_CONFIG_HOME'] = llxprtDir;
+    // User alias configs are read from <dataDir>/providers; the global
+    // test-storage isolation sets LLXPRT_DATA_HOME, so point it at this
+    // test's own root too.
+    process.env['LLXPRT_DATA_HOME'] = llxprtDir;
 
     resetProviderManager();
     setFileSystem(new NodeFileSystem());
@@ -98,6 +104,11 @@ describe('Provider alias integration', () => {
       delete process.env['LLXPRT_CONFIG_HOME'];
     } else {
       process.env['LLXPRT_CONFIG_HOME'] = originalConfigHome;
+    }
+    if (originalDataHome === undefined) {
+      delete process.env['LLXPRT_DATA_HOME'];
+    } else {
+      process.env['LLXPRT_DATA_HOME'] = originalDataHome;
     }
 
     resetProviderManager();

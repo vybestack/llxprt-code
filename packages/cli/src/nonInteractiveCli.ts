@@ -22,6 +22,7 @@ import {
   type MessageBus,
   debugLogger,
   type ContractPart,
+  PLACEHOLDER_MODEL,
 } from '@vybestack/llxprt-code-core';
 import { activateSettingsRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import {
@@ -268,6 +269,8 @@ function emitUserMessage(
 }
 type ConfigWithBootstrapArgs = Config & {
   readonly _bootstrapArgs?: BootstrapProfileArgs;
+  readonly _profileModelParams?: Record<string, unknown>;
+  readonly _cliModelParams?: Record<string, unknown>;
 };
 
 function readBootstrapArgs(config: Config): BootstrapProfileArgs | undefined {
@@ -299,6 +302,27 @@ function buildActivationCliOverrides(
       : {}),
   };
   return Object.keys(overrides).length > 0 ? overrides : undefined;
+}
+
+function collectActivationModelParams(
+  config: Config,
+): ProviderActivationIntent['modelParams'] | undefined {
+  const configWithParams = config as ConfigWithBootstrapArgs;
+  const mergedModelParams: Record<string, unknown> = {};
+
+  // Profile model params apply regardless of provider source. A CLI provider
+  // override suppresses the profile's provider/model selection, not its model
+  // params (see profileResolution.ts contract).
+  if (configWithParams._profileModelParams) {
+    Object.assign(mergedModelParams, configWithParams._profileModelParams);
+  }
+  if (configWithParams._cliModelParams) {
+    Object.assign(mergedModelParams, configWithParams._cliModelParams);
+  }
+
+  return Object.keys(mergedModelParams).length > 0
+    ? mergedModelParams
+    : undefined;
 }
 
 async function processQuery(
@@ -345,6 +369,11 @@ function buildNonInteractiveActivationIntent(
   const useExternalAuth = params.settings.merged.useExternalAuth === true;
   const cliOverrides = buildActivationCliOverrides(params.config);
   const bootstrapArgs = readBootstrapArgs(params.config);
+  const modelParams = collectActivationModelParams(params.config);
+  const configModel = params.config.getModel();
+  const resolvedModel =
+    bootstrapArgs?.modelOverride ??
+    (configModel !== PLACEHOLDER_MODEL ? configModel : undefined);
   return {
     provider:
       params.config.getProvider() ??
@@ -352,10 +381,10 @@ function buildNonInteractiveActivationIntent(
       undefined,
     defaultProvider: 'gemini',
     authMode: useExternalAuth ? 'none' : 'auto',
-    ...(bootstrapArgs?.modelOverride !== null &&
-    bootstrapArgs?.modelOverride !== undefined
-      ? { model: bootstrapArgs.modelOverride }
+    ...(typeof resolvedModel === 'string' && resolvedModel.trim().length > 0
+      ? { model: resolvedModel.trim() }
       : {}),
+    ...(modelParams !== undefined ? { modelParams } : {}),
     ...(cliOverrides !== undefined ? { cliOverrides } : {}),
   };
 }

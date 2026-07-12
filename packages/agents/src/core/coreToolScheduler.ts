@@ -50,6 +50,7 @@ import type {
   AllToolCallsCompleteHandler,
   ToolCallsUpdateHandler,
 } from '@vybestack/llxprt-code-core/scheduler/types.js';
+import { accumulateLiveOutput } from '@vybestack/llxprt-code-core/scheduler/liveOutput.js';
 import { setToolContext } from '../scheduler/utils.js';
 import {
   applyTransition,
@@ -608,7 +609,10 @@ export class CoreToolScheduler implements ToolSchedulerContract {
               }
               this.toolCalls = this.toolCalls.map((tc) =>
                 tc.request.callId === id && tc.status === 'executing'
-                  ? { ...tc, liveOutput: chunk }
+                  ? {
+                      ...tc,
+                      liveOutput: accumulateLiveOutput(tc.liveOutput, chunk),
+                    }
                   : tc,
               );
               this.notifyToolCallsUpdate();

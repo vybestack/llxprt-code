@@ -173,12 +173,15 @@ export function formatSuccessContent(
   return JSON.stringify(payload, null, 2);
 }
 
+/**
+ * Normalizes line endings in a streaming text fragment without forcing a
+ * trailing newline. See taskAsyncExecution.ts for rationale.
+ */
 export function normalizeSubagentStreamingText(text: string): string {
   if (!text) {
     return '';
   }
-  const lf = text.replace(/\r\n?/g, '\n');
-  return lf.endsWith('\n') ? lf : lf + '\n';
+  return text.replace(/\r\n?/g, '\n');
 }
 
 export function resolveTimeoutSeconds(

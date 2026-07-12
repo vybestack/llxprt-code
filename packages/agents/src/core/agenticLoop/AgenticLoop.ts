@@ -384,7 +384,6 @@ export class AgenticLoop {
       return { continueLoop: false, nextMessage: [] };
     }
 
-    this.recordCompletedToolCalls(completed);
     this.notifyAllToolCallsComplete(completed);
     yield { kind: 'tools_complete', completed };
     // Bun 1.3.14 does not unwrap a promised async-generator return value through yield*.
@@ -392,24 +391,10 @@ export class AgenticLoop {
     return nextMessage;
   }
 
-  private recordCompletedToolCalls(completed: CompletedToolCall[]): void {
-    try {
-      const currentModel =
-        this.agentClient.getCurrentSequenceModel() ?? this.config.getModel();
-      this.agentClient
-        .getChat()
-        .recordCompletedToolCalls(currentModel, completed);
-    } catch {
-      // History persistence is best-effort; loop continuation uses the
-      // functionResponse parts built from the completed calls directly.
-    }
-  }
-
   /**
    * Forwards the completed-tool-calls batch to the caller's
-   * {@link DisplayCallbacks.onAllToolCallsComplete} AFTER the loop has recorded
-   * them into chat history (so the callback sees persisted state) and BEFORE
-   * the loop emits its tools_complete event. Supports async callbacks: the
+   * {@link DisplayCallbacks.onAllToolCallsComplete} before the loop emits its
+   * tools_complete event. Supports async callbacks: the
    * returned promise is NOT awaited (must not block the loop) — a rejection
    * handler is attached so async failures are logged and never surface as
    * unhandled rejections. Sync throws are caught and logged the same way.

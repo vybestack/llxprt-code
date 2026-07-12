@@ -239,6 +239,62 @@ describe('separateSettings — settings categorization', () => {
     const result = separateSettings({ seed: 42 }, 'openai');
     expect(result.modelParams.seed).toBe(42);
   });
+
+  describe('transport-selector keys never leak into modelParams @issue:2483', () => {
+    it('classifies apiMode as provider-config (dropped from all buckets)', () => {
+      const result = separateSettings({ apiMode: 'responses' }, 'openai');
+      // provider-config keys are intentionally dropped by separateSettings;
+      // they are consumed from provider settings at call time, not via
+      // the SeparatedSettings buckets.
+      expect(result.modelParams.apiMode).toBeUndefined();
+      expect(result.cliSettings.apiMode).toBeUndefined();
+      expect(result.modelBehavior.apiMode).toBeUndefined();
+    });
+
+    it('classifies responsesMode as provider-config (dropped from all buckets)', () => {
+      const result = separateSettings({ responsesMode: 'responses' }, 'openai');
+      expect(result.modelParams.responsesMode).toBeUndefined();
+      expect(result.cliSettings.responsesMode).toBeUndefined();
+      expect(result.modelBehavior.responsesMode).toBeUndefined();
+    });
+
+    it('classifies responses-mode as cli-behavior (lands in cliSettings, not modelParams)', () => {
+      const result = separateSettings({ 'responses-mode': 'chat' }, 'openai');
+      expect(result.modelParams['responses-mode']).toBeUndefined();
+      // Positive assertion: this is a global fallback setting, so it
+      // must land in cliSettings for the CLI layer to consume.
+      expect(result.cliSettings['responses-mode']).toBe('chat');
+    });
+
+    it('classifies openaiResponsesEnabled as provider-config (dropped from all buckets)', () => {
+      const result = separateSettings(
+        { openaiResponsesEnabled: true },
+        'openai',
+      );
+      expect(result.modelParams.openaiResponsesEnabled).toBeUndefined();
+      expect(result.cliSettings.openaiResponsesEnabled).toBeUndefined();
+      expect(result.modelBehavior.openaiResponsesEnabled).toBeUndefined();
+    });
+
+    it('all four selector keys are absent from modelParams simultaneously', () => {
+      const result = separateSettings(
+        {
+          apiMode: 'responses',
+          responsesMode: 'chat',
+          'responses-mode': 'responses',
+          openaiResponsesEnabled: true,
+          temperature: 0.5,
+        },
+        'openai',
+      );
+      expect(result.modelParams.apiMode).toBeUndefined();
+      expect(result.modelParams.responsesMode).toBeUndefined();
+      expect(result.modelParams['responses-mode']).toBeUndefined();
+      expect(result.modelParams.openaiResponsesEnabled).toBeUndefined();
+      // Legitimate model params still pass through
+      expect(result.modelParams.temperature).toBe(0.5);
+    });
+  });
 });
 
 describe('validateSetting — validation', () => {
@@ -468,6 +524,23 @@ describe('parseSetting — string-to-value parsing', () => {
     expect(result).toBe(false);
   });
 
+  it('parses reasoning.effort=max as the string max', () => {
+    const result = parseSetting('reasoning.effort', 'max');
+    expect(result).toBe('max');
+  });
+
+  it('validates reasoning.effort=max successfully', () => {
+    const parsed = parseSetting('reasoning.effort', 'max');
+    const validation = validateSetting('reasoning.effort', parsed);
+    expect(validation.success).toBe(true);
+  });
+
+  it('rejects reasoning.effort with an invalid value', () => {
+    const parsed = parseSetting('reasoning.effort', 'ultra');
+    const validation = validateSetting('reasoning.effort', parsed);
+    expect(validation.success).toBe(false);
+  });
+
   it('returns raw string for unknown setting', () => {
     const result = parseSetting('unknown-setting-xyz', 'hello');
     expect(result).toBe('hello');
@@ -493,6 +566,11 @@ describe('getProfilePersistableKeys — profile persistence', () => {
   it('includes reasoning.enabled in persistable keys', () => {
     const keys = getProfilePersistableKeys();
     expect(keys).toContain('reasoning.enabled');
+  });
+
+  it('reasoning.effort enumValues includes max', () => {
+    const spec = getSettingSpec('reasoning.effort');
+    expect(spec?.enumValues).toContain('max');
   });
 
   it('auth-key is persistable to profile (canonical)', () => {

@@ -16,14 +16,14 @@
  */
 
 import {
-  DebugLogger,
   mergeRefreshedToken,
-  type Config,
-  type MessageBus,
   type OAuthTokenRequestMetadata,
   type OAuthTokenWithExtras,
-  debugLogger,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-auth';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type {
   AuthenticatorInterface,
   BucketFailoverOAuthManagerLike,

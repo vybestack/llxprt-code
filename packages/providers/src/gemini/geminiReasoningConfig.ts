@@ -7,7 +7,7 @@
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { shouldDumpSDKContext } from '../utils/dumpSDKContext.js';
 
-type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface ReasoningConfig {
   enabled: boolean;
@@ -38,6 +38,7 @@ export function mapReasoningEffortToThinkingLevel(
       return 'MEDIUM';
     case 'high':
     case 'xhigh':
+    case 'max':
       return 'HIGH';
     default:
       return undefined;
