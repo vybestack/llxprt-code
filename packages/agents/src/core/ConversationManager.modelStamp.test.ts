@@ -18,7 +18,7 @@
  *  - imported/restored history does NOT get stamped.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import type { Content } from '@google/genai';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';

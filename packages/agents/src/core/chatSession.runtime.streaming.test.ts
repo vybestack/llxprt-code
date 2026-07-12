@@ -9,7 +9,8 @@
  * Sibling to chatSession.runtime.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'bun:test';
+import { vi } from 'vitest';
 import type { Tool } from '@google/genai';
 import { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -169,8 +170,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
   });
 
   it('aborts a stalled non-stream sendMessage response after partial provider output instead of hanging forever', async () => {
-    vi.useFakeTimers();
-    const testTimeoutMs = 30_000; // 30 second timeout for this test
+    const testTimeoutMs = 20;
 
     try {
       // Set explicit timeout via ephemeral setting
@@ -255,21 +255,16 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         },
       );
 
-      await Promise.resolve();
-      await Promise.resolve();
-      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
-
       await rejection;
       expect(capturedSignal?.aborted).toBe(true);
       expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
     } finally {
-      vi.useRealTimers();
+      config.setEphemeralSetting('stream-idle-timeout-ms', 0);
     }
   });
 
   it('aborts a stalled direct-message response after partial provider output instead of hanging forever', async () => {
-    vi.useFakeTimers();
-    const testTimeoutMs = 30_000; // 30 second timeout for this test
+    const testTimeoutMs = 20;
 
     try {
       // Set explicit timeout via ephemeral setting
@@ -354,15 +349,11 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         },
       );
 
-      await Promise.resolve();
-      await Promise.resolve();
-      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
-
       await rejection;
       expect(capturedSignal?.aborted).toBe(true);
       expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
     } finally {
-      vi.useRealTimers();
+      config.setEphemeralSetting('stream-idle-timeout-ms', 0);
     }
   });
 });

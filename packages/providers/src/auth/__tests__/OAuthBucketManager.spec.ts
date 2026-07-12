@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { OAuthBucketManager } from '../OAuthBucketManager.js';
 import type {
   TokenStore,
@@ -467,9 +467,7 @@ describe('OAuthBucketManager', () => {
       const token = createMockToken('access_token', 3600000);
       tokenStore.setToken('anthropic', token, 'work@company.com');
 
-      await expect(
-        bucketManager.validateBucketExists('anthropic', 'work@company.com'),
-      ).resolves.not.toThrow();
+      await bucketManager.validateBucketExists('anthropic', 'work@company.com');
     });
 
     /**
@@ -481,11 +479,11 @@ describe('OAuthBucketManager', () => {
      * @and Error message includes provider
      */
     it('should throw error for non-existent bucket', async () => {
-      await expect(
+      expect(
         bucketManager.validateBucketExists('anthropic', 'nonexistent'),
       ).rejects.toThrow('nonexistent');
 
-      await expect(
+      expect(
         bucketManager.validateBucketExists('anthropic', 'nonexistent'),
       ).rejects.toThrow('anthropic');
     });
@@ -498,7 +496,7 @@ describe('OAuthBucketManager', () => {
      * @then Throws error
      */
     it('should throw error for non-existent default bucket', async () => {
-      await expect(
+      expect(
         bucketManager.validateBucketExists('anthropic', 'default'),
       ).rejects.toThrow(/not found/);
     });
@@ -511,7 +509,7 @@ describe('OAuthBucketManager', () => {
      * @then Prevents switching to invalid bucket
      */
     it('should validate bucket before switching', async () => {
-      await expect(
+      expect(
         bucketManager.validateBucketExists('anthropic', 'nonexistent'),
       ).rejects.toThrow(/not found/);
     });
@@ -524,7 +522,7 @@ describe('OAuthBucketManager', () => {
      * @then Error message suggests how to fix
      */
     it('should provide actionable error message', async () => {
-      await expect(
+      expect(
         bucketManager.validateBucketExists('anthropic', 'missing'),
       ).rejects.toThrow(/authenticate|login|auth/i);
     });
@@ -693,9 +691,7 @@ describe('OAuthBucketManager', () => {
       );
       expect(status.authenticated).toBe(true);
 
-      await expect(
-        bucketManager.validateBucketExists('anthropic', 'work@company.com'),
-      ).resolves.not.toThrow();
+      await bucketManager.validateBucketExists('anthropic', 'work@company.com');
 
       const profileBuckets = ['work@company.com', 'personal@gmail.com'];
       const next = bucketManager.getNextBucket(

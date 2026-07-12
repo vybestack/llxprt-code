@@ -8,6 +8,21 @@ import {
   writeToStderr,
 } from '@vybestack/llxprt-code-core';
 
+/**
+ * Test-injectable write function. Defaults to the real writeToStderr.
+ * Tests that need to capture stderr output (without module-level mocking,
+ * which is unsupported under Bun's native test runner) can replace this
+ * via the exported __setWriteToStderrForTesting seam.
+ */
+let stderrWriter: (...args: Parameters<typeof writeToStderr>) => boolean =
+  writeToStderr;
+
+export function __setWriteToStderrForTesting(
+  fn: ((...args: Parameters<typeof writeToStderr>) => boolean) | null,
+): void {
+  stderrWriter = fn ?? writeToStderr;
+}
+
 export function formatNonInteractiveError(error: unknown): string {
   const formatted = parseAndFormatApiError(error);
   if (formatted && !formatted.includes('[object Object]')) {
@@ -55,10 +70,10 @@ export function reportNonInteractiveError(
     // not a process exit status. Hardcoding 1 would conflate exit status with
     // an error code in the JSON envelope. The trailing newline is explicit so
     // the output is unambiguous newline-delimited JSON.
-    writeToStderr(`${formatter.formatError(normalizedError)}\n`);
+    stderrWriter(`${formatter.formatError(normalizedError)}\n`);
   } else if (outputFormat === OutputFormat.STREAM_JSON) {
     const streamFormatter = new StreamJsonFormatter();
-    writeToStderr(
+    stderrWriter(
       streamFormatter.formatEvent({
         type: JsonStreamEventType.ERROR,
         timestamp: new Date().toISOString(),
@@ -68,6 +83,6 @@ export function reportNonInteractiveError(
     );
   } else {
     const printableError = formatNonInteractiveError(error);
-    writeToStderr(`Non-interactive run failed: ${printableError}\n`);
+    stderrWriter(`Non-interactive run failed: ${printableError}\n`);
   }
 }

@@ -23,7 +23,7 @@
  *        full raw>keyName>inline>keyfile>oauth>none chain.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import { buildAgent, drain, countType } from './helpers/agentHarness.js';
 import {
@@ -188,9 +188,11 @@ describe('Profiles/auth-winner @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
       const providerBefore = agent.getProvider();
-      await expect(agent.profiles.apply('does-not-exist')).rejects.toThrow(
+      const applyPromise = agent.profiles.apply('does-not-exist');
+      expect(applyPromise).rejects.toThrow(
         "Profile 'does-not-exist' not found",
       );
+      await applyPromise.catch(() => undefined);
       // a failed resolve must not have mutated the live provider
       expect(agent.getProvider()).toBe(providerBefore);
     } finally {
@@ -248,9 +250,9 @@ describe('Profiles/auth-winner @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-
   it('T19a setDefault on an unknown profile rejects with a clear not-found error @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-009', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      await expect(agent.profiles.setDefault('ghost')).rejects.toThrow(
-        "Profile 'ghost' not found",
-      );
+      const defaultPromise = agent.profiles.setDefault('ghost');
+      expect(defaultPromise).rejects.toThrow("Profile 'ghost' not found");
+      await defaultPromise.catch(() => undefined);
       expect(agent.profiles.getDefault()).toBeUndefined();
     } finally {
       await cleanup();

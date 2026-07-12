@@ -9,30 +9,46 @@ import {
   it,
   expect,
   vi,
+  beforeAll,
   beforeEach,
   afterEach,
   type Mock,
 } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { createPolicyUpdater } from './config.js';
+import type { createPolicyUpdater as CreatePolicyUpdater } from './config.js';
 import { PolicyEngine } from './policy-engine.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { MessageBusType } from '../confirmation-bus/types.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import * as debugLoggerModule from '../utils/debugLogger.js';
+import * as actualSettings from '../../../settings/index.ts';
 
-vi.mock('node:fs/promises');
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  )),
+const mockFsPromises = vi.hoisted(() => ({
+  mkdir: vi.fn(),
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
+  rename: vi.fn(),
+}));
+
+vi.mock('node:fs/promises', () => ({
+  ...mockFsPromises,
+  default: mockFsPromises,
+}));
+vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...actualSettings,
   getSettingsService: vi.fn(),
 }));
+
+let createPolicyUpdater: typeof CreatePolicyUpdater;
 
 describe('createPolicyUpdater - TOML Persistence', () => {
   let policyEngine: PolicyEngine;
   let messageBus: MessageBus;
+
+  beforeAll(async () => {
+    ({ createPolicyUpdater } = await import('./config.js'));
+  });
 
   beforeEach(() => {
     policyEngine = new PolicyEngine({ rules: [], checkers: [] });

@@ -6,7 +6,7 @@
  * MessageConverter.convertIContentToResponse() can map it to finishReason,
  * which turn.ts uses to yield the Finished event that ends a turn.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { convertIContentToResponse } from './MessageConverter.js';
 

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OAuthManager } from './oauth-manager.js';
 import { KeyringTokenStore } from './types.js';
 import type { ISecureStore } from '@vybestack/llxprt-code-auth';
@@ -28,18 +28,6 @@ function createStubSecureStore(): ISecureStore {
   };
 }
 
-// Mock the file system to simulate missing OAuth credentials
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
-  return {
-    ...actual,
-    promises: {
-      ...actual.promises,
-      readFile: vi.fn(),
-      unlink: vi.fn(),
-    },
-  };
-});
 
 function createLoadedSettings(
   overrides: {
@@ -52,7 +40,7 @@ function createLoadedSettings(
   return createFakeOAuthSettings(overrides);
 }
 
-const mockFs = vi.mocked(fs);
+const readFileSpy = vi.spyOn(fs, 'readFile');
 
 describe('OAuth Provider Premature Initialization', () => {
   let tokenStore: KeyringTokenStore;
@@ -66,7 +54,7 @@ describe('OAuth Provider Premature Initialization', () => {
     oauthManager = new OAuthManager(tokenStore);
 
     // Mock the OAuth credentials file to not exist
-    mockFs.readFile.mockRejectedValue(
+    readFileSpy.mockRejectedValue(
       new Error(
         "ENOENT: no such file or directory, open '/.llxprt/oauth_creds.json'",
       ),
@@ -101,7 +89,7 @@ describe('OAuth Provider Premature Initialization', () => {
       }).not.toThrow();
 
       // Verify no file access was attempted during registration
-      expect(mockFs.readFile).not.toHaveBeenCalled();
+      expect(readFileSpy).not.toHaveBeenCalled();
     });
 
     /**
@@ -123,7 +111,7 @@ describe('OAuth Provider Premature Initialization', () => {
       }).not.toThrow();
 
       // Verify no file access was attempted during registration
-      expect(mockFs.readFile).not.toHaveBeenCalled();
+      expect(readFileSpy).not.toHaveBeenCalled();
 
       // Verify all providers are registered
       const providers = oauthManager.getSupportedProviders();
@@ -157,7 +145,7 @@ describe('OAuth Provider Premature Initialization', () => {
       expect(statuses).toHaveLength(2);
 
       // Verify no OAuth initialization was triggered
-      expect(mockFs.readFile).not.toHaveBeenCalled();
+      expect(readFileSpy).not.toHaveBeenCalled();
 
       // Verify providers remain unauthenticated (no OAuth triggered)
       const codexStatus = statuses.find((s) => s.provider === 'codex');
@@ -193,7 +181,7 @@ describe('OAuth Provider Premature Initialization', () => {
       expect(availableProviders).toContain('anthropic');
 
       // Verify no OAuth initialization was triggered
-      expect(mockFs.readFile).not.toHaveBeenCalled();
+      expect(readFileSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -211,13 +199,13 @@ describe('OAuth Provider Premature Initialization', () => {
       oauthManager.registerProvider(codexProvider);
 
       // Registration should not trigger initialization
-      expect(mockFs.readFile).not.toHaveBeenCalled();
+      expect(readFileSpy).not.toHaveBeenCalled();
 
       // Requesting token should not trigger initialization since OAuth is not enabled
       const token = await oauthManager.getToken('codex');
 
       // Should NOT have attempted to read credentials file
-      expect(mockFs.readFile).not.toHaveBeenCalled();
+      expect(readFileSpy).not.toHaveBeenCalled();
 
       // Should return null when OAuth is not enabled
       expect(token).toBeNull();
@@ -242,7 +230,7 @@ describe('OAuth Provider Premature Initialization', () => {
       const codexToken = await oauthManager.getToken('codex');
 
       // Should not have attempted to read credentials
-      expect(mockFs.readFile).not.toHaveBeenCalledWith(
+      expect(readFileSpy).not.toHaveBeenCalledWith(
         expect.stringContaining('oauth_creds.json'),
       );
 
@@ -270,7 +258,7 @@ describe('OAuth Provider Premature Initialization', () => {
         expiry_date: Date.now() + 3600000, // 1 hour from now
       };
 
-      mockFs.readFile.mockResolvedValue(JSON.stringify(mockCredentials));
+      readFileSpy.mockResolvedValue(JSON.stringify(mockCredentials));
 
       const codexProvider = new CodexOAuthProvider(tokenStore);
       oauthManager.registerProvider(codexProvider);
@@ -279,7 +267,7 @@ describe('OAuth Provider Premature Initialization', () => {
       const token = await oauthManager.getToken('codex');
 
       // Should NOT have read the credentials file
-      expect(mockFs.readFile).not.toHaveBeenCalled();
+      expect(readFileSpy).not.toHaveBeenCalled();
 
       // Should return null since OAuth is not enabled
       expect(token).toBeNull();

@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 
-function buildProviderWithOAuth() {
+function buildProviderWithOAuth(fetchFn: typeof fetch) {
   const oauthManager = {
     getOAuthToken: vi.fn(async () => ({
       access_token: 'test',
@@ -26,6 +26,7 @@ function buildProviderWithOAuth() {
     'https://chatgpt.com/backend-api/codex',
     undefined,
     oauthManager as unknown as object,
+    fetchFn,
   );
 }
 
@@ -63,8 +64,6 @@ describe('OpenAIResponsesProvider Codex Mode - malformed call ids', () => {
   });
 
   it('should not emit function_call_output for malformed call ids that cannot match a function_call', async () => {
-    const provider = buildProviderWithOAuth();
-
     const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => {
       const bodyText =
         init?.body instanceof Blob
@@ -99,10 +98,13 @@ describe('OpenAIResponsesProvider Codex Mode - malformed call ids', () => {
         }
       }
 
-      return new Response('', { status: 200 });
+      return new Response('data: [DONE]\n\n', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
     });
 
-    globalThis.fetch = fetchMock as typeof globalThis.fetch;
+    const provider = buildProviderWithOAuth(fetchMock as typeof fetch);
 
     // Simulate a corrupted/malformed history item where the tool_response has a
     // callId missing the underscore (matches the reported failure mode).

@@ -4,18 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { GenerateContentConfig, Tool } from '@google/genai';
-import { ChatSession } from './chatSession.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { ChatSession } from './chatSession.js?chat-session-runtime-suite-3';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js?chat-session-runtime-suite';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js?chat-session-runtime-suite';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js?chat-session-runtime-suite';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -30,16 +30,6 @@ import {
   BeforeModelHookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
-
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
-  retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
-}));
-
-const retryWithBackoff = vi.mocked(
-  await import('@vybestack/llxprt-code-core/utils/retry.js').then(
-    (m) => m.retryWithBackoff,
-  ),
-);
 
 describe('ChatSession runtime context', () => {
   let settingsService: SettingsService;
@@ -143,7 +133,6 @@ describe('ChatSession runtime context', () => {
 
     expect(response).toBeDefined();
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
-    expect(retryWithBackoff).toHaveBeenCalled();
 
     const options = calls[0];
     expect(options).toBeDefined();

@@ -24,7 +24,7 @@
  * - T18a status/disableOAuth/login/logout/switchBucket/setBaseUrl behavior.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { buildAgent } from './helpers/agentHarness.js';
 
 describe('Auth @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', () => {
@@ -162,9 +162,11 @@ describe('Auth @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', () => {
       provider: 'openai',
     });
     try {
-      await expect(
-        agent.auth.keys.save('', 'sk-value', { provider: 'openai' }),
-      ).rejects.toThrow('Key name must be non-empty');
+      const savePromise = agent.auth.keys.save('', 'sk-value', {
+        provider: 'openai',
+      });
+      expect(savePromise).rejects.toThrow('Key name must be non-empty');
+      await savePromise.catch(() => undefined);
 
       // the store stays empty after the rejected save
       const list = await agent.auth.keys.list();
@@ -179,9 +181,9 @@ describe('Auth @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', () => {
       provider: 'openai',
     });
     try {
-      await expect(
-        agent.auth.keys.use('', { provider: 'openai' }),
-      ).rejects.toThrow('Key name must be non-empty');
+      const usePromise = agent.auth.keys.use('', { provider: 'openai' });
+      expect(usePromise).rejects.toThrow('Key name must be non-empty');
+      await usePromise.catch(() => undefined);
 
       // no keyName winner was established by the rejected use()
       const status = agent.getProviderStatus();
@@ -328,9 +330,11 @@ describe('Auth @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', () => {
       // login without a handler must reject with the SPECIFIC, provider-scoped
       // "requires an onOAuthPrompt handler" message — not an incidental
       // TypeError from falling through into a missing handler call.
-      await expect(agent.auth.login('anthropic')).rejects.toThrow(
+      const loginPromise = agent.auth.login('anthropic');
+      expect(loginPromise).rejects.toThrow(
         'OAuth login for provider "anthropic" requires an onOAuthPrompt handler',
       );
+      await loginPromise.catch(() => undefined);
 
       // status reflects unauthenticated
       const status = agent.auth.status('anthropic');
@@ -428,9 +432,9 @@ describe('Auth @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', () => {
       onOAuthPrompt: () => false, // user declines
     });
     try {
-      await expect(agent.auth.login('anthropic')).rejects.toThrow(
-        'OAuth login was declined',
-      );
+      const loginPromise = agent.auth.login('anthropic');
+      expect(loginPromise).rejects.toThrow('OAuth login was declined');
+      await loginPromise.catch(() => undefined);
 
       // a declined login leaves the provider unauthenticated and bucket-free
       expect(agent.auth.status('anthropic')).not.toBe('authenticated');
@@ -565,11 +569,12 @@ describe('Auth @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', () => {
     try {
       // the active provider is 'openai'; targeting 'anthropic' must throw and
       // must NOT mutate the active provider's baseUrl.
-      await expect(
-        agent.auth.setBaseUrl('https://proxy.example.com/v1', {
-          provider: 'anthropic',
-        }),
-      ).rejects.toThrow(/active provider "openai"/);
+      const baseUrlPromise = agent.auth.setBaseUrl(
+        'https://proxy.example.com/v1',
+        { provider: 'anthropic' },
+      );
+      expect(baseUrlPromise).rejects.toThrow(/active provider "openai"/);
+      await baseUrlPromise.catch(() => undefined);
       expect(agent.getProviderStatus().baseUrl).toBeUndefined();
     } finally {
       await cleanup();

@@ -38,6 +38,18 @@ export interface ProviderConfigResult {
   isPaidMode?: boolean;
 }
 
+export interface ProviderConfigDependencies {
+  sanitizeApiKey: (key: string) => string;
+  updateApiKey: typeof updateActiveProviderApiKey;
+  updateBaseUrl: typeof updateActiveProviderBaseUrl;
+}
+
+const defaultDependencies: ProviderConfigDependencies = {
+  sanitizeApiKey,
+  updateApiKey: updateActiveProviderApiKey,
+  updateBaseUrl: updateActiveProviderBaseUrl,
+};
+
 /**
  * Sets or removes the API key for the active provider.
  *
@@ -47,14 +59,15 @@ export interface ProviderConfigResult {
  */
 export async function setProviderApiKey(
   apiKey: string | undefined,
+  dependencies: ProviderConfigDependencies = defaultDependencies,
 ): Promise<ProviderConfigResult> {
   try {
     const trimmed = apiKey?.trim();
     const normalized =
       trimmed && trimmed.toLowerCase() !== 'none' && trimmed !== ''
-        ? sanitizeApiKey(trimmed)
+        ? dependencies.sanitizeApiKey(trimmed)
         : null;
-    const result = await updateActiveProviderApiKey(normalized);
+    const result = await dependencies.updateApiKey(normalized);
     return {
       success: true,
       message: result.message,
@@ -77,12 +90,13 @@ export async function setProviderApiKey(
  */
 export async function setProviderBaseUrl(
   baseUrl: string | undefined,
+  dependencies: ProviderConfigDependencies = defaultDependencies,
 ): Promise<ProviderConfigResult> {
   try {
     const trimmed = baseUrl?.trim() ?? '';
     const normalized =
       trimmed === '' || trimmed.toLowerCase() === 'none' ? null : trimmed;
-    const result = await updateActiveProviderBaseUrl(normalized);
+    const result = await dependencies.updateBaseUrl(normalized);
     return {
       success: true,
       message: result.message,

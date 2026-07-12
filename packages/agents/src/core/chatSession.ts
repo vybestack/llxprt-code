@@ -151,6 +151,8 @@ export class ChatSession {
     contentGenerator: ContentGenerator,
     generationConfig: GenerateContentConfig = {},
     initialHistory: Content[] = [],
+    triggerCompressionHook: typeof triggerPreCompressHook = triggerPreCompressHook,
+    compressionRetry?: ConstructorParameters<typeof CompressionHandler>[5],
   ) {
     this.runtimeContext = view;
     this.runtimeState = view.state;
@@ -187,7 +189,7 @@ export class ChatSession {
       async (context: CompressionContext) => {
         const config = view.providerRuntime.config;
         if (config) {
-          await triggerPreCompressHook(
+          await triggerCompressionHook(
             config,
             context.trigger === 'auto'
               ? PreCompressTrigger.Auto
@@ -195,6 +197,7 @@ export class ChatSession {
           );
         }
       },
+      compressionRetry,
     );
 
     this.conversationManager = new ConversationManager(
@@ -632,10 +635,15 @@ export class ChatSession {
   async enforceContextWindow(
     pendingTokens: number,
     promptId: string,
+    resolveTokenLimit?: Parameters<
+      CompressionHandler['enforceContextWindow']
+    >[3],
   ): Promise<void> {
     return this.compressionHandler.enforceContextWindow(
       pendingTokens,
       promptId,
+      undefined,
+      resolveTokenLimit,
     );
   }
 

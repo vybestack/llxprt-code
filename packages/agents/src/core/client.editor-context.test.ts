@@ -9,7 +9,8 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi } from 'vitest';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
@@ -47,19 +48,19 @@ const {
   mockGenerateContentFn,
   mockEmbedContentFn,
   mockTurnRunFn,
-} = vi.hoisted(() => ({
+} = {
   mockChatCreateFn: vi.fn(),
   mockGenerateContentFn: vi.fn(),
   mockEmbedContentFn: vi.fn(),
   mockTurnRunFn: vi.fn(),
-}));
+};
 
 const {
   todoStoreReadMock,
   todoStoreReadPausedMock,
   todoStoreWritePausedMock,
   mockTodoStoreConstructor,
-} = vi.hoisted(() => {
+} = (() => {
   const readMock = vi.fn();
   const readPausedMock = vi.fn();
   const writePausedMock = vi.fn();
@@ -74,9 +75,9 @@ const {
     todoStoreWritePausedMock: writePausedMock,
     mockTodoStoreConstructor: constructorMock,
   };
-});
+})();
 
-vi.mock('@google/genai');
+vi.mock('@google/genai', () => ({ GoogleGenAI: vi.fn() }));
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -101,28 +102,14 @@ vi.mock(
     })),
   }),
 );
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
-  return {
-    ...actual,
-    LocalTodoStore: mockTodoStoreConstructor,
-  };
-});
-vi.mock('./turn', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./turn.js')>();
-  class MockTurn {
-    pendingToolCalls = [];
-    run = mockTurnRunFn;
-    constructor() {}
-  }
-  return {
-    ...actual,
-    Turn: MockTurn,
-  };
-});
+vi.mock('@vybestack/llxprt-code-tools', () => ({
+  LocalTodoStore: vi.fn().mockImplementation(() => ({
+    readTodos: vi.fn().mockResolvedValue([]),
+    readPausedState: vi.fn().mockResolvedValue(false),
+    writePausedState: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
 
-vi.mock('@vybestack/llxprt-code-core/config/config.js');
 vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));
@@ -138,32 +125,16 @@ vi.mock(
         .join('') ?? undefined,
   }),
 );
-vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
-  logApiRequest: vi.fn(),
-  logApiResponse: vi.fn(),
-  logApiError: vi.fn(),
-}));
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
-  return {
-    ...actual,
-    ideContext: {
-      ...actual.ideContext,
-      getIdeContext: vi.fn(),
-      subscribeToIdeContext: vi.fn(),
-      setIdeContext: vi.fn(),
-      clearIdeContext: vi.fn(),
-    },
-  };
-});
-vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
-  tokenLimit: vi.fn(),
+vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
+  ideContext: {
+    getIdeContext: vi.fn(),
+    subscribeToIdeContext: vi.fn(),
+    setIdeContext: vi.fn(),
+    clearIdeContext: vi.fn(),
+  },
 }));
 vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
@@ -180,6 +151,7 @@ describe('Gemini Client (client.ts)', () => {
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,
+      createTurn: () => ({ run: mockTurnRunFn }) as never,
     });
     client = ctx.client;
 
@@ -359,7 +331,7 @@ describe('Gemini Client (client.ts)', () => {
           };
 
           // Setup current context
-          vi.mocked(ideContext.getIdeContext).mockReturnValue({
+          ideContext.getIdeContext.mockReturnValue({
             workspaceState: {
               openFiles: [
                 { ...currentActiveFile, isActive: true, timestamp: Date.now() },
@@ -380,7 +352,7 @@ describe('Gemini Client (client.ts)', () => {
             addHistory: (typeof vi)['fn'];
           };
 
-          const addHistoryCalls = vi.mocked(mockChat.addHistory).mock.calls;
+          const addHistoryCalls = mockChat.addHistory.mock.calls;
 
           // Check for the appropriate context based on shouldSendContext flag
           const summaryCall = addHistoryCalls.find((call) =>
@@ -420,7 +392,7 @@ describe('Gemini Client (client.ts)', () => {
         };
 
         // Setup current context (same as previous)
-        vi.mocked(ideContext.getIdeContext).mockReturnValue({
+        ideContext.getIdeContext.mockReturnValue({
           workspaceState: {
             openFiles: [
               { ...activeFile, isActive: true, timestamp: Date.now() },
@@ -447,7 +419,7 @@ describe('Gemini Client (client.ts)', () => {
           // consume stream
         }
 
-        const addHistoryCalls = vi.mocked(mockChat.addHistory).mock.calls;
+        const addHistoryCalls = mockChat.addHistory.mock.calls;
         const contextCall = addHistoryCalls.find((call) =>
           JSON.stringify(call[0]).includes("user's editor context"),
         );

@@ -3,7 +3,7 @@
  * @requirement REQ-SP2-001
  * @project-plans/debuglogging/requirements.md
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,
@@ -13,124 +13,109 @@ import {
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
-import Anthropic from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
 import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
-  getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
-}));
-
-vi.mock('@anthropic-ai/sdk', () => {
-  class FakeAnthropic {
-    static created: Array<{
-      instanceId: symbol;
-      options: Record<string, unknown>;
-    }> = [];
-
-    static requests: Array<{
-      request: unknown;
-    }> = [];
-
-    static reset(): void {
-      FakeAnthropic.created = [];
-      FakeAnthropic.requests = [];
-    }
-
-    readonly instanceId: symbol;
-    readonly options: Record<string, unknown>;
-    readonly messages: {
-      create: ReturnType<typeof vi.fn>;
-    };
-
-    constructor(opts: Record<string, unknown>) {
-      this.instanceId = Symbol('anthropic-client');
-      this.options = opts;
-      FakeAnthropic.created.push({
-        instanceId: this.instanceId,
-        options: opts,
-      });
-      this.messages = {
-        create: vi.fn(async (request: unknown) => {
-          FakeAnthropic.requests.push({ request });
-          const req = request as { stream?: boolean };
-
-          if (req.stream === true) {
-            // Return async iterable for streaming
-            return {
-              async *[Symbol.asyncIterator]() {
-                yield {
-                  type: 'message_start',
-                  message: {
-                    id: 'msg_test',
-                    type: 'message',
-                    role: 'assistant',
-                    content: [],
-                    model: 'claude-3-sonnet-20240229',
-                    stop_reason: null,
-                    stop_sequence: null,
-                    usage: { input_tokens: 10, output_tokens: 0 },
-                  },
-                };
-                yield {
-                  type: 'content_block_start',
-                  index: 0,
-                  content_block: { type: 'text', text: '' },
-                };
-                yield {
-                  type: 'content_block_delta',
-                  index: 0,
-                  delta: { type: 'text_delta', text: 'ok' },
-                };
-                yield {
-                  type: 'content_block_stop',
-                  index: 0,
-                };
-                yield {
-                  type: 'message_delta',
-                  delta: { stop_reason: 'end_turn', stop_sequence: null },
-                  usage: { output_tokens: 1 },
-                };
-                yield {
-                  type: 'message_stop',
-                };
-              },
-            };
-          }
-
-          // Non-streaming response
-          return {
-            content: [
-              {
-                type: 'text',
-                text: 'ok',
-              },
-            ],
-            usage: {
-              input_tokens: 0,
-              output_tokens: 0,
-            },
-          };
-        }),
-      };
-    }
-  }
-
-  return { default: FakeAnthropic };
-});
-
-const FakeAnthropicClass = Anthropic as unknown as {
-  created: Array<{
+class FakeAnthropic {
+  static created: Array<{
     instanceId: symbol;
     options: Record<string, unknown>;
-  }>;
-  requests: Array<{
+  }> = [];
+
+  static requests: Array<{
     request: unknown;
-  }>;
-  reset(): void;
-};
+  }> = [];
+
+  static reset(): void {
+    FakeAnthropic.created = [];
+    FakeAnthropic.requests = [];
+  }
+
+  readonly instanceId: symbol;
+  readonly options: Record<string, unknown>;
+  readonly messages: {
+    create: ReturnType<typeof vi.fn>;
+  };
+
+  constructor(opts: Record<string, unknown>) {
+    this.instanceId = Symbol('anthropic-client');
+    this.options = opts;
+    FakeAnthropic.created.push({
+      instanceId: this.instanceId,
+      options: opts,
+    });
+    this.messages = {
+      create: vi.fn(async (request: unknown) => {
+        FakeAnthropic.requests.push({ request });
+        const req = request as { stream?: boolean };
+
+        if (req.stream === true) {
+          // Return async iterable for streaming
+          return {
+            async *[Symbol.asyncIterator]() {
+              yield {
+                type: 'message_start',
+                message: {
+                  id: 'msg_test',
+                  type: 'message',
+                  role: 'assistant',
+                  content: [],
+                  model: 'claude-3-sonnet-20240229',
+                  stop_reason: null,
+                  stop_sequence: null,
+                  usage: { input_tokens: 10, output_tokens: 0 },
+                },
+              };
+              yield {
+                type: 'content_block_start',
+                index: 0,
+                content_block: { type: 'text', text: '' },
+              };
+              yield {
+                type: 'content_block_delta',
+                index: 0,
+                delta: { type: 'text_delta', text: 'ok' },
+              };
+              yield {
+                type: 'content_block_stop',
+                index: 0,
+              };
+              yield {
+                type: 'message_delta',
+                delta: { stop_reason: 'end_turn', stop_sequence: null },
+                usage: { output_tokens: 1 },
+              };
+              yield {
+                type: 'message_stop',
+              };
+            },
+          };
+        }
+
+        // Non-streaming response
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'ok',
+            },
+          ],
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+          },
+        };
+      }),
+    };
+  }
+}
+
+const constructClient = (options: Record<string, unknown>): Anthropic =>
+  new FakeAnthropic(options) as unknown as Anthropic;
+const FakeAnthropicClass = FakeAnthropic;
 
 const ANTHROPIC_CONSTRUCTOR_OPTS = {
   getEphemeralSettings: () => ({ streaming: 'disabled' }),
@@ -140,7 +125,13 @@ class TestAnthropicProvider extends AnthropicProvider {
   private nextAuthToken = 'token-A';
 
   constructor() {
-    super(undefined, 'https://api.anthropic.com', ANTHROPIC_CONSTRUCTOR_OPTS);
+    super(
+      undefined,
+      'https://api.anthropic.com',
+      ANTHROPIC_CONSTRUCTOR_OPTS,
+      undefined,
+      { constructClient },
+    );
   }
 
   setAuthToken(token: string): void {
@@ -156,13 +147,9 @@ class TestAnthropicProvider extends AnthropicProvider {
   }
 }
 
-class TestAnthropicProviderOAuth extends AnthropicProvider {
-  constructor() {
-    super(undefined, 'https://api.anthropic.com', ANTHROPIC_CONSTRUCTOR_OPTS);
-  }
-
+class TestAnthropicProviderOAuth extends TestAnthropicProvider {
   protected override async getAuthToken(): Promise<string> {
-    return '';
+    return Promise.resolve('');
   }
 
   protected override async getAuthTokenForPrompt(): Promise<string> {

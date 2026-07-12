@@ -13,11 +13,9 @@
  * source of truth for Codex models.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 
 // This test needs real config files, not the global mock
-vi.unmock('./providerAliases.js');
-
 import { loadProviderAliasEntries } from './providerAliases.js';
 import { createOpenAIResponsesAliasProvider } from './aliasProviderFactory.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';

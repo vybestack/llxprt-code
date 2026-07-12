@@ -113,19 +113,29 @@ export class TodoContinuationService {
 
   private readonly todoReminderService: TodoReminderService;
   private readonly config: Config;
+  private readonly createTodoStore: (
+    sessionId: string,
+    agentId: string,
+  ) => Pick<TodoStore, 'readTodos' | 'readPausedState' | 'writePausedState'>;
 
   constructor({
     config,
     todoReminderService,
     complexitySuggestionCooldown,
+    createTodoStore = (sessionId, agentId) => new TodoStore(sessionId, agentId),
   }: {
     config: Config;
     todoReminderService: TodoReminderService;
     complexitySuggestionCooldown: number;
+    createTodoStore?: (
+      sessionId: string,
+      agentId: string,
+    ) => Pick<TodoStore, 'readTodos' | 'readPausedState' | 'writePausedState'>;
   }) {
     this.config = config;
     this.todoReminderService = todoReminderService;
     this.complexitySuggestionCooldown = complexitySuggestionCooldown;
+    this.createTodoStore = createTodoStore;
   }
 
   updateTodoToolAvailabilityFromDeclarations(
@@ -243,7 +253,7 @@ export class TodoContinuationService {
   async readTodoSnapshot(): Promise<Todo[]> {
     try {
       const sessionId = this.config.getSessionId();
-      const store = new TodoStore(sessionId, DEFAULT_AGENT_ID);
+      const store = this.createTodoStore(sessionId, DEFAULT_AGENT_ID);
       return await store.readTodos();
     } catch {
       // Reading persisted task-list state failed; return an empty snapshot.
@@ -254,7 +264,7 @@ export class TodoContinuationService {
   async readPausedState(): Promise<boolean> {
     try {
       const sessionId = this.config.getSessionId();
-      const store = new TodoStore(sessionId, DEFAULT_AGENT_ID);
+      const store = this.createTodoStore(sessionId, DEFAULT_AGENT_ID);
       return await store.readPausedState();
     } catch {
       return false;
@@ -264,7 +274,7 @@ export class TodoContinuationService {
   async clearPausedState(): Promise<void> {
     try {
       const sessionId = this.config.getSessionId();
-      const store = new TodoStore(sessionId, DEFAULT_AGENT_ID);
+      const store = this.createTodoStore(sessionId, DEFAULT_AGENT_ID);
       await store.writePausedState(false);
     } catch {
       // Clearing paused task-list state failed; do not block the new prompt.

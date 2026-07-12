@@ -7,7 +7,7 @@
  * @issue #922 - GPT-5.2-Codex thinking blocks not visible
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { PROFILE_EPHEMERAL_KEYS } from './runtimeSettings.js';
 
 describe('reasoning.summary profile save/load @issue:922', () => {

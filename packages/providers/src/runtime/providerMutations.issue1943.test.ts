@@ -2,104 +2,62 @@
  * @issue #1943 - /toolformat is not persisted into profile ephemerals
  *
  * Behavioral tests for setActiveToolFormatOverride() writing to both
- * SettingsService AND Config ephemeral settings, so the tool-format value
- * is captured during profile saves.
- *
- * Before the fix, only settingsService.updateSettings() was called.
- * After the fix, config.setEphemeralSetting('tool-format', value) is also called,
- * mirroring the pattern used by updateActiveProviderBaseUrl.
+ * SettingsService and Config ephemeral settings, so the tool-format value is
+ * captured during profile saves.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import {
+  setActiveToolFormatOverride,
+  type ToolFormatMutationDependencies,
+  type ToolFormatState,
+} from './providerMutations.js';
 
-const mockConfig = {
-  setEphemeralSetting: vi.fn(),
-  getEphemeralSetting: vi.fn().mockReturnValue(undefined),
+const setEphemeralSetting = vi.fn();
+const updateSettings = vi.fn().mockResolvedValue(undefined);
+const state: ToolFormatState = {
+  providerName: 'openai',
+  currentFormat: 'openai',
+  override: 'openai',
+  isAutoDetected: false,
 };
 
-const mockSettingsService = {
-  updateSettings: vi.fn().mockResolvedValue(undefined),
-  getProviderSettings: vi.fn().mockReturnValue({}),
-};
-
-const mockProviderManager = {
-  getActiveProvider: vi.fn().mockReturnValue({ name: 'openai' }),
-  getActiveProviderName: vi.fn().mockReturnValue('openai'),
-};
-
-vi.mock('./runtimeAccessors.js', () => ({
-  getCliRuntimeServices: () => ({
-    config: mockConfig,
-    settingsService: mockSettingsService,
-    providerManager: mockProviderManager,
+const dependencies: ToolFormatMutationDependencies = {
+  getRuntimeServices: () => ({
+    config: { setEphemeralSetting },
+    settingsService: { updateSettings },
   }),
-  _internal: {
-    getActiveProviderOrThrow: () => ({ name: 'openai' }),
-    getProviderSettingsSnapshot: () => ({}),
-  },
-}));
-
-import { setActiveToolFormatOverride } from './providerMutations.js';
+  getActiveProvider: () => ({ name: 'openai' }),
+  getToolFormatState: async () => state,
+};
 
 describe('setActiveToolFormatOverride ephemeral persistence (issue #1943)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSettingsService.getProviderSettings.mockReturnValue({});
   });
 
-  it('writes "openai" to config.setEphemeralSetting when setting toolFormat to "openai"', async () => {
-    await setActiveToolFormatOverride('openai');
+  it.each([
+    ['openai', 'openai'],
+    [null, 'auto'],
+    ['auto', 'auto'],
+    ['kimi', 'kimi'],
+  ] as const)(
+    'persists %s as %s in settings and ephemerals',
+    async (input, expected) => {
+      expect(await setActiveToolFormatOverride(input, dependencies)).toBe(
+        state,
+      );
+      expect(updateSettings).toHaveBeenCalledWith('openai', {
+        toolFormat: expected,
+      });
+      expect(setEphemeralSetting).toHaveBeenCalledWith('tool-format', expected);
+    },
+  );
 
-    expect(mockSettingsService.updateSettings).toHaveBeenCalledWith('openai', {
-      toolFormat: 'openai',
-    });
-    expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
-      'tool-format',
-      'openai',
-    );
-  });
+  it('updates settings and ephemerals exactly once', async () => {
+    await setActiveToolFormatOverride('openai', dependencies);
 
-  it('writes "auto" to config.setEphemeralSetting when clearing override', async () => {
-    await setActiveToolFormatOverride(null);
-
-    expect(mockSettingsService.updateSettings).toHaveBeenCalledWith('openai', {
-      toolFormat: 'auto',
-    });
-    expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
-      'tool-format',
-      'auto',
-    );
-  });
-
-  it('writes "auto" to config.setEphemeralSetting when explicitly setting to "auto"', async () => {
-    await setActiveToolFormatOverride('auto');
-
-    expect(mockSettingsService.updateSettings).toHaveBeenCalledWith('openai', {
-      toolFormat: 'auto',
-    });
-    expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
-      'tool-format',
-      'auto',
-    );
-  });
-
-  it('writes "kimi" to config.setEphemeralSetting when setting toolFormat to "kimi"', async () => {
-    await setActiveToolFormatOverride('kimi');
-
-    expect(mockSettingsService.updateSettings).toHaveBeenCalledWith('openai', {
-      toolFormat: 'kimi',
-    });
-    expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
-      'tool-format',
-      'kimi',
-    );
-  });
-
-  it('calls both settingsService and config (mirrors updateActiveProviderBaseUrl pattern)', async () => {
-    await setActiveToolFormatOverride('openai');
-
-    // Both should be called exactly once
-    expect(mockSettingsService.updateSettings).toHaveBeenCalledTimes(1);
-    expect(mockConfig.setEphemeralSetting).toHaveBeenCalledTimes(1);
+    expect(updateSettings).toHaveBeenCalledTimes(1);
+    expect(setEphemeralSetting).toHaveBeenCalledTimes(1);
   });
 });

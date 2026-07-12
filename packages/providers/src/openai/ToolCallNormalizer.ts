@@ -47,7 +47,13 @@ export interface ValidatedToolCall {
 /**
  * ToolCallNormalizer - Responsible for normalizing tool calls
  */
+export type ProcessToolParameters = typeof processToolParameters;
+
 export class ToolCallNormalizer {
+  constructor(
+    private readonly processParameters: ProcessToolParameters = processToolParameters,
+  ) {}
+
   /**
    * Normalize tool calls
    */
@@ -122,7 +128,7 @@ export class ToolCallNormalizer {
 
     // Use processToolParameters to handle double-escaping and format-specific issues
     // Let it auto-detect issues instead of relying on format parameter
-    const processed = processToolParameters(args, 'unknown_tool');
+    const processed = this.processParameters(args, 'unknown_tool');
 
     // Normalize the result to a Record<string, unknown>
     if (typeof processed === 'object' && processed !== null) {

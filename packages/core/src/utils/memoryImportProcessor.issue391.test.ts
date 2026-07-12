@@ -4,15 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import * as fs from 'fs/promises';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as path from 'path';
 import { processImports } from './memoryImportProcessor.js';
 import { debugLogger } from './debugLogger.js';
-
-// Mock fs/promises
-vi.mock('fs/promises');
-const mockedFs = vi.mocked(fs);
 
 // Mock console methods to capture error messages
 const originalConsoleError = debugLogger.error;
@@ -35,11 +30,6 @@ describe('memoryImportProcessor - Issue #391', () => {
     const content = 'Some content @commitlint/config-conventional more content';
     const basePath = path.resolve('/test/path');
 
-    // Mock fs.access to reject (simulating file not found)
-    mockedFs.access.mockRejectedValue(
-      new Error('ENOENT: no such file or directory'),
-    );
-
     const result = await processImports(content, basePath, false);
 
     // Should have an error comment in the result
@@ -59,10 +49,6 @@ describe('memoryImportProcessor - Issue #391', () => {
     const content = 'Some content @commitlint/config-conventional more content';
     const basePath = path.resolve('/test/path');
 
-    // Mock fs.access to reject
-    const error = new Error('ENOENT: no such file or directory');
-    mockedFs.access.mockRejectedValue(error);
-
     // Test with debug mode false (default)
     const resultNormal = await processImports(content, basePath, false);
     expect(debugLogger.error).not.toHaveBeenCalled();
@@ -74,7 +60,9 @@ describe('memoryImportProcessor - Issue #391', () => {
     const resultDebug = await processImports(content, basePath, true);
     expect(debugLogger.error).toHaveBeenCalledWith(
       '[ERROR] [ImportProcessor]',
-      'Failed to import commitlint/config-conventional: ENOENT: no such file or directory',
+      expect.stringMatching(
+        /^Failed to import commitlint\/config-conventional: ENOENT: no such file or directory/,
+      ),
     );
 
     // Both results should contain the error comment
@@ -90,11 +78,6 @@ describe('memoryImportProcessor - Issue #391', () => {
     const content =
       'Content @commitlint/config-conventional and @nonexistent/file.md';
     const basePath = path.resolve('/test/path');
-
-    // Mock fs.access to reject for all files
-    mockedFs.access.mockRejectedValue(
-      new Error('ENOENT: no such file or directory'),
-    );
 
     const result = await processImports(content, basePath, false);
 
@@ -112,13 +95,6 @@ describe('memoryImportProcessor - Issue #391', () => {
     const content = 'Some content @commitlint/config-conventional more content';
     const basePath = path.resolve('/test/path');
 
-    // Create an ENOENT error specifically
-    const enoentError = new Error(
-      'ENOENT: no such file or directory',
-    ) as Error & { code: string };
-    enoentError.code = 'ENOENT';
-    mockedFs.access.mockRejectedValue(enoentError);
-
     const result = await processImports(content, basePath, false);
 
     // Should contain the error comment but not log to console
@@ -131,11 +107,6 @@ describe('memoryImportProcessor - Issue #391', () => {
   it('should fail fast in flat mode when encountering missing files', async () => {
     const content = 'Content @commitlint/config-conventional';
     const basePath = path.resolve('/test/path');
-
-    // Mock fs.access to reject
-    mockedFs.access.mockRejectedValue(
-      new Error('ENOENT: no such file or directory'),
-    );
 
     const result = await processImports(
       content,

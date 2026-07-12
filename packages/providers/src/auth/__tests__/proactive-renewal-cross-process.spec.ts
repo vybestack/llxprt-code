@@ -91,7 +91,7 @@ describe('ProactiveRenewalManager – cross-process refresh safety', () => {
 
       // Another process refreshed: same access_token (unlikely) but new refresh_token
       const diskToken = makeToken('access-A', 'refresh-R2', 500);
-      vi.mocked(tokenStore.getToken).mockResolvedValue(diskToken);
+      tokenStore.getToken.mockResolvedValue(diskToken);
 
       await manager.runProactiveRenewal('anthropic', 'default');
 
@@ -104,7 +104,7 @@ describe('ProactiveRenewalManager – cross-process refresh safety', () => {
 
       // Another process refreshed: new access_token, new refresh_token
       const diskToken = makeToken('access-B', 'refresh-R2', 3600);
-      vi.mocked(tokenStore.getToken).mockResolvedValue(diskToken);
+      tokenStore.getToken.mockResolvedValue(diskToken);
 
       await manager.runProactiveRenewal('anthropic', 'default');
 
@@ -116,11 +116,11 @@ describe('ProactiveRenewalManager – cross-process refresh safety', () => {
       manager.scheduleProactiveRenewal('anthropic', 'default', originalToken);
 
       // Disk token is identical (no other process refreshed)
-      vi.mocked(tokenStore.getToken).mockResolvedValue(
+      tokenStore.getToken.mockResolvedValue(
         makeToken('access-A', 'refresh-R1', 600),
       );
       const refreshedToken = makeToken('access-B', 'refresh-R2', 3600);
-      vi.mocked(provider.refreshToken).mockResolvedValue(refreshedToken);
+      provider.refreshToken.mockResolvedValue(refreshedToken);
 
       await manager.runProactiveRenewal('anthropic', 'default');
 
@@ -136,7 +136,7 @@ describe('ProactiveRenewalManager – cross-process refresh safety', () => {
 
       // Verify by triggering renewal with a token where only refresh_token changed
       const diskTokenDiffRefresh = makeToken('access-X', 'refresh-Z', 1200);
-      vi.mocked(tokenStore.getToken).mockResolvedValue(diskTokenDiffRefresh);
+      tokenStore.getToken.mockResolvedValue(diskTokenDiffRefresh);
 
       await manager.runProactiveRenewal('anthropic', 'default');
 
@@ -155,7 +155,7 @@ describe('ProactiveRenewalManager – cross-process refresh safety', () => {
       manager.scheduleProactiveRenewal('anthropic', 'default', originalToken);
 
       // Lock acquisition times out (another process holds it)
-      vi.mocked(tokenStore.acquireRefreshLock).mockResolvedValue(false);
+      tokenStore.acquireRefreshLock.mockResolvedValue(false);
 
       // Another process already refreshed the token while holding the lock
       const externallyRefreshedToken = makeToken(
@@ -163,9 +163,7 @@ describe('ProactiveRenewalManager – cross-process refresh safety', () => {
         'refresh-R2',
         3600,
       );
-      vi.mocked(tokenStore.getToken).mockResolvedValue(
-        externallyRefreshedToken,
-      );
+      tokenStore.getToken.mockResolvedValue(externallyRefreshedToken);
 
       await manager.runProactiveRenewal('anthropic', 'default');
 
@@ -181,7 +179,8 @@ describe('ProactiveRenewalManager – cross-process refresh safety', () => {
       // later. Advance past the retry backoff window and confirm no refresh
       // attempt was made (timer was rescheduled for the new token's expiry).
       vi.advanceTimersByTime(65 * 1000);
-      await vi.runAllTimersAsync();
+      vi.runAllTimers();
+      await Promise.resolve();
 
       // No refreshToken call — the timer hasn't fired yet because it was
       // rescheduled based on the externally-refreshed token's 3600s expiry
@@ -193,10 +192,10 @@ describe('ProactiveRenewalManager – cross-process refresh safety', () => {
       manager.scheduleProactiveRenewal('anthropic', 'default', originalToken);
 
       // Lock acquisition times out
-      vi.mocked(tokenStore.acquireRefreshLock).mockResolvedValue(false);
+      tokenStore.acquireRefreshLock.mockResolvedValue(false);
 
       // Token on disk is unchanged — no other process refreshed it
-      vi.mocked(tokenStore.getToken).mockResolvedValue(
+      tokenStore.getToken.mockResolvedValue(
         makeToken('access-A', 'refresh-R1', 600),
       );
 
@@ -206,17 +205,20 @@ describe('ProactiveRenewalManager – cross-process refresh safety', () => {
       expect(provider.refreshToken).not.toHaveBeenCalled();
 
       // Now allow lock to succeed on retry to verify the retry was scheduled
-      vi.mocked(tokenStore.acquireRefreshLock).mockResolvedValue(true);
+      tokenStore.acquireRefreshLock.mockResolvedValue(true);
       const refreshedToken = makeToken('access-B', 'refresh-R2', 3600);
-      vi.mocked(provider.refreshToken).mockResolvedValue(refreshedToken);
+      provider.refreshToken.mockResolvedValue(refreshedToken);
       // Disk still has original token at retry time
-      vi.mocked(tokenStore.getToken).mockResolvedValue(
+      tokenStore.getToken.mockResolvedValue(
         makeToken('access-A', 'refresh-R1', 600),
       );
 
       // Advance timers to trigger retry (backoff starts at ~30s)
       vi.advanceTimersByTime(65 * 1000);
-      await vi.runAllTimersAsync();
+      vi.runAllTimers();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+      }
 
       // On retry, lock was acquired and refresh was attempted
       expect(provider.refreshToken).toHaveBeenCalledTimes(1);
@@ -248,7 +250,7 @@ describe('ProactiveRenewalManager – cross-process refresh safety', () => {
       );
 
       const diskTokenNoRefresh = makeExpiredToken('access-A', '');
-      vi.mocked(tokenStore.getToken).mockResolvedValue(diskTokenNoRefresh);
+      tokenStore.getToken.mockResolvedValue(diskTokenNoRefresh);
 
       await manager.runProactiveRenewal('anthropic', 'default');
 
@@ -284,7 +286,7 @@ describe('executeTokenRefresh – refresh_token guard', () => {
     const originalToken = makeExpiredToken('access-A', 'refresh-R1');
     const diskToken = makeExpiredToken('access-A', 'refresh-R2');
 
-    vi.mocked(tokenStore.getToken).mockResolvedValue(diskToken);
+    tokenStore.getToken.mockResolvedValue(diskToken);
 
     const result = await executeTokenRefresh(
       'anthropic',
@@ -307,8 +309,8 @@ describe('executeTokenRefresh – refresh_token guard', () => {
     const diskToken = makeExpiredToken('access-A', 'refresh-R1');
     const refreshedToken = makeToken('access-B', 'refresh-R2', 3600);
 
-    vi.mocked(tokenStore.getToken).mockResolvedValue(diskToken);
-    vi.mocked(provider.refreshToken).mockResolvedValue(refreshedToken);
+    tokenStore.getToken.mockResolvedValue(diskToken);
+    provider.refreshToken.mockResolvedValue(refreshedToken);
 
     const result = await executeTokenRefresh(
       'anthropic',
@@ -333,7 +335,7 @@ describe('executeTokenRefresh – refresh_token guard', () => {
       expiry: Math.floor(Date.now() / 1000) - 60,
     };
 
-    vi.mocked(tokenStore.getToken).mockResolvedValue(diskTokenNoRefresh);
+    tokenStore.getToken.mockResolvedValue(diskTokenNoRefresh);
 
     const result = await executeTokenRefresh(
       'anthropic',

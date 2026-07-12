@@ -12,44 +12,65 @@ export enum ReleaseChannel {
   STABLE = 'stable',
 }
 
-const cache = new Map<string, ReleaseChannel>();
+type PackageJsonLoader = typeof getPackageJson;
 
-/**
- * Clears the cache for testing purposes.
- * @private
- */
-export function _clearCache() {
-  cache.clear();
+export interface ReleaseChannelDetector {
+  clearCache(): void;
+  isNightly(cwd: string): Promise<boolean>;
+  isPreview(cwd: string): Promise<boolean>;
+  isStable(cwd: string): Promise<boolean>;
 }
 
-async function _getReleaseChannel(cwd: string): Promise<ReleaseChannel> {
-  if (cache.has(cwd)) {
-    return cache.get(cwd)!;
-  }
+export function createReleaseChannelDetector(
+  loadPackageJson: PackageJsonLoader = getPackageJson,
+): ReleaseChannelDetector {
+  const cache = new Map<string, ReleaseChannel>();
 
-  const packageJson = await getPackageJson(cwd);
-  const version = packageJson?.version ?? '';
+  const getReleaseChannel = async (cwd: string): Promise<ReleaseChannel> => {
+    const cachedChannel = cache.get(cwd);
+    if (cachedChannel !== undefined) {
+      return cachedChannel;
+    }
 
-  let channel: ReleaseChannel;
-  if (version.includes('nightly') || version === '') {
-    channel = ReleaseChannel.NIGHTLY;
-  } else if (version.includes('preview')) {
-    channel = ReleaseChannel.PREVIEW;
-  } else {
-    channel = ReleaseChannel.STABLE;
-  }
-  cache.set(cwd, channel);
-  return channel;
+    const packageJson = await loadPackageJson(cwd);
+    const version = packageJson?.version ?? '';
+    let channel: ReleaseChannel;
+    if (version.includes('nightly') || version === '') {
+      channel = ReleaseChannel.NIGHTLY;
+    } else if (version.includes('preview')) {
+      channel = ReleaseChannel.PREVIEW;
+    } else {
+      channel = ReleaseChannel.STABLE;
+    }
+    cache.set(cwd, channel);
+    return channel;
+  };
+
+  return {
+    clearCache: () => cache.clear(),
+    isNightly: async (cwd) =>
+      (await getReleaseChannel(cwd)) === ReleaseChannel.NIGHTLY,
+    isPreview: async (cwd) =>
+      (await getReleaseChannel(cwd)) === ReleaseChannel.PREVIEW,
+    isStable: async (cwd) =>
+      (await getReleaseChannel(cwd)) === ReleaseChannel.STABLE,
+  };
 }
 
-export async function isNightly(cwd: string): Promise<boolean> {
-  return (await _getReleaseChannel(cwd)) === ReleaseChannel.NIGHTLY;
+const defaultDetector = createReleaseChannelDetector();
+
+export function _clearCache(): void {
+  defaultDetector.clearCache();
 }
 
-export async function isPreview(cwd: string): Promise<boolean> {
-  return (await _getReleaseChannel(cwd)) === ReleaseChannel.PREVIEW;
+export function isNightly(cwd: string): Promise<boolean> {
+  return defaultDetector.isNightly(cwd);
 }
 
-export async function isStable(cwd: string): Promise<boolean> {
-  return (await _getReleaseChannel(cwd)) === ReleaseChannel.STABLE;
+export function isPreview(cwd: string): Promise<boolean> {
+  return defaultDetector.isPreview(cwd);
+}
+
+export function isStable(cwd: string): Promise<boolean> {
+  return defaultDetector.isStable(cwd);
 }

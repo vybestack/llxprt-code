@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
+import { vi } from 'vitest';
 
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('test system prompt'),
@@ -89,7 +90,7 @@ describe('generateJson', () => {
     contentGenerator = makeContentGenerator();
     baseLlmClient = makeBaseLlmClient();
     vi.clearAllMocks();
-    vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(SYSTEM_PROMPT);
+    getCoreSystemPromptAsync.mockResolvedValue(SYSTEM_PROMPT);
   });
 
   it('returns parsed JSON for valid model response', async () => {
@@ -135,7 +136,7 @@ describe('generateJson', () => {
   });
 
   it('converts plain text "user"/"model" responses for next_speaker checks', async () => {
-    vi.mocked(baseLlmClient.generateJson).mockResolvedValue(
+    baseLlmClient.generateJson.mockResolvedValue(
       'user' as unknown as Record<string, unknown>,
     );
 
@@ -163,7 +164,7 @@ describe('generateJson', () => {
 
   it('rethrows errors when not aborted', async () => {
     const apiError = new Error('API failure');
-    vi.mocked(baseLlmClient.generateJson).mockRejectedValue(apiError);
+    baseLlmClient.generateJson.mockRejectedValue(apiError);
 
     const contents = [{ role: 'user', parts: [{ text: 'hello' }] }];
 
@@ -200,7 +201,7 @@ describe('generateContent', () => {
       generateContent: vi.fn().mockResolvedValue(mockResponse),
     });
     vi.clearAllMocks();
-    vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(SYSTEM_PROMPT);
+    getCoreSystemPromptAsync.mockResolvedValue(SYSTEM_PROMPT);
   });
 
   it('returns generated content with merged config', async () => {
@@ -258,7 +259,7 @@ describe('generateContent', () => {
   });
 
   it('wraps and rethrows non-abort errors with model name', async () => {
-    vi.mocked(contentGenerator.generateContent).mockRejectedValue(
+    contentGenerator.generateContent.mockRejectedValue(
       new Error('network error'),
     );
 
@@ -298,7 +299,7 @@ describe('generateEmbedding', () => {
       [0.1, 0.2],
       [0.3, 0.4],
     ];
-    vi.mocked(baseLlmClient.generateEmbedding).mockResolvedValue(embeddings);
+    baseLlmClient.generateEmbedding.mockResolvedValue(embeddings);
 
     const result = await generateEmbedding(
       baseLlmClient,

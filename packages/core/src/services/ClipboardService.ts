@@ -12,6 +12,12 @@ import { spawn } from 'child_process';
  * @pseudocode lines 29-37
  */
 export class ClipboardService {
+  constructor(
+    private readonly spawnProcess: typeof spawn = spawn,
+    private readonly getPlatform: () => NodeJS.Platform = () =>
+      process.platform,
+  ) {}
+
   /**
    * Copy text to clipboard using platform-specific utilities
    * @plan PLAN-20250822-GEMINIFALLBACK.P06
@@ -21,7 +27,7 @@ export class ClipboardService {
   async copyToClipboard(text: string): Promise<void> {
     const run = (cmd: string, args: string[]): Promise<void> =>
       new Promise<void>((resolveInner, rejectInner) => {
-        const child = spawn(cmd, args);
+        const child = this.spawnProcess(cmd, args);
         let stderr = '';
         child.stderr.on('data', (chunk) => (stderr += chunk.toString()));
         child.on('error', (err) => {
@@ -52,7 +58,8 @@ export class ClipboardService {
        * @requirement REQ-001.2
        * @pseudocode lines 31-36
        */
-      switch (process.platform) {
+      const platform = this.getPlatform();
+      switch (platform) {
         case 'win32':
           // Windows: clip
           run('clip', []).then(resolve).catch(reject);
@@ -71,7 +78,7 @@ export class ClipboardService {
             });
           break;
         default:
-          reject(new Error(`Unsupported platform: ${process.platform}`));
+          reject(new Error(`Unsupported platform: ${platform}`));
           break;
       }
     });

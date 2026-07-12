@@ -49,12 +49,18 @@ export class CodexOAuthProvider implements OAuthProvider {
   private addItem?: OAuthUICallback;
   private initGuard: InitializationGuard;
   private authInProgress: Promise<CodexOAuthToken> | null = null;
+  private readonly startLocalCallback: typeof startLocalOAuthCallback;
 
-  constructor(tokenStore: TokenStore, addItem?: OAuthUICallback) {
+  constructor(
+    tokenStore: TokenStore,
+    addItem?: OAuthUICallback,
+    startLocalCallback: typeof startLocalOAuthCallback = startLocalOAuthCallback,
+  ) {
     this.deviceFlow = new CodexDeviceFlow();
     this.logger = new DebugLogger('llxprt:auth:codex');
     this.tokenStore = tokenStore;
     this.addItem = addItem;
+    this.startLocalCallback = startLocalCallback;
     // Codex uses rethrow mode — no OAuthError wrapping, simpler semantics
     this.initGuard = new InitializationGuard('rethrow');
   }
@@ -149,7 +155,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     );
 
     this.logger.debug(() => '[FLOW] Starting local callback server...');
-    const localCallback = await startLocalOAuthCallback({
+    const localCallback = await this.startLocalCallback({
       state,
       portRange: [CODEX_PRIMARY_PORT, CODEX_FALLBACK_RANGE[1]],
       timeoutMs: CALLBACK_TIMEOUT_MS,

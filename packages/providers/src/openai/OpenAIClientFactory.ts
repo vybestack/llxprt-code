@@ -161,11 +161,19 @@ export function resolveRuntimeKey(
  * @requirement:REQ-SP4-002
  * Instantiates a fresh OpenAI client per call to preserve stateless behaviour.
  */
+export type OpenAIClientConstructor = (
+  options: ConstructorParameters<typeof OpenAI>[0],
+) => OpenAI;
+
+export const createOpenAIClient: OpenAIClientConstructor = (options) =>
+  new OpenAI(options);
+
 export function instantiateClient(
   authToken: string,
   baseURL?: string,
   agents?: { httpAgent: http.Agent; httpsAgent: https.Agent },
   headers?: Record<string, string>,
+  constructClient: OpenAIClientConstructor = createOpenAIClient,
 ): OpenAI {
   const clientOptions: Record<string, unknown> = {
     apiKey: authToken || '',
@@ -187,7 +195,7 @@ export function instantiateClient(
     clientOptions.httpsAgent = agents.httpsAgent;
   }
 
-  return new OpenAI(
+  return constructClient(
     clientOptions as unknown as ConstructorParameters<typeof OpenAI>[0],
   );
 }

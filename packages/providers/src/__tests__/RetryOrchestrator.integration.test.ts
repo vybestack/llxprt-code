@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -322,9 +322,11 @@ describe('RetryOrchestrator', () => {
         } as unknown as GenerateChatOptions['runtime'],
       };
 
-      await expect(
-        consumeStream(orchestrator.generateChatCompletion(options)),
-      ).rejects.toThrow(/Rate limit exceeded/);
+      const consumptionPromise = consumeStream(
+        orchestrator.generateChatCompletion(options),
+      );
+      expect(consumptionPromise).rejects.toThrow(/Rate limit exceeded/);
+      await consumptionPromise.catch(() => undefined);
 
       // EXPECTATION: getLastFailoverReasons was called after tryFailover returned false
       expect(getLastFailoverReasonsCalled).toBe(true);
@@ -430,7 +432,7 @@ describe('RetryOrchestrator', () => {
       };
 
       // EXPECTATION: Should not crash, fallback to basic error message
-      await expect(
+      expect(
         consumeStream(orchestrator.generateChatCompletion(options)),
       ).rejects.toThrow(/bucket/i);
     });

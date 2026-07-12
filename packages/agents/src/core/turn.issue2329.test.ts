@@ -14,8 +14,13 @@
  * emitted ServerAgentStreamEvent values.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { vi } from 'vitest';
+import {
+  Turn,
+  AgentEventType,
+  DEFAULT_AGENT_ID,
+} from './turn.js?turn-issue2329-suite';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
 import {
@@ -24,22 +29,8 @@ import {
   mockResponseToChunk,
 } from './turn-test-helpers.js';
 
-const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
-  mockSendMessageStream: vi.fn(),
-  mockGetHistory: vi.fn(),
-}));
-
-vi.mock('@google/genai', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@google/genai')>();
-  const MockChat = vi.fn().mockImplementation(() => ({
-    sendMessageStream: mockSendMessageStream,
-    getHistory: mockGetHistory,
-  }));
-  return {
-    ...actual,
-    Chat: MockChat,
-  };
-});
+const mockSendMessageStream = vi.fn();
+const mockGetHistory = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
@@ -78,7 +69,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
           candidates: [
             {
               content: { parts: [{ text: 'I decline to answer.' }] },
-              finishReason: 'STOP',
+              finishReason: 'stop',
               providerStopReason: 'refusal',
             },
           ],
@@ -110,7 +101,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
           candidates: [
             {
               content: { parts: [{ text: 'Normal answer.' }] },
-              finishReason: 'STOP',
+              finishReason: 'stop',
               providerStopReason: 'end_turn',
             },
           ],
@@ -141,7 +132,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
           candidates: [
             {
               content: { parts: [{ text: 'answer' }] },
-              finishReason: 'STOP',
+              finishReason: 'stop',
             },
           ],
         }),
@@ -159,9 +150,9 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
 
     const finished = findFinishedEvent(events);
     expect(finished).toBeDefined();
-    // When no providerStopReason is set, rawStopReason is the Gemini enum
-    // string ('STOP'). That's non-empty so stopReason IS present.
-    expect(finished?.value.stopReason).toBe('STOP');
+    // Without a provider-specific reason, the canonical finish reason is
+    // retained as the raw stop reason carrier.
+    expect(finished?.value.stopReason).toBe('stop');
   });
 
   it('omits stopReason from Finished when providerStopReason is an empty string', async () => {
@@ -172,7 +163,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
           candidates: [
             {
               content: { parts: [{ text: 'answer' }] },
-              finishReason: 'STOP',
+              finishReason: 'stop',
               providerStopReason: '',
             },
           ],
@@ -215,7 +206,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
           candidates: [
             {
               content: { parts: [] },
-              finishReason: 'STOP',
+              finishReason: 'stop',
               providerStopReason: 'refusal',
             },
           ],
@@ -247,7 +238,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
           candidates: [
             {
               content: { parts: [{ text: 'A normal answer.' }] },
-              finishReason: 'STOP',
+              finishReason: 'stop',
               finishMessage: 'completed successfully',
             },
           ],
@@ -268,8 +259,8 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
     expect(finished).toBeDefined();
     expect(finished?.value.reason).toBe('stop');
     // finishMessage was never read by the neutral pipeline; stopReason carries
-    // the raw Gemini finish reason string ('STOP'), NOT the finishMessage text.
+    // the canonical finish reason, not the finishMessage text.
     expect(finished?.value.stopReason).not.toContain('completed successfully');
-    expect(finished?.value.stopReason).toBe('STOP');
+    expect(finished?.value.stopReason).toBe('stop');
   });
 });

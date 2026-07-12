@@ -11,7 +11,7 @@
  *
  * @issue #1142
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import { resetSettingsService } from '@vybestack/llxprt-code-settings';
@@ -23,8 +23,8 @@ import type {
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
-// Mock fetch globally
-global.fetch = vi.fn();
+const fetchMock = vi.fn<() => Promise<Response>>();
+global.fetch = fetchMock;
 
 describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (issue #1142)', () => {
   let provider: OpenAIProvider;
@@ -169,7 +169,7 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
       }),
     ];
 
-    vi.mocked(global.fetch).mockResolvedValue(createStreamingResponse(chunks));
+    fetchMock.mockResolvedValue(createStreamingResponse(chunks));
 
     const generator = provider.generateChatCompletion(
       [
@@ -297,7 +297,7 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
       }),
     ];
 
-    vi.mocked(global.fetch).mockResolvedValue(createStreamingResponse(chunks));
+    fetchMock.mockResolvedValue(createStreamingResponse(chunks));
 
     const generator = provider.generateChatCompletion(
       [{ role: 'user' as const, content: 'What is the answer?' }],

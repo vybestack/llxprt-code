@@ -9,12 +9,14 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi } from 'vitest';
 import type { Part, PartListUnion } from '@google/genai';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
-import { AgentEventType, Turn } from './turn.js';
+import { AgentEventType } from './turn.js';
+import type { Turn } from './turn.js';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import { fromAsync, setupGeminiClient } from './client-test-helpers.js';
@@ -50,19 +52,19 @@ const {
   mockGenerateContentFn,
   mockEmbedContentFn,
   mockTurnRunFn,
-} = vi.hoisted(() => ({
+} = {
   mockChatCreateFn: vi.fn(),
   mockGenerateContentFn: vi.fn(),
   mockEmbedContentFn: vi.fn(),
   mockTurnRunFn: vi.fn(),
-}));
+};
 
 const {
   todoStoreReadMock,
   todoStoreReadPausedMock,
   todoStoreWritePausedMock,
   mockTodoStoreConstructor,
-} = vi.hoisted(() => {
+} = (() => {
   const readMock = vi.fn();
   const readPausedMock = vi.fn();
   const writePausedMock = vi.fn();
@@ -77,9 +79,20 @@ const {
     todoStoreWritePausedMock: writePausedMock,
     mockTodoStoreConstructor: constructorMock,
   };
-});
+})();
 
-vi.mock('@google/genai');
+const todoMocks = {
+  read: todoStoreReadMock,
+  readPaused: todoStoreReadPausedMock,
+  writePaused: todoStoreWritePausedMock,
+};
+(
+  globalThis as typeof globalThis & {
+    __clientTodoMocks: typeof todoMocks;
+  }
+).__clientTodoMocks = todoMocks;
+
+vi.mock('@google/genai', () => ({ GoogleGenAI: vi.fn() }));
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -104,28 +117,29 @@ vi.mock(
     })),
   }),
 );
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
-  return {
-    ...actual,
-    LocalTodoStore: mockTodoStoreConstructor,
-  };
-});
-vi.mock('./turn', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./turn.js')>();
-  class MockTurn {
-    pendingToolCalls = [];
-    run = mockTurnRunFn;
-    constructor() {}
-  }
-  return {
-    ...actual,
-    Turn: MockTurn,
-  };
-});
+vi.mock('@vybestack/llxprt-code-tools', () => ({
+  LocalTodoStore: vi.fn().mockImplementation(() => ({
+    readTodos: (...args: unknown[]) =>
+      (
+        globalThis as typeof globalThis & {
+          __clientTodoMocks: typeof todoMocks;
+        }
+      ).__clientTodoMocks.read(...args),
+    readPausedState: (...args: unknown[]) =>
+      (
+        globalThis as typeof globalThis & {
+          __clientTodoMocks: typeof todoMocks;
+        }
+      ).__clientTodoMocks.readPaused(...args),
+    writePausedState: (...args: unknown[]) =>
+      (
+        globalThis as typeof globalThis & {
+          __clientTodoMocks: typeof todoMocks;
+        }
+      ).__clientTodoMocks.writePaused(...args),
+  })),
+}));
 
-vi.mock('@vybestack/llxprt-code-core/config/config.js');
 vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));
@@ -141,32 +155,16 @@ vi.mock(
         .join('') ?? undefined,
   }),
 );
-vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
-  logApiRequest: vi.fn(),
-  logApiResponse: vi.fn(),
-  logApiError: vi.fn(),
-}));
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
-  return {
-    ...actual,
-    ideContext: {
-      ...actual.ideContext,
-      getIdeContext: vi.fn(),
-      subscribeToIdeContext: vi.fn(),
-      setIdeContext: vi.fn(),
-      clearIdeContext: vi.fn(),
-    },
-  };
-});
-vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
-  tokenLimit: vi.fn(),
+vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
+  ideContext: {
+    getIdeContext: vi.fn(),
+    subscribeToIdeContext: vi.fn(),
+    setIdeContext: vi.fn(),
+    clearIdeContext: vi.fn(),
+  },
 }));
 vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
@@ -183,6 +181,10 @@ describe('Gemini Client (client.ts)', () => {
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,
+      createTurn: () =>
+        ({
+          run: mockTurnRunFn,
+        }) as never,
     });
     client = ctx.client;
 
@@ -203,21 +205,32 @@ describe('Gemini Client (client.ts)', () => {
 
   describe('sendMessageStream', () => {
     beforeEach(() => {
-      (
+      const todoService = (
         client as unknown as {
-          todoContinuationService: { todoToolsAvailable: boolean };
+          todoContinuationService: {
+            todoToolsAvailable: boolean;
+            readTodoSnapshot: typeof todoStoreReadMock;
+            readPausedState: typeof todoStoreReadPausedMock;
+            clearPausedState: () => Promise<void>;
+          };
         }
-      ).todoContinuationService.todoToolsAvailable = true;
+      ).todoContinuationService;
+      todoService.todoToolsAvailable = true;
+      todoService.readTodoSnapshot = todoStoreReadMock;
+      todoService.readPausedState = todoStoreReadPausedMock;
+      todoService.clearPausedState = async () => {
+        await todoStoreWritePausedMock(false);
+      };
     });
 
     it('retries once when no tool work and todos unchanged', async () => {
       const reminderService = new TodoReminderService();
       const followUpReminderText =
         '---\nSystem Note: You still have unfinished todos. Continue the required work.\n---';
-      vi.mocked(reminderService.getUpdateActiveTodoReminder).mockReturnValue(
+      reminderService.getUpdateActiveTodoReminder.mockReturnValue(
         followUpReminderText,
       );
-      vi.mocked(reminderService.getEscalatedActiveTodoReminder).mockReturnValue(
+      reminderService.getEscalatedActiveTodoReminder.mockReturnValue(
         followUpReminderText,
       );
       const svcForRetry = (
@@ -386,7 +399,7 @@ describe('Gemini Client (client.ts)', () => {
 
     it('does not retry after todo_pause', async () => {
       const reminderService = new TodoReminderService();
-      vi.mocked(reminderService.getUpdateActiveTodoReminder).mockReturnValue(
+      reminderService.getUpdateActiveTodoReminder.mockReturnValue(
         '---\nSystem Note: Update the active todo before replying.\n---',
       );
       const svcForPause = (
@@ -476,7 +489,7 @@ describe('Gemini Client (client.ts)', () => {
 
     it('should add context if ideMode is enabled and there are open files but no active file', async () => {
       // Arrange
-      vi.mocked(ideContext.getIdeContext).mockReturnValue({
+      ideContext.getIdeContext.mockReturnValue({
         workspaceState: {
           openFiles: [
             {
@@ -524,7 +537,7 @@ describe('Gemini Client (client.ts)', () => {
       }
 
       // Verify that the IDE context was included correctly for files without active file
-      const addHistoryCalls = vi.mocked(mockChat.addHistory).mock.calls;
+      const addHistoryCalls = mockChat.addHistory.mock.calls;
       const contextCall = addHistoryCalls.find((call) =>
         JSON.stringify(call[0]).includes('editor context'),
       );
@@ -573,7 +586,7 @@ describe('Gemini Client (client.ts)', () => {
       }
 
       // Assert
-      expect(finalResult).toBeInstanceOf(Turn);
+      expect(finalResult?.run).toBe(mockTurnRunFn);
     });
 
     it('should yield MaxSessionTurns and stop when session turn limit is reached', async () => {
@@ -629,7 +642,7 @@ describe('Gemini Client (client.ts)', () => {
       // Verify that the max session turns limit was respected
       expect(events).toStrictEqual([
         {
-          type: AgentEventType.ModelInfo,
+          type: 'model_info',
           value: {
             model: 'test-model',
             providerName: 'backend',
@@ -637,7 +650,7 @@ describe('Gemini Client (client.ts)', () => {
             displayLabel: 'test-model',
           },
         },
-        { type: AgentEventType.MaxSessionTurns },
+        { type: 'max_session_turns' },
       ]);
     });
   });

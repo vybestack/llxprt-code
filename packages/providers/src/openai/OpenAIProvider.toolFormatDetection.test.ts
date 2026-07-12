@@ -1,36 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
-
-const mockSettingsService = vi.hoisted(() => ({
-  set: vi.fn(),
-  get: vi.fn(),
-  setProviderSetting: vi.fn(),
-  getProviderSetting: vi.fn(),
-  getProviderSettings: vi.fn(),
-  updateSettings: vi.fn(),
-  settings: { providers: { openai: {} } },
-}));
-
-vi.mock('openai', () => ({
-  default: vi.fn(),
-}));
-
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  )),
-  getSettingsService: () => mockSettingsService,
-  SETTINGS_REGISTRY: [],
-}));
 
 describe('OpenAIProvider tool format detection', () => {
   let provider: OpenAIProvider;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    mockSettingsService.settings = { providers: { openai: {} } };
-    mockSettingsService.getProviderSettings.mockReturnValue({});
-    mockSettingsService.get.mockReturnValue(undefined);
     provider = new OpenAIProvider('test-key');
   });
 

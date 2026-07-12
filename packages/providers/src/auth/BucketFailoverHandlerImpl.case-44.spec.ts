@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
 import { OAuthManager } from './oauth-manager.js';
 import { MemoryTokenStore } from './BucketFailoverHandlerImpl.test-helpers.js';
@@ -33,11 +33,11 @@ describe('BucketFailoverHandlerImpl #44', () => {
     );
 
     // Act / Assert
-    await expect(handler.ensureBucketsAuthenticated()).rejects.toThrow(
-      'first auth attempt failed',
-    );
+    const firstAttempt = handler.ensureBucketsAuthenticated();
+    expect(firstAttempt).rejects.toThrow('first auth attempt failed');
+    await firstAttempt.catch(() => undefined);
 
-    await expect(handler.ensureBucketsAuthenticated()).resolves.toBeUndefined();
+    expect(await handler.ensureBucketsAuthenticated()).toBeUndefined();
     expect(oauthManager.authenticateMultipleBuckets).toHaveBeenCalledTimes(2);
   });
 });

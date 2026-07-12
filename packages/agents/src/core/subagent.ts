@@ -36,6 +36,7 @@ import {
   getScopeLocalFuncDefs,
   createSchedulerConfig,
   createChatObject,
+  type CreateChatSession,
 } from './subagentRuntimeSetup.js';
 import {
   isFatalToolError,
@@ -134,6 +135,17 @@ function processInteractiveStreamEvent(
  * @requirement REQ-STAT6-001.1, REQ-STAT6-001.2, REQ-STAT6-003.1, REQ-STAT6-003.2
  * @pseudocode agent-runtime-context.md line 93 (step 007.1)
  */
+export interface SubAgentDependencies {
+  createChatSession?: CreateChatSession;
+  executeToolCall?: import('./subagentToolProcessing.js').SubagentExecuteToolCall;
+  createTurn?: (
+    chat: ChatSession,
+    promptId: string,
+    agentId: string,
+    providerName: string,
+  ) => Pick<Turn, 'run' | 'pendingToolCalls'>;
+}
+
 export class SubAgentScope {
   output: OutputObject = {
     terminate_reason: SubagentTerminateMode.ERROR,
@@ -170,6 +182,7 @@ export class SubAgentScope {
     private readonly outputConfig?: OutputConfig,
     settingsSnapshot?: ReadonlySettingsSnapshot,
     parentAbortSignal?: AbortSignal,
+    private readonly dependencies: SubAgentDependencies = {},
   ) {
     const randomPart = Math.random().toString(36).slice(2, 8);
     this.subagentId = `${this.name}-${randomPart}`;
@@ -204,6 +217,7 @@ export class SubAgentScope {
     outputConfig?: OutputConfig,
     overrides: SubAgentRuntimeOverrides = {},
     parentSignal?: AbortSignal,
+    dependencies: SubAgentDependencies = {},
   ): Promise<SubAgentScope> {
     const runtimeBundle = overrides.runtimeBundle;
     if (!runtimeBundle) {
@@ -283,6 +297,7 @@ export class SubAgentScope {
       outputConfig,
       settingsSnapshot,
       parentSignal,
+      dependencies,
     );
   }
 
@@ -346,6 +361,7 @@ export class SubAgentScope {
       environmentContextLoader: this.environmentContextLoader,
       foregroundConfig: this.config,
       context,
+      createChatSession: this.dependencies.createChatSession,
     });
     if (!chat) {
       this.output.terminate_reason = SubagentTerminateMode.ERROR;
@@ -560,7 +576,14 @@ export class SubAgentScope {
       | null
       | undefined;
     const providerName = providerNameOrDefault(providerRaw);
-    const turn = new Turn(chat, promptId, this.subagentId, providerName);
+    const turn = this.dependencies.createTurn
+      ? this.dependencies.createTurn(
+          chat,
+          promptId,
+          this.subagentId,
+          providerName,
+        )
+      : new Turn(chat, promptId, this.subagentId, providerName);
     const parts = currentMessages[0]?.parts ?? [];
 
     let textResponse = '';
@@ -757,6 +780,7 @@ export class SubAgentScope {
         outputConfig: this.outputConfig,
         toolExecutorContext: this.toolExecutorContext,
         messageBus: this.messageBus,
+        executeToolCall: this.dependencies.executeToolCall,
       },
       () => {
         this.clearTimeoutHandle();

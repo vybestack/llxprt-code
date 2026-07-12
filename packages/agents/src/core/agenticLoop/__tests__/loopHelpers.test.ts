@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import type { Content, Part } from '@google/genai';
 import { filterEagerlyRecordedToolResponses } from '../loopHelpers.js';
 

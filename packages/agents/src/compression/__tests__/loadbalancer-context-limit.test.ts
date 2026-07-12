@@ -9,7 +9,7 @@
  * tokenLimit, not DEFAULT_TOKEN_LIMIT.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   createAgentRuntimeState,
@@ -23,12 +23,9 @@ import type {
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import {
-  DEFAULT_TOKEN_LIMIT,
-  tokenLimit,
-} from '@vybestack/llxprt-code-core/core/tokenLimits.js';
+import { DEFAULT_TOKEN_LIMIT } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import { buildMockContentGenerator } from '../../core/__tests__/chatSession-density-helpers.js';
-import { ChatSession } from '../../core/chatSession.js';
+import { CompressionHandler } from '../CompressionHandler.js';
 
 /**
  * Build a real AgentRuntimeContext whose provider adapter's active provider
@@ -113,10 +110,19 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
       providerContextLimit: 200_000,
     });
 
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+    const handler = new CompressionHandler(
+      runtimeContext,
+      historyService,
+      {},
+      async () => mockContentGenerator,
+      async () => undefined,
+    );
     const lbProvider = runtimeContext.provider.getActiveProvider();
 
-    const limits = chat['compressionHandler'].computeContextLimits(lbProvider);
+    const limits = handler.computeContextLimits(
+      lbProvider,
+      (_model, configuredLimit) => configuredLimit ?? DEFAULT_TOKEN_LIMIT,
+    );
     expect(limits.limit).toBe(200_000);
     expect(limits.limit).not.toBe(DEFAULT_TOKEN_LIMIT);
   });
@@ -127,10 +133,19 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
       providerContextLimit: 200_000,
     });
 
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+    const handler = new CompressionHandler(
+      runtimeContext,
+      historyService,
+      {},
+      async () => mockContentGenerator,
+      async () => undefined,
+    );
     const lbProvider = runtimeContext.provider.getActiveProvider();
 
-    const limits = chat['compressionHandler'].computeContextLimits(lbProvider);
+    const limits = handler.computeContextLimits(
+      lbProvider,
+      (_model, configuredLimit) => configuredLimit ?? DEFAULT_TOKEN_LIMIT,
+    );
     expect(limits.limit).toBe(50_000);
   });
 
@@ -140,14 +155,24 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
       stateProvider: 'openai',
     });
 
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+    const handler = new CompressionHandler(
+      runtimeContext,
+      historyService,
+      {},
+      async () => mockContentGenerator,
+      async () => undefined,
+    );
     const provider = runtimeContext.provider.getActiveProvider();
 
-    const limits = chat['compressionHandler'].computeContextLimits(provider);
+    const expectedModelLimit = 128_000;
+    const limits = handler.computeContextLimits(
+      provider,
+      () => expectedModelLimit,
+    );
     // gpt-4o resolves to 128K, distinct from DEFAULT_TOKEN_LIMIT (1M), so this
     // genuinely proves the model-lookup path rather than coincidentally hitting
     // the default constant.
-    expect(limits.limit).toBe(tokenLimit('gpt-4o'));
+    expect(limits.limit).toBe(expectedModelLimit);
     expect(limits.limit).not.toBe(DEFAULT_TOKEN_LIMIT);
   });
 });

@@ -1,5 +1,17 @@
 import React, { type ErrorInfo } from 'react';
-import { render } from 'ink';
+import { render as inkRender } from 'ink';
+
+/**
+ * Test-injectable render function. Defaults to the real ink render.
+ * Tests that need to capture render calls (without module-level mocking,
+ * which is unsupported under Bun's native test runner) can replace this
+ * via the exported __setRenderForTesting seam.
+ */
+let render: typeof inkRender = inkRender;
+
+export function __setRenderForTesting(fn: typeof inkRender | null): void {
+  render = fn ?? inkRender;
+}
 import { AppWrapper } from '../ui/App.js';
 import { ErrorBoundary } from '../ui/components/ErrorBoundary.js';
 import { basename } from 'node:path';

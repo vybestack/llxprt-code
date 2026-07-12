@@ -1,40 +1,30 @@
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-  type MockInstance,
-} from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 
-vi.mock('./local-oauth-callback.js', () => ({
-  startLocalOAuthCallback: vi.fn(),
-}));
-
-import * as coreModule from '@vybestack/llxprt-code-core';
+import type { AnthropicDeviceFlow } from '@vybestack/llxprt-code-auth';
 import { OAuthError, OAuthErrorType } from '@vybestack/llxprt-code-auth';
 import type {
   DeviceCodeResponse,
   OAuthToken,
   TokenStore,
 } from '@vybestack/llxprt-code-core';
-import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
+import {
+  AnthropicOAuthProvider,
+  type AnthropicOAuthProviderDependencies,
+} from './anthropic-oauth-provider.js';
 import type { LocalOAuthCallbackServer } from './local-oauth-callback.js';
-import { startLocalOAuthCallback } from './local-oauth-callback.js';
-
-const startLocalOAuthCallbackMock = vi.mocked(startLocalOAuthCallback);
 const openBrowserArgs: string[] = [];
 
 describe('AnthropicOAuthProvider local callback flow', () => {
   let provider: AnthropicOAuthProvider;
   let tokenStore: TokenStore;
-  let deviceFlow: coreModule.AnthropicDeviceFlow;
-  let shouldLaunchBrowserSpy: MockInstance;
+  let deviceFlow: AnthropicDeviceFlow;
+  let startLocalOAuthCallbackMock: ReturnType<typeof vi.fn>;
+  let shouldLaunchBrowser: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     openBrowserArgs.length = 0;
-    startLocalOAuthCallbackMock.mockReset();
+    startLocalOAuthCallbackMock = vi.fn();
+    shouldLaunchBrowser = vi.fn().mockReturnValue(true);
     vi.spyOn(global.console, 'log').mockImplementation(() => {});
 
     const saveToken = vi.fn<TokenStore['saveToken']>(
@@ -53,59 +43,39 @@ describe('AnthropicOAuthProvider local callback flow', () => {
       releaseAuthLock: vi.fn(async () => undefined),
     } satisfies TokenStore;
 
-    provider = new AnthropicOAuthProvider(tokenStore);
-    deviceFlow = (
-      provider as unknown as {
-        deviceFlow: coreModule.AnthropicDeviceFlow;
-      }
-    ).deviceFlow;
-
-    (
-      deviceFlow as unknown as {
-        initiateDeviceFlow: () => Promise<DeviceCodeResponse>;
-      }
-    ).initiateDeviceFlow = vi.fn(async () => ({
-      verification_uri: 'https://console.anthropic.com/oauth/authorize',
-      verification_uri_complete:
-        'https://claude.ai/oauth/authorize?redirect_uri=https%3A%2F%2Fconsole.anthropic.com%2Foauth%2Fcode',
-      user_code: 'CODE123',
-      device_code: 'device-code',
-      expires_in: 1800,
-      interval: 5,
-    }));
-    (deviceFlow as unknown as { getState: () => string }).getState = vi
-      .fn()
-      .mockReturnValue('generated-state');
-    (
-      deviceFlow as unknown as {
-        buildAuthorizationUrl: (redirectUri: string) => string;
-      }
-    ).buildAuthorizationUrl = vi
-      .fn()
-      .mockImplementation(
-        (redirectUri: string) =>
-          `https://claude.ai/oauth/authorize?redirect_uri=${encodeURIComponent(
-            redirectUri,
-          )}&code=true`,
-      );
-    (
-      deviceFlow as unknown as {
-        exchangeCodeForToken: (authCode: string) => Promise<OAuthToken>;
-      }
-    ).exchangeCodeForToken = vi.fn(async () => ({
-      token_type: 'Bearer' as const,
-      access_token: 'local-token',
-      expiry: Math.floor(Date.now() / 1000) + 3600,
-      scope: null,
-    }));
-    vi.spyOn(coreModule, 'openBrowserSecurely').mockImplementation(
-      async (url: string) => {
+    deviceFlow = {
+      initiateDeviceFlow: vi.fn(async () => ({
+        verification_uri: 'https://console.anthropic.com/oauth/authorize',
+        verification_uri_complete:
+          'https://claude.ai/oauth/authorize?redirect_uri=https%3A%2F%2Fconsole.anthropic.com%2Foauth%2Fcode',
+        user_code: 'CODE123',
+        device_code: 'device-code',
+        expires_in: 1800,
+        interval: 5,
+      })),
+      getState: vi.fn().mockReturnValue('generated-state'),
+      buildAuthorizationUrl: vi.fn((redirectUri: string) =>
+        `https://claude.ai/oauth/authorize?redirect_uri=${encodeURIComponent(
+          redirectUri,
+        )}&code=true`,
+      ),
+      exchangeCodeForToken: vi.fn(async () => ({
+        token_type: 'Bearer' as const,
+        access_token: 'local-token',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        scope: null,
+      })),
+    } as unknown as AnthropicDeviceFlow;
+    const dependencies: AnthropicOAuthProviderDependencies = {
+      startLocalOAuthCallback: startLocalOAuthCallbackMock,
+      createDeviceFlow: () => deviceFlow,
+      shouldLaunchBrowser,
+      openBrowserSecurely: vi.fn(async (url: string) => {
         openBrowserArgs.push(url);
-      },
-    );
-    shouldLaunchBrowserSpy = vi
-      .spyOn(coreModule, 'shouldLaunchBrowser')
-      .mockReturnValue(true);
+      }),
+      copyToClipboard: vi.fn().mockResolvedValue(undefined),
+    };
+    provider = new AnthropicOAuthProvider(tokenStore, undefined, dependencies);
   });
 
   afterEach(() => {
@@ -155,7 +125,7 @@ describe('AnthropicOAuthProvider local callback flow', () => {
       new Error('callback unavailable'),
     );
 
-    shouldLaunchBrowserSpy.mockReturnValue(true);
+    shouldLaunchBrowser.mockReturnValue(true);
 
     const manualPromise = provider.initiateAuth();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -226,7 +196,7 @@ describe('AnthropicOAuthProvider local callback flow', () => {
     startLocalOAuthCallbackMock.mockRejectedValue(
       new Error('callback unavailable'),
     );
-    shouldLaunchBrowserSpy.mockReturnValue(true);
+    shouldLaunchBrowser.mockReturnValue(true);
 
     const firstAttempt = provider.initiateAuth().then(
       () => 'resolved',

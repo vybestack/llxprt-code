@@ -21,7 +21,7 @@
  *   - T24: every completion-related entry is classified (no orphan).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { COMMAND_API_MAP, type CommandApiMapping } from './command-api-map.js';
 
 const VALID_KINDS: ReadonlySet<string> = new Set([

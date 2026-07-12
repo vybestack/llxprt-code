@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, beforeEach, afterEach } from 'vitest';
-import { it } from '@fast-check/vitest';
+import { describe, expect, beforeEach, afterEach } from 'bun:test';
+import { asyncPropertyTest } from '../test-utils/propertyTest.js';
 import * as fc from 'fast-check';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -48,15 +48,16 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-002
      */
-    it.prop([
-      fc.array(
-        fc.record({
-          text: fc.string({ minLength: 1, maxLength: 100 }),
-          speaker: fc.constantFrom('human' as const, 'ai' as const),
-        }),
-        { minLength: 1, maxLength: 20 },
-      ),
-    ])(
+    asyncPropertyTest(
+      [
+        fc.array(
+          fc.record({
+            text: fc.string({ minLength: 1, maxLength: 100 }),
+            speaker: fc.constantFrom('human' as const, 'ai' as const),
+          }),
+          { minLength: 1, maxLength: 20 },
+        ),
+      ],
       'any sequence of content events produces history of same length @requirement:REQ-RPL-002',
       async (contents) => {
         const localTempDir = await fs.mkdtemp(
@@ -87,7 +88,8 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-003
      */
-    it.prop([fc.integer({ min: 1, max: 10 }), fc.integer({ min: 0, max: 10 })])(
+    asyncPropertyTest(
+      [fc.integer({ min: 1, max: 10 }), fc.integer({ min: 0, max: 10 })],
       'compression always resets to exactly 1+post items @requirement:REQ-RPL-003',
       async (preCount, postCount) => {
         const localTempDir = await fs.mkdtemp(
@@ -123,7 +125,8 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-002d
      */
-    it.prop([fc.integer({ min: 1, max: 15 }), fc.integer({ min: 0, max: 20 })])(
+    asyncPropertyTest(
+      [fc.integer({ min: 1, max: 15 }), fc.integer({ min: 0, max: 20 })],
       'rewind(N) on history of size M produces max(0, M-N) items @requirement:REQ-RPL-002d',
       async (historySize, rewindCount) => {
         const localTempDir = await fs.mkdtemp(
@@ -157,15 +160,16 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-001
      */
-    it.prop([
-      fc.array(
-        fc.record({
-          text: fc.string({ minLength: 1, maxLength: 50 }),
-          speaker: fc.constantFrom('human' as const, 'ai' as const),
-        }),
-        { minLength: 1, maxLength: 10 },
-      ),
-    ])(
+    asyncPropertyTest(
+      [
+        fc.array(
+          fc.record({
+            text: fc.string({ minLength: 1, maxLength: 50 }),
+            speaker: fc.constantFrom('human' as const, 'ai' as const),
+          }),
+          { minLength: 1, maxLength: 10 },
+        ),
+      ],
       'replaying the same file twice produces identical results @requirement:REQ-RPL-001',
       async (contents) => {
         const localTempDir = await fs.mkdtemp(
@@ -203,17 +207,18 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-007
      */
-    it.prop([
-      fc.array(
-        fc.constantFrom(
-          'content' as const,
-          'provider_switch' as const,
-          'session_event' as const,
-          'directories_changed' as const,
+    asyncPropertyTest(
+      [
+        fc.array(
+          fc.constantFrom(
+            'content' as const,
+            'provider_switch' as const,
+            'session_event' as const,
+            'directories_changed' as const,
+          ),
+          { minLength: 1, maxLength: 10 },
         ),
-        { minLength: 1, maxLength: 10 },
-      ),
-    ])(
+      ],
       'session metadata always present after replay @requirement:REQ-RPL-007',
       async (eventTypes) => {
         const localTempDir = await fs.mkdtemp(
@@ -263,7 +268,8 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-001
      */
-    it.prop([fc.integer({ min: 1, max: 30 })])(
+    asyncPropertyTest(
+      [fc.integer({ min: 1, max: 30 })],
       'lastSeq always equals the final event seq regardless of event count @requirement:REQ-RPL-001',
       async (eventCount) => {
         const localTempDir = await fs.mkdtemp(
@@ -297,7 +303,8 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-001
      */
-    it.prop([fc.integer({ min: 1, max: 20 }), fc.boolean()])(
+    asyncPropertyTest(
+      [fc.integer({ min: 1, max: 20 }), fc.boolean()],
       'eventCount matches total valid events regardless of optional corrupt last line @requirement:REQ-RPL-001',
       async (contentCount: number, hasCorruptLastLine: boolean) => {
         const localTempDir = await fs.mkdtemp(
@@ -338,12 +345,13 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-002
      */
-    it.prop([
-      fc.record({
-        speaker: fc.constantFrom('human' as const, 'ai' as const),
-        text: fc.string({ minLength: 1, maxLength: 200 }),
-      }),
-    ])(
+    asyncPropertyTest(
+      [
+        fc.record({
+          speaker: fc.constantFrom('human' as const, 'ai' as const),
+          text: fc.string({ minLength: 1, maxLength: 200 }),
+        }),
+      ],
       'any valid IContent round-trips through record -> replay losslessly @requirement:REQ-RPL-002',
       async ({ speaker, text }) => {
         const localTempDir = await fs.mkdtemp(
@@ -378,15 +386,16 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-001
      */
-    it.prop([
-      fc.array(
-        fc.record({
-          text: fc.string({ minLength: 1, maxLength: 50 }),
-          speaker: fc.constantFrom('human' as const, 'ai' as const),
-        }),
-        { minLength: 1, maxLength: 10 },
-      ),
-    ])(
+    asyncPropertyTest(
+      [
+        fc.array(
+          fc.record({
+            text: fc.string({ minLength: 1, maxLength: 50 }),
+            speaker: fc.constantFrom('human' as const, 'ai' as const),
+          }),
+          { minLength: 1, maxLength: 10 },
+        ),
+      ],
       'warnings array is always present regardless of input @requirement:REQ-RPL-001',
       async (contents) => {
         const localTempDir = await fs.mkdtemp(
@@ -417,7 +426,8 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-001
      */
-    it.prop([fc.integer({ min: 1, max: 5 }), fc.integer({ min: 1, max: 10 })])(
+    asyncPropertyTest(
+      [fc.integer({ min: 1, max: 5 }), fc.integer({ min: 1, max: 10 })],
       'seq monotonicity preserved across N resumes @requirement:REQ-RPL-001',
       async (resumeCount, turnsPerSegment) => {
         const localTempDir = await fs.mkdtemp(
@@ -469,16 +479,17 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-002
      */
-    it.prop([
-      fc.array(
-        fc.oneof(
-          fc.constant('content' as const),
-          fc.constant('compressed' as const),
-          fc.constant('rewind' as const),
+    asyncPropertyTest(
+      [
+        fc.array(
+          fc.oneof(
+            fc.constant('content' as const),
+            fc.constant('compressed' as const),
+            fc.constant('rewind' as const),
+          ),
+          { minLength: 1, maxLength: 15 },
         ),
-        { minLength: 1, maxLength: 15 },
-      ),
-    ])(
+      ],
       'arbitrary interleaving of content/compressed/rewind produces valid history @requirement:REQ-RPL-002',
       async (eventTypes) => {
         const localTempDir = await fs.mkdtemp(

@@ -174,6 +174,7 @@ export async function fetchCodexUsage(
 export function formatCodexRateLimitWindow(
   window: CodexRateLimitWindow,
   label: string,
+  now: Date = new Date(),
 ): string | null {
   if (!window || typeof window.used_percent !== 'number') {
     return null;
@@ -183,7 +184,6 @@ export function formatCodexRateLimitWindow(
   const resetDate = new Date(window.reset_at * 1000); // Convert unix timestamp to milliseconds
 
   let timeUntilReset: string;
-  const now = new Date();
   const diffMs = resetDate.getTime() - now.getTime();
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMins / 60);
@@ -203,7 +203,10 @@ export function formatCodexRateLimitWindow(
 /**
  * Format all available Codex usage information for display
  */
-export function formatCodexUsage(usage: CodexUsageInfo): string[] {
+export function formatCodexUsage(
+  usage: CodexUsageInfo,
+  now: Date = new Date(),
+): string[] {
   const lines: string[] = [];
 
   // Format rate limit windows
@@ -212,6 +215,7 @@ export function formatCodexUsage(usage: CodexUsageInfo): string[] {
       const formatted = formatCodexRateLimitWindow(
         usage.rate_limit.primary_window,
         '5-hour limit',
+        now,
       );
       if (formatted) lines.push(formatted);
     }
@@ -220,6 +224,7 @@ export function formatCodexUsage(usage: CodexUsageInfo): string[] {
       const formatted = formatCodexRateLimitWindow(
         usage.rate_limit.secondary_window,
         'Weekly limit',
+        now,
       );
       if (formatted) lines.push(formatted);
     }

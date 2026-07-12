@@ -40,6 +40,8 @@ export class AuthStatusService {
     private readonly proactiveRenewalManager: ProactiveRenewalManager,
     private readonly bucketManager: OAuthBucketManager,
     private readonly tokenAccessCoordinator: TokenAccessCoordinator,
+    private readonly flushAuthScope: typeof flushRuntimeAuthScope =
+      flushRuntimeAuthScope,
   ) {}
 
   // --------------------------------------------------------------------------
@@ -437,7 +439,7 @@ export class AuthStatusService {
     }
 
     try {
-      flushRuntimeAuthScope(runtimeContext.runtimeId);
+      this.flushAuthScope(runtimeContext.runtimeId);
       logger.debug(
         `Flushed runtime auth scope ${runtimeContext.runtimeId} for ${providerName}`,
       );

@@ -4,150 +4,134 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
-const { aliasEntries } = vi.hoisted(() => ({
-  aliasEntries: [] as Array<Record<string, unknown>>,
-}));
+const aliasEntries: Array<Record<string, unknown>> = [];
 
-const {
-  StubSettingsService: StubSettingsServiceClass,
-  StubConfig: StubConfigClass,
-  StubProvider: StubProviderClass,
-} = vi.hoisted(() => {
-  class StubSettingsService {
-    providers: Record<string, Record<string, unknown>> = {};
-    global: Record<string, unknown> = {};
+class StubSettingsService {
+  providers: Record<string, Record<string, unknown>> = {};
+  global: Record<string, unknown> = {};
 
-    set(key: string, value: unknown): void {
-      this.global[key] = value;
-    }
+  set(key: string, value: unknown): void {
+    this.global[key] = value;
+  }
 
-    get(key: string): unknown {
-      return this.global[key];
-    }
+  get(key: string): unknown {
+    return this.global[key];
+  }
 
-    getAllGlobalSettings(): Record<string, unknown> {
-      return { ...this.global };
-    }
+  getAllGlobalSettings(): Record<string, unknown> {
+    return { ...this.global };
+  }
 
-    setProviderSetting(provider: string, key: string, value: unknown): void {
-      this.providers[provider] ??= {};
-      if (value === undefined) {
-        delete this.providers[provider][key];
-      } else {
-        this.providers[provider][key] = value;
-      }
-    }
-
-    getProviderSettings(provider: string): Record<string, unknown> {
-      return this.providers[provider] ?? {};
-    }
-
-    switchProvider = vi.fn(async (provider: string) => {
-      this.set('activeProvider', provider);
-    });
-
-    async updateSettings(
-      providerOrChanges?: string | Record<string, unknown>,
-      changes?: Record<string, unknown>,
-    ): Promise<void> {
-      if (typeof providerOrChanges === 'string') {
-        for (const [key, value] of Object.entries(changes!)) {
-          this.setProviderSetting(providerOrChanges, key, value);
-        }
-      } else if (typeof providerOrChanges === 'object') {
-        for (const [key, value] of Object.entries(providerOrChanges)) {
-          this.set(key, value);
-        }
-      }
+  setProviderSetting(provider: string, key: string, value: unknown): void {
+    this.providers[provider] ??= {};
+    if (value === undefined) {
+      delete this.providers[provider][key];
+    } else {
+      this.providers[provider][key] = value;
     }
   }
 
-  class StubConfig {
-    private model: string | undefined = undefined;
-    private provider = 'openai';
-    private ephemeral: Record<string, unknown> = {};
-    private providerManager: unknown;
-    private settingsService: InstanceType<typeof StubSettingsService>;
-    initializeContentGeneratorConfig = vi.fn(async () => {});
+  getProviderSettings(provider: string): Record<string, unknown> {
+    return this.providers[provider] ?? {};
+  }
 
-    constructor(settingsService: InstanceType<typeof StubSettingsService>) {
-      this.settingsService = settingsService;
-    }
+  switchProvider = vi.fn(async (provider: string) => {
+    this.set('activeProvider', provider);
+  });
 
-    getSettingsService(): unknown {
-      return this.settingsService;
-    }
-
-    setEphemeralSetting(key: string, value: unknown): void {
-      if (value === undefined) {
-        delete this.ephemeral[key];
-      } else {
-        this.ephemeral[key] = value;
+  async updateSettings(
+    providerOrChanges?: string | Record<string, unknown>,
+    changes?: Record<string, unknown>,
+  ): Promise<void> {
+    if (typeof providerOrChanges === 'string') {
+      for (const [key, value] of Object.entries(changes!)) {
+        this.setProviderSetting(providerOrChanges, key, value);
+      }
+    } else if (typeof providerOrChanges === 'object') {
+      for (const [key, value] of Object.entries(providerOrChanges)) {
+        this.set(key, value);
       }
     }
+  }
+}
 
-    getEphemeralSetting(key: string): unknown {
-      return this.ephemeral[key];
-    }
+class StubConfig {
+  private model: string | undefined = undefined;
+  private provider = 'openai';
+  private ephemeral: Record<string, unknown> = {};
+  private providerManager: unknown;
+  private settingsService: InstanceType<typeof StubSettingsService>;
+  initializeContentGeneratorConfig = vi.fn(async () => {});
 
-    getEphemeralSettings(): Record<string, unknown> {
-      return { ...this.ephemeral };
-    }
+  constructor(settingsService: InstanceType<typeof StubSettingsService>) {
+    this.settingsService = settingsService;
+  }
 
-    getModel(): string | undefined {
-      return this.model;
-    }
+  getSettingsService(): unknown {
+    return this.settingsService;
+  }
 
-    setModel(model: string | undefined): void {
-      this.model = model;
-    }
-
-    setProvider(provider: string): void {
-      this.provider = provider;
-    }
-
-    getProvider(): string {
-      return this.provider;
-    }
-
-    setProviderManager(manager: unknown): void {
-      this.providerManager = manager;
-    }
-
-    getProviderManager(): unknown {
-      return this.providerManager;
+  setEphemeralSetting(key: string, value: unknown): void {
+    if (value === undefined) {
+      delete this.ephemeral[key];
+    } else {
+      this.ephemeral[key] = value;
     }
   }
 
-  class StubProvider {
-    name: string;
-    defaultModel = 'gpt-4o';
-    providerConfig: { baseUrl?: string } = {};
-
-    constructor(name: string) {
-      this.name = name;
-    }
-
-    getDefaultModel(): string {
-      return this.defaultModel;
-    }
+  getEphemeralSetting(key: string): unknown {
+    return this.ephemeral[key];
   }
 
-  return { StubSettingsService, StubConfig, StubProvider };
-});
+  getEphemeralSettings(): Record<string, unknown> {
+    return { ...this.ephemeral };
+  }
 
-type StubSettingsServiceInstance = InstanceType<
-  typeof StubSettingsServiceClass
->;
-type StubConfigInstance = InstanceType<typeof StubConfigClass>;
-type StubProviderInstance = InstanceType<typeof StubProviderClass>;
+  getModel(): string | undefined {
+    return this.model;
+  }
 
-const StubSettingsService = StubSettingsServiceClass;
-const StubConfig = StubConfigClass;
-const StubProvider = StubProviderClass;
+  setModel(model: string | undefined): void {
+    this.model = model;
+  }
+
+  setProvider(provider: string): void {
+    this.provider = provider;
+  }
+
+  getProvider(): string {
+    return this.provider;
+  }
+
+  setProviderManager(manager: unknown): void {
+    this.providerManager = manager;
+  }
+
+  getProviderManager(): unknown {
+    return this.providerManager;
+  }
+}
+
+class StubProvider {
+  name: string;
+  defaultModel = 'gpt-4o';
+  providerConfig: { baseUrl?: string } = {};
+
+  constructor(name: string) {
+    this.name = name;
+  }
+
+  getDefaultModel(): string {
+    return this.defaultModel;
+  }
+}
+
+type StubSettingsServiceInstance = InstanceType<typeof StubSettingsService>;
+type StubConfigInstance = InstanceType<typeof StubConfig>;
+type StubProviderInstance = InstanceType<typeof StubProvider>;
 
 const providers: Record<string, StubProviderInstance> = {
   openai: new StubProvider('openai'),
@@ -175,55 +159,6 @@ const mockProviderManager = {
 let stubSettingsService: StubSettingsServiceInstance;
 let stubConfig: StubConfigInstance;
 
-vi.mock('../composition/providerAliases.js', () => ({
-  loadProviderAliasEntries: () => aliasEntries,
-}));
-
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
-
-  let activeContext: {
-    settingsService: StubSettingsServiceInstance;
-    config?: StubConfigInstance;
-    runtimeId?: string;
-    metadata?: Record<string, unknown>;
-  } | null = null;
-
-  return {
-    ...actual,
-    SettingsService: StubSettingsServiceClass,
-    Config: StubConfigClass,
-    createProviderRuntimeContext: (context: {
-      settingsService: StubSettingsServiceInstance;
-      config?: StubConfigInstance;
-      runtimeId?: string;
-      metadata?: Record<string, unknown>;
-    }) => {
-      activeContext = context;
-      return context;
-    },
-    getActiveProviderRuntimeContext: () => {
-      if (!activeContext) {
-        throw new Error(
-          'MissingProviderRuntimeError(provider-runtime): runtime registration missing',
-        );
-      }
-      return activeContext;
-    },
-    setActiveProviderRuntimeContext: (context: {
-      settingsService: StubSettingsServiceInstance;
-      config?: StubConfigInstance;
-      runtimeId?: string;
-      metadata?: Record<string, unknown>;
-    }) => {
-      activeContext = context;
-    },
-    peekActiveProviderRuntimeContext: () => activeContext,
-    getCurrentRuntimeScope: () => undefined,
-  };
-});
-
 const {
   switchActiveProvider,
   setActiveModel,
@@ -238,6 +173,9 @@ const mockOAuthManager = {
   setMessageBus: vi.fn(),
   setConfigGetter: vi.fn(),
 } as never;
+
+const setActiveModelWithAliases = (modelName: string) =>
+  setActiveModel(modelName, () => aliasEntries);
 
 const debugLoggerWarnSpy = vi
   .spyOn(DebugLogger.prototype, 'warn')
@@ -346,7 +284,9 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       defaultModel?: string,
     ): Promise<void> {
       pushAnthropicAlias({ defaultModel });
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('anthropic', {
+        loadAliasEntries: () => aliasEntries,
+      });
       // Confirm provider is active with initial model defaults applied
       activeProviderName = 'anthropic';
     }
@@ -357,7 +297,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       // Start with sonnet so we can switch TO opus
       await setupAnthropicProvider('claude-sonnet-4-5-20250929');
 
-      await setActiveModel('claude-opus-4-6');
+      await setActiveModelWithAliases('claude-opus-4-6');
 
       expect(stubConfig.getModel()).toBe('claude-opus-4-6');
       expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBe(true);
@@ -373,7 +313,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     it('setActiveModel("claude-sonnet-4-5-20250929") applies reasoning defaults but NOT reasoning.effort', async () => {
       await setupAnthropicProvider('claude-opus-4-6');
 
-      await setActiveModel('claude-sonnet-4-5-20250929');
+      await setActiveModelWithAliases('claude-sonnet-4-5-20250929');
 
       expect(stubConfig.getModel()).toBe('claude-sonnet-4-5-20250929');
       expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBe(true);
@@ -394,7 +334,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       // Confirm opus defaults were applied by switchActiveProvider
       expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('high');
 
-      await setActiveModel('claude-sonnet-4-5-20250929');
+      await setActiveModelWithAliases('claude-sonnet-4-5-20250929');
 
       // reasoning.effort was in old defaults (opus) but NOT in new defaults (sonnet).
       // Current value "high" matches old default "high", so it's cleared.
@@ -409,7 +349,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       // User manually overrides reasoning.effort to "low"
       stubConfig.setEphemeralSetting('reasoning.effort', 'low');
 
-      await setActiveModel('claude-sonnet-4-5-20250929');
+      await setActiveModelWithAliases('claude-sonnet-4-5-20250929');
 
       // Current value "low" differs from old default "high", so it's user-owned — not cleared
       expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('low');
@@ -421,7 +361,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       // User sets a custom value for a key that model defaults would set
       stubConfig.setEphemeralSetting('reasoning.enabled', false);
 
-      await setActiveModel('claude-opus-4-6');
+      await setActiveModelWithAliases('claude-opus-4-6');
 
       // Current value (false) differs from old default (true), so treated as user-owned
       expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBe(false);
@@ -440,11 +380,13 @@ describe('Provider alias defaults (model + ephemerals)', () => {
         },
       });
 
-      await switchActiveProvider('openrouter');
+      await switchActiveProvider('openrouter', {
+        loadAliasEntries: () => aliasEntries,
+      });
       activeProviderName = 'openrouter';
 
       // No modelDefaults in openrouter alias config — setActiveModel should work fine
-      await setActiveModel('gpt-4o-mini');
+      await setActiveModelWithAliases('gpt-4o-mini');
 
       expect(stubConfig.getModel()).toBe('gpt-4o-mini');
       expect(
@@ -455,7 +397,10 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     it('when model is undefined (no previous model), setActiveModel applies defaults normally', async () => {
       pushAnthropicAlias();
       // Set up anthropic provider without applying model defaults (simulating profile load)
-      await switchActiveProvider('anthropic', { skipModelDefaults: true });
+      await switchActiveProvider('anthropic', {
+        skipModelDefaults: true,
+        loadAliasEntries: () => aliasEntries,
+      });
       activeProviderName = 'anthropic';
 
       // Clear the model to simulate no previous model
@@ -463,7 +408,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       // Also clear provider settings model
       stubSettingsService.setProviderSetting('anthropic', 'model', undefined);
 
-      await setActiveModel('claude-opus-4-6');
+      await setActiveModelWithAliases('claude-opus-4-6');
 
       // Old defaults are {} (no previous model), all new defaults applied unconditionally
       expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBe(true);
@@ -485,7 +430,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       // The stateless recomputation cannot distinguish this from model-defaulted.
       stubConfig.setEphemeralSetting('reasoning.effort', 'high');
 
-      await setActiveModel('claude-sonnet-4-5-20250929');
+      await setActiveModelWithAliases('claude-sonnet-4-5-20250929');
 
       // Per stateless policy: current value "high" === old default "high",
       // so it IS cleared even though the user set it explicitly.
@@ -505,14 +450,16 @@ describe('Provider alias defaults (model + ephemerals)', () => {
           'reasoning.enabled': true,
         },
       });
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('anthropic', {
+        loadAliasEntries: () => aliasEntries,
+      });
       activeProviderName = 'anthropic';
 
       // Confirm reasoning.enabled is true (from model default, which overrides alias)
       expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBe(true);
 
       // Switch to a non-Claude model (no modelDefaults entries match)
-      await setActiveModel('gpt-4o');
+      await setActiveModelWithAliases('gpt-4o');
 
       // reasoning.enabled IS cleared: current value (true) matches old model default (true)
       expect(
@@ -525,7 +472,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     it('Opus-4-6 -> Sonnet-4-5: reasoning.effort cleared, others stay', async () => {
       await setupAnthropicProvider('claude-opus-4-6');
 
-      await setActiveModel('claude-sonnet-4-5-20250929');
+      await setActiveModelWithAliases('claude-sonnet-4-5-20250929');
 
       // reasoning.effort: was in opus defaults, not in sonnet defaults, current matches old → cleared
       expect(
@@ -549,7 +496,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
         stubConfig.getEphemeralSetting('reasoning.effort'),
       ).toBeUndefined();
 
-      await setActiveModel('claude-opus-4-6');
+      await setActiveModelWithAliases('claude-opus-4-6');
 
       // reasoning.effort: not in sonnet defaults, IS in opus defaults, key was undefined → applied
       expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('high');
@@ -570,7 +517,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBe(true);
       expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('high');
 
-      await setActiveModel('gpt-4o');
+      await setActiveModelWithAliases('gpt-4o');
 
       // Old defaults exist, new defaults are {} — all cleared since current matches old
       expect(
@@ -591,7 +538,10 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       pushAnthropicAlias();
       // Start with a non-Claude model — use skipModelDefaults to simulate profile
       // load, then manually set the model
-      await switchActiveProvider('anthropic', { skipModelDefaults: true });
+      await switchActiveProvider('anthropic', {
+        skipModelDefaults: true,
+        loadAliasEntries: () => aliasEntries,
+      });
       activeProviderName = 'anthropic';
       stubConfig.setModel('gpt-4o');
       stubSettingsService.setProviderSetting('anthropic', 'model', 'gpt-4o');
@@ -601,7 +551,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
         stubConfig.getEphemeralSetting('reasoning.enabled'),
       ).toBeUndefined();
 
-      await setActiveModel('claude-opus-4-6');
+      await setActiveModelWithAliases('claude-opus-4-6');
 
       // Old defaults are {} (gpt-4o matches nothing), all new defaults applied
       expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBe(true);
@@ -623,7 +573,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       stubConfig.setEphemeralSetting('reasoning.effort', 'low');
 
       // setActiveModel for the same model
-      await setActiveModel('claude-opus-4-6');
+      await setActiveModelWithAliases('claude-opus-4-6');
 
       // Current value "low" differs from old default "high" → user-owned, not overwritten
       expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('low');
@@ -639,7 +589,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       stubConfig.setEphemeralSetting('reasoning.effort', 'low');
 
       // /model opus again
-      await setActiveModel('claude-opus-4-6');
+      await setActiveModelWithAliases('claude-opus-4-6');
 
       // Current value "low" differs from old default "high" → user-owned, stays
       expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('low');
@@ -657,7 +607,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       stubConfig.setEphemeralSetting('reasoning.effort', 'low');
 
       // /model opus
-      await setActiveModel('claude-opus-4-6');
+      await setActiveModelWithAliases('claude-opus-4-6');
 
       // Old model (sonnet) has no effort default, so current "low" doesn't match
       // any old default → treated as user-owned → not overwritten by opus default "high"
@@ -670,7 +620,10 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       pushAnthropicAlias();
 
       // Profile load path: skipModelDefaults: true
-      await switchActiveProvider('anthropic', { skipModelDefaults: true });
+      await switchActiveProvider('anthropic', {
+        skipModelDefaults: true,
+        loadAliasEntries: () => aliasEntries,
+      });
       activeProviderName = 'anthropic';
 
       // Then --set is applied after profile load
@@ -678,7 +631,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('low');
 
       // Then user changes model via /model
-      await setActiveModel('claude-opus-4-6');
+      await setActiveModelWithAliases('claude-opus-4-6');
 
       // Profile load skipped model defaults, so old model has no computed defaults.
       // Current "low" doesn't match any old default → user-owned → stays

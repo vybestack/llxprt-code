@@ -18,12 +18,15 @@ export async function buildAgentSystemPrompt(
   inputs: AgentInputs,
   runtimeContext: Config,
   systemPromptTemplate: string,
+  loadDirectoryContext: (
+    runtimeContext: Config,
+  ) => Promise<string> = getDirectoryContextString,
 ): Promise<string> {
   // Inject user inputs into the prompt template.
   let finalPrompt = templateString(systemPromptTemplate, inputs);
 
   // Append environment context (CWD and folder structure).
-  const dirContext = await getDirectoryContextString(runtimeContext);
+  const dirContext = await loadDirectoryContext(runtimeContext);
   finalPrompt += `\n\n# Environment Context\n${dirContext}`;
 
   // Append standard rules for non-interactive execution.

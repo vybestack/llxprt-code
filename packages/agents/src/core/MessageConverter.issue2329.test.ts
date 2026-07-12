@@ -14,7 +14,7 @@
  * providerStopReason carrier (not the SDK's finishMessage field).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { FinishReason } from '@google/genai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { convertIContentToResponse } from './MessageConverter.js';

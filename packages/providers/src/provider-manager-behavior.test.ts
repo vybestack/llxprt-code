@@ -21,7 +21,7 @@
  * @requirement:REQ-TEST-001
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -332,13 +332,13 @@ describe('FakeProvider behavioral tests', () => {
     }
 
     // Second call should throw
-    await expect(
-      (async () => {
-        for await (const _chunk of provider.generateChatCompletion([])) {
-          // should not reach here
-        }
-      })(),
-    ).rejects.toThrow(/no more canned responses/i);
+    const consumptionPromise = (async (): Promise<void> => {
+      for await (const _chunk of provider.generateChatCompletion([])) {
+        // should not reach here
+      }
+    })();
+    expect(consumptionPromise).rejects.toThrow(/no more canned responses/i);
+    await consumptionPromise.catch(() => undefined);
   });
 
   /**

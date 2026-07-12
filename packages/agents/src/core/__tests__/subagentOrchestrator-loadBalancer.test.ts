@@ -20,17 +20,41 @@
  *       profile so failover/round-robin routing downstream is not lost.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'bun:test';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '../../../../settings/src/settings/SettingsService.js?subagent-orchestrator-load-balancer-suite';
+import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import type { SubAgentScope } from '../subagent.js';
-import { SubagentOrchestrator } from '../subagentOrchestrator.js';
+import { SubagentOrchestrator } from '../subagentOrchestrator.js?subagent-orchestrator-load-balancer-suite';
 import {
   makeForegroundConfig,
   createRuntimeBundle,
 } from './subagentOrchestrator-test-helpers.js';
 
+const createIsolatedRuntimeContext = (options: {
+  runtimeId?: string;
+  settingsService?: SettingsService;
+  metadata?: Record<string, unknown>;
+  prepare?: (context: IsolatedRuntimeContextHandle) => void;
+}): IsolatedRuntimeContextHandle => {
+  const settingsService = options.settingsService ?? new SettingsService();
+  const context = {
+    runtimeId: options.runtimeId ?? 'isolated-load-balancer-runtime',
+    metadata: options.metadata ?? {},
+    settingsService,
+    config: makeForegroundConfig(),
+    providerManager: { registerProvider: vi.fn() },
+    oauthManager: {},
+  } as unknown as IsolatedRuntimeContextHandle;
+  return {
+    ...context,
+    activate: vi.fn(),
+    runWithRuntimeScope: async <T>(callback: () => Promise<T>) => callback(),
+    dispose: vi.fn(),
+  } as unknown as IsolatedRuntimeContextHandle;
+};
 describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
   const loadBalancerSubagent: SubagentConfig = {
     name: 'lb-helper',
@@ -134,12 +158,20 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       .fn<typeof SubAgentScope.create>()
       .mockResolvedValue(scope);
 
+    const settingsService = new SettingsService();
     const orchestrator = new SubagentOrchestrator({
       subagentManager: { loadSubagent } as unknown as SubagentManager,
       profileManager: { loadProfile } as unknown as ProfileManager,
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
+      createSettingsService: () => settingsService,
+      createProviderRuntimeContext: (init) => ({
+        ...init,
+        settingsService: init.settingsService,
+      }),
+      applyProfile: async () => undefined,
+      createIsolatedRuntimeContext,
     });
 
     // Before the fix this rejected with RuntimeStateError: provider.missing.
@@ -172,12 +204,20 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       .fn<typeof SubAgentScope.create>()
       .mockResolvedValue(scope);
 
+    const settingsService = new SettingsService();
     const orchestrator = new SubagentOrchestrator({
       subagentManager: { loadSubagent } as unknown as SubagentManager,
       profileManager: { loadProfile } as unknown as ProfileManager,
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
+      createSettingsService: () => settingsService,
+      createProviderRuntimeContext: (init) => ({
+        ...init,
+        settingsService: init.settingsService,
+      }),
+      applyProfile: async () => undefined,
+      createIsolatedRuntimeContext,
     });
 
     const result = await orchestrator.launch({
@@ -222,9 +262,9 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       runtimeLoader,
     });
 
-    await expect(
-      orchestrator.launch({ name: emptySubagent.name }),
-    ).rejects.toThrow(/must reference at least one profile/);
+    expect(orchestrator.launch({ name: emptySubagent.name })).rejects.toThrow(
+      /must reference at least one profile/,
+    );
     expect(runtimeLoader).not.toHaveBeenCalled();
   });
 
@@ -268,9 +308,9 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       loadProfile,
     );
 
-    await expect(
-      orchestrator.launch({ name: nestedSubagent.name }),
-    ).rejects.toThrow(/cannot use nested load balancer profile 'inner-lb'/);
+    expect(orchestrator.launch({ name: nestedSubagent.name })).rejects.toThrow(
+      /cannot use nested load balancer profile 'inner-lb'/,
+    );
     expect(runtimeLoader).not.toHaveBeenCalled();
   });
 
@@ -305,9 +345,9 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       loadProfile,
     );
 
-    await expect(
-      orchestrator.launch({ name: invalidSubagent.name }),
-    ).rejects.toThrow(/must define a non-empty provider/);
+    expect(orchestrator.launch({ name: invalidSubagent.name })).rejects.toThrow(
+      /must define a non-empty provider/,
+    );
     expect(runtimeLoader).not.toHaveBeenCalled();
   });
 
@@ -342,9 +382,9 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       loadProfile,
     );
 
-    await expect(
-      orchestrator.launch({ name: invalidSubagent.name }),
-    ).rejects.toThrow(/must define a non-empty model/);
+    expect(orchestrator.launch({ name: invalidSubagent.name })).rejects.toThrow(
+      /must define a non-empty model/,
+    );
     expect(runtimeLoader).not.toHaveBeenCalled();
   });
 });

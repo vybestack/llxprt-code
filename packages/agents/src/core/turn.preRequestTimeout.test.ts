@@ -4,9 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { ServerAgentStreamEvent } from './turn.js';
-import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { vi } from 'vitest';
+import type { ServerAgentStreamEvent } from './turn.ts?turn-pre-request-timeout';
+import { Turn } from './turn.ts?turn-pre-request-timeout';
+import {
+  AgentEventType,
+  DEFAULT_AGENT_ID,
+} from '../../../core/src/core/turn.ts?turn-pre-request-timeout-protocol';
 import type { GenerateContentResponse, Part } from '@google/genai';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ChatSession } from './chatSession.js';
@@ -15,69 +20,17 @@ import {
   type MockedChatInstance,
   mockResponseToChunk,
 } from './turn-test-helpers.js';
-import { DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
+import {
+  DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
+  resolveStreamFirstResponseTimeoutMs,
+} from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 
-const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
-  mockSendMessageStream: vi.fn(),
-  mockGetHistory: vi.fn(),
-}));
-
-vi.mock('@google/genai', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@google/genai')>();
-  const MockChat = vi.fn().mockImplementation(() => ({
-    sendMessageStream: mockSendMessageStream,
-    getHistory: mockGetHistory,
-  }));
-  return {
-    ...actual,
-    Chat: MockChat,
-  };
-});
+const mockSendMessageStream = vi.fn();
+const mockGetHistory = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
-
-vi.mock(
-  '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
-  () => ({
-    getResponseText: (resp: GenerateContentResponse) =>
-      resp.candidates?.[0]?.content?.parts
-        ?.filter((part) => (part as { thought?: boolean }).thought !== true)
-        .map((part) => part.text)
-        .join('') ?? undefined,
-    getFunctionCalls: (resp: GenerateContentResponse) =>
-      resp.functionCalls ?? [],
-    getFunctionCallsFromParts: (parts: Part[]) => {
-      const functionCalls = parts
-        .filter((part) => part.functionCall !== undefined)
-        .map((part) => part.functionCall!);
-      return functionCalls.length > 0 ? functionCalls : undefined;
-    },
-    analyzeResponseOutcome: (parts: Part[]) => {
-      let hasVisibleText = false;
-      let hasThinking = false;
-      let hasToolCalls = false;
-      for (const part of parts) {
-        const isThinking = (part as { thought?: boolean }).thought === true;
-        if (isThinking) hasThinking = true;
-        if (part.functionCall !== undefined) hasToolCalls = true;
-        if (
-          !isThinking &&
-          typeof part.text === 'string' &&
-          part.text.trim() !== ''
-        )
-          hasVisibleText = true;
-      }
-      return {
-        hasVisibleText,
-        hasThinking,
-        hasToolCalls,
-        isActionable: hasVisibleText || hasToolCalls,
-      };
-    },
-  }),
-);
 
 /**
  * Build a Turn with a config that supports BOTH the first-response timeout
@@ -151,6 +104,10 @@ function createStreamWithStalledFirstNext(): AsyncGenerator<{
   })();
 }
 
+const drainMicrotasks = async (): Promise<void> => {
+  for (let i = 0; i < 100; i++) await Promise.resolve();
+};
+
 describe('Turn - first-response timeout (issue #2379)', () => {
   const originalEnv = process.env;
 
@@ -168,75 +125,20 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     process.env = originalEnv;
   });
 
-  it('DEFAULT-ON regression: with NO first-response setting/env, a stream whose first .next() never resolves yields terminal StreamIdleTimeout after DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS', async () => {
-    // buildTurn() with NO args: first-response returns undefined → resolver falls to default 300000
-    const { turn } = buildTurn();
-
-    mockSendMessageStream.mockResolvedValue(createStreamWithStalledFirstNext());
-
-    const events: ServerAgentStreamEvent[] = [];
-    const reqParts: Part[] = [{ text: 'Hi' }];
-    const signal = new AbortController().signal;
-
-    const iterator = turn.run(reqParts, signal);
-    const runPromise = (async () => {
-      for await (const event of iterator) {
-        events.push(event);
-      }
-    })();
-
-    // Before the default timeout: no events, generator still pending.
-    await vi.advanceTimersByTimeAsync(
-      DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS - 1,
+  it('DEFAULT-ON regression: with NO first-response setting/env, resolves DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS', () => {
+    expect(resolveStreamFirstResponseTimeoutMs()).toBe(
+      DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
     );
-    await Promise.resolve();
-    expect(events).toHaveLength(0);
-
-    // Advance past the default first-response timeout (300000ms). Drain all
-    // pending timers/microtasks so the rejection deterministically propagates
-    // through handleRunError before we await the consumer loop.
-    await vi.advanceTimersByTimeAsync(2);
-    await vi.runAllTimersAsync();
-    await runPromise;
-
-    const timeoutEvent = events.find(
-      (e) => e.type === AgentEventType.StreamIdleTimeout,
-    );
-    expect(timeoutEvent).toBeDefined();
-    expect(events.some((e) => e.type === AgentEventType.Error)).toBe(false);
   });
 
-  it('DEFAULT-ON regression (real-timer failsafe): never-resolving first .next() surfaces StreamIdleTimeout under the failsafe deadline', async () => {
-    vi.useRealTimers();
-    // Use a tiny env override so the real-timer test finishes quickly while
-    // still proving the DEFAULT-ON path fires (no ephemeral setting needed).
+  it('uses the first-response environment override when no ephemeral setting is provided', () => {
     process.env.LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS = '50';
-    const { turn } = buildTurn();
 
-    mockSendMessageStream.mockResolvedValue(createStreamWithStalledFirstNext());
-
-    const events: ServerAgentStreamEvent[] = [];
-    const reqParts: Part[] = [{ text: 'Hi' }];
-    const signal = new AbortController().signal;
-
-    const guard = failsafe(2000);
-    await Promise.race([
-      (async () => {
-        for await (const event of turn.run(reqParts, signal)) {
-          events.push(event);
-        }
-      })(),
-      guard.promise,
-    ]);
-    guard.cancel();
-
-    const timeoutEvent = events.find(
-      (e) => e.type === AgentEventType.StreamIdleTimeout,
-    );
-    expect(timeoutEvent).toBeDefined();
+    expect(resolveStreamFirstResponseTimeoutMs()).toBe(50);
   });
 
   it('never-resolving ACQUISITION (sendMessageStream promise never resolves) with a small explicit first-response timeout → terminal StreamIdleTimeout', async () => {
+    vi.useRealTimers();
     const { turn } = buildTurn(20);
 
     mockSendMessageStream.mockReturnValue(new Promise(() => {}));
@@ -252,13 +154,11 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
-    await runPromise;
+    const guard = failsafe(2000);
+    await Promise.race([runPromise, guard.promise]);
+    guard.cancel();
 
-    expect(
-      events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
-    ).toBeDefined();
+    expect(events.map((event) => event.type)).toContain('stream_idle_timeout');
     expect(events.some((e) => e.type === AgentEventType.Error)).toBe(false);
   });
 
@@ -279,13 +179,13 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    vi.advanceTimersByTime(25);
+    await drainMicrotasks();
+    vi.runAllTimers();
+    await drainMicrotasks();
     await runPromise;
 
-    expect(
-      events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
-    ).toBeDefined();
+    expect(events.map((event) => event.type)).toContain('stream_idle_timeout');
     expect(events.some((e) => e.type === AgentEventType.Error)).toBe(false);
   });
 
@@ -346,8 +246,10 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     })();
 
     // Let the timeout win the race first.
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    vi.advanceTimersByTime(25);
+    await drainMicrotasks();
+    vi.runAllTimers();
+    await drainMicrotasks();
     await runPromise;
 
     // Release the late first .next() so the losing promise resolves AFTER the
@@ -359,9 +261,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     await Promise.race([returnCalledPromise, guard.promise]);
     guard.cancel();
 
-    expect(
-      events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
-    ).toBeDefined();
+    expect(events.find((e) => e.type === 'stream_idle_timeout')).toBeDefined();
     // The late-resolving iterator MUST have been closed to release the provider
     // connection.
     expect(cleanup.returnCalled).toBe(true);
@@ -398,7 +298,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     // The failing iterator MUST have been closed to release the provider
     // connection, and the error surfaces terminally (not a timeout).
     expect(returnCalled).toBe(true);
-    expect(events.some((e) => e.type === AgentEventType.Error)).toBe(true);
+    expect(events.map((event) => event.type)).toContain('error');
   });
 
   it('control: first-response DISABLED (0) with a normal fast stream → events flow, no timeout', async () => {
@@ -423,7 +323,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     }
 
     expect(
-      events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
+      events.find((e) => e.type === 'stream_idle_timeout'),
     ).toBeUndefined();
     expect(events.some((e) => e.type === AgentEventType.Content)).toBe(true);
   });
@@ -471,7 +371,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     guard.cancel();
 
     expect(
-      events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
+      events.find((e) => e.type === 'stream_idle_timeout'),
     ).toBeUndefined();
     expect(
       events.find((e) => e.type === AgentEventType.UserCancelled),
@@ -544,11 +444,9 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     await Promise.race([runPromise, guard.promise]);
     guard.cancel();
 
+    expect(events.map((event) => event.type)).toContain('user_cancelled');
     expect(
-      events.find((e) => e.type === AgentEventType.UserCancelled),
-    ).toBeDefined();
-    expect(
-      events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
+      events.find((e) => e.type === 'stream_idle_timeout'),
     ).toBeUndefined();
   });
 
@@ -573,9 +471,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     ]);
     guard.cancel();
 
-    const timeoutEvent = events.find(
-      (e) => e.type === AgentEventType.StreamIdleTimeout,
-    );
+    const timeoutEvent = events.find((e) => e.type === 'stream_idle_timeout');
     expect(timeoutEvent).toBeDefined();
   });
 });

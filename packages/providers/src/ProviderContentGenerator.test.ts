@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { ProviderContentGenerator } from './ProviderContentGenerator.js';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 
@@ -78,21 +78,21 @@ describe('ProviderContentGenerator', () => {
 
   it('generateContent throws unsupported error', async () => {
     const gen = new ProviderContentGenerator(providerManager, dummyConfig);
-    await expect(gen.generateContent({ contents: [] }, 'id')).rejects.toThrow(
+    expect(gen.generateContent({ contents: [] }, 'id')).rejects.toThrow(
       'IContent pipeline',
     );
   });
 
   it('generateContentStream throws unsupported error', async () => {
     const gen = new ProviderContentGenerator(providerManager, dummyConfig);
-    await expect(
-      gen.generateContentStream({ contents: [] }, 'id'),
-    ).rejects.toThrow('IContent pipeline');
+    expect(gen.generateContentStream({ contents: [] }, 'id')).rejects.toThrow(
+      'IContent pipeline',
+    );
   });
 
   it('embedContent throws unsupported error', async () => {
     const gen = new ProviderContentGenerator(providerManager, dummyConfig);
-    await expect(gen.embedContent({ texts: ['hi'] })).rejects.toThrow(
+    expect(gen.embedContent({ texts: ['hi'] })).rejects.toThrow(
       'Embeddings not supported',
     );
   });

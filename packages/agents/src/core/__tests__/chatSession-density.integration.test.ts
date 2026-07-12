@@ -13,8 +13,8 @@
  * safety). Sibling to chatSession-density.test.ts.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ChatSession } from '../chatSession.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { ChatSession } from '../chatSession.ts?density-integration-suite-v2';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   resetCallIds,
@@ -24,7 +24,7 @@ import {
   buildRuntimeContext,
   buildMockContentGenerator,
   getInternals,
-} from './chatSession-density-helpers.js';
+} from './chatSession-density-helpers.ts?density-integration-suite-v2';
 
 describe('Density Optimization Integration (P19)', () => {
   let historyService: HistoryService;
@@ -244,6 +244,14 @@ describe('Density Optimization Integration (P19)', () => {
         internals.compressionHandler,
         'performCompression',
       );
+      vi.spyOn(
+        internals.compressionHandler,
+        'computeContextLimits',
+      ).mockReturnValue({
+        completionBudget: 65_536,
+        limit: 200_000,
+        marginAdjustedLimit: 199_000,
+      });
 
       // Mock getTotalTokens:
       // - First call (initial projected check): over the margin-adjusted limit

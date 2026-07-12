@@ -29,11 +29,24 @@ export interface HookState {
  * Tracks per-prompt hook state to prevent duplicate firings during
  * recursive sendMessageStream calls.
  */
+export interface AgentHookManagerDependencies {
+  triggerBeforeAgentHook: typeof triggerBeforeAgentHook;
+  triggerAfterAgentHook: typeof triggerAfterAgentHook;
+}
+
+const defaultDependencies: AgentHookManagerDependencies = {
+  triggerBeforeAgentHook,
+  triggerAfterAgentHook,
+};
+
 export class AgentHookManager {
   private readonly hookStateMap: Map<string, HookState> = new Map();
   private readonly config: Config;
 
-  constructor(config: Config) {
+  constructor(
+    config: Config,
+    private readonly dependencies: AgentHookManagerDependencies = defaultDependencies,
+  ) {
     this.config = config;
   }
 
@@ -57,7 +70,10 @@ export class AgentHookManager {
     hookState.activeCalls++;
 
     if (!hookState.hasFiredBeforeAgent) {
-      const result = await triggerBeforeAgentHook(this.config, prompt);
+      const result = await this.dependencies.triggerBeforeAgentHook(
+        this.config,
+        prompt,
+      );
       hookState.hasFiredBeforeAgent = true;
       return result;
     }
@@ -84,7 +100,7 @@ export class AgentHookManager {
     hookState.activeCalls--;
 
     if (hookState.activeCalls === 0 && !hasPendingToolCalls) {
-      return triggerAfterAgentHook(
+      return this.dependencies.triggerAfterAgentHook(
         this.config,
         prompt,
         hookState.cumulativeResponse,

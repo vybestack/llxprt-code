@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 
 import { FileSearchFactory, AbortError } from './fileSearch.js';
 import {
@@ -166,7 +166,7 @@ describe('FileSearch Directories', () => {
       const controller = new AbortController();
       controller.abort();
 
-      await expect(
+      expect(
         fileSearch.search('src/', { signal: controller.signal }),
       ).rejects.toThrow(AbortError);
       expect(crawlSpy).not.toHaveBeenCalled();

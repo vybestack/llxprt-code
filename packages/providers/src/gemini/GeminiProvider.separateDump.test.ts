@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as dumpSDKContextModule from '../utils/dumpSDKContext.js';
 
 describe('Gemini non-OAuth non-streaming generate separate dump', () => {
@@ -111,17 +111,17 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
     const { GeminiProvider } = await import('./GeminiProvider.js');
     const provider = new GeminiProvider('test-api-key');
 
-    await expect(
-      provider['nonOAuthNonStreamingGenerate'](
-        mockContentGenerator,
-        apiRequest,
-        false,
-        true,
-        undefined,
-        mapResponseToChunks,
-        true,
-      ),
-    ).rejects.toThrow('API Error');
+    const operationPromise = provider['nonOAuthNonStreamingGenerate'](
+      mockContentGenerator,
+      apiRequest,
+      false,
+      true,
+      undefined,
+      mapResponseToChunks,
+      true,
+    );
+    expect(operationPromise).rejects.toThrow('API Error');
+    await operationPromise.catch(() => undefined);
 
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
@@ -184,17 +184,17 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
     const { GeminiProvider } = await import('./GeminiProvider.js');
     const provider = new GeminiProvider('test-api-key');
 
-    await expect(
-      provider['nonOAuthNonStreamingGenerate'](
-        mockContentGenerator,
-        { model: 'gemini-2.5-pro', contents: [], config: {} },
-        true,
-        true,
-        undefined,
-        mapResponseToChunks,
-        true,
-      ),
-    ).rejects.toThrow('API Error');
+    const operationPromise = provider['nonOAuthNonStreamingGenerate'](
+      mockContentGenerator,
+      { model: 'gemini-2.5-pro', contents: [], config: {} },
+      true,
+      true,
+      undefined,
+      mapResponseToChunks,
+      true,
+    );
+    expect(operationPromise).rejects.toThrow('API Error');
+    await operationPromise.catch(() => undefined);
 
     expect(callOrder).toStrictEqual(['requestDump', 'apiCall']);
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
@@ -289,7 +289,9 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
     // All chunks should pass through unchanged
     expect(received).toStrictEqual(chunks);
 
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-gemini-test12',
       'gemini',
       { streaming: true, chunks, completed: true },
@@ -332,15 +334,18 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
     );
 
     const received: unknown[] = [];
-    await expect(async () => {
+    const consumptionPromise = (async (): Promise<void> => {
       for await (const chunk of result.stream as AsyncIterable<unknown>) {
         received.push(chunk);
       }
-    }).rejects.toThrow('Stream interrupted');
+    })();
+    expect(consumptionPromise).rejects.toThrow('Stream interrupted');
+    await consumptionPromise.catch(() => undefined);
 
     // All chunks yielded before the error should pass through
     expect(received).toStrictEqual(chunks);
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-gemini-test12',
       'gemini',
       {
@@ -382,15 +387,18 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
     );
 
     const received: unknown[] = [];
-    await expect(async () => {
+    const consumptionPromise = (async (): Promise<void> => {
       for await (const chunk of result.stream as AsyncIterable<unknown>) {
         received.push(chunk);
       }
-    }).rejects.toThrow('Gemini stream failed');
+    })();
+    expect(consumptionPromise).rejects.toThrow('Gemini stream failed');
+    await consumptionPromise.catch(() => undefined);
 
     expect(received).toStrictEqual(chunks);
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-gemini-test12',
       'gemini',
       {
@@ -420,15 +428,15 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
     const { GeminiProvider } = await import('./GeminiProvider.js');
     const provider = new GeminiProvider('test-api-key');
 
-    await expect(
-      provider['nonOAuthStreamingGenerate'](
-        mockContentGenerator,
-        apiRequest,
-        false,
-        true,
-        undefined,
-      ),
-    ).rejects.toThrow('Connection error');
+    const operationPromise = provider['nonOAuthStreamingGenerate'](
+      mockContentGenerator,
+      apiRequest,
+      false,
+      true,
+      undefined,
+    );
+    expect(operationPromise).rejects.toThrow('Connection error');
+    await operationPromise.catch(() => undefined);
 
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(

@@ -5,24 +5,17 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-const { mockChatCreate, mockOpenAIConstructor } = vi.hoisted(() => {
-  const chatCreate = vi.fn();
-  const constructor = vi.fn().mockImplementation(() => ({
-    chat: {
-      completions: {
-        create: chatCreate,
-      },
+const mockChatCreate = vi.fn();
+const mockOpenAIConstructor = vi.fn().mockImplementation(() => ({
+  chat: {
+    completions: {
+      create: mockChatCreate,
     },
-  }));
-  return { mockChatCreate: chatCreate, mockOpenAIConstructor: constructor };
-});
+  },
+}));
 let settingsServiceRef: { current: SettingsService } = {
   current: new SettingsService(),
 };
-
-vi.mock('openai', () => ({
-  default: mockOpenAIConstructor,
-}));
 
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
@@ -31,14 +24,6 @@ vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 // REQ-RETRY-001: retryWithBackoff removed from providers
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   isNetworkTransientError: vi.fn(() => false),
-}));
-
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  )),
-  getSettingsService: () => settingsServiceRef.current,
-  SETTINGS_REGISTRY: [],
 }));
 
 const createBasicMessages = (): IContent[] => [
@@ -84,13 +69,18 @@ describe('OpenAIProvider model params and custom headers', () => {
     settingsService.setProviderSetting('openai', 'top_p', 0.9);
     settingsService.setProviderSetting('openai', 'streaming', 'disabled');
 
-    const provider = new OpenAIProvider('test-key', undefined, {
-      getEphemeralSettings: () => ({
-        streaming: 'disabled',
-        temperature: 0.6,
-        top_p: 0.9,
-      }),
-    });
+    const provider = new OpenAIProvider(
+      'test-key',
+      undefined,
+      {
+        getEphemeralSettings: () => ({
+          streaming: 'disabled',
+          temperature: 0.6,
+          top_p: 0.9,
+        }),
+      },
+      { constructClient: mockOpenAIConstructor },
+    );
 
     provider.setRuntimeSettingsService(settingsService);
 
@@ -162,15 +152,20 @@ describe('OpenAIProvider model params and custom headers', () => {
     );
     settingsService.setProviderSetting('openai', 'streaming', 'enabled');
 
-    const provider = new OpenAIProvider('test-key', undefined, {
-      getEphemeralSettings: () => ({
-        streaming: 'enabled',
-        'custom-headers': customHeaders,
-      }),
-      customHeaders: {
-        'X-Provider-Header': 'provider-value',
+    const provider = new OpenAIProvider(
+      'test-key',
+      undefined,
+      {
+        getEphemeralSettings: () => ({
+          streaming: 'enabled',
+          'custom-headers': customHeaders,
+        }),
+        customHeaders: {
+          'X-Provider-Header': 'provider-value',
+        },
       },
-    });
+      { constructClient: mockOpenAIConstructor },
+    );
 
     provider.setRuntimeSettingsService(settingsService);
 
@@ -262,6 +257,7 @@ describe('OpenAIProvider model params and custom headers', () => {
           'socket-nodelay': true,
         }),
       },
+      { constructClient: mockOpenAIConstructor },
     );
 
     provider.setRuntimeSettingsService(settingsService);

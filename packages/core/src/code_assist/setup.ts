@@ -33,7 +33,16 @@ export interface UserData {
  * @param projectId the user's project id, if any
  * @returns the user's actual project id
  */
-export async function setupUser(client: OAuth2Client): Promise<UserData> {
+export async function setupUser(
+  client: OAuth2Client,
+  createServer: (
+    client: OAuth2Client,
+    projectId: string | undefined,
+  ) => Pick<CodeAssistServer, 'loadCodeAssist' | 'onboardUser'> = (
+    serverClient,
+    projectId,
+  ) => new CodeAssistServer(serverClient, projectId, {}, undefined),
+): Promise<UserData> {
   const logger = new DebugLogger('llxprt:code:setup');
 
   logger.debug(
@@ -45,7 +54,7 @@ export async function setupUser(client: OAuth2Client): Promise<UserData> {
     process.env['GOOGLE_CLOUD_PROJECT_ID'];
   const projectId = rawProjectId === '' ? undefined : rawProjectId;
   // PRIVACY FIX: sessionId parameter removed from CodeAssistServer constructor
-  const caServer = new CodeAssistServer(client, projectId, {}, undefined);
+  const caServer = createServer(client, projectId);
   const coreClientMetadata: ClientMetadata = {
     ideType: 'IDE_UNSPECIFIED',
     platform: 'PLATFORM_UNSPECIFIED',
@@ -146,7 +155,7 @@ function buildOnboardUserRequest(
 }
 
 async function finishOnboarding(
-  caServer: CodeAssistServer,
+  caServer: Pick<CodeAssistServer, 'onboardUser'>,
   onboardReq: OnboardUserRequest,
   tier: GeminiUserTier,
   projectId: string | undefined,

@@ -9,35 +9,29 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { InstallationManager } from './installationManager.js';
 import * as debugLoggerModule from './debugLogger.js';
 import * as fs from 'node:fs';
+import * as actualFs from 'node:fs';
 import * as os from 'node:os';
+import * as actualOs from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'crypto';
+import * as actualCrypto from 'node:crypto';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
-  return {
-    ...actual,
-    readFileSync: vi.fn(actual.readFileSync),
-    existsSync: vi.fn(actual.existsSync),
-  } as typeof actual;
-});
+vi.mock('node:fs', () => ({
+  ...actualFs,
+  readFileSync: vi.fn(actualFs.readFileSync),
+  existsSync: vi.fn(actualFs.existsSync),
+}));
 
-vi.mock('os', async (importOriginal) => {
-  const os = await importOriginal<typeof import('os')>();
-  return {
-    ...os,
-    homedir: vi.fn(),
-  };
-});
+vi.mock('os', () => ({
+  ...actualOs,
+  homedir: vi.fn(),
+}));
 
-vi.mock('crypto', async (importOriginal) => {
-  const crypto = await importOriginal<typeof import('crypto')>();
-  return {
-    ...crypto,
-    randomUUID: vi.fn(),
-  };
-});
+vi.mock('crypto', () => ({
+  ...actualCrypto,
+  randomUUID: vi.fn(),
+}));
 
 describe('InstallationManager', () => {
   let tempHomeDir: string;

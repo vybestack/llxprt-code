@@ -129,7 +129,10 @@ export interface ExcludeOptions {
  * file exclusion patterns for different tools and use cases.
  */
 export class FileExclusions {
-  constructor(private config?: Config) {}
+  constructor(
+    private config?: Config,
+    private readonly getMemoryFilename: () => string = getCurrentLlxprtMdFilename,
+  ) {}
 
   /**
    * Gets core ignore patterns for basic file operations like glob.
@@ -160,7 +163,7 @@ export class FileExclusions {
 
     // Add dynamic patterns (like current LLxprt MD filename)
     if (includeDynamicPatterns) {
-      patterns.push(`**/${getCurrentLlxprtMdFilename()}`);
+      patterns.push(`**/${this.getMemoryFilename()}`);
     }
 
     // Add custom patterns from configuration

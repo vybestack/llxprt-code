@@ -157,6 +157,7 @@ export class DirectMessageProcessor {
     private readonly makePositionMatcher: () =>
       | (() => { historyId: string; toolName?: string })
       | undefined,
+    private readonly retry: typeof retryWithBackoff = retryWithBackoff,
   ) {}
 
   /**
@@ -257,7 +258,7 @@ export class DirectMessageProcessor {
     params: SendMessageParameters,
     userIContents: IContent[],
   ): Promise<GenerateContentResponse> {
-    return retryWithBackoff(
+    return this.retry(
       async () =>
         this._executeDirectProviderCall(provider, params, userIContents),
       {

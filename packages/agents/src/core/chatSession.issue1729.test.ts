@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core/services/history/blocks/ThinkingBlock.js';
-import { ChatSession } from './chatSession.js';
+import { ChatSession } from './chatSession.js?chat-session-issue-1729';
 import { getProviderStopReason } from './providerStopReason.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js?chat-session-issue-1729';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';

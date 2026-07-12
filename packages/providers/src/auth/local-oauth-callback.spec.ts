@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import http from 'node:http';
 import net from 'node:net';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
@@ -29,10 +29,6 @@ const findAvailablePort = async (): Promise<number> =>
   });
 
 describe('startLocalOAuthCallback', () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it('captures authorization code from localhost redirect', async () => {
     const port = await findAvailablePort();
     const server = await startLocalOAuthCallback({
@@ -115,23 +111,16 @@ describe('startLocalOAuthCallback', () => {
   });
 
   it('rejects when callback does not arrive within timeout', async () => {
-    vi.useFakeTimers();
-
     const port = await findAvailablePort();
     const server = await startLocalOAuthCallback({
       state: 'timeout-state',
       portRange: [port, port],
-      timeoutMs: 100,
+      timeoutMs: 20,
     });
 
     const callbackPromise = server.waitForCallback();
-    const rejectionObserver = callbackPromise.catch(() => undefined);
-
-    await vi.advanceTimersByTimeAsync(150);
-    await rejectionObserver;
-    await expect(callbackPromise).rejects.toThrowError(
-      'OAuth callback timed out',
-    );
+    expect(callbackPromise).rejects.toThrowError('OAuth callback timed out');
+    await callbackPromise.catch(() => undefined);
 
     await server.shutdown();
   });

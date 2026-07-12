@@ -21,7 +21,6 @@ import { createIsolatedRuntimeContext } from '@vybestack/llxprt-code-providers/r
 import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime.js';
 import {
   switchActiveProvider,
-  setActiveModel,
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
   getActiveProviderName,
@@ -132,7 +131,15 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
     model: parsed.model,
     messageBus,
     prepare: (ctx) => {
-      registerProvidersOntoManager(ctx.providerManager, ctx, ctx.config);
+      registerProvidersOntoManager(
+        ctx.providerManager,
+        {
+          settingsService,
+          runtimeId: ctx.runtimeId,
+          metadata: ctx.metadata,
+        },
+        ctx.config,
+      );
     },
   });
   const manager = handle.providerManager;
@@ -594,8 +601,10 @@ async function applyInitialProviderModelAuth(
   }
   const activeModel = safeActiveModelName();
   if (parsed.model !== activeModel) {
-    // setActiveModel does NOT rebuild — explicit initializeContentGeneratorConfig required.
-    await setActiveModel(parsed.model);
+    // Keep the adopted Config authoritative. The ambient CLI mutation helpers
+    // may point at another runtime in an aggregate process, so model bootstrap
+    // must not depend on that mutable default pointer.
+    config.setModel(parsed.model);
     await config.initializeContentGeneratorConfig();
   }
   if (resolvedAuth.apiKey !== undefined) {
@@ -657,6 +666,9 @@ export function registerProvidersOntoManager(
   const { manager: registered } = createProviderManager(
     context as Parameters<typeof createProviderManager>[0],
     { config, oauthSettings: createFileOAuthSettingsProvider() },
+  );
+  isolatedManager.setRuntimeContext(
+    context as Parameters<typeof isolatedManager.setRuntimeContext>[0],
   );
   for (const name of registered.listProviders()) {
     const provider = registered.getProviderByName(name);

@@ -7,7 +7,7 @@
  * Split from AnthropicProvider.test.ts for max-lines compliance.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -20,113 +20,10 @@ import {
   type AnthropicTestSetup,
 } from './test-utils/anthropicProviderTestSetup.js';
 
-// Shared mock instance for messages.create - using vi.hoisted so it's
-// available when vi.mock factories run.
-const mockMessagesCreate = vi.hoisted(() => vi.fn());
-
-// Mock the ToolFormatter
-vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
-  ToolFormatter: vi.fn().mockImplementation(() => ({
-    toProviderFormat: vi.fn((tools: unknown[], format: string) => {
-      if (format === 'anthropic') {
-        return tools.map((tool) => {
-          const t = tool as {
-            function: {
-              name: string;
-              description?: string;
-              parameters: unknown;
-            };
-          };
-          return {
-            name: t.function.name,
-            description: t.function.description ?? '',
-            input_schema: { type: 'object', ...t.function.parameters },
-          };
-        });
-      }
-      return tools;
-    }),
-    fromProviderFormat: vi.fn((rawToolCall: unknown, format: string) => {
-      if (format === 'anthropic') {
-        const tc = rawToolCall as {
-          id: string;
-          name: string;
-          input?: unknown;
-        };
-        return [
-          {
-            id: tc.id,
-            type: 'function',
-            function: {
-              name: tc.name,
-              arguments: tc.input != null ? JSON.stringify(tc.input) : '',
-            },
-          },
-        ];
-      }
-      return [rawToolCall];
-    }),
-    convertGeminiToAnthropic: vi.fn(() => []),
-    convertGeminiToFormat: vi.fn(() => undefined),
-  })),
-}));
-
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
-  getCoreSystemPromptAsync: vi.fn(
-    async () => "You are Claude Code, Anthropic's official CLI for Claude.",
-  ),
-}));
-
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
-  getErrorStatus: vi.fn(() => undefined),
-  isNetworkTransientError: vi.fn(() => false),
-}));
-
-vi.mock('@anthropic-ai/sdk', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    messages: { create: mockMessagesCreate },
-    beta: {
-      models: {
-        list: vi.fn().mockReturnValue({
-          async *[Symbol.asyncIterator]() {
-            const models = [
-              { id: 'claude-opus-4-20250514', display_name: 'Claude 4 Opus' },
-              {
-                id: 'claude-sonnet-4-20250514',
-                display_name: 'Claude 4 Sonnet',
-              },
-              {
-                id: 'claude-3-7-opus-20250115',
-                display_name: 'Claude 3.7 Opus',
-              },
-              {
-                id: 'claude-3-7-sonnet-20250115',
-                display_name: 'Claude 3.7 Sonnet',
-              },
-              {
-                id: 'claude-3-5-sonnet-20241022',
-                display_name: 'Claude 3.5 Sonnet',
-              },
-              {
-                id: 'claude-3-5-haiku-20241022',
-                display_name: 'Claude 3.5 Haiku',
-              },
-              { id: 'claude-3-opus-20240229', display_name: 'Claude 3 Opus' },
-              {
-                id: 'claude-3-sonnet-20240229',
-                display_name: 'Claude 3 Sonnet',
-              },
-              { id: 'claude-3-haiku-20240307', display_name: 'Claude 3 Haiku' },
-            ];
-            for (const model of models) {
-              yield model;
-            }
-          },
-        }),
-      },
-    },
-  })),
-}));
+const mockMessagesCreate = vi.fn();
+const constructClient = () => ({
+  messages: { create: mockMessagesCreate },
+});
 
 describe('AnthropicProvider', () => {
   let settingsService: AnthropicTestSetup['settingsService'];
@@ -134,7 +31,7 @@ describe('AnthropicProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    const setup = setupAnthropicProvider();
+    const setup = setupAnthropicProvider({ constructClient });
     settingsService = setup.settingsService;
     runtimeContext = setup.runtimeContext;
   });
@@ -156,6 +53,8 @@ describe('AnthropicProvider', () => {
             streaming: 'disabled',
           }),
         },
+        undefined,
+        { constructClient },
       );
 
       // Mock getAuthToken to return the OAuth token
@@ -250,6 +149,8 @@ describe('AnthropicProvider', () => {
             streaming: 'disabled',
           }),
         },
+        undefined,
+        { constructClient },
       );
 
       const callOptions = createProviderCallOptions({
@@ -288,6 +189,8 @@ describe('AnthropicProvider', () => {
             streaming: 'enabled',
           }),
         },
+        undefined,
+        { constructClient },
       );
 
       // Mock getAuthToken to return the OAuth token
@@ -367,6 +270,8 @@ describe('AnthropicProvider', () => {
             streaming: 'disabled',
           }),
         },
+        undefined,
+        { constructClient },
       );
 
       // Mock getAuthToken to return the OAuth token
@@ -434,6 +339,8 @@ describe('AnthropicProvider', () => {
             streaming: 'disabled',
           }),
         },
+        undefined,
+        { constructClient },
       );
 
       // Mock getAuthToken to return the OAuth token
@@ -491,6 +398,8 @@ describe('AnthropicProvider', () => {
             streaming: 'disabled',
           }),
         },
+        undefined,
+        { constructClient },
       );
 
       // Mock getAuthToken to return the OAuth token
@@ -562,6 +471,8 @@ describe('AnthropicProvider', () => {
             streaming: 'disabled',
           }),
         },
+        undefined,
+        { constructClient },
       );
 
       const callOptions = createProviderCallOptions({

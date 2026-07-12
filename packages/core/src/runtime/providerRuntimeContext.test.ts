@@ -9,7 +9,7 @@
  * @requirement:REQ-SP-002.1
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { resetSettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '../config/config.js';

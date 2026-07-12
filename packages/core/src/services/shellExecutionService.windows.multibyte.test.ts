@@ -12,8 +12,14 @@ import type { Readable } from 'stream';
 import { ShellExecutionService } from './shellExecutionService.js';
 import type { ChildProcess } from 'child_process';
 
-vi.mock('os');
-vi.mock('child_process');
+const mockPlatform = vi.hoisted(() => vi.fn());
+const mockSpawn = vi.hoisted(() => vi.fn());
+
+vi.mock('os', () => ({
+  platform: mockPlatform,
+  default: { platform: mockPlatform },
+}));
+vi.mock('child_process', () => ({ spawn: mockSpawn }));
 vi.mock('../utils/textUtils.js', () => ({ isBinary: () => false }));
 vi.mock('strip-ansi', () => ({ default: (s: string) => s }));
 vi.mock('../utils/systemEncoding.js', () => ({

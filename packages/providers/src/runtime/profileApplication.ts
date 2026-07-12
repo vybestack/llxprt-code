@@ -52,6 +52,7 @@ export interface ProviderSelectionResult {
 export interface ProfileApplicationOptions {
   profileName?: string;
   profileManager?: ProfileManager;
+  getRuntimeServices?: typeof getCliRuntimeServices;
 }
 
 export interface ProfileApplicationResult {
@@ -804,7 +805,9 @@ export async function applyProfileWithGuards(
   profileInput: Profile,
   options: ProfileApplicationOptions = {},
 ): Promise<ProfileApplicationResult> {
-  const runtimeServices = getCliRuntimeServices();
+  const runtimeServices = (
+    options.getRuntimeServices ?? getCliRuntimeServices
+  )();
   const servicesForProfileApplication = {
     ...runtimeServices,
     profileManager: options.profileManager ?? runtimeServices.profileManager,

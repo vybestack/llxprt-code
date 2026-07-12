@@ -24,11 +24,12 @@ import process from 'node:process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import * as actualFsPromises from 'node:fs/promises';
+import * as actualSettings from '../../../settings/index.ts';
 
-vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>();
+vi.mock('node:fs/promises', () => {
   return {
-    ...actual,
+    ...actualFsPromises,
     readFile: vi
       .fn()
       .mockRejectedValue(
@@ -41,10 +42,8 @@ const mockSettingsService = {
   get: vi.fn().mockReturnValue(undefined),
   set: vi.fn(),
 };
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  )),
+vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...actualSettings,
   getSettingsService: () => mockSettingsService,
 }));
 

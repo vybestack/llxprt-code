@@ -41,6 +41,7 @@ import {
 import {
   resolveProfileBuckets,
   resolveCurrentProfileSessionMetadata,
+  type ProfileBucketResolverDependencies,
 } from './token-profile-resolver.js';
 import type { ProviderRegistry } from './provider-registry.js';
 import type { ProactiveRenewalManager } from './proactive-renewal-manager.js';
@@ -116,6 +117,7 @@ export class TokenAccessCoordinator {
      * see the current Config instance.
      */
     private readonly getConfigFn: () => Config | undefined = () => undefined,
+    private readonly profileBucketDependencies?: ProfileBucketResolverDependencies,
   ) {}
 
   // --------------------------------------------------------------------------
@@ -847,7 +849,11 @@ export class TokenAccessCoordinator {
     providerName: string,
     metadata?: OAuthTokenRequestMetadata,
   ): Promise<string[]> {
-    return resolveProfileBuckets(providerName, metadata);
+    return resolveProfileBuckets(
+      providerName,
+      metadata,
+      this.profileBucketDependencies,
+    );
   }
 
   // --------------------------------------------------------------------------

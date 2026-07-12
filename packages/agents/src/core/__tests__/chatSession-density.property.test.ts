@@ -15,7 +15,7 @@
  * Sibling to chatSession-density.test.ts.
  */
 
-import { describe, it } from 'vitest';
+import { describe, it } from 'bun:test';
 import * as fc from 'fast-check';
 import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';

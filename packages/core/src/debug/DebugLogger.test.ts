@@ -2,7 +2,7 @@
  * @plan PLAN-20250120-DEBUGLOGGING.P04
  * @requirement REQ-001,REQ-002,REQ-006
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { DebugLogger } from './DebugLogger.js';
 import { ConfigurationManager } from './ConfigurationManager.js';
@@ -516,6 +516,7 @@ describe('DebugLogger', () => {
   it('should handle any string message when enabled @plan:PLAN-20250120-DEBUGLOGGING.P04', () => {
     fc.assert(
       fc.property(fc.string(), (message) => {
+        vi.restoreAllMocks();
         const logger = new DebugLogger('test');
         logger.enabled = true;
 
@@ -574,6 +575,7 @@ describe('DebugLogger', () => {
         fc.string(),
         fc.array(fc.anything(), { minLength: 1, maxLength: 5 }),
         (message, args) => {
+          vi.restoreAllMocks();
           const logger = new DebugLogger('test');
           logger.enabled = true;
 
@@ -627,6 +629,7 @@ describe('DebugLogger', () => {
         fc.constantFrom('debug', 'log', 'error'),
         fc.string(),
         (level, message) => {
+          vi.restoreAllMocks();
           const logger = new DebugLogger('test');
           logger.enabled = true;
 
@@ -691,6 +694,7 @@ describe('DebugLogger', () => {
   it('should handle function evaluation consistently @plan:PLAN-20250120-DEBUGLOGGING.P04', () => {
     fc.assert(
       fc.property(fc.boolean(), fc.string(), (enabled, returnValue) => {
+        vi.restoreAllMocks();
         const logger = new DebugLogger('test');
         logger.enabled = enabled;
 

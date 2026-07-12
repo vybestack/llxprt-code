@@ -9,18 +9,31 @@
  * @plan:PLAN-20250214-CREDPROXY.P25
  */
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 
 import { PKCESessionStore } from '../oauth-session-manager.js';
 
 describe('PKCESessionStore', () => {
   const baseNow = new Date('2025-02-14T00:00:00.000Z').getTime();
   const peerA = { type: 'uid', uid: 1000 };
+  let now = baseNow;
+  const dependencies = {
+    now: () => now,
+    setInterval: (callback: () => void, delay: number): NodeJS.Timeout =>
+      setInterval(() => {
+        now += delay;
+        callback();
+      }, delay),
+    clearInterval,
+  };
+  const createStore = (timeout?: number): PKCESessionStore =>
+    new PKCESessionStore(timeout, dependencies);
+
   const peerB = { type: 'uid', uid: 2000 };
 
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.setSystemTime(baseNow);
+    now = baseNow;
     delete process.env.LLXPRT_OAUTH_SESSION_TIMEOUT_SECONDS;
   });
 
@@ -34,7 +47,7 @@ describe('PKCESessionStore', () => {
    * @scenario createSession returns a 32-character hex session ID
    */
   it('creates cryptographic-looking session IDs', () => {
-    const store = new PKCESessionStore();
+    const store = createStore();
     const sessionId = store.createSession(
       'anthropic',
       'default',
@@ -51,7 +64,7 @@ describe('PKCESessionStore', () => {
    * @scenario concurrent createSession calls produce independent unique IDs
    */
   it('creates unique IDs for independent concurrent sessions', () => {
-    const store = new PKCESessionStore();
+    const store = createStore();
     const id1 = store.createSession(
       'anthropic',
       'default',
@@ -75,7 +88,7 @@ describe('PKCESessionStore', () => {
    * @scenario createSession stores all required session fields
    */
   it('stores expected fields on createSession', () => {
-    const store = new PKCESessionStore();
+    const store = createStore();
     const flowInstance = { providerFlow: true };
     const sessionId = store.createSession(
       'anthropic',
@@ -101,7 +114,7 @@ describe('PKCESessionStore', () => {
    * @scenario getSession returns session data when valid and unused
    */
   it('returns session for valid getSession requests', () => {
-    const store = new PKCESessionStore();
+    const store = createStore();
     const sessionId = store.createSession(
       'anthropic',
       'default',
@@ -119,7 +132,7 @@ describe('PKCESessionStore', () => {
    * @scenario getSession throws SESSION_NOT_FOUND for unknown IDs
    */
   it('throws SESSION_NOT_FOUND for missing session IDs', () => {
-    const store = new PKCESessionStore();
+    const store = createStore();
 
     expect(() =>
       store.getSession('deadbeefdeadbeefdeadbeefdeadbeef', peerA),
@@ -131,7 +144,7 @@ describe('PKCESessionStore', () => {
    * @scenario markUsed makes getSession throw SESSION_ALREADY_USED
    */
   it('throws SESSION_ALREADY_USED when session has been marked used', () => {
-    const store = new PKCESessionStore();
+    const store = createStore();
     const id = store.createSession(
       'anthropic',
       'default',
@@ -150,7 +163,7 @@ describe('PKCESessionStore', () => {
    * @scenario getSession rejects mismatched peer identity uid
    */
   it('throws UNAUTHORIZED on peer identity mismatch', () => {
-    const store = new PKCESessionStore();
+    const store = createStore();
     const id = store.createSession(
       'anthropic',
       'default',
@@ -170,7 +183,7 @@ describe('PKCESessionStore', () => {
    * @scenario getSession succeeds when peer identity matches creator
    */
   it('allows getSession when peer identity uid matches', () => {
-    const store = new PKCESessionStore();
+    const store = createStore();
     const id = store.createSession(
       'anthropic',
       'default',
@@ -188,7 +201,7 @@ describe('PKCESessionStore', () => {
    * @scenario expired sessions are deleted and throw SESSION_EXPIRED
    */
   it('expires sessions based on timeout and removes them', () => {
-    const store = new PKCESessionStore();
+    const store = createStore();
     const id = store.createSession(
       'anthropic',
       'default',
@@ -197,6 +210,7 @@ describe('PKCESessionStore', () => {
       peerA,
     );
 
+    now += 600_001;
     vi.advanceTimersByTime(600_001);
 
     expect(() => store.getSession(id, peerA)).toThrow('SESSION_EXPIRED');
@@ -208,7 +222,7 @@ describe('PKCESessionStore', () => {
    * @scenario removeSession aborts abortController then removes session
    */
   it('removeSession aborts controller and deletes the session', () => {
-    const store = new PKCESessionStore();
+    const store = createStore();
     const id = store.createSession(
       'anthropic',
       'default',
@@ -230,7 +244,7 @@ describe('PKCESessionStore', () => {
    * @scenario removeSession is a no-op for unknown session IDs
    */
   it('removeSession no-ops for unknown IDs', () => {
-    const store = new PKCESessionStore();
+    const store = createStore();
 
     store.removeSession('ffffffffffffffffffffffffffffffff');
 
@@ -250,7 +264,7 @@ describe('PKCESessionStore', () => {
    * @scenario sweepExpired removes used and expired sessions while keeping active sessions
    */
   it('sweepExpired removes only used/expired sessions', () => {
-    const store = new PKCESessionStore();
+    const store = createStore();
     const activeId = store.createSession(
       'anthropic',
       'default',
@@ -274,6 +288,7 @@ describe('PKCESessionStore', () => {
     );
 
     store.markUsed(usedId);
+    now += 600_001;
     vi.advanceTimersByTime(600_001);
     store.sweepExpired();
 
@@ -291,7 +306,7 @@ describe('PKCESessionStore', () => {
    * @scenario sweepExpired aborts controllers for swept sessions
    */
   it('sweepExpired aborts controllers for removed sessions', () => {
-    const store = new PKCESessionStore();
+    const store = createStore();
     const id = store.createSession(
       'anthropic',
       'default',
@@ -315,7 +330,7 @@ describe('PKCESessionStore', () => {
    */
   it('uses LLXPRT_OAUTH_SESSION_TIMEOUT_SECONDS when provided', () => {
     process.env.LLXPRT_OAUTH_SESSION_TIMEOUT_SECONDS = '300';
-    const store = new PKCESessionStore();
+    const store = createStore();
     const id = store.createSession(
       'anthropic',
       'default',
@@ -324,6 +339,7 @@ describe('PKCESessionStore', () => {
       peerA,
     );
 
+    now += 300_001;
     vi.advanceTimersByTime(300_001);
 
     expect(() => store.getSession(id, peerA)).toThrow('SESSION_EXPIRED');
@@ -334,7 +350,7 @@ describe('PKCESessionStore', () => {
    * @scenario startGC triggers periodic sweep on 60s interval
    */
   it('startGC uses a 60-second interval to trigger cleanup', () => {
-    const store = new PKCESessionStore(1);
+    const store = createStore(1);
     const id = store.createSession(
       'anthropic',
       'default',
@@ -354,7 +370,7 @@ describe('PKCESessionStore', () => {
    * @scenario clearAll aborts all controllers and removes all sessions
    */
   it('clearAll aborts all controllers and clears sessions', () => {
-    const store = new PKCESessionStore();
+    const store = createStore();
     const id1 = store.createSession(
       'anthropic',
       'default',
@@ -387,7 +403,7 @@ describe('PKCESessionStore', () => {
    * @scenario clearAll also clears active GC interval to prevent future sweeps
    */
   it('clearAll stops future GC interval sweeps', () => {
-    const store = new PKCESessionStore(1);
+    const store = createStore(1);
     const id = store.createSession(
       'anthropic',
       'default',
@@ -399,6 +415,7 @@ describe('PKCESessionStore', () => {
     store.startGC();
     store.clearAll();
 
+    now += 120_000;
     vi.advanceTimersByTime(120_000);
 
     expect(() => store.getSession(id, peerA)).toThrow('SESSION_NOT_FOUND');

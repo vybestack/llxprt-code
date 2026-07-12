@@ -6,14 +6,14 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as crypto from 'node:crypto';
+import * as actualFs from 'node:fs';
 
 // Mock fs before importing the module under test
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
+vi.mock('node:fs', () => {
   return {
-    ...actual,
+    ...actualFs,
     promises: {
-      ...actual.promises,
+      ...actualFs.promises,
       mkdir: vi.fn(),
       writeFile: vi.fn(),
       rename: vi.fn(),
@@ -490,7 +490,7 @@ describe('SessionPersistenceService', () => {
 
       await expect(
         service.save([], undefined, undefined),
-      ).resolves.not.toThrow();
+      ).resolves.toBeUndefined();
     });
 
     it('should handle large history arrays', async () => {
@@ -511,7 +511,7 @@ describe('SessionPersistenceService', () => {
           undefined,
           undefined,
         ),
-      ).resolves.not.toThrow();
+      ).resolves.toBeUndefined();
     });
 
     it('should handle special characters in project path', () => {

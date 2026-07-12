@@ -119,6 +119,7 @@ export class StreamProcessor {
     ) => ProviderRuntimeContext,
     private readonly historyService: HistoryService,
     private readonly generationConfig: GenerateContentConfig,
+    private readonly flushAuthScope: typeof flushRuntimeAuthScope = flushRuntimeAuthScope,
   ) {}
 
   markToolResponsesRecorded(callIds: readonly string[]): void {
@@ -606,7 +607,7 @@ export class StreamProcessor {
         this.runtimeContext.providerRuntime.runtimeId ??
         this.runtimeContext.state.runtimeId;
       if (typeof runtimeId === 'string' && runtimeId.trim() !== '') {
-        flushRuntimeAuthScope(runtimeId);
+        this.flushAuthScope(runtimeId);
       }
       this.logger.debug(
         () =>

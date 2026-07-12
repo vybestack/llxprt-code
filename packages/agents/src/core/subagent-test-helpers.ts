@@ -236,10 +236,14 @@ function createDefaultHistory(): HistoryService {
   return {
     clear: vi.fn(),
     add: vi.fn(),
+    getCurated: () => [],
     getCuratedForProvider: vi.fn(() => []),
+    getTotalTokens: () => 0,
     getIdGeneratorCallback: vi.fn(() => vi.fn()),
     findUnmatchedToolCalls: vi.fn(() => []),
     generateTurnKey: vi.fn(() => `turn-${Date.now()}`),
+    waitForTokenUpdates: async () => undefined,
+    estimateTokensForContents: async () => 0,
   } as unknown as HistoryService;
 }
 
@@ -271,8 +275,13 @@ function createRuntimeContext(
     },
     history,
     ephemerals: {
+      reasoning: {
+        includeInContext: () => false,
+      },
       compressionThreshold: () => 0.8,
-      contextLimit: () => 60_000,
+      compressionStrategy: () => 'middle-out',
+      compressionVerification: () => false,
+      contextLimit: () => 1_000_000,
       preserveThreshold: () => 0.2,
       toolFormatOverride: () => undefined,
     },

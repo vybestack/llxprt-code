@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { Config } from './config.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MessageBus } from '../confirmation-bus/message-bus.js';

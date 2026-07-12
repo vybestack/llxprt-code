@@ -4,16 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { vi } from 'vitest';
 import { AgentExecutor } from './executor.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
 import { LSTool } from '@vybestack/llxprt-code-tools';
 import {
-  ChatSession,
+  type ChatSession,
   StreamEventType,
   type StreamEvent,
 } from '../core/chatSession.js';
-import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import {
   setupExecutorFixture,
@@ -27,41 +27,22 @@ import {
   type MockFn,
 } from './executor-test-helpers.js';
 
-const { mockSendMessageStream, mockExecuteToolCall } = vi.hoisted(() => ({
-  mockSendMessageStream: vi.fn(),
-  mockExecuteToolCall: vi.fn(),
-}));
-
-vi.mock('../core/chatSession.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../core/chatSession.js')>();
-  return {
-    ...actual,
-    ChatSession: vi.fn().mockImplementation(() => ({
-      sendMessageStream: mockSendMessageStream,
-    })),
-  };
-});
-
-vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
-  executeToolCall: mockExecuteToolCall,
-}));
-
-vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
-
-const MockedChatSession = vi.mocked(ChatSession);
-const mockedGetDirectoryContextString = vi.mocked(getDirectoryContextString);
+const mockSendMessageStream = vi.fn();
+const mockExecuteToolCall = vi.fn();
+const dependencies = {
+  loadDirectoryContext: async () => 'Mocked Environment Context',
+  createChatSession: () =>
+    ({ sendMessageStream: mockSendMessageStream }) as unknown as ChatSession,
+  executeTool: mockExecuteToolCall,
+};
 
 describe('AgentExecutor run (Termination Conditions)', () => {
   let fixture: ExecutorTestFixture;
 
   beforeEach(() => {
     fixture = setupExecutorFixture({
-      MockedChatSession,
       mockSendMessageStream: mockSendMessageStream as MockFn,
       mockExecuteToolCall: mockExecuteToolCall as MockFn,
-      mockedGetDirectoryContextString:
-        mockedGetDirectoryContextString as MockFn,
       vi,
     });
   });
@@ -79,6 +60,8 @@ describe('AgentExecutor run (Termination Conditions)', () => {
       definition,
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
+      undefined,
+      dependencies,
     );
 
     mockWorkResponse(mockSendMessageStream, mockExecuteToolCall, 't1');
@@ -101,6 +84,8 @@ describe('AgentExecutor run (Termination Conditions)', () => {
       definition,
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
+      undefined,
+      dependencies,
     );
 
     mockModelResponse(mockSendMessageStream, [
@@ -108,7 +93,8 @@ describe('AgentExecutor run (Termination Conditions)', () => {
     ]);
 
     mockExecuteToolCall.mockImplementationOnce(async () => {
-      await vi.advanceTimersByTimeAsync(61 * 1000);
+      vi.advanceTimersByTime(61 * 1000);
+      await Promise.resolve();
       return createCompletedToolCallResponse({
         callId: 't1',
         name: LSTool.Name,
@@ -139,6 +125,8 @@ describe('AgentExecutor run (Termination Conditions)', () => {
       definition,
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
+      undefined,
+      dependencies,
     );
 
     let capturedSignal: AbortSignal | undefined;
@@ -184,7 +172,13 @@ describe('AgentExecutor run (Termination Conditions)', () => {
       },
     );
 
-    await vi.advanceTimersByTimeAsync(testTimeoutMs + 1_000);
+    for (let index = 0; index < 100; index++) {
+      await Promise.resolve();
+    }
+    vi.advanceTimersByTime(testTimeoutMs + 1_000);
+    for (let index = 0; index < 100; index++) {
+      await Promise.resolve();
+    }
 
     await runRejection;
     expect(capturedSignal?.aborted).toBe(true);
@@ -197,6 +191,8 @@ describe('AgentExecutor run (Termination Conditions)', () => {
       definition,
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
+      undefined,
+      dependencies,
     );
 
     mockSendMessageStream.mockImplementationOnce(async () =>

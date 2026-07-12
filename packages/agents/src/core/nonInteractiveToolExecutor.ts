@@ -103,6 +103,7 @@ export async function executeToolCall(
   abortSignal?: AbortSignal,
   dependencies?: {
     messageBus?: MessageBus;
+    defaultAgentId?: string;
   },
 ): Promise<CompletedToolCall> {
   const startTime = Date.now();
@@ -115,7 +116,8 @@ export async function executeToolCall(
     );
   }
 
-  const agentId = toolCallRequest.agentId ?? DEFAULT_AGENT_ID;
+  const agentId =
+    toolCallRequest.agentId ?? dependencies?.defaultAgentId ?? DEFAULT_AGENT_ID;
   toolCallRequest.agentId = agentId;
 
   const internalAbortController = new AbortController();

@@ -84,8 +84,9 @@ describe('shell-parser', () => {
     );
 
     it('should record initialization errors when tree-sitter exports are missing', async () => {
-      vi.resetModules();
-      vi.doMock('web-tree-sitter', () => ({
+      resetParser();
+
+      const result = await initializeParser(async () => ({
         Parser: class MockParser {
           static init(): Promise<void> {
             return Promise.resolve();
@@ -97,21 +98,14 @@ describe('shell-parser', () => {
         Language: undefined,
       }));
 
-      try {
-        const parserModule = await import('./shell-parser.js');
-        parserModule.resetParser();
+      expect(result).toBe(false);
+      expect(isParserAvailable()).toBe(false);
+      expect(getInitializationError()?.message).toContain(
+        'Language export not found',
+      );
 
-        const result = await parserModule.initializeParser();
-
-        expect(result).toBe(false);
-        expect(parserModule.isParserAvailable()).toBe(false);
-        expect(parserModule.getInitializationError()?.message).toContain(
-          'Language export not found',
-        );
-      } finally {
-        vi.doUnmock('web-tree-sitter');
-        vi.resetModules();
-      }
+      resetParser();
+      parserInitialized = await initializeParser();
     });
   });
 

@@ -16,7 +16,7 @@
  * through the public performCompression() / middle-out strategy interface.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -448,9 +448,7 @@ describe('Compression Boundary Logic (Issue #982)', () => {
       vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
 
       // Should not throw - small history may or may not compress
-      await expect(
-        chat.performCompression('test-prompt-id'),
-      ).resolves.not.toThrow();
+      await chat.performCompression('test-prompt-id');
     });
   });
 });

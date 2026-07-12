@@ -4,9 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { vi } from 'vitest';
 import type { ServerAgentStreamEvent } from './turn.js';
-import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
+import { AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
+import { Turn } from './turn.ts?abort-timeout-behavior';
 import type { Part } from '@google/genai';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import type { ChatSession } from './chatSession.js';
@@ -16,67 +18,18 @@ import {
   mockResponseToChunk,
 } from './turn-test-helpers.js';
 
-const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
-  mockSendMessageStream: vi.fn(),
-  mockGetHistory: vi.fn(),
-}));
-
-vi.mock('@google/genai', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@google/genai')>();
-  const MockChat = vi.fn().mockImplementation(() => ({
-    sendMessageStream: mockSendMessageStream,
-    getHistory: mockGetHistory,
-  }));
-  return {
-    ...actual,
-    Chat: MockChat,
-  };
-});
+const mockSendMessageStream = vi.fn();
+const mockGetHistory = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
 
-vi.mock(
-  '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
-  () => ({
-    getResponseText: (resp: GenerateContentResponse) =>
-      resp.candidates?.[0]?.content?.parts
-        ?.filter((part) => (part as { thought?: boolean }).thought !== true)
-        .map((part) => part.text)
-        .join('') ?? undefined,
-    getFunctionCalls: (resp: GenerateContentResponse) =>
-      resp.functionCalls ?? [],
-    getFunctionCallsFromParts: (parts: Part[]) => {
-      const functionCalls = parts
-        .filter((part) => part.functionCall !== undefined)
-        .map((part) => part.functionCall!);
-      return functionCalls.length > 0 ? functionCalls : undefined;
-    },
-    analyzeResponseOutcome: (parts: Part[]) => {
-      let hasVisibleText = false;
-      let hasThinking = false;
-      let hasToolCalls = false;
-      for (const part of parts) {
-        const isThinking = (part as { thought?: boolean }).thought === true;
-        if (isThinking) hasThinking = true;
-        if (part.functionCall !== undefined) hasToolCalls = true;
-        if (
-          !isThinking &&
-          typeof part.text === 'string' &&
-          part.text.trim() !== ''
-        )
-          hasVisibleText = true;
-      }
-      return {
-        hasVisibleText,
-        hasThinking,
-        hasToolCalls,
-        isActionable: hasVisibleText || hasToolCalls,
-      };
-    },
-  }),
-);
+const drainMicrotasks = async (): Promise<void> => {
+  for (let i = 0; i < 100; i++) {
+    await Promise.resolve();
+  }
+};
 
 describe('Turn run - abort and idle timeout', () => {
   let turn: Turn;
@@ -139,7 +92,7 @@ describe('Turn run - abort and idle timeout', () => {
         value: 'First part',
         traceId: undefined,
       },
-      { type: AgentEventType.UserCancelled },
+      { type: 'user_cancelled' },
     ]);
     expect(turn.getDebugResponses().length).toBe(1);
   });
@@ -223,11 +176,12 @@ describe('Turn run - abort and idle timeout', () => {
         }
       })();
 
-      await vi.advanceTimersByTimeAsync(100);
+      vi.advanceTimersByTime(100);
+      await drainMicrotasks();
       await runPromise;
 
       expect(returnSpy).toHaveBeenCalled();
-      expect(events).toContainEqual({ type: AgentEventType.UserCancelled });
+      expect(events).toContainEqual({ type: 'user_cancelled' });
     } finally {
       vi.useRealTimers();
     }
@@ -279,7 +233,7 @@ describe('Turn run - abort and idle timeout', () => {
       events1.push(event);
     }
 
-    expect(events1).toContainEqual({ type: AgentEventType.UserCancelled });
+    expect(events1).toContainEqual({ type: 'user_cancelled' });
     expect(callCount).toBe(1);
 
     const freshController = new AbortController();
@@ -336,7 +290,7 @@ describe('Turn run - abort and idle timeout', () => {
       events.push(event);
     }
 
-    expect(events).toStrictEqual([{ type: AgentEventType.UserCancelled }]);
+    expect(events).toStrictEqual([{ type: 'user_cancelled' }]);
 
     expect(reportError).not.toHaveBeenCalled();
   });
@@ -397,7 +351,9 @@ describe('Turn run - abort and idle timeout', () => {
         return events;
       })();
 
-      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
+      await drainMicrotasks();
+      vi.advanceTimersByTime(testTimeoutMs + 1);
+      await drainMicrotasks();
       const events = await eventsPromise;
 
       expect(events).toStrictEqual([
@@ -407,7 +363,7 @@ describe('Turn run - abort and idle timeout', () => {
           traceId: undefined,
         },
         {
-          type: AgentEventType.StreamIdleTimeout,
+          type: 'stream_idle_timeout',
           value: {
             error: {
               message:
@@ -491,11 +447,13 @@ describe('Turn run - abort and idle timeout', () => {
         return events;
       })();
 
-      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
+      await drainMicrotasks();
+      vi.advanceTimersByTime(testTimeoutMs + 1);
+      await drainMicrotasks();
       const events1 = await events1Promise;
 
       expect(events1).toContainEqual(
-        expect.objectContaining({ type: AgentEventType.StreamIdleTimeout }),
+        expect.objectContaining({ type: 'stream_idle_timeout' }),
       );
       expect(callCount).toBe(1);
 
@@ -510,7 +468,8 @@ describe('Turn run - abort and idle timeout', () => {
         return events;
       })();
 
-      await vi.advanceTimersByTimeAsync(100);
+      vi.advanceTimersByTime(100);
+      await drainMicrotasks();
       const events2 = await events2Promise;
 
       expect(callCount).toBe(2);

@@ -10,8 +10,8 @@
  *              DELTA-HTEL-001, DELTA-HTEL-002, DELTA-HFAIL-001, DELTA-HAPP-001, DELTA-HAPP-002
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { test } from '@fast-check/vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { propertyTest } from '../../test-utils/propertyTest.js';
 import * as fc from 'fast-check';
 import type { AggregatedHookResult } from '../hookAggregator.js';
 import type { HookOutput, HookExecutionResult, HookConfig } from '../types.js';
@@ -599,16 +599,17 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P13
    * @requirement DELTA-HRUN-002, DELTA-HAPP-001
    */
-  test.prop([
-    fc.array(
-      fc.record({
-        hasStopReason: fc.boolean(),
-        stopReason: fc.string({ minLength: 1, maxLength: 50 }),
-        continueIsFalse: fc.boolean(),
-      }),
-      { minLength: 1, maxLength: 8 },
-    ),
-  ])(
+  propertyTest(
+    [
+      fc.array(
+        fc.record({
+          hasStopReason: fc.boolean(),
+          stopReason: fc.string({ minLength: 1, maxLength: 50 }),
+          continueIsFalse: fc.boolean(),
+        }),
+        { minLength: 1, maxLength: 8 },
+      ),
+    ],
     'METAMORPHIC: shouldStop=true iff at least one hook has continue===false @plan:PLAN-20250218-HOOKSYSTEM.P13',
     (outputShapes) => {
       const outputs = outputShapes.map((s) => ({
@@ -639,13 +640,14 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P13
    * @requirement DELTA-HRUN-002
    */
-  test.prop([
-    fc.oneof(
-      fc.string({ minLength: 1, maxLength: 100 }),
-      fc.string({ minLength: 1, maxLength: 50 }).map((s) => `  ${s}  `),
-      fc.string({ minLength: 1, maxLength: 50 }).map((s) => `\t${s}\n`),
-    ),
-  ])(
+  propertyTest(
+    [
+      fc.oneof(
+        fc.string({ minLength: 1, maxLength: 100 }),
+        fc.string({ minLength: 1, maxLength: 50 }).map((s) => `  ${s}  `),
+        fc.string({ minLength: 1, maxLength: 50 }).map((s) => `\t${s}\n`),
+      ),
+    ],
     'METAMORPHIC: stopReason output is trim-idempotent @plan:PLAN-20250218-HOOKSYSTEM.P13',
     (reason) => {
       const aggregated = buildAggregated([
@@ -675,15 +677,16 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P13
    * @requirement DELTA-HTEL-001
    */
-  test.prop([
-    fc.array(
-      fc.record({
-        success: fc.boolean(),
-        durationMs: fc.integer({ min: 0, max: 5000 }),
-      }),
-      { minLength: 1, maxLength: 8 },
-    ),
-  ])(
+  propertyTest(
+    [
+      fc.array(
+        fc.record({
+          success: fc.boolean(),
+          durationMs: fc.integer({ min: 0, max: 5000 }),
+        }),
+        { minLength: 1, maxLength: 8 },
+      ),
+    ],
     'METAMORPHIC: emitPerHookLogs emits at least one record per hook result @plan:PLAN-20250218-HOOKSYSTEM.P13',
     (hookResultShapes) => {
       const mockDebugLogger = createMockDebugLogger();
@@ -728,15 +731,16 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P13
    * @requirement DELTA-HTEL-002
    */
-  test.prop([
-    fc.array(
-      fc.record({
-        success: fc.boolean(),
-        durationMs: fc.integer({ min: 0, max: 5000 }),
-      }),
-      { minLength: 1, maxLength: 10 },
-    ),
-  ])(
+  propertyTest(
+    [
+      fc.array(
+        fc.record({
+          success: fc.boolean(),
+          durationMs: fc.integer({ min: 0, max: 5000 }),
+        }),
+        { minLength: 1, maxLength: 10 },
+      ),
+    ],
     'METAMORPHIC: batch summary successCount + failureCount === hookCount @plan:PLAN-20250218-HOOKSYSTEM.P13',
     (hookResultShapes) => {
       const mockDebugLogger = createMockDebugLogger();
@@ -798,15 +802,16 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P13
    * @requirement DELTA-HRUN-003
    */
-  test.prop([
-    fc.array(
-      fc.record({
-        hasSystemMessage: fc.boolean(),
-        systemMessage: fc.string({ minLength: 1, maxLength: 100 }),
-      }),
-      { minLength: 1, maxLength: 5 },
-    ),
-  ])(
+  propertyTest(
+    [
+      fc.array(
+        fc.record({
+          hasSystemMessage: fc.boolean(),
+          systemMessage: fc.string({ minLength: 1, maxLength: 100 }),
+        }),
+        { minLength: 1, maxLength: 5 },
+      ),
+    ],
     'METAMORPHIC: first systemMessage in allOutputs is surfaced @plan:PLAN-20250218-HOOKSYSTEM.P13',
     (outputShapes) => {
       const outputs = outputShapes.map((s) => ({

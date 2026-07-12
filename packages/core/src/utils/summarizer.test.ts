@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock } from 'vitest';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { Mock } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { AgentClientContract } from '../core/clientContract.js';
 import { debugLogger } from './debugLogger.js';
 import {

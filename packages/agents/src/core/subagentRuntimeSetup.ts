@@ -733,7 +733,18 @@ export interface CreateChatObjectParams {
   environmentContextLoader: EnvironmentContextLoader;
   foregroundConfig: Config;
   context: ContextState;
+  createChatSession?: CreateChatSession;
 }
+
+export type CreateChatSession = (
+  runtimeContext: AgentRuntimeContext,
+  contentGenerator: ContentGenerator,
+  generationConfig: GenerateContentConfig,
+  startHistory: Content[],
+) => ChatSession;
+
+const defaultCreateChatSession: CreateChatSession = (...args) =>
+  new ChatSession(...args);
 
 export async function createChatObject(
   params: CreateChatObjectParams,
@@ -782,6 +793,7 @@ export async function createChatObject(
     runtimeContext,
     contentGenerator,
     logger,
+    params.createChatSession ?? defaultCreateChatSession,
   );
 }
 
@@ -847,6 +859,7 @@ function instantiateChat(
   runtimeContext: AgentRuntimeContext,
   contentGenerator: ContentGenerator,
   _logger: { debug: (fn: () => string) => void },
+  createChatSession: CreateChatSession,
 ): ChatSession | null {
   try {
     const generationConfig: GenerateContentConfig & {
@@ -861,7 +874,7 @@ function instantiateChat(
           : undefined,
     };
 
-    return new ChatSession(
+    return createChatSession(
       runtimeContext,
       contentGenerator,
       generationConfig,

@@ -8,8 +8,8 @@
  * must still parse and yield the same ContentValidation verdicts.
  * Blocks WITH providerMetadata must round-trip through JSON unchanged.
  */
-import { describe, expect } from 'vitest';
-import { it } from '@fast-check/vitest';
+import { describe, expect, it } from 'bun:test';
+import { propertyTest } from '../../test-utils/propertyTest.js';
 import * as fc from 'fast-check';
 import {
   ContentValidation,
@@ -268,16 +268,17 @@ describe('REQ-009.2: UsageStats new optional fields', () => {
 // ============================================================================
 
 describe('IContent providerMetadata property-based', () => {
-  it.prop([
-    fc.record({
-      type: fc.constant('text'),
-      text: fc.string({ maxLength: 100 }),
-      providerMetadata: fc.dictionary(
-        fc.string({ minLength: 1, maxLength: 10 }),
-        fc.jsonValue(),
-      ),
-    }),
-  ])(
+  propertyTest(
+    [
+      fc.record({
+        type: fc.constant('text'),
+        text: fc.string({ maxLength: 100 }),
+        providerMetadata: fc.dictionary(
+          fc.string({ minLength: 1, maxLength: 10 }),
+          fc.jsonValue(),
+        ),
+      }),
+    ],
     'any TextBlock with providerMetadata round-trips through JSON unchanged',
     (block: TextBlock) => {
       const roundTripped: TextBlock = JSON.parse(JSON.stringify(block));
@@ -285,15 +286,16 @@ describe('IContent providerMetadata property-based', () => {
     },
   );
 
-  it.prop([
-    fc.array(
-      fc.record({
-        type: fc.constant('text'),
-        text: fc.string({ minLength: 0, maxLength: 20 }),
-      }),
-      { minLength: 1, maxLength: 5 },
-    ),
-  ])(
+  propertyTest(
+    [
+      fc.array(
+        fc.record({
+          type: fc.constant('text'),
+          text: fc.string({ minLength: 0, maxLength: 20 }),
+        }),
+        { minLength: 1, maxLength: 5 },
+      ),
+    ],
     'hasContent verdict is stable across JSON round-trips (no providerMetadata)',
     (blocks) => {
       const content: IContent = {
@@ -311,21 +313,22 @@ describe('IContent providerMetadata property-based', () => {
     },
   );
 
-  it.prop([
-    fc.record({
-      type: fc.constant('tool_call'),
-      id: fc.string({ minLength: 1, maxLength: 10 }),
-      name: fc.string({ minLength: 1, maxLength: 10 }),
-      parameters: fc.dictionary(
-        fc.string({ minLength: 1, maxLength: 5 }),
-        fc.string({ maxLength: 10 }),
-      ),
-      providerMetadata: fc.dictionary(
-        fc.string({ minLength: 1, maxLength: 10 }),
-        fc.string({ maxLength: 20 }),
-      ),
-    }),
-  ])(
+  propertyTest(
+    [
+      fc.record({
+        type: fc.constant('tool_call'),
+        id: fc.string({ minLength: 1, maxLength: 10 }),
+        name: fc.string({ minLength: 1, maxLength: 10 }),
+        parameters: fc.dictionary(
+          fc.string({ minLength: 1, maxLength: 5 }),
+          fc.string({ maxLength: 10 }),
+        ),
+        providerMetadata: fc.dictionary(
+          fc.string({ minLength: 1, maxLength: 10 }),
+          fc.string({ maxLength: 20 }),
+        ),
+      }),
+    ],
     'ToolCallBlock with providerMetadata round-trips through JSON unchanged',
     (block: ToolCallBlock) => {
       const roundTripped: ToolCallBlock = JSON.parse(JSON.stringify(block));
@@ -333,18 +336,19 @@ describe('IContent providerMetadata property-based', () => {
     },
   );
 
-  it.prop([
-    fc.record({
-      type: fc.constant('media'),
-      mimeType: fc.string({ minLength: 1, maxLength: 20 }),
-      data: fc.string({ minLength: 1, maxLength: 30 }),
-      encoding: fc.constantFrom('url' as const, 'base64' as const),
-      providerMetadata: fc.dictionary(
-        fc.string({ minLength: 1, maxLength: 10 }),
-        fc.string({ maxLength: 20 }),
-      ),
-    }),
-  ])(
+  propertyTest(
+    [
+      fc.record({
+        type: fc.constant('media'),
+        mimeType: fc.string({ minLength: 1, maxLength: 20 }),
+        data: fc.string({ minLength: 1, maxLength: 30 }),
+        encoding: fc.constantFrom('url' as const, 'base64' as const),
+        providerMetadata: fc.dictionary(
+          fc.string({ minLength: 1, maxLength: 10 }),
+          fc.string({ maxLength: 20 }),
+        ),
+      }),
+    ],
     'MediaBlock with providerMetadata round-trips through JSON unchanged',
     (block: MediaBlock) => {
       const roundTripped: MediaBlock = JSON.parse(JSON.stringify(block));
@@ -352,30 +356,31 @@ describe('IContent providerMetadata property-based', () => {
     },
   );
 
-  it.prop([
-    fc
-      .record({
-        promptTokens: fc.nat({ max: 100000 }),
-        completionTokens: fc.nat({ max: 100000 }),
-        totalTokens: fc.nat({ max: 200000 }),
-        reasoningTokens: fc.option(fc.nat({ max: 50000 })),
-        toolTokens: fc.option(fc.nat({ max: 50000 })),
-      })
-      .map((v): UsageStats => {
-        const stats: UsageStats = {
-          promptTokens: v.promptTokens,
-          completionTokens: v.completionTokens,
-          totalTokens: v.totalTokens,
-        };
-        if (v.reasoningTokens !== null) {
-          stats.reasoningTokens = v.reasoningTokens;
-        }
-        if (v.toolTokens !== null) {
-          stats.toolTokens = v.toolTokens;
-        }
-        return stats;
-      }),
-  ])(
+  propertyTest(
+    [
+      fc
+        .record({
+          promptTokens: fc.nat({ max: 100000 }),
+          completionTokens: fc.nat({ max: 100000 }),
+          totalTokens: fc.nat({ max: 200000 }),
+          reasoningTokens: fc.option(fc.nat({ max: 50000 })),
+          toolTokens: fc.option(fc.nat({ max: 50000 })),
+        })
+        .map((v): UsageStats => {
+          const stats: UsageStats = {
+            promptTokens: v.promptTokens,
+            completionTokens: v.completionTokens,
+            totalTokens: v.totalTokens,
+          };
+          if (v.reasoningTokens !== null) {
+            stats.reasoningTokens = v.reasoningTokens;
+          }
+          if (v.toolTokens !== null) {
+            stats.toolTokens = v.toolTokens;
+          }
+          return stats;
+        }),
+    ],
     'UsageStats with new fields round-trips through JSON unchanged',
     (stats: UsageStats) => {
       const roundTripped: UsageStats = JSON.parse(JSON.stringify(stats));

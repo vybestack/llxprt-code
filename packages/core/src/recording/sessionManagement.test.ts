@@ -26,9 +26,26 @@
  * Property-based tests use @fast-check/vitest (≥30% of total tests).
  */
 
-import { describe, expect, beforeEach, afterEach } from 'vitest';
-import { it as itProp } from '@fast-check/vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fc from 'fast-check';
+
+const property =
+  <Values extends unknown[]>(
+    arbitraries: { [Index in keyof Values]: fc.Arbitrary<Values[Index]> },
+    parameters?: fc.Parameters<Values>,
+  ) =>
+  (
+    name: string,
+    predicate: (...values: Values) => Promise<void> | void,
+    timeout?: number,
+  ) =>
+    it(
+      name,
+      () => fc.assert(fc.asyncProperty(...arbitraries, predicate), parameters),
+      timeout,
+    );
+
+const itProp = Object.assign(it, { prop: property });
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';

@@ -20,6 +20,7 @@
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "test": "vitest run",
+    "test:bun": "bun ../../scripts/run_bun_tests.ts --exclude 'src/ui/**/*.test.tsx' --exclude 'src/ui/**/*.spec.tsx' --exclude 'src/ui/App.test.tsx' --exclude 'src/ui/App.e2e.test.tsx' --exclude 'src/ui/App.context.test.tsx' --exclude 'src/ui/App.components.test.tsx' --exclude 'src/ui/App.dialogs.test.tsx' --exclude 'src/ui/App.behavior.test.tsx'",
     "test:integration": "vitest run -c vitest.integration.config.ts",
     "test:ci:covered": "vitest run -c vitest.ci.covered.config.ts",
     "test:ci:fast": "vitest run -c vitest.ci.fast.config.ts",

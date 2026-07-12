@@ -24,7 +24,7 @@
  * Property-based tests use @fast-check/vitest (≥30% of total).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -510,13 +510,13 @@ describe('integration: full session recording lifecycle', () => {
     });
 
     // Verify file exists
-    await expect(fs.access(filePath)).resolves.toBeUndefined();
+    await fs.access(filePath);
 
     const deleteResult = await deleteSession(sessionId, chatsDir, PROJECT_HASH);
     expect(deleteResult.ok).toBe(true);
 
     // File should be gone
-    await expect(fs.access(filePath)).rejects.toThrow(/ENOENT/);
+    expect(fs.access(filePath)).rejects.toThrow(/ENOENT/);
   });
 
   // =========================================================================

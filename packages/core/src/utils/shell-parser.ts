@@ -169,7 +169,10 @@ export function getInitializationError(): Error | null {
  * Returns true if initialization succeeded, false otherwise.
  * Safe to call multiple times - will return cached result.
  */
-export async function initializeParser(): Promise<boolean> {
+export async function initializeParser(
+  loadTreeSitter: () => Promise<TreeSitterModule> = async () =>
+    (await import('web-tree-sitter')) as TreeSitterModule,
+): Promise<boolean> {
   if (parser && bashLanguage) {
     return true;
   }
@@ -181,7 +184,7 @@ export async function initializeParser(): Promise<boolean> {
   initializationAttempted = true;
 
   try {
-    const TreeSitter = (await import('web-tree-sitter')) as TreeSitterModule;
+    const TreeSitter = await loadTreeSitter();
     const parserCandidate = TreeSitter.Parser;
     const defaultCandidate = TreeSitter.default;
     const Parser = resolveTreeSitterParser(

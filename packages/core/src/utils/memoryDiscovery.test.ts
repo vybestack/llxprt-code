@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fsPromises from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -17,20 +17,13 @@ import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { LLXPRT_DIR } from './paths.js';
 import type { LlxprtExtension } from '../config/config.js';
 
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof os>();
-  return {
-    ...actualOs,
-    homedir: vi.fn(),
-  };
-});
-
 describe('memoryDiscovery', () => {
   const DEFAULT_FOLDER_TRUST = true;
   let testRootDir: string;
   let cwd: string;
   let projectRoot: string;
   let homedir: string;
+  let memoryPaths: import('./memoryDiscovery.js').MemoryDiscoveryPaths;
 
   async function createEmptyDir(fullPath: string) {
     await fsPromises.mkdir(fullPath, { recursive: true });
@@ -48,7 +41,6 @@ describe('memoryDiscovery', () => {
       path.join(os.tmpdir(), 'folder-structure-test-'),
     );
 
-    vi.resetAllMocks();
     // Set environment variables to indicate test environment
     process.env.NODE_ENV = 'test';
     process.env.VITEST = 'true';
@@ -56,7 +48,10 @@ describe('memoryDiscovery', () => {
     projectRoot = await createEmptyDir(path.join(testRootDir, 'project'));
     cwd = await createEmptyDir(path.join(projectRoot, 'src'));
     homedir = await createEmptyDir(path.join(testRootDir, 'userhome'));
-    vi.mocked(os.homedir).mockReturnValue(homedir);
+    memoryPaths = {
+      homeDirectory: homedir,
+      globalCoreMemoryFile: path.join(homedir, LLXPRT_DIR, '.LLXPRT_SYSTEM'),
+    };
   });
 
   afterEach(async () => {
@@ -83,6 +78,11 @@ describe('memoryDiscovery', () => {
         new FileDiscoveryService(projectRoot),
         [],
         false, // untrusted
+        'tree',
+        undefined,
+        200,
+        undefined,
+        memoryPaths,
       );
 
       expect(result).toStrictEqual({
@@ -111,7 +111,12 @@ describe('memoryDiscovery', () => {
           false,
           new FileDiscoveryService(projectRoot),
           [],
-          false, // untrusted
+          false,
+          'tree',
+          undefined,
+          200,
+          undefined,
+          memoryPaths, // untrusted
         );
 
       expect(fileCount).toStrictEqual(1);
@@ -128,6 +133,11 @@ describe('memoryDiscovery', () => {
       new FileDiscoveryService(projectRoot),
       [],
       DEFAULT_FOLDER_TRUST,
+      'tree',
+      undefined,
+      200,
+      undefined,
+      memoryPaths,
     );
 
     expect(result).toStrictEqual({
@@ -150,6 +160,11 @@ describe('memoryDiscovery', () => {
       new FileDiscoveryService(projectRoot),
       [],
       DEFAULT_FOLDER_TRUST,
+      'tree',
+      undefined,
+      200,
+      undefined,
+      memoryPaths,
     );
 
     expect(result).toStrictEqual({
@@ -177,6 +192,11 @@ default context content
       new FileDiscoveryService(projectRoot),
       [],
       DEFAULT_FOLDER_TRUST,
+      'tree',
+      undefined,
+      200,
+      undefined,
+      memoryPaths,
     );
 
     expect(result).toStrictEqual({
@@ -208,6 +228,11 @@ custom context content
       new FileDiscoveryService(projectRoot),
       [],
       DEFAULT_FOLDER_TRUST,
+      'tree',
+      undefined,
+      200,
+      undefined,
+      memoryPaths,
     );
 
     expect(result).toStrictEqual({
@@ -243,6 +268,11 @@ cwd context content
       new FileDiscoveryService(projectRoot),
       [],
       DEFAULT_FOLDER_TRUST,
+      'tree',
+      undefined,
+      200,
+      undefined,
+      memoryPaths,
     );
 
     expect(result).toStrictEqual({
@@ -275,6 +305,11 @@ Subdir custom memory
       new FileDiscoveryService(projectRoot),
       [],
       DEFAULT_FOLDER_TRUST,
+      'tree',
+      undefined,
+      200,
+      undefined,
+      memoryPaths,
     );
 
     expect(result).toStrictEqual({
@@ -307,6 +342,11 @@ Src directory memory
       new FileDiscoveryService(projectRoot),
       [],
       DEFAULT_FOLDER_TRUST,
+      'tree',
+      undefined,
+      200,
+      undefined,
+      memoryPaths,
     );
 
     expect(result).toStrictEqual({
@@ -351,6 +391,11 @@ Subdir memory
       new FileDiscoveryService(projectRoot),
       [],
       DEFAULT_FOLDER_TRUST,
+      'tree',
+      undefined,
+      200,
+      undefined,
+      memoryPaths,
     );
 
     expect(result).toStrictEqual({
@@ -409,7 +454,9 @@ Subdir memory
         respectGitIgnore: true,
         respectLlxprtIgnore: true,
       },
-      200, // maxDirs parameter
+      200,
+      undefined,
+      memoryPaths, // maxDirs parameter
     );
 
     expect(result).toStrictEqual({
@@ -442,7 +489,9 @@ My code memory
           respectGitIgnore: true,
           respectLlxprtIgnore: true,
         },
-        50, // maxDirs
+        50,
+        undefined,
+        memoryPaths, // maxDirs
       );
 
       // Debug logging removed - no need to check for it
@@ -454,6 +503,11 @@ My code memory
         new FileDiscoveryService(projectRoot),
         [],
         DEFAULT_FOLDER_TRUST,
+        'tree',
+        undefined,
+        200,
+        undefined,
+        memoryPaths,
       );
 
       expect(result).toStrictEqual({
@@ -493,7 +547,8 @@ My code memory
       'tree',
       undefined,
       200,
-      1, // maxDepth = 1, only CWD (depth 0) and level1 (depth 1)
+      1,
+      memoryPaths, // maxDepth = 1, only CWD (depth 0) and level1 (depth 1)
     );
 
     // Should find cwdFile (depth 0) and level1File (depth 1) from downward scan
@@ -538,7 +593,8 @@ My code memory
       'tree',
       undefined,
       200,
-      0, // maxDepth = 0, downward scan only finds CWD level
+      0,
+      memoryPaths, // maxDepth = 0, downward scan only finds CWD level
     );
 
     // Global and upward-found files should still be present
@@ -579,7 +635,8 @@ My code memory
       'tree',
       undefined,
       200,
-      0, // maxDepth = 0
+      0,
+      memoryPaths, // maxDepth = 0
     );
 
     // .llxprt/LLXPRT.md files from upward scan should still be present
@@ -613,6 +670,11 @@ My code memory
       new FileDiscoveryService(projectRoot),
       [extension],
       DEFAULT_FOLDER_TRUST,
+      'tree',
+      undefined,
+      200,
+      undefined,
+      memoryPaths,
     );
 
     expect(result).toStrictEqual({
@@ -640,6 +702,11 @@ Extension memory content
       new FileDiscoveryService(projectRoot),
       [],
       DEFAULT_FOLDER_TRUST,
+      'tree',
+      undefined,
+      200,
+      undefined,
+      memoryPaths,
     );
 
     expect(result).toStrictEqual({
@@ -675,6 +742,11 @@ included directory memory
       new FileDiscoveryService(projectRoot),
       [],
       DEFAULT_FOLDER_TRUST,
+      'tree',
+      undefined,
+      200,
+      undefined,
+      memoryPaths,
     );
 
     // Should have loaded all files
@@ -710,6 +782,11 @@ included directory memory
       new FileDiscoveryService(projectRoot),
       [],
       DEFAULT_FOLDER_TRUST,
+      'tree',
+      undefined,
+      200,
+      undefined,
+      memoryPaths,
     );
 
     // Should have both files without duplicates

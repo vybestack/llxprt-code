@@ -17,7 +17,7 @@
  * - T15 ide.* current/detected IDE + trust; editor open/close fire (fake IDE).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { buildAgent } from './helpers/agentHarness.js';
 import {
   createFakeIdeEnvironment,
@@ -292,8 +292,8 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
 
     it('openEditor()/closeEditor() are no-ops (do not throw) when no deps are wired @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-014', async () => {
       const control = new IdeControl();
-      await expect(control.openEditor()).resolves.toBeUndefined();
-      await expect(control.closeEditor()).resolves.toBeUndefined();
+      expect(await control.openEditor()).toBeUndefined();
+      expect(await control.closeEditor()).toBeUndefined();
     });
 
     it('a fixture entry without a version omits the version field but still reports trusted @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-014', () => {
@@ -332,7 +332,7 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
     it('trust() is a silent no-op on the real-environment path (no seam to mutate) @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-014', async () => {
       deactivateFakeIde();
       const control = new IdeControl();
-      await expect(control.trust('vscode')).resolves.toBeUndefined();
+      expect(await control.trust('vscode')).toBeUndefined();
       // detection is unchanged by a trust call outside the seam
       expect(control.detected()[0].trusted).toBe(false);
     });

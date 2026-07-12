@@ -1,0 +1,5 @@
+[test]
+preload = [
+  "../../test-setup/augment-bun-vi.ts",
+  "./bun-test-setup.ts",
+]

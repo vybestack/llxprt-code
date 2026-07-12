@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { createAgentRuntimeState } from './AgentRuntimeState.js';
 import { createAgentRuntimeContext } from './createAgentRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from './contracts/RuntimeProvider.js';

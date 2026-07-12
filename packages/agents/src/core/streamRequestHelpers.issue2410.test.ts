@@ -12,7 +12,7 @@
  * single Part) into a plain-text string for forwarding to providers.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { extractSystemInstructionText } from './streamRequestHelpers.js';
 
 describe('issue #2410 – extractSystemInstructionText', () => {

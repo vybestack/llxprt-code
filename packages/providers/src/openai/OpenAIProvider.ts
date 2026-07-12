@@ -53,13 +53,20 @@ import { extractSanitizedChunkText } from './OpenAIStreamChunkText.js';
 import {
   createHttpAgents,
   resolveRuntimeKey,
+  createOpenAIClient,
   instantiateClient,
   mergeInvocationHeaders,
+  type OpenAIClientConstructor,
 } from './OpenAIClientFactory.js';
+
+export interface OpenAIProviderDependencies {
+  constructClient?: OpenAIClientConstructor;
+}
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
   private readonly textToolParser = new GemmaToolCallParser();
   private readonly toolCallPipeline = new ToolCallPipeline();
+  private readonly dependencies: OpenAIProviderDependencies;
 
   private getLogger(): DebugLogger {
     return new DebugLogger('llxprt:provider:openai');
@@ -74,6 +81,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     apiKey: string | undefined,
     baseURL?: string,
     config?: IProviderConfig,
+    dependencies?: Partial<OpenAIProviderDependencies>,
   ) {
     const normalizedApiKey =
       apiKey && apiKey.trim() !== '' ? apiKey : undefined;
@@ -88,6 +96,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       },
       config,
     );
+    this.dependencies = {
+      constructClient: dependencies?.constructClient ?? createOpenAIClient,
+    };
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
     // @requirement:REQ-SP4-002
@@ -133,7 +144,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // based on User-Agent, which must be sent as a real HTTP header.
     const headers = mergeInvocationHeaders(options);
 
-    return instantiateClient(authToken, baseURL, agents, headers);
+    return instantiateClient(
+      authToken,
+      baseURL,
+      agents,
+      headers,
+      this.dependencies.constructClient,
+    );
   }
 
   /**

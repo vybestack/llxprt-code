@@ -13,7 +13,7 @@
  * everything above the preserved messages.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type {
   IContent,
   MediaBlock,
@@ -508,7 +508,7 @@ describe('OneShotStrategy', () => {
       });
 
       const strategy = new OneShotStrategy();
-      await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
+      expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
     });
 
     it('throws CompressionExecutionError when provider fails', async () => {
@@ -524,9 +524,7 @@ describe('OneShotStrategy', () => {
       });
 
       const strategy = new OneShotStrategy();
-      await expect(strategy.compress(ctx)).rejects.toThrow(
-        CompressionExecutionError,
-      );
+      expect(strategy.compress(ctx)).rejects.toThrow(CompressionExecutionError);
     });
   });
 
@@ -570,7 +568,7 @@ describe('OneShotStrategy', () => {
       });
       const strategy = new OneShotStrategy();
 
-      await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
+      expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
       const capturedError = await strategy
         .compress(ctx)
         .then(() => undefined)
@@ -594,7 +592,7 @@ describe('OneShotStrategy', () => {
       });
       const strategy = new OneShotStrategy();
 
-      await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
+      expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
       const capturedError = await strategy
         .compress(ctx)
         .then(() => undefined)

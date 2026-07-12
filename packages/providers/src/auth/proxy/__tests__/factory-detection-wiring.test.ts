@@ -13,13 +13,11 @@
  * instead of directly instantiating KeyringTokenStore or calling getProviderKeyStorage().
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import {
-  createTokenStore,
-  createProviderKeyStorage,
-  resetFactorySingletons,
-} from '../credential-store-factory.js';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { OAuthManager } from '../../oauth-manager.js'; // PROXY-IMPORT-EXCEPTION: test needs facade class
+
+const { createTokenStore, createProviderKeyStorage, resetFactorySingletons } =
+  await import('../credential-store-factory.js?factory-detection-wiring');
 
 describe('Factory Detection Wiring (P33)', () => {
   let originalSocketEnv: string | undefined;
@@ -84,9 +82,16 @@ describe('Factory Detection Wiring (P33)', () => {
   describe('createProviderKeyStorage factory', () => {
     it('returns direct storage when LLXPRT_CREDENTIAL_SOCKET is not set', () => {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-      const storage = createProviderKeyStorage();
+      const directStorage = {
+        getKey: async () => null,
+        saveKey: async () => undefined,
+        deleteKey: async () => false,
+        hasKey: async () => false,
+        listKeys: async () => [],
+      };
+      const storage = createProviderKeyStorage(() => directStorage);
 
-      expect(storage).toBeDefined();
+      expect(storage).toBe(directStorage);
       // Assert the FULL public ProviderKeyStorageLike structural contract so
       // the direct path verifies the same surface as the proxy path below.
       expect(typeof storage.getKey).toBe('function');

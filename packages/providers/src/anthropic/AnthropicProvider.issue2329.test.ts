@@ -11,7 +11,7 @@
  * AnthropicResponseParser.issue1844.test.ts.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
@@ -19,24 +19,11 @@ import {
   type AnthropicTestSetup,
 } from './test-utils/anthropicProviderTestSetup.js';
 
-const mockMessagesCreate = vi.hoisted(() => vi.fn());
-
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
-  getCoreSystemPromptAsync: vi.fn(
-    async () => "You are Claude Code, Anthropic's official CLI for Claude.",
-  ),
-}));
-
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
-  getErrorStatus: vi.fn(() => undefined),
-  isNetworkTransientError: vi.fn(() => false),
-}));
-
-vi.mock('@anthropic-ai/sdk', () => ({
-  default: vi.fn().mockImplementation(() => ({
+const mockMessagesCreate = vi.fn();
+const constructClient = (): import('@anthropic-ai/sdk').default =>
+  ({
     messages: { create: mockMessagesCreate },
-  })),
-}));
+  }) as unknown as import('@anthropic-ai/sdk').default;
 
 describe('AnthropicProvider issue #2329 – streaming refusal propagation', () => {
   let provider: AnthropicTestSetup['provider'];
@@ -44,7 +31,7 @@ describe('AnthropicProvider issue #2329 – streaming refusal propagation', () =
 
   beforeEach(() => {
     vi.clearAllMocks();
-    const setup = setupAnthropicProvider();
+    const setup = setupAnthropicProvider({ constructClient });
     provider = setup.provider;
     buildCallOptions = setup.buildCallOptions;
   });

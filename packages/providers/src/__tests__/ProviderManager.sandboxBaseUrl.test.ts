@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import type { IProvider } from '../IProvider.js';
 import {

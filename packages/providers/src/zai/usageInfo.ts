@@ -166,7 +166,10 @@ export async function fetchZaiUsage(
 /**
  * Format a reset time relative to now for display
  */
-function formatResetTime(nextResetTime: number | undefined): string {
+function formatResetTime(
+  nextResetTime: number | undefined,
+  now: number,
+): string {
   if (
     nextResetTime === undefined ||
     nextResetTime === 0 ||
@@ -175,7 +178,6 @@ function formatResetTime(nextResetTime: number | undefined): string {
     return 'N/A';
   }
 
-  const now = Date.now();
   const diffMs = nextResetTime - now;
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMins / 60);
@@ -192,7 +194,10 @@ function formatResetTime(nextResetTime: number | undefined): string {
 /**
  * Format all available Z.ai usage information for display
  */
-export function formatZaiUsage(usage: ZaiUsageInfo): string[] {
+export function formatZaiUsage(
+  usage: ZaiUsageInfo,
+  now = Date.now(),
+): string[] {
   const lines: string[] = [];
 
   // Show plan level
@@ -202,7 +207,7 @@ export function formatZaiUsage(usage: ZaiUsageInfo): string[] {
 
   for (const limit of usage.data.limits) {
     if (limit.type === 'TOKENS_LIMIT') {
-      const resetStr = formatResetTime(limit.nextResetTime);
+      const resetStr = formatResetTime(limit.nextResetTime, now);
       lines.push(
         `  5-hour token usage: ${limit.percentage}% used (resets ${resetStr})`,
       );

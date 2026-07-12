@@ -15,7 +15,7 @@
  * targets. No deep core import is required by a #1595 consumer.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import fc from 'fast-check';
 import { ApprovalMode, PolicyDecision } from '@vybestack/llxprt-code-agents';
 import * as root from '@vybestack/llxprt-code-agents';

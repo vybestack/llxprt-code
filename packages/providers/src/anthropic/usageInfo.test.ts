@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import {
   fetchAnthropicUsage,
   formatUsagePeriod,
@@ -153,14 +153,7 @@ describe('usageInfo', () => {
   });
 
   describe('formatUsagePeriod', () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2025-11-04T10:00:00Z'));
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
+    const now = new Date('2025-11-04T10:00:00Z');
 
     it('should format usage period with hours until reset', () => {
       const period = {
@@ -168,7 +161,7 @@ describe('usageInfo', () => {
         resets_at: '2025-11-04T14:30:00Z',
       };
 
-      const result = formatUsagePeriod(period, 'Usage');
+      const result = formatUsagePeriod(period, 'Usage', now);
       expect(result).toContain('6.5% used');
       expect(result).toContain('4h 30m');
       expect(result).toContain('Usage');
@@ -180,7 +173,7 @@ describe('usageInfo', () => {
         resets_at: '2025-11-04T10:45:00Z',
       };
 
-      const result = formatUsagePeriod(period, 'Usage');
+      const result = formatUsagePeriod(period, 'Usage', now);
       expect(result).toContain('50.0% used');
       expect(result).toContain('in 45m');
     });
@@ -191,13 +184,13 @@ describe('usageInfo', () => {
         resets_at: '2025-11-04T10:00:30Z',
       };
 
-      const result = formatUsagePeriod(period, 'Usage');
+      const result = formatUsagePeriod(period, 'Usage', now);
       expect(result).toContain('99.9% used');
       expect(result).toContain('soon');
     });
 
     it('should return null for null period', () => {
-      const result = formatUsagePeriod(null, 'Usage');
+      const result = formatUsagePeriod(null, 'Usage', now);
       expect(result).toBeNull();
     });
 
@@ -207,7 +200,7 @@ describe('usageInfo', () => {
         resets_at: null,
       };
 
-      const result = formatUsagePeriod(period, 'Usage');
+      const result = formatUsagePeriod(period, 'Usage', now);
       expect(result).toContain('0.0% used');
       expect(result).toContain('N/A');
     });
@@ -218,20 +211,13 @@ describe('usageInfo', () => {
         resets_at: '2025-11-05T00:00:00Z',
       };
 
-      const result = formatUsagePeriod(period, 'Usage');
+      const result = formatUsagePeriod(period, 'Usage', now);
       expect(result).toContain('15.2% used');
     });
   });
 
   describe('formatAllUsagePeriods', () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2025-11-04T10:00:00Z'));
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
+    const now = new Date('2025-11-04T10:00:00Z');
 
     it('should format all available usage periods', () => {
       const usage = {
@@ -250,7 +236,7 @@ describe('usageInfo', () => {
         },
       };
 
-      const result = formatAllUsagePeriods(usage);
+      const result = formatAllUsagePeriods(usage, now);
       expect(result).toHaveLength(3);
       expect(result[0]).toContain('5-hour window');
       expect(result[0]).toContain('6.5%');
@@ -268,7 +254,7 @@ describe('usageInfo', () => {
         seven_day_opus: null,
       };
 
-      const result = formatAllUsagePeriods(usage);
+      const result = formatAllUsagePeriods(usage, now);
       expect(result).toHaveLength(0);
     });
 
@@ -293,7 +279,7 @@ describe('usageInfo', () => {
         },
       };
 
-      const result = formatAllUsagePeriods(usage);
+      const result = formatAllUsagePeriods(usage, now);
       expect(result).toHaveLength(3);
       // Known labels
       expect(result.some((line) => line.includes('5-hour window'))).toBe(true);

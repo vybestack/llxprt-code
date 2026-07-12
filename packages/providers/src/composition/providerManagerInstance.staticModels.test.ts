@@ -10,7 +10,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import type { IModel } from '@vybestack/llxprt-code-providers';
 
 describe('Provider Manager Static Models Integration (Issue #1206)', () => {

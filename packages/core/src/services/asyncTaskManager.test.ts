@@ -9,7 +9,7 @@
  * @requirement REQ-ASYNC-001, REQ-ASYNC-002
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { AsyncTaskManager } from './asyncTaskManager.js';
 
 describe('AsyncTaskManager', () => {

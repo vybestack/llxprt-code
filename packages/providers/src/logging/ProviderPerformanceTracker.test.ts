@@ -4,13 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { ProviderPerformanceTracker } from './ProviderPerformanceTracker.js';
 
 describe('ProviderPerformanceTracker', () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
   it('should initialize metrics correctly', () => {
     const tracker = new ProviderPerformanceTracker('test-provider');
     const metrics = tracker.getLatestMetrics();
@@ -37,11 +34,11 @@ describe('ProviderPerformanceTracker', () => {
   });
 
   it('should record completion metrics correctly', () => {
-    vi.useFakeTimers();
-    const tracker = new ProviderPerformanceTracker('test-provider');
-
     const mockDate = new Date('2025-01-01T00:00:00Z').getTime();
-    vi.setSystemTime(mockDate);
+    const tracker = new ProviderPerformanceTracker(
+      'test-provider',
+      () => mockDate,
+    );
 
     tracker.recordCompletion(1000, 200, 500, 10);
 
@@ -57,21 +54,18 @@ describe('ProviderPerformanceTracker', () => {
   });
 
   it('should accumulate tokens per minute correctly', () => {
-    vi.useFakeTimers();
-    const tracker = new ProviderPerformanceTracker('test-provider');
-
-    const now = new Date('2025-01-01T00:00:00Z').getTime();
-    vi.setSystemTime(now);
+    let now = new Date('2025-01-01T00:00:00Z').getTime();
+    const tracker = new ProviderPerformanceTracker('test-provider', () => now);
 
     tracker.recordCompletion(500, 100, 200, 5);
 
-    vi.setSystemTime(now + 30000);
+    now += 30000;
     tracker.recordCompletion(600, 120, 300, 8);
 
     const metrics = tracker.getLatestMetrics();
     expect(metrics.tokensPerMinute).toBeCloseTo(983.61, 1);
 
-    vi.setSystemTime(now + 65000);
+    now += 35000;
     tracker.recordCompletion(400, 80, 150, 6);
 
     const updatedMetrics = tracker.getLatestMetrics();
@@ -79,15 +73,12 @@ describe('ProviderPerformanceTracker', () => {
   });
 
   it('should not produce inflated TPM when requests complete close together after long delays', () => {
-    vi.useFakeTimers();
-    const tracker = new ProviderPerformanceTracker('test-provider');
-
-    const now = new Date('2025-01-01T00:00:00Z').getTime();
-    vi.setSystemTime(now);
+    let now = new Date('2025-01-01T00:00:00Z').getTime();
+    const tracker = new ProviderPerformanceTracker('test-provider', () => now);
 
     tracker.recordCompletion(90000, null, 10000, 50);
 
-    vi.setSystemTime(now + 2000);
+    now += 2000;
     tracker.recordCompletion(90000, null, 10000, 50);
 
     const metrics = tracker.getLatestMetrics();
@@ -96,11 +87,8 @@ describe('ProviderPerformanceTracker', () => {
   });
 
   it('should produce accurate TPM for long-running request', () => {
-    vi.useFakeTimers();
-    const tracker = new ProviderPerformanceTracker('test-provider');
-
-    const now = new Date('2025-01-01T00:00:00Z').getTime();
-    vi.setSystemTime(now);
+    let now = new Date('2025-01-01T00:00:00Z').getTime();
+    const tracker = new ProviderPerformanceTracker('test-provider', () => now);
 
     tracker.recordCompletion(60000, null, 10000, 100);
 
@@ -109,11 +97,11 @@ describe('ProviderPerformanceTracker', () => {
   });
 
   it('should record error metrics correctly', () => {
-    const tracker = new ProviderPerformanceTracker('test-provider');
-
-    // Mock Date.now for consistent testing
     const mockDate = new Date('2025-01-01T00:00:00Z').getTime();
-    vi.setSystemTime(mockDate);
+    const tracker = new ProviderPerformanceTracker(
+      'test-provider',
+      () => mockDate,
+    );
 
     tracker.recordError(500, 'Test error');
 
@@ -127,11 +115,11 @@ describe('ProviderPerformanceTracker', () => {
   });
 
   it('should calculate error rate correctly with multiple requests', () => {
-    const tracker = new ProviderPerformanceTracker('test-provider');
-
-    // Mock Date.now for consistent testing
     const mockDate = new Date('2025-01-01T00:00:00Z').getTime();
-    vi.setSystemTime(mockDate);
+    const tracker = new ProviderPerformanceTracker(
+      'test-provider',
+      () => mockDate,
+    );
 
     // Record successful completion first
     tracker.recordCompletion(1000, 200, 500, 10);
@@ -166,11 +154,11 @@ describe('ProviderPerformanceTracker', () => {
   });
 
   it('should reset metrics correctly', () => {
-    const tracker = new ProviderPerformanceTracker('test-provider');
-
-    // Mock Date.now for consistent testing
     const mockDate = new Date('2025-01-01T00:00:00Z').getTime();
-    vi.setSystemTime(mockDate);
+    const tracker = new ProviderPerformanceTracker(
+      'test-provider',
+      () => mockDate,
+    );
 
     // Record some metrics
     tracker.recordCompletion(1000, 200, 500, 10);
@@ -195,11 +183,11 @@ describe('ProviderPerformanceTracker', () => {
   });
 
   it('should generate performance summary correctly', () => {
-    const tracker = new ProviderPerformanceTracker('test-provider');
-
-    // Mock Date.now for consistent testing
     const mockDate = new Date('2025-01-01T00:00:00Z').getTime();
-    vi.setSystemTime(mockDate);
+    const tracker = new ProviderPerformanceTracker(
+      'test-provider',
+      () => mockDate,
+    );
 
     // Record some metrics
     tracker.recordCompletion(1000, 200, 500, 10);
@@ -214,8 +202,6 @@ describe('ProviderPerformanceTracker', () => {
   describe('Issue #1805: TPM numerator uses total tokens (input + output)', () => {
     it('should accumulate totalTokens as input + output for each completion', () => {
       const tracker = new ProviderPerformanceTracker('test-provider');
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2025-01-01T00:00:00Z').getTime());
 
       // Simulate: 100 input + 50 output = 150 total tokens
       tracker.recordCompletion(1000, null, 150, 1);
@@ -228,9 +214,6 @@ describe('ProviderPerformanceTracker', () => {
 
     it('should compute TPM from total tokens (input+output), not just output tokens', () => {
       const tracker = new ProviderPerformanceTracker('test-provider');
-      vi.useFakeTimers();
-      const now = new Date('2025-01-01T00:00:00Z').getTime();
-      vi.setSystemTime(now);
 
       // 150 total tokens (input+output), not 50 output-only
       tracker.recordCompletion(1000, null, 150, 1);

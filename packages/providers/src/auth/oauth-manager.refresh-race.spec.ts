@@ -9,7 +9,7 @@
  * When multiple clients try to refresh the same token, only one should perform the actual refresh.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { OAuthManager } from './oauth-manager.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from './types.js';
 import { promises as fs } from 'fs';

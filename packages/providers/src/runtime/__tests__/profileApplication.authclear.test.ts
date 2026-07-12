@@ -7,6 +7,7 @@
  * @plan PLAN-20260623-ISSUE2132
  */
 
+import { createRequire } from 'node:module';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import {
@@ -29,13 +30,14 @@ import {
   restoreGcpEnvVars,
 } from './profileApplicationTestSetup.js';
 
-vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>();
-  return {
-    ...actual,
-    readFile: vi.fn(),
-  };
-});
+const require = createRequire(import.meta.url);
+const actualFs =
+  require('node:fs/promises') as typeof import('node:fs/promises');
+
+vi.mock('node:fs/promises', () => ({
+  ...actualFs,
+  readFile: vi.fn(),
+}));
 
 vi.mock('../runtimeSettings.js', () => ({
   switchActiveProvider: switchActiveProviderMock,
@@ -218,7 +220,7 @@ describe('Profile application clears stale auth state (issue #2132)', () => {
 
   it('preserves explicit auth-keyfile on the newly loaded profile', async () => {
     const mockFs = await import('node:fs/promises');
-    vi.mocked(mockFs.readFile).mockResolvedValue('keyfile-content');
+    mockFs.readFile.mockResolvedValue('keyfile-content');
 
     providerManagerStub.available = ['openai'];
     providerManagerStub.providerLookup = new Map([

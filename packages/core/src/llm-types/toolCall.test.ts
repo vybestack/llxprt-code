@@ -3,8 +3,9 @@
  * @requirement REQ-004.1, REQ-004.2, REQ-004.3
  * @pseudocode lines 60-78
  */
-import { describe, expect } from 'vitest';
-import { it } from '@fast-check/vitest';
+import { describe, expect } from 'bun:test';
+import { it } from 'bun:test';
+import { propertyTest } from '../test-utils/propertyTest.js';
 import * as fc from 'fast-check';
 import {
   toolResultContentFromLegacyPartListUnion,
@@ -383,12 +384,13 @@ describe('ToolCallRequest type usage', () => {
 // ============================================================================
 
 describe('toolCall property-based', () => {
-  it.prop([
-    fc.array(fc.record({ text: fc.string({ maxLength: 50 }) }), {
-      minLength: 0,
-      maxLength: 10,
-    }),
-  ])(
+  propertyTest(
+    [
+      fc.array(fc.record({ text: fc.string({ maxLength: 50 }) }), {
+        minLength: 0,
+        maxLength: 10,
+      }),
+    ],
     'array of {text: string} yields TextBlocks preserving order and content',
     (parts) => {
       const result = toolResultContentFromLegacyPartListUnion(parts);
@@ -404,7 +406,8 @@ describe('toolCall property-based', () => {
     },
   );
 
-  it.prop([fc.string({ maxLength: 100 })])(
+  propertyTest(
+    [fc.string({ maxLength: 100 })],
     'any string input yields ok with value === input',
     (s: string) => {
       const result = toolResultContentFromLegacyPartListUnion(s);
@@ -412,16 +415,17 @@ describe('toolCall property-based', () => {
     },
   );
 
-  it.prop([
-    fc.oneof(
-      fc.constant(null),
-      fc.constant(undefined),
-      fc.integer(),
-      fc.constant({}),
-      fc.constant({ mystery: 42 }),
-      fc.record({ executableCode: fc.record({ code: fc.string() }) }),
-    ),
-  ])(
+  propertyTest(
+    [
+      fc.oneof(
+        fc.constant(null),
+        fc.constant(undefined),
+        fc.integer(),
+        fc.constant({}),
+        fc.constant({ mystery: 42 }),
+        fc.record({ executableCode: fc.record({ code: fc.string() }) }),
+      ),
+    ],
     'unsupported shape always returns {ok:false} with non-empty error string',
     (input: unknown) => {
       const result = toolResultContentFromLegacyPartListUnion(input);
@@ -429,14 +433,15 @@ describe('toolCall property-based', () => {
     },
   );
 
-  it.prop([
-    fc.record({
-      inlineData: fc.record({
-        mimeType: fc.string({ minLength: 1, maxLength: 30 }),
-        data: fc.string({ minLength: 1, maxLength: 50 }),
+  propertyTest(
+    [
+      fc.record({
+        inlineData: fc.record({
+          mimeType: fc.string({ minLength: 1, maxLength: 30 }),
+          data: fc.string({ minLength: 1, maxLength: 50 }),
+        }),
       }),
-    }),
-  ])(
+    ],
     'inlineData with string mimeType+data always yields MediaBlock base64',
     (input) => {
       const result = toolResultContentFromLegacyPartListUnion(input);
@@ -454,49 +459,55 @@ describe('toolCall property-based', () => {
     },
   );
 
-  it.prop([
-    fc.record({
-      fileData: fc.record({
-        fileUri: fc.string({ minLength: 1, maxLength: 50 }),
-        mimeType: fc.option(fc.string({ minLength: 1, maxLength: 30 })),
-      }),
-    }),
-  ])('fileData always yields MediaBlock url with correct mimeType', (input) => {
-    const result = toolResultContentFromLegacyPartListUnion(input);
-    if (!result.ok || !Array.isArray(result.value)) return false;
-    const block = result.value[0];
-    const expectedMime = input.fileData.mimeType ?? 'application/octet-stream';
-    return (
-      block.type === 'media' &&
-      block.encoding === 'url' &&
-      block.mimeType === expectedMime &&
-      block.data === input.fileData.fileUri
-    );
-  });
-
-  it.prop([
-    fc
-      .oneof(
-        // Case 1: response key present (fc.option → null or string)
-        fc.record({
-          name: fc.string({ minLength: 1, maxLength: 20 }),
-          id: fc.option(fc.string({ minLength: 1, maxLength: 10 })),
-          response: fc.option(fc.string({ maxLength: 30 })),
+  propertyTest(
+    [
+      fc.record({
+        fileData: fc.record({
+          fileUri: fc.string({ minLength: 1, maxLength: 50 }),
+          mimeType: fc.option(fc.string({ minLength: 1, maxLength: 30 })),
         }),
-        // Case 2: response key is optional — fast-check will sometimes
-        // omit the 'response' key entirely, exercising the result:{} fallback.
-        // When present, it's always a string.
-        fc.record(
-          {
+      }),
+    ],
+    'fileData always yields MediaBlock url with correct mimeType',
+    (input) => {
+      const result = toolResultContentFromLegacyPartListUnion(input);
+      if (!result.ok || !Array.isArray(result.value)) return false;
+      const block = result.value[0];
+      const expectedMime =
+        input.fileData.mimeType ?? 'application/octet-stream';
+      return (
+        block.type === 'media' &&
+        block.encoding === 'url' &&
+        block.mimeType === expectedMime &&
+        block.data === input.fileData.fileUri
+      );
+    },
+  );
+
+  propertyTest(
+    [
+      fc
+        .oneof(
+          // Case 1: response key present (fc.option → null or string)
+          fc.record({
             name: fc.string({ minLength: 1, maxLength: 20 }),
             id: fc.option(fc.string({ minLength: 1, maxLength: 10 })),
-            response: fc.string({ maxLength: 30 }),
-          },
-          { requiredKeys: ['name'] },
-        ),
-      )
-      .map((fnResp) => ({ functionResponse: fnResp })),
-  ])(
+            response: fc.option(fc.string({ maxLength: 30 })),
+          }),
+          // Case 2: response key is optional — fast-check will sometimes
+          // omit the 'response' key entirely, exercising the result:{} fallback.
+          // When present, it's always a string.
+          fc.record(
+            {
+              name: fc.string({ minLength: 1, maxLength: 20 }),
+              id: fc.option(fc.string({ minLength: 1, maxLength: 10 })),
+              response: fc.string({ maxLength: 30 }),
+            },
+            { requiredKeys: ['name'] },
+          ),
+        )
+        .map((fnResp) => ({ functionResponse: fnResp })),
+    ],
     'functionResponse always yields ToolResponseBlock with correct fields',
     (input) => {
       const result = toolResultContentFromLegacyPartListUnion(input);
@@ -512,15 +523,16 @@ describe('toolCall property-based', () => {
     },
   );
 
-  it.prop([
-    fc.array(
-      fc.oneof(
-        fc.record({ text: fc.string({ maxLength: 20 }) }),
-        fc.string({ maxLength: 15 }),
+  propertyTest(
+    [
+      fc.array(
+        fc.oneof(
+          fc.record({ text: fc.string({ maxLength: 20 }) }),
+          fc.string({ maxLength: 15 }),
+        ),
+        { minLength: 0, maxLength: 5 },
       ),
-      { minLength: 0, maxLength: 5 },
-    ),
-  ])(
+    ],
     'array of text parts and strings always yields ok with TextBlocks',
     (parts) => {
       const result = toolResultContentFromLegacyPartListUnion(parts);

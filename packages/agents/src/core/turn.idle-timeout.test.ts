@@ -4,9 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { vi } from 'vitest';
 import type { ServerAgentStreamEvent } from './turn.js';
-import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
+import { AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
+import { Turn } from './turn.ts?idle-timeout-behavior';
 import type { GenerateContentResponse, Part } from '@google/genai';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
@@ -15,67 +17,16 @@ import {
   mockResponseToChunk,
 } from './turn-test-helpers.js';
 
-const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
-  mockSendMessageStream: vi.fn(),
-  mockGetHistory: vi.fn(),
-}));
-
-vi.mock('@google/genai', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@google/genai')>();
-  const MockChat = vi.fn().mockImplementation(() => ({
-    sendMessageStream: mockSendMessageStream,
-    getHistory: mockGetHistory,
-  }));
-  return {
-    ...actual,
-    Chat: MockChat,
-  };
-});
+const mockSendMessageStream = vi.fn();
+const mockGetHistory = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
 
-vi.mock(
-  '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
-  () => ({
-    getResponseText: (resp: GenerateContentResponse) =>
-      resp.candidates?.[0]?.content?.parts
-        ?.filter((part) => (part as { thought?: boolean }).thought !== true)
-        .map((part) => part.text)
-        .join('') ?? undefined,
-    getFunctionCalls: (resp: GenerateContentResponse) =>
-      resp.functionCalls ?? [],
-    getFunctionCallsFromParts: (parts: Part[]) => {
-      const functionCalls = parts
-        .filter((part) => part.functionCall !== undefined)
-        .map((part) => part.functionCall!);
-      return functionCalls.length > 0 ? functionCalls : undefined;
-    },
-    analyzeResponseOutcome: (parts: Part[]) => {
-      let hasVisibleText = false;
-      let hasThinking = false;
-      let hasToolCalls = false;
-      for (const part of parts) {
-        const isThinking = (part as { thought?: boolean }).thought === true;
-        if (isThinking) hasThinking = true;
-        if (part.functionCall !== undefined) hasToolCalls = true;
-        if (
-          !isThinking &&
-          typeof part.text === 'string' &&
-          part.text.trim() !== ''
-        )
-          hasVisibleText = true;
-      }
-      return {
-        hasVisibleText,
-        hasThinking,
-        hasToolCalls,
-        isActionable: hasVisibleText || hasToolCalls,
-      };
-    },
-  }),
-);
+const drainMicrotasks = async (): Promise<void> => {
+  for (let i = 0; i < 100; i++) await Promise.resolve();
+};
 
 describe('Turn - stream idle timeout behavioral tests', () => {
   let turn: Turn;
@@ -147,14 +98,8 @@ describe('Turn - stream idle timeout behavioral tests', () => {
           candidates: [{ content: { parts: [{ text: 'First chunk' }] } }],
         }),
       };
-      // Inter-chunk gap that exceeds the 30s inter-chunk idle timeout.
-      await vi.advanceTimersByTimeAsync(45_000);
-      yield {
-        type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [{ content: { parts: [{ text: 'Late response' }] } }],
-        }),
-      };
+      // Never produce a second chunk; the outer test advances the watchdog.
+      await new Promise<void>(() => {});
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
@@ -169,22 +114,23 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(29_999);
-    await Promise.resolve();
+    await drainMicrotasks();
+    vi.advanceTimersByTime(29_999);
+    await drainMicrotasks();
     // First chunk arrived immediately (Content), but the inter-chunk idle
     // timeout (30s gap before the second chunk) has not yet elapsed.
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe(AgentEventType.Content);
 
-    await vi.advanceTimersByTimeAsync(2);
+    vi.advanceTimersByTime(2);
+    await drainMicrotasks();
     await Promise.resolve();
 
-    await vi.runAllTimersAsync();
+    vi.runAllTimers();
+    await drainMicrotasks();
     await runPromise;
 
-    const timeoutEvent = events.find(
-      (e) => e.type === AgentEventType.StreamIdleTimeout,
-    );
+    const timeoutEvent = events.find((e) => e.type === 'stream_idle_timeout');
     expect(timeoutEvent).toBeDefined();
     expect(mockGetConfig).toHaveBeenCalled();
   });
@@ -293,15 +239,17 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
+    vi.advanceTimersByTime(30 * 60 * 1000);
+    await drainMicrotasks();
     await Promise.resolve();
 
     expect(
-      events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
+      events.find((e) => e.type === 'stream_idle_timeout'),
     ).toBeUndefined();
 
     resolveIterator!();
-    await vi.runAllTimersAsync();
+    vi.runAllTimers();
+    await drainMicrotasks();
     await runPromise;
 
     expect(events).toHaveLength(1);
@@ -351,7 +299,8 @@ describe('Turn - stream idle timeout behavioral tests', () => {
         }),
       };
       // Inter-chunk gap exceeding the env-driven 15s inter-chunk timeout.
-      await vi.advanceTimersByTimeAsync(30_000);
+      vi.advanceTimersByTime(30_000);
+      await drainMicrotasks();
       yield {
         type: StreamEventType.CHUNK,
         value: mockResponseToChunk({
@@ -371,15 +320,15 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(16_000);
+    vi.advanceTimersByTime(16_000);
+    await drainMicrotasks();
     await Promise.resolve();
 
-    await vi.runAllTimersAsync();
+    vi.runAllTimers();
+    await drainMicrotasks();
     await runPromise;
 
-    const timeoutEvent = events.find(
-      (e) => e.type === AgentEventType.StreamIdleTimeout,
-    );
+    const timeoutEvent = events.find((e) => e.type === 'stream_idle_timeout');
     expect(timeoutEvent).toBeDefined();
   });
 
@@ -442,17 +391,19 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(700_000);
+    vi.advanceTimersByTime(700_000);
+    await drainMicrotasks();
     await Promise.resolve();
 
     expect(
-      events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
+      events.find((e) => e.type === 'stream_idle_timeout'),
     ).toBeUndefined();
 
     expect(vi.getTimerCount()).toBe(0);
 
     resolveIterator!();
-    await vi.runAllTimersAsync();
+    vi.runAllTimers();
+    await drainMicrotasks();
     await runPromise;
 
     expect(events).toHaveLength(1);

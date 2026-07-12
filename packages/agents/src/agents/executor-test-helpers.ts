@@ -238,10 +238,8 @@ export const mockWorkResponse = (
 // ---------------------------------------------------------------------------
 
 export interface ExecutorFixtureParams {
-  MockedChatSession: MockFn;
   mockSendMessageStream: MockFn;
   mockExecuteToolCall: MockFn;
-  mockedGetDirectoryContextString: MockFn;
   vi: ViTestApi;
 }
 
@@ -260,23 +258,10 @@ export interface ExecutorTestFixture {
 export function setupExecutorFixture(
   params: ExecutorFixtureParams,
 ): ExecutorTestFixture {
-  const {
-    MockedChatSession,
-    mockSendMessageStream,
-    mockExecuteToolCall,
-    mockedGetDirectoryContextString,
-    vi,
-  } = params;
+  const { mockSendMessageStream, mockExecuteToolCall, vi } = params;
   vi.resetAllMocks();
   mockSendMessageStream.mockReset();
   mockExecuteToolCall.mockReset();
-
-  MockedChatSession.mockImplementation(
-    () =>
-      ({
-        sendMessageStream: mockSendMessageStream,
-      }) as unknown as Record<string, unknown>,
-  );
 
   vi.useFakeTimers();
 
@@ -294,10 +279,6 @@ export function setupExecutorFixture(
   parentToolRegistry.registerTool(MOCK_TOOL_NOT_ALLOWED);
 
   vi.spyOn(mockConfig, 'getToolRegistry').mockReturnValue(parentToolRegistry);
-
-  mockedGetDirectoryContextString.mockResolvedValue(
-    'Mocked Environment Context',
-  );
 
   const activities: SubagentActivityEvent[] = [];
   const onActivity = (activity: SubagentActivityEvent) =>

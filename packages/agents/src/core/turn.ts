@@ -56,15 +56,20 @@ import {
   resolveStreamIdleTimeoutMs,
   resolveStreamFirstResponseTimeoutMs,
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-} from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
-import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
+} from '../../../core/src/utils/streamIdleTimeout.js';
+import { delay } from '../../../core/src/utils/delay.js';
 import {
   DEFAULT_AGENT_ID,
   AgentEventType,
-  type ToolCallRequestInfo,
-  type ServerAgentStreamEvent,
-  type ServerCitationEvent,
-  type StructuredError,
+  ERROR_EVENT_TYPE,
+  STREAM_IDLE_TIMEOUT_EVENT_TYPE,
+  USER_CANCELLED_EVENT_TYPE,
+} from './agentEventProtocol.js';
+import type {
+  ToolCallRequestInfo,
+  ServerAgentStreamEvent,
+  ServerCitationEvent,
+  StructuredError,
 } from '@vybestack/llxprt-code-core/core/turn.js';
 
 /** @deprecated Use DEFAULT_STREAM_IDLE_TIMEOUT_MS from streamIdleTimeout.js instead */
@@ -493,7 +498,7 @@ export class Turn {
 
       const streamEvent = result.value;
       if (isAbortSignalActive(signal)) {
-        yield { type: AgentEventType.UserCancelled };
+        yield { type: USER_CANCELLED_EVENT_TYPE };
         return;
       }
 
@@ -599,13 +604,13 @@ export class Turn {
     idleFlag: { timedOut: boolean },
   ): AsyncGenerator<ServerAgentStreamEvent> {
     if (signal.aborted) {
-      yield { type: AgentEventType.UserCancelled };
+      yield { type: USER_CANCELLED_EVENT_TYPE };
       return;
     }
 
     if (idleFlag.timedOut) {
       yield {
-        type: AgentEventType.StreamIdleTimeout,
+        type: STREAM_IDLE_TIMEOUT_EVENT_TYPE,
         value: {
           error: {
             message: TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE,
@@ -638,7 +643,7 @@ export class Turn {
       message: getErrorMessage(error),
       status,
     };
-    yield { type: AgentEventType.Error, value: { error: structuredError } };
+    yield { type: ERROR_EVENT_TYPE, value: { error: structuredError } };
   }
 
   // The run method yields simpler events suitable for server logic
@@ -655,7 +660,7 @@ export class Turn {
 
     try {
       if (signal.aborted) {
-        yield { type: AgentEventType.UserCancelled };
+        yield { type: USER_CANCELLED_EVENT_TYPE };
         return;
       }
 

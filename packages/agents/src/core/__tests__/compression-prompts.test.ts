@@ -2,8 +2,8 @@
  * @plan PLAN-20260211-HIGHDENSITY.P22
  * @requirement REQ-HD-010.1, REQ-HD-010.2, REQ-HD-010.3, REQ-HD-010.4, REQ-HD-010.5
  */
-import { describe, it, expect } from 'vitest';
-import { getCompressionPrompt } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { describe, it, expect } from 'bun:test';
+import { getCompressionPrompt } from '../../../../core/src/core/prompts.ts?compression-prompt-contract';
 
 describe('getCompressionPrompt enriched sections', () => {
   const prompt = getCompressionPrompt();

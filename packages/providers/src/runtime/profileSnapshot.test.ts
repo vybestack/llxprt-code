@@ -4,69 +4,54 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
-
-// Mock external dependencies of applyProfileSnapshot so we can verify
-// emission without bootstrapping the entire CLI runtime.
-vi.mock('./runtimeAccessors.js', () => ({
-  getCliRuntimeServices: vi.fn(() => ({
-    config: {},
-    settingsService: { setCurrentProfileName: vi.fn() },
-    providerManager: {},
-  })),
-  maybeGetCliOAuthManager: vi.fn(() => null),
-  getActiveModelName: vi.fn(() => 'test-model'),
-  getActiveModelParams: vi.fn(() => ({})),
-  _internal: {
-    resolveActiveProviderName: vi.fn(() => 'test-provider'),
-    getProviderSettingsSnapshot: vi.fn(() => ({})),
-    getActiveProviderOrThrow: vi.fn(),
-    extractModelParams: vi.fn(() => ({})),
-  },
-}));
-
-vi.mock('./profileApplication.js', () => ({
-  applyProfileWithGuards: vi.fn(
-    async (profile: { provider: string; model: string }) => ({
-      providerName: profile.provider,
-      modelName: profile.model,
-      infoMessages: [],
-      warnings: [],
-      providerChanged: true,
-      baseUrl: undefined,
-      didFallback: false,
-      requestedProvider: profile.provider,
-    }),
-  ),
-}));
-
-const profileManagerLoadProfileMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@vybestack/llxprt-code-settings', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-settings')
-  >('@vybestack/llxprt-code-settings');
-  return {
-    ...actual,
-    ProfileManager: vi.fn(() => ({
-      loadProfile: profileManagerLoadProfileMock,
-      listProfiles: vi.fn(),
-    })),
-  };
-});
 
 import {
   applyProfileSnapshot,
   buildRuntimeProfileSnapshot,
   buildModelProfileInfoPayload,
   getProfileByName,
+  type ProfileSnapshotDependencies,
 } from './profileSnapshot.js';
-import {
-  getCliRuntimeServices,
-  _internal as runtimeAccessorsInternal,
-} from './runtimeAccessors.js';
+
+const createDependencies = (
+  overrides: Partial<ProfileSnapshotDependencies> = {},
+): ProfileSnapshotDependencies => ({
+  getRuntimeServices: () =>
+    ({
+      config: {},
+      settingsService: { setCurrentProfileName: vi.fn() },
+      providerManager: {},
+    }) as ReturnType<ProfileSnapshotDependencies['getRuntimeServices']>,
+  getOAuthManager: () => null,
+  applyProfile: async (profile) => ({
+    providerName: profile.provider,
+    modelName: profile.model,
+    infoMessages: [],
+    warnings: [],
+    providerChanged: true,
+    baseUrl: undefined,
+    didFallback: false,
+    requestedProvider: profile.provider,
+  }),
+  loadProfile: async () => {
+    throw new Error('Unexpected profile load');
+  },
+  saveProfile: async () => {},
+  ...overrides,
+});
+
+let dependencies: ProfileSnapshotDependencies;
+let profileManagerLoadProfileMock: ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  profileManagerLoadProfileMock = vi.fn();
+  dependencies = createDependencies({
+    loadProfile: profileManagerLoadProfileMock,
+  });
+});
 
 describe('buildModelProfileInfoPayload', () => {
   it('builds payload with profile name as displayLabel when profile is active', () => {
@@ -234,7 +219,7 @@ describe('ModelProfileChanged emission from applyProfileSnapshot', () => {
       ephemeralSettings: {},
     };
 
-    await applyProfileSnapshot(profile, { profileName: 'work' });
+    await applyProfileSnapshot(profile, { profileName: 'work' }, dependencies);
 
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith(
@@ -259,7 +244,11 @@ describe('ModelProfileChanged emission from applyProfileSnapshot', () => {
       ephemeralSettings: {},
     };
 
-    await applyProfileSnapshot(profile, { profileName: undefined });
+    await applyProfileSnapshot(
+      profile,
+      { profileName: undefined },
+      dependencies,
+    );
 
     expect(listener).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -285,7 +274,7 @@ describe('ModelProfileChanged emission from applyProfileSnapshot', () => {
       ephemeralSettings: {},
     };
 
-    await applyProfileSnapshot(profile, { profileName: 'prod' });
+    await applyProfileSnapshot(profile, { profileName: 'prod' }, dependencies);
 
     expect(listener).toHaveBeenCalledTimes(1);
   });
@@ -297,28 +286,27 @@ describe('buildRuntimeProfileSnapshot', () => {
   });
 
   it('excludes internal settings from persisted ephemeralSettings', () => {
-    vi.mocked(getCliRuntimeServices).mockReturnValue({
-      config: {
-        getEphemeralSettings: () => ({
-          activeProvider: 'gemini',
-          currentProfile: 'glm',
-          tools: { disabled: ['read_file'] },
-          'context-limit': 190000,
-        }),
-      },
-      settingsService: { setCurrentProfileName: vi.fn() },
-      providerManager: {},
-    } as ReturnType<typeof getCliRuntimeServices>);
-    vi.mocked(
-      runtimeAccessorsInternal.resolveActiveProviderName,
-    ).mockReturnValue('openai');
-    vi.mocked(
-      runtimeAccessorsInternal.getProviderSettingsSnapshot,
-    ).mockReturnValue({
-      model: 'gpt-4o',
+    dependencies = createDependencies({
+      getRuntimeServices: () =>
+        ({
+          config: {
+            getEphemeralSettings: () => ({
+              activeProvider: 'gemini',
+              currentProfile: 'glm',
+              tools: { disabled: ['read_file'] },
+              'context-limit': 190000,
+            }),
+            getProvider: () => 'openai',
+          },
+          settingsService: {
+            setCurrentProfileName: vi.fn(),
+            getProviderSettings: () => ({ model: 'gpt-4o' }),
+          },
+          providerManager: {},
+        }) as ReturnType<ProfileSnapshotDependencies['getRuntimeServices']>,
     });
 
-    const snapshot = buildRuntimeProfileSnapshot();
+    const snapshot = buildRuntimeProfileSnapshot(dependencies);
 
     expect(snapshot.ephemeralSettings).toMatchObject({
       'context-limit': 190000,
@@ -377,7 +365,7 @@ describe('getProfileByName', () => {
       },
     );
 
-    const profile = await getProfileByName('glm');
+    const profile = await getProfileByName('glm', dependencies);
 
     expect(profile).toMatchObject({
       type: 'loadbalancer',

@@ -18,7 +18,7 @@
  * Tests for tool ID normalization in OpenAIResponsesProvider
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { buildResponsesInputFromContent } from '../buildResponsesInputFromContent.js';

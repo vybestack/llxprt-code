@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'bun:test';
+import { vi } from 'vitest';
 
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('core system prompt'),
@@ -21,52 +22,11 @@ vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () => ({
   getEnvironmentContext: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock('./chatSession.js', () => ({
-  ChatSession: vi.fn().mockImplementation(() => ({
-    setActiveTodosProvider: vi.fn(),
-    getHistoryService: vi.fn().mockReturnValue(null),
-  })),
-}));
-
-vi.mock('@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js', () => ({
-  loadAgentRuntime: vi.fn().mockResolvedValue({
-    runtimeContext: {},
-    contentGenerator: {},
-    toolsView: { listToolNames: () => [] },
-    history: {},
-    providerAdapter: {},
-    telemetryAdapter: {},
-  }),
-}));
-
 vi.mock(
   '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js',
   () => ({
     setProviderRuntimeStateFactory: vi.fn(),
     createProviderRuntimeContext: vi.fn().mockReturnValue({}),
-  }),
-);
-
-vi.mock(
-  '@vybestack/llxprt-code-core/services/history/HistoryService.js',
-  () => ({
-    HistoryService: vi.fn().mockImplementation(() => ({
-      add: vi.fn(),
-      generateTurnKey: vi.fn().mockReturnValue('turn-1'),
-      setBaseTokenOffset: vi.fn(),
-      estimateTokensForText: vi.fn().mockResolvedValue(100),
-      resetTokenAccounting: vi.fn(),
-      recalculateTotalTokens: vi.fn().mockResolvedValue(undefined),
-    })),
-  }),
-);
-
-vi.mock(
-  '@vybestack/llxprt-code-core/services/history/ContentConverters.js',
-  () => ({
-    ContentConverters: {
-      toIContent: vi.fn().mockReturnValue({ role: 'user', parts: [] }),
-    },
   }),
 );
 
@@ -86,13 +46,20 @@ import {
 } from './ChatSessionFactory.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
-import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+const loadRuntime = vi.fn();
 import { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
+
+function makeChatSession(): ChatSession {
+  return {
+    setActiveTodosProvider: vi.fn(),
+    getHistoryService: vi.fn().mockReturnValue(null),
+  } as unknown as ChatSession;
+}
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
@@ -200,16 +167,11 @@ describe('buildSettingsSnapshot', () => {
     expect(snapshot['reasoning.maxTokens']).toBe(8192);
   });
 
-  it('includes tool governance in snapshot', async () => {
-    const { getToolGovernanceEphemerals } = await import(
-      './clientToolGovernance.js'
-    );
-    vi.mocked(getToolGovernanceEphemerals).mockReturnValueOnce({
-      allowed: ['bash', 'read_file'],
-    });
-
+  it('includes tool governance in snapshot', () => {
     const config = makeConfig();
-    const snapshot = buildSettingsSnapshot(config);
+    const snapshot = buildSettingsSnapshot(config, () => ({
+      allowed: ['bash', 'read_file'],
+    }));
 
     expect(snapshot.tools).toStrictEqual({ allowed: ['bash', 'read_file'] });
   });
@@ -228,7 +190,7 @@ describe('buildSystemInstruction', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('core system prompt');
+    getCoreSystemPromptAsync.mockResolvedValue('core system prompt');
   });
 
   it('includes user memory in the system prompt', async () => {
@@ -273,7 +235,7 @@ describe('buildSystemInstruction', () => {
     const config = makeConfig();
     const envParts = [{ text: 'CWD: /workspace' }];
 
-    vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('base prompt');
+    getCoreSystemPromptAsync.mockResolvedValue('base prompt');
 
     const result = await buildSystemInstruction(config, [], envParts, MODEL);
 
@@ -300,9 +262,7 @@ describe('buildSystemInstruction', () => {
     const { shouldIncludeSubagentDelegationForConfig } = await import(
       './clientToolGovernance.js'
     );
-    vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValueOnce(
-      true,
-    );
+    shouldIncludeSubagentDelegationForConfig.mockResolvedValueOnce(true);
 
     const config = makeConfig();
     await buildSystemInstruction(config, ['task', 'list_subagents'], [], MODEL);
@@ -328,9 +288,9 @@ describe('buildSystemInstruction', () => {
 describe('createChatSession', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('system prompt');
-    vi.mocked(getEnvironmentContext).mockResolvedValue([]);
-    vi.mocked(loadAgentRuntime).mockResolvedValue({
+    getCoreSystemPromptAsync.mockResolvedValue('system prompt');
+    getEnvironmentContext.mockResolvedValue([]);
+    loadRuntime.mockResolvedValue({
       runtimeContext: {},
       contentGenerator: {},
       toolsView: { listToolNames: () => [], getToolMetadata: () => undefined },
@@ -356,10 +316,12 @@ describe('createChatSession', () => {
       generateContentConfig: {},
       todoContinuationService,
       toolRegistry: undefined,
+      loadRuntime,
+      createChatSessionInstance: makeChatSession,
     });
 
     expect(clearFn).toHaveBeenCalled();
-    expect(vi.mocked(loadAgentRuntime)).toHaveBeenCalledWith(
+    expect(loadRuntime).toHaveBeenCalledWith(
       expect.objectContaining({
         overrides: expect.objectContaining({
           historyService: existingHistoryService,
@@ -390,9 +352,11 @@ describe('createChatSession', () => {
       generateContentConfig: {},
       todoContinuationService,
       toolRegistry: undefined,
+      loadRuntime,
+      createChatSessionInstance: makeChatSession,
     });
 
-    expect(vi.mocked(loadAgentRuntime)).toHaveBeenCalledWith(
+    expect(loadRuntime).toHaveBeenCalledWith(
       expect.objectContaining({
         profile: expect.objectContaining({
           settings: expect.objectContaining({
@@ -408,6 +372,7 @@ describe('createChatSession', () => {
     const runtimeState = makeRuntimeState();
     const todoContinuationService = makeTodoContinuationService();
     const clearFn = vi.fn();
+    const createHistoryService = vi.fn(() => new HistoryService());
 
     await createChatSession({
       config,
@@ -418,10 +383,13 @@ describe('createChatSession', () => {
       generateContentConfig: {},
       todoContinuationService,
       toolRegistry: undefined,
+      loadRuntime,
+      createChatSessionInstance: makeChatSession,
+      createHistoryService,
     });
 
     expect(clearFn).not.toHaveBeenCalled();
-    expect(HistoryService).toHaveBeenCalled();
+    expect(createHistoryService).toHaveBeenCalledOnce();
   });
 
   it('adds extra history to a new HistoryService', async () => {
@@ -436,10 +404,6 @@ describe('createChatSession', () => {
       resetTokenAccounting: vi.fn(),
       recalculateTotalTokens: vi.fn().mockResolvedValue(undefined),
     };
-    vi.mocked(HistoryService).mockImplementationOnce(
-      () => mockHistoryInstance as unknown as HistoryService,
-    );
-
     const extraHistory = [
       { role: 'user' as const, parts: [{ text: 'hello' }] },
     ];
@@ -454,6 +418,10 @@ describe('createChatSession', () => {
       generateContentConfig: {},
       todoContinuationService,
       toolRegistry: undefined,
+      loadRuntime,
+      createChatSessionInstance: makeChatSession,
+      createHistoryService: () =>
+        mockHistoryInstance as unknown as HistoryService,
     });
 
     expect(mockHistoryInstance.add).toHaveBeenCalled();
@@ -463,6 +431,7 @@ describe('createChatSession', () => {
     const config = makeConfig();
     const runtimeState = makeRuntimeState({ model: 'gemini-2.5-flash' });
     const todoContinuationService = makeTodoContinuationService();
+    const createChatSessionInstance = vi.fn(makeChatSession);
 
     await createChatSession({
       config,
@@ -473,9 +442,11 @@ describe('createChatSession', () => {
       generateContentConfig: {},
       todoContinuationService,
       toolRegistry: undefined,
+      loadRuntime,
+      createChatSessionInstance,
     });
 
-    expect(ChatSession).toHaveBeenCalledWith(
+    expect(createChatSessionInstance).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
       expect.objectContaining({
@@ -489,6 +460,7 @@ describe('createChatSession', () => {
     const config = makeConfig();
     const runtimeState = makeRuntimeState({ model: 'gemini-2.0-flash' });
     const todoContinuationService = makeTodoContinuationService();
+    const createChatSessionInstance = vi.fn(makeChatSession);
 
     await createChatSession({
       config,
@@ -499,9 +471,11 @@ describe('createChatSession', () => {
       generateContentConfig: {},
       todoContinuationService,
       toolRegistry: undefined,
+      loadRuntime,
+      createChatSessionInstance,
     });
 
-    expect(ChatSession).toHaveBeenCalledWith(
+    expect(createChatSessionInstance).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
       expect.not.objectContaining({ thinkingConfig: expect.anything() }),
@@ -517,7 +491,7 @@ describe('createChatSession', () => {
       setActiveTodosProvider: vi.fn(),
       getHistoryService: vi.fn().mockReturnValue(null),
     };
-    vi.mocked(ChatSession).mockImplementationOnce(
+    const createChatSessionInstance = vi.fn(
       () => mockChat as unknown as ChatSession,
     );
 
@@ -530,6 +504,8 @@ describe('createChatSession', () => {
       generateContentConfig: {},
       todoContinuationService,
       toolRegistry: undefined,
+      loadRuntime,
+      createChatSessionInstance,
     });
 
     expect(mockChat.setActiveTodosProvider).toHaveBeenCalledWith(
@@ -542,7 +518,7 @@ describe('createChatSession', () => {
       './clientToolGovernance.js'
     );
     const mockDeclarations = [{ name: 'todo_write' }];
-    vi.mocked(buildToolDeclarationsFromView).mockReturnValueOnce(
+    buildToolDeclarationsFromView.mockReturnValueOnce(
       mockDeclarations as never,
     );
 
@@ -559,6 +535,8 @@ describe('createChatSession', () => {
       generateContentConfig: {},
       todoContinuationService,
       toolRegistry: undefined,
+      loadRuntime,
+      createChatSessionInstance: makeChatSession,
     });
 
     expect(
@@ -570,14 +548,12 @@ describe('createChatSession', () => {
 describe('createChatSessionSafe', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('system prompt');
-    vi.mocked(getEnvironmentContext).mockResolvedValue([]);
+    getCoreSystemPromptAsync.mockResolvedValue('system prompt');
+    getEnvironmentContext.mockResolvedValue([]);
   });
 
   it('wraps errors and throws with descriptive message', async () => {
-    vi.mocked(loadAgentRuntime).mockRejectedValueOnce(
-      new Error('runtime init failed'),
-    );
+    loadRuntime.mockRejectedValueOnce(new Error('runtime init failed'));
 
     const config = makeConfig();
     const runtimeState = makeRuntimeState();
@@ -593,6 +569,8 @@ describe('createChatSessionSafe', () => {
         generateContentConfig: {},
         todoContinuationService,
         toolRegistry: undefined,
+        loadRuntime,
+        createChatSessionInstance: makeChatSession,
       }),
     ).rejects.toThrow('Failed to initialize chat');
   });

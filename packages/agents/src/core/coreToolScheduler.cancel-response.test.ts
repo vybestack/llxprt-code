@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import type {
   ToolCall,
   WaitingToolCall,
@@ -24,6 +24,20 @@ import {
   createMockConfig,
   waitForStatus,
 } from './coreToolScheduler-test-helpers.js';
+async function waitForCondition(
+  condition: () => boolean,
+  description: string,
+  timeoutMs = 5000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (condition()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Timed out waiting for ${description}`);
+}
 
 describe('CoreToolScheduler cancelled tool responseParts', () => {
   it('should populate responseParts for cancelled tools when cancelAll is called', async () => {
@@ -105,9 +119,11 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
     scheduler.cancelAll();
 
     // Wait for tool to be cancelled
-    await vi.waitFor(() => {
-      expect(onAllToolCallsComplete).toHaveBeenCalled();
-    });
+    await waitForCondition(
+      () => onAllToolCallsComplete.mock.calls.length > 0,
+      'tool completion callback',
+    );
+    expect(onAllToolCallsComplete).toHaveBeenCalled();
 
     const completedCalls = onAllToolCallsComplete.mock
       .calls[0][0] as CompletedToolCall[];
@@ -198,9 +214,11 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
 
     // 2. Wait just enough for it to finish and enter checkAndNotifyCompletion
     // (awaiting our slow mock)
-    await vi.waitFor(() => {
-      expect(completionCallCount).toBe(1);
-    });
+    await waitForCondition(
+      () => completionCallCount === 1,
+      'the first completion callback',
+    );
+    expect(completionCallCount).toBe(1);
 
     // 3. Trigger a concurrent completion event (e.g. via cancelAll)
     scheduler.cancelAll(abortController.signal);
@@ -277,9 +295,11 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
     );
 
     // 2. Wait for reporting to start
-    await vi.waitFor(() => {
-      expect(onAllToolCallsComplete).toHaveBeenCalled();
-    });
+    await waitForCondition(
+      () => onAllToolCallsComplete.mock.calls.length > 0,
+      'tool completion callback',
+    );
+    expect(onAllToolCallsComplete).toHaveBeenCalled();
 
     // 3. Abort the signal while reporting is in progress
     abortController.abort();

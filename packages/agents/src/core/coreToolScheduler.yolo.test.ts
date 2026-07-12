@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import type { ToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -92,9 +92,7 @@ describe('CoreToolScheduler YOLO mode', () => {
 
     // Act
     await scheduler.schedule([request], abortController.signal);
-    await vi.waitFor(() => {
-      expect(onAllToolCallsComplete).toHaveBeenCalled();
-    });
+    expect(onAllToolCallsComplete).toHaveBeenCalled();
 
     // Assert
     // 1. The tool's execute method was called directly.

@@ -4,7 +4,7 @@
  * @plan PLAN-20251202-THINKING.P16
  * @requirement REQ-THINK-003, REQ-THINK-004, REQ-THINK-005, EC-006
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIProvider } from '../OpenAIProvider';
 import { buildMessagesWithReasoning } from '../OpenAIRequestBuilder';
 import type {
@@ -19,18 +19,11 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type OpenAI from 'openai';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 
-// Mock OpenAI client at the instance level
 const mockChatCompletionsCreate = vi.fn();
-
-vi.mock('openai', () => ({
-  default: class MockOpenAI {
-    chat = {
-      completions: {
-        create: mockChatCompletionsCreate,
-      },
-    };
-  },
-}));
+const constructClient = (): OpenAI =>
+  ({
+    chat: { completions: { create: mockChatCompletionsCreate } },
+  }) as unknown as OpenAI;
 
 describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
   let provider: OpenAIProvider;
@@ -54,7 +47,12 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
 
     settingsService = runtime.settingsService;
     runtimeConfig = runtime.config;
-    provider = new OpenAIProvider('test-api-key', 'https://api.openai.com/v1');
+    provider = new OpenAIProvider(
+      'test-api-key',
+      'https://api.openai.com/v1',
+      undefined,
+      { constructClient },
+    );
     provider.setRuntimeSettingsService?.(settingsService);
     provider.setConfig?.(runtime.config);
 

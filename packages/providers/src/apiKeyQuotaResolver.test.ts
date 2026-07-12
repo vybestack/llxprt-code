@@ -4,35 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import {
   detectApiKeyProvider,
   detectApiKeyProviderFromName,
   fetchApiKeyQuota,
 } from './apiKeyQuotaResolver.js';
 
-// Mock all the usage info modules
-vi.mock('./zai/usageInfo.js', () => ({
+const dependencies = {
   fetchZaiUsage: vi.fn(),
   formatZaiUsage: vi.fn(),
-}));
-
-vi.mock('./synthetic/usageInfo.js', () => ({
   fetchSyntheticUsage: vi.fn(),
   formatSyntheticUsage: vi.fn(),
-}));
-
-vi.mock('./chutes/usageInfo.js', () => ({
   fetchChutesUsage: vi.fn(),
   formatChutesUsage: vi.fn(),
-}));
-
-vi.mock('./kimi/usageInfo.js', () => ({
   fetchKimiUsage: vi.fn(),
   formatKimiUsage: vi.fn(),
   fetchKimiCodeUsage: vi.fn(),
   formatKimiCodeUsage: vi.fn(),
-}));
+};
 
 describe('apiKeyQuotaResolver', () => {
   describe('detectApiKeyProviderFromName', () => {
@@ -131,12 +121,8 @@ describe('apiKeyQuotaResolver', () => {
       vi.resetAllMocks();
     });
 
-    afterEach(() => {
-      vi.restoreAllMocks();
-    });
-
     it('should return null for empty API key', async () => {
-      const result = await fetchApiKeyQuota('zai', '');
+      const result = await fetchApiKeyQuota('zai', '', undefined, dependencies);
       expect(result).toBeNull();
     });
 
@@ -144,30 +130,32 @@ describe('apiKeyQuotaResolver', () => {
       const result = await fetchApiKeyQuota(
         'zai',
         undefined as unknown as string,
+        undefined,
+        dependencies,
       );
       expect(result).toBeNull();
     });
 
     it('should fetch and format Z.ai quota', async () => {
-      const { fetchZaiUsage, formatZaiUsage } = await import(
-        './zai/usageInfo.js'
-      );
       const mockUsage = { data: { limits: [], level: 'max' } };
       const mockLines = ['  Plan: Max'];
-      vi.mocked(fetchZaiUsage).mockResolvedValue(
-        mockUsage as ReturnType<typeof fetchZaiUsage> extends Promise<infer T>
+      dependencies.fetchZaiUsage.mockResolvedValue(
+        mockUsage as ReturnType<
+          typeof dependencies.fetchZaiUsage
+        > extends Promise<infer T>
           ? T
           : never,
       );
-      vi.mocked(formatZaiUsage).mockReturnValue(mockLines);
+      dependencies.formatZaiUsage.mockReturnValue(mockLines);
 
       const result = await fetchApiKeyQuota(
         'zai',
         'test-key',
         'https://api.z.ai/v1',
+        dependencies,
       );
 
-      expect(fetchZaiUsage).toHaveBeenCalledWith(
+      expect(dependencies.fetchZaiUsage).toHaveBeenCalledWith(
         'test-key',
         'https://api.z.ai/v1',
       );
@@ -175,73 +163,77 @@ describe('apiKeyQuotaResolver', () => {
     });
 
     it('should fetch and format Synthetic quota', async () => {
-      const { fetchSyntheticUsage, formatSyntheticUsage } = await import(
-        './synthetic/usageInfo.js'
-      );
       const mockUsage = {
         subscription: { limit: 100, requests: 50, renewsAt: '2026-01-01' },
       };
       const mockLines = ['  Subscription: 50/100'];
-      vi.mocked(fetchSyntheticUsage).mockResolvedValue(
-        mockUsage as ReturnType<typeof fetchSyntheticUsage> extends Promise<
-          infer T
-        >
+      dependencies.fetchSyntheticUsage.mockResolvedValue(
+        mockUsage as ReturnType<
+          typeof dependencies.fetchSyntheticUsage
+        > extends Promise<infer T>
           ? T
           : never,
       );
-      vi.mocked(formatSyntheticUsage).mockReturnValue(mockLines);
+      dependencies.formatSyntheticUsage.mockReturnValue(mockLines);
 
-      const result = await fetchApiKeyQuota('synthetic', 'test-key');
+      const result = await fetchApiKeyQuota(
+        'synthetic',
+        'test-key',
+        undefined,
+        dependencies,
+      );
 
-      expect(fetchSyntheticUsage).toHaveBeenCalledWith('test-key');
+      expect(dependencies.fetchSyntheticUsage).toHaveBeenCalledWith('test-key');
       expect(result).toStrictEqual({ provider: 'Synthetic', lines: mockLines });
     });
 
     it('should fetch and format Chutes quota', async () => {
-      const { fetchChutesUsage, formatChutesUsage } = await import(
-        './chutes/usageInfo.js'
-      );
       const mockUsage = {
         quotas: [],
         balance: 10.0,
         username: 'test',
       };
       const mockLines = ['  Balance: $10.00'];
-      vi.mocked(fetchChutesUsage).mockResolvedValue(
-        mockUsage as ReturnType<typeof fetchChutesUsage> extends Promise<
-          infer T
-        >
+      dependencies.fetchChutesUsage.mockResolvedValue(
+        mockUsage as ReturnType<
+          typeof dependencies.fetchChutesUsage
+        > extends Promise<infer T>
           ? T
           : never,
       );
-      vi.mocked(formatChutesUsage).mockReturnValue(mockLines);
+      dependencies.formatChutesUsage.mockReturnValue(mockLines);
 
-      const result = await fetchApiKeyQuota('chutes', 'test-key');
+      const result = await fetchApiKeyQuota(
+        'chutes',
+        'test-key',
+        undefined,
+        dependencies,
+      );
 
-      expect(fetchChutesUsage).toHaveBeenCalledWith('test-key');
+      expect(dependencies.fetchChutesUsage).toHaveBeenCalledWith('test-key');
       expect(result).toStrictEqual({ provider: 'Chutes', lines: mockLines });
     });
 
     it('should fetch and format Kimi quota for standard keys', async () => {
-      const { fetchKimiUsage, formatKimiUsage } = await import(
-        './kimi/usageInfo.js'
-      );
       const mockUsage = { available_balance: 42.5 };
       const mockLines = ['  Available balance: $42.50'];
-      vi.mocked(fetchKimiUsage).mockResolvedValue(
-        mockUsage as ReturnType<typeof fetchKimiUsage> extends Promise<infer T>
+      dependencies.fetchKimiUsage.mockResolvedValue(
+        mockUsage as ReturnType<
+          typeof dependencies.fetchKimiUsage
+        > extends Promise<infer T>
           ? T
           : never,
       );
-      vi.mocked(formatKimiUsage).mockReturnValue(mockLines);
+      dependencies.formatKimiUsage.mockReturnValue(mockLines);
 
       const result = await fetchApiKeyQuota(
         'kimi',
         'sk-standard-key',
         'https://api.moonshot.ai/v1',
+        dependencies,
       );
 
-      expect(fetchKimiUsage).toHaveBeenCalledWith(
+      expect(dependencies.fetchKimiUsage).toHaveBeenCalledWith(
         'sk-standard-key',
         'https://api.moonshot.ai/v1',
       );
@@ -249,29 +241,27 @@ describe('apiKeyQuotaResolver', () => {
     });
 
     it('should fetch and format Kimi Code quota for sk-kimi- keys', async () => {
-      const { fetchKimiCodeUsage, formatKimiCodeUsage } = await import(
-        './kimi/usageInfo.js'
-      );
       const mockUsage = {
         usage: { limit: '100', remaining: '85' },
       };
       const mockLines = ['  Weekly quota: 15/100 used (85 remaining)'];
-      vi.mocked(fetchKimiCodeUsage).mockResolvedValue(
-        mockUsage as ReturnType<typeof fetchKimiCodeUsage> extends Promise<
-          infer T
-        >
+      dependencies.fetchKimiCodeUsage.mockResolvedValue(
+        mockUsage as ReturnType<
+          typeof dependencies.fetchKimiCodeUsage
+        > extends Promise<infer T>
           ? T
           : never,
       );
-      vi.mocked(formatKimiCodeUsage).mockReturnValue(mockLines);
+      dependencies.formatKimiCodeUsage.mockReturnValue(mockLines);
 
       const result = await fetchApiKeyQuota(
         'kimi',
         'sk-kimi-subscription-key',
         'https://api.kimi.com/coding/v1',
+        dependencies,
       );
 
-      expect(fetchKimiCodeUsage).toHaveBeenCalledWith(
+      expect(dependencies.fetchKimiCodeUsage).toHaveBeenCalledWith(
         'sk-kimi-subscription-key',
         'https://api.kimi.com/coding/v1',
       );
@@ -279,31 +269,48 @@ describe('apiKeyQuotaResolver', () => {
     });
 
     it('should return null when Kimi Code fetch returns null', async () => {
-      const { fetchKimiCodeUsage } = await import('./kimi/usageInfo.js');
-      vi.mocked(fetchKimiCodeUsage).mockResolvedValue(null);
+      dependencies.fetchKimiCodeUsage.mockResolvedValue(null);
 
-      const result = await fetchApiKeyQuota('kimi', 'sk-kimi-subscription-key');
+      const result = await fetchApiKeyQuota(
+        'kimi',
+        'sk-kimi-subscription-key',
+        undefined,
+        dependencies,
+      );
       expect(result).toBeNull();
     });
 
     it('should return null when fetch returns null', async () => {
-      const { fetchZaiUsage } = await import('./zai/usageInfo.js');
-      vi.mocked(fetchZaiUsage).mockResolvedValue(null);
+      dependencies.fetchZaiUsage.mockResolvedValue(null);
 
-      const result = await fetchApiKeyQuota('zai', 'test-key');
+      const result = await fetchApiKeyQuota(
+        'zai',
+        'test-key',
+        undefined,
+        dependencies,
+      );
       expect(result).toBeNull();
     });
 
     it('should return null for unknown provider', async () => {
-      const result = await fetchApiKeyQuota('unknown', 'test-key');
+      const result = await fetchApiKeyQuota(
+        'unknown',
+        'test-key',
+        undefined,
+        dependencies,
+      );
       expect(result).toBeNull();
     });
 
     it('should handle errors gracefully', async () => {
-      const { fetchZaiUsage } = await import('./zai/usageInfo.js');
-      vi.mocked(fetchZaiUsage).mockRejectedValue(new Error('test error'));
+      dependencies.fetchZaiUsage.mockRejectedValue(new Error('test error'));
 
-      const result = await fetchApiKeyQuota('zai', 'test-key');
+      const result = await fetchApiKeyQuota(
+        'zai',
+        'test-key',
+        undefined,
+        dependencies,
+      );
       expect(result).toBeNull();
     });
   });

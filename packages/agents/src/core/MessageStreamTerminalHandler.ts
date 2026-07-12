@@ -11,7 +11,10 @@ import {
   type MessageStreamDeps,
   type StreamContext,
 } from './MessageStreamOrchestrator.js';
-import { AgentEventType, type ServerAgentStreamEvent } from './turn.js';
+import {
+  AgentEventType,
+  type ServerAgentStreamEvent,
+} from './agentEventProtocol.js';
 
 interface TerminalState {
   hadToolCallsThisTurn: boolean;
@@ -259,7 +262,7 @@ export async function* handleTerminalEvent(
   state: TerminalState,
   initialRequest: PartListUnion,
 ): AsyncGenerator<ServerAgentStreamEvent, IterationResult | undefined> {
-  if (event.type === AgentEventType.Error) {
+  if (event.type === 'error') {
     return yield* handleErrorEvent(
       deps,
       event,
@@ -271,7 +274,7 @@ export async function* handleTerminalEvent(
     );
   }
 
-  if (event.type === AgentEventType.InvalidStream) {
+  if (event.type === 'invalid_stream') {
     return yield* handleInvalidStreamEvent(
       deps,
       signal,

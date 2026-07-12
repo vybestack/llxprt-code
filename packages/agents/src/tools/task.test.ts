@@ -9,7 +9,7 @@
  * Sibling files cover max_turns, timeout, async mode, and issue-specific tests.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';

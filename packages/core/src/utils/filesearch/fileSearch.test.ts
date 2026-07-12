@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'bun:test';
 import { AsyncFzf } from 'fzf';
 
 import { FileSearchFactory, AbortError, filter } from './fileSearch.js';
@@ -283,7 +283,7 @@ describe('FileSearch', () => {
     });
 
     // Expect no errors to be thrown during initialization
-    await expect(fileSearch.initialize()).resolves.toBeUndefined();
+    await fileSearch.initialize();
     const results = await fileSearch.search('');
     expect(results).toStrictEqual(['src/', 'src/file1.js']);
   });
@@ -369,7 +369,7 @@ describe('FileSearch', () => {
     const controller = new AbortController();
     controller.abort();
 
-    await expect(
+    expect(
       fileSearch.search('sst', { signal: controller.signal }),
     ).rejects.toThrow(AbortError);
     expect(findSpy).not.toHaveBeenCalled();
@@ -460,7 +460,7 @@ describe('FileSearch', () => {
     // Abort after a short delay to ensure filter has started
     setTimeout(() => controller.abort(), 1);
 
-    await expect(filterPromise).rejects.toThrow(AbortError);
+    expect(filterPromise).rejects.toThrow(AbortError);
   });
 
   it('should throw an error if search is called before initialization', async () => {
@@ -476,7 +476,7 @@ describe('FileSearch', () => {
       enableFuzzySearch: true,
     });
 
-    await expect(fileSearch.search('')).rejects.toThrow(
+    expect(fileSearch.search('')).rejects.toThrow(
       'Engine not initialized. Call initialize() first.',
     );
   });
@@ -579,12 +579,9 @@ describe('FileSearch', () => {
       signal: controller.signal,
     });
 
-    // Yield to allow the search to start before aborting.
-    await new Promise((resolve) => setImmediate(resolve));
-
     controller.abort();
 
-    await expect(searchPromise).rejects.toThrow(AbortError);
+    expect(searchPromise).rejects.toThrow(AbortError);
   });
 
   it('should leverage ResultCache for bestBaseQuery optimization', async () => {

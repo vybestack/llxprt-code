@@ -12,20 +12,18 @@
  * 3. Passes errorStatus to the callback
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { retryWithBackoff, type HttpError } from './retry.js';
 import { setSimulate429 } from './testUtils.js';
 
 describe('retryWithBackoff onAuthError callback', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
     setSimulate429(false);
     vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.useRealTimers();
   });
 
   /**
@@ -43,14 +41,13 @@ describe('retryWithBackoff onAuthError callback', () => {
 
     const promise = retryWithBackoff(mockFn, {
       maxAttempts: 2,
-      initialDelayMs: 10,
+      initialDelayMs: 0,
       onAuthError: mockOnAuthError,
     });
 
-    await Promise.all([
-      expect(promise).rejects.toThrow('Unauthorized'),
-      vi.runAllTimersAsync(),
-    ]);
+    const error = await promise.catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({ message: 'Unauthorized' });
 
     // onAuthError should have been called for the 401
     expect(mockOnAuthError).toHaveBeenCalledTimes(1);
@@ -75,14 +72,13 @@ describe('retryWithBackoff onAuthError callback', () => {
 
     const promise = retryWithBackoff(mockFn, {
       maxAttempts: 2,
-      initialDelayMs: 10,
+      initialDelayMs: 0,
       onAuthError: mockOnAuthError,
     });
 
-    await Promise.all([
-      expect(promise).rejects.toThrow('Forbidden'),
-      vi.runAllTimersAsync(),
-    ]);
+    const error = await promise.catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({ message: 'Forbidden' });
 
     // onAuthError should have been called for the 403
     expect(mockOnAuthError).toHaveBeenCalledTimes(1);
@@ -107,14 +103,13 @@ describe('retryWithBackoff onAuthError callback', () => {
 
     const promise = retryWithBackoff(mockFn, {
       maxAttempts: 2,
-      initialDelayMs: 10,
+      initialDelayMs: 0,
       onAuthError: mockOnAuthError,
     });
 
-    await Promise.all([
-      expect(promise).rejects.toThrow('Rate limit'),
-      vi.runAllTimersAsync(),
-    ]);
+    const error = await promise.catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({ message: 'Rate limit' });
 
     expect(mockOnAuthError).not.toHaveBeenCalled();
   });
@@ -134,14 +129,13 @@ describe('retryWithBackoff onAuthError callback', () => {
 
     const promise = retryWithBackoff(mockFn, {
       maxAttempts: 2,
-      initialDelayMs: 10,
+      initialDelayMs: 0,
       onAuthError: mockOnAuthError,
     });
 
-    await Promise.all([
-      expect(promise).rejects.toThrow('Server error'),
-      vi.runAllTimersAsync(),
-    ]);
+    const error = await promise.catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({ message: 'Server error' });
 
     expect(mockOnAuthError).not.toHaveBeenCalled();
   });
@@ -163,14 +157,13 @@ describe('retryWithBackoff onAuthError callback', () => {
 
     const promise = retryWithBackoff(mockFn, {
       maxAttempts: 2,
-      initialDelayMs: 10,
+      initialDelayMs: 0,
       onAuthError: mockOnAuthError,
     });
 
-    await Promise.all([
-      expect(promise).rejects.toThrow('Unauthorized'),
-      vi.runAllTimersAsync(),
-    ]);
+    const error = await promise.catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({ message: 'Unauthorized' });
 
     expect(mockOnAuthError).toHaveBeenCalledTimes(1);
     expect(mockFn).toHaveBeenCalledTimes(2);

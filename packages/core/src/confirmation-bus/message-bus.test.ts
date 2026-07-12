@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { MessageBus } from './message-bus.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { PolicyDecision, type PolicyEngineConfig } from '../policy/types.js';

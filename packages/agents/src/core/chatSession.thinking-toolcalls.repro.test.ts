@@ -8,17 +8,17 @@
  * max-lines/no-console disable).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '../../../core/src/config/config.ts?thinking-toolcalls-repro';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+} from '../../../core/src/runtime/providerRuntimeContext.ts?thinking-toolcalls-repro';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -37,10 +37,6 @@ import {
   createConfigParams,
   isThoughtPart,
 } from './chatSession-thinking-helpers.js';
-
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
-  retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
-}));
 
 describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persistence', () => {
   let settingsService: SettingsService;

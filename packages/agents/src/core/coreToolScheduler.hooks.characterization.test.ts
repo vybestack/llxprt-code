@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import {
   CoreToolScheduler,
   type CompletedToolCall,
@@ -16,6 +16,23 @@ import {
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
+
+async function waitForResolverCount(
+  resolvers: ReadonlyMap<string, () => void>,
+  expectedCount: number,
+  timeoutMs = 5000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (resolvers.size === expectedCount) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(
+    `Timed out waiting for ${expectedCount} resolvers; received ${resolvers.size}`,
+  );
+}
 
 function createMockPolicyEngine() {
   return {
@@ -529,9 +546,8 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
       },
     ]);
 
-    await vi.waitFor(() => {
-      expect(resolvers.size).toBe(3);
-    });
+    await waitForResolverCount(resolvers, 3);
+    expect(resolvers.size).toBe(3);
 
     resolvers.get('2')?.();
     resolvers.get('3')?.();

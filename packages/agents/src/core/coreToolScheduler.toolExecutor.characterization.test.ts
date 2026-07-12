@@ -12,7 +12,7 @@
  * These tests document EXISTING behavior prior to ToolExecutor extraction.
  */
 
-import { describe, it, expect, vi, type Mock } from 'vitest';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import type { ToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import { expectSuccessful } from './coreToolScheduler-test-helpers.js';
@@ -96,27 +96,6 @@ function createScheduler(
     getPreferredEditor: () => 'vscode',
     onEditorClose: vi.fn(),
   });
-}
-
-async function _waitForStatus(
-  onToolCallsUpdate: Mock,
-  status: ToolCall['status'],
-): Promise<ToolCall | undefined> {
-  let matchingCall: ToolCall | undefined;
-  await vi.waitFor(() => {
-    const latestCalls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as
-      | ToolCall[]
-      | undefined;
-    matchingCall = latestCalls?.find((call) => call.status === status);
-    if (!matchingCall) {
-      throw new Error(
-        `Waiting for status "${status}", latest statuses: ${
-          latestCalls?.map((call) => call.status).join(', ') ?? 'none'
-        }`,
-      );
-    }
-  });
-  return matchingCall;
 }
 
 describe('CoreToolScheduler - Tool Execution Characterization', () => {

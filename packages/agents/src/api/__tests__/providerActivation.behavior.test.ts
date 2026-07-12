@@ -12,7 +12,7 @@
  * assertions exercise a REAL CLI-style Config wired to the FakeProvider.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   executeProviderActivation,
   fromConfig,
@@ -436,17 +436,20 @@ describe('fromConfig surfaces auth failure (#2374 finding 3)', () => {
       // import and fromConfig's import to distinct module instances, breaking
       // instanceof identity. The error.name is the reliable cross-identity
       // signal that fromConfig surfaced an AgentBootstrapError.
-      await expect(
-        fromConfig({ config: built.config, activation: intent }),
-      ).rejects.toSatisfy((err: unknown) => {
-        if (!(err instanceof Error)) {
-          return false;
-        }
-        return (
-          err.name === 'AgentBootstrapError' &&
-          err.message.includes('fromConfig activation failed')
+      const activationError = await fromConfig({
+        config: built.config,
+        activation: intent,
+      }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(activationError).toBeInstanceOf(Error);
+      if (activationError instanceof Error) {
+        expect(activationError.name).toBe('AgentBootstrapError');
+        expect(activationError.message).toContain(
+          'fromConfig activation failed',
         );
-      });
+      }
     } finally {
       await built.cleanup();
     }

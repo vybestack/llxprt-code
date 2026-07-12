@@ -19,6 +19,7 @@
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "test": "bun test --path-ignore-patterns dist",
+    "test:bun": "bun ../../scripts/run_bun_tests.ts",
     "test:ci": "bun test --path-ignore-patterns dist",
     "typecheck": "tsc --noEmit",
     "test:vitest": "vitest run --config ./vitest.config.ts"

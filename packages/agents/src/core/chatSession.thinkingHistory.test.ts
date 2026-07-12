@@ -19,7 +19,7 @@
  *
  * The bug: Step 3-5 are losing the thinking blocks.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type {
   IContent,
   ThinkingBlock,

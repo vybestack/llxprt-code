@@ -28,7 +28,7 @@
  * Property test: tool-arg projection stability (fc.dictionary).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import type {
   ToolConfirmation,

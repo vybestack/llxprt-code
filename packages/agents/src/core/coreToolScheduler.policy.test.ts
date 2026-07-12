@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import type { ToolCall, WaitingToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -23,6 +23,20 @@ import {
   createMockMessageBus,
   createMockPolicyEngine,
 } from './coreToolScheduler-test-helpers.js';
+
+async function waitForCall(
+  callback: ReturnType<typeof vi.fn>,
+  timeoutMs = 5000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (callback.mock.calls.length > 0) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Timed out waiting for tool completion callback');
+}
 
 describe('CoreToolScheduler policy decisions', () => {
   it('should reject tool execution when policy denies it', async () => {
@@ -200,12 +214,11 @@ describe('CoreToolScheduler policy decisions', () => {
       outcome: ToolConfirmationOutcome.ProceedOnce,
     });
 
-    await vi.waitFor(() => {
-      expect(onAllToolCallsComplete).toHaveBeenCalled();
-      const completedCallsAsk = onAllToolCallsComplete.mock.calls.at(
-        -1,
-      )?.[0] as ToolCall[];
-      expect(completedCallsAsk[0]?.status).toBe('success');
-    });
+    await waitForCall(onAllToolCallsComplete);
+    expect(onAllToolCallsComplete).toHaveBeenCalled();
+    const completedCallsAsk = onAllToolCallsComplete.mock.calls.at(
+      -1,
+    )?.[0] as ToolCall[];
+    expect(completedCallsAsk[0]?.status).toBe('success');
   });
 });

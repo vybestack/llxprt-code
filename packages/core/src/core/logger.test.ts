@@ -12,7 +12,7 @@ import {
   beforeEach,
   afterEach,
   afterAll,
-} from 'vitest';
+} from 'bun:test';
 import type { LogEntry } from './logger.js';
 import {
   Logger,
@@ -77,10 +77,6 @@ async function readLogFile(): Promise<LogEntry[]> {
     throw error;
   }
 }
-
-vi.mock('../utils/session.js', () => ({
-  sessionId: 'test-session-id',
-}));
 
 describe('Logger', () => {
   let logger: Logger;
@@ -477,9 +473,7 @@ describe('Logger', () => {
         .spyOn(debugLogger, 'error')
         .mockImplementation(() => {});
 
-      await expect(
-        uninitializedLogger.saveCheckpoint(conversation, 'tag'),
-      ).resolves.not.toThrow();
+      await uninitializedLogger.saveCheckpoint(conversation, 'tag');
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         'Logger not initialized or checkpoint file path not set. Cannot save a checkpoint.',
       );
@@ -606,7 +600,7 @@ describe('Logger', () => {
       expect(result).toBe(true);
 
       // Verify the file is actually gone
-      await expect(fs.access(taggedFilePath)).rejects.toThrow(/ENOENT/);
+      expect(fs.access(taggedFilePath)).rejects.toThrow(/ENOENT/);
     });
 
     it('should delete both new and old checkpoint files if they exist', async () => {
@@ -649,9 +643,11 @@ describe('Logger', () => {
         .spyOn(debugLogger, 'error')
         .mockImplementation(() => {});
 
-      await expect(logger.deleteCheckpoint(tag)).rejects.toThrow(
-        'EACCES: permission denied',
-      );
+      const deleteError = await logger
+        .deleteCheckpoint(tag)
+        .catch((error: unknown) => error);
+      expect(deleteError).toBeInstanceOf(Error);
+      expect((deleteError as Error).message).toBe('EACCES: permission denied');
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         `Failed to delete checkpoint file ${taggedFilePath}:`,
         expect.any(Error),
@@ -706,7 +702,7 @@ describe('Logger', () => {
       );
       uninitializedLogger.close();
 
-      await expect(uninitializedLogger.checkpointExists(tag)).rejects.toThrow(
+      expect(uninitializedLogger.checkpointExists(tag)).rejects.toThrow(
         'Logger not initialized. Cannot check for checkpoint existence.',
       );
     });
@@ -721,9 +717,11 @@ describe('Logger', () => {
         .spyOn(debugLogger, 'error')
         .mockImplementation(() => {});
 
-      await expect(logger.checkpointExists(tag)).rejects.toThrow(
-        'EACCES: permission denied',
-      );
+      const accessError = await logger
+        .checkpointExists(tag)
+        .catch((error: unknown) => error);
+      expect(accessError).toBeInstanceOf(Error);
+      expect((accessError as Error).message).toBe('EACCES: permission denied');
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         `Failed to check checkpoint existence for path for tag "${tag}":`,
         expect.any(Error),

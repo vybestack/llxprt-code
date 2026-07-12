@@ -33,7 +33,7 @@
 //      never null under the harness (always non-null from construction), so
 //      the null-branch is defensively dead in this environment.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import {
   type AgentEvent,

@@ -19,20 +19,13 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-const mockChatCompletionsCreate = vi.hoisted(() => vi.fn());
-
-const mockOpenAIConstructor = vi.hoisted(() =>
-  vi.fn().mockImplementation(() => ({
-    chat: {
-      completions: {
-        create: mockChatCompletionsCreate,
-      },
+const mockChatCompletionsCreate = vi.fn();
+const mockOpenAIConstructor = vi.fn().mockImplementation(() => ({
+  chat: {
+    completions: {
+      create: mockChatCompletionsCreate,
     },
-  })),
-);
-
-vi.mock('openai', () => ({
-  default: mockOpenAIConstructor,
+  },
 }));
 
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -43,21 +36,10 @@ vi.mock('@vybestack/llxprt-code-core/code_assist/codeAssist.js', () => ({
   createCodeAssistContentGenerator: vi.fn(),
 }));
 
-const mockSettingsService = vi.hoisted(() => ({
-  set: vi.fn(),
-  get: vi.fn(),
-  getProviderSettings: vi.fn().mockReturnValue({}),
-  updateSettings: vi.fn(),
-  getAllGlobalSettings: vi.fn().mockReturnValue({}),
-}));
-
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  )),
-  getSettingsService: vi.fn(() => mockSettingsService),
-  SETTINGS_REGISTRY: [],
-}));
+const createProvider = (): OpenAIProvider =>
+  new OpenAIProvider('test-key', undefined, undefined, {
+    constructClient: mockOpenAIConstructor,
+  });
 
 describe('OpenAIProvider - MediaBlock support', () => {
   beforeEach(() => {
@@ -83,7 +65,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
     mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
     process.env.OPENAI_API_KEY = 'test-key';
 
-    const provider = new OpenAIProvider('test-key');
+    const provider = createProvider();
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -154,7 +136,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
     mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
     process.env.OPENAI_API_KEY = 'test-key';
 
-    const provider = new OpenAIProvider('test-key');
+    const provider = createProvider();
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -253,7 +235,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
     mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
     process.env.OPENAI_API_KEY = 'test-key';
 
-    const provider = new OpenAIProvider('test-key');
+    const provider = createProvider();
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -311,7 +293,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
     mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
     process.env.OPENAI_API_KEY = 'test-key';
 
-    const provider = new OpenAIProvider('test-key');
+    const provider = createProvider();
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -362,7 +344,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
     mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
     process.env.OPENAI_API_KEY = 'test-key';
 
-    const provider = new OpenAIProvider('test-key');
+    const provider = createProvider();
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -411,7 +393,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
     mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
     process.env.OPENAI_API_KEY = 'test-key';
 
-    const provider = new OpenAIProvider('test-key');
+    const provider = createProvider();
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -455,7 +437,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
     mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
     process.env.OPENAI_API_KEY = 'test-key';
 
-    const provider = new OpenAIProvider('test-key');
+    const provider = createProvider();
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -501,7 +483,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
     mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
     process.env.OPENAI_API_KEY = 'test-key';
 
-    const provider = new OpenAIProvider('test-key');
+    const provider = createProvider();
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -565,7 +547,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
       mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
       process.env.OPENAI_API_KEY = 'test-key';
 
-      const provider = new OpenAIProvider('test-key');
+      const provider = createProvider();
 
       const contents: IContent[] = [
         {
@@ -671,7 +653,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
       mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
       process.env.OPENAI_API_KEY = 'test-key';
 
-      const provider = new OpenAIProvider('test-key');
+      const provider = createProvider();
 
       const contents: IContent[] = [
         {
@@ -744,7 +726,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
       mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
       process.env.OPENAI_API_KEY = 'test-key';
 
-      const provider = new OpenAIProvider('test-key');
+      const provider = createProvider();
 
       const contents: IContent[] = [
         {

@@ -86,11 +86,34 @@ export function makeAnthropicSdkWrappedError(
     error?: { type?: string; error?: { type?: string; message?: string } };
   };
   err.status = undefined;
+
   err.error = { type: 'error', error: { type, message } };
   return err;
 }
 
 // ---------------------------------------------------------------------------
+export const retryWithoutDelay = async <T>(
+  operation: () => Promise<T>,
+  options: {
+    maxAttempts: number;
+    shouldRetryOnError: (error: Error) => boolean;
+  },
+): Promise<T> => {
+  for (let attempt = 1; attempt <= options.maxAttempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (
+        attempt === options.maxAttempts ||
+        !options.shouldRetryOnError(error as Error)
+      ) {
+        throw error;
+      }
+    }
+  }
+  throw new Error('Retry attempts exhausted');
+};
+
 // ChatSession factory
 // ---------------------------------------------------------------------------
 
@@ -101,6 +124,7 @@ export function makeAnthropicSdkWrappedError(
 export function makeChatSession(
   runtimeSetup: ReturnType<typeof createChatSessionRuntime>,
   providerRuntimeSnapshot: ProviderRuntimeContext,
+  retry: ConstructorParameters<typeof ChatSession>[5],
 ): ChatSession {
   const runtimeState = createAgentRuntimeState({
     runtimeId: runtimeSetup.runtime.runtimeId ?? 'test-chatSession-runtime',
@@ -156,7 +180,7 @@ export function makeChatSession(
     embedContent: vi.fn(),
   };
 
-  return new ChatSession(view, mockContentGenerator, {}, []);
+  return new ChatSession(view, mockContentGenerator, {}, [], undefined, retry);
 }
 
 // ---------------------------------------------------------------------------

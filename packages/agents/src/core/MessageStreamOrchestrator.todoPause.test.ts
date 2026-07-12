@@ -27,14 +27,16 @@
  * observable effect (a follow-up model turn), not on a private method.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
+import { vi } from 'vitest';
 import type { PartListUnion } from '@google/genai';
-import type {
-  ServerAgentStreamEvent,
-  ToolCallResponseInfo,
-  ToolCallRequestInfo,
-} from './turn.js';
-import { AgentEventType } from './turn.js';
+import type { Turn } from './turn.js';
+import {
+  AgentEventType,
+  type ServerAgentStreamEvent,
+  type ToolCallResponseInfo,
+  type ToolCallRequestInfo,
+} from '../../../core/src/core/turn.ts?todo-pause-events';
 import type { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -51,18 +53,6 @@ vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
       userContextLimit ?? 1_000_000,
   ),
 }));
-
-vi.mock('./turn.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./turn.js')>();
-  class MockTurn {
-    pendingToolCalls: unknown[] = [];
-    run = mockTurnRun;
-  }
-  return {
-    ...actual,
-    Turn: MockTurn as unknown as typeof actual.Turn,
-  };
-});
 
 import {
   MessageStreamOrchestrator,
@@ -261,6 +251,11 @@ function buildOrchestrator(options: BuildOptions = {}): {
         // Empty — only its invocation (via _finishWithToolCalls) matters.
       },
     ),
+    createTurn: () =>
+      ({
+        pendingToolCalls: [],
+        run: mockTurnRun,
+      }) as unknown as Turn,
   };
 
   return {
@@ -322,7 +317,7 @@ function expectPauseToolEvents(events: ServerAgentStreamEvent[]): void {
 describe('MessageStreamOrchestrator — todo_pause loop break (issue #2287)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(tokenLimit).mockImplementation(
+    (tokenLimit as ReturnType<typeof vi.fn>).mockImplementation(
       (_model: string, userContextLimit?: number) =>
         userContextLimit ?? 1_000_000,
     );

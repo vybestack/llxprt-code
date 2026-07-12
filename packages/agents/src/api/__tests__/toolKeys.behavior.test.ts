@@ -15,7 +15,7 @@
  * the API boundary (R-NO-RAW-SECRETS).
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -109,7 +109,7 @@ describe('agent.tools.keys — built-in tool-key control (REQ-007)', () => {
   it('save() with an unregistered tool name rejects (throw propagates)', async () => {
     const { keys, dir: d } = await makeKeys();
     dir = d;
-    await expect(keys.save('not-a-tool', 'k')).rejects.toThrow(
+    expect(keys.save('not-a-tool', 'k')).rejects.toThrow(
       'Invalid tool key name',
     );
   });
@@ -117,9 +117,7 @@ describe('agent.tools.keys — built-in tool-key control (REQ-007)', () => {
   it('status() with an unregistered tool name rejects (throw propagates)', async () => {
     const { keys, dir: d } = await makeKeys();
     dir = d;
-    await expect(keys.status('not-a-tool')).rejects.toThrow(
-      'Invalid tool key name',
-    );
+    expect(keys.status('not-a-tool')).rejects.toThrow('Invalid tool key name');
   });
 
   // T18c — no key, no keyfile → { toolName, hasKey:false } only.

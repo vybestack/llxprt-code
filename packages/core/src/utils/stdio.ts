@@ -56,7 +56,11 @@ export function writeToStderr(
  * This prevents stray output from libraries (or the app itself) from corrupting the UI.
  * Returns a cleanup function that restores the original write methods.
  */
-export function patchStdio(): () => void {
+export function patchStdio(
+  emitOutput: typeof coreEvents.emitOutput = coreEvents.emitOutput.bind(
+    coreEvents,
+  ),
+): () => void {
   const previousStdoutWrite = process.stdout.write;
   const previousStderrWrite = process.stderr.write;
 
@@ -69,7 +73,7 @@ export function patchStdio(): () => void {
   ) => {
     const encoding =
       typeof encodingOrCb === 'string' ? encodingOrCb : undefined;
-    coreEvents.emitOutput({ chunk, encoding, isStderr: false });
+    emitOutput({ chunk, encoding, isStderr: false });
     const callback = typeof encodingOrCb === 'function' ? encodingOrCb : cb;
     if (callback) {
       callback();
@@ -86,7 +90,7 @@ export function patchStdio(): () => void {
   ) => {
     const encoding =
       typeof encodingOrCb === 'string' ? encodingOrCb : undefined;
-    coreEvents.emitOutput({ chunk, encoding, isStderr: true });
+    emitOutput({ chunk, encoding, isStderr: true });
     const callback = typeof encodingOrCb === 'function' ? encodingOrCb : cb;
     if (callback) {
       callback();

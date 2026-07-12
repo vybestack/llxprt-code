@@ -18,7 +18,7 @@
  * Phase 08 will implement the methods and make these pass.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { HistoryService } from '../HistoryService.js';
 import type { IContent } from '../IContent.js';
@@ -290,7 +290,7 @@ describe('HistoryService — Density Extensions', () => {
 
       const result = makeDensityResult([2, 2], new Map());
 
-      await expect(service.applyDensityResult(result)).rejects.toThrow(
+      expect(service.applyDensityResult(result)).rejects.toThrow(
         CompressionStrategyError,
       );
     });
@@ -581,7 +581,7 @@ describe('HistoryService — Density Extensions', () => {
                 new Map([[conflictIdx, makeEntry('human', 'X')]]),
               );
 
-              await expect(svc.applyDensityResult(result)).rejects.toThrow(
+              expect(svc.applyDensityResult(result)).rejects.toThrow(
                 CompressionStrategyError,
               );
             },
@@ -630,7 +630,7 @@ describe('HistoryService — Density Extensions', () => {
               const oobIndex = histSize + offset;
               const result = makeDensityResult([oobIndex], new Map());
 
-              await expect(svc.applyDensityResult(result)).rejects.toThrow(
+              expect(svc.applyDensityResult(result)).rejects.toThrow(
                 CompressionStrategyError,
               );
             },

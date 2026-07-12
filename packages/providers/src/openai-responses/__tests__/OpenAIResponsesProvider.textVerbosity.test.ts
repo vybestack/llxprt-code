@@ -6,7 +6,7 @@
  * @issue #922 - Enable reasoning/thinking summaries for Codex models
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,

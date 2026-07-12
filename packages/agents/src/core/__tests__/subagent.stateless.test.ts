@@ -21,7 +21,7 @@
  * AgentRuntimeContext yet.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { SubAgentScope } from '../subagent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -762,7 +762,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       );
       const runConfig = createTestRunConfig();
 
-      await expect(
+      expect(
         SubAgentScope.create(
           'stateless-subagent',
           foregroundConfig,
@@ -858,8 +858,8 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
 
       const { overrides } = createRuntimeOverrides({ runtimeBundle });
 
-      await expect(
-        SubAgentScope.create(
+      expect(
+        await SubAgentScope.create(
           'stateless-subagent',
           foregroundConfig,
           promptConfig,
@@ -869,7 +869,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
           undefined,
           overrides,
         ),
-      ).resolves.toBeInstanceOf(SubAgentScope);
+      ).toBeInstanceOf(SubAgentScope);
     });
   });
 });

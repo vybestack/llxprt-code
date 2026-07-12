@@ -10,7 +10,7 @@
  * 3. recalculateTotalTokens(modelName) uses the provided model's tokenizer
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import { createUserMessage } from './IContent.js';
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';

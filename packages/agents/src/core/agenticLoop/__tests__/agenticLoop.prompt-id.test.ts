@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { AgenticLoop } from '../AgenticLoop.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
@@ -146,7 +146,7 @@ describe('AgenticLoop promptId correlation', () => {
     const firstEvent = await firstRun.next();
     expect(firstEvent.done).toBe(false);
 
-    await expect(
+    expect(
       collectEvents(loop, 'second', new AbortController().signal),
     ).rejects.toThrow('concurrent executions');
 

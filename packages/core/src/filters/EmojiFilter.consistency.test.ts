@@ -9,7 +9,7 @@
  * These tests ensure that emojis are consistently filtered across all contexts
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { FilterConfiguration } from './EmojiFilter';
 import { EmojiFilter } from './EmojiFilter';
 

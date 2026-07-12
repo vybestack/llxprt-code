@@ -29,7 +29,6 @@ import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/pro
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { mergeSystemInstruction } from '../utils/systemInstructionMerge.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
-import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { OpenAIResponsesProviderBase } from './OpenAIResponsesProviderBase.js';
 import { buildOpenAIResponsesInput } from './OpenAIResponsesInputBuilder.js';
@@ -653,7 +652,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     bodyBlob: Blob;
     abortSignal?: AbortSignal;
   }): Promise<Response> {
-    return fetch(options.responsesURL, {
+    return this.fetchFn(options.responsesURL, {
       method: 'POST',
       headers: options.headers,
       body: options.bodyBlob,
@@ -707,8 +706,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;
     }
-    const canRetryStream =
-      this.shouldRetryOnError(error) || isNetworkTransientError(error);
+    const canRetryStream = this.shouldRetryOnError(error);
     if (
       !canRetryStream ||
       state.streamingAttempt >= state.maxStreamingAttempts

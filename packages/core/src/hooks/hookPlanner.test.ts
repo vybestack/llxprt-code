@@ -9,8 +9,8 @@
  * @requirement:HOOK-087,HOOK-088,HOOK-089,HOOK-090,HOOK-091
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { HookPlanner } from './hookPlanner.js';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import type { HookPlanner as HookPlannerType } from './hookPlanner.js';
 import type { HookRegistry, HookRegistryEntry } from './hookRegistry.js';
 import { HookEventName, HookType } from './types.js';
 import { ConfigSource } from './hookRegistry.js';
@@ -29,9 +29,15 @@ vi.mock('../debug/index.js', () => ({
   },
 }));
 
+let HookPlanner: typeof HookPlannerType;
+
 describe('HookPlanner', () => {
-  let hookPlanner: HookPlanner;
+  let hookPlanner: HookPlannerType;
   let mockHookRegistry: HookRegistry;
+
+  beforeAll(async () => {
+    ({ HookPlanner } = await import('./hookPlanner.js'));
+  });
 
   beforeEach(() => {
     vi.resetAllMocks();

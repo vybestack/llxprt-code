@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -242,11 +242,13 @@ describe('LoadBalancingProvider', () => {
         });
 
         // Should throw error when trying to delegate
-        await expect(async () => {
+        const consumptionPromise = (async (): Promise<void> => {
           for await (const _chunk of iterator) {
             // Should not get here
           }
-        }).rejects.toThrow(/Provider.*not found/);
+        })();
+        expect(consumptionPromise).rejects.toThrow(/Provider.*not found/);
+        await consumptionPromise.catch(() => undefined);
       } finally {
         providerManager.getProviderByName = originalGetProvider;
       }
@@ -278,20 +280,24 @@ describe('LoadBalancingProvider', () => {
         });
 
         // Should throw error with detailed message
-        await expect(async () => {
+        const consumptionPromise = (async (): Promise<void> => {
           for await (const _chunk of iterator) {
             // Should not get here
           }
-        }).rejects.toThrow(/my-sub-profile/);
+        })();
+        expect(consumptionPromise).rejects.toThrow(/my-sub-profile/);
+        await consumptionPromise.catch(() => undefined);
 
-        await expect(async () => {
+        const secondConsumptionPromise = (async (): Promise<void> => {
           const iterator2 = provider.generateChatCompletion({
             contents: [{ role: 'user', parts: [{ text: 'test' }] }],
           });
           for await (const _chunk of iterator2) {
             // Should not get here
           }
-        }).rejects.toThrow(/missing-provider/);
+        })();
+        expect(secondConsumptionPromise).rejects.toThrow(/missing-provider/);
+        await secondConsumptionPromise.catch(() => undefined);
       } finally {
         providerManager.getProviderByName = originalGetProvider;
       }
@@ -356,11 +362,13 @@ describe('LoadBalancingProvider', () => {
         const iterator2 = provider.generateChatCompletion({
           contents: [{ role: 'user', parts: [{ text: 'test2' }] }],
         });
-        await expect(async () => {
+        const consumptionPromise = (async (): Promise<void> => {
           for await (const _chunk of iterator2) {
             // Should not get here
           }
-        }).rejects.toThrow(/Provider.*not found/);
+        })();
+        expect(consumptionPromise).rejects.toThrow(/Provider.*not found/);
+        await consumptionPromise.catch(() => undefined);
 
         // Third call - should succeed (sub-3) - counter should have advanced despite error
         const iterator3 = provider.generateChatCompletion({

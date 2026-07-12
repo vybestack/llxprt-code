@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'bun:test';
 import { SimpleExtensionLoader } from './extensionLoader.js';
 import type { Config } from '../config/config.js';
 import { type McpClientManager } from '@vybestack/llxprt-code-mcp';
@@ -57,7 +57,8 @@ describe('SimpleExtensionLoader', () => {
   it('should start active extensions', async () => {
     const loader = new SimpleExtensionLoader([activeExtension]);
     await loader.start(mockConfig);
-    expect(mockMcpClientManager.startExtension).toHaveBeenCalledExactlyOnceWith(
+    expect(mockMcpClientManager.startExtension).toHaveBeenCalledTimes(1);
+    expect(mockMcpClientManager.startExtension).toHaveBeenCalledWith(
       activeExtension,
     );
   });
@@ -82,9 +83,10 @@ describe('SimpleExtensionLoader', () => {
       await loader.loadExtension(activeExtension);
       expect(mockMcpClientManager.startExtension).not.toHaveBeenCalled();
       await loader.start(mockConfig);
-      expect(
-        mockMcpClientManager.startExtension,
-      ).toHaveBeenCalledExactlyOnceWith(activeExtension);
+      expect(mockMcpClientManager.startExtension).toHaveBeenCalledTimes(1);
+      expect(mockMcpClientManager.startExtension).toHaveBeenCalledWith(
+        activeExtension,
+      );
     });
 
     it.each([true, false])(

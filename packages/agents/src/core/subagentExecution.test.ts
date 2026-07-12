@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import {
   checkTerminationConditions,
   filterTextWithEmoji,
@@ -368,7 +368,7 @@ describe('subagentExecution', () => {
 
       abortController.abort();
 
-      await expect(completionPromise).rejects.toMatchObject({
+      expect(completionPromise).rejects.toMatchObject({
         name: 'AbortError',
       });
     });
@@ -381,13 +381,13 @@ describe('subagentExecution', () => {
         abortController.signal,
       );
       abortController.abort();
-      await expect(abortedPromise).rejects.toMatchObject({
+      expect(abortedPromise).rejects.toMatchObject({
         name: 'AbortError',
       });
 
       await channel.handleCompletion([]);
 
-      await expect(channel.awaitCompletedCalls()).resolves.toStrictEqual([]);
+      expect(await channel.awaitCompletedCalls()).toStrictEqual([]);
     });
   });
 });

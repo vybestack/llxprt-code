@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import {
   getToolGovernanceEphemerals,
   readToolList,
   buildToolDeclarationsFromView,
   getEnabledToolNamesForPrompt,
   shouldIncludeSubagentDelegationForConfig,
-} from './clientToolGovernance.js';
+} from './clientToolGovernance.js?client-tool-governance-suite';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';

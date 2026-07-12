@@ -38,7 +38,7 @@
  * makes every case pass with no rewrite.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';

@@ -4,10 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'vitest';
-
-// This test needs real config files, not the global mock
-vi.unmock('./providerAliases.js');
+import { describe, expect, it } from 'bun:test';
 
 import { loadProviderAliasEntries } from './providerAliases.js';
 

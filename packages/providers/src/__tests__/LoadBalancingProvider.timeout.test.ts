@@ -7,7 +7,7 @@
  * Issue #489 - Advanced Failover with Metrics
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
@@ -95,7 +95,7 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
         }
       })();
 
-      await vi.runAllTimersAsync();
+      vi.runAllTimers();
       await genPromise;
 
       expect(chunks).toHaveLength(2);

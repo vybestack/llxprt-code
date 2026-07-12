@@ -4,43 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
+import { vi } from 'vitest';
 import { TodoContinuationService } from './TodoContinuationService.js';
 import { AgentEventType } from './turn.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-
-// Mock TodoStore so persisted todo state doesn't hit the filesystem
-const {
-  todoStoreReadMock,
-  todoStoreReadPausedMock,
-  todoStoreWritePausedMock,
-  mockTodoStoreConstructor,
-} = vi.hoisted(() => {
-  const readMock = vi.fn();
-  const readPausedMock = vi.fn();
-  const writePausedMock = vi.fn();
-  const constructorMock = vi.fn().mockImplementation(() => ({
-    readTodos: readMock,
-    readPausedState: readPausedMock,
-    writePausedState: writePausedMock,
-  }));
-  return {
-    todoStoreReadMock: readMock,
-    todoStoreReadPausedMock: readPausedMock,
-    todoStoreWritePausedMock: writePausedMock,
-    mockTodoStoreConstructor: constructorMock,
-  };
-});
-
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
-  return {
-    ...actual,
-    LocalTodoStore: mockTodoStoreConstructor,
-  };
-});
 
 vi.mock(
   '@vybestack/llxprt-code-core/services/todo-reminder-service.js',
@@ -93,16 +62,9 @@ describe('TodoContinuationService', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    todoStoreReadMock.mockResolvedValue([]);
-    todoStoreReadPausedMock.mockResolvedValue(false);
-    todoStoreWritePausedMock.mockResolvedValue(undefined);
-    mockTodoStoreConstructor.mockImplementation(() => ({
-      readTodos: todoStoreReadMock,
-      readPausedState: todoStoreReadPausedMock,
-      writePausedState: todoStoreWritePausedMock,
-    }));
-
-    vi.mocked(TodoReminderService).mockImplementation(
+    (
+      TodoReminderService as unknown as ReturnType<typeof vi.fn>
+    ).mockImplementation(
       () =>
         ({
           getComplexTaskSuggestion: vi
@@ -309,7 +271,7 @@ describe('TodoContinuationService', () => {
       );
       expect(result).toBeDefined();
       expect(
-        vi.mocked(reminderService.getEscalatedComplexTaskSuggestion),
+        reminderService.getEscalatedComplexTaskSuggestion,
       ).toHaveBeenCalled();
     });
   });

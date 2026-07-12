@@ -30,7 +30,7 @@
  * - recordOwnership: default flags + sessionLocks default.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type {
   AgentEvent,
   AgentToolCall,

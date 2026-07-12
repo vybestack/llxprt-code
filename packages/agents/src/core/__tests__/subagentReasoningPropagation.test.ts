@@ -22,7 +22,7 @@
  * feeds the provider invocation's modelBehavior/cliSettings.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { createRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import { separateSettings } from '@vybestack/llxprt-code-settings';
 import type { Profile } from '@vybestack/llxprt-code-settings';

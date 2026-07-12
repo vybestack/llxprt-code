@@ -6,7 +6,7 @@
  * @requirement:REQ-STAT5-002 - No Config reads for provider/model/auth
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 

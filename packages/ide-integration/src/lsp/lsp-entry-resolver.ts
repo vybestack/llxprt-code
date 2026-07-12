@@ -45,7 +45,7 @@ async function resolveViaImportMeta(
   }
 
   try {
-    const packageUrl = resolveImportMeta(LSP_PACKAGE_NAME);
+    const packageUrl = resolveImportMeta.call(import.meta, LSP_PACKAGE_NAME);
     return await resolveEntryFromPackagePath(
       fileURLToPath(packageUrl),
       pathIsReadable,

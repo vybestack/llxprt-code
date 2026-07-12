@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import { createProviderWithRuntime as createProviderWithRuntimeHelper } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
@@ -26,20 +26,6 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 const skipInCI = process.env.CI === 'true';
 
 // Helper functions and utilities for OpenAI OAuth testing
-
-// Mock OpenAI module
-vi.mock('openai', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    chat: {
-      completions: {
-        create: vi.fn(),
-      },
-    },
-    models: {
-      list: vi.fn(),
-    },
-  })),
-}));
 
 describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
   let originalEnv: NodeJS.ProcessEnv;
@@ -74,7 +60,6 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
   };
 
   beforeEach(async () => {
-    vi.clearAllMocks();
     originalEnv = { ...process.env };
 
     // Clear global SettingsService instance to ensure isolation

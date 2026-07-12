@@ -135,7 +135,10 @@ function contentsToIContents(contents: Content[]): IContent[] {
  * - Dependency injection for testing
  */
 export class BaseLLMClient {
-  constructor(private readonly contentGenerator: ContentGenerator | null) {
+  constructor(
+    private readonly contentGenerator: ContentGenerator | null,
+    private readonly retry: typeof retryWithBackoff = retryWithBackoff,
+  ) {
     if (!contentGenerator) {
       throw new Error('ContentGenerator is required');
     }
@@ -375,7 +378,7 @@ export class BaseLLMClient {
       const apiCall = () =>
         this.contentGenerator!.generateContent(request, promptId);
 
-      return await retryWithBackoff(apiCall, {
+      return await this.retry(apiCall, {
         shouldRetryOnContent,
         maxAttempts: maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
       });

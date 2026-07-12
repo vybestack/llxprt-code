@@ -19,7 +19,7 @@
 // instantiates `new AuthControl(deps)` directly with no cast — the masked
 // detail methods delegate live to the real manager.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import fc from 'fast-check';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type {

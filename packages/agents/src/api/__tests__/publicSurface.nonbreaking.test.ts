@@ -17,7 +17,7 @@
  * No mock theater: structural/identity assertions only. No deep /src/ imports.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 
 import * as root from '@vybestack/llxprt-code-agents';

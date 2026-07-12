@@ -16,7 +16,7 @@
  * positive case exercises the real SkillManager through Config.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { buildAgent } from './helpers/agentHarness.js';
 
 describe('agent.skills control @plan:PLAN-20260626-RUNTIMEBOUNDARY.P03', () => {
@@ -52,7 +52,7 @@ describe('agent.skills control @plan:PLAN-20260626-RUNTIMEBOUNDARY.P03', () => {
   it('reload resolves without throwing @scenario:reload @given:an agent built normally @when:agent.skills.reload() @then:the promise resolves (no throw)', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      await expect(agent.skills.reload()).resolves.toBeUndefined();
+      expect(await agent.skills.reload()).toBeUndefined();
     } finally {
       await cleanup();
     }

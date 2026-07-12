@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '../OpenAIProvider.js';
 import OpenAI from 'openai';
@@ -12,58 +12,56 @@ import {
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-vi.mock('openai', () => {
-  class FakeOpenAI {
-    static created: symbol[] = [];
-    static lastOptions: Record<string, unknown> | null = null;
+class FakeOpenAI {
+  static created: symbol[] = [];
+  static lastOptions: Record<string, unknown> | null = null;
 
-    static reset(): void {
-      FakeOpenAI.created = [];
-      FakeOpenAI.lastOptions = null;
-    }
-
-    readonly instanceId: symbol;
-    options: Record<string, unknown>;
-
-    constructor(opts: Record<string, unknown>) {
-      this.instanceId = Symbol('openai-client');
-      FakeOpenAI.created.push(this.instanceId);
-      this.options = opts;
-      FakeOpenAI.lastOptions = opts;
-    }
-
-    chat = {
-      completions: {
-        create: vi.fn(async () => ({
-          async *[Symbol.asyncIterator]() {
-            yield {
-              choices: [
-                {
-                  delta: { content: 'mock-response' },
-                  finish_reason: 'stop',
-                  index: 0,
-                },
-              ],
-              usage: {
-                prompt_tokens: 0,
-                completion_tokens: 0,
-                total_tokens: 0,
-              },
-            };
-          },
-        })),
-      },
-    };
+  static reset(): void {
+    FakeOpenAI.created = [];
+    FakeOpenAI.lastOptions = null;
   }
 
-  return { default: FakeOpenAI };
-});
+  readonly instanceId: symbol;
+  options: Record<string, unknown>;
 
-const FakeOpenAIClass = OpenAI as unknown as {
-  created: symbol[];
-  lastOptions: Record<string, unknown> | null;
-  reset(): void;
-};
+  constructor(opts: Record<string, unknown>) {
+    this.instanceId = Symbol('openai-client');
+    FakeOpenAI.created.push(this.instanceId);
+    this.options = opts;
+    FakeOpenAI.lastOptions = opts;
+  }
+
+  chat = {
+    completions: {
+      create: vi.fn(async () => ({
+        async *[Symbol.asyncIterator]() {
+          yield {
+            choices: [
+              {
+                delta: { content: 'mock-response' },
+                finish_reason: 'stop',
+                index: 0,
+              },
+            ],
+            usage: {
+              prompt_tokens: 0,
+              completion_tokens: 0,
+              total_tokens: 0,
+            },
+          };
+        },
+      })),
+    },
+  };
+}
+
+const FakeOpenAIClass = FakeOpenAI;
+const constructFakeClient = (
+  options: ConstructorParameters<typeof OpenAI>[0],
+): OpenAI =>
+  new FakeOpenAI(
+    options as unknown as Record<string, unknown>,
+  ) as unknown as OpenAI;
 
 class RequiresAuthTestProvider extends OpenAIProvider {
   protected override async getAuthToken(): Promise<string> {
@@ -97,11 +95,14 @@ function buildCallOptions(
   });
 }
 
+const originalApiKey = process.env.OPENAI_API_KEY;
+const originalBaseUrl = process.env.OPENAI_BASE_URL;
+
 describe('requires-auth setting', () => {
   beforeEach(() => {
     FakeOpenAIClass.reset();
-    vi.stubEnv('OPENAI_API_KEY', '');
-    vi.stubEnv('OPENAI_BASE_URL', '');
+    process.env.OPENAI_API_KEY = '';
+    process.env.OPENAI_BASE_URL = '';
 
     setActiveProviderRuntimeContext(
       createProviderRuntimeContext({
@@ -113,13 +114,18 @@ describe('requires-auth setting', () => {
 
   afterEach(() => {
     clearActiveProviderRuntimeContext();
-    vi.unstubAllEnvs();
+    if (originalApiKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalApiKey;
+    if (originalBaseUrl === undefined) delete process.env.OPENAI_BASE_URL;
+    else process.env.OPENAI_BASE_URL = originalBaseUrl;
   });
 
   it('allows connection to remote endpoint without auth when requires-auth is false', async () => {
     const provider = new RequiresAuthTestProvider(
       undefined,
       'http://host.docker.internal:1234/v1/',
+      undefined,
+      { constructClient: constructFakeClient },
     );
     const settings = createSettingsWithRequiresAuth(
       'http://host.docker.internal:1234/v1/',
@@ -132,7 +138,7 @@ describe('requires-auth setting', () => {
     });
 
     const generator = provider.generateChatCompletion(callOptions);
-    await expect(generator.next()).resolves.toBeDefined();
+    expect(await generator.next()).toBeDefined();
     expect(FakeOpenAIClass.created).toHaveLength(1);
   });
 
@@ -140,9 +146,13 @@ describe('requires-auth setting', () => {
     const provider = new RequiresAuthTestProvider(
       undefined,
       'http://host.docker.internal:1234/v1/',
+      undefined,
+      { constructClient: constructFakeClient },
     );
     const settings = createSettingsWithRequiresAuth(
       'http://host.docker.internal:1234/v1/',
+      undefined,
+      { constructClient: constructFakeClient },
     );
 
     const callOptions = buildCallOptions(provider, {
@@ -151,13 +161,15 @@ describe('requires-auth setting', () => {
     });
 
     const generator = provider.generateChatCompletion(callOptions);
-    await expect(generator.next()).rejects.toThrow('REQ-SP4-003');
+    expect(generator.next()).rejects.toThrow('REQ-SP4-003');
   });
 
   it('throws auth error for remote endpoint without auth when requires-auth is true', async () => {
     const provider = new RequiresAuthTestProvider(
       undefined,
       'http://host.docker.internal:1234/v1/',
+      undefined,
+      { constructClient: constructFakeClient },
     );
     const settings = createSettingsWithRequiresAuth(
       'http://host.docker.internal:1234/v1/',
@@ -170,6 +182,6 @@ describe('requires-auth setting', () => {
     });
 
     const generator = provider.generateChatCompletion(callOptions);
-    await expect(generator.next()).rejects.toThrow('REQ-SP4-003');
+    expect(generator.next()).rejects.toThrow('REQ-SP4-003');
   });
 });

@@ -62,6 +62,7 @@ import {
   resolveToolName,
   finalizeOutput,
   processFunctionCalls,
+  type ProcessFunctionCallsContext,
   buildTodoCompletionPrompt,
 } from './subagentToolProcessing.js';
 
@@ -84,6 +85,7 @@ export interface NonInteractiveRunContext {
   readonly outputConfig?: OutputConfig;
   readonly toolExecutorContext: ToolExecutionConfig;
   readonly messageBus?: MessageBus;
+  readonly executeToolCall?: ProcessFunctionCallsContext['executeToolCall'];
 }
 
 /** Result of a single non-interactive turn iteration. */
@@ -427,6 +429,7 @@ export async function dispatchNonInteractiveTurnResult(
       toolExecutorContext: ctx.toolExecutorContext,
       config: ctx.config,
       messageBus: ctx.messageBus,
+      executeToolCall: ctx.executeToolCall,
     });
   }
   const todoReminder = await buildTodoCompletionPrompt(

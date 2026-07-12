@@ -10,7 +10,7 @@
  * @plan PLAN-20260206-TOOLKEY.P04
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -305,7 +305,7 @@ describe('ToolKeyStorage', () => {
         keyringLoader: async () => mockKeyring,
       });
 
-      await expect(storage.deleteKey('exa')).resolves.not.toThrow();
+      await storage.deleteKey('exa');
     });
 
     /**
@@ -442,12 +442,12 @@ describe('ToolKeyStorage', () => {
       await storage.saveKey('exa', 'sk-to-remove');
       const filePath = path.join(tempDir, 'exa.key');
       // Verify file exists first
-      await expect(fs.stat(filePath)).resolves.toBeDefined();
+      expect(fs.stat(filePath)).resolves.toBeDefined();
 
       await storage.deleteKey('exa');
 
       // File should be gone
-      await expect(fs.stat(filePath)).rejects.toThrow(/ENOENT/);
+      expect(fs.stat(filePath)).rejects.toThrow(/ENOENT/);
     });
   });
 
@@ -481,7 +481,7 @@ describe('ToolKeyStorage', () => {
       });
 
       // Must reject (fail closed) — never silently return null.
-      await expect(reader.getKey('exa')).rejects.toThrow(
+      expect(reader.getKey('exa')).rejects.toThrow(
         /Failed to decrypt envelope/,
       );
     });
@@ -500,7 +500,7 @@ describe('ToolKeyStorage', () => {
         machineSecretLoader: nullSecretLoader(),
       });
 
-      await expect(reader.getKey('exa')).rejects.toThrow(
+      expect(reader.getKey('exa')).rejects.toThrow(
         /v:2 envelope requires a machine secret/,
       );
     });
@@ -562,7 +562,7 @@ describe('ToolKeyStorage', () => {
 
       // Must reject (fail closed) — must NOT resolve to null (which would
       // let resolveKey fall through to other sources).
-      await expect(reader.getKey('exa')).rejects.toThrow(
+      expect(reader.getKey('exa')).rejects.toThrow(
         /corrupted or in an unrecognized format/,
       );
     });
@@ -590,7 +590,7 @@ describe('ToolKeyStorage', () => {
       // decrypt path lets Node's raw GCM authentication error propagate; its
       // exact wording is not a stable API contract, so matching the message
       // string would make this test brittle across Node versions.
-      await expect(reader.getKey('exa')).rejects.toThrow(Error);
+      expect(reader.getKey('exa')).rejects.toThrow(Error);
     });
 
     /**
@@ -612,7 +612,7 @@ describe('ToolKeyStorage', () => {
         machineSecretLoader: secretLoaderA(),
       });
 
-      await expect(reader.getKey('exa')).rejects.toThrow(
+      expect(reader.getKey('exa')).rejects.toThrow(
         /corrupted or in an unrecognized format/,
       );
     });
@@ -638,7 +638,7 @@ describe('ToolKeyStorage', () => {
         machineSecretLoader: secretLoaderA(),
       });
 
-      await expect(reader.getKey('exa')).rejects.toThrow(
+      expect(reader.getKey('exa')).rejects.toThrow(
         /corrupted or in an unrecognized format/,
       );
     });
@@ -662,9 +662,9 @@ describe('ToolKeyStorage', () => {
         keyringLoader: async () => null,
         machineSecretLoader: nullSecretLoader(),
       });
-      await expect(
-        degradedWriter.saveKey('exa', 'sk-attacker'),
-      ).rejects.toThrow(/Refusing to overwrite an existing v:2 envelope/);
+      expect(degradedWriter.saveKey('exa', 'sk-attacker')).rejects.toThrow(
+        /Refusing to overwrite an existing v:2 envelope/,
+      );
 
       // File must be byte-identical (not overwritten/downgraded).
       const afterContent = await fs.readFile(filePath, 'utf-8');
@@ -988,7 +988,7 @@ describe('ToolKeyStorage', () => {
         keyringLoader: async () => null,
       });
 
-      await expect(storage.saveKey('../etc/passwd', 'sk-bad')).rejects.toThrow(
+      expect(storage.saveKey('../etc/passwd', 'sk-bad')).rejects.toThrow(
         /Invalid tool key name/,
       );
     });
@@ -999,7 +999,7 @@ describe('ToolKeyStorage', () => {
         keyringLoader: async () => null,
       });
 
-      await expect(storage.getKey('not-a-tool')).rejects.toThrow(
+      expect(storage.getKey('not-a-tool')).rejects.toThrow(
         /Invalid tool key name/,
       );
     });
@@ -1010,7 +1010,7 @@ describe('ToolKeyStorage', () => {
         keyringLoader: async () => null,
       });
 
-      await expect(
+      expect(
         storage.setKeyfilePath('../traversal', '/some/path'),
       ).rejects.toThrow(/Invalid tool key name/);
     });
@@ -1021,7 +1021,7 @@ describe('ToolKeyStorage', () => {
         keyringLoader: async () => null,
       });
 
-      await expect(storage.getKeyfilePath('../../etc/shadow')).rejects.toThrow(
+      expect(storage.getKeyfilePath('../../etc/shadow')).rejects.toThrow(
         /Invalid tool key name/,
       );
     });
@@ -1032,7 +1032,7 @@ describe('ToolKeyStorage', () => {
         keyringLoader: async () => null,
       });
 
-      await expect(storage.resolveKey('unknown')).rejects.toThrow(
+      expect(storage.resolveKey('unknown')).rejects.toThrow(
         /Invalid tool key name/,
       );
     });

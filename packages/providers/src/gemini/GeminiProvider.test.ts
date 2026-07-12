@@ -4,50 +4,45 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi } from '../../../../test-setup/vi-compat.js';
 import { GeminiProvider } from './GeminiProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Part } from '@google/genai';
+import type { GoogleGenAI, GoogleGenAIOptions, Part } from '@google/genai';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import {
-  getSettingsService,
+  registerSettingsService,
+  resetSettingsService,
   type SettingsService,
 } from '@vybestack/llxprt-code-settings';
 
-const generateContentStreamMock = vi.hoisted(() => vi.fn());
+const generateContentStreamMock = vi.fn();
 
-const googleGenAIConstructor = vi.hoisted(() =>
-  vi.fn().mockImplementation(() => ({
-    models: {
-      generateContentStream: generateContentStreamMock,
-    },
-  })),
+const googleGenAIConstructor = vi.fn(
+  (_options: GoogleGenAIOptions): GoogleGenAI =>
+    ({
+      models: {
+        generateContentStream: generateContentStreamMock,
+      },
+    }) as unknown as GoogleGenAI,
 );
 
-vi.mock('@google/genai', () => ({
-  GoogleGenAI: googleGenAIConstructor,
-  Type: { OBJECT: 'object' },
-}));
+const createProvider = (
+  apiKey?: string,
+  baseURL?: string,
+): GeminiProvider =>
+  new GeminiProvider(apiKey, baseURL, undefined, async (options) =>
+    googleGenAIConstructor(options),
+  );
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
-  getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
-}));
-
-const mockSettingsService = vi.hoisted(() => ({
+const mockSettingsService = {
   set: vi.fn(),
   get: vi.fn(),
   getProviderSettings: vi.fn().mockReturnValue({}),
   updateSettings: vi.fn(),
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
-}));
-
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  )),
-  getSettingsService: vi.fn(() => mockSettingsService),
-  SETTINGS_REGISTRY: [],
-}));
+  clear: vi.fn(),
+};
 
 /**
  * @plan PLAN-20250822-GEMINIFALLBACK.P11
@@ -56,9 +51,10 @@ vi.mock('@vybestack/llxprt-code-settings', async () => ({
  */
 describe('GeminiProvider', () => {
   beforeEach(() => {
+    resetSettingsService();
     vi.clearAllMocks();
     mockSettingsService.get.mockReset();
-    vi.mocked(getSettingsService).mockImplementation(() => mockSettingsService);
+    registerSettingsService(mockSettingsService as unknown as SettingsService);
     generateContentStreamMock.mockReset();
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
@@ -69,10 +65,8 @@ describe('GeminiProvider', () => {
   });
 
   it('uses the constructor fallback when the global settings service is unavailable', () => {
-    vi.mocked(getSettingsService).mockImplementation(() => {
-      throw new Error('SettingsService not registered');
-    });
-    const provider = new GeminiProvider();
+    resetSettingsService();
+    const provider = createProvider();
 
     expect(() => provider.isPaidMode()).not.toThrow();
     expect(provider.isPaidMode()).toBe(false);
@@ -85,7 +79,7 @@ describe('GeminiProvider', () => {
       }
       return undefined;
     });
-    const provider = new GeminiProvider();
+    const provider = createProvider();
     provider.setRuntimeSettingsService(
       mockSettingsService as unknown as SettingsService,
     );
@@ -100,7 +94,7 @@ describe('GeminiProvider', () => {
       }
       return undefined;
     });
-    const provider = new GeminiProvider();
+    const provider = createProvider();
     provider.setRuntimeSettingsService(
       mockSettingsService as unknown as SettingsService,
     );
@@ -125,7 +119,7 @@ describe('GeminiProvider', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'override-key';
 
-    const provider = new GeminiProvider('override-key');
+    const provider = createProvider('override-key');
     const overrides = {
       serverTools: [],
       toolConfig: {
@@ -174,7 +168,7 @@ describe('GeminiProvider', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'ephemeral-key';
 
-    const provider = new GeminiProvider('ephemeral-key');
+    const provider = createProvider('ephemeral-key');
     const options = createProviderCallOptions({
       providerName: provider.name,
       contents: [
@@ -220,7 +214,7 @@ describe('GeminiProvider', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'resolved-key';
 
-    const provider = new GeminiProvider('test-api-key');
+    const provider = createProvider('test-api-key');
     const oversized = 'line\n'.repeat(2000);
     const generator = provider.generateChatCompletion(
       createProviderCallOptions({
@@ -383,7 +377,7 @@ describe('GeminiProvider', () => {
 
     process.env.GEMINI_API_KEY = 'resolved-key';
 
-    const provider = new GeminiProvider('test-api-key');
+    const provider = createProvider('test-api-key');
 
     (
       provider as unknown as {
@@ -438,7 +432,7 @@ describe('GeminiProvider', () => {
   });
 
   it('should include gemini-3-flash-preview in model list', async () => {
-    const provider = new GeminiProvider();
+    const provider = createProvider();
 
     vi.spyOn(
       provider as unknown as {
@@ -504,7 +498,7 @@ describe('GeminiProvider', () => {
       generateContentStreamMock.mockResolvedValueOnce(fakeStream);
       process.env.GEMINI_API_KEY = 'test-key';
 
-      const provider = new GeminiProvider('test-key');
+      const provider = createProvider('test-key');
       const generator = provider.generateChatCompletion(
         createProviderCallOptions({
           providerName: provider.name,
@@ -555,7 +549,7 @@ describe('GeminiProvider', () => {
       generateContentStreamMock.mockResolvedValueOnce(fakeStream);
       process.env.GEMINI_API_KEY = 'test-key';
 
-      const provider = new GeminiProvider('test-key');
+      const provider = createProvider('test-key');
       const generator = provider.generateChatCompletion(
         createProviderCallOptions({
           providerName: provider.name,
@@ -598,7 +592,7 @@ describe('GeminiProvider', () => {
       generateContentStreamMock.mockResolvedValueOnce(fakeStream);
       process.env.GEMINI_API_KEY = 'test-key';
 
-      const provider = new GeminiProvider('test-key');
+      const provider = createProvider('test-key');
       const generator = provider.generateChatCompletion(
         createProviderCallOptions({
           providerName: provider.name,
@@ -638,7 +632,7 @@ describe('GeminiProvider', () => {
       generateContentStreamMock.mockResolvedValueOnce(fakeStream);
       process.env.GEMINI_API_KEY = 'test-key';
 
-      const provider = new GeminiProvider('test-key');
+      const provider = createProvider('test-key');
       const generator = provider.generateChatCompletion(
         createProviderCallOptions({
           providerName: provider.name,
@@ -672,7 +666,7 @@ describe('GeminiProvider', () => {
       generateContentStreamMock.mockResolvedValueOnce(fakeStream);
       process.env.GEMINI_API_KEY = 'test-key';
 
-      const provider = new GeminiProvider('test-key');
+      const provider = createProvider('test-key');
       const contents: IContent[] = [
         { speaker: 'human', blocks: [{ type: 'text', text: 'screenshot' }] },
         {

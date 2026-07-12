@@ -8,6 +8,7 @@
  * Split from profileApplication.test.ts during #2092 lint hardening.
  */
 
+import { createRequire } from 'node:module';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import {
@@ -31,13 +32,14 @@ import {
   restoreGcpEnvVars,
 } from './profileApplicationTestSetup.js';
 
-vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>();
-  return {
-    ...actual,
-    readFile: vi.fn(),
-  };
-});
+const require = createRequire(import.meta.url);
+const actualFs =
+  require('node:fs/promises') as typeof import('node:fs/promises');
+
+vi.mock('node:fs/promises', () => ({
+  ...actualFs,
+  readFile: vi.fn(),
+}));
 
 const mockFs = await import('node:fs/promises');
 
@@ -136,11 +138,11 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
   });
 
   it('should apply keyfile auth to SettingsService BEFORE switching provider', async () => {
-    vi.mocked(mockFs.readFile).mockResolvedValue('test-api-key-from-file');
+    mockFs.readFile.mockResolvedValue('test-api-key-from-file');
 
     const operationOrder: string[] = [];
 
-    vi.mocked(mockFs.readFile).mockImplementation(async (filePath) => {
+    mockFs.readFile.mockImplementation(async (filePath) => {
       operationOrder.push(`readFile:${filePath}`);
       return 'test-api-key-from-file';
     });
@@ -375,7 +377,7 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
   });
 
   it('should NOT trigger OAuth when profile has keyfile and provider switch calls getModels', async () => {
-    vi.mocked(mockFs.readFile).mockResolvedValue('test-api-key-from-keyfile');
+    mockFs.readFile.mockResolvedValue('test-api-key-from-keyfile');
 
     const oauthCalls: string[] = [];
 
@@ -483,9 +485,7 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
   });
 
   it('should handle keyfile loading failure gracefully without blocking provider switch', async () => {
-    vi.mocked(mockFs.readFile).mockRejectedValue(
-      new Error('ENOENT: file not found'),
-    );
+    mockFs.readFile.mockRejectedValue(new Error('ENOENT: file not found'));
 
     const operationOrder: string[] = [];
 

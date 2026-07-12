@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { fetchZaiUsage, formatZaiUsage } from './usageInfo.js';
 
 describe('usageInfo', () => {
@@ -13,7 +13,7 @@ describe('usageInfo', () => {
 
     beforeEach(() => {
       fetchMock = vi.fn();
-      vi.stubGlobal('fetch', fetchMock);
+      global.fetch = fetchMock;
     });
 
     afterEach(() => {
@@ -249,14 +249,7 @@ describe('usageInfo', () => {
   });
 
   describe('formatZaiUsage', () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2026-02-10T10:00:00Z'));
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
+    const now = new Date('2026-02-10T10:00:00Z').getTime();
 
     it('should show plan level', () => {
       const usage = {
@@ -269,7 +262,7 @@ describe('usageInfo', () => {
         success: true,
       };
 
-      const result = formatZaiUsage(usage);
+      const result = formatZaiUsage(usage, now);
       expect(result.some((line) => line.includes('Plan: Max'))).toBe(true);
     });
 
@@ -293,7 +286,7 @@ describe('usageInfo', () => {
         success: true,
       };
 
-      const result = formatZaiUsage(usage);
+      const result = formatZaiUsage(usage, now);
       expect(result.some((line) => line.includes('5-hour token usage'))).toBe(
         true,
       );
@@ -329,7 +322,7 @@ describe('usageInfo', () => {
         success: true,
       };
 
-      const result = formatZaiUsage(usage);
+      const result = formatZaiUsage(usage, now);
       expect(result.some((line) => line.includes('MCP usage (monthly)'))).toBe(
         true,
       );
@@ -365,7 +358,7 @@ describe('usageInfo', () => {
         success: true,
       };
 
-      const result = formatZaiUsage(usage);
+      const result = formatZaiUsage(usage, now);
       expect(
         result.some(
           (line) => line.includes('search-prime') && line.includes('500'),
@@ -405,7 +398,7 @@ describe('usageInfo', () => {
         success: true,
       };
 
-      const result = formatZaiUsage(usage);
+      const result = formatZaiUsage(usage, now);
       expect(result.some((line) => line.includes('zread'))).toBe(false);
     });
 
@@ -420,7 +413,7 @@ describe('usageInfo', () => {
         success: true,
       };
 
-      const result = formatZaiUsage(usage);
+      const result = formatZaiUsage(usage, now);
       // Should only have the plan line
       expect(result).toHaveLength(1);
       expect(result[0]).toContain('Plan: Free');
@@ -446,7 +439,7 @@ describe('usageInfo', () => {
         success: true,
       };
 
-      const result = formatZaiUsage(usage);
+      const result = formatZaiUsage(usage, now);
       expect(result.some((line) => line.includes('2h 30m'))).toBe(true);
     });
 
@@ -470,7 +463,7 @@ describe('usageInfo', () => {
         success: true,
       };
 
-      const result = formatZaiUsage(usage);
+      const result = formatZaiUsage(usage, now);
       expect(result.some((line) => line.includes('in 45m'))).toBe(true);
     });
 
@@ -494,7 +487,7 @@ describe('usageInfo', () => {
         success: true,
       };
 
-      const result = formatZaiUsage(usage);
+      const result = formatZaiUsage(usage, now);
       expect(result.some((line) => line.includes('soon'))).toBe(true);
     });
 
@@ -530,7 +523,7 @@ describe('usageInfo', () => {
         success: true,
       };
 
-      const result = formatZaiUsage(usage);
+      const result = formatZaiUsage(usage, now);
       expect(result.some((line) => line.includes('Plan: Max'))).toBe(true);
       expect(result.some((line) => line.includes('5-hour token usage'))).toBe(
         true,
@@ -551,7 +544,7 @@ describe('usageInfo', () => {
         success: true,
       };
 
-      const result = formatZaiUsage(usage);
+      const result = formatZaiUsage(usage, now);
       expect(result[0]).toContain('Plan: Pro');
     });
   });

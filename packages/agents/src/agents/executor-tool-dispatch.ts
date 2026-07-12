@@ -33,6 +33,8 @@ import {
 } from '../core/hookToolRestrictions.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import { TASK_COMPLETE_TOOL_NAME } from './recovery.js';
+
+export type ExecuteToolCall = typeof executeToolCall;
 import type { AgentDefinition, SubagentActivityEventType } from './types.js';
 
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -110,6 +112,7 @@ export async function processFunctionCalls(
   emitActivity: EmitActivityFn,
   signal: AbortSignal,
   promptId: string,
+  executeTool: ExecuteToolCall = executeToolCall,
 ): Promise<FunctionCallProcessingResult> {
   const allowedToolNames = new Set(toolRegistry.getAllToolNames());
   allowedToolNames.add(TASK_COMPLETE_TOOL_NAME);
@@ -134,6 +137,7 @@ export async function processFunctionCalls(
       signal,
       taskCompleted,
       submittedOutput,
+      executeTool,
     );
     if (dispatch.kind === 'skip') {
       // Hook-restricted or otherwise filtered; do nothing.
@@ -190,6 +194,7 @@ function dispatchSingleFunctionCall(
   signal: AbortSignal,
   currentTaskCompleted: boolean,
   currentSubmittedOutput: string | null,
+  executeTool: ExecuteToolCall,
 ): FunctionCallDispatch {
   const callId = functionCall.id ?? `${promptId}-${index}`;
   const args = functionCall.args ?? {};
@@ -237,6 +242,7 @@ function dispatchSingleFunctionCall(
       runtimeContext,
       messageBus,
       emitActivity,
+      executeTool,
     ),
   };
 }
@@ -432,6 +438,7 @@ function createToolExecutionPromise(
   runtimeContext: Config,
   messageBus: MessageBus,
   emitActivity: EmitActivityFn,
+  executeTool: ExecuteToolCall,
 ): Promise<ToolExecutionResult | void> {
   const hookAllowedTools =
     getHookRestrictedAllowedToolsForFunctionCall(functionCall);
@@ -447,12 +454,9 @@ function createToolExecutionPromise(
   };
 
   return (async () => {
-    const completed = await executeToolCall(
-      runtimeContext,
-      requestInfo,
-      signal,
-      { messageBus },
-    );
+    const completed = await executeTool(runtimeContext, requestInfo, signal, {
+      messageBus,
+    });
     const toolResponse = completed.response;
 
     if (toolResponse.error) {

@@ -25,7 +25,7 @@
  * settings-only sentinel mechanism.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 
 // Settings-package imports — the intended post-migration source
 import {

@@ -9,7 +9,7 @@
  * Sibling to chatSession.runtime.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { Part } from '@google/genai';
 import { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -756,7 +756,9 @@ describe('ChatSession runtime history and tool-call behavior', () => {
         {},
         [],
       );
-      const { Turn, AgentEventType } = await import('./turn.js');
+      const { Turn, AgentEventType } = await import(
+        './turn.js?chat-session-runtime-history-suite'
+      );
       const turn = new Turn(chat, 'prompt-123');
 
       const events = [] as Array<{ type: string; value?: unknown }>;

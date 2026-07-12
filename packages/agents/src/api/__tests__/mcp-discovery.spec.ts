@@ -24,14 +24,14 @@
  *        mcp.status/listTools still callable while pending.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import {
   buildAgent,
   drain,
   typesOf,
   countType,
   isDoneEvent,
-} from './helpers/agentHarness.js';
+} from './helpers/agentHarness.ts?mcp-discovery-suite';
 import {
   createFakeMcpRegistry,
   fakeRegistryWithServer,
@@ -492,8 +492,8 @@ describe('McpControl projection @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ
   it('refresh() is a no-op (resolves) when the manager is not yet initialized @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-013', async () => {
     const { deps } = createFakeMcpDeps({ hasManager: false });
     const control = new McpControl(deps);
-    await expect(control.refresh('whatever')).resolves.toBeUndefined();
-    await expect(control.refresh()).resolves.toBeUndefined();
+    expect(await control.refresh('whatever')).toBeUndefined();
+    expect(await control.refresh()).toBeUndefined();
   });
 
   it('a deps-less McpControl degrades every read to its empty/idle default and auth to unauthenticated @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-013', async () => {
@@ -507,7 +507,7 @@ describe('McpControl projection @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ
       discoveryState: 'idle',
       servers: [],
     });
-    await expect(control.refresh('x')).resolves.toBeUndefined();
+    expect(await control.refresh('x')).toBeUndefined();
     // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 — a deps-less control has no
     // getRequiresAuth closure → requiresAuth is undefined-safe false (no longer
     // hardcoded true).

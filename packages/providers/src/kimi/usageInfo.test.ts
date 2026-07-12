@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import {
   fetchKimiUsage,
   formatKimiUsage,
@@ -18,11 +18,11 @@ describe('kimiUsageInfo', () => {
 
     beforeEach(() => {
       fetchMock = vi.fn();
-      vi.stubGlobal('fetch', fetchMock);
+      global.fetch = fetchMock;
     });
 
     afterEach(() => {
-      vi.restoreAllMocks();
+      fetchMock.mockReset();
     });
 
     it('should return null for empty API key', async () => {
@@ -232,11 +232,11 @@ describe('kimiUsageInfo', () => {
 
     beforeEach(() => {
       fetchMock = vi.fn();
-      vi.stubGlobal('fetch', fetchMock);
+      global.fetch = fetchMock;
     });
 
     afterEach(() => {
-      vi.restoreAllMocks();
+      fetchMock.mockReset();
     });
 
     it('should return null for empty API key', async () => {

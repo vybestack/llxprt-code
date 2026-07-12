@@ -428,6 +428,8 @@ export function buildPartsFromCompletedCalls(
 // Non-interactive tool call processing
 // ---------------------------------------------------------------------------
 
+export type SubagentExecuteToolCall = typeof executeToolCall;
+
 export interface ProcessFunctionCallsContext {
   output: OutputObject;
   subagentId: string;
@@ -435,6 +437,7 @@ export interface ProcessFunctionCallsContext {
   toolExecutorContext: ToolExecutionConfig;
   config: Config;
   messageBus?: MessageBus;
+  executeToolCall?: SubagentExecuteToolCall;
 }
 
 export async function processFunctionCalls(
@@ -569,7 +572,7 @@ async function executeNonInteractiveTool(
     ctx.config,
     { interactive: false },
   );
-  const completed = await executeToolCall(
+  const completed = await (ctx.executeToolCall ?? executeToolCall)(
     schedulerConfig,
     requestInfo,
     abortController.signal,

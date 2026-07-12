@@ -11,7 +11,7 @@
  * options.invocation.getModelBehavior.
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import {
   BaseProvider,
@@ -213,15 +213,15 @@ describe('RetryOrchestrator invocation safety', () => {
     const abortController = new AbortController();
     setTimeout(() => abortController.abort(), 50);
 
-    await expect(
-      consumeStream(
-        orchestrator.generateChatCompletion(
-          [prompt],
-          undefined,
-          abortController.signal,
-        ),
+    const consumptionPromise = consumeStream(
+      orchestrator.generateChatCompletion(
+        [prompt],
+        undefined,
+        abortController.signal,
       ),
-    ).rejects.toThrow(/abort/i);
+    );
+    expect(consumptionPromise).rejects.toThrow(/abort/i);
+    await consumptionPromise.catch(() => undefined);
 
     expect(providerCalls).toBeGreaterThanOrEqual(1);
   });

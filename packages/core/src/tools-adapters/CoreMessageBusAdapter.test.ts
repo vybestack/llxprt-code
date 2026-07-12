@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { CoreMessageBusAdapter } from './CoreMessageBusAdapter.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
@@ -103,7 +103,7 @@ describe('CoreMessageBusAdapter', () => {
         const requestConfirmationSpy = vi.spyOn(bus, 'requestConfirmation');
         const adapter = new CoreMessageBusAdapter(bus);
 
-        await expect(adapter.requestConfirmation(rawDetails)).resolves.toBe(
+        expect(adapter.requestConfirmation(rawDetails)).resolves.toBe(
           ToolConfirmationOutcome.ProceedOnce,
         );
 
@@ -123,7 +123,7 @@ describe('CoreMessageBusAdapter', () => {
     const controller = new AbortController();
     controller.abort();
 
-    await expect(
+    expect(
       adapter.requestConfirmation({ name: 'tool-a' }, controller.signal),
     ).resolves.toBe(ToolConfirmationOutcome.Cancel);
     expect(requestConfirmationSpy).not.toHaveBeenCalled();
@@ -140,7 +140,7 @@ describe('CoreMessageBusAdapter', () => {
     );
     const adapter = new CoreMessageBusAdapter(bus);
 
-    await expect(adapter.requestConfirmation({ name: 'tool-a' })).resolves.toBe(
+    expect(adapter.requestConfirmation({ name: 'tool-a' })).resolves.toBe(
       ToolConfirmationOutcome.Cancel,
     );
   });

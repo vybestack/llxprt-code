@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import {
   nextStreamEventWithIdleTimeout,
   StreamIdleTimeoutError,
@@ -116,19 +116,19 @@ describe('nextStreamEventWithIdleTimeout', () => {
 
     const iterator = stream()[Symbol.asyncIterator]();
 
-    await expect(
-      nextStreamEventWithIdleTimeout({ iterator, timeoutMs: 30_000 }),
-    ).resolves.toStrictEqual({ done: false, value: 'one' });
+    expect(
+      await nextStreamEventWithIdleTimeout({ iterator, timeoutMs: 30_000 }),
+    ).toStrictEqual({ done: false, value: 'one' });
     expect(vi.getTimerCount()).toBe(0);
 
-    await expect(
-      nextStreamEventWithIdleTimeout({ iterator, timeoutMs: 30_000 }),
-    ).resolves.toStrictEqual({ done: false, value: 'two' });
+    expect(
+      await nextStreamEventWithIdleTimeout({ iterator, timeoutMs: 30_000 }),
+    ).toStrictEqual({ done: false, value: 'two' });
     expect(vi.getTimerCount()).toBe(0);
 
-    await expect(
-      nextStreamEventWithIdleTimeout({ iterator, timeoutMs: 30_000 }),
-    ).resolves.toStrictEqual({ done: false, value: 'three' });
+    expect(
+      await nextStreamEventWithIdleTimeout({ iterator, timeoutMs: 30_000 }),
+    ).toStrictEqual({ done: false, value: 'three' });
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -148,7 +148,8 @@ describe('nextStreamEventWithIdleTimeout', () => {
 
     controller.abort();
 
-    await expect(nextEventPromise).rejects.toMatchObject({
+    const aborted = nextEventPromise.catch((error: unknown) => error);
+    expect(await aborted).toMatchObject({
       name: 'AbortError',
       message: 'Aborted',
     });
@@ -161,7 +162,7 @@ describe('nextStreamEventWithIdleTimeout', () => {
     const iterator = (async function* () {
       yield 1;
     })()[Symbol.asyncIterator]();
-    await expect(
+    expect(
       nextStreamEventWithIdleTimeout({
         iterator,
         timeoutMs: 5000,

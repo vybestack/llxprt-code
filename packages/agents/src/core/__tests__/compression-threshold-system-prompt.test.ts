@@ -23,7 +23,7 @@
  * - System prompt never gets compressed (verified indirectly)
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createUserMessage } from '@vybestack/llxprt-code-core/services/history/IContent.js';

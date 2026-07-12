@@ -36,6 +36,7 @@ import type { TodoContinuationService } from './TodoContinuationService.js';
  */
 export function buildSettingsSnapshot(
   config: Config,
+  getToolGovernance: typeof getToolGovernanceEphemerals = getToolGovernanceEphemerals,
 ): ReadonlySettingsSnapshot {
   const rawCompressionThreshold = config.getEphemeralSetting(
     'compression-threshold',
@@ -68,7 +69,7 @@ export function buildSettingsSnapshot(
     contextLimit,
     preserveThreshold: preserveThreshold ?? 0.2,
     telemetry: { enabled: true, target: null },
-    tools: getToolGovernanceEphemerals(config),
+    tools: getToolGovernance(config),
     'reasoning.enabled': config.getEphemeralSetting('reasoning.enabled') as
       | boolean
       | undefined,
@@ -158,6 +159,11 @@ export interface CreateChatSessionDeps {
   generateContentConfig: GenerateContentConfig;
   todoContinuationService: TodoContinuationService;
   toolRegistry: ToolRegistry | undefined;
+  createHistoryService?: () => HistoryService;
+  loadRuntime?: typeof loadAgentRuntime;
+  createChatSessionInstance?: (
+    ...args: ConstructorParameters<typeof ChatSession>
+  ) => ChatSession;
 }
 
 /**
@@ -167,6 +173,7 @@ function setupHistoryService(
   storedHistoryService: HistoryService | undefined,
   extraHistory: Content[] | undefined,
   runtimeState: AgentRuntimeState,
+  createHistoryService: () => HistoryService,
 ): { historyService: HistoryService; reused: boolean } {
   const logger = new DebugLogger('llxprt:client:start');
   if (storedHistoryService) {
@@ -174,7 +181,7 @@ function setupHistoryService(
     return { historyService: storedHistoryService, reused: true };
   }
 
-  const historyService = new HistoryService();
+  const historyService = createHistoryService();
   if (extraHistory && extraHistory.length > 0) {
     const currentModel = runtimeState.model;
     for (const content of extraHistory) {
@@ -240,6 +247,10 @@ async function buildChatFromRuntime(
   todoContinuationService: TodoContinuationService,
   toolRegistry: ToolRegistry | undefined,
   systemInstruction: string,
+  createChatSessionInstance: (
+    ...args: ConstructorParameters<typeof ChatSession>
+  ) => ChatSession,
+  loadRuntime: typeof loadAgentRuntime,
 ): Promise<ChatSession> {
   const model = runtimeState.model;
   const generationConfigWithThinking = buildGenerateContentConfig(
@@ -255,7 +266,7 @@ async function buildChatFromRuntime(
     metadata: { source: 'AgentClient.startChat' },
   });
 
-  const runtimeBundle = await loadAgentRuntime({
+  const runtimeBundle = await loadRuntime({
     profile: {
       config,
       state: runtimeState,
@@ -277,7 +288,7 @@ async function buildChatFromRuntime(
   );
   const tools: Tool[] = [{ functionDeclarations: filteredDeclarations }];
 
-  const chat = new ChatSession(
+  const chat = createChatSessionInstance(
     runtimeBundle.runtimeContext,
     runtimeBundle.contentGenerator,
     { systemInstruction, ...generationConfigWithThinking, tools },
@@ -312,6 +323,9 @@ export async function createChatSession(
     generateContentConfig,
     todoContinuationService,
     toolRegistry,
+    createHistoryService = () => new HistoryService(),
+    loadRuntime = loadAgentRuntime,
+    createChatSessionInstance = (...args) => new ChatSession(...args),
   } = deps;
 
   const logger = new DebugLogger('llxprt:client:start');
@@ -320,6 +334,7 @@ export async function createChatSession(
     storedHistoryService,
     extraHistory,
     runtimeState,
+    createHistoryService,
   );
 
   const getTokenizerFactory = (config as Config & Record<string, unknown>)[
@@ -373,6 +388,8 @@ export async function createChatSession(
     todoContinuationService,
     toolRegistry,
     systemInstruction,
+    createChatSessionInstance,
+    loadRuntime,
   );
 
   if (reused) {

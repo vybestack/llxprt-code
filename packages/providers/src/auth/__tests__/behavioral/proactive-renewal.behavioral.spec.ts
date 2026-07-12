@@ -15,6 +15,12 @@ import {
   createTestProvider,
 } from './test-utils.js';
 import type { OAuthToken } from '../../types.js';
+async function advanceTimers(ms: number): Promise<void> {
+  vi.advanceTimersByTime(ms);
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve();
+  }
+}
 
 const PROVIDER = 'test-provider';
 
@@ -51,10 +57,10 @@ describe('Proactive renewal behavioral scenarios', () => {
 
     manager.scheduleProactiveRenewal(PROVIDER, 'default', token);
 
-    await vi.advanceTimersByTimeAsync(269 * 1000);
+    await advanceTimers(269 * 1000);
     expect(acquireLockSpy).not.toHaveBeenCalled();
 
-    await vi.advanceTimersByTimeAsync(36 * 1000);
+    await advanceTimers(36 * 1000);
     expect(acquireLockSpy).toHaveBeenCalled();
   });
 
@@ -63,7 +69,7 @@ describe('Proactive renewal behavioral scenarios', () => {
 
     manager.scheduleProactiveRenewal(PROVIDER, 'default', token);
 
-    await vi.advanceTimersByTimeAsync(600 * 1000);
+    await advanceTimers(600 * 1000);
 
     expect(acquireLockSpy).not.toHaveBeenCalled();
     expect(refreshTokenSpy).not.toHaveBeenCalled();
@@ -80,7 +86,7 @@ describe('Proactive renewal behavioral scenarios', () => {
 
     manager.scheduleProactiveRenewal(PROVIDER, 'default', token);
 
-    await vi.advanceTimersByTimeAsync(600 * 1000);
+    await advanceTimers(600 * 1000);
 
     expect(acquireLockSpy).not.toHaveBeenCalled();
     expect(refreshTokenSpy).not.toHaveBeenCalled();
@@ -98,7 +104,7 @@ describe('Proactive renewal behavioral scenarios', () => {
 
     manager.scheduleProactiveRenewal(PROVIDER, 'default', originalToken);
 
-    await vi.advanceTimersByTimeAsync(305 * 1000);
+    await advanceTimers(305 * 1000);
 
     expect(refreshTokenSpy).toHaveBeenCalledWith(originalToken);
     expect(saveTokenSpy).toHaveBeenCalledWith(
@@ -116,10 +122,10 @@ describe('Proactive renewal behavioral scenarios', () => {
 
     manager.scheduleProactiveRenewal(PROVIDER, 'default', token);
 
-    await vi.advanceTimersByTimeAsync(305 * 1000);
+    await advanceTimers(305 * 1000);
     expect(refreshTokenSpy).toHaveBeenCalledTimes(1);
 
-    await vi.advanceTimersByTimeAsync(65 * 1000);
+    await advanceTimers(65 * 1000);
     expect(refreshTokenSpy).toHaveBeenCalledTimes(2);
   });
 
@@ -131,18 +137,18 @@ describe('Proactive renewal behavioral scenarios', () => {
 
     manager.scheduleProactiveRenewal(PROVIDER, 'default', token);
 
-    await vi.advanceTimersByTimeAsync(305 * 1000);
+    await advanceTimers(305 * 1000);
     expect(refreshTokenSpy).toHaveBeenCalledTimes(1);
 
-    await vi.advanceTimersByTimeAsync(65 * 1000);
+    await advanceTimers(65 * 1000);
     expect(refreshTokenSpy).toHaveBeenCalledTimes(2);
 
     expect(MAX_PROACTIVE_RENEWAL_FAILURES).toBe(3);
 
-    await vi.advanceTimersByTimeAsync(130 * 1000);
+    await advanceTimers(130 * 1000);
     expect(refreshTokenSpy).toHaveBeenCalledTimes(3);
 
-    await vi.advanceTimersByTimeAsync(600 * 1000);
+    await advanceTimers(600 * 1000);
     expect(refreshTokenSpy).toHaveBeenCalledTimes(3);
   });
 
@@ -160,7 +166,7 @@ describe('Proactive renewal behavioral scenarios', () => {
     await tokenStore.saveToken(PROVIDER, externallyRefreshedToken, 'default');
     saveTokenSpy.mockClear();
 
-    await vi.advanceTimersByTimeAsync(305 * 1000);
+    await advanceTimers(305 * 1000);
 
     expect(saveTokenSpy).not.toHaveBeenCalled();
     expect(refreshTokenSpy).not.toHaveBeenCalled();
@@ -211,7 +217,7 @@ describe('Proactive renewal behavioral scenarios', () => {
 
     await manager.configureProactiveRenewalsForProfile(newProfile);
 
-    await vi.advanceTimersByTimeAsync(600 * 1000);
+    await advanceTimers(600 * 1000);
 
     expect(acquireLockSpy).not.toHaveBeenCalledWith(
       PROVIDER,
@@ -226,7 +232,7 @@ describe('Proactive renewal behavioral scenarios', () => {
     manager.scheduleProactiveRenewal(PROVIDER, 'default', token);
     manager.scheduleProactiveRenewal(PROVIDER, 'default', token);
 
-    await vi.advanceTimersByTimeAsync(305 * 1000);
+    await advanceTimers(305 * 1000);
 
     expect(refreshTokenSpy).toHaveBeenCalledTimes(1);
   });

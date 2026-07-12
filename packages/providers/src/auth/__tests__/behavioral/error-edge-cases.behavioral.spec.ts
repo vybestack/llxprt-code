@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ProactiveRenewalManager } from '../../proactive-renewal-manager.js';
 import {
   MemoryTokenStore,
@@ -51,13 +51,7 @@ describe('Error and edge case behavioral scenarios', () => {
     let acquireRefreshLockSpy: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
-      vi.useFakeTimers();
       proactiveTokenStore = new MemoryTokenStore();
-    });
-
-    afterEach(() => {
-      proactiveManager.clearAllTimers();
-      vi.useRealTimers();
     });
 
     it('retries refresh after lock acquisition fails then succeeds', async () => {
@@ -86,15 +80,16 @@ describe('Error and edge case behavioral scenarios', () => {
 
       proactiveManager.scheduleProactiveRenewal(PROVIDER, 'default', token);
 
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await proactiveManager.runProactiveRenewal(PROVIDER, 'default');
 
       expect(acquireRefreshLockSpy).toHaveBeenCalledTimes(1);
       expect(refreshTokenSpy).not.toHaveBeenCalled();
 
-      await vi.advanceTimersByTimeAsync(65 * 1000);
+      await proactiveManager.runProactiveRenewal(PROVIDER, 'default');
 
       expect(acquireRefreshLockSpy).toHaveBeenCalledTimes(2);
       expect(refreshTokenSpy).toHaveBeenCalled();
+      proactiveManager.clearAllTimers();
     });
   });
 

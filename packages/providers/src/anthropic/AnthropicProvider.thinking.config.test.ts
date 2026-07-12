@@ -7,7 +7,7 @@
  * Split from AnthropicProvider.thinking.test.ts for max-lines compliance.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type {
   IContent,
   ThinkingBlock,

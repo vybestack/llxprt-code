@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type {
   IContent,
@@ -32,28 +32,10 @@ import type {
   AnthropicRequestBody,
 } from './test-utils/anthropicTestUtils.js';
 
-// Mock dependencies
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
-  getCoreSystemPromptAsync: vi.fn(
-    async () => "You are Claude Code, Anthropic's official CLI for Claude.",
-  ),
-}));
-
-// REQ-RETRY-001: retryWithBackoff removed from providers
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
-  getErrorStatus: vi.fn(() => undefined),
-  isNetworkTransientError: vi.fn(() => false),
-}));
-
 const mockMessagesCreate = vi.fn();
-
-vi.mock('@anthropic-ai/sdk', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    messages: {
-      create: mockMessagesCreate,
-    },
-  })),
-}));
+const constructClient = () => ({
+  messages: { create: mockMessagesCreate },
+});
 
 describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () => {
   let provider: AnthropicProvider;
@@ -76,10 +58,16 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
           ...svc.getProviderSettings('anthropic'),
         });
 
-        return new AnthropicProvider('test-api-key', undefined, {
-          ...TEST_PROVIDER_CONFIG,
-          getEphemeralSettings: ephemeralSettingsGetter,
-        });
+        return new AnthropicProvider(
+          'test-api-key',
+          undefined,
+          {
+            ...TEST_PROVIDER_CONFIG,
+            getEphemeralSettings: ephemeralSettingsGetter,
+          },
+          undefined,
+          { constructClient },
+        );
       },
       {
         runtimeId: 'anthropic.toolresult.test',

@@ -22,7 +22,7 @@
  * continuation via stream/chat).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import {
@@ -163,9 +163,9 @@ describe('Core conversation @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-001
       // generateJson reaches the real client with a snapshot copy of contents.
       // The fake provider has no JSON path, so the client's real error is
       // surfaced verbatim — proving the delegation actually executed.
-      await expect(
-        agent.generateJson(contents, { type: 'object' }),
-      ).rejects.toThrow(/Failed to generate content/);
+      expect(agent.generateJson(contents, { type: 'object' })).rejects.toThrow(
+        /Failed to generate content/,
+      );
 
       // detached: the side-channel call did not mutate the live history
       expect((await agent.getHistory()).length).toBe(beforeLen);
@@ -180,7 +180,7 @@ describe('Core conversation @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-001
       // generateEmbedding forwards a copy of the texts to the client; the fake
       // provider does not support embeddings, so the real client error is
       // surfaced — confirming the delegation reached the provider layer.
-      await expect(agent.generateEmbedding(['hello'])).rejects.toThrow(
+      expect(agent.generateEmbedding(['hello'])).rejects.toThrow(
         /Embeddings not supported/,
       );
     } finally {

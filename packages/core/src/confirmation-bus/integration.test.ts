@@ -6,7 +6,7 @@
  * tool execution flow.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { writeFile, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -637,9 +637,9 @@ priority = 10
 
       const toolCall: ToolCallRequest = { args: {} }; // No name
 
-      await expect(
-        messageBus.requestConfirmation(toolCall, {}),
-      ).rejects.toThrow('Tool call must have a name');
+      expect(messageBus.requestConfirmation(toolCall, {})).rejects.toThrow(
+        'Tool call must have a name',
+      );
 
       messageBus.removeAllListeners();
     });
@@ -649,7 +649,7 @@ priority = 10
       const content = 'this is not valid TOML [[[';
       await writeFile(path, content);
 
-      await expect(loadPolicyFromToml(path)).rejects.toThrow(Error);
+      expect(loadPolicyFromToml(path)).rejects.toThrow(Error);
     });
 
     it('should validate priority bands', async () => {
@@ -664,7 +664,7 @@ priority = 5000
 `;
       await writeFile(path, content);
 
-      await expect(loadPolicyFromToml(path)).rejects.toThrow(
+      expect(loadPolicyFromToml(path)).rejects.toThrow(
         'priority must be <= 999',
       );
     });

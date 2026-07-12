@@ -7,6 +7,8 @@
 import { type IModel } from '../IModel.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { resolveUserMemory } from '../utils/userMemory.js';
 import {
   BaseProvider,
   type BaseProviderConfig,
@@ -58,7 +60,19 @@ import {
  * package to keep the provider class thin and within lint budgets.
  */
 export class GeminiProvider extends BaseProvider {
-  constructor(apiKey?: string, baseURL?: string, config?: Config) {
+  constructor(
+    apiKey?: string,
+    baseURL?: string,
+    config?: Config,
+    private readonly genAIClientFactory: (
+      options: GoogleGenAIOptions,
+    ) => Promise<GoogleGenAI> = async (options) => {
+      const { GoogleGenAI } = await import('@google/genai');
+      return new GoogleGenAI(options);
+    },
+    private readonly buildCorePrompt: typeof getCoreSystemPromptAsync = getCoreSystemPromptAsync,
+    private readonly resolveMemory: typeof resolveUserMemory = resolveUserMemory,
+  ) {
     const baseConfig: BaseProviderConfig = {
       name: 'gemini',
       apiKey,
@@ -314,8 +328,7 @@ export class GeminiProvider extends BaseProvider {
     httpOptions: ReturnType<typeof this.createHttpOptions>,
     baseURL?: string,
   ): Promise<GoogleGenAI> {
-    const { GoogleGenAI } = await import('@google/genai');
-    return new GoogleGenAI(
+    return this.genAIClientFactory(
       this.buildGoogleGenAIOptions(authToken, authMode, httpOptions, baseURL),
     );
   }
@@ -423,6 +436,8 @@ export class GeminiProvider extends BaseProvider {
       setup.reasoningConfig.includeInResponse,
       () => this.createNonOAuthGenerator(setup),
       setup.baseURL,
+      this.buildCorePrompt,
+      this.resolveMemory,
     );
   }
 
@@ -434,8 +449,7 @@ export class GeminiProvider extends BaseProvider {
       params: GenerateContentParameters,
     ) => Promise<AsyncIterable<GenerateContentResponse>>;
   }> {
-    const { GoogleGenAI } = await import('@google/genai');
-    const genAI = new GoogleGenAI(
+    const genAI = await this.genAIClientFactory(
       this.buildGoogleGenAIOptions(
         setup.authToken,
         setup.authMode,

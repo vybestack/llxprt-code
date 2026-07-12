@@ -62,10 +62,11 @@ function getProviderContextLimit(
 export function getTokenLimitForConfiguredContext(
   model: string,
   config: ContextLimitConfig,
+  resolveTokenLimit: typeof tokenLimit = tokenLimit,
 ): number {
   const contextLimit =
     getConfiguredContextLimit(config) ?? getProviderContextLimit(config);
   return contextLimit === undefined
-    ? tokenLimit(model)
-    : tokenLimit(model, contextLimit);
+    ? resolveTokenLimit(model)
+    : resolveTokenLimit(model, contextLimit);
 }

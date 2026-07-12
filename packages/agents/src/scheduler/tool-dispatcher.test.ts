@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ToolDispatcher } from './tool-dispatcher.js';
 import type { ToolCallRequestInfo } from '@vybestack/llxprt-code-core/core/turn.js';
 import type {

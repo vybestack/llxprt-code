@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import {
   executeToolCall,
   type ToolExecutionConfig,
-} from './nonInteractiveToolExecutor.js';
+} from './nonInteractiveToolExecutor.ts?non-interactive-tool-executor-suite';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
@@ -111,18 +111,22 @@ describe('executeToolCall', () => {
       args: { param1: 'value1' },
       isClientInitiated: false,
       prompt_id: 'prompt-id-1',
+      agentId: DEFAULT_AGENT_ID,
     };
     const toolResult: ToolResult = {
       llmContent: 'Tool executed successfully',
       returnDisplay: 'Success!',
     };
-    vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+    (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+      mockTool,
+    );
     mockTool.executeFn.mockReturnValue(toolResult);
 
     const { response } = await executeToolCall(
       mockConfig,
       request,
       abortController.signal,
+      { defaultAgentId: DEFAULT_AGENT_ID },
     );
 
     // Behavior verified via response structure - no mock interaction checks needed
@@ -156,7 +160,7 @@ describe('executeToolCall', () => {
       hookRestrictedAllowedTools: ['read_file'],
     };
 
-    await expect(
+    expect(
       executeToolCall(mockConfig, request, abortController.signal),
     ).rejects.toThrow('disabled by hook restrictions');
     expect(mockToolRegistry.getTool).not.toHaveBeenCalled();
@@ -170,11 +174,12 @@ describe('executeToolCall', () => {
       isClientInitiated: false,
       prompt_id: 'prompt-id-2',
     };
-    vi.mocked(mockToolRegistry.getTool).mockReturnValue(undefined);
-    vi.mocked(mockToolRegistry.getAllToolNames).mockReturnValue([
-      'testTool',
-      'anotherTool',
-    ]);
+    (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+      undefined,
+    );
+    (
+      mockToolRegistry.getAllToolNames as ReturnType<typeof vi.fn>
+    ).mockReturnValue(['testTool', 'anotherTool']);
 
     const { response } = await executeToolCall(
       mockConfig,
@@ -204,7 +209,9 @@ describe('executeToolCall', () => {
       isClientInitiated: false,
       prompt_id: 'prompt-id-3',
     };
-    vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+    (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+      mockTool,
+    );
     vi.spyOn(mockTool, 'build').mockImplementation(() => {
       throw new Error('Invalid parameters');
     });
@@ -238,7 +245,9 @@ describe('executeToolCall', () => {
         type: ToolErrorType.EXECUTION_FAILED,
       },
     };
-    vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+    (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+      mockTool,
+    );
     mockTool.executeFn.mockReturnValue(executionErrorResult);
 
     const { response } = await executeToolCall(
@@ -270,7 +279,9 @@ describe('executeToolCall', () => {
       isClientInitiated: false,
       prompt_id: 'prompt-id-5',
     };
-    vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+    (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+      mockTool,
+    );
     mockTool.executeFn.mockImplementation(() => {
       throw new Error('Something went very wrong');
     });
@@ -302,17 +313,23 @@ describe('executeToolCall', () => {
       isClientInitiated: false,
       prompt_id: 'prompt-id-disabled',
     };
-    vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
-    vi.mocked(mockToolRegistry.getAllTools).mockReturnValue([
+    (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+      mockTool,
+    );
+    (mockToolRegistry.getAllTools as ReturnType<typeof vi.fn>).mockReturnValue([
       mockTool,
     ] as never[]);
-    vi.mocked(mockConfig.getEphemeralSetting).mockImplementation((key) => {
+    (
+      mockConfig.getEphemeralSetting as ReturnType<typeof vi.fn>
+    ).mockImplementation((key) => {
       if (key === 'tools.disabled') {
         return ['testTool'];
       }
       return undefined;
     });
-    vi.mocked(mockConfig.getEphemeralSettings).mockReturnValue({
+    (
+      mockConfig.getEphemeralSettings as ReturnType<typeof vi.fn>
+    ).mockReturnValue({
       'tools.disabled': ['testTool'],
     });
 
@@ -337,13 +354,18 @@ describe('executeToolCall', () => {
       prompt_id: 'prompt-id-policy',
     };
 
-    vi.mocked(mockToolRegistry.getTool).mockReturnValue(undefined);
-    vi.mocked(mockToolRegistry.getAllTools).mockReturnValue([]);
-    vi.mocked(mockToolRegistry.getAllToolNames).mockReturnValue([
-      'read_file',
-      'glob',
-    ]);
-    vi.mocked(mockConfig.getEphemeralSettings).mockReturnValue({
+    (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+      undefined,
+    );
+    (mockToolRegistry.getAllTools as ReturnType<typeof vi.fn>).mockReturnValue(
+      [],
+    );
+    (
+      mockToolRegistry.getAllToolNames as ReturnType<typeof vi.fn>
+    ).mockReturnValue(['read_file', 'glob']);
+    (
+      mockConfig.getEphemeralSettings as ReturnType<typeof vi.fn>
+    ).mockReturnValue({
       'tools.allowed': ['read_file', 'glob'],
     });
 
@@ -384,7 +406,9 @@ describe('executeToolCall', () => {
       ],
       returnDisplay: 'Image processed',
     };
-    vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+    (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+      mockTool,
+    );
     mockTool.executeFn.mockReturnValue(toolResult);
 
     const { response } = await executeToolCall(
@@ -515,7 +539,9 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
 
   describe('response structure validation', () => {
     it('should return ToolCallResponseInfo with correct structure', async () => {
-      vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+      (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+        mockTool,
+      );
       mockTool.executeFn.mockReturnValue({
         llmContent: 'Success',
         returnDisplay: 'Success!',
@@ -538,7 +564,9 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
     });
 
     it('should include functionResponse in responseParts', async () => {
-      vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+      (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+        mockTool,
+      );
       mockTool.executeFn.mockReturnValue({
         llmContent: 'Success',
         returnDisplay: 'Success!',
@@ -564,7 +592,9 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
 
   describe('agentId preservation', () => {
     it('should preserve agentId from request through to response', async () => {
-      vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+      (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+        mockTool,
+      );
       mockTool.executeFn.mockReturnValue({
         llmContent: 'Success',
         returnDisplay: 'Success!',
@@ -583,7 +613,9 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
     });
 
     it('should use DEFAULT_AGENT_ID when request has no agentId', async () => {
-      vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+      (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+        mockTool,
+      );
       mockTool.executeFn.mockReturnValue({
         llmContent: 'Success',
         returnDisplay: 'Success!',
@@ -603,7 +635,9 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
 
   describe('resource cleanup', () => {
     it('should allow subsequent executions after completion', async () => {
-      vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+      (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+        mockTool,
+      );
       mockTool.executeFn.mockReturnValue({
         llmContent: 'Success',
         returnDisplay: 'Success!',
@@ -626,7 +660,9 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
     });
 
     it('should not emit MaxListenersExceededWarning when reusing an abort signal', async () => {
-      vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+      (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+        mockTool,
+      );
       mockTool.executeFn.mockReturnValue({
         llmContent: 'Success',
         returnDisplay: 'Success!',
@@ -663,7 +699,9 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
     });
 
     it('should allow subsequent executions after failure', async () => {
-      vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+      (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+        mockTool,
+      );
 
       mockTool.executeFn.mockImplementationOnce(() => {
         throw new Error('Tool failed');
@@ -697,7 +735,9 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         startedResolver = resolve;
       });
 
-      vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+      (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+        mockTool,
+      );
       mockTool.executeFn.mockImplementation(
         async (_args: unknown, signal: AbortSignal) => {
           startedResolver?.();
@@ -737,7 +777,9 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
 
   describe('error response structure', () => {
     it('should include original request info in error response', async () => {
-      vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+      (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+        mockTool,
+      );
       mockTool.executeFn.mockImplementation(() => {
         throw new Error('Execution failed');
       });
@@ -753,7 +795,9 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
     });
 
     it('should include functionResponse in error responseParts', async () => {
-      vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+      (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+        mockTool,
+      );
       mockTool.executeFn.mockImplementation(() => {
         throw new Error('Execution failed');
       });
@@ -774,7 +818,9 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
     });
 
     it('should return error for tool that does not exist', async () => {
-      vi.mocked(mockToolRegistry.getTool).mockReturnValue(undefined);
+      (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+        undefined,
+      );
 
       const { response } = await executeToolCall(
         createMockConfig(),
@@ -787,7 +833,9 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
     });
 
     it('should return error for invalid tool arguments', async () => {
-      vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+      (mockToolRegistry.getTool as ReturnType<typeof vi.fn>).mockReturnValue(
+        mockTool,
+      );
       mockTool.executeFn.mockImplementation(() => {
         throw new Error('Invalid arguments: missing required field "path"');
       });

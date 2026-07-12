@@ -22,7 +22,7 @@
 //   - setModelParam precedence (line 757): overwrite semantics — a second
 //     setModelParam on the same key replaces the prior value.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 import {

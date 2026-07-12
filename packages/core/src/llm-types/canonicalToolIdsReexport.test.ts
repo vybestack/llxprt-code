@@ -22,7 +22,7 @@
  * the llm-types barrel so downstream migrations (#2348-#2351) consume it
  * without importing history internals.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   canonicalizeToolCallId,
   canonicalizeToolResponseId,

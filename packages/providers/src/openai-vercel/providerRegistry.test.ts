@@ -16,7 +16,7 @@
  * is in place.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import {
@@ -29,19 +29,6 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-
-// Mock the 'ai' module to avoid import errors
-vi.mock('ai', () => ({
-  generateText: vi.fn(),
-  streamText: vi.fn(),
-  extractReasoningMiddleware: vi.fn(() => ({})),
-  wrapLanguageModel: vi.fn((model) => model),
-}));
-
-// Mock @ai-sdk/openai
-vi.mock('@ai-sdk/openai', () => ({
-  createOpenAI: vi.fn(() => vi.fn((modelId: string) => ({ modelId }))),
-}));
 
 describe('OpenAIVercelProvider Registry Integration', () => {
   let providerManager: ProviderManager;

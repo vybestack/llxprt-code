@@ -4,19 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { fetchChutesUsage, formatChutesUsage } from './usageInfo.js';
 
 describe('chutesUsageInfo', () => {
   describe('fetchChutesUsage', () => {
     let fetchMock: ReturnType<typeof vi.fn>;
 
+    const originalFetch = globalThis.fetch;
+
     beforeEach(() => {
       fetchMock = vi.fn();
-      vi.stubGlobal('fetch', fetchMock);
+      globalThis.fetch = fetchMock;
     });
 
     afterEach(() => {
+      globalThis.fetch = originalFetch;
       vi.restoreAllMocks();
     });
 

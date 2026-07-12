@@ -4,15 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'bun:test';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '../../../settings/src/settings/SettingsService.js?subagent-orchestrator-suite';
+import type {
+  IsolatedRuntimeContextHandle,
+  IsolatedRuntimeContextOptions,
+} from '@vybestack/llxprt-code-providers/runtime.js';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubAgentScope } from './subagent.js';
 import { type SubAgentScope as SubAgentScopeInstance } from './subagent.js';
 import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { SubagentOrchestrator } from './subagentOrchestrator.js';
+import { SubagentOrchestrator } from './subagentOrchestrator.js?subagent-orchestrator-suite';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   makeForegroundConfig,
@@ -36,6 +41,30 @@ const defaultRunConfig: RunConfig = {
 };
 
 const foregroundConfig = makeForegroundConfig();
+const createSettingsService = () => new SettingsService();
+const createRuntimeHandle = (
+  options: IsolatedRuntimeContextOptions = {},
+): IsolatedRuntimeContextHandle => {
+  const settingsService = options.settingsService ?? createSettingsService();
+  const config = foregroundConfig;
+  const providerManager = {
+    setRuntimeContext: vi.fn(),
+  } as unknown as IsolatedRuntimeContextHandle['providerManager'];
+  const context = {
+    config,
+    settingsService,
+    providerManager,
+    oauthManager: {},
+    runtimeId: options.runtimeId ?? 'isolated-runtime',
+    metadata: options.metadata ?? {},
+  };
+  return {
+    ...context,
+    activate: vi.fn(),
+    cleanup: vi.fn(),
+  } as unknown as IsolatedRuntimeContextHandle;
+};
+const activateProvider = vi.fn().mockResolvedValue(undefined);
 
 const createScopeFactory = () => {
   const fakeScope = {
@@ -88,18 +117,21 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       subagentManager,
       profileManager,
       foregroundConfig,
+      createSettingsService,
+      createIsolatedRuntimeContext: createRuntimeHandle,
+      activateProvider,
       scopeFactory: factory,
       runtimeLoader,
     });
 
-    await expect(
-      orchestrator.launch({
-        name: subagentName,
-        runConfig: defaultRunConfig,
-      }),
-    ).rejects.toThrow(
+    const launchPromise = orchestrator.launch({
+      name: subagentName,
+      runConfig: defaultRunConfig,
+    });
+    expect(launchPromise).rejects.toThrow(
       /Unable to load subagent 'nonexistent-helper': Subagent not found. Use the list_subagents tool to discover available subagents before calling the task tool./,
     );
+    await launchPromise.catch(() => undefined);
     expect(loadSubagent).toHaveBeenCalledWith(subagentName);
     expect(factory).not.toHaveBeenCalled();
   });
@@ -122,11 +154,14 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       subagentManager,
       profileManager,
       foregroundConfig,
+      createSettingsService,
+      createIsolatedRuntimeContext: createRuntimeHandle,
+      activateProvider,
       scopeFactory: factory,
       runtimeLoader,
     });
 
-    await expect(
+    expect(
       orchestrator.launch({
         name: subagentName,
         runConfig: defaultRunConfig,
@@ -163,6 +198,9 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       subagentManager,
       profileManager,
       foregroundConfig,
+      createSettingsService,
+      createIsolatedRuntimeContext: createRuntimeHandle,
+      activateProvider,
       scopeFactory: factory,
       runtimeLoader,
     });
@@ -229,6 +267,9 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       subagentManager,
       profileManager,
       foregroundConfig,
+      createSettingsService,
+      createIsolatedRuntimeContext: createRuntimeHandle,
+      activateProvider,
       scopeFactory: factory,
       runtimeLoader,
     });
@@ -274,6 +315,9 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       subagentManager,
       profileManager,
       foregroundConfig,
+      createSettingsService,
+      createIsolatedRuntimeContext: createRuntimeHandle,
+      activateProvider,
       scopeFactory: factory,
       runtimeLoader,
     });
@@ -312,6 +356,9 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       subagentManager,
       profileManager,
       foregroundConfig,
+      createSettingsService,
+      createIsolatedRuntimeContext: createRuntimeHandle,
+      activateProvider,
       scopeFactory: factory,
       runtimeLoader,
     });
@@ -360,6 +407,9 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       subagentManager,
       profileManager,
       foregroundConfig: configWithParentTurns,
+      createSettingsService,
+      createIsolatedRuntimeContext: createRuntimeHandle,
+      activateProvider,
       scopeFactory: factory,
       runtimeLoader,
     });
@@ -408,6 +458,9 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       subagentManager,
       profileManager,
       foregroundConfig: configWithDynamicTurns,
+      createSettingsService,
+      createIsolatedRuntimeContext: createRuntimeHandle,
+      activateProvider,
       scopeFactory: factory,
       runtimeLoader,
     });
@@ -452,6 +505,9 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       subagentManager,
       profileManager,
       foregroundConfig,
+      createSettingsService,
+      createIsolatedRuntimeContext: createRuntimeHandle,
+      activateProvider,
       scopeFactory: factory,
       runtimeLoader,
     });
@@ -499,6 +555,9 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       subagentManager,
       profileManager,
       foregroundConfig: configWithParentTurns,
+      createSettingsService,
+      createIsolatedRuntimeContext: createRuntimeHandle,
+      activateProvider,
       scopeFactory: factory,
       runtimeLoader,
     });
@@ -557,6 +616,9 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       subagentManager,
       profileManager,
       foregroundConfig: configWithParentTurns,
+      createSettingsService,
+      createIsolatedRuntimeContext: createRuntimeHandle,
+      activateProvider,
       scopeFactory: factory,
       runtimeLoader,
     });
@@ -604,6 +666,9 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       subagentManager,
       profileManager,
       foregroundConfig: configWithUnlimitedParentTurns,
+      createSettingsService,
+      createIsolatedRuntimeContext: createRuntimeHandle,
+      activateProvider,
       scopeFactory: factory,
       runtimeLoader,
     });
@@ -651,6 +716,9 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       subagentManager,
       profileManager,
       foregroundConfig: configWithZeroParentTurns,
+      createSettingsService,
+      createIsolatedRuntimeContext: createRuntimeHandle,
+      activateProvider,
       scopeFactory: factory,
       runtimeLoader,
     });
@@ -685,6 +753,9 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       subagentManager,
       profileManager,
       foregroundConfig,
+      createSettingsService,
+      createIsolatedRuntimeContext: createRuntimeHandle,
+      activateProvider,
       scopeFactory: factory,
       runtimeLoader,
     });
@@ -692,7 +763,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const controller = new AbortController();
     controller.abort();
 
-    await expect(
+    expect(
       orchestrator.launch(
         { name: subagentConfig.name, runConfig: defaultRunConfig },
         controller.signal,
@@ -716,6 +787,9 @@ describe('SubagentOrchestrator - MessageBus threading (Issue #2312)', () => {
       subagentManager,
       profileManager,
       foregroundConfig,
+      createSettingsService,
+      createIsolatedRuntimeContext: createRuntimeHandle,
+      activateProvider,
       scopeFactory: factory,
       runtimeLoader,
       messageBus: sessionMessageBus,
@@ -740,6 +814,9 @@ describe('SubagentOrchestrator - MessageBus threading (Issue #2312)', () => {
       subagentManager,
       profileManager,
       foregroundConfig,
+      createSettingsService,
+      createIsolatedRuntimeContext: createRuntimeHandle,
+      activateProvider,
       scopeFactory: factory,
       runtimeLoader,
     });

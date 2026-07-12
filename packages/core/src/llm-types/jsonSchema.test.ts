@@ -3,8 +3,9 @@
  * @requirement REQ-002.1, REQ-002.2, REQ-002.3
  * @pseudocode lines 30-37
  */
-import { describe, expect } from 'vitest';
-import { it } from '@fast-check/vitest';
+import { describe, expect } from 'bun:test';
+import { it } from 'bun:test';
+import { propertyTest } from '../test-utils/propertyTest.js';
 import * as fc from 'fast-check';
 import {
   isJsonSchema,
@@ -114,51 +115,56 @@ describe('JsonSchemaObject structural type usage', () => {
 // ============================================================================
 
 describe('jsonSchema property-based', () => {
-  it.prop([fc.boolean()])(
+  propertyTest(
+    [fc.boolean()],
     'isJsonSchema is true for any boolean',
     (v: boolean) => isJsonSchema(v) === true,
   );
 
-  it.prop([fc.object({ maxDepth: 3 })])(
+  propertyTest(
+    [fc.object({ maxDepth: 3 })],
     'isJsonSchema is true for any plain object',
     (v: object) => isJsonSchema(v) === true,
   );
 
-  it.prop([
-    fc.oneof(
-      fc.integer(),
-      fc.string(),
-      fc.constant(null),
-      fc.constant(undefined),
-    ),
-  ])(
+  propertyTest(
+    [
+      fc.oneof(
+        fc.integer(),
+        fc.string(),
+        fc.constant(null),
+        fc.constant(undefined),
+      ),
+    ],
     'isJsonSchema is false for numbers, strings, null, and undefined',
     (v: unknown) => isJsonSchema(v) === false,
   );
 
-  it.prop([fc.array(fc.string())])(
+  propertyTest(
+    [fc.array(fc.string())],
     'isJsonSchema is false for arrays',
     (v: string[]) => isJsonSchema(v) === false,
   );
 
-  it.prop([
-    fc.record({
-      type: fc.constant('object'),
-      properties: fc.object({ maxDepth: 2 }),
-    }),
-  ])(
+  propertyTest(
+    [
+      fc.record({
+        type: fc.constant('object'),
+        properties: fc.object({ maxDepth: 2 }),
+      }),
+    ],
     'schema with type and properties is recognized as JsonSchema',
     (schema) => isJsonSchema(schema) === true,
   );
 
-  it.prop([fc.record({ $ref: fc.string({ minLength: 1, maxLength: 30 }) })])(
+  propertyTest(
+    [fc.record({ $ref: fc.string({ minLength: 1, maxLength: 30 }) })],
     'schema with $ref keyword is recognized as JsonSchema',
     (schema) => isJsonSchema(schema) === true,
   );
 
-  it.prop([
-    fc.dictionary(fc.string({ minLength: 1, maxLength: 10 }), fc.nat()),
-  ])(
+  propertyTest(
+    [fc.dictionary(fc.string({ minLength: 1, maxLength: 10 }), fc.nat())],
     'arbitrary-keyed object schema is always recognized as JsonSchema',
     (schema) => isJsonSchema(schema) === true,
   );

@@ -8,7 +8,7 @@
  * @requirement:REQ-VERIFY-001.2
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { resolve, join, relative } from 'path';
 

@@ -37,6 +37,7 @@ import { mapUsageToMetadata } from './vercelMetadataMapper.js';
 import { getAiTool } from './vercelModelClient.js';
 
 type VercelTools = Record<string, Tool<unknown, never>>;
+export type GenerateTextFunction = typeof generateText;
 
 /**
  * Invokes AI SDK generateText with the given options, wrapping errors.
@@ -51,6 +52,7 @@ export async function invokeGenerateText(
   formattedTools: OpenAIVercelTool[] | undefined,
   logger: DebugLogger,
   providerName: string,
+  generate: GenerateTextFunction = generateText,
 ): Promise<Awaited<ReturnType<typeof generateText>>> {
   const aiToolFn = getAiTool();
   const toolsForGenerate =
@@ -74,7 +76,7 @@ export async function invokeGenerateText(
     generateOptions['maxTokens'] = params.maxOutputTokens;
   }
   try {
-    return await generateText(
+    return await generate(
       generateOptions as Parameters<typeof generateText>[0],
     );
   } catch (error) {

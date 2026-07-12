@@ -4,9 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  beforeEach,
+  afterEach,
+} from 'vitest';
 import * as fs from 'node:fs/promises';
-import { createPolicyUpdater } from './config.js';
+import type { createPolicyUpdater as CreatePolicyUpdater } from './config.js';
 import { PolicyEngine } from './policy-engine.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { MessageBusType } from '../confirmation-bus/types.js';
@@ -19,12 +27,21 @@ import {
   type PolicyUpdateOptions,
 } from '@vybestack/llxprt-code-tools';
 import * as shellUtils from '../utils/shell-utils.js';
+import * as actualSettings from '../../../settings/index.ts';
 
-vi.mock('node:fs/promises');
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  )),
+const mockFsPromises = vi.hoisted(() => ({
+  mkdir: vi.fn(),
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
+  rename: vi.fn(),
+}));
+
+vi.mock('node:fs/promises', () => ({
+  ...mockFsPromises,
+  default: mockFsPromises,
+}));
+vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...actualSettings,
   getSettingsService: vi.fn(),
 }));
 vi.mock('../utils/shell-utils.js', () => ({
@@ -42,6 +59,12 @@ interface TestableShellToolInvocation {
     outcome: ToolConfirmationOutcome,
   ): PolicyUpdateOptions | undefined;
 }
+
+let createPolicyUpdater: typeof CreatePolicyUpdater;
+
+beforeAll(async () => {
+  ({ createPolicyUpdater } = await import('./config.js'));
+});
 
 describe('createPolicyUpdater', () => {
   let policyEngine: PolicyEngine;

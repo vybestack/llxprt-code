@@ -9,6 +9,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from './turn.js';
 import { getTokenLimitForConfiguredContext } from './contextLimitResolver.js';
+import type { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 
 /**
  * Shared overflow threshold: the guard trips when the estimated request
@@ -22,6 +23,7 @@ export interface PreflightOverflowDeps {
   getEffectiveModel: () => string;
   config: Config;
   logger: DebugLogger;
+  resolveTokenLimit?: typeof tokenLimit;
 }
 
 export interface PreflightOverflowContext {
@@ -74,8 +76,11 @@ export async function resolvePreflightOverflow(
     // estimate when compression just nulled lastPromptTokenCount) — NOT
     // getLastPromptTokenCount(), which returns 0 right after compression.
     const newRemaining =
-      getTokenLimitForConfiguredContext(getEffectiveModel(), config) -
-      chat.getProjectedPromptBaseline();
+      getTokenLimitForConfiguredContext(
+        getEffectiveModel(),
+        config,
+        deps.resolveTokenLimit,
+      ) - chat.getProjectedPromptBaseline();
     if (newRemaining <= 0) {
       return true;
     }

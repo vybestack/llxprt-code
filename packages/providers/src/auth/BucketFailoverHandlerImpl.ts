@@ -64,6 +64,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   private lastFailoverReasons: Record<string, BucketFailureReason> = {};
 
   private readonly configuredAuthRetryTimeoutMs: number;
+  private readonly flushAuthScope: (runtimeId: string) => void;
 
   static readonly DEFAULT_AUTH_RETRY_TIMEOUT_MS = 30000;
 
@@ -72,7 +73,10 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     provider: string,
     oauthManager: BucketFailoverOAuthManagerLike,
     metadata?: OAuthTokenRequestMetadata,
-    options?: { authRetryTimeoutMs?: number },
+    options?: {
+      authRetryTimeoutMs?: number;
+      flushAuthScope?: (runtimeId: string) => void;
+    },
   ) {
     this.buckets = buckets;
     this.currentBucketIndex = 0;
@@ -83,6 +87,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     this.configuredAuthRetryTimeoutMs =
       options?.authRetryTimeoutMs ??
       BucketFailoverHandlerImpl.DEFAULT_AUTH_RETRY_TIMEOUT_MS;
+    this.flushAuthScope = options?.flushAuthScope ?? flushRuntimeAuthScope;
 
     // Align the handler state with any existing session override.
     const sessionBucket = this.oauthManager.getSessionBucket(
@@ -732,7 +737,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
    * Called at turn boundaries and after auth errors.
    */
   invalidateAuthCache(runtimeId: string): void {
-    flushRuntimeAuthScope(runtimeId);
+    this.flushAuthScope(runtimeId);
     logger.debug('Auth cache invalidated for runtime', { runtimeId });
   }
 }

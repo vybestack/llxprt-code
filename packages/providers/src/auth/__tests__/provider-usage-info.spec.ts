@@ -6,44 +6,8 @@
 
 import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 
-// ---------------------------------------------------------------------------
-// Hoisted mock factories
-// ---------------------------------------------------------------------------
-const {
-  mockFetchAnthropicUsage,
-  mockFetchCodexUsage,
-  mockGetSettingsService,
-  mockSettingsServiceRef,
-} = vi.hoisted(() => {
-  const settingsServiceRef = { current: { get: vi.fn(() => false) } };
-  return {
-    mockFetchAnthropicUsage: vi.fn(),
-    mockFetchCodexUsage: vi.fn(),
-    mockGetSettingsService: vi.fn(() => settingsServiceRef.current),
-    mockSettingsServiceRef: settingsServiceRef,
-  };
-});
-
-vi.mock('@vybestack/llxprt-code-providers', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-providers')
-  >('@vybestack/llxprt-code-providers');
-  return {
-    ...actual,
-    fetchAnthropicUsage: mockFetchAnthropicUsage,
-    fetchCodexUsage: mockFetchCodexUsage,
-  };
-});
-
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-core')
-  >('@vybestack/llxprt-code-core');
-  return {
-    ...actual,
-    getSettingsService: mockGetSettingsService,
-  };
-});
+const mockFetchAnthropicUsage = vi.fn();
+const mockFetchCodexUsage = vi.fn();
 
 import {
   getAnthropicUsageInfo,
@@ -115,7 +79,11 @@ describe('getAnthropicUsageInfo', () => {
 
   it('returns null when no token exists for the bucket', async () => {
     const store = makeTokenStore();
-    const result = await getAnthropicUsageInfo(store, 'default');
+    const result = await getAnthropicUsageInfo(
+      store,
+      'default',
+      mockFetchAnthropicUsage,
+    );
     expect(result).toBeNull();
     expect(mockFetchAnthropicUsage).not.toHaveBeenCalled();
   });
@@ -131,7 +99,11 @@ describe('getAnthropicUsageInfo', () => {
     });
     mockFetchAnthropicUsage.mockResolvedValue({ plan: 'legacy-single-bucket' });
 
-    const result = await getAnthropicUsageInfo(store, 'default');
+    const result = await getAnthropicUsageInfo(
+      store,
+      'default',
+      mockFetchAnthropicUsage,
+    );
 
     expect(mockFetchAnthropicUsage).toHaveBeenCalledWith(
       'sk-ant-api03-not-oauth',
@@ -146,7 +118,11 @@ describe('getAnthropicUsageInfo', () => {
     });
     mockFetchAnthropicUsage.mockRejectedValue(new Error('network error'));
 
-    const result = await getAnthropicUsageInfo(store, 'default');
+    const result = await getAnthropicUsageInfo(
+      store,
+      'default',
+      mockFetchAnthropicUsage,
+    );
     expect(result).toBeNull();
   });
 
@@ -157,7 +133,11 @@ describe('getAnthropicUsageInfo', () => {
     });
     mockFetchAnthropicUsage.mockResolvedValue({ plan: 'max' });
 
-    const result = await getAnthropicUsageInfo(store, 'my-bucket');
+    const result = await getAnthropicUsageInfo(
+      store,
+      'my-bucket',
+      mockFetchAnthropicUsage,
+    );
 
     expect(mockFetchAnthropicUsage).toHaveBeenCalledWith(token.access_token);
     expect(result).toStrictEqual({ plan: 'max' });
@@ -170,7 +150,7 @@ describe('getAnthropicUsageInfo', () => {
     });
     mockFetchAnthropicUsage.mockResolvedValue({ plan: 'free' });
 
-    await getAnthropicUsageInfo(store, undefined);
+    await getAnthropicUsageInfo(store, undefined, mockFetchAnthropicUsage);
 
     expect(store.getToken).toHaveBeenCalledWith('anthropic', 'default');
   });
@@ -182,7 +162,11 @@ describe('getAnthropicUsageInfo', () => {
     });
     mockFetchAnthropicUsage.mockResolvedValue(null);
 
-    const result = await getAnthropicUsageInfo(store, 'default');
+    const result = await getAnthropicUsageInfo(
+      store,
+      'default',
+      mockFetchAnthropicUsage,
+    );
     expect(result).toBeNull();
   });
 });
@@ -202,7 +186,10 @@ describe('getAllAnthropicUsageInfo', () => {
       getToken: vi.fn().mockResolvedValue(null),
     });
 
-    const result = await getAllAnthropicUsageInfo(store);
+    const result = await getAllAnthropicUsageInfo(
+      store,
+      mockFetchAnthropicUsage,
+    );
     expect(result.size).toBe(0);
   });
 
@@ -212,7 +199,7 @@ describe('getAllAnthropicUsageInfo', () => {
       getToken: vi.fn().mockResolvedValue(null),
     });
 
-    await getAllAnthropicUsageInfo(store);
+    await getAllAnthropicUsageInfo(store, mockFetchAnthropicUsage);
 
     expect(store.getToken).toHaveBeenCalledWith('anthropic', 'default');
   });
@@ -228,7 +215,10 @@ describe('getAllAnthropicUsageInfo', () => {
       getToken: vi.fn().mockResolvedValue(expiredToken),
     });
 
-    const result = await getAllAnthropicUsageInfo(store);
+    const result = await getAllAnthropicUsageInfo(
+      store,
+      mockFetchAnthropicUsage,
+    );
     expect(result.size).toBe(0);
     expect(mockFetchAnthropicUsage).not.toHaveBeenCalled();
   });
@@ -244,7 +234,10 @@ describe('getAllAnthropicUsageInfo', () => {
       getToken: vi.fn().mockResolvedValue(apiKeyToken),
     });
 
-    const result = await getAllAnthropicUsageInfo(store);
+    const result = await getAllAnthropicUsageInfo(
+      store,
+      mockFetchAnthropicUsage,
+    );
     expect(result.size).toBe(0);
     expect(mockFetchAnthropicUsage).not.toHaveBeenCalled();
   });
@@ -266,7 +259,10 @@ describe('getAllAnthropicUsageInfo', () => {
       .mockResolvedValueOnce({ plan: 'max', bucket: 'bucket-a' })
       .mockResolvedValueOnce({ plan: 'pro', bucket: 'bucket-b' });
 
-    const result = await getAllAnthropicUsageInfo(store);
+    const result = await getAllAnthropicUsageInfo(
+      store,
+      mockFetchAnthropicUsage,
+    );
 
     expect(result.size).toBe(2);
     expect(result.get('bucket-a')).toStrictEqual({
@@ -296,7 +292,10 @@ describe('getAllAnthropicUsageInfo', () => {
       .mockRejectedValueOnce(new Error('network error'))
       .mockResolvedValueOnce({ plan: 'pro' });
 
-    const result = await getAllAnthropicUsageInfo(store);
+    const result = await getAllAnthropicUsageInfo(
+      store,
+      mockFetchAnthropicUsage,
+    );
 
     expect(result.size).toBe(1);
     expect(result.get('bucket-b')).toStrictEqual({ plan: 'pro' });
@@ -310,7 +309,10 @@ describe('getAllAnthropicUsageInfo', () => {
     });
     mockFetchAnthropicUsage.mockResolvedValue(null);
 
-    const result = await getAllAnthropicUsageInfo(store);
+    const result = await getAllAnthropicUsageInfo(
+      store,
+      mockFetchAnthropicUsage,
+    );
     expect(result.size).toBe(0);
   });
 });
@@ -330,7 +332,11 @@ describe('getAllCodexUsageInfo', () => {
       getToken: vi.fn().mockResolvedValue(null),
     });
 
-    const result = await getAllCodexUsageInfo(store);
+    const result = await getAllCodexUsageInfo(
+      store,
+      undefined,
+      mockFetchCodexUsage,
+    );
     expect(result.size).toBe(0);
   });
 
@@ -340,7 +346,7 @@ describe('getAllCodexUsageInfo', () => {
       getToken: vi.fn().mockResolvedValue(null),
     });
 
-    await getAllCodexUsageInfo(store);
+    await getAllCodexUsageInfo(store, undefined, mockFetchCodexUsage);
 
     expect(store.getToken).toHaveBeenCalledWith('codex', 'default');
   });
@@ -357,7 +363,11 @@ describe('getAllCodexUsageInfo', () => {
       getToken: vi.fn().mockResolvedValue(expiredToken),
     });
 
-    const result = await getAllCodexUsageInfo(store);
+    const result = await getAllCodexUsageInfo(
+      store,
+      undefined,
+      mockFetchCodexUsage,
+    );
     expect(result.size).toBe(0);
     expect(mockFetchCodexUsage).not.toHaveBeenCalled();
   });
@@ -373,7 +383,11 @@ describe('getAllCodexUsageInfo', () => {
       getToken: vi.fn().mockResolvedValue(tokenWithoutAccountId),
     });
 
-    const result = await getAllCodexUsageInfo(store);
+    const result = await getAllCodexUsageInfo(
+      store,
+      undefined,
+      mockFetchCodexUsage,
+    );
     expect(result.size).toBe(0);
     expect(mockFetchCodexUsage).not.toHaveBeenCalled();
   });
@@ -391,7 +405,11 @@ describe('getAllCodexUsageInfo', () => {
     });
     mockFetchCodexUsage.mockResolvedValue({ quota: 1000 });
 
-    const result = await getAllCodexUsageInfo(store);
+    const result = await getAllCodexUsageInfo(
+      store,
+      undefined,
+      mockFetchCodexUsage,
+    );
 
     expect(mockFetchCodexUsage).toHaveBeenCalledWith(
       'codex-access-token',
@@ -422,6 +440,7 @@ describe('getAllCodexUsageInfo', () => {
     await getAllCodexUsageInfo(
       store,
       mockConfig as unknown as import('@vybestack/llxprt-code-core').Config,
+      mockFetchCodexUsage,
     );
 
     expect(mockFetchCodexUsage).toHaveBeenCalledWith(
@@ -451,6 +470,7 @@ describe('getAllCodexUsageInfo', () => {
     await getAllCodexUsageInfo(
       store,
       mockConfig as unknown as import('@vybestack/llxprt-code-core').Config,
+      mockFetchCodexUsage,
     );
 
     expect(mockFetchCodexUsage).toHaveBeenCalledWith(
@@ -487,7 +507,11 @@ describe('getAllCodexUsageInfo', () => {
       .mockRejectedValueOnce(new Error('fetch failed'))
       .mockResolvedValueOnce({ quota: 999 });
 
-    const result = await getAllCodexUsageInfo(store);
+    const result = await getAllCodexUsageInfo(
+      store,
+      undefined,
+      mockFetchCodexUsage,
+    );
     expect(result.size).toBe(1);
     expect(result.get('bucket-b')).toStrictEqual({ quota: 999 });
   });
@@ -500,8 +524,6 @@ describe('getAllCodexUsageInfo', () => {
 describe('getHigherPriorityAuth', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSettingsServiceRef.current = { get: vi.fn(() => false) };
-    mockGetSettingsService.mockReturnValue(mockSettingsServiceRef.current);
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.QWEN_API_KEY;
   });
@@ -517,10 +539,13 @@ describe('getHigherPriorityAuth', () => {
   });
 
   it('returns null when authOnly is enabled', async () => {
-    mockSettingsServiceRef.current.get = vi.fn(() => true);
     const settings = makeLoadedSettings();
 
-    const result = await getHigherPriorityAuth('anthropic', settings);
+    const result = await getHigherPriorityAuth(
+      'anthropic',
+      settings,
+      () => true,
+    );
     expect(result).toBeNull();
   });
 
@@ -529,7 +554,11 @@ describe('getHigherPriorityAuth', () => {
       providerApiKeys: { anthropic: 'sk-ant-key' },
     });
 
-    const result = await getHigherPriorityAuth('anthropic', settings);
+    const result = await getHigherPriorityAuth(
+      'anthropic',
+      settings,
+      () => false,
+    );
     expect(result).toBe('API Key');
   });
 
@@ -538,7 +567,11 @@ describe('getHigherPriorityAuth', () => {
       providerKeyfiles: { anthropic: '/path/to/keyfile.json' },
     });
 
-    const result = await getHigherPriorityAuth('anthropic', settings);
+    const result = await getHigherPriorityAuth(
+      'anthropic',
+      settings,
+      () => false,
+    );
     expect(result).toBe('Keyfile');
   });
 
@@ -546,7 +579,11 @@ describe('getHigherPriorityAuth', () => {
     process.env.ANTHROPIC_API_KEY = 'sk-test-env-key';
     const settings = makeLoadedSettings();
 
-    const result = await getHigherPriorityAuth('anthropic', settings);
+    const result = await getHigherPriorityAuth(
+      'anthropic',
+      settings,
+      () => false,
+    );
     expect(result).toBe('Environment Variable');
   });
 
@@ -554,14 +591,22 @@ describe('getHigherPriorityAuth', () => {
     process.env.MISTRAL_API_KEY = 'mistral-env-key';
     const settings = makeLoadedSettings();
 
-    const result = await getHigherPriorityAuth('mistral', settings);
+    const result = await getHigherPriorityAuth(
+      'mistral',
+      settings,
+      () => false,
+    );
     expect(result).toBe('Environment Variable');
   });
 
   it('returns null when no higher priority auth exists', async () => {
     const settings = makeLoadedSettings();
 
-    const result = await getHigherPriorityAuth('anthropic', settings);
+    const result = await getHigherPriorityAuth(
+      'anthropic',
+      settings,
+      () => false,
+    );
     expect(result).toBeNull();
   });
 
@@ -570,7 +615,11 @@ describe('getHigherPriorityAuth', () => {
       providerBaseUrls: { openai: 'https://api.openai.com/v1' },
     });
 
-    const result = await getHigherPriorityAuth('anthropic', settings);
+    const result = await getHigherPriorityAuth(
+      'anthropic',
+      settings,
+      () => false,
+    );
     expect(result).toBeNull();
   });
 
@@ -580,7 +629,11 @@ describe('getHigherPriorityAuth', () => {
       providerApiKeys: { anthropic: 'settings-key' },
     });
 
-    const result = await getHigherPriorityAuth('anthropic', settings);
+    const result = await getHigherPriorityAuth(
+      'anthropic',
+      settings,
+      () => false,
+    );
     expect(result).toBe('API Key');
   });
 
@@ -590,7 +643,11 @@ describe('getHigherPriorityAuth', () => {
       providerKeyfiles: { anthropic: '/keyfile.json' },
     });
 
-    const result = await getHigherPriorityAuth('anthropic', settings);
+    const result = await getHigherPriorityAuth(
+      'anthropic',
+      settings,
+      () => false,
+    );
     expect(result).toBe('Keyfile');
   });
 });

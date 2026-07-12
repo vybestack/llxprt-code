@@ -4,11 +4,9 @@
  * SPDX-License-Identifier:Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { spawn } from 'child_process';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import type { spawn } from 'child_process';
 import { ClipboardService } from './ClipboardService.js';
-
-vi.mock('child_process');
 
 /**
  * @plan PLAN-20250822-GEMINIFALLBACK.P05
@@ -17,9 +15,11 @@ vi.mock('child_process');
  */
 describe('ClipboardService', () => {
   let clipboardService: ClipboardService;
+  let mockSpawn: ReturnType<typeof vi.fn<typeof spawn>>;
 
   beforeEach(() => {
-    clipboardService = new ClipboardService();
+    mockSpawn = vi.fn<typeof spawn>();
+    clipboardService = new ClipboardService(mockSpawn);
     vi.clearAllMocks();
   });
 
@@ -39,7 +39,6 @@ describe('ClipboardService', () => {
     const testUrl = 'https://example.com/oauth?code=12345';
 
     // Mock child_process.spawn for this test
-    const mockSpawn = vi.mocked(spawn);
     const mockChildProcess = {
       stdin: {
         write: vi.fn(),
@@ -65,9 +64,7 @@ describe('ClipboardService', () => {
       value: 'darwin',
     });
 
-    await expect(
-      clipboardService.copyToClipboard(testUrl),
-    ).resolves.toBeUndefined();
+    await clipboardService.copyToClipboard(testUrl);
 
     expect(mockSpawn).toHaveBeenCalledWith('pbcopy', []);
     expect(mockChildProcess.stdin.write).toHaveBeenCalledWith(testUrl);
@@ -83,7 +80,6 @@ describe('ClipboardService', () => {
     const testUrl = 'https://example.com/oauth?code=12345';
 
     // Mock child_process.spawn for this test
-    const mockSpawn = vi.mocked(spawn);
     const mockChildProcess = {
       stdin: {
         write: vi.fn(),
@@ -109,9 +105,7 @@ describe('ClipboardService', () => {
       value: 'darwin',
     });
 
-    await expect(
-      clipboardService.copyToClipboard(testUrl),
-    ).resolves.toBeUndefined();
+    await clipboardService.copyToClipboard(testUrl);
 
     expect(mockSpawn).toHaveBeenCalledWith('pbcopy', []);
     expect(mockChildProcess.stdin.write).toHaveBeenCalledWith(testUrl);
@@ -127,7 +121,6 @@ describe('ClipboardService', () => {
     const testUrl = 'https://example.com/oauth?code=12345';
 
     // Mock child_process.spawn for this test
-    const mockSpawn = vi.mocked(spawn);
     const mockChildProcess = {
       stdin: {
         write: vi.fn(),
@@ -153,9 +146,7 @@ describe('ClipboardService', () => {
       value: 'linux',
     });
 
-    await expect(
-      clipboardService.copyToClipboard(testUrl),
-    ).resolves.toBeUndefined();
+    await clipboardService.copyToClipboard(testUrl);
 
     expect(mockSpawn).toHaveBeenCalledWith('xclip', [
       '-selection',
@@ -174,7 +165,6 @@ describe('ClipboardService', () => {
     const testUrl = 'https://example.com/oauth?code=12345';
 
     // Mock child_process.spawn for this test
-    const mockSpawn = vi.mocked(spawn);
     const mockChildProcessForXclip = {
       stdin: {
         write: vi.fn(),
@@ -200,9 +190,7 @@ describe('ClipboardService', () => {
       value: 'linux',
     });
 
-    await expect(
-      clipboardService.copyToClipboard(testUrl),
-    ).resolves.toBeUndefined();
+    await clipboardService.copyToClipboard(testUrl);
 
     expect(mockSpawn).toHaveBeenCalledWith('xclip', [
       '-selection',
@@ -221,7 +209,6 @@ describe('ClipboardService', () => {
     const testUrl = 'https://example.com/oauth?code=12345';
 
     // Mock child_process.spawn for this test
-    const mockSpawn = vi.mocked(spawn);
     const mockChildProcess = {
       stdin: {
         write: vi.fn(),
@@ -247,9 +234,7 @@ describe('ClipboardService', () => {
       value: 'win32',
     });
 
-    await expect(
-      clipboardService.copyToClipboard(testUrl),
-    ).resolves.toBeUndefined();
+    await clipboardService.copyToClipboard(testUrl);
 
     expect(mockSpawn).toHaveBeenCalledWith('clip', []);
     expect(mockChildProcess.stdin.write).toHaveBeenCalledWith(testUrl);
@@ -265,7 +250,6 @@ describe('ClipboardService', () => {
     const testUrl = 'https://example.com/oauth?code=12345';
 
     // Mock child_process.spawn to simulate failure
-    const mockSpawn = vi.mocked(spawn);
     const mockChildProcess = {
       stdin: {
         write: vi.fn(),
@@ -299,7 +283,7 @@ describe('ClipboardService', () => {
     });
 
     // Should reject with error when pbcopy fails
-    await expect(clipboardService.copyToClipboard(testUrl)).rejects.toThrow(
+    expect(clipboardService.copyToClipboard(testUrl)).rejects.toThrow(
       'spawn ENOENT',
     );
   });
@@ -313,7 +297,6 @@ describe('ClipboardService', () => {
     const testUrl = 'https://example.com/oauth?code=12345';
 
     // Mock child_process.spawn to simulate failure with stderr output
-    const mockSpawn = vi.mocked(spawn);
     const mockChildProcess = {
       stdin: {
         write: vi.fn(),
@@ -347,7 +330,7 @@ describe('ClipboardService', () => {
     });
 
     // Should reject with specific error message when pbcopy fails
-    await expect(clipboardService.copyToClipboard(testUrl)).rejects.toThrow(
+    expect(clipboardService.copyToClipboard(testUrl)).rejects.toThrow(
       'spawn pbcopy ENOENT',
     );
   });

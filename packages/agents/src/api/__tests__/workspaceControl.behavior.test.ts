@@ -16,7 +16,7 @@
  * delegation, so every positive case exercises the bound WorkspaceContext.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

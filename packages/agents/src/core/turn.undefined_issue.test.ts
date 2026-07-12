@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Turn } from './turn.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { Turn } from './turn.ts?undefined-tool-name-behavior';
+import { AgentEventType } from '../../../core/src/core/turn.ts?undefined-tool-name-behavior';
 import type { ChatSession } from './chatSession.js';
 import type { FunctionCall } from '@google/genai';
-import { AgentEventType } from './turn.js';
 
 describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => {
   let mockChatSession: ChatSession;

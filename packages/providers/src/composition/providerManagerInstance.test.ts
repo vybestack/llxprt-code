@@ -9,7 +9,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import {
   debugLogger,
   sanitizeForByteString,
@@ -21,21 +21,6 @@ import {
   setFileSystem,
   bindOpenAIAliasIdentity,
 } from './providerManagerInstance.js';
-
-// Mock os module and set homedir before imports
-vi.mock('os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('os')>();
-  return {
-    ...actual,
-    homedir: vi.fn(() => '/home/user'),
-    platform: vi.fn(() => 'linux'),
-  };
-});
-
-// Mock stripJsonComments
-vi.mock('strip-json-comments', () => ({
-  default: (content: string) => content,
-}));
 
 function sanitizeApiKey(key: string): string {
   const sanitized = sanitizeForByteString(key);

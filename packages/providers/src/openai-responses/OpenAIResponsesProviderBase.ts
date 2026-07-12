@@ -42,6 +42,8 @@ import type { ResponsesInputItem } from './OpenAIResponsesTypes.js';
 export abstract class OpenAIResponsesProviderBase extends BaseProvider {
   protected logger: DebugLogger;
   protected _isCodexMode: boolean;
+  protected readonly fetchFn: typeof fetch;
+  protected readonly isTransientError: (error: unknown) => boolean;
   // @plan:PLAN-20251023-STATELESS-HARDENING.P08
   // @requirement:REQ-SP4-002/REQ-SP4-003
   // Removed static cache scope and conversation cache dependencies to achieve stateless operation
@@ -51,6 +53,8 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
     baseURL?: string,
     config?: IProviderConfig,
     oauthManager?: OAuthManager,
+    fetchFn: typeof fetch = fetch,
+    isTransientError: (error: unknown) => boolean = isNetworkTransientError,
   ) {
     // Detect Codex mode from baseURL at construction time
     const isCodex = baseURL?.includes('chatgpt.com/backend-api/codex') ?? false;
@@ -71,6 +75,8 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
     super(baseConfig, config);
 
     this._isCodexMode = isCodex;
+    this.fetchFn = fetchFn;
+    this.isTransientError = isTransientError;
     this.logger = new DebugLogger('llxprt:providers:openai-responses');
     this.logger.debug(
       () =>
@@ -115,7 +121,7 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
       return status === 429 || (status >= 500 && status < 600);
     }
 
-    return isNetworkTransientError(error);
+    return this.isTransientError(error);
   }
 
   /**

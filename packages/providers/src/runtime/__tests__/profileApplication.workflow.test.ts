@@ -3,6 +3,7 @@
  * Split from profileApplication.test.ts during #2092 lint hardening.
  */
 
+import { createRequire } from 'node:module';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import {
@@ -27,13 +28,14 @@ import {
   restoreGcpEnvVars,
 } from './profileApplicationTestSetup.js';
 
-vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>();
-  return {
-    ...actual,
-    readFile: vi.fn(),
-  };
-});
+const require = createRequire(import.meta.url);
+const actualFs =
+  require('node:fs/promises') as typeof import('node:fs/promises');
+
+vi.mock('node:fs/promises', () => ({
+  ...actualFs,
+  readFile: vi.fn(),
+}));
 
 const mockFs = await import('node:fs/promises');
 
@@ -69,7 +71,7 @@ describe('STEP 2 workflow: pre-switch auth wiring', () => {
     vi.clearAllMocks();
   });
   it('sets auth-keyfile ephemeral and provider setting from keyfile before switch', async () => {
-    vi.mocked(mockFs.readFile).mockResolvedValue('keyfile-api-key');
+    mockFs.readFile.mockResolvedValue('keyfile-api-key');
 
     providerManagerStub.available = ['anthropic'];
     providerManagerStub.providerLookup = new Map([
@@ -210,7 +212,7 @@ describe('STEP 2 workflow: pre-switch auth wiring', () => {
   });
 
   it('falls back to direct auth-key when keyfile read returns empty content', async () => {
-    vi.mocked(mockFs.readFile).mockResolvedValue('   ');
+    mockFs.readFile.mockResolvedValue('   ');
 
     providerManagerStub.available = ['openai'];
     providerManagerStub.providerLookup = new Map([

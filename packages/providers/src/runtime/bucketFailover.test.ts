@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 
 import { executeWithBucketFailover } from './bucketFailover.js';
 
@@ -26,7 +26,7 @@ describe('executeWithBucketFailover', () => {
   it('normalizes non-Error non-failover throws before rethrowing', async () => {
     const seenBuckets: string[] = [];
 
-    await expect(
+    expect(
       executeWithBucketFailover(
         { prompt: 'hello' },
         ['primary', 'secondary'],

@@ -38,6 +38,7 @@ import {
   type StatusMutator,
   type SchedulerAccessor,
   type EditorCallbacks,
+  type ConfirmationCoordinatorDependencies,
 } from '../scheduler/confirmation-coordinator.js';
 import type {
   ScheduledToolCall,
@@ -100,6 +101,7 @@ export interface CoreToolSchedulerOptions {
   onEditorClose: () => void;
   onEditorOpen?: () => void;
   toolContextInteractiveMode?: boolean;
+  logToolCall?: typeof logToolCall;
 }
 
 export class CoreToolScheduler implements ToolSchedulerContract {
@@ -119,6 +121,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
   private toolContextInteractiveMode: boolean;
   private requestQueue: QueuedRequest[] = [];
   private readonly resultAggregator: ResultAggregator;
+  private readonly logToolCall: typeof logToolCall;
 
   // Track all callIds seen at the scheduler boundary to prevent duplicate execution
   private seenCallIds: Set<string> = new Set();
@@ -128,8 +131,12 @@ export class CoreToolScheduler implements ToolSchedulerContract {
    * @requirement REQ-D01-001.2
    * @pseudocode lines 56-72
    */
-  constructor(options: CoreToolSchedulerOptions) {
+  constructor(
+    options: CoreToolSchedulerOptions,
+    confirmationDependencies?: ConfirmationCoordinatorDependencies,
+  ) {
     this.config = options.config;
+    this.logToolCall = options.logToolCall ?? logToolCall;
     this.toolExecutor = new ToolExecutor(this.config);
     this.toolDispatcher = new ToolDispatcher(
       options.toolRegistry,
@@ -181,6 +188,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       schedulerAccessor,
       editorCallbacks,
       (config, details) => triggerToolNotificationHook(config, details),
+      confirmationDependencies,
     );
     this.confirmationCoordinator.subscribe();
   }
@@ -798,7 +806,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       // Clean up signal mappings for completed calls
       for (const call of completedCalls) {
         this.confirmationCoordinator.deleteSignal(call.request.callId);
-        logToolCall(this.config, new ToolCallEvent(call));
+        this.logToolCall(this.config, new ToolCallEvent(call));
       }
 
       if (this.onAllToolCallsComplete) {

@@ -15,7 +15,7 @@
  * provider — no mock theater.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { FinishReason } from '@google/genai';
 import { ChatSession } from './chatSession.js';
 import { getProviderStopReason } from './providerStopReason.js';
@@ -37,10 +37,6 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
-
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
-  retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
-}));
 
 describe('Issue 2329: direct-path refusal preservation @issue:2329', () => {
   let settingsService: SettingsService;

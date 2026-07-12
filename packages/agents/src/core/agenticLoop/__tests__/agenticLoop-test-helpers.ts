@@ -18,6 +18,7 @@
 
 import { vi } from 'vitest';
 import { CoreToolScheduler } from '../../coreToolScheduler.js';
+import type { ConfirmationCoordinatorDependencies } from '../../../scheduler/confirmation-coordinator.js';
 import type { AgenticLoop } from '../AgenticLoop.js';
 import type { ApprovalHandler, AgenticLoopEvent } from '../types.js';
 import type { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
@@ -242,6 +243,7 @@ export function createTestConfig(options: {
   policyEngine: PolicyEngine;
   interactive: boolean;
   approvalMode?: ApprovalMode;
+  confirmationDependencies?: ConfirmationCoordinatorDependencies;
 }): Config {
   const { messageBus, toolRegistry, policyEngine, interactive } = options;
   const approvalMode = options.approvalMode ?? ApprovalMode.YOLO;
@@ -268,7 +270,7 @@ export function createTestConfig(options: {
       (
         opts: ConstructorParameters<typeof CoreToolScheduler>[0],
       ): CoreToolScheduler =>
-        new CoreToolScheduler(opts),
+        new CoreToolScheduler(opts, options.confirmationDependencies),
     getOrCreateScheduler: (
       sessionId: string,
       callbacks: Parameters<Config['getOrCreateScheduler']>[1],

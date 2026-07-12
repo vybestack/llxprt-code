@@ -19,8 +19,9 @@ import { vi } from 'vitest';
 import type { Chat, GenerateContentResponse } from '@google/genai';
 import { GoogleGenAI } from '@google/genai';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
+
 import type { ChatSession } from './chatSession.js';
+import type { MessageStreamDeps } from './MessageStreamOrchestrator.js';
 import { AgentClient } from './client.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -55,18 +56,22 @@ export interface ClientMockFns {
   mockChatCreateFn: ReturnType<typeof vi.fn>;
   mockGenerateContentFn: ReturnType<typeof vi.fn>;
   mockEmbedContentFn: ReturnType<typeof vi.fn>;
+  createTurn?: MessageStreamDeps['createTurn'];
+  resolveTokenLimit?: MessageStreamDeps['resolveTokenLimit'];
+}
+
+function asMock<T>(value: T): T & ReturnType<typeof vi.fn> {
+  return value as T & ReturnType<typeof vi.fn>;
 }
 
 /** Reset all mocks and re-apply the shared service mocks. */
 function resetAndApplyServiceMocks(): void {
   vi.resetAllMocks();
-  vi.mocked(uiTelemetryService.setLastPromptTokenCount).mockClear();
+  asMock(uiTelemetryService.setLastPromptTokenCount).mockClear();
 
-  vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(
-    'Test system instruction',
-  );
+  asMock(getCoreSystemPromptAsync).mockResolvedValue('Test system instruction');
 
-  vi.mocked(ComplexityAnalyzer).mockImplementation(
+  asMock(ComplexityAnalyzer).mockImplementation(
     () =>
       ({
         analyzeComplexity: vi.fn().mockReturnValue({
@@ -80,7 +85,7 @@ function resetAndApplyServiceMocks(): void {
       }) as unknown as ComplexityAnalyzer,
   );
 
-  vi.mocked(TodoReminderService).mockImplementation(
+  asMock(TodoReminderService).mockImplementation(
     () =>
       ({
         getComplexTaskSuggestion: vi.fn(),
@@ -99,7 +104,7 @@ function setupGoogleGenAIMock(mockFns: ClientMockFns): void {
   const { mockChatCreateFn, mockGenerateContentFn, mockEmbedContentFn } =
     mockFns;
 
-  const MockedGoogleGenAI = vi.mocked(GoogleGenAI);
+  const MockedGoogleGenAI = asMock(GoogleGenAI);
   MockedGoogleGenAI.mockImplementation((..._args: unknown[]): GoogleGenAI => {
     const mockInstance = {
       chats: { create: mockChatCreateFn },
@@ -123,15 +128,17 @@ function setupGoogleGenAIMock(mockFns: ClientMockFns): void {
   } as unknown as GenerateContentResponse);
 }
 
-/** Build and register the mock Config implementation. */
-function setupConfigMock(): ContentGeneratorConfig {
+/** Build the config fixture and its content-generator settings. */
+function createConfigFixture(): {
+  config: Config;
+  contentGeneratorConfig: ContentGeneratorConfig;
+} {
   const mockToolRegistry = {
     getFunctionDeclarations: vi.fn().mockReturnValue([]),
     getTool: vi.fn().mockReturnValue(null),
     getAllTools: vi.fn().mockReturnValue([]),
   };
   const fileService = new FileDiscoveryService('/test/dir');
-  const MockedConfig = vi.mocked(Config, true);
   const contentGeneratorConfig: ContentGeneratorConfig = {
     model: 'test-model',
     apiKey: 'test-key',
@@ -181,24 +188,32 @@ function setupConfigMock(): ContentGeneratorConfig {
     getMcpClientManager: vi.fn().mockReturnValue(undefined),
     getModelRouterService: vi.fn().mockReturnValue(undefined),
   };
-  MockedConfig.mockImplementation(() => mockConfigObject as unknown as Config);
-  return contentGeneratorConfig;
+  return {
+    config: mockConfigObject as unknown as Config,
+    contentGeneratorConfig,
+  };
 }
 
 /** Instantiate the AgentClient and wire its chat mock. */
 async function createAndInitClient(
+  mockConfig: Config,
   contentGeneratorConfig: ContentGeneratorConfig,
+  createTurn?: MessageStreamDeps['createTurn'],
+  resolveTokenLimit?: MessageStreamDeps['resolveTokenLimit'],
 ): Promise<AgentClient> {
-  const mockConfig = new Config({
-    sessionId: 'test-session-id',
-  } as ConfigParameters);
   const runtimeState = createAgentRuntimeState({
     runtimeId: 'test-runtime',
     provider: 'gemini',
     model: 'test-model',
     sessionId: 'test-session-id',
   });
-  const client = new AgentClient(mockConfig, runtimeState);
+  const client = new AgentClient(
+    mockConfig,
+    runtimeState,
+    undefined,
+    createTurn,
+    resolveTokenLimit,
+  );
   await client.initialize(contentGeneratorConfig);
 
   client.getHistory = vi.fn().mockReturnValue([]);
@@ -230,8 +245,12 @@ export async function setupGeminiClient(
 ): Promise<ClientTestContext> {
   resetAndApplyServiceMocks();
   setupGoogleGenAIMock(mockFns);
-  const contentGeneratorConfig = setupConfigMock();
-  const client = await createAndInitClient(contentGeneratorConfig);
-  const mockConfig = client['config'];
+  const { config: mockConfig, contentGeneratorConfig } = createConfigFixture();
+  const client = await createAndInitClient(
+    mockConfig,
+    contentGeneratorConfig,
+    mockFns.createTurn,
+    mockFns.resolveTokenLimit,
+  );
   return { client, mockConfig };
 }

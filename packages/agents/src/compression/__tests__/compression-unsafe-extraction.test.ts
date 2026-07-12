@@ -12,7 +12,7 @@
  * that mock functions were called.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   makeUserMessage,

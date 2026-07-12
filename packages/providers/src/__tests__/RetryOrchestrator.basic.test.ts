@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -245,7 +245,7 @@ describe('RetryOrchestrator', () => {
         contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
       };
 
-      await expect(
+      expect(
         consumeStream(orchestrator.generateChatCompletion(options)),
       ).rejects.toThrow('Bad request');
     });
@@ -317,7 +317,7 @@ describe('RetryOrchestrator', () => {
         contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
       };
 
-      await expect(
+      expect(
         consumeStream(orchestrator.generateChatCompletion(options)),
       ).rejects.toThrow('Rate limit exceeded');
     });
@@ -574,7 +574,7 @@ describe('RetryOrchestrator', () => {
         contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
       };
 
-      await expect(
+      expect(
         consumeStream(orchestrator.generateChatCompletion(options)),
       ).rejects.toThrow(/timeout/i);
     });
@@ -735,7 +735,7 @@ describe('RetryOrchestrator', () => {
         } as unknown as GenerateChatOptions['runtime'],
       };
 
-      await expect(
+      expect(
         consumeStream(orchestrator.generateChatCompletion(options)),
       ).rejects.toThrow(/abort/i);
     });
@@ -763,7 +763,7 @@ describe('RetryOrchestrator', () => {
       // Abort after a short time during the backoff
       setTimeout(() => abortController.abort(), 100);
 
-      await expect(
+      expect(
         consumeStream(orchestrator.generateChatCompletion(options)),
       ).rejects.toThrow(/abort/i);
     });
@@ -823,7 +823,8 @@ describe('RetryOrchestrator', () => {
       // Abort after a short delay
       setTimeout(() => abortController.abort(), 25);
 
-      await expect(streamPromise).rejects.toThrow(/abort/i);
+      expect(streamPromise).rejects.toThrow(/abort/i);
+      await streamPromise.catch(() => undefined);
 
       // Provider should have been called and received the signal
       expect(providerCalls).toBeGreaterThan(0);

@@ -11,24 +11,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ContextManager } from './contextManager.js';
 import * as memoryDiscovery from '../utils/memoryDiscovery.js';
+import { concatenateInstructions as actualConcatenateInstructions } from '../utils/memoryDiscovery.ts';
 import type { Config } from '../config/config.js';
 import { coreEvents, CoreEvent } from '../utils/events.js';
 
 // Mock memoryDiscovery module
-vi.mock('../utils/memoryDiscovery.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../utils/memoryDiscovery.js')>();
-  return {
-    ...actual,
-    loadGlobalMemory: vi.fn(),
-    loadEnvironmentMemory: vi.fn(),
-    loadJitSubdirectoryMemory: vi.fn(),
-    loadCoreMemory: vi.fn(),
-    concatenateInstructions: vi
-      .fn()
-      .mockImplementation(actual.concatenateInstructions),
-  };
-});
+vi.mock('../utils/memoryDiscovery.js', () => ({
+  loadGlobalMemory: vi.fn(),
+  loadEnvironmentMemory: vi.fn(),
+  loadJitSubdirectoryMemory: vi.fn(),
+  loadCoreMemory: vi.fn(),
+  concatenateInstructions: vi.fn(actualConcatenateInstructions),
+}));
 
 describe('ContextManager', () => {
   let contextManager: ContextManager;

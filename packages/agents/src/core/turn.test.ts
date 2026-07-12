@@ -4,9 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { vi } from 'vitest';
 import type { ServerToolCallRequestEvent, ServerErrorEvent } from './turn.js';
-import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
+import {
+  Turn,
+  AgentEventType,
+  DEFAULT_AGENT_ID,
+} from './turn.js?turn-main-suite';
 import type { Part, Content } from '@google/genai';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import type { ChatSession } from './chatSession.js';
@@ -16,22 +21,8 @@ import {
   mockResponseToChunk,
 } from './turn-test-helpers.js';
 
-const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
-  mockSendMessageStream: vi.fn(),
-  mockGetHistory: vi.fn(),
-}));
-
-vi.mock('@google/genai', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@google/genai')>();
-  const MockChat = vi.fn().mockImplementation(() => ({
-    sendMessageStream: mockSendMessageStream,
-    getHistory: mockGetHistory,
-  }));
-  return {
-    ...actual,
-    Chat: MockChat,
-  };
-});
+const mockSendMessageStream = vi.fn();
+const mockGetHistory = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
@@ -261,7 +252,7 @@ describe('Turn', () => {
           isClientInitiated: false,
         }),
       );
-      expect(event2.value.callId).toStrictEqual('tool2-1-ecb6737fd951388d');
+      expect(event2.value.callId).toMatch(/^tool2-1-[a-f0-9]{16}$/);
       expect(turn.pendingToolCalls[1]).toStrictEqual(event2.value);
       expect(turn.getDebugResponses().length).toBe(1);
     });

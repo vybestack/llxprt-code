@@ -32,9 +32,28 @@ const logger = new DebugLogger('llxprt:oauth:provider-usage');
  * @param tokenStore - Token store to read from
  * @param bucket - Bucket to fetch usage for (required; caller resolves default)
  */
+export type FetchAnthropicUsage = (
+  token: string,
+) => Promise<Record<string, unknown> | null>;
+export type FetchCodexUsage = (
+  token: string,
+  accountId: string,
+  baseUrl?: string,
+) => Promise<Record<string, unknown> | null>;
+
+async function defaultFetchAnthropicUsage(
+  token: string,
+): Promise<Record<string, unknown> | null> {
+  const { fetchAnthropicUsage } = await import(
+    '@vybestack/llxprt-code-providers'
+  );
+  return fetchAnthropicUsage(token);
+}
+
 export async function getAnthropicUsageInfo(
   tokenStore: TokenStore,
   bucket?: string,
+  fetchUsage: FetchAnthropicUsage = defaultFetchAnthropicUsage,
 ): Promise<Record<string, unknown> | null> {
   const bucketToUse = bucket ?? 'default';
   const token = await tokenStore.getToken('anthropic', bucketToUse);
@@ -44,10 +63,7 @@ export async function getAnthropicUsageInfo(
   }
 
   try {
-    const { fetchAnthropicUsage } = await import(
-      '@vybestack/llxprt-code-providers'
-    );
-    return await fetchAnthropicUsage(token.access_token);
+    return await fetchUsage(token.access_token);
   } catch (error) {
     logger.debug(
       `Error fetching Anthropic usage info for bucket ${bucketToUse}:`,
@@ -114,15 +130,12 @@ async function fetchAndStoreCodexUsage(
  */
 export async function getAllAnthropicUsageInfo(
   tokenStore: TokenStore,
+  fetchUsage: FetchAnthropicUsage = defaultFetchAnthropicUsage,
 ): Promise<Map<string, Record<string, unknown>>> {
   const result = new Map<string, Record<string, unknown>>();
 
   const buckets = await tokenStore.listBuckets('anthropic');
   const bucketsToCheck = buckets.length > 0 ? buckets : ['default'];
-
-  const { fetchAnthropicUsage } = await import(
-    '@vybestack/llxprt-code-providers'
-  );
 
   for (const bucket of bucketsToCheck) {
     const token = await tokenStore.getToken('anthropic', bucket);
@@ -138,7 +151,7 @@ export async function getAllAnthropicUsageInfo(
       await fetchAndStoreAnthropicUsage(
         bucket,
         token.access_token,
-        fetchAnthropicUsage,
+        fetchUsage,
         result,
         logger,
       );
@@ -159,13 +172,17 @@ export async function getAllAnthropicUsageInfo(
 export async function getAllCodexUsageInfo(
   tokenStore: TokenStore,
   config?: Config,
+  fetchUsage: FetchCodexUsage = async (token, accountId, baseUrl) => {
+    const { fetchCodexUsage } = await import(
+      '@vybestack/llxprt-code-providers'
+    );
+    return fetchCodexUsage(token, accountId, baseUrl);
+  },
 ): Promise<Map<string, Record<string, unknown>>> {
   const result = new Map<string, Record<string, unknown>>();
 
   const buckets = await tokenStore.listBuckets('codex');
   const bucketsToCheck = buckets.length > 0 ? buckets : ['default'];
-
-  const { fetchCodexUsage } = await import('@vybestack/llxprt-code-providers');
 
   for (const bucket of bucketsToCheck) {
     const token = await tokenStore.getToken('codex', bucket);
@@ -191,7 +208,7 @@ export async function getAllCodexUsageInfo(
         token.access_token,
         accountId,
         codexBaseUrl,
-        fetchCodexUsage,
+        fetchUsage,
         result,
         logger,
       );
@@ -212,14 +229,15 @@ export async function getAllCodexUsageInfo(
 export async function getHigherPriorityAuth(
   providerName: string,
   settings: IOAuthSettingsProvider | undefined,
+  getAuthOnly: () => unknown = () =>
+    getRuntimeSettingsService().get('authOnly'),
 ): Promise<string | null> {
   if (!settings) {
     return null;
   }
 
   try {
-    const settingsService = getRuntimeSettingsService();
-    const authOnly = isAuthOnlyEnabled(settingsService.get('authOnly'));
+    const authOnly = isAuthOnlyEnabled(getAuthOnly());
     if (authOnly) {
       return null;
     }

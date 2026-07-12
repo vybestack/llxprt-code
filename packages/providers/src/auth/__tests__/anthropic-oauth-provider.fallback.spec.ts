@@ -4,11 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-
-vi.mock('../local-oauth-callback.js', () => ({
-  startLocalOAuthCallback: vi.fn(),
-}));
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 
 import * as coreModule from '@vybestack/llxprt-code-core';
 import type {
@@ -17,9 +13,7 @@ import type {
   TokenStore,
 } from '@vybestack/llxprt-code-core';
 import { AnthropicOAuthProvider } from '../anthropic-oauth-provider.js';
-import { startLocalOAuthCallback } from '../local-oauth-callback.js';
-
-const startLocalOAuthCallbackMock = vi.mocked(startLocalOAuthCallback);
+const startLocalOAuthCallbackMock = vi.fn();
 const openBrowserArgs: string[] = [];
 
 /**
@@ -58,7 +52,13 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
       releaseAuthLock: vi.fn(async () => undefined),
     } satisfies TokenStore;
 
-    provider = new AnthropicOAuthProvider(tokenStore);
+    provider = new AnthropicOAuthProvider(tokenStore, undefined, {
+      startLocalOAuthCallback: startLocalOAuthCallbackMock,
+      shouldLaunchBrowser: () => true,
+      openBrowserSecurely: async (url: string) => {
+        openBrowserArgs.push(url);
+      },
+    });
     deviceFlow = (
       provider as unknown as {
         deviceFlow: coreModule.AnthropicDeviceFlow;
@@ -102,12 +102,6 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
       expiry: Math.floor(Date.now() / 1000) + 3600,
       scope: null,
     }));
-    vi.spyOn(coreModule, 'openBrowserSecurely').mockImplementation(
-      async (url: string) => {
-        openBrowserArgs.push(url);
-      },
-    );
-    vi.spyOn(coreModule, 'shouldLaunchBrowser').mockReturnValue(true);
   });
 
   afterEach(() => {

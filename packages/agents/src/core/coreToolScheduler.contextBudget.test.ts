@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import {
   CoreToolScheduler,
   type CompletedToolCall,
@@ -138,6 +138,19 @@ class OrderTrackingTool extends BaseDeclarativeTool<
     );
   }
 }
+async function waitForCall(
+  callback: ReturnType<typeof vi.fn>,
+  timeoutMs = 5000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (callback.mock.calls.length > 0) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Timed out waiting for tool completion callback');
+}
 
 describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
   let onAllToolCallsComplete: ReturnType<typeof vi.fn>;
@@ -220,9 +233,8 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       new AbortController().signal,
     );
 
-    await vi.waitFor(() => {
-      expect(onAllToolCallsComplete).toHaveBeenCalled();
-    });
+    await waitForCall(onAllToolCallsComplete);
+    expect(onAllToolCallsComplete).toHaveBeenCalled();
 
     const calls = onAllToolCallsComplete.mock
       .calls[0][0] as CompletedToolCall[];
@@ -270,9 +282,8 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       new AbortController().signal,
     );
 
-    await vi.waitFor(() => {
-      expect(onAllToolCallsComplete).toHaveBeenCalled();
-    });
+    await waitForCall(onAllToolCallsComplete);
+    expect(onAllToolCallsComplete).toHaveBeenCalled();
 
     const calls = onAllToolCallsComplete.mock
       .calls[0][0] as CompletedToolCall[];
@@ -348,9 +359,8 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       new AbortController().signal,
     );
 
-    await vi.waitFor(() => {
-      expect(onAllToolCallsComplete).toHaveBeenCalled();
-    });
+    await waitForCall(onAllToolCallsComplete);
+    expect(onAllToolCallsComplete).toHaveBeenCalled();
 
     const calls = onAllToolCallsComplete.mock
       .calls[0][0] as CompletedToolCall[];
@@ -413,9 +423,8 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
 
     await scheduler.schedule(requests, new AbortController().signal);
 
-    await vi.waitFor(() => {
-      expect(onAllToolCallsComplete).toHaveBeenCalled();
-    });
+    await waitForCall(onAllToolCallsComplete);
+    expect(onAllToolCallsComplete).toHaveBeenCalled();
 
     const calls = onAllToolCallsComplete.mock
       .calls[0][0] as CompletedToolCall[];
@@ -463,9 +472,8 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
 
     await scheduler.schedule(requests, new AbortController().signal);
 
-    await vi.waitFor(() => {
-      expect(onAllToolCallsComplete).toHaveBeenCalled();
-    });
+    await waitForCall(onAllToolCallsComplete);
+    expect(onAllToolCallsComplete).toHaveBeenCalled();
 
     const calls = onAllToolCallsComplete.mock
       .calls[0][0] as CompletedToolCall[];

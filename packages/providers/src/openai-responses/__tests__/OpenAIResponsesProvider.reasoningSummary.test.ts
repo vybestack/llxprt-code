@@ -7,7 +7,7 @@
  * @issue #922 - GPT-5.2-Codex thinking blocks not visible
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,

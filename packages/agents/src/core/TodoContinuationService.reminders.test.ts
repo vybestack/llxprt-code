@@ -4,43 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
+import { vi } from 'vitest';
 import { TodoContinuationService } from './TodoContinuationService.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { Todo } from '@vybestack/llxprt-code-tools';
 
-// Mock TodoStore so persisted todo state doesn't hit the filesystem
-const {
-  todoStoreReadMock,
-  todoStoreReadPausedMock,
-  todoStoreWritePausedMock,
-  mockTodoStoreConstructor,
-} = vi.hoisted(() => {
-  const readMock = vi.fn();
-  const readPausedMock = vi.fn();
-  const writePausedMock = vi.fn();
-  const constructorMock = vi.fn().mockImplementation(() => ({
-    readTodos: readMock,
-    readPausedState: readPausedMock,
-    writePausedState: writePausedMock,
-  }));
-  return {
-    todoStoreReadMock: readMock,
-    todoStoreReadPausedMock: readPausedMock,
-    todoStoreWritePausedMock: writePausedMock,
-    mockTodoStoreConstructor: constructorMock,
-  };
-});
-
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
-  return {
-    ...actual,
-    LocalTodoStore: mockTodoStoreConstructor,
-  };
-});
+const todoStoreReadMock = vi.fn();
+const todoStoreReadPausedMock = vi.fn();
+const todoStoreWritePausedMock = vi.fn();
+const mockTodoStoreConstructor = vi.fn(() => ({
+  readTodos: todoStoreReadMock,
+  readPausedState: todoStoreReadPausedMock,
+  writePausedState: todoStoreWritePausedMock,
+}));
 
 vi.mock(
   '@vybestack/llxprt-code-core/services/todo-reminder-service.js',
@@ -84,6 +62,7 @@ function makeService(
       overrides.todoReminderService ?? new TodoReminderService(),
     complexitySuggestionCooldown:
       overrides.complexitySuggestionCooldown ?? 300000,
+    createTodoStore: mockTodoStoreConstructor,
   });
 }
 
@@ -114,7 +93,9 @@ describe('TodoContinuationService', () => {
       writePausedState: todoStoreWritePausedMock,
     }));
 
-    vi.mocked(TodoReminderService).mockImplementation(
+    (
+      TodoReminderService as unknown as ReturnType<typeof vi.fn>
+    ).mockImplementation(
       () =>
         ({
           getComplexTaskSuggestion: vi
@@ -150,18 +131,16 @@ describe('TodoContinuationService', () => {
       todoStoreReadMock.mockResolvedValue([]);
       const result = await service.getTodoReminderForCurrentState();
       expect(result.reminder).toBeDefined();
-      expect(
-        vi.mocked(reminderService.getCreateListReminder),
-      ).toHaveBeenCalled();
+      expect(reminderService.getCreateListReminder).toHaveBeenCalled();
     });
 
     it('returns update reminder when active todos exist', async () => {
       todoStoreReadMock.mockResolvedValue([pendingTodo]);
       const result = await service.getTodoReminderForCurrentState();
       expect(result.reminder).toBeDefined();
-      expect(
-        vi.mocked(reminderService.getUpdateActiveTodoReminder),
-      ).toHaveBeenCalledWith(pendingTodo);
+      expect(reminderService.getUpdateActiveTodoReminder).toHaveBeenCalledWith(
+        pendingTodo,
+      );
     });
 
     it('suppresses reminders and active todos when todo continuation is paused', async () => {
@@ -176,11 +155,9 @@ describe('TodoContinuationService', () => {
         activeTodos: [],
       });
       expect(
-        vi.mocked(reminderService.getUpdateActiveTodoReminder),
+        reminderService.getUpdateActiveTodoReminder,
       ).not.toHaveBeenCalled();
-      expect(
-        vi.mocked(reminderService.getCreateListReminder),
-      ).not.toHaveBeenCalled();
+      expect(reminderService.getCreateListReminder).not.toHaveBeenCalled();
     });
 
     it('returns escalated reminder when escalate flag is set', async () => {
@@ -189,9 +166,7 @@ describe('TodoContinuationService', () => {
         escalate: true,
       });
       expect(result.reminder).toBeDefined();
-      expect(
-        vi.mocked(reminderService.getEscalatedActiveTodoReminder),
-      ).toHaveBeenCalled();
+      expect(reminderService.getEscalatedActiveTodoReminder).toHaveBeenCalled();
     });
 
     it('returns null reminder when todos exist but none are active', async () => {
@@ -265,7 +240,7 @@ describe('TodoContinuationService', () => {
       expect(service.toolActivityCount).toBe(0);
       expect(todoStoreReadMock).not.toHaveBeenCalled();
       expect(
-        vi.mocked(reminderService.getUpdateActiveTodoReminder),
+        reminderService.getUpdateActiveTodoReminder,
       ).not.toHaveBeenCalled();
     });
   });
@@ -278,29 +253,25 @@ describe('TodoContinuationService', () => {
         [pendingTodo],
       );
       expect(result).toBe('---\nSystem Note: Update the active todo.\n---');
+      expect(reminderService.getUpdateActiveTodoReminder).toHaveBeenCalledWith(
+        pendingTodo,
+      );
       expect(
-        vi.mocked(reminderService.getUpdateActiveTodoReminder),
-      ).toHaveBeenCalledWith(pendingTodo);
-      expect(
-        vi.mocked(reminderService.getEscalatedActiveTodoReminder),
+        reminderService.getEscalatedActiveTodoReminder,
       ).not.toHaveBeenCalled();
     });
 
     it('returns escalated reminder when snapshot unchanged', () => {
       service.lastTodoSnapshot = [pendingTodo];
       service.buildFollowUpReminder([pendingTodo], [pendingTodo]);
-      expect(
-        vi.mocked(reminderService.getEscalatedActiveTodoReminder),
-      ).toHaveBeenCalled();
+      expect(reminderService.getEscalatedActiveTodoReminder).toHaveBeenCalled();
     });
 
     it('returns create-list reminder when no todos and list is empty', () => {
       service.lastTodoSnapshot = [];
       const result = service.buildFollowUpReminder([], []);
       expect(result).toBeDefined();
-      expect(
-        vi.mocked(reminderService.getCreateListReminder),
-      ).toHaveBeenCalled();
+      expect(reminderService.getCreateListReminder).toHaveBeenCalled();
     });
 
     it('returns undefined when no active todos and snapshot has items', () => {

@@ -16,7 +16,7 @@
  * delegation to Config.getLspConfig()/getLspServiceClient().
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type {
   AgentLspConfig,
   AgentLspServerConfig,
@@ -84,13 +84,13 @@ describe('agent.lsp control @plan:PLAN-20260626-RUNTIMEBOUNDARY.P05', () => {
   });
 
   it('rejects malformed LSP configs before runtime projection @scenario:lsp-schema-server-id @given:agent configs with missing servers or server id @when:createAgent parses config @then:construction rejects instead of exposing undefined server ids', async () => {
-    await expect(
+    expect(
       buildAgent('plain-text.jsonl', {
         lsp: {} as unknown as AgentLspConfig,
       }),
     ).rejects.toBeInstanceOf(Error);
 
-    await expect(
+    expect(
       buildAgent('plain-text.jsonl', {
         lsp: {
           servers: [

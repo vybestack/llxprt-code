@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
@@ -72,12 +72,14 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         messages: [{ role: 'user' as const, content: 'test' }],
       };
 
-      await expect(async () => {
+      const consumptionPromise = (async (): Promise<void> => {
         const results: IContent[] = [];
         for await (const chunk of provider.generateChatCompletion(options)) {
           results.push(chunk);
         }
-      }).rejects.toThrow(/failover/i);
+      })();
+      expect(consumptionPromise).rejects.toThrow(/failover/i);
+      await consumptionPromise.catch(() => undefined);
     });
 
     it('should include profile name in error message', async () => {
@@ -122,12 +124,14 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         messages: [{ role: 'user' as const, content: 'test' }],
       };
 
-      await expect(async () => {
+      const consumptionPromise = (async (): Promise<void> => {
         const results: IContent[] = [];
         for await (const chunk of provider.generateChatCompletion(options)) {
           results.push(chunk);
         }
-      }).rejects.toThrow(/my-test-profile/i);
+      })();
+      expect(consumptionPromise).rejects.toThrow(/my-test-profile/i);
+      await consumptionPromise.catch(() => undefined);
     });
 
     it('should include all backend names that failed', async () => {
@@ -172,12 +176,14 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         messages: [{ role: 'user' as const, content: 'test' }],
       };
 
-      await expect(async () => {
+      const consumptionPromise = (async (): Promise<void> => {
         const results: IContent[] = [];
         for await (const chunk of provider.generateChatCompletion(options)) {
           results.push(chunk);
         }
-      }).rejects.toThrow(/(backend-one|backend-two)/i);
+      })();
+      expect(consumptionPromise).rejects.toThrow(/(backend-one|backend-two)/i);
+      await consumptionPromise.catch(() => undefined);
     });
 
     it('includes per-backend failure messages when multiple backends fail', async () => {
@@ -229,14 +235,16 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         messages: [{ role: 'user' as const, content: 'test' }],
       };
 
-      await expect(async () => {
+      const consumptionPromise = (async (): Promise<void> => {
         const results: IContent[] = [];
         for await (const chunk of provider.generateChatCompletion(options)) {
           results.push(chunk);
         }
-      }).rejects.toThrow(
+      })();
+      expect(consumptionPromise).rejects.toThrow(
         'zai: rate limited by vendor; glm51: authentication failed',
       );
+      await consumptionPromise.catch(() => undefined);
     });
 
     it('includes HTTP status codes in per-backend summary when available', async () => {
@@ -296,14 +304,16 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         messages: [{ role: 'user' as const, content: 'test' }],
       };
 
-      await expect(async () => {
+      const consumptionPromise = (async (): Promise<void> => {
         const results: IContent[] = [];
         for await (const chunk of provider.generateChatCompletion(options)) {
           results.push(chunk);
         }
-      }).rejects.toThrow(
+      })();
+      expect(consumptionPromise).rejects.toThrow(
         'zai: Unauthorized (status: 401); glm51: Rate limit (status: 429)',
       );
+      await consumptionPromise.catch(() => undefined);
     });
 
     it('preserves single-failure message format for backward compatibility', () => {

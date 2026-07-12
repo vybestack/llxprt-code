@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
@@ -11,8 +11,8 @@ describe('resolveTextSearchTarget', () => {
   let workspaceContext: WorkspaceContext;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'resolve-search-target-'),
+    tempDir = await fs.realpath(
+      await fs.mkdtemp(path.join(os.tmpdir(), 'resolve-search-target-')),
     );
     await fs.mkdir(path.join(tempDir, 'sub'));
     await fs.writeFile(path.join(tempDir, 'file.txt'), 'content');

@@ -5,7 +5,7 @@
  *
  * @issue #1846 — Indefinite pipeline hangs caused by collect-then-yield
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
 import { attachHookRestrictedAllowedTools } from './hookToolRestrictions.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
@@ -142,9 +142,14 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
       }
     )._recordHistoryWithUsage;
 
-    await expect(
-      recordHistoryWithUsage.call(processor, userInput, [], []),
-    ).rejects.toThrow('history write failed');
+    const recordPromise = recordHistoryWithUsage.call(
+      processor,
+      userInput,
+      [],
+      [],
+    );
+    expect(recordPromise).rejects.toThrow('history write failed');
+    await recordPromise.catch(() => undefined);
 
     expect(eagerIds.size).toBe(0);
   });
@@ -280,16 +285,16 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
     };
 
     const yielded: GenerateContentResponse[] = [];
-    await expect(
-      (async () => {
-        for await (const chunk of processor.processStreamResponse(
-          filteredOnlyStream(),
-          userInput,
-        )) {
-          yielded.push(chunk);
-        }
-      })(),
-    ).rejects.toThrow('Model stream ended');
+    const streamPromise = (async () => {
+      for await (const chunk of processor.processStreamResponse(
+        filteredOnlyStream(),
+        userInput,
+      )) {
+        yielded.push(chunk);
+      }
+    })();
+    expect(streamPromise).rejects.toThrow('Model stream ended');
+    await streamPromise.catch(() => undefined);
 
     expect(yielded).toHaveLength(1);
   });

@@ -5,8 +5,7 @@
  */
 
 interface StubRecord {
-  existed: boolean;
-  value: unknown;
+  descriptor?: PropertyDescriptor;
 }
 
 interface WaitForOptions {
@@ -34,19 +33,31 @@ export class StubRegistry {
   stub(key: string | symbol, value: unknown): void {
     if (!this.snapshots.has(key)) {
       this.snapshots.set(key, {
-        existed: Object.prototype.hasOwnProperty.call(this.target, key),
-        value: this.target[key],
+        descriptor: Object.getOwnPropertyDescriptor(this.target, key),
       });
     }
-    this.target[key] = value;
+    const descriptor = Object.getOwnPropertyDescriptor(this.target, key);
+    if (descriptor && !descriptor.configurable) {
+      if (!descriptor.writable) {
+        throw new TypeError(`Cannot stub readonly property ${String(key)}`);
+      }
+      this.target[key] = value;
+      return;
+    }
+    Object.defineProperty(this.target, key, {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value,
+    });
   }
 
   restoreAll(): void {
     for (const [key, record] of this.snapshots) {
-      if (record.existed) {
-        this.target[key] = record.value;
+      if (record.descriptor) {
+        Object.defineProperty(this.target, key, record.descriptor);
       } else {
-        delete this.target[key];
+        Reflect.deleteProperty(this.target, key);
       }
     }
     this.snapshots.clear();

@@ -4,11 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  beforeEach,
+  afterEach,
+  vi,
+} from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { SkillManager } from './skillManager.js';
+import type { SkillManager as SkillManagerType } from './skillManager.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { type LlxprtExtension } from '../config/config.js';
 import {
@@ -16,22 +24,22 @@ import {
   getBuiltinSkillsDir,
   type SkillDefinition,
 } from './skillLoader.js';
+import * as actualSkillLoader from './skillLoader.ts';
 import { coreEvents } from '../utils/events.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
-vi.mock('./skillLoader.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./skillLoader.js')>();
-  return {
-    ...actual,
-    loadSkillsFromDir: vi.fn(actual.loadSkillsFromDir),
-    getBuiltinSkillsDir: vi.fn(actual.getBuiltinSkillsDir),
-  };
+let SkillManager: typeof SkillManagerType;
+
+beforeAll(async () => {
+  ({ SkillManager } = await import('./skillManager.js'));
 });
 
 describe('SkillManager', () => {
   let testRootDir: string;
 
   beforeEach(async () => {
+    vi.spyOn(actualSkillLoader, 'loadSkillsFromDir');
+    vi.spyOn(actualSkillLoader, 'getBuiltinSkillsDir');
     testRootDir = await fs.mkdtemp(
       path.join(os.tmpdir(), 'skill-manager-test-'),
     );

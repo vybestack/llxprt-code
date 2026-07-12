@@ -29,7 +29,6 @@ vi.mock('node:os', () => ({
 }));
 
 // Mock external dependencies
-vi.mock('@vybestack/llxprt-code-mcp');
 vi.mock('node:fs', () => ({
   promises: {
     readFile: vi.fn(),

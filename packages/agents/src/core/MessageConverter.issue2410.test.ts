@@ -15,7 +15,7 @@
  * the boundary guards in MessageConverter prevent that.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   normalizeToolInteractionInput,
   createUserContentWithFunctionResponseFix,

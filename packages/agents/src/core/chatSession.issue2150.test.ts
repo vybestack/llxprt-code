@@ -22,7 +22,7 @@
  * end-to-end and faithful to production.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { ChatSession, StreamEventType } from './chatSession.js';
 import type { StreamEvent } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -231,7 +231,9 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
 
     // A non-transient error must still propagate (loop breaks) and must NOT be
     // retried, so the provider is invoked exactly once.
-    await expect(collectEvents(stream)).rejects.toThrow('Bad request');
+    const eventsPromise = collectEvents(stream);
+    expect(eventsPromise).rejects.toThrow('Bad request');
+    await eventsPromise.catch(() => undefined);
     expect(attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });
@@ -264,7 +266,9 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-abort',
     );
 
-    await expect(collectEvents(stream)).rejects.toThrow('Request aborted');
+    const eventsPromise = collectEvents(stream);
+    expect(eventsPromise).rejects.toThrow('Request aborted');
+    await eventsPromise.catch(() => undefined);
     // The abort must terminate immediately without a retry.
     expect(attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
@@ -294,7 +298,9 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
 
     // The loop must not spin forever: after the bounded retry budget is
     // exhausted, the final connection error propagates.
-    await expect(collectEvents(stream)).rejects.toThrow('Connection error.');
+    const eventsPromise = collectEvents(stream);
+    expect(eventsPromise).rejects.toThrow('Connection error.');
+    await eventsPromise.catch(() => undefined);
     // Bounded and deterministic: with INVALID_CONTENT_RETRY_OPTIONS.maxAttempts
     // === 2, the provider is invoked exactly twice (1 initial + 1 retry) and
     // the second failure exhausts the budget, propagating the error.
@@ -338,7 +344,9 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
     );
 
     // The error propagates; the aborted signal must suppress the retry.
-    await expect(collectEvents(stream)).rejects.toThrow('terminated');
+    const eventsPromise = collectEvents(stream);
+    expect(eventsPromise).rejects.toThrow('terminated');
+    await eventsPromise.catch(() => undefined);
     expect(attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });
@@ -372,7 +380,9 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-abort-code',
     );
 
-    await expect(collectEvents(stream)).rejects.toThrow('terminated');
+    const eventsPromise = collectEvents(stream);
+    expect(eventsPromise).rejects.toThrow('terminated');
+    await eventsPromise.catch(() => undefined);
     // The ABORT_ERR code must classify this as an abort and suppress retry.
     expect(attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);

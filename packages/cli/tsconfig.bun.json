@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "ink": ["./test-utils/ink-stub.ts"],
+      "ink-testing-library": ["./test-utils/ink-testing-library.ts"]
+    }
+  }
+}

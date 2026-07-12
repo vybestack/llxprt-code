@@ -366,8 +366,12 @@ export class ProviderContentEnforcer {
         this.deps.providerRuntimeNullable?.settingsService,
       ),
     );
-    const userContextLimit = this.deps.runtimeContext.ephemerals.contextLimit();
-    const limit = tokenLimit(model, userContextLimit);
+    const resolvedContextLimit =
+      this.deps.runtimeContext.ephemerals.contextLimit();
+    const limit =
+      Number.isFinite(resolvedContextLimit) && resolvedContextLimit > 0
+        ? resolvedContextLimit
+        : tokenLimit(model);
     const marginAdjustedLimit = this.computeMarginAdjustedLimit(limit);
     return {
       completionBudget,

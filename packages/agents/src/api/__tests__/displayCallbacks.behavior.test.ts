@@ -20,7 +20,7 @@
  * with real data), not mock-call-count assertions.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { ToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import {
   buildAgent,

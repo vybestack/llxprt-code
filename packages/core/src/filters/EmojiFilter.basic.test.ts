@@ -9,7 +9,7 @@
  * Tests actual transformations and behaviors, not implementation details
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { FilterConfiguration } from './EmojiFilter';
 import { EmojiFilter } from './EmojiFilter';
 

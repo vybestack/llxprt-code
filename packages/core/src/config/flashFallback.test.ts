@@ -4,27 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'bun:test';
 import { Config } from './config.js';
 import { DEFAULT_GEMINI_MODEL, DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
 import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
-import fs from 'node:fs';
-
-vi.mock('node:fs');
 
 describe('Flash Model Fallback Configuration', () => {
   let config: Config;
 
   beforeEach(() => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.statSync).mockReturnValue({
-      isDirectory: () => true,
-    } as fs.Stats);
     config = new Config({
       sessionId: 'test-session',
-      targetDir: '/test',
+      targetDir: process.cwd(),
       debugMode: false,
-      cwd: '/test',
+      cwd: process.cwd(),
       model: DEFAULT_GEMINI_MODEL,
       ideClient: IdeClient.getInstance(false),
     });
@@ -46,9 +39,9 @@ describe('Flash Model Fallback Configuration', () => {
       // Create config without initializing contentGeneratorConfig
       const newConfig = new Config({
         sessionId: 'test-session-2',
-        targetDir: '/test',
+        targetDir: process.cwd(),
         debugMode: false,
-        cwd: '/test',
+        cwd: process.cwd(),
         model: DEFAULT_GEMINI_MODEL,
         ideClient: IdeClient.getInstance(false),
       });
@@ -70,9 +63,9 @@ describe('Flash Model Fallback Configuration', () => {
       // Test with fresh config where contentGeneratorConfig might not be set
       const newConfig = new Config({
         sessionId: 'test-session-2',
-        targetDir: '/test',
+        targetDir: process.cwd(),
         debugMode: false,
-        cwd: '/test',
+        cwd: process.cwd(),
         model: 'custom-model',
         ideClient: IdeClient.getInstance(false),
       });

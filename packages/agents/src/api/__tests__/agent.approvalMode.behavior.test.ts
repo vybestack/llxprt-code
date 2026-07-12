@@ -48,7 +48,7 @@
  * make every case pass with no rewrite.
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { buildAgent, type BuiltAgent } from './helpers/agentHarness.js';

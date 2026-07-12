@@ -508,3 +508,90 @@ pretest guards. The npm path (`npm run test`) remains the primary CI
 verification path; `test:bun` is the supported Bun-backed alternative. The
 npm path is not removed until the Bun-backed path is proven equivalent
 across all CI matrix legs.
+
+## Native Bun Test Runner Migration (issue #2475)
+
+### Overview
+
+In addition to the Bun-backed Vitest orchestration (`test:bun`), each workspace
+is being incrementally migrated to run tests natively under Bun's test runner
+(`bun test`). Native Bun tests run faster (no Vitest overhead) and provide
+better integration with Bun's module system.
+
+### Workspace `test:bun` scripts
+
+Each migrated workspace defines a `test:bun` script in its `package.json` that
+runs the native Bun test files in isolated processes via
+`scripts/run_bun_tests.ts`:
+
+```json
+"test:bun": "bun ../../scripts/run_bun_tests.ts"
+```
+
+The isolation (one fresh Bun process per test file) preserves the same
+module-level mock isolation that Vitest provides per file, because Bun's
+`mock.module` is process-wide.
+
+### Vitest compatibility shim (`augment-bun-vi.ts`)
+
+Bun's test runner injects its own partial Vitest API for `import ... from
+'vitest'`, but this built-in handler bypasses both `mock.module` and Bun
+plugins. The shim at `test-setup/augment-bun-vi.ts` augments Bun's injected
+`vi` object in-place with the missing Vitest-compatible methods:
+
+- `vi.hoisted` — hoisted mock factory
+- `vi.mocked` — typed mock introspection
+- `vi.stubEnv` / `vi.unstubAllEnvs` — environment-variable stubbing
+- `vi.stubGlobal` / `vi.unstubAllGlobals` — global stubbing
+- `vi.importActual` — real module loading via query-string bypass
+- `vi.waitFor` — async wait helper
+- `vi.advanceTimersByTimeAsync` / `vi.runAllTimersAsync` — async timer helpers
+- `vi.mock` / `vi.doMock` — overridden to pass `importOriginal` to factories
+
+Each workspace's `bunfig.toml` includes this shim as a preload:
+
+```toml
+[test]
+preload = ["../../test-setup/augment-bun-vi.ts"]
+```
+
+### CLI workspace specifics
+
+The CLI workspace has additional complexities:
+
+1. **Ink module redirect**: Bun's `mock.module('ink')` triggers export
+   validation against the real Ink ESM build, which fails on re-exports
+   like `Range` / `Selection` from `selection.js`. The CLI's
+   `bun-test-setup.ts` uses a `Bun.plugin` with `onResolve` to redirect
+   `'ink'` and `'ink-testing-library'` specifiers to TypeScript stub files
+   before module resolution, preventing Bun from ever loading the real Ink
+   module.
+
+2. **Dependency injection seams**: Some characterization tests previously used
+   `vi.mock` with `importOriginal` to replace individual exports (e.g.,
+   `writeToStderr` from core). Under Bun, `mock.module` intercepts all
+   imports of a specifier including `importActual` calls, causing deadlocks.
+   These tests now use typed dependency-injection seams
+   (`__setWriteToStderrForTesting`, `__setRenderForTesting`) instead of
+   module-level mocking.
+
+### Running native Bun tests
+
+```bash
+# All workspaces
+npm run test:bun --workspaces --if-present
+
+# Single workspace
+cd packages/agents && bun ../../scripts/run_bun_tests.ts
+
+# With exclusions (CLI excludes UI component tests)
+cd packages/cli && bun ../../scripts/run_bun_tests.ts \
+  --exclude 'src/ui/**/*.test.tsx'
+```
+
+### CI parity
+
+The `bun_native_test_parity` CI job runs a representative sample of tests
+from each migrated workspace under Bun's native test runner to verify
+parity with Vitest results. The full Vitest suite remains the primary
+verification path; native Bun runs are additive parity checks.

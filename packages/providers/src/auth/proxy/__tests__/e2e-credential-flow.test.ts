@@ -37,11 +37,8 @@ import {
 import { KeyringTokenStore } from '@vybestack/llxprt-code-auth';
 import { CredentialProxyServer } from '../credential-proxy-server.js';
 import { ProactiveScheduler } from '../proactive-scheduler.js';
-import {
-  createTokenStore,
-  createProviderKeyStorage,
-  resetFactorySingletons,
-} from '../credential-store-factory.js';
+const { createTokenStore, createProviderKeyStorage, resetFactorySingletons } =
+  await import('../credential-store-factory.js?e2e-credential-flow');
 
 // ─── In-Memory Test Doubles ──────────────────────────────────────────────────
 
@@ -265,8 +262,10 @@ describe('E2E Credential Flow (Phase 37)', () => {
         );
         expect(hostAfterRemove).toBeNull();
 
-        // 6. Stop proxy → verify socket removed. On Windows the pipe path is
-        //    not a filesystem entry, so existsSync is also false there.
+        // 6. Close the client before stopping the server so no socket handle
+        // remains live after the test completes.
+        proxyStore.getClient().close();
+        await new Promise<void>((resolve) => setImmediate(resolve));
         await server.stop();
         expect(fs.existsSync(socketPath)).toBe(false);
       } finally {
@@ -284,14 +283,6 @@ describe('E2E Credential Flow (Phase 37)', () => {
   // ─────────────────────────────────────────────────────────────────────────
 
   describe('Scenario 5: Proactive Renewal', () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
     /**
      * @requirement E2E.5
      * @scenario Proactive token renewal
@@ -342,11 +333,17 @@ describe('E2E Credential Flow (Phase 37)', () => {
         });
 
         // Schedule renewal (should fire at expiry - 300 = 300 seconds from now)
+        // Install fake timers only for this assertion, after socket startup.
+        vi.useFakeTimers();
         scheduler.schedule('anthropic', 'default', nearExpiryToken.expiry);
         expect(scheduler.activeCount).toBe(1);
 
-        // Advance time past the renewal point
-        await vi.advanceTimersByTimeAsync(300 * 1000 + 100);
+        // Advance time past the renewal point.
+
+        vi.advanceTimersByTime(300 * 1000 + 100);
+        await Promise.resolve();
+        await Promise.resolve();
+        vi.useRealTimers();
 
         // Verify refresh was called
         expect(refreshCalled).toBe(true);

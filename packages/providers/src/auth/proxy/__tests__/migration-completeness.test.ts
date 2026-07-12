@@ -15,13 +15,11 @@
  * @requirement R2.3, R12.5, R26.1
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import {
-  createTokenStore,
-  createProviderKeyStorage,
-  resetFactorySingletons,
-} from '../credential-store-factory.js';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { KeyringTokenStore } from '@vybestack/llxprt-code-auth';
+
+const { createTokenStore, createProviderKeyStorage, resetFactorySingletons } =
+  await import('../credential-store-factory.js?migration-completeness');
 import { mergeRefreshedToken } from '@vybestack/llxprt-code-core';
 
 describe('Migration Completeness (P35)', () => {

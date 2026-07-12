@@ -14,7 +14,7 @@
  * Property-based tests for HighDensityStrategy.optimize().
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
 import type {
   IContent,

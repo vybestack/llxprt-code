@@ -4,20 +4,36 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
-  openBrowserSecurely,
-  shouldLaunchBrowser,
-} from './secure-browser-launcher.js';
+  describe,
+  it,
+  expect,
+  beforeAll,
+  beforeEach,
+  afterEach,
+  vi,
+} from 'vitest';
+import type * as BrowserLauncher from './secure-browser-launcher.js';
+
+let openBrowserSecurely: typeof BrowserLauncher.openBrowserSecurely;
+let shouldLaunchBrowser: typeof BrowserLauncher.shouldLaunchBrowser;
 
 // Create mock function using vi.hoisted
 const mockExecFile = vi.hoisted(() => vi.fn());
 
 // Mock modules
-vi.mock('node:child_process');
 vi.mock('node:util', () => ({
   promisify: () => mockExecFile,
 }));
+vi.mock('node:os', () => ({
+  platform: () => process.platform,
+}));
+
+beforeAll(async () => {
+  ({ openBrowserSecurely, shouldLaunchBrowser } = await import(
+    './secure-browser-launcher.js'
+  ));
+});
 
 describe('secure-browser-launcher', () => {
   let originalPlatform: PropertyDescriptor | undefined;

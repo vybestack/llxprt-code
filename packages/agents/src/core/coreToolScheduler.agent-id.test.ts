@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import type { ToolCall, CompletedToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -16,6 +16,20 @@ import {
   createMockMessageBus,
   createMockPolicyEngine,
 } from './coreToolScheduler-test-helpers.js';
+
+async function waitForCall(
+  callback: ReturnType<typeof vi.fn>,
+  timeoutMs = 5000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (callback.mock.calls.length > 0) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Timed out waiting for tool completion callback');
+}
 
 describe('CoreToolScheduler agentId propagation', () => {
   it('propagates agentId from request to completed call payloads', async () => {
@@ -29,6 +43,7 @@ describe('CoreToolScheduler agentId propagation', () => {
       getToolByName: () => mockTool,
       getFunctionDeclarations: () => [],
       tools: new Map(),
+
       discovery: {},
       registerTool: () => {},
       getToolByDisplayName: () => mockTool,
@@ -85,9 +100,8 @@ describe('CoreToolScheduler agentId propagation', () => {
 
     await scheduler.schedule([request], abortController.signal);
 
-    await vi.waitFor(() => {
-      expect(onAllToolCallsComplete).toHaveBeenCalled();
-    });
+    await waitForCall(onAllToolCallsComplete);
+    expect(onAllToolCallsComplete).toHaveBeenCalled();
 
     const completedCalls = onAllToolCallsComplete.mock
       .calls[0][0] as CompletedToolCall[];
@@ -157,9 +171,8 @@ describe('CoreToolScheduler agentId propagation', () => {
 
     await scheduler.schedule(request, abortController.signal);
 
-    await vi.waitFor(() => {
-      expect(onAllToolCallsComplete).toHaveBeenCalled();
-    });
+    await waitForCall(onAllToolCallsComplete);
+    expect(onAllToolCallsComplete).toHaveBeenCalled();
 
     const [completedCalls] = onAllToolCallsComplete.mock.lastCall as [
       ToolCall[],
@@ -235,9 +248,8 @@ describe('CoreToolScheduler agentId propagation', () => {
 
     await scheduler.schedule([requestWithoutAgent], abortController.signal);
 
-    await vi.waitFor(() => {
-      expect(onAllToolCallsComplete).toHaveBeenCalled();
-    });
+    await waitForCall(onAllToolCallsComplete);
+    expect(onAllToolCallsComplete).toHaveBeenCalled();
 
     const completedCalls = onAllToolCallsComplete.mock
       .calls[0][0] as CompletedToolCall[];

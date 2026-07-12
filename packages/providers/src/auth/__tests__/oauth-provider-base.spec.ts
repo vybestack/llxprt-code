@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import {
   InitializationState,
   InitializationGuard,
@@ -84,7 +84,7 @@ describe('InitializationGuard (wrap mode)', () => {
   it('wraps unknown error in OAuthError on failure', async () => {
     const guard = new InitializationGuard('wrap', 'my-provider');
     const raw = new Error('raw init error');
-    await expect(
+    expect(
       guard.ensureInitialized(async () => {
         throw raw;
       }),
@@ -99,7 +99,7 @@ describe('InitializationGuard (wrap mode)', () => {
       'test error',
       {},
     );
-    await expect(
+    expect(
       guard.ensureInitialized(async () => {
         throw oauthErr;
       }),
@@ -166,7 +166,7 @@ describe('InitializationGuard (rethrow mode)', () => {
   it('rethrows the original error without wrapping', async () => {
     const guard = new InitializationGuard('rethrow');
     const raw = new Error('codex init fail');
-    await expect(
+    expect(
       guard.ensureInitialized(async () => {
         throw raw;
       }),
@@ -214,7 +214,7 @@ describe('AuthCodeDialog', () => {
     const dialog = new AuthCodeDialog();
     const promise = dialog.waitForAuthCode();
     dialog.cancelAuth('test-provider');
-    await expect(promise).rejects.toBeInstanceOf(OAuthError);
+    expect(promise).rejects.toBeInstanceOf(OAuthError);
   });
 
   it('cancelAuth sets __oauth_needs_code to false', async () => {
@@ -223,7 +223,8 @@ describe('AuthCodeDialog', () => {
       true;
     const pendingPromise = dialog.waitForAuthCode();
     dialog.cancelAuth('test-provider');
-    await expect(pendingPromise).rejects.toBeInstanceOf(OAuthError);
+    expect(pendingPromise).rejects.toBeInstanceOf(OAuthError);
+    await pendingPromise.catch(() => undefined);
     expect(
       (global as unknown as { __oauth_needs_code: boolean }).__oauth_needs_code,
     ).toBe(false);
@@ -261,7 +262,8 @@ describe('AuthCodeDialog', () => {
 
     dialog.rejectWithError(timeoutError);
 
-    await expect(promise).rejects.toBe(timeoutError);
+    expect(promise).rejects.toBe(timeoutError);
+    await promise.catch(() => undefined);
     expect(dialog.hasPendingPromise()).toBe(false);
     expect(
       (global as unknown as { __oauth_needs_code: boolean }).__oauth_needs_code,

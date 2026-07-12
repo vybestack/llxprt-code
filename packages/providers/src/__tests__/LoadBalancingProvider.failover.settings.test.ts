@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
@@ -332,12 +332,14 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         messages: [{ role: 'user' as const, content: 'test' }],
       };
 
-      await expect(async () => {
+      const consumptionPromise = (async (): Promise<void> => {
         const results: IContent[] = [];
         for await (const chunk of provider.generateChatCompletion(options)) {
           results.push(chunk);
         }
-      }).rejects.toThrow(/failover exhausted/);
+      })();
+      expect(consumptionPromise).rejects.toThrow(/failover exhausted/);
+      await consumptionPromise.catch(() => undefined);
     });
   });
 });

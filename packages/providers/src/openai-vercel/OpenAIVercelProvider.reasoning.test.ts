@@ -16,19 +16,15 @@ import type {
   ThinkingBlock,
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type * as Ai from 'ai';
-
 /**
  * Mock the Vercel AI SDK to control streaming responses
  */
-vi.mock('ai', async () => {
-  const actual = await vi.importActual<typeof Ai>('ai');
-  return {
-    ...actual,
-    streamText: vi.fn(),
-    generateText: vi.fn(),
-  };
-});
+vi.mock('ai', () => ({
+  streamText: vi.fn(),
+  generateText: vi.fn(),
+  extractReasoningMiddleware: vi.fn(() => ({})),
+  wrapLanguageModel: vi.fn((model) => model),
+}));
 
 vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: vi.fn(() => ({

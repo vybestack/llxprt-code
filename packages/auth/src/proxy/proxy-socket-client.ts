@@ -145,6 +145,7 @@ export class ProxySocketClient {
     });
     this.socket.on('data', (chunk: Buffer) => this.onData(chunk));
     this.socket.on('error', (err: Error) => this.onError(err));
+    this.socket.on('end', () => this.onClose());
     this.socket.on('close', () => this.onClose());
     await new Promise<void>((resolve, reject) => {
       this.socket!.once('connect', resolve);

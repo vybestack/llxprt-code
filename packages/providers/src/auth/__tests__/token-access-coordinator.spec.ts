@@ -109,22 +109,6 @@ function createMockFacade() {
   };
 }
 
-// Register runtime accessors via the bridge (no mock theater)
-
-// Mock @vybestack/llxprt-code-core ProfileManager
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
-  return {
-    ...actual,
-    ProfileManager: class MockProfileManager {
-      async loadProfile(name: string) {
-        throw new Error(`Profile ${name} not found`);
-      }
-    },
-  };
-});
-
 // --------------------------------------------------------------------------
 // Factory helper that creates coordinator with all mocks wired
 // --------------------------------------------------------------------------
@@ -196,8 +180,8 @@ describe('TokenAccessCoordinator', () => {
 
       // Settings = undefined, registry says oauth enabled → will try to trigger auth
       // acquireRefreshLock → true, no disk token → falls through to auth section
-      vi.mocked(tokenStore.acquireRefreshLock).mockResolvedValue(true);
-      vi.mocked(tokenStore.getToken).mockResolvedValue(null);
+      tokenStore.acquireRefreshLock.mockResolvedValue(true);
+      tokenStore.getToken.mockResolvedValue(null);
 
       // NO setAuthenticator call — must throw
       await expect(coordinator.getToken('anthropic')).rejects.toThrow(
@@ -210,9 +194,9 @@ describe('TokenAccessCoordinator', () => {
     const provider = createMockProvider('anthropic');
     const { coordinator, tokenStore, facade } = makeCoordinator({ provider });
     coordinator.setGetProfileBucketsDelegate(async () => ['default']);
-    vi.mocked(facade.getSessionBucket).mockReturnValue('');
-    vi.mocked(tokenStore.acquireRefreshLock).mockResolvedValue(true);
-    vi.mocked(tokenStore.getToken).mockResolvedValue(null);
+    facade.getSessionBucket.mockReturnValue('');
+    tokenStore.acquireRefreshLock.mockResolvedValue(true);
+    tokenStore.getToken.mockResolvedValue(null);
 
     await expect(coordinator.getToken('anthropic')).rejects.toThrow(
       'authenticator not wired',
@@ -236,8 +220,8 @@ describe('TokenAccessCoordinator', () => {
       const { coordinator, tokenStore } = makeCoordinator({ provider });
 
       // Return expired token on first getToken, lock succeeds, recheck also returns expired
-      vi.mocked(tokenStore.getToken).mockResolvedValue(expiredToken);
-      vi.mocked(tokenStore.acquireRefreshLock).mockResolvedValue(true);
+      tokenStore.getToken.mockResolvedValue(expiredToken);
+      tokenStore.acquireRefreshLock.mockResolvedValue(true);
 
       await coordinator.getOAuthToken('anthropic', 'default');
 
@@ -255,8 +239,8 @@ describe('TokenAccessCoordinator', () => {
       });
       const { coordinator, tokenStore } = makeCoordinator({ provider });
 
-      vi.mocked(tokenStore.getToken).mockResolvedValue(expiredToken);
-      vi.mocked(tokenStore.acquireRefreshLock).mockResolvedValue(true);
+      tokenStore.getToken.mockResolvedValue(expiredToken);
+      tokenStore.acquireRefreshLock.mockResolvedValue(true);
 
       // getOAuthToken swallows refresh errors and returns null
       const result = await coordinator.getOAuthToken('anthropic', 'default');
@@ -273,7 +257,7 @@ describe('TokenAccessCoordinator', () => {
       const validToken = makeToken('still-good', 3600);
       const { coordinator, tokenStore } = makeCoordinator({ provider });
 
-      vi.mocked(tokenStore.getToken).mockResolvedValue(validToken);
+      tokenStore.getToken.mockResolvedValue(validToken);
 
       const result = await coordinator.getOAuthToken('anthropic', 'default');
 
@@ -290,12 +274,12 @@ describe('TokenAccessCoordinator', () => {
 
       // First getToken returns expired; after lock acquisition recheck returns fresh
       let callCount = 0;
-      vi.mocked(tokenStore.getToken).mockImplementation(async () => {
+      tokenStore.getToken.mockImplementation(async () => {
         callCount++;
         if (callCount === 1) return expiredToken; // initial read
         return freshToken; // recheck under lock
       });
-      vi.mocked(tokenStore.acquireRefreshLock).mockResolvedValue(true);
+      tokenStore.acquireRefreshLock.mockResolvedValue(true);
 
       const result = await coordinator.getOAuthToken('anthropic', 'default');
 
@@ -315,8 +299,8 @@ describe('TokenAccessCoordinator', () => {
       const { coordinator, tokenStore } = makeCoordinator({ provider });
 
       // No token in store initially (getOAuthToken returns null), no disk token either
-      vi.mocked(tokenStore.getToken).mockResolvedValue(null);
-      vi.mocked(tokenStore.acquireRefreshLock).mockResolvedValue(true);
+      tokenStore.getToken.mockResolvedValue(null);
+      tokenStore.acquireRefreshLock.mockResolvedValue(true);
 
       // Wire an authenticator so we don't blow up on the auth path
       coordinator.setAuthenticator({
@@ -333,7 +317,7 @@ describe('TokenAccessCoordinator', () => {
       }
 
       // Find the call with waitMs:5000 — that's the disk-check lock
-      const lockCalls = vi.mocked(tokenStore.acquireRefreshLock).mock.calls;
+      const lockCalls = tokenStore.acquireRefreshLock.mock.calls;
       const diskCheckCall = lockCalls.find(
         ([, opts]) => (opts as { waitMs?: number }).waitMs === 5000,
       );
@@ -352,11 +336,11 @@ describe('TokenAccessCoordinator', () => {
       const expiredDiskToken = makeToken('disk-expired', -100);
       // getOAuthToken path: no store token
       // disk-check path: finds expired token with refresh_token
-      vi.mocked(tokenStore.getToken)
+      tokenStore.getToken
         .mockResolvedValueOnce(null) // getOAuthToken's first read
         .mockResolvedValueOnce(expiredDiskToken); // disk-check inside getToken
 
-      vi.mocked(tokenStore.acquireRefreshLock).mockResolvedValue(true);
+      tokenStore.acquireRefreshLock.mockResolvedValue(true);
 
       coordinator.setAuthenticator({
         authenticate: vi.fn(async () => {}),
@@ -384,7 +368,7 @@ describe('TokenAccessCoordinator', () => {
       const storedToken = makeToken('peeked', 3600);
       const { coordinator, tokenStore } = makeCoordinator({ provider });
 
-      vi.mocked(tokenStore.getToken).mockResolvedValue(storedToken);
+      tokenStore.getToken.mockResolvedValue(storedToken);
 
       const result = await coordinator.peekStoredToken('anthropic');
 
@@ -397,7 +381,7 @@ describe('TokenAccessCoordinator', () => {
       const provider = createMockProvider('anthropic');
       const { coordinator, tokenStore } = makeCoordinator({ provider });
 
-      vi.mocked(tokenStore.getToken).mockRejectedValue(new Error('disk error'));
+      tokenStore.getToken.mockRejectedValue(new Error('disk error'));
 
       const result = await coordinator.peekStoredToken('anthropic');
       expect(result).toBeNull();
@@ -422,7 +406,7 @@ describe('TokenAccessCoordinator', () => {
       const validToken = makeToken('valid', 3600);
       const { coordinator, tokenStore } = makeCoordinator({ provider });
 
-      vi.mocked(tokenStore.getToken).mockResolvedValue(validToken);
+      tokenStore.getToken.mockResolvedValue(validToken);
 
       // Fire two concurrent getOAuthToken calls
       const [r1, r2] = await Promise.all([
@@ -485,11 +469,9 @@ describe('TokenAccessCoordinator', () => {
         authenticateMultipleBuckets: vi.fn(async () => {}),
       });
 
-      vi.mocked(tokenStore.getToken).mockResolvedValue(null);
-      vi.mocked(tokenStore.acquireRefreshLock).mockResolvedValue(true);
-      vi.mocked(facade.authenticate).mockRejectedValue(
-        new Error('auth failed hard'),
-      );
+      tokenStore.getToken.mockResolvedValue(null);
+      tokenStore.acquireRefreshLock.mockResolvedValue(true);
+      facade.authenticate.mockRejectedValue(new Error('auth failed hard'));
 
       await expect(coordinator.getToken('gemini')).rejects.toThrow(
         'auth failed hard',

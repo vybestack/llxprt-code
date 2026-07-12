@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession, StreamEventType } from './chatSession.js';
 import type { HookSystem } from '@vybestack/llxprt-code-core/hooks/HookSystem.js';
 import {
@@ -96,8 +96,8 @@ describe('ChatSession hook execution control', () => {
 
     // Create runtime state and context
     const runtimeState = createAgentRuntimeState({
-      runtimeId: runtimeSetup.runtime.runtimeId,
-      provider: runtimeSetup.provider.name,
+      runtimeId: 'chat-session-hook-control',
+      provider: mockProvider.name,
       model: 'test-model',
       sessionId: 'test-session',
     });
@@ -108,7 +108,7 @@ describe('ChatSession hook execution control', () => {
       history: historyService,
       settings: {
         compressionThreshold: 0.8,
-        contextLimit: undefined,
+        contextLimit: 1_000_000,
         preserveThreshold: 0.2,
         telemetry: {
           enabled: true,

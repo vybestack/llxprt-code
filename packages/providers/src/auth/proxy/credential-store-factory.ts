@@ -76,7 +76,9 @@ export function createTokenStore(): TokenStore {
  *
  * @plan PLAN-20250214-CREDPROXY.P36
  */
-export function createProviderKeyStorage(): ProviderKeyStorageLike {
+export function createProviderKeyStorage(
+  getDirectStorage?: () => ProviderKeyStorage,
+): ProviderKeyStorageLike {
   const socketPath = process.env.LLXPRT_CREDENTIAL_SOCKET;
   if (socketPath) {
     if (!proxyKeyStorage) {
@@ -84,6 +86,9 @@ export function createProviderKeyStorage(): ProviderKeyStorageLike {
       proxyKeyStorage = new ProxyProviderKeyStorage(client);
     }
     return proxyKeyStorage;
+  }
+  if (getDirectStorage) {
+    return getDirectStorage();
   }
   directKeyStorage ??= getProviderKeyStorage();
   return directKeyStorage;

@@ -7,7 +7,7 @@
  * provider-level refresh. OAuthManager owns all refresh operations.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
 import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-core';
 
@@ -33,11 +33,13 @@ function validToken(): OAuthToken {
 
 describe('AnthropicOAuthProvider.getToken() - no provider-level refresh (Issue #1378)', () => {
   let tokenStore: TokenStore;
+  let getToken: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    getToken = vi.fn(async () => null);
     tokenStore = {
       saveToken: vi.fn(async () => undefined),
-      getToken: vi.fn(async () => null),
+      getToken,
       removeToken: vi.fn(async () => undefined),
       listProviders: vi.fn(async () => []),
       listBuckets: vi.fn(async () => ['default']),
@@ -51,7 +53,7 @@ describe('AnthropicOAuthProvider.getToken() - no provider-level refresh (Issue #
 
   it('returns expired token without attempting refresh', async () => {
     const expired = expiredToken();
-    vi.mocked(tokenStore.getToken).mockResolvedValue(expired);
+    getToken.mockResolvedValue(expired);
 
     const provider = new AnthropicOAuthProvider(tokenStore);
     const deviceFlow = (
@@ -77,7 +79,7 @@ describe('AnthropicOAuthProvider.getToken() - no provider-level refresh (Issue #
 
   it('returns valid token directly from store', async () => {
     const valid = validToken();
-    vi.mocked(tokenStore.getToken).mockResolvedValue(valid);
+    getToken.mockResolvedValue(valid);
 
     const provider = new AnthropicOAuthProvider(tokenStore);
 
@@ -88,7 +90,7 @@ describe('AnthropicOAuthProvider.getToken() - no provider-level refresh (Issue #
   });
 
   it('returns null when no token exists', async () => {
-    vi.mocked(tokenStore.getToken).mockResolvedValue(null);
+    getToken.mockResolvedValue(null);
 
     const provider = new AnthropicOAuthProvider(tokenStore);
 

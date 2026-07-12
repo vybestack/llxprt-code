@@ -8,7 +8,7 @@
  * models, no tool prefixing, no OAuth headers, SDK apiKey construction.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
@@ -28,52 +28,17 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { OAUTH_MODELS } from './AnthropicModelData.js';
 
-vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
-  ToolFormatter: vi.fn().mockImplementation(() => ({
-    toProviderFormat: vi.fn((tools: unknown[]) => tools),
-    fromProviderFormat: vi.fn((rawToolCall: unknown) => [rawToolCall]),
-    convertGeminiToAnthropic: vi.fn(() => []),
-    convertGeminiToFormat: vi.fn(() => undefined),
-  })),
-}));
-
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
-  getCoreSystemPromptAsync: vi.fn(
-    async () => "You are Claude Code, Anthropic's official CLI for Claude.",
-  ),
-}));
-
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
-  getErrorStatus: vi.fn(() => undefined),
-  isNetworkTransientError: vi.fn(() => false),
-}));
-
-/**
- * Track Anthropic SDK constructor calls so we can assert on authToken vs apiKey
- * without touching protected methods or using type assertions.
- */
+/** Track SDK construction to verify OAuth-token versus API-key configuration. */
 const sdkConstructorCalls: Array<Record<string, unknown>> = [];
-
 const mockBetaModelsList = vi.fn();
-
 const mockMessagesCreate = vi.fn();
-
-vi.mock('@anthropic-ai/sdk', () => ({
-  default: vi.fn().mockImplementation((opts: Record<string, unknown>) => {
-    sdkConstructorCalls.push({ ...opts });
-    return {
-      _options: opts,
-      messages: {
-        create: mockMessagesCreate,
-      },
-      beta: {
-        models: {
-          list: mockBetaModelsList,
-        },
-      },
-    };
-  }),
-}));
+const constructClient = (options: Record<string, unknown>) => {
+  sdkConstructorCalls.push({ ...options });
+  return {
+    messages: { create: mockMessagesCreate },
+    beta: { models: { list: mockBetaModelsList } },
+  };
+};
 
 /** Create a non-streaming response from Anthropic SDK */
 function nonStreamingResponse(text = 'response') {
@@ -143,6 +108,8 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
           'test-api-key',
           undefined,
           TEST_PROVIDER_CONFIG,
+          undefined,
+          { constructClient },
         );
       },
       {
@@ -185,6 +152,8 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
         'sk-ant-oat-test-token',
         undefined,
         TEST_PROVIDER_CONFIG,
+        undefined,
+        { constructClient },
       );
 
       const models = await oauthProvider.getModels();
@@ -202,6 +171,8 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
         'sk-ant-oat-test-token',
         undefined,
         TEST_PROVIDER_CONFIG,
+        undefined,
+        { constructClient },
       );
 
       await oauthProvider.getModels();
@@ -214,6 +185,8 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
         'test-api-key',
         undefined,
         TEST_PROVIDER_CONFIG,
+        undefined,
+        { constructClient },
       );
 
       const models = await apiProvider.getModels();
@@ -233,6 +206,8 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
         'test-api-key',
         undefined,
         TEST_PROVIDER_CONFIG,
+        undefined,
+        { constructClient },
       );
 
       await apiProvider.getModels();
@@ -245,6 +220,8 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
         '',
         undefined,
         TEST_PROVIDER_CONFIG,
+        undefined,
+        { constructClient },
       );
 
       const models = await noAuthProvider.getModels();
@@ -266,6 +243,8 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
             streaming: 'disabled',
           }),
         },
+        undefined,
+        { constructClient },
       );
 
       const callOptions = buildCallOptions(
@@ -299,12 +278,18 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
     });
 
     it('constructs SDK with apiKey and no authToken for regular API keys, without OAuth beta headers', async () => {
-      const apiProvider = new AnthropicProvider('test-api-key', undefined, {
-        ...TEST_PROVIDER_CONFIG,
-        getEphemeralSettings: () => ({
-          streaming: 'disabled',
-        }),
-      });
+      const apiProvider = new AnthropicProvider(
+        'test-api-key',
+        undefined,
+        {
+          ...TEST_PROVIDER_CONFIG,
+          getEphemeralSettings: () => ({
+            streaming: 'disabled',
+          }),
+        },
+        undefined,
+        { constructClient },
+      );
 
       const callOptions = buildCallOptions(
         [
@@ -349,6 +334,8 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
             streaming: 'disabled',
           }),
         },
+        undefined,
+        { constructClient },
       );
 
       const callOptions = buildCallOptions(
@@ -390,12 +377,18 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
     });
 
     it('sends tool names without prefix when using a regular API key', async () => {
-      const apiProvider = new AnthropicProvider('test-api-key', undefined, {
-        ...TEST_PROVIDER_CONFIG,
-        getEphemeralSettings: () => ({
-          streaming: 'disabled',
-        }),
-      });
+      const apiProvider = new AnthropicProvider(
+        'test-api-key',
+        undefined,
+        {
+          ...TEST_PROVIDER_CONFIG,
+          getEphemeralSettings: () => ({
+            streaming: 'disabled',
+          }),
+        },
+        undefined,
+        { constructClient },
+      );
 
       const callOptions = buildCallOptions(
         [
@@ -448,6 +441,8 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
             streaming: 'disabled',
           }),
         },
+        undefined,
+        { constructClient },
       );
 
       const callOptions = buildCallOptions(
@@ -482,12 +477,18 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
     });
 
     it('does not include oauth-2025-04-20 in anthropic-beta header for API key requests', async () => {
-      const apiProvider = new AnthropicProvider('test-api-key', undefined, {
-        ...TEST_PROVIDER_CONFIG,
-        getEphemeralSettings: () => ({
-          streaming: 'disabled',
-        }),
-      });
+      const apiProvider = new AnthropicProvider(
+        'test-api-key',
+        undefined,
+        {
+          ...TEST_PROVIDER_CONFIG,
+          getEphemeralSettings: () => ({
+            streaming: 'disabled',
+          }),
+        },
+        undefined,
+        { constructClient },
+      );
 
       settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
 

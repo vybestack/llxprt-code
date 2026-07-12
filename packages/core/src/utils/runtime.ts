@@ -44,38 +44,45 @@ function isBunTerminalPlatform(platform: string): boolean {
   return platform === 'linux' || platform === 'darwin';
 }
 
-/**
- * Returns true when the current process is running under the Bun runtime.
- *
- * Bun populates `process.versions.bun` with its version string; Node and other
- * runtimes leave it `undefined`. Reading the version avoids referencing Bun's
- * global object, so this helper stays type-checkable without Bun type packages.
- */
+export interface RuntimeDetector {
+  isBunRuntime(): boolean;
+  isBunPosix(): boolean;
+  isWindows(): boolean;
+}
+
+export function createRuntimeDetector(
+  getProcess: () => unknown = () => globalThis.process,
+): RuntimeDetector {
+  const isBunRuntimeForProcess = (processValue: unknown): boolean => {
+    const bunVersion = getProcessVersions(processValue)?.bun;
+    return typeof bunVersion === 'string' && bunVersion.length > 0;
+  };
+
+  return {
+    isBunRuntime: () => isBunRuntimeForProcess(getProcess()),
+    isBunPosix: () => {
+      const processValue = getProcess();
+      const platform = getProcessPlatform(processValue);
+      return (
+        isBunRuntimeForProcess(processValue) &&
+        typeof platform === 'string' &&
+        isBunTerminalPlatform(platform)
+      );
+    },
+    isWindows: () => getProcessPlatform(getProcess()) === 'win32',
+  };
+}
+
+const defaultDetector = createRuntimeDetector();
+
 export function isBunRuntime(): boolean {
-  const bunVersion = getProcessVersions(globalThis.process)?.bun;
-  return typeof bunVersion === 'string' && bunVersion.length > 0;
+  return defaultDetector.isBunRuntime();
 }
 
-/**
- * Returns true when running under Bun on a platform where Bun.Terminal is
- * supported.
- *
- * `Bun.Terminal` (the PTY bridge used by the Bun adapter) is supported on Linux
- * and macOS; Windows and other platforms must use the node-pty path.
- */
 export function isBunPosix(): boolean {
-  const platform = getProcessPlatform(globalThis.process);
-  if (!isBunRuntime() || typeof platform !== 'string') {
-    return false;
-  }
-
-  return isBunTerminalPlatform(platform);
+  return defaultDetector.isBunPosix();
 }
 
-/**
- * Returns true when the current process platform is Windows (win32).
- */
 export function isWindows(): boolean {
-  const platform = getProcessPlatform(globalThis.process);
-  return typeof platform === 'string' && platform === 'win32';
+  return defaultDetector.isWindows();
 }

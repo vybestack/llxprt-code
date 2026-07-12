@@ -29,7 +29,7 @@
  * fail for behavioral (identity-mismatch) reasons.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import { MessageBus } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';

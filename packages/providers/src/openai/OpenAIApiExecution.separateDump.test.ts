@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as dumpSDKContextModule from '../utils/dumpSDKContext.js';
 import {
   executeApiRequest,
@@ -167,7 +167,9 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     // All chunks should pass through unchanged
     expect(received).toStrictEqual(chunks);
 
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-openai-test12',
       'openai',
       { streaming: true, chunks, completed: true },
@@ -200,16 +202,20 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     const result = await executeApiRequest(opts);
 
     const received: unknown[] = [];
-    await expect(async () => {
+    const consumptionPromise = (async (): Promise<void> => {
       for await (const chunk of result as AsyncIterable<unknown>) {
         received.push(chunk);
       }
-    }).rejects.toThrow('Stream interrupted');
+    })();
+    expect(consumptionPromise).rejects.toThrow('Stream interrupted');
+    await consumptionPromise.catch(() => undefined);
 
     // All chunks yielded before the error should pass through
     expect(received).toStrictEqual(chunks);
 
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-openai-test12',
       'openai',
       {
@@ -264,7 +270,9 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       streamingEnabled: false,
     });
 
-    await expect(executeApiRequest(opts)).rejects.toThrow('Rate limit');
+    const executionPromise = executeApiRequest(opts);
+    expect(executionPromise).rejects.toThrow('Rate limit');
+    await executionPromise.catch(() => undefined);
 
     expect(callOrder).toStrictEqual([
       'apiCall',
@@ -296,7 +304,9 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       streamingEnabled: false,
     });
 
-    await expect(executeApiRequest(opts)).rejects.toThrow('Rate limit');
+    const executionPromise = executeApiRequest(opts);
+    expect(executionPromise).rejects.toThrow('Rate limit');
+    await executionPromise.catch(() => undefined);
 
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledOnce();
@@ -324,9 +334,9 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       streamingEnabled: true,
     });
 
-    await expect(executeApiRequest(opts)).rejects.toThrow(
-      'Stream setup failed',
-    );
+    const executionPromise = executeApiRequest(opts);
+    expect(executionPromise).rejects.toThrow('Stream setup failed');
+    await executionPromise.catch(() => undefined);
 
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledOnce();
@@ -370,11 +380,15 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       streamingEnabled: true,
     });
 
-    await expect(executeApiRequest(opts)).rejects.toThrow(
+    const executionPromise = executeApiRequest(opts);
+    expect(executionPromise).rejects.toThrow(
       'Cerebras/Qwen API bug: Tool not found in list. We sent 1 tools. Known API issue.',
     );
+    await executionPromise.catch(() => undefined);
 
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledTimes(1);
+
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
       'openai',
       '/chat/completions',
       opts.requestBody,
@@ -414,17 +428,22 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       streamingEnabled: false,
     });
 
-    await expect(executeApiRequest(opts)).rejects.toThrow(
+    const executionPromise = executeApiRequest(opts);
+    expect(executionPromise).rejects.toThrow(
       'Cerebras/Qwen API bug: Tool not found in list. We sent 1 tools. Known API issue.',
     );
+    await executionPromise.catch(() => undefined);
 
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledTimes(1);
+
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
       'openai',
       '/chat/completions',
       opts.requestBody,
       'https://api.cerebras.ai/v1',
     );
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-openai-test12',
       'openai',
       { error: '400 Tool is not present in the tools list: lookup_weather' },
@@ -464,11 +483,15 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       streamingEnabled: false,
     });
 
-    await expect(executeApiRequest(opts)).rejects.toThrow(
+    const executionPromise = executeApiRequest(opts);
+    expect(executionPromise).rejects.toThrow(
       'Cerebras/Qwen API bug: Tool not found in list. We sent 1 tools. Known API issue.',
     );
+    await executionPromise.catch(() => undefined);
 
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledTimes(1);
+
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
       'openai',
       '/chat/completions',
       opts.requestBody,
@@ -488,7 +511,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
 
     const opts = createBaseOptions({ client, dumpMode: 'on' });
 
-    await expect(executeApiRequest(opts)).resolves.toStrictEqual({
+    expect(await executeApiRequest(opts)).toStrictEqual({
       id: 'chatcmpl-test',
       choices: [],
     });
@@ -521,15 +544,18 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
 
     const result = await executeApiRequest(opts);
     const received: unknown[] = [];
-    await expect(async () => {
+    const consumptionPromise = (async (): Promise<void> => {
       for await (const chunk of result as AsyncIterable<unknown>) {
         received.push(chunk);
       }
-    }).rejects.toThrow('Stream iteration failed');
+    })();
+    expect(consumptionPromise).rejects.toThrow('Stream iteration failed');
+    await consumptionPromise.catch(() => undefined);
 
     expect(received).toStrictEqual(chunks);
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-openai-test12',
       'openai',
       {

@@ -9,7 +9,7 @@
  * OpenAI-Vercel schema converter should consume `parametersJsonSchema` directly.
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'bun:test';
 
 let convertToolsToOpenAIVercel: typeof import('./schemaConverter.js').convertToolsToOpenAIVercel;
 

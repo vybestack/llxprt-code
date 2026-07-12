@@ -18,7 +18,7 @@
  *   - client.lifecycle.test.ts
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { Content } from '@google/genai';
 import { findCompressSplitPoint, isThinkingSupported } from './client.js';
 

@@ -11,14 +11,14 @@
  * file-level max-lines).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi } from 'vitest';
 import type { Part } from '@google/genai';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType, PerformCompressionResult } from './turn.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
-import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import { fromAsync, setupGeminiClient } from './client-test-helpers.js';
 
 // Mock prompts module before imports
@@ -52,19 +52,19 @@ const {
   mockGenerateContentFn,
   mockEmbedContentFn,
   mockTurnRunFn,
-} = vi.hoisted(() => ({
+} = {
   mockChatCreateFn: vi.fn(),
   mockGenerateContentFn: vi.fn(),
   mockEmbedContentFn: vi.fn(),
   mockTurnRunFn: vi.fn(),
-}));
+};
 
 const {
   todoStoreReadMock,
   todoStoreReadPausedMock,
   todoStoreWritePausedMock,
   mockTodoStoreConstructor,
-} = vi.hoisted(() => {
+} = (() => {
   const readMock = vi.fn();
   const readPausedMock = vi.fn();
   const writePausedMock = vi.fn();
@@ -79,9 +79,9 @@ const {
     todoStoreWritePausedMock: writePausedMock,
     mockTodoStoreConstructor: constructorMock,
   };
-});
+})();
 
-vi.mock('@google/genai');
+vi.mock('@google/genai', () => ({ GoogleGenAI: vi.fn() }));
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -106,28 +106,14 @@ vi.mock(
     })),
   }),
 );
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
-  return {
-    ...actual,
-    LocalTodoStore: mockTodoStoreConstructor,
-  };
-});
-vi.mock('./turn', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./turn.js')>();
-  class MockTurn {
-    pendingToolCalls = [];
-    run = mockTurnRunFn;
-    constructor() {}
-  }
-  return {
-    ...actual,
-    Turn: MockTurn,
-  };
-});
+vi.mock('@vybestack/llxprt-code-tools', () => ({
+  LocalTodoStore: vi.fn().mockImplementation(() => ({
+    readTodos: vi.fn().mockResolvedValue([]),
+    readPausedState: vi.fn().mockResolvedValue(false),
+    writePausedState: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
 
-vi.mock('@vybestack/llxprt-code-core/config/config.js');
 vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));
@@ -144,31 +130,49 @@ vi.mock(
   }),
 );
 vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
+  DEFAULT_OTLP_ENDPOINT: 'http://localhost:4318',
+  DEFAULT_TELEMETRY_TARGET: null,
+  TelemetryTarget: { LOCAL: 'local', GCP: 'gcp' },
+  StartSessionEvent: class StartSessionEvent {},
+  initializeTelemetry: vi.fn(),
+  logCliConfiguration: vi.fn(),
   logApiRequest: vi.fn(),
   logApiResponse: vi.fn(),
   logApiError: vi.fn(),
 }));
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
-  retryWithBackoff: vi.fn((apiCall) => apiCall()),
-}));
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
-  return {
-    ...actual,
-    ideContext: {
-      ...actual.ideContext,
-      getIdeContext: vi.fn(),
-      subscribeToIdeContext: vi.fn(),
-      setIdeContext: vi.fn(),
-      clearIdeContext: vi.fn(),
+  retryWithBackoff: vi.fn(
+    async (
+      apiCall: () => Promise<unknown>,
+      options?: {
+        maxAttempts?: number;
+        shouldRetryOnError?: (error: unknown) => boolean;
+      },
+    ) => {
+      const maxAttempts = options?.maxAttempts ?? 1;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          return await apiCall();
+        } catch (error) {
+          if (
+            attempt === maxAttempts ||
+            options?.shouldRetryOnError?.(error) !== true
+          ) {
+            throw error;
+          }
+        }
+      }
+      throw new Error('Retry attempts exhausted');
     },
-  };
-});
-vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
-  tokenLimit: vi.fn(),
+  ),
+}));
+vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
+  ideContext: {
+    getIdeContext: vi.fn(),
+    subscribeToIdeContext: vi.fn(),
+    setIdeContext: vi.fn(),
+    clearIdeContext: vi.fn(),
+  },
 }));
 vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
@@ -205,8 +209,7 @@ function buildOverflowScenario(
   client: AgentClient,
   scenario: OverflowScenario,
 ): OverflowScenarioHandle {
-  vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
-  vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+  uiTelemetryService.getLastPromptTokenCount.mockReturnValue(
     PREFLIGHT_BASELINE,
   );
 
@@ -254,6 +257,8 @@ describe('Gemini Client — preflight compression recovery (issue 2402)', () => 
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,
+      createTurn: () => ({ run: mockTurnRunFn }) as never,
+      resolveTokenLimit: () => MOCKED_TOKEN_LIMIT,
     });
     client = ctx.client;
 

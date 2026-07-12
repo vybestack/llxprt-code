@@ -22,7 +22,7 @@
  * shares its exact, RegExp-free parity semantics.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import { readFileSync } from 'node:fs';
 import { join, normalize } from 'node:path';
@@ -276,7 +276,11 @@ function isDriverAllowed(specifier: string): boolean {
   if (specifier === AGENTS_ROOT) {
     return true;
   }
-  if (specifier === 'vitest' || specifier.startsWith('vitest/')) {
+  if (
+    specifier === 'vitest' ||
+    specifier.startsWith('vitest/') ||
+    specifier === 'bun:test'
+  ) {
     return true;
   }
   if (specifier === 'fast-check' || specifier.startsWith('fast-check/')) {

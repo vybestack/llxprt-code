@@ -20,7 +20,7 @@
  * @requirement:REQ-TEST-001
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 
 // P11: provider content generation implementation is provider-owned;
 // core retains only structural runtime contracts.
@@ -101,7 +101,7 @@ describe('ProviderContentGenerator behavioral tests', () => {
     const mockManager = {} as unknown as IProviderManager;
     const generator = new ProviderContentGenerator(mockManager, {});
 
-    await expect(generator.embedContent({ texts: [] })).rejects.toThrow(
+    expect(generator.embedContent({ texts: [] })).rejects.toThrow(
       /embeddings not supported/i,
     );
   });

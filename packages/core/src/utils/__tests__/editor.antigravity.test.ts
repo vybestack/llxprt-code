@@ -4,17 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
-
-vi.mock('child_process', () => ({
-  execSync: vi.fn(),
-  execFileSync: vi.fn(),
-  spawn: vi.fn(() => ({
-    on: vi.fn((event: string, cb: (code: number) => void) => {
-      if (event === 'close') cb(0);
-    }),
-  })),
-}));
+import { describe, it, expect, afterEach } from 'bun:test';
 
 import { getDiffCommand, allowEditorTypeInSandbox } from '../editor.js';
 import type { EditorType } from '../editor.js';

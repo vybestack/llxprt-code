@@ -233,8 +233,10 @@ export async function buildSystemInstruction(
   globalConfig: Config | undefined,
   toolNamesForPrompt: string[] | undefined,
   currentModel: string,
+  buildCorePrompt: typeof getCoreSystemPromptAsync = getCoreSystemPromptAsync,
+  resolveMemory: typeof resolveUserMemory = resolveUserMemory,
 ): Promise<string> {
-  const userMemory = await resolveUserMemory(
+  const userMemory = await resolveMemory(
     options.userMemory,
     () => options.invocation.userMemory,
   );
@@ -250,7 +252,7 @@ export async function buildSystemInstruction(
         ? subagentConfig.getSubagentManager()
         : undefined,
   );
-  return getCoreSystemPromptAsync({
+  return buildCorePrompt({
     userMemory,
     mcpInstructions,
     model: currentModel,

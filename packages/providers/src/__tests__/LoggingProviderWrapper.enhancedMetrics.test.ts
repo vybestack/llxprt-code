@@ -7,7 +7,7 @@
  * Split from LoggingProviderWrapper.apiTelemetry.test.ts for max-lines compliance.
  */
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'bun:test';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type { GenerateChatOptions, IContent, IProvider } from '../IProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -378,11 +378,15 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
         }),
       );
 
-      await expect(async () => {
+      const consumptionPromise = (async (): Promise<void> => {
         for await (const _chunk of iterator) {
           // Consume until stream throws
         }
-      }).rejects.toThrow('Stream interrupted after partial output');
+      })();
+      expect(consumptionPromise).rejects.toThrow(
+        'Stream interrupted after partial output',
+      );
+      await consumptionPromise.catch(() => undefined);
 
       const metrics = wrapper.getPerformanceMetrics();
       expect(metrics.timeToFirstToken).not.toBeNull();
@@ -599,11 +603,15 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
         }),
       );
 
-      await expect(async () => {
+      const consumptionPromise = (async (): Promise<void> => {
         for await (const _chunk of iterator) {
           // consume chunks until the stream fails
         }
-      }).rejects.toThrow('stream failed after usage metadata');
+      })();
+      expect(consumptionPromise).rejects.toThrow(
+        'stream failed after usage metadata',
+      );
+      await consumptionPromise.catch(() => undefined);
 
       const metrics = wrapper.getPerformanceMetrics();
       expect(metrics.totalRequests).toBe(0);

@@ -50,6 +50,7 @@ import { templateString } from './utils.js';
 import { type z } from 'zod';
 import {
   processFunctionCalls as processFunctionCallsDispatch,
+  type ExecuteToolCall,
   buildCompleteTaskDeclaration,
 } from './executor-tool-dispatch.js';
 import { callModelAndConsumeStream } from './executor-stream-processor.js';
@@ -74,6 +75,14 @@ type AgentLoopIterationResult =
 
 /** A callback function to report on agent activity. */
 export type ActivityCallback = (activity: SubagentActivityEvent) => void;
+
+export interface AgentExecutorDependencies {
+  loadDirectoryContext?: (runtimeContext: Config) => Promise<string>;
+  createChatSession?: (
+    ...args: ConstructorParameters<typeof ChatSession>
+  ) => ChatSession;
+  executeTool?: ExecuteToolCall;
+}
 
 /**
  * Register tools from the agent's tool config into the isolated agent registry.
@@ -121,6 +130,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
   private readonly runtimeContext: Config;
   private readonly messageBus: MessageBus;
   private readonly onActivity?: ActivityCallback;
+  private readonly dependencies: AgentExecutorDependencies;
 
   /**
    * Creates and validates a new `AgentExecutor` instance.
@@ -143,6 +153,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     runtimeContext: Config,
     messageBus: MessageBus,
     onActivity?: ActivityCallback,
+    dependencies: AgentExecutorDependencies = {},
   ): Promise<AgentExecutor<TOutput>> {
     /**
      * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
@@ -177,6 +188,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       agentToolRegistry,
       messageBus,
       onActivity,
+      dependencies,
     );
   }
 
@@ -192,12 +204,14 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     toolRegistry: ToolRegistry,
     messageBus: MessageBus,
     onActivity?: ActivityCallback,
+    dependencies: AgentExecutorDependencies = {},
   ) {
     this.definition = definition;
     this.runtimeContext = runtimeContext;
     this.toolRegistry = toolRegistry;
     this.messageBus = messageBus;
     this.onActivity = onActivity;
+    this.dependencies = dependencies;
 
     const randomIdPart = Math.random().toString(36).slice(2, 8);
     this.agentId = `${this.definition.name}-${randomIdPart}`;
@@ -597,6 +611,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         emitFn,
         signal,
         promptId,
+        this.dependencies.executeTool,
       );
 
     if (taskCompleted) {
@@ -728,7 +743,11 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       );
       const runtimeBundle = await this.buildRuntimeBundle();
 
-      return new ChatSession(
+      const createChatSession =
+        this.dependencies.createChatSession ??
+        ((...args: ConstructorParameters<typeof ChatSession>) =>
+          new ChatSession(...args));
+      return createChatSession(
         runtimeBundle.runtimeContext,
         runtimeBundle.contentGenerator,
         generationConfig,
@@ -881,6 +900,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       inputs,
       this.runtimeContext,
       promptConfig.systemPrompt,
+      this.dependencies.loadDirectoryContext,
     );
   }
 

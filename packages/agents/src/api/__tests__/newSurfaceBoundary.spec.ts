@@ -16,7 +16,7 @@
  * agents through public createAgent and keeps internal assertions test-only.
  */
 
-import { describe, it, expect, expectTypeOf } from 'vitest';
+import { describe, it, expect, expectTypeOf } from 'bun:test';
 import type {
   Agent,
   AgentConfig,

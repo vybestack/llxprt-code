@@ -35,6 +35,9 @@ const originalPlatform = process.platform;
 describe('editor utils', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (execSync as Mock).mockImplementation(() => {
+      throw new Error('command not found');
+    });
     vi.unstubAllEnvs();
     Object.defineProperty(process, 'platform', {
       value: originalPlatform,
@@ -202,11 +205,9 @@ describe('editor utils', () => {
       if (commands.length > 1) {
         it(`should use second command "${commands[1]}" when first doesn't exist on non-windows`, () => {
           Object.defineProperty(process, 'platform', { value: 'linux' });
-          (execSync as Mock)
-            .mockImplementationOnce(() => {
-              throw new Error(); // first command not found
-            })
-            .mockReturnValueOnce(Buffer.from(`/usr/bin/${commands[1]}`)); // second command found
+          (execSync as Mock).mockImplementationOnce(() => {
+            throw new Error(); // first command not found
+          });
 
           const diffCommand = getDiffCommand('old.txt', 'new.txt', editor);
           expect(diffCommand).toStrictEqual({

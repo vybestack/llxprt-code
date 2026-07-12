@@ -2,7 +2,7 @@
  * @plan PLAN-20251023-STATELESS-HARDENING.P07
  * @requirement REQ-SP4-004
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type { GenerateChatOptions, IContent, IProvider } from '../IProvider.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -100,7 +100,7 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
       runtime,
     });
 
-    await expect(iterator.next()).rejects.toMatchObject({
+    expect(iterator.next()).rejects.toMatchObject({
       requirement: 'REQ-SP4-004',
       name: 'MissingProviderRuntimeError',
     });
@@ -124,7 +124,7 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
       runtime,
     });
 
-    await expect(iterator.next()).rejects.toMatchObject({
+    expect(iterator.next()).rejects.toMatchObject({
       requirement: 'REQ-SP4-004',
       name: 'MissingProviderRuntimeError',
     });
@@ -228,7 +228,7 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
       }),
     );
 
-    await expect(iterator.next()).rejects.toThrow(
+    expect(iterator.next()).rejects.toThrow(
       'FAST FAIL: Invalid config instance - missing getConversationLoggingEnabled() method',
     );
   });

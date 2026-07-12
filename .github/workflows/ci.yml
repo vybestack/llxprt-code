@@ -623,6 +623,60 @@ jobs:
           bunx vitest run --config ./scripts/tests/vitest.config.ts scripts/tests/test-orchestrator.test.ts
 
   #
+  # Bun-native test parity (issue #2475)
+  #
+  # Runs a representative sample of tests from each migrated workspace using
+  # Bun's native test runner (bun test) to verify parity with the Vitest
+  # results. This catches regressions in the Bun compatibility shim
+  # (augment-bun-vi.ts) and workspace-specific bunfig.toml configurations
+  # without the cost of a full Bun-native run of all 500+ test files per
+  # workspace.
+  bun_native_test_parity:
+    name: 'Bun Native Test Parity'
+    runs-on: 'ubuntu-latest'
+    timeout-minutes: 15
+    needs:
+      - 'skip_check'
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    permissions:
+      contents: 'read'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88f656a37f22edcfb5dd907a8' # ratchet:actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@735f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
+      - name: 'Install dependencies'
+        run: |-
+          bun install
+          git checkout -- bun.lock
+
+      - name: 'Run CLI characterization test under Bun'
+        run: |-
+          cd packages/cli
+          bun test src/__tests__/cliSessionDispatch.characterization.test.tsx --max-concurrency 1 --timeout 30000
+
+      - name: 'Run agents sample under Bun'
+        run: |-
+          cd packages/agents
+          bun test src/agents/executor.test.ts --max-concurrency 1 --timeout 30000
+
+      - name: 'Run core sample under Bun'
+        run: |-
+          cd packages/core
+          bun test src/utils/errors.test.ts --max-concurrency 1 --timeout 30000
+
+      - name: 'Run providers sample under Bun'
+        run: |-
+          cd packages/providers
+          bun test src/BaseProvider.test.ts --max-concurrency 1 --timeout 30000
+
+  #
   # Test: Node (Linux and macOS - always run)
   #
   # Stays on npm (not Bun) for S6 (#2243): Bun's hoisted linker non-

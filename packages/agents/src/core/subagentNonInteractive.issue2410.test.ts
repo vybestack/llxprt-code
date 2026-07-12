@@ -17,7 +17,7 @@
  * and empty arrays (stop cases), and true for non-empty arrays (continue case).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { Content } from '@google/genai';
 import { hasNonInteractiveMessages } from './subagentNonInteractive.js';
 

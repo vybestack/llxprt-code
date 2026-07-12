@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
 import { OAuthManager } from './oauth-manager.js';
 import {
@@ -76,7 +76,7 @@ describe('BucketFailoverHandlerImpl #47', () => {
     releaseEagerAuth?.();
     await ensurePromise;
 
-    await expect(failoverPromise).resolves.toBe(true);
+    expect(await failoverPromise).toBe(true);
     expect(getOAuthTokenCalls).toBe(2);
     expect(oauthManager.authenticate).not.toHaveBeenCalled();
     expect(handler.getCurrentBucket()).toBe('bucket-a');

@@ -16,10 +16,11 @@
  *    available, not just config.getModel.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
+import { vi } from 'vitest';
 import type { Content, PartListUnion } from '@google/genai';
-import type { ServerAgentStreamEvent, ModelInfo } from './turn.js';
-import { AgentEventType } from './turn.js';
+import type { ServerAgentStreamEvent, ModelInfo, Turn } from './turn.js';
+import { AgentEventType, MODEL_INFO_EVENT_TYPE } from './agentEventProtocol.js';
 import type { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -27,26 +28,12 @@ import type { LoopDetectionService } from '@vybestack/llxprt-code-core/services/
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 
-const mockTurnRun = vi.fn();
-
 vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
   tokenLimit: vi.fn(
     (_model: string, userContextLimit?: number) =>
       userContextLimit ?? 1_000_000,
   ),
 }));
-
-vi.mock('./turn.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./turn.js')>();
-  class MockTurn {
-    pendingToolCalls: unknown[] = [];
-    run = mockTurnRun;
-  }
-  return {
-    ...actual,
-    Turn: MockTurn as unknown as typeof actual.Turn,
-  };
-});
 
 import {
   MessageStreamOrchestrator,
@@ -128,7 +115,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
       };
     })();
 
-  mockTurnRun.mockReturnValue(stream);
+  const turnRun = vi.fn().mockReturnValue(stream);
 
   const deps: MessageStreamDeps = {
     config,
@@ -210,6 +197,8 @@ function buildOrchestrator(options: BuildOptions = {}): {
     },
     updateTelemetryTokenCount: vi.fn(),
     sendMessageStream: vi.fn(),
+    createTurn: () =>
+      ({ pendingToolCalls: [], run: turnRun }) as unknown as Turn,
   };
 
   return {
@@ -235,8 +224,8 @@ async function collectModelInfos(
   }
   return events
     .filter(
-      (e): e is { type: typeof AgentEventType.ModelInfo; value: ModelInfo } =>
-        e.type === AgentEventType.ModelInfo,
+      (e): e is { type: typeof MODEL_INFO_EVENT_TYPE; value: ModelInfo } =>
+        e.type === MODEL_INFO_EVENT_TYPE,
     )
     .map((e) => e.value);
 }
@@ -244,7 +233,7 @@ async function collectModelInfos(
 describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(tokenLimit).mockImplementation(
+    (tokenLimit as ReturnType<typeof vi.fn>).mockImplementation(
       (_model: string, userContextLimit?: number) =>
         userContextLimit ?? 1_000_000,
     );
@@ -365,8 +354,10 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     ];
     const { orchestrator } = buildOrchestrator();
     const deps = orchestrator['deps'];
-    vi.mocked(deps.hasChat).mockReturnValue(false);
-    vi.mocked(deps.getPreviousHistory).mockReturnValue(previousHistory);
+    (deps.hasChat as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    (deps.getPreviousHistory as ReturnType<typeof vi.fn>).mockReturnValue(
+      previousHistory,
+    );
 
     await collectModelInfos(orchestrator, 'prompt-restore-history');
 
@@ -383,7 +374,7 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
 
     await collectModelInfos(orchestrator, 'prompt-context-limit');
 
-    expect(vi.mocked(tokenLimit).mock.calls).toContainEqual([
+    expect((tokenLimit as ReturnType<typeof vi.fn>).mock.calls).toContainEqual([
       'claude-opus-4-8',
       200_000,
     ]);

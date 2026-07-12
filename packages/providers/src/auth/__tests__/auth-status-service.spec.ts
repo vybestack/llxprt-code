@@ -6,37 +6,14 @@
 
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
-// ---------------------------------------------------------------------------
-// Hoist mock factories so they're available before vi.mock() runs
-// ---------------------------------------------------------------------------
-const { flushMockRef, providerManagerRef, providerRef } = vi.hoisted(() => ({
-  flushMockRef: {
-    current: undefined as ReturnType<typeof vi.fn> | undefined,
-  },
-  providerManagerRef: {
-    current: undefined as
-      | { getProviderByName: ReturnType<typeof vi.fn> }
-      | undefined,
-  },
-  providerRef: {
-    current: undefined as unknown,
-  },
+const flushAuthScopeMock = vi.fn(() => ({
+  runtimeId: 'test-runtime',
+  revokedTokens: [],
 }));
-
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-core')
-  >('@vybestack/llxprt-code-core');
-  const flushMock = vi.fn(() => ({
-    runtimeId: 'test-runtime',
-    revokedTokens: [],
-  }));
-  flushMockRef.current = flushMock;
-  return {
-    ...actual,
-    flushRuntimeAuthScope: flushMock,
-  };
-});
+const providerManagerRef: {
+  current?: { getProviderByName: ReturnType<typeof vi.fn> };
+} = {};
+const providerRef: { current?: unknown } = {};
 
 import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
 
@@ -168,6 +145,7 @@ function makeService(
     proactiveRenewalManager,
     bucketManager,
     tokenAccessCoordinator,
+    flushAuthScopeMock,
   );
 }
 
@@ -177,7 +155,7 @@ function makeService(
 
 describe('AuthStatusService.isAuthenticated', () => {
   beforeEach(() => {
-    flushMockRef.current?.mockClear();
+    flushAuthScopeMock?.mockClear();
     providerManagerRef.current?.getProviderByName.mockReset();
 
     // Register runtime accessors via the bridge
@@ -310,7 +288,7 @@ describe('AuthStatusService.isAuthenticated', () => {
 
 describe('AuthStatusService.logout', () => {
   beforeEach(() => {
-    flushMockRef.current?.mockClear();
+    flushAuthScopeMock?.mockClear();
     providerManagerRef.current?.getProviderByName.mockReset();
     oauthRuntimeBridge.setAccessors({
       getEphemeralSetting: () => undefined,
@@ -438,8 +416,8 @@ describe('AuthStatusService.logout', () => {
 
     await service.logout('device-code-test');
 
-    expect(flushMockRef.current).toBeDefined();
-    expect(flushMockRef.current).toHaveBeenCalled();
+    expect(flushAuthScopeMock).toBeDefined();
+    expect(flushAuthScopeMock).toHaveBeenCalled();
   });
 });
 
@@ -449,7 +427,7 @@ describe('AuthStatusService.logout', () => {
 
 describe('AuthStatusService.clearProviderAuthCaches (via logout)', () => {
   beforeEach(() => {
-    flushMockRef.current?.mockClear();
+    flushAuthScopeMock?.mockClear();
     providerManagerRef.current?.getProviderByName.mockReset();
 
     // Register runtime accessors via the bridge
@@ -518,8 +496,8 @@ describe('AuthStatusService.clearProviderAuthCaches (via logout)', () => {
     await service.logout('device-code-test');
 
     // flush must still execute despite all failures
-    expect(flushMockRef.current).toBeDefined();
-    expect(flushMockRef.current).toHaveBeenCalled();
+    expect(flushAuthScopeMock).toBeDefined();
+    expect(flushAuthScopeMock).toHaveBeenCalled();
   });
 
   it('no provider-name-specific branching for gemini in clearProviderAuthCaches (G3)', async () => {
@@ -753,7 +731,7 @@ describe('AuthStatusService.getAuthStatusWithBuckets', () => {
 
 describe('AuthStatusService.logout session-bucket clear', () => {
   beforeEach(() => {
-    flushMockRef.current?.mockClear();
+    flushAuthScopeMock?.mockClear();
   });
 
   it('clears metadata-scoped and unscoped session buckets when current session bucket matches bucketToUse', async () => {
@@ -868,7 +846,12 @@ describe('AuthStatusService.logout proactive renewal cleanup', () => {
       proactiveRenewalManager.clearRenewalsForProvider as ReturnType<
         typeof vi.fn
       >,
-    ).toHaveBeenCalledExactlyOnceWith('device-code-test', 'bucket-x');
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      proactiveRenewalManager.clearRenewalsForProvider as ReturnType<
+        typeof vi.fn
+      >,
+    ).toHaveBeenCalledWith('device-code-test', 'bucket-x');
 
     // Over-broad cleanup methods must NOT be called
     expect(

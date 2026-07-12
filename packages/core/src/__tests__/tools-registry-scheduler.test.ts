@@ -24,7 +24,7 @@
  * is not fully testable from this test file's vantage point.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   maskKeyForDisplay,
   getSupportedToolNames,

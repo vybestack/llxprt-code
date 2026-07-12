@@ -1,0 +1,10 @@
+[install]
+# Match the repository root: reproduce npm's hoisted node_modules topology so
+# tooling that walks node_modules behaves identically under bun and npm.
+linker = "hoisted"
+
+[test]
+# Package-local preload that augments bun:test's `vi`/`it` with the Vitest
+# helpers the core suite relies on and performs the provider-runtime
+# bootstrapping that test-setup.ts provides under Vitest.
+preload = ["./bun-test-setup.ts"]

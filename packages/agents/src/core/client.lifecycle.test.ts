@@ -9,7 +9,8 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi } from 'vitest';
 import type { Content } from '@google/genai';
 import { AgentClient } from './client.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -54,19 +55,19 @@ const {
   mockGenerateContentFn,
   mockEmbedContentFn,
   mockTurnRunFn,
-} = vi.hoisted(() => ({
+} = {
   mockChatCreateFn: vi.fn(),
   mockGenerateContentFn: vi.fn(),
   mockEmbedContentFn: vi.fn(),
   mockTurnRunFn: vi.fn(),
-}));
+};
 
 const {
   todoStoreReadMock,
   todoStoreReadPausedMock,
   todoStoreWritePausedMock,
   mockTodoStoreConstructor,
-} = vi.hoisted(() => {
+} = (() => {
   const readMock = vi.fn();
   const readPausedMock = vi.fn();
   const writePausedMock = vi.fn();
@@ -81,9 +82,11 @@ const {
     todoStoreWritePausedMock: writePausedMock,
     mockTodoStoreConstructor: constructorMock,
   };
-});
+})();
 
-vi.mock('@google/genai');
+vi.mock('@google/genai', () => ({
+  GoogleGenAI: vi.fn(),
+}));
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -108,28 +111,14 @@ vi.mock(
     })),
   }),
 );
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
-  return {
-    ...actual,
-    LocalTodoStore: mockTodoStoreConstructor,
-  };
-});
-vi.mock('./turn', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./turn.js')>();
-  class MockTurn {
-    pendingToolCalls = [];
-    run = mockTurnRunFn;
-    constructor() {}
-  }
-  return {
-    ...actual,
-    Turn: MockTurn,
-  };
-});
+vi.mock('@vybestack/llxprt-code-tools', () => ({
+  LocalTodoStore: vi.fn().mockImplementation(() => ({
+    readTodos: todoStoreReadMock,
+    readPausedState: todoStoreReadPausedMock,
+    writePausedState: todoStoreWritePausedMock,
+  })),
+}));
 
-vi.mock('@vybestack/llxprt-code-core/config/config.js');
 vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));
@@ -145,32 +134,16 @@ vi.mock(
         .join('') ?? undefined,
   }),
 );
-vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
-  logApiRequest: vi.fn(),
-  logApiResponse: vi.fn(),
-  logApiError: vi.fn(),
-}));
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
-  return {
-    ...actual,
-    ideContext: {
-      ...actual.ideContext,
-      getIdeContext: vi.fn(),
-      subscribeToIdeContext: vi.fn(),
-      setIdeContext: vi.fn(),
-      clearIdeContext: vi.fn(),
-    },
-  };
-});
-vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
-  tokenLimit: vi.fn(),
+vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
+  ideContext: {
+    getIdeContext: vi.fn(),
+    subscribeToIdeContext: vi.fn(),
+    setIdeContext: vi.fn(),
+    clearIdeContext: vi.fn(),
+  },
 }));
 vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
@@ -187,6 +160,7 @@ describe('Gemini Client (client.ts)', () => {
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,
+      createTurn: () => ({ run: mockTurnRunFn }) as never,
     });
     client = ctx.client;
 
@@ -391,12 +365,10 @@ describe('Gemini Client (client.ts)', () => {
       vi.spyOn(config, 'getMcpClientManager').mockReturnValue(undefined);
       vi.spyOn(config, 'isInteractive').mockReturnValue(true);
 
-      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
-      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
-        false,
-      );
+      getEnabledToolNamesForPrompt.mockReturnValue([]);
+      shouldIncludeSubagentDelegationForConfig.mockResolvedValue(false);
 
-      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt');
+      getCoreSystemPromptAsync.mockResolvedValue('prompt');
 
       await client.updateSystemInstruction();
 
@@ -437,12 +409,10 @@ describe('Gemini Client (client.ts)', () => {
       vi.spyOn(config, 'getMcpClientManager').mockReturnValue(undefined);
       vi.spyOn(config, 'isInteractive').mockReturnValue(false);
 
-      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
-      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
-        false,
-      );
+      getEnabledToolNamesForPrompt.mockReturnValue([]);
+      shouldIncludeSubagentDelegationForConfig.mockResolvedValue(false);
 
-      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt');
+      getCoreSystemPromptAsync.mockResolvedValue('prompt');
 
       await client.updateSystemInstruction();
 

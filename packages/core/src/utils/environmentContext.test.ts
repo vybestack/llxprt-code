@@ -20,11 +20,9 @@ import {
 import type { Config } from '../config/config.js';
 import { getFolderStructure } from './getFolderStructure.js';
 
-vi.mock('../config/config.js');
 vi.mock('./getFolderStructure.js', () => ({
   getFolderStructure: vi.fn(),
 }));
-vi.mock('@vybestack/llxprt-code-tools');
 
 describe('getDirectoryContextString', () => {
   let mockConfig: Partial<Config>;

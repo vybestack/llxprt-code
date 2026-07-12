@@ -12,46 +12,22 @@
  * and every subsequent prompt was swallowed with no error.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import {
   switchActiveProviderMock,
   setActiveModelMock,
-  updateActiveProviderBaseUrlMock,
-  updateActiveProviderApiKeyMock,
-  setActiveModelParamMock,
-  clearActiveModelParamMock,
-  getActiveModelParamsMock,
   setEphemeralSettingMock,
   getCliRuntimeServicesMock,
-  getActiveProviderOrThrowMock,
-  isCliStatelessProviderModeEnabledMock,
-  isCliRuntimeStatelessReadyMock,
-  createProviderKeyStorageMock,
   providerManagerStub,
   resetProfileApplicationStubs,
   restoreGcpEnvVars,
 } from './profileApplicationTestSetup.js';
 
-vi.mock('../runtimeSettings.js', () => ({
-  switchActiveProvider: switchActiveProviderMock,
-  setActiveModel: setActiveModelMock,
-  updateActiveProviderBaseUrl: updateActiveProviderBaseUrlMock,
-  updateActiveProviderApiKey: updateActiveProviderApiKeyMock,
-  setActiveModelParam: setActiveModelParamMock,
-  clearActiveModelParam: clearActiveModelParamMock,
-  getActiveModelParams: getActiveModelParamsMock,
-  setEphemeralSetting: setEphemeralSettingMock,
-  createProviderKeyStorage: createProviderKeyStorageMock,
-  getCliRuntimeServices: getCliRuntimeServicesMock,
-  getActiveProviderOrThrow: getActiveProviderOrThrowMock,
-  isCliStatelessProviderModeEnabled: isCliStatelessProviderModeEnabledMock,
-  isCliRuntimeStatelessReady: isCliRuntimeStatelessReadyMock,
-}));
-
-const { applyProfileWithGuards, selectAvailableProvider } = await import(
-  '../profileApplication.js'
-);
+import {
+  applyProfileWithGuards,
+  selectAvailableProvider,
+} from '../profileApplication.js';
 
 describe('selectAvailableProvider (issue #2479)', () => {
   it('throws when the requested provider is not registered', () => {
@@ -135,8 +111,11 @@ describe('applyProfileWithGuards with unavailable provider (issue #2479)', () =>
       ['anthropic', { name: 'anthropic' }],
     ]);
 
-    await expect(
-      applyProfileWithGuards(corruptProfile, { profileName: 'zai' }),
+    expect(
+      applyProfileWithGuards(corruptProfile, {
+        profileName: 'zai',
+        getRuntimeServices: getCliRuntimeServicesMock,
+      }),
     ).rejects.toThrow(/Provider 'load-balancer' is not available/);
 
     // The session must not have been mutated: no provider switch happened.
@@ -158,8 +137,11 @@ describe('applyProfileWithGuards with unavailable provider (issue #2479)', () =>
       ['gemini', { name: 'gemini' }],
     ]);
 
-    await expect(
-      applyProfileWithGuards(profile, { profileName: 'broken' }),
+    expect(
+      applyProfileWithGuards(profile, {
+        profileName: 'broken',
+        getRuntimeServices: getCliRuntimeServicesMock,
+      }),
     ).rejects.toThrow(/Provider 'not-a-real-provider' is not available/);
 
     expect(setEphemeralSettingMock).not.toHaveBeenCalled();

@@ -60,6 +60,9 @@ interface ProviderSwitchOptions {
   preserveEphemerals?: string[];
   skipModelDefaults?: boolean;
   addItem?: OAuthUICallback;
+  loadAliasEntries?: typeof loadProviderAliasEntries;
+  runtimeServices?: ReturnType<typeof getCliRuntimeServices>;
+  getActiveProfileName?: typeof getActiveProfileName;
 }
 
 interface ProviderSwitchContext {
@@ -219,11 +222,13 @@ function resetBucketFailoverHandler(config: Config): void {
   candidate.setBucketFailoverHandler(undefined);
 }
 
-function getAliasConfig(providerName: string): ProviderAliasConfig | undefined {
+function getAliasConfig(
+  providerName: string,
+  loadAliasEntries: typeof loadProviderAliasEntries,
+): ProviderAliasConfig | undefined {
   try {
-    return loadProviderAliasEntries().find(
-      (entry) => entry.alias === providerName,
-    )?.config;
+    return loadAliasEntries().find((entry) => entry.alias === providerName)
+      ?.config;
   } catch {
     return undefined;
   }
@@ -722,7 +727,8 @@ function createProviderSwitchContext(
     throw new Error('Provider name is required.');
   }
 
-  const { config, settingsService, providerManager } = getCliRuntimeServices();
+  const { config, settingsService, providerManager } =
+    options.runtimeServices ?? getCliRuntimeServices();
   const currentProvider = providerManager.getActiveProviderName() ?? null;
 
   if (currentProvider === name) {
@@ -773,7 +779,10 @@ function createProviderSwitchContext(
 
     activeProvider: providerManager.getActiveProvider(),
     baseProvider: {},
-    aliasConfig: getAliasConfig(name),
+    aliasConfig: getAliasConfig(
+      name,
+      options.loadAliasEntries ?? loadProviderAliasEntries,
+    ),
     modelToApply: '',
     providerBaseUrl: undefined,
     finalBaseUrl: undefined,
@@ -831,7 +840,7 @@ export async function switchActiveProvider(
   addProviderInfoMessages(context);
   await initializeContentGeneratorConfigIfSupported(context.config);
 
-  const profileName = getActiveProfileName();
+  const profileName = (options.getActiveProfileName ?? getActiveProfileName)();
 
   // Context-scoped model resolution (issue #1770): prefer the context-local
   // model sources over the stale global getActiveModelName().

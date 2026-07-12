@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
+import { vi } from '../../../../../test-setup/vi-compat.js';
 import { MultiBucketAuthenticator } from '../MultiBucketAuthenticator.js';
 
 /**

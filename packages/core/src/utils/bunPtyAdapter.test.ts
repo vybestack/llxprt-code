@@ -67,7 +67,7 @@ function createMockBunSubprocess(
 
 function stubBunSpawn(subprocess: MockBunSubprocess): ReturnType<typeof vi.fn> {
   const spawn = vi.fn().mockReturnValue(subprocess);
-  vi.stubGlobal('Bun', { spawn });
+  vi.spyOn(Bun, 'spawn').mockImplementation(spawn as typeof Bun.spawn);
   return spawn;
 }
 
@@ -81,7 +81,7 @@ function stubBunSpawnWithOptions(
       return subprocess;
     },
   );
-  vi.stubGlobal('Bun', { spawn });
+  vi.spyOn(Bun, 'spawn').mockImplementation(spawn as typeof Bun.spawn);
   return {
     getOptions(): MockBunSpawnOptions {
       if (!capturedOptions) {
@@ -95,6 +95,7 @@ function stubBunSpawnWithOptions(
 describe('Bun PTY adapter spawn options', () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 

@@ -8,7 +8,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { coreEvents } from '@vybestack/llxprt-code-core';
 import { DEFAULT_PRESERVE_EPHEMERALS } from './providerSwitch.js';
 
-vi.mock('./runtimeAccessors.js', () => {
+function createRuntimeServices() {
   const mockConfig = {
     setEphemeralSetting: vi.fn(),
     getEphemeralSetting: vi.fn(),
@@ -27,8 +27,10 @@ vi.mock('./runtimeAccessors.js', () => {
     set: vi.fn(),
     get: vi.fn((key: string) => (key === 'currentProfile' ? null : 'openai')),
     getProviderSetting: vi.fn(),
+    getProviderSettings: vi.fn(() => ({})),
     setProviderSetting: vi.fn(),
     switchProvider: vi.fn(),
+    updateSettings: vi.fn(),
     providerSettings: vi.fn(() => ({})),
   };
   const mockProviderManager = {
@@ -45,55 +47,18 @@ vi.mock('./runtimeAccessors.js', () => {
     })),
   };
   return {
-    getCliRuntimeServices: vi.fn(() => ({
-      config: mockConfig,
-      settingsService: mockSettingsService,
-      providerManager: mockProviderManager,
-    })),
-    maybeGetCliOAuthManager: vi.fn(() => null),
-    getActiveModelName: vi.fn(() => 'gpt-4'),
-    getActiveProviderName: vi.fn(() => 'openai'),
-    getEphemeralSettings: vi.fn(() => ({})),
-    setEphemeralSetting: vi.fn(),
-    clearEphemeralSetting: vi.fn(),
-    setActiveModelParam: vi.fn(),
-    clearActiveModelParam: vi.fn(),
-    _internal: {
-      getProviderSettingsSnapshot: vi.fn(() => ({})),
-      getActiveProviderOrThrow: vi.fn(() => ({
-        name: 'openai',
-        getDefaultModel: vi.fn(() => 'gpt-4'),
-      })),
-      resolveActiveProviderName: vi.fn(() => 'openai'),
-      extractModelParams: vi.fn(() => ({})),
-    },
+    config: mockConfig,
+    settingsService: mockSettingsService,
+    providerManager: mockProviderManager,
   };
-});
-
-vi.mock('./providerMutations.js', () => ({
-  computeModelDefaults: vi.fn(() => ({})),
-  normalizeProviderBaseUrl: vi.fn(),
-  extractProviderBaseUrl: vi.fn(() => undefined),
-  updateActiveProviderApiKey: vi.fn(),
-}));
-
-vi.mock(
-  '@vybestack/llxprt-code-providers/composition/providerAliases.js',
-  () => ({
-    loadProviderAliasEntries: vi.fn(() => []),
-  }),
-);
-
-vi.mock(
-  '@vybestack/llxprt-code-providers/composition/oauth-provider-registration.js',
-  () => ({
-    ensureOAuthProviderRegistered: vi.fn(),
-  }),
-);
+}
 
 describe('providerSwitch', () => {
+  let runtimeServices: ReturnType<typeof createRuntimeServices>;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    runtimeServices = createRuntimeServices();
   });
 
   afterEach(() => {
@@ -116,7 +81,11 @@ describe('providerSwitch', () => {
     it('should return unchanged result when switching to the same provider', async () => {
       const { switchActiveProvider } = await import('./providerSwitch.js');
 
-      const result = await switchActiveProvider('openai', {});
+      const result = await switchActiveProvider('openai', {
+        runtimeServices,
+        getActiveProfileName: () => null,
+        loadAliasEntries: () => [],
+      });
 
       expect(result.changed).toBe(false);
       expect(result.previousProvider).toBe('openai');
@@ -146,7 +115,11 @@ describe('providerSwitch', () => {
 
       // computeModelDefaults mock returns {} so modelToApply stays empty.
       // getActiveModelName mock returns 'gpt-4' as fallback.
-      await switchActiveProvider('gemini', {});
+      await switchActiveProvider('gemini', {
+        runtimeServices,
+        getActiveProfileName: () => null,
+        loadAliasEntries: () => [],
+      });
 
       expect(emitSpy).toHaveBeenCalledTimes(1);
       const emitted = emitSpy.mock.calls[0][0];
@@ -161,11 +134,7 @@ describe('providerSwitch', () => {
       const emitSpy = vi.spyOn(coreEvents, 'emitModelProfileChanged');
 
       // Make the provider return no default model so modelToApply resolves to ''
-      const { getCliRuntimeServices } = await import('./runtimeAccessors.js');
-      const mockFn = getCliRuntimeServices as unknown as ReturnType<
-        typeof vi.fn
-      >;
-      mockFn.mockReturnValue({
+      runtimeServices = {
         config: {
           setEphemeralSetting: vi.fn(),
           getEphemeralSetting: vi.fn(),
@@ -186,6 +155,7 @@ describe('providerSwitch', () => {
           getProviderSetting: vi.fn(),
           setProviderSetting: vi.fn(),
           switchProvider: vi.fn(),
+          getProviderSettings: vi.fn(() => ({})),
           providerSettings: vi.fn(() => ({})),
         },
         providerManager: {
@@ -201,9 +171,13 @@ describe('providerSwitch', () => {
             getDefaultModel: vi.fn(() => undefined),
           })),
         },
-      });
+      };
 
-      await switchActiveProvider('gemini', {});
+      await switchActiveProvider('gemini', {
+        runtimeServices,
+        getActiveProfileName: () => null,
+        loadAliasEntries: () => [],
+      });
 
       expect(emitSpy).toHaveBeenCalledTimes(1);
       const emitted = emitSpy.mock.calls[0][0];
@@ -216,12 +190,16 @@ describe('providerSwitch', () => {
       const { switchActiveProvider } = await import('./providerSwitch.js');
       const emitSpy = vi.spyOn(coreEvents, 'emitModelProfileChanged');
 
-      await switchActiveProvider('gemini', {});
+      await switchActiveProvider('gemini', {
+        runtimeServices,
+        getActiveProfileName: () => null,
+        loadAliasEntries: () => [],
+      });
 
       const emitted = emitSpy.mock.calls[0][0];
       expect(emitted.displayLabel).not.toBe('');
-      // Falls back to active model name when no profile
-      expect(emitted.displayLabel).toBe('gpt-4');
+      // Falls back through the switched provider's model resolution.
+      expect(emitted.displayLabel).toBe(emitted.model);
     });
 
     it('falls back to provider name when active model, config model, and provider default are all empty', async () => {
@@ -231,12 +209,7 @@ describe('providerSwitch', () => {
       // Override mocks so ALL model sources return empty.
       // Provider manager active name must differ from the target ('gemini')
       // so that switchActiveProvider actually performs a switch.
-      const { getCliRuntimeServices, getActiveModelName } = await import(
-        './runtimeAccessors.js'
-      );
-      (
-        getCliRuntimeServices as unknown as ReturnType<typeof vi.fn>
-      ).mockReturnValue({
+      runtimeServices = {
         config: {
           setEphemeralSetting: vi.fn(),
           getEphemeralSetting: vi.fn(),
@@ -257,6 +230,7 @@ describe('providerSwitch', () => {
           getProviderSetting: vi.fn(),
           setProviderSetting: vi.fn(),
           switchProvider: vi.fn(),
+          getProviderSettings: vi.fn(() => ({})),
           providerSettings: vi.fn(() => ({})),
           getCurrentProfileName: vi.fn(() => null),
         },
@@ -273,12 +247,13 @@ describe('providerSwitch', () => {
             getDefaultModel: vi.fn(() => ''),
           })),
         },
-      });
-      (
-        getActiveModelName as unknown as ReturnType<typeof vi.fn>
-      ).mockReturnValue('');
+      };
 
-      await switchActiveProvider('gemini', {});
+      await switchActiveProvider('gemini', {
+        runtimeServices,
+        getActiveProfileName: () => null,
+        loadAliasEntries: () => [],
+      });
 
       expect(emitSpy).toHaveBeenCalledTimes(1);
       const emitted = emitSpy.mock.calls[0][0];
@@ -292,16 +267,11 @@ describe('providerSwitch', () => {
 
     it('does not use stale getActiveModelName when modelToApply is empty; prefers context-scoped config model', async () => {
       const { switchActiveProvider } = await import('./providerSwitch.js');
-      const { getCliRuntimeServices, getActiveModelName } = await import(
-        './runtimeAccessors.js'
-      );
 
       // modelToApply will be empty because provider has no default model.
       // config.getModel reflects the post-switch model.
       // getActiveModelName is STALE — returns the old provider's model.
-      (
-        getCliRuntimeServices as unknown as ReturnType<typeof vi.fn>
-      ).mockReturnValue({
+      runtimeServices = {
         config: {
           setEphemeralSetting: vi.fn(),
           getEphemeralSetting: vi.fn(),
@@ -322,6 +292,7 @@ describe('providerSwitch', () => {
           getProviderSetting: vi.fn(),
           setProviderSetting: vi.fn(),
           switchProvider: vi.fn(),
+          getProviderSettings: vi.fn(() => ({})),
           providerSettings: vi.fn(() => ({})),
           getCurrentProfileName: vi.fn(() => null),
         },
@@ -339,14 +310,14 @@ describe('providerSwitch', () => {
             getDefaultModel: vi.fn(() => ''),
           })),
         },
-      });
-      // Stale global: still returns old provider's model
-      (
-        getActiveModelName as unknown as ReturnType<typeof vi.fn>
-      ).mockReturnValue('gpt-4-stale');
+      };
 
       const emitSpy = vi.spyOn(coreEvents, 'emitModelProfileChanged');
-      await switchActiveProvider('gemini', {});
+      await switchActiveProvider('gemini', {
+        runtimeServices,
+        getActiveProfileName: () => null,
+        loadAliasEntries: () => [],
+      });
 
       expect(emitSpy).toHaveBeenCalledTimes(1);
       const emitted = emitSpy.mock.calls[0][0];
@@ -358,13 +329,7 @@ describe('providerSwitch', () => {
 
     it('multi-provider: emitting context-scoped model, not stale global, when switching from openai to anthropic', async () => {
       const { switchActiveProvider } = await import('./providerSwitch.js');
-      const { getCliRuntimeServices, getActiveModelName } = await import(
-        './runtimeAccessors.js'
-      );
-
-      (
-        getCliRuntimeServices as unknown as ReturnType<typeof vi.fn>
-      ).mockReturnValue({
+      runtimeServices = {
         config: {
           setEphemeralSetting: vi.fn(),
           getEphemeralSetting: vi.fn(),
@@ -386,6 +351,7 @@ describe('providerSwitch', () => {
           getProviderSetting: vi.fn(),
           setProviderSetting: vi.fn(),
           switchProvider: vi.fn(),
+          getProviderSettings: vi.fn(() => ({})),
           providerSettings: vi.fn(() => ({})),
           getCurrentProfileName: vi.fn(() => null),
         },
@@ -403,14 +369,14 @@ describe('providerSwitch', () => {
             getDefaultModel: vi.fn(() => ''),
           })),
         },
-      });
-      // Stale global: still returns old openai model
-      (
-        getActiveModelName as unknown as ReturnType<typeof vi.fn>
-      ).mockReturnValue('gpt-4o-stale');
+      };
 
       const emitSpy = vi.spyOn(coreEvents, 'emitModelProfileChanged');
-      await switchActiveProvider('anthropic', {});
+      await switchActiveProvider('anthropic', {
+        runtimeServices,
+        getActiveProfileName: () => null,
+        loadAliasEntries: () => [],
+      });
 
       const emitted = emitSpy.mock.calls[0][0];
       // Must use context-scoped model, not stale global

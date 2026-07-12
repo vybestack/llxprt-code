@@ -31,14 +31,7 @@ import {
   hasFunctionResponse,
 } from './agenticLoop-test-helpers.js';
 
-const { modifyWithEditorMock } = vi.hoisted(() => ({
-  modifyWithEditorMock: vi.fn(),
-}));
-vi.mock('@vybestack/llxprt-code-tools', async (importActual) => {
-  const actual =
-    await importActual<typeof import('@vybestack/llxprt-code-tools')>();
-  return { ...actual, modifyWithEditor: modifyWithEditorMock };
-});
+const modifyWithEditorMock = vi.fn();
 
 describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
   beforeEach(() => {
@@ -316,6 +309,9 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
       policyEngine: createAskPolicyEngine(),
       interactive: true,
       approvalMode: ApprovalMode.DEFAULT,
+      confirmationDependencies: {
+        modifyWithEditor: modifyWithEditorMock,
+      },
     });
 
     let confirmationCount = 0;

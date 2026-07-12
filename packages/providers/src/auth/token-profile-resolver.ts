@@ -22,6 +22,21 @@ import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 
 const logger = new DebugLogger('llxprt:oauth:token');
 
+type LoadedProfile = Awaited<
+  ReturnType<Awaited<ReturnType<typeof createProfileManager>>['loadProfile']>
+>;
+
+export interface ProfileBucketResolverDependencies {
+  loadProfile: (profileName: string) => Promise<LoadedProfile>;
+}
+
+const defaultDependencies: ProfileBucketResolverDependencies = {
+  loadProfile: async (profileName) => {
+    const profileManager = await createProfileManager();
+    return profileManager.loadProfile(profileName);
+  },
+};
+
 /**
  * Resolve the current profile name from metadata or runtime settings.
  * Returns null if unavailable (not an error unless requestedProfileName is set).
@@ -53,13 +68,11 @@ export async function loadProfileBuckets(
   providerName: string,
   currentProfileName: string,
   requestedProfileName: string | null,
+  dependencies: ProfileBucketResolverDependencies = defaultDependencies,
 ): Promise<string[]> {
-  let profile: Awaited<
-    ReturnType<Awaited<ReturnType<typeof createProfileManager>>['loadProfile']>
-  >;
+  let profile: LoadedProfile;
   try {
-    const profileManager = await createProfileManager();
-    profile = await profileManager.loadProfile(currentProfileName);
+    profile = await dependencies.loadProfile(currentProfileName);
   } catch (error) {
     logger.debug(`Could not load profile buckets for ${providerName}:`, error);
     if (requestedProfileName) {
@@ -102,6 +115,7 @@ export async function loadProfileBuckets(
 export async function resolveProfileBuckets(
   providerName: string,
   metadata?: OAuthTokenRequestMetadata,
+  dependencies: ProfileBucketResolverDependencies = defaultDependencies,
 ): Promise<string[]> {
   const requestedProfileName =
     typeof metadata?.profileId === 'string' && metadata.profileId.trim() !== ''
@@ -120,6 +134,7 @@ export async function resolveProfileBuckets(
     providerName,
     currentProfileName,
     requestedProfileName,
+    dependencies,
   );
 }
 

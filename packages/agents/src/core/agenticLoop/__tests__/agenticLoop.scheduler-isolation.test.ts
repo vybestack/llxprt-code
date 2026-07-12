@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { AgenticLoop } from '../AgenticLoop.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
@@ -98,9 +98,7 @@ describe('AgenticLoop scheduler isolation', () => {
     };
     await mainScheduler.schedule([mainRequest], new AbortController().signal);
 
-    await vi.waitFor(() => {
-      expect(mainCompletions.length).toBeGreaterThan(0);
-    });
+    expect(mainCompletions.length).toBeGreaterThan(0);
     expect(mainTool.executeFn).toHaveBeenCalledTimes(1);
     const lastMainCompletion = mainCompletions.at(-1);
     expect(lastMainCompletion).toBeDefined();

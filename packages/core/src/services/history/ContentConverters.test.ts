@@ -6,7 +6,7 @@ import type {
   ThinkingBlock,
 } from './IContent';
 import type { GeminiContent } from '../../llm-types/geminiContent.js';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 
 /**
  * Structural shape matching Google's Content for test fixtures.

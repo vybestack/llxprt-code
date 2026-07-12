@@ -5,7 +5,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Mock } from 'vitest';
+import * as nodeFs from 'node:fs';
+import * as actualTools from '../../../tools/index.ts';
+import * as actualSettings from '../../../settings/index.ts';
+import * as actualIdeIntegration from '../../../ide-integration/index.ts';
+import { coreEvents as actualCoreEvents } from '../utils/events.js';
 import { Config } from './config.js';
 import { GitService } from '../services/gitService.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
@@ -13,7 +17,17 @@ import { getSettingsService } from '@vybestack/llxprt-code-settings';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestConfig } from '../test-utils/config.js';
 import {
+  buildEventsMockBody,
+  buildFetchMockBody,
+  buildFsMockBody,
+  buildGitServiceMockBody,
+  buildIdeIntegrationMockBody,
+  buildMemoryDiscoveryMockBody,
+  buildSettingsMockBody,
+  buildTelemetryMockBody,
+  buildToolsMockBody,
   createBaseParams,
+  gitServiceInitializeMock,
   resetAgentClientMock,
   type HoistedConfigMocks,
 } from './configTestHarness.js';
@@ -29,64 +43,28 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
   setGlobalProxy: vi.fn(),
 }));
 
-vi.mock('fs', async (importOriginal) => {
-  const h = await import('./configTestHarness.js');
-  return h.buildFsMockBody(await importOriginal());
-});
+vi.mock('fs', () => buildFsMockBody(nodeFs));
 
 // Mock dependencies that might be called during Config construction or createServerConfig.
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const h = await import('./configTestHarness.js');
-  return h.buildToolsMockBody(
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>(),
-  );
-});
+vi.mock('@vybestack/llxprt-code-tools', () => buildToolsMockBody(actualTools));
 
 // Mock individual tools if their constructors are complex or have side effects
 
-vi.mock('../core/contentGenerator.js', async (importOriginal) => {
-  const h = await import('./configTestHarness.js');
-  return h.buildContentGeneratorMockBody(await importOriginal());
-});
-
-vi.mock('../telemetry/index.js', async () => {
-  const h = await import('./configTestHarness.js');
-  return h.buildTelemetryMockBody();
-});
-
-vi.mock('../services/gitService.js', async () => {
-  const h = await import('./configTestHarness.js');
-  return h.buildGitServiceMockBody();
-});
-
-vi.mock('@vybestack/llxprt-code-settings', async () => {
-  const h = await import('./configTestHarness.js');
-  return h.buildSettingsMockBody();
-});
-
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const h = await import('./configTestHarness.js');
-  return h.buildIdeIntegrationMockBody(
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >(),
-  );
-});
-
-vi.mock('../utils/memoryDiscovery.js', async () => {
-  const h = await import('./configTestHarness.js');
-  return h.buildMemoryDiscoveryMockBody(hoistedConfigMocks);
-});
-
-vi.mock('../utils/events.js', async (importOriginal) => {
-  const h = await import('./configTestHarness.js');
-  return h.buildEventsMockBody(await importOriginal(), hoistedConfigMocks);
-});
-
-vi.mock('../utils/fetch.js', async () => {
-  const h = await import('./configTestHarness.js');
-  return h.buildFetchMockBody(hoistedConfigMocks);
-});
+vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
+vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
+vi.mock('@vybestack/llxprt-code-settings', () =>
+  buildSettingsMockBody(actualSettings),
+);
+vi.mock('@vybestack/llxprt-code-ide-integration', () =>
+  buildIdeIntegrationMockBody(actualIdeIntegration),
+);
+vi.mock('../utils/memoryDiscovery.js', () =>
+  buildMemoryDiscoveryMockBody(hoistedConfigMocks),
+);
+vi.mock('../utils/events.js', () =>
+  buildEventsMockBody({ coreEvents: actualCoreEvents }, hoistedConfigMocks),
+);
+vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 describe('Server Config (config.ts)', () => {
   const baseParams = createBaseParams(
@@ -100,7 +78,7 @@ describe('Server Config (config.ts)', () => {
   describe('initialize', () => {
     it('should throw an error if checkpointing is enabled and GitService fails', async () => {
       const gitError = new Error('Git is not installed');
-      (GitService.prototype.initialize as Mock).mockRejectedValue(gitError);
+      gitServiceInitializeMock.mockRejectedValue(gitError);
 
       const config = new Config({
         ...baseParams,
@@ -112,7 +90,7 @@ describe('Server Config (config.ts)', () => {
 
     it('should not throw an error if checkpointing is disabled and GitService fails', async () => {
       const gitError = new Error('Git is not installed');
-      (GitService.prototype.initialize as Mock).mockRejectedValue(gitError);
+      gitServiceInitializeMock.mockRejectedValue(gitError);
 
       const config = new Config({
         ...baseParams,

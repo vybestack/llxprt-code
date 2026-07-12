@@ -4,15 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { vi } from 'vitest';
 import { AgentExecutor } from './executor.js';
 import type { AgentInputs } from './types.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
 import { LSTool } from '@vybestack/llxprt-code-tools';
 import { ReadFileTool } from '@vybestack/llxprt-code-tools';
-import { ChatSession } from '../core/chatSession.js';
+import type { ChatSession } from '../core/chatSession.js';
 import { type FunctionCall } from '@google/genai';
-import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import {
   setupExecutorFixture,
@@ -26,41 +26,28 @@ import {
   type MockFn,
 } from './executor-test-helpers.js';
 
-const { mockSendMessageStream, mockExecuteToolCall } = vi.hoisted(() => ({
-  mockSendMessageStream: vi.fn(),
-  mockExecuteToolCall: vi.fn(),
-}));
-
-vi.mock('../core/chatSession.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../core/chatSession.js')>();
-  return {
-    ...actual,
-    ChatSession: vi.fn().mockImplementation(() => ({
+const mockSendMessageStream = vi.fn();
+const mockExecuteToolCall = vi.fn();
+const chatSessionCalls: ConstructorParameters<typeof ChatSession>[] = [];
+const dependencies = {
+  loadDirectoryContext: async () => 'Mocked Environment Context',
+  createChatSession: (...args: ConstructorParameters<typeof ChatSession>) => {
+    chatSessionCalls.push(args);
+    return {
       sendMessageStream: mockSendMessageStream,
-    })),
-  };
-});
-
-vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
-  executeToolCall: mockExecuteToolCall,
-}));
-
-vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
-
-const MockedChatSession = vi.mocked(ChatSession);
-const mockedGetDirectoryContextString = vi.mocked(getDirectoryContextString);
+    } as unknown as ChatSession;
+  },
+  executeTool: mockExecuteToolCall,
+};
 
 describe('AgentExecutor run (Execution Loop and Logic)', () => {
   let fixture: ExecutorTestFixture;
 
   beforeEach(() => {
+    chatSessionCalls.length = 0;
     fixture = setupExecutorFixture({
-      MockedChatSession,
       mockSendMessageStream: mockSendMessageStream as MockFn,
       mockExecuteToolCall: mockExecuteToolCall as MockFn,
-      mockedGetDirectoryContextString:
-        mockedGetDirectoryContextString as MockFn,
       vi,
     });
   });
@@ -76,6 +63,7 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
+      dependencies,
     );
     const inputs: AgentInputs = { goal: 'Find files' };
 
@@ -119,7 +107,7 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
 
     expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
 
-    const chatConstructorArgs = MockedChatSession.mock.calls[0];
+    const chatConstructorArgs = chatSessionCalls[0];
     const chatConfig = chatConstructorArgs[2]; // generationConfig is the 3rd argument (index 2)
     expect(chatConfig?.systemInstruction).toContain(
       `MUST call the \`${TASK_COMPLETE_TOOL_NAME}\` tool`,
@@ -182,6 +170,7 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
+      dependencies,
     );
 
     mockModelResponse(mockSendMessageStream, [
@@ -237,6 +226,7 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
+      dependencies,
     );
 
     mockModelResponse(mockSendMessageStream, [
@@ -290,6 +280,7 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
+      dependencies,
     );
 
     mockModelResponse(mockSendMessageStream, [
@@ -352,6 +343,7 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
+      dependencies,
     );
 
     mockModelResponse(mockSendMessageStream, [
@@ -387,6 +379,7 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
+      dependencies,
     );
 
     const call1: FunctionCall = {
@@ -411,7 +404,8 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
     mockExecuteToolCall.mockImplementation(async (_ctx, reqInfo) => {
       callsStarted++;
       const shouldSignal = callsStarted === 2;
-      await vi.advanceTimersByTimeAsync(100);
+      vi.advanceTimersByTime(100);
+      await Promise.resolve();
       // Signal after the await to avoid re-entrancy issues.
       void (shouldSignal && resolverHolder.resolve?.());
       return createCompletedToolCallResponse({
@@ -439,10 +433,13 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
 
     const runPromise = executor.run({ goal: 'Parallel' }, fixture.signal);
 
-    await vi.advanceTimersByTimeAsync(1);
+    vi.advanceTimersByTime(1);
+    await Promise.resolve();
     await bothStarted;
-    await vi.advanceTimersByTimeAsync(150);
-    await vi.advanceTimersByTimeAsync(1);
+    vi.advanceTimersByTime(150);
+    await Promise.resolve();
+    vi.advanceTimersByTime(1);
+    await Promise.resolve();
 
     const output = await runPromise;
 
@@ -472,6 +469,7 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
+      dependencies,
     );
 
     const badCallId = 'bad_call_1';

@@ -4,9 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  beforeEach,
+  afterEach,
+} from 'vitest';
 import * as fs from 'node:fs';
-import { HookRegistry, ConfigSource } from './hookRegistry.js';
+import type { HookRegistry as HookRegistryType } from './hookRegistry.js';
 import type { Storage } from '@vybestack/llxprt-code-settings';
 import { HookEventName, HookType } from './types.js';
 import type { Config } from '../config/config.js';
@@ -44,8 +52,15 @@ vi.mock('./trustedHooks.js', () => ({
   TrustedHooksManager: vi.fn(() => mockTrustManager),
 }));
 
+let HookRegistry: typeof HookRegistryType;
+let ConfigSource: typeof import('./hookRegistry.js').ConfigSource;
+
 describe('HookRegistry', () => {
-  let hookRegistry: HookRegistry;
+  let hookRegistry: HookRegistryType;
+
+  beforeAll(async () => {
+    ({ HookRegistry, ConfigSource } = await import('./hookRegistry.js'));
+  });
   let mockConfig: Config;
   let mockStorage: Storage;
 

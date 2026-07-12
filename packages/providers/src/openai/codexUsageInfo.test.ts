@@ -447,14 +447,7 @@ describe('codexUsageInfo', () => {
   });
 
   describe('formatCodexRateLimitWindow', () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2025-02-05T10:00:00Z'));
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
+    const now = new Date('2025-02-05T10:00:00Z');
 
     it('should format window with hours until reset', () => {
       const window = {
@@ -464,7 +457,7 @@ describe('codexUsageInfo', () => {
         reset_at: Math.floor(new Date('2025-02-05T14:30:00Z').getTime() / 1000),
       };
 
-      const result = formatCodexRateLimitWindow(window, '5-hour limit');
+      const result = formatCodexRateLimitWindow(window, '5-hour limit', now);
       expect(result).toContain('15% used');
       expect(result).toContain('4h 30m');
       expect(result).toContain('5-hour limit');
@@ -478,7 +471,7 @@ describe('codexUsageInfo', () => {
         reset_at: Math.floor(new Date('2025-02-05T10:45:00Z').getTime() / 1000),
       };
 
-      const result = formatCodexRateLimitWindow(window, 'Weekly limit');
+      const result = formatCodexRateLimitWindow(window, 'Weekly limit', now);
       expect(result).toContain('52% used');
       expect(result).toContain('in 45m');
     });
@@ -491,26 +484,19 @@ describe('codexUsageInfo', () => {
         reset_at: Math.floor(new Date('2025-02-05T10:00:30Z').getTime() / 1000),
       };
 
-      const result = formatCodexRateLimitWindow(window, '5-hour limit');
+      const result = formatCodexRateLimitWindow(window, '5-hour limit', now);
       expect(result).toContain('99% used');
       expect(result).toContain('soon');
     });
 
     it('should return null for null window', () => {
-      const result = formatCodexRateLimitWindow(null, '5-hour limit');
+      const result = formatCodexRateLimitWindow(null, '5-hour limit', now);
       expect(result).toBeNull();
     });
   });
 
   describe('formatCodexUsage', () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2025-02-05T10:00:00Z'));
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
+    const now = new Date('2025-02-05T10:00:00Z');
 
     it('should format all available data', () => {
       const usage = {
@@ -542,7 +528,7 @@ describe('codexUsageInfo', () => {
         },
       };
 
-      const result = formatCodexUsage(usage);
+      const result = formatCodexUsage(usage, now);
       expect(result).toHaveLength(3);
       expect(result[0]).toContain('5-hour limit');
       expect(result[0]).toContain('15%');
@@ -563,7 +549,7 @@ describe('codexUsageInfo', () => {
         credits: null,
       };
 
-      const result = formatCodexUsage(usage);
+      const result = formatCodexUsage(usage, now);
       expect(result).toHaveLength(0);
     });
 
@@ -578,7 +564,7 @@ describe('codexUsageInfo', () => {
         },
       };
 
-      const result = formatCodexUsage(usage);
+      const result = formatCodexUsage(usage, now);
       expect(result).toHaveLength(1);
       expect(result[0]).toBe('  Credits: Unlimited');
     });
@@ -594,7 +580,7 @@ describe('codexUsageInfo', () => {
         },
       };
 
-      const result = formatCodexUsage(usage);
+      const result = formatCodexUsage(usage, now);
       expect(result).toHaveLength(1);
       expect(result[0]).toBe('  Credits: None');
     });
@@ -610,7 +596,7 @@ describe('codexUsageInfo', () => {
         },
       };
 
-      const result = formatCodexUsage(usage);
+      const result = formatCodexUsage(usage, now);
       expect(result).toHaveLength(1);
       expect(result[0]).toBe('  Credits: 150');
     });
@@ -622,7 +608,7 @@ describe('codexUsageInfo', () => {
         credits: null,
       };
 
-      const result = formatCodexUsage(usage);
+      const result = formatCodexUsage(usage, now);
       expect(result).toHaveLength(0);
     });
 
@@ -645,7 +631,7 @@ describe('codexUsageInfo', () => {
         credits: null,
       };
 
-      const result = formatCodexUsage(usage);
+      const result = formatCodexUsage(usage, now);
       expect(result).toHaveLength(1);
       expect(result[0]).toContain('5-hour limit');
       expect(result[0]).toContain('30%');
@@ -662,7 +648,7 @@ describe('codexUsageInfo', () => {
         },
       };
 
-      const result = formatCodexUsage(usage);
+      const result = formatCodexUsage(usage, now);
       expect(result).toHaveLength(1);
       expect(result[0]).toBe('  Credits: None');
     });

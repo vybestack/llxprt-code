@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { FakeProvider } from './FakeProvider.js';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -110,11 +110,12 @@ describe('FakeProvider', () => {
       // noop
     }
 
-    await expect(async () => {
+    const exhaustResponses = async (): Promise<void> => {
       for await (const _chunk of provider.generateChatCompletion([])) {
         // noop
       }
-    }).rejects.toThrow(/no more canned responses/);
+    };
+    expect(exhaustResponses()).rejects.toThrow(/no more canned responses/);
   });
 
   it('returns fake auth token and model metadata', async () => {
@@ -134,7 +135,7 @@ describe('FakeProvider', () => {
     expect(provider.getCurrentModel()).toBe('fake-model');
     expect(provider.getServerTools()).toStrictEqual([]);
 
-    await expect(provider.invokeServerTool()).rejects.toThrow(
+    expect(provider.invokeServerTool()).rejects.toThrow(
       /does not support server tools/,
     );
 

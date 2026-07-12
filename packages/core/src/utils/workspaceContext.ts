@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { isNodeError } from '../utils/errors.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as process from 'process';
@@ -152,22 +151,19 @@ export class WorkspaceContext {
    * if it did exist.
    */
   private fullyResolvedPath(pathToCheck: string): string {
-    try {
-      return fs.realpathSync(pathToCheck);
-    } catch (e: unknown) {
-      if (
-        isNodeError(e) &&
-        e.code === 'ENOENT' &&
-        e.path &&
-        // realpathSync does not set e.path correctly for symlinks to
-        // non-existent files.
-        !this.isFileSymlink(e.path)
-      ) {
-        // If it doesn't exist, e.path contains the fully resolved path.
-        return e.path;
+    const missingSegments: string[] = [];
+    let existingAncestor = path.resolve(pathToCheck);
+
+    while (!fs.existsSync(existingAncestor)) {
+      const parent = path.dirname(existingAncestor);
+      if (parent === existingAncestor || this.isFileSymlink(existingAncestor)) {
+        throw new Error(`Unable to resolve path: ${pathToCheck}`);
       }
-      throw e;
+      missingSegments.unshift(path.basename(existingAncestor));
+      existingAncestor = parent;
     }
+
+    return path.join(fs.realpathSync(existingAncestor), ...missingSegments);
   }
 
   /**

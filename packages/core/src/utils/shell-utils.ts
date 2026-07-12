@@ -76,9 +76,11 @@ export interface ShellConfiguration {
  *
  * @returns The ShellConfiguration for the current environment.
  */
-export function getShellConfiguration(): ShellConfiguration {
-  if (isWindows()) {
-    const comSpec = process.env['ComSpec'];
+export function getShellConfiguration(
+  platformIsWindows: boolean = isWindows(),
+  comSpec: string | undefined = process.env['ComSpec'],
+): ShellConfiguration {
+  if (platformIsWindows) {
     if (comSpec) {
       const executable = comSpec.toLowerCase();
       if (
@@ -113,7 +115,11 @@ export function getShellConfiguration(): ShellConfiguration {
  * @param shell The type of shell the argument is for.
  * @returns The shell-escaped string.
  */
-export function escapeShellArg(arg: string, shell: ShellType): string {
+export function escapeShellArg(
+  arg: string,
+  shell: ShellType,
+  quoteArgument: typeof quote = quote,
+): string {
   if (!arg) {
     return '';
   }
@@ -128,7 +134,7 @@ export function escapeShellArg(arg: string, shell: ShellType): string {
     case 'bash':
     default:
       // POSIX shell escaping using shell-quote.
-      return quote([arg]);
+      return quoteArgument([arg]);
   }
 }
 
@@ -174,7 +180,7 @@ export function splitCommands(
   }
 
   // Fall back to regex-based parsing
-  return splitCommandsRegex(command, { splitOnPipes });
+  return splitCommandsFallback(command, { splitOnPipes });
 }
 
 type SplitState = {
@@ -239,7 +245,7 @@ function handleSingleOperator(
  * - Process substitution `<()`, `>()` is not tracked
  * - The `&` redirection heuristic (prevChar/nextChar `>`) is fragile
  */
-function splitCommandsRegex(
+export function splitCommandsFallback(
   command: string,
   options?: SplitCommandsOptions,
 ): string[] {
@@ -476,14 +482,14 @@ export function detectCommandSubstitution(command: string): boolean {
   }
 
   // Fall back to regex-based detection
-  return detectCommandSubstitutionRegex(command);
+  return detectCommandSubstitutionFallback(command);
 }
 
 /**
  * Regex-based fallback for detecting command substitution.
  * Used only when tree-sitter WASM failed to load at startup.
  */
-function detectCommandSubstitutionRegex(command: string): boolean {
+export function detectCommandSubstitutionFallback(command: string): boolean {
   let inSingleQuotes = false;
   let inDoubleQuotes = false;
   let inBackticks = false;

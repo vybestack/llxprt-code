@@ -19,8 +19,15 @@
 
 import type { Config } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import type { ModelDefaultRule } from '../composition/index.js';
-import { getCliRuntimeServices, _internal } from './runtimeAccessors.js';
+import {
+  loadProviderAliasEntries,
+  type ModelDefaultRule,
+} from '../composition/index.js';
+import {
+  getCliRuntimeServices,
+  _internal,
+  type CliRuntimeServices,
+} from './runtimeAccessors.js';
 
 const logger = new DebugLogger('llxprt:runtime:providerMutations');
 
@@ -376,23 +383,39 @@ export async function getActiveToolFormatState(): Promise<ToolFormatState> {
   };
 }
 
+export interface ToolFormatMutationDependencies {
+  getRuntimeServices: () => Pick<
+    CliRuntimeServices,
+    'config' | 'settingsService'
+  >;
+  getActiveProvider: typeof _internal.getActiveProviderOrThrow;
+  getToolFormatState: typeof getActiveToolFormatState;
+}
+
+const defaultToolFormatMutationDependencies: ToolFormatMutationDependencies = {
+  getRuntimeServices: getCliRuntimeServices,
+  getActiveProvider: _internal.getActiveProviderOrThrow,
+  getToolFormatState: getActiveToolFormatState,
+};
+
 export async function setActiveToolFormatOverride(
   formatName: ToolFormatOverrideLiteral | null,
+  dependencies: ToolFormatMutationDependencies = defaultToolFormatMutationDependencies,
 ): Promise<ToolFormatState> {
-  const { config, settingsService } = getCliRuntimeServices();
-  const provider = _internal.getActiveProviderOrThrow();
+  const { config, settingsService } = dependencies.getRuntimeServices();
+  const provider = dependencies.getActiveProvider();
 
   if (!formatName || formatName === 'auto') {
     await settingsService.updateSettings(provider.name, { toolFormat: 'auto' });
     config.setEphemeralSetting('tool-format', 'auto');
-    return getActiveToolFormatState();
+    return dependencies.getToolFormatState();
   }
 
   await settingsService.updateSettings(provider.name, {
     toolFormat: formatName,
   });
   config.setEphemeralSetting('tool-format', formatName);
-  return getActiveToolFormatState();
+  return dependencies.getToolFormatState();
 }
 
 /**
@@ -405,6 +428,7 @@ export async function setActiveToolFormatOverride(
  */
 export async function setActiveModel(
   modelName: string,
+  loadAliasEntries: typeof loadProviderAliasEntries = loadProviderAliasEntries,
 ): Promise<ModelChangeResult> {
   const { config, settingsService, providerManager } = getCliRuntimeServices();
 
@@ -439,10 +463,9 @@ export async function setActiveModel(
   config.setModel(modelName);
 
   // Load alias config for the current provider to apply model defaults
-  const { loadProviderAliasEntries } = await import('../composition/index.js');
   let aliasConfig;
   try {
-    aliasConfig = loadProviderAliasEntries().find(
+    aliasConfig = loadAliasEntries().find(
       (entry) => entry.alias === activeProvider.name,
     )?.config;
   } catch {

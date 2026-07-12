@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { tokenLimit, DEFAULT_TOKEN_LIMIT } from './tokenLimits.js';
 
 describe('tokenLimit', () => {
