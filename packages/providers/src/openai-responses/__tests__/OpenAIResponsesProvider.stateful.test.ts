@@ -307,10 +307,12 @@ describe('OpenAIResponsesProvider stateful conversations @issue:207', () => {
 
     expect(body['previous_response_id']).toBeUndefined();
     expect(body['store']).toBe(false);
-    expect(userMessages(inputItems(body))).toStrictEqual([
+    const items = inputItems(body);
+    expect(userMessages(items)).toStrictEqual([
       'first question',
       'second question',
     ]);
+    expect(assistantMessages(items)).toContain('first answer');
   });
 
   it('falls back to full history in stateful mode with no prior AI message metadata.id', async () => {

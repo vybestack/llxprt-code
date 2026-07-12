@@ -132,6 +132,7 @@ describe('ConversationManager records responseId into history @issue:207', () =>
     const ai = all.find((c) => c.speaker === 'ai');
     expect(ai).toBeDefined();
     expect(ai?.metadata?.id).toBe('resp_abc');
+    expect(ai?.metadata?.responsesStored).toBeUndefined();
   });
 
   it('does not set metadata.id when responseId is null', () => {

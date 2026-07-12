@@ -57,6 +57,8 @@ describe('Issue 207: metadata.id carried as responseId @issue:207', () => {
     expect(getResponseId(response)).toBe('resp_xyz');
     expect(response.usageMetadata).toBeDefined();
     expect(response.usageMetadata?.promptTokenCount).toBe(10);
+    expect(response.usageMetadata?.candidatesTokenCount).toBe(5);
+    expect(response.usageMetadata?.totalTokenCount).toBe(15);
   });
 
   it('does not set responseId when metadata.id is an empty string', () => {
