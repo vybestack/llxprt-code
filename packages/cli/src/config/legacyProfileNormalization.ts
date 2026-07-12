@@ -24,6 +24,7 @@ import {
 import {
   copyDirFilteredWithInterceptor,
   copyFileWithMode,
+  createSymlinkClone,
 } from './legacyCopyEngine.js';
 
 /**
@@ -172,7 +173,14 @@ function copyProfileEntry(
     return 0;
   }
   if (entry.isSymbolicLink() && !pathEntryExists(destPath)) {
-    return copySymlinkRaw(srcPath, destPath, errors, logger);
+    return createSymlinkClone(
+      srcPath,
+      destPath,
+      legacyRoot,
+      destRoot,
+      errors,
+      logger,
+    );
   }
   return 0;
 }
@@ -350,30 +358,6 @@ function copyNestedDirectory(
     (s, d) => copyFileWithMode(s, d, errors, logger),
     logger,
   );
-}
-
-function copySymlinkRaw(
-  srcPath: string,
-  destPath: string,
-  errors: string[],
-  logger: DebugLogger,
-): number {
-  let target: string;
-  try {
-    target = fs.readlinkSync(srcPath);
-  } catch (error) {
-    errors.push(`${srcPath}: ${String(error)}`);
-    logger.debug(`Cannot read symlink ${srcPath}: ${String(error)}`);
-    return 0;
-  }
-  try {
-    fs.symlinkSync(target, destPath);
-    return 1;
-  } catch (error) {
-    errors.push(`${destPath}: ${String(error)}`);
-    logger.debug(`Cannot create symlink at ${destPath}: ${String(error)}`);
-    return 0;
-  }
 }
 
 function uniqueTempName(dir: string, base: string): string {

@@ -833,7 +833,10 @@ export async function writeProfileFile(
     try {
       const stat = await fs.stat(filePath);
       fileMode = stat.mode & 0o777;
-    } catch {
+    } catch (error) {
+      if (!hasErrnoCode(error, 'ENOENT')) {
+        throw error;
+      }
       fileMode = 0o600;
     }
     await atomicWriteFile(filePath, data, fileMode);
