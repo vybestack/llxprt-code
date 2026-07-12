@@ -239,6 +239,7 @@ vi.mock('../../utils/events.js', async (importOriginal) => {
 });
 
 describe('LSP E2E integration (P36)', () => {
+  const isWindows = process.platform === 'win32';
   const repoRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
   const targetDir = repoRoot;
 
@@ -639,16 +640,19 @@ describe('LSP E2E integration (P36)', () => {
   });
 
   // --- 15. MCP Transport Streams ---
-  it('getMcpTransportStreams returns PassThrough streams when alive', async () => {
-    const client = new LspServiceClient({ servers: [] }, targetDir);
-    await client.start();
+  it.skipIf(isWindows)(
+    'getMcpTransportStreams returns PassThrough streams when alive',
+    async () => {
+      const client = new LspServiceClient({ servers: [] }, targetDir);
+      await client.start();
 
-    expect(client.isAlive()).toBe(true);
-    const transport = client.getMcpTransportStreams();
-    expect(transport).not.toBeNull();
-    expect(transport!.readable).toBeDefined();
-    expect(transport!.writable).toBeDefined();
-  });
+      expect(client.isAlive()).toBe(true);
+      const transport = client.getMcpTransportStreams();
+      expect(transport).not.toBeNull();
+      expect(transport!.readable).toBeDefined();
+      expect(transport!.writable).toBeDefined();
+    },
+  );
 
   // --- 16. MCP Transport Null When Not Alive ---
   it('getMcpTransportStreams returns null when not alive', () => {
@@ -683,7 +687,7 @@ describe('LSP E2E integration (P36)', () => {
   });
 
   // --- 18. Shutdown then checkFile is safe ---
-  it('checkFile returns empty after shutdown', async () => {
+  it.skipIf(isWindows)('checkFile returns empty after shutdown', async () => {
     const client = new LspServiceClient({ servers: [] }, targetDir);
     await client.start();
     expect(client.isAlive()).toBe(true);

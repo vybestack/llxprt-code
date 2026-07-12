@@ -149,6 +149,44 @@ describe('STEP 2 workflow: pre-switch auth wiring', () => {
     expect(configStub.getEphemeralSetting('auth-key')).toBeUndefined();
   });
 
+  it('applies the exact issue 2477 Z.ai profile without Gemini fallback', async () => {
+    keyStorageStub.getKey.mockResolvedValueOnce('resolved-zai-key');
+    providerManagerStub.available = ['anthropic'];
+    providerManagerStub.providerLookup = new Map([
+      ['anthropic', { name: 'anthropic' }],
+    ]);
+    setActiveModelMock.mockResolvedValueOnce({ nextModel: 'glm-5.2' });
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'anthropic',
+      model: 'glm-5.2',
+      modelParams: {},
+      ephemeralSettings: {
+        'auth-key-name': 'zai',
+        'base-url': 'https://api.z.ai/api/anthropic',
+        'context-limit': 200000,
+      },
+    };
+
+    const result = await applyProfileWithGuards(profile);
+
+    expect(result.providerName).toBe('anthropic');
+    expect(result.modelName).toBe('glm-5.2');
+    expect(result.baseUrl).toBe('https://api.z.ai/api/anthropic');
+    expect(settingsServiceStub.getProviderSettings('anthropic')).toMatchObject({
+      'base-url': 'https://api.z.ai/api/anthropic',
+      'auth-key': 'resolved-zai-key',
+    });
+    expect(configStub.getEphemeralSetting('auth-key-name')).toBe('zai');
+    expect(keyStorageStub.getKey).toHaveBeenCalledWith('zai');
+    expect(updateActiveProviderApiKeyMock).toHaveBeenCalledWith(
+      'resolved-zai-key',
+    );
+    expect(setActiveModelMock).toHaveBeenCalledWith('glm-5.2');
+    expect(setActiveModelMock).not.toHaveBeenCalledWith('gemini-2.5-pro');
+  });
+
   it('adds warning when auth-key-name is missing from secure storage', async () => {
     keyStorageStub.getKey.mockResolvedValueOnce(null);
 

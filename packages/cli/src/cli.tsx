@@ -52,7 +52,10 @@ import { loadSettings } from './config/settings.js';
 import { patchStdio, ExitCodes } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { runStartupMigration } from './config/pathMigration.js';
+import {
+  runStartupMigration,
+  reportStartupResult,
+} from './config/pathMigration.js';
 import {
   cleanupCheckpoints,
   runExitCleanup,
@@ -127,13 +130,13 @@ function setupProcessLifecycle(): () => void {
 
   // Migrate legacy ~/.llxprt/ to platform-standard path (if needed),
   // then ensure the platform directory exists.
-  const migrationResult = runStartupMigration();
-  if (!migrationResult.migrated && migrationResult.error === true) {
-    const legacyDir = Storage.getLegacyLlxprtDir();
-    process.stderr.write(
-      `Warning: configuration migration failed (${migrationResult.reason}). ` +
-        `Falling back to legacy directory ${legacyDir} for this session.\n`,
-    );
+  const startupResult = runStartupMigration();
+  const legacyDir = Storage.getLegacyLlxprtDir();
+  const report = reportStartupResult(startupResult, legacyDir);
+  for (const message of report.messages) {
+    process.stderr.write(message + '\n');
+  }
+  if (report.needsLegacyFallback) {
     process.env['LLXPRT_CONFIG_HOME'] = legacyDir;
   }
   const llxprtDir = Storage.getGlobalConfigDir();

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ConfigParameters } from './config.js';
 import { Config, ApprovalMode } from './config.js';
@@ -313,7 +314,7 @@ describe('Config JIT context', () => {
       expect(result).toContain('sub memory');
       expect(mockLoadJitSubdirectoryMemory).toHaveBeenCalledWith(
         '/path/to/target/sub/file.ts',
-        [baseParams.targetDir],
+        [path.resolve(baseParams.targetDir)],
         expect.any(Set),
         baseParams.debugMode,
         true,

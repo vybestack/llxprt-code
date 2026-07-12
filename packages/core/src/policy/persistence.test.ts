@@ -561,7 +561,7 @@ priority = 100
       // Verify correct path used
       expect(fs.rename).toHaveBeenCalledWith(
         expect.stringMatching(/\.tmp$/),
-        '/home/user/.llxprt/policies/auto-saved.toml',
+        path.join(userPoliciesDir, 'auto-saved.toml'),
       );
 
       // Path should NOT contain Google strings

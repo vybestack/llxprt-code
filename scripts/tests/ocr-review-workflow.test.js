@@ -13,7 +13,7 @@ import {
   expectCommonCredentialsRedacted,
   expectContainsAll,
   extractFunctionSource,
-  hasPerl,
+  hasBashAndPerl,
   makePostSanitizer,
   normalize,
   readRootFile,
@@ -451,60 +451,72 @@ describe('.github/workflows/ocr-review.yml', () => {
     expect(sanitized).toBe('first [REDACTED] second [REDACTED]');
     expect(sanitized).not.toContain(secret);
   });
-  it('redacts exact OCR secrets with regex metacharacters and backslashes in notify diagnostics', () => {
-    // Include Perl's \E escape marker to prove quotemeta prevents it from ending literal matching early.
-    const secret = String.raw`tok$^.*+?()[]{}|\slash\Eend`;
+  it.skipIf(!hasBashAndPerl())(
+    'redacts exact OCR secrets with regex metacharacters and backslashes in notify diagnostics',
+    () => {
+      // Include Perl's \E escape marker to prove quotemeta prevents it from ending literal matching early.
+      const secret = String.raw`tok$^.*+?()[]{}|\slash\Eend`;
 
-    const sanitized = runNotifySanitizer(
-      notifyRun,
-      `first ${secret} second ${secret}`,
-      secret,
-    );
+      const sanitized = runNotifySanitizer(
+        notifyRun,
+        `first ${secret} second ${secret}`,
+        secret,
+      );
 
-    expect(sanitized).toBe('first [REDACTED] second [REDACTED]');
-    expect(sanitized).not.toContain(secret);
-  });
+      expect(sanitized).toBe('first [REDACTED] second [REDACTED]');
+      expect(sanitized).not.toContain(secret);
+    },
+  );
 
-  it('redacts common credential patterns in notify diagnostics', () => {
-    const diagnostic = [
-      'Error: OCR review failed for packages/agents/src/core/TurnProcessor.ts:266',
-      'snippet: for await (const event of stream) handle(event);',
-    ].join('\n');
+  it.skipIf(!hasBashAndPerl())(
+    'redacts common credential patterns in notify diagnostics',
+    () => {
+      const diagnostic = [
+        'Error: OCR review failed for packages/agents/src/core/TurnProcessor.ts:266',
+        'snippet: for await (const event of stream) handle(event);',
+      ].join('\n');
 
-    const sanitized = runNotifySanitizer(
-      notifyRun,
-      [commonCredentialInput(), diagnostic].join('\n'),
-      'unused-secret',
-    );
+      const sanitized = runNotifySanitizer(
+        notifyRun,
+        [commonCredentialInput(), diagnostic].join('\n'),
+        'unused-secret',
+      );
 
-    expectCommonCredentialsRedacted(sanitized);
-    expect(sanitized).toContain(diagnostic);
-  });
+      expectCommonCredentialsRedacted(sanitized);
+      expect(sanitized).toContain(diagnostic);
+    },
+  );
 
-  it('does not redact short generic token and secret diagnostic words in notify diagnostics', () => {
-    const diagnostic =
-      'token=expired secret=enabled while auth_token_value remains visible';
+  it.skipIf(!hasBashAndPerl())(
+    'does not redact short generic token and secret diagnostic words in notify diagnostics',
+    () => {
+      const diagnostic =
+        'token=expired secret=enabled while auth_token_value remains visible';
 
-    expect(runNotifySanitizer(notifyRun, diagnostic, 'unused-secret')).toBe(
-      diagnostic,
-    );
-  });
+      expect(runNotifySanitizer(notifyRun, diagnostic, 'unused-secret')).toBe(
+        diagnostic,
+      );
+    },
+  );
 
-  it('redacts the configured OCR LLM URL from notify diagnostics', () => {
-    const url = 'https://llm.example.test/v1/messages?api_key=sk-url-secret';
+  it.skipIf(!hasBashAndPerl())(
+    'redacts the configured OCR LLM URL from notify diagnostics',
+    () => {
+      const url = 'https://llm.example.test/v1/messages?api_key=sk-url-secret';
 
-    const sanitized = runNotifySanitizer(
-      notifyRun,
-      `request failed for ${url}`,
-      'unused-secret',
-      { OCR_LLM_URL: url },
-    );
+      const sanitized = runNotifySanitizer(
+        notifyRun,
+        `request failed for ${url}`,
+        'unused-secret',
+        { OCR_LLM_URL: url },
+      );
 
-    expect(sanitized).toBe('request failed for [REDACTED]');
-    expect(sanitized).not.toContain(url);
-  });
+      expect(sanitized).toBe('request failed for [REDACTED]');
+      expect(sanitized).not.toContain(url);
+    },
+  );
 
-  it.skipIf(!hasPerl())(
+  it.skipIf(!hasBashAndPerl())(
     'fails closed with process details when notify diagnostic sanitization fails',
     () => {
       const secret = 'must-not-leak';

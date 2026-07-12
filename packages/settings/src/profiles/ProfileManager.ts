@@ -25,6 +25,7 @@ import {
 import fs from 'fs/promises';
 import path from 'path';
 import { Storage } from '@vybestack/llxprt-code-storage';
+import { writeProfileFile, deleteProfileFile } from './profileStore.js';
 
 interface ProfileSettingsServiceLike {
   exportForProfile?: () => Promise<{
@@ -98,11 +99,12 @@ export class ProfileManager {
     profileName: string,
     profile: PersistableProfile,
   ): Promise<void> {
-    await fs.mkdir(this.profilesDir, { recursive: true });
-
-    const filePath = path.join(this.profilesDir, `${profileName}.json`);
-
-    await fs.writeFile(filePath, JSON.stringify(profile, null, 2), 'utf8');
+    await writeProfileFile(
+      this.profilesDir,
+      profileName,
+      JSON.stringify(profile, null, 2),
+      'overwrite',
+    );
   }
 
   async saveLoadBalancerProfile(name: string, profile: unknown): Promise<void> {
@@ -136,12 +138,11 @@ export class ProfileManager {
 
     await fs.mkdir(this.profilesDir, { recursive: true });
 
-    const filePath = path.join(this.profilesDir, `${name}.json`);
-
-    await fs.writeFile(
-      filePath,
+    await writeProfileFile(
+      this.profilesDir,
+      name,
       JSON.stringify(loadBalancerProfile, null, 2),
-      'utf8',
+      'overwrite',
     );
   }
 
@@ -248,10 +249,8 @@ export class ProfileManager {
    * @param profileName The name of the profile to delete
    */
   async deleteProfile(profileName: string): Promise<void> {
-    const filePath = path.join(this.profilesDir, `${profileName}.json`);
-
     try {
-      await fs.unlink(filePath);
+      await deleteProfileFile(this.profilesDir, profileName);
     } catch (error) {
       if (error instanceof Error && error.message.includes('ENOENT')) {
         throw new Error(`Profile '${profileName}' not found`);

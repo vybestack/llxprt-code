@@ -18,6 +18,10 @@ import { encodeFrame, FrameDecoder } from '../framing.js';
 import { ProxySocketClient, PROTOCOL_VERSION } from '../proxy-socket-client.js';
 
 function createTempSocketPath(): string {
+  if (process.platform === 'win32') {
+    return `\\\\.\\pipe\\llxprt-proxy-pks-test-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'proxy-pks-test-'));
   return path.join(tmpDir, 'test.sock');
 }
@@ -84,9 +88,11 @@ describe('ProxyProviderKeyStorage', () => {
       }
     });
     try {
-      // Remove the entire temp directory (includes socket file)
-      const tmpDir = path.dirname(socketPath);
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      if (process.platform !== 'win32') {
+        // Remove the entire temp directory (includes socket file)
+        const tmpDir = path.dirname(socketPath);
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
     } catch {
       // may already be gone
     }
