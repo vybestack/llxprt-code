@@ -51,8 +51,29 @@ function associationKey(provider: string, bucket: string): string {
 }
 
 /**
+ * Build a fresh association object from a source so the store never hands
+ * out or persists a reference to caller-owned objects.
+ */
+function cloneAssociation(
+  source: BrowserProfileAssociation,
+): BrowserProfileAssociation {
+  const clone: BrowserProfileAssociation = {
+    browser: source.browser,
+    profileDirectory: source.profileDirectory,
+  };
+  if (source.displayName !== undefined) {
+    clone.displayName = source.displayName;
+  }
+  return clone;
+}
+
+/**
  * Runtime type guard for the persisted file shape. Ensures malformed or
  * partial JSON is rejected without relying on `any`.
+ *
+ * Validates not only that `associations` is an object, but that every entry
+ * has the required `browser` and `profileDirectory` fields so malformed
+ * entries cannot silently pass and cause runtime errors when consumed.
  */
 function isAssociationFileData(value: unknown): value is AssociationFileData {
   if (typeof value !== 'object' || value === null) {
@@ -63,7 +84,25 @@ function isAssociationFileData(value: unknown): value is AssociationFileData {
   if (typeof associations !== 'object' || associations === null) {
     return false;
   }
+  const entries = associations as Record<string, unknown>;
+  for (const entry of Object.values(entries)) {
+    if (!isAssociationEntry(entry)) {
+      return false;
+    }
+  }
   return true;
+}
+
+function isAssociationEntry(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const entry = value as Record<string, unknown>;
+  return (
+    typeof entry.browser === 'string' &&
+    typeof entry.profileDirectory === 'string' &&
+    (entry.displayName === undefined || typeof entry.displayName === 'string')
+  );
 }
 
 /**
@@ -106,16 +145,7 @@ export class BrowserProfileAssociationStore {
     const data = this.readData();
     const key = associationKey(provider, bucket);
 
-    // Build a fresh object to avoid external mutation
-    const stored: BrowserProfileAssociation = {
-      browser: association.browser,
-      profileDirectory: association.profileDirectory,
-      ...(association.displayName !== undefined
-        ? { displayName: association.displayName }
-        : {}),
-    };
-
-    data.associations[key] = stored;
+    data.associations[key] = cloneAssociation(association);
     this.writeData(data);
   }
 
@@ -136,13 +166,7 @@ export class BrowserProfileAssociationStore {
     const found = data.associations[key];
 
     // Return a fresh copy so external mutation does not affect the store
-    return {
-      browser: found.browser,
-      profileDirectory: found.profileDirectory,
-      ...(found.displayName !== undefined
-        ? { displayName: found.displayName }
-        : {}),
-    };
+    return cloneAssociation(found);
   }
 
   /**
@@ -171,14 +195,7 @@ export class BrowserProfileAssociationStore {
     for (const [key, assoc] of Object.entries(data.associations)) {
       if (key.startsWith(prefix)) {
         const bucket = key.slice(prefix.length);
-        results.push({
-          bucket,
-          browser: assoc.browser,
-          profileDirectory: assoc.profileDirectory,
-          ...(assoc.displayName !== undefined
-            ? { displayName: assoc.displayName }
-            : {}),
-        });
+        results.push({ bucket, ...cloneAssociation(assoc) });
       }
     }
 

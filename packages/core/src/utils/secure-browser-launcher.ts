@@ -325,6 +325,35 @@ async function openSpecificBrowser(
 }
 
 /**
+ * Single-quote a value for safe embedding in a PowerShell single-quoted
+ * string literal. PowerShell escapes a literal single quote by doubling it.
+ */
+function powershellQuote(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+/**
+ * Build a `Start-Process` PowerShell command that passes each browser
+ * argument and the URL as separate elements of a PowerShell array
+ * (`-ArgumentList @('a','b',...)`). Array elements are individually
+ * single-quoted so values containing spaces (e.g. a Chrome profile
+ * directory named "Profile 1") are preserved instead of being split on
+ * whitespace.
+ */
+function buildStartProcessCommand(
+  executable: string,
+  browserArgs: string[],
+  url: string,
+): string {
+  const quotedUrl = powershellQuote(url);
+  const argList =
+    browserArgs.length > 0
+      ? `@(${browserArgs.join(',')},${quotedUrl})`
+      : quotedUrl;
+  return `Start-Process '${executable}' -ArgumentList ${argList}`;
+}
+
+/**
  * Build the command and arguments to launch Chrome/Chromium with a profile.
  */
 function buildChromeLaunchArgs(
@@ -344,11 +373,16 @@ function buildChromeLaunchArgs(
 
     case 'win32': {
       // Use Start-Process with chrome.exe and the profile arg.
-      // The profile directory was already validated against the strict
-      // allowlist, so it contains only [A-Za-z0-9 _.-].
-      const profileArg = profileDirectory
-        ? ` --profile-directory=${profileDirectory}`
-        : '';
+      // Pass -ArgumentList as a PowerShell array of separately single-quoted
+      // strings so spaces in the profile directory (e.g. "Profile 1") are
+      // preserved. A single unquoted string would be split on whitespace by
+      // PowerShell, truncating --profile-directory=Profile 1 to =Profile.
+      const chromeArgs: string[] = [];
+      if (profileDirectory) {
+        chromeArgs.push(
+          powershellQuote(`--profile-directory=${profileDirectory}`),
+        );
+      }
       return [
         'powershell.exe',
         [
@@ -357,7 +391,7 @@ function buildChromeLaunchArgs(
           '-WindowStyle',
           'Hidden',
           '-Command',
-          `Start-Process 'chrome.exe' -ArgumentList '${profileArg.trim()} ${url.replace(/'/g, "''")}'`,
+          buildStartProcessCommand('chrome.exe', chromeArgs, url),
         ],
       ];
     }
@@ -397,7 +431,15 @@ function buildFirefoxLaunchArgs(
     }
 
     case 'win32': {
-      const profilePart = profileDirectory ? ` -P ${profileDirectory}` : '';
+      // Pass -ArgumentList as a PowerShell array so spaces in the profile
+      // name are preserved (see buildChromeLaunchArgs win32 note).
+      const firefoxArgs: string[] = [];
+      if (profileDirectory) {
+        firefoxArgs.push(
+          powershellQuote('-P'),
+          powershellQuote(profileDirectory),
+        );
+      }
       return [
         'powershell.exe',
         [
@@ -406,7 +448,7 @@ function buildFirefoxLaunchArgs(
           '-WindowStyle',
           'Hidden',
           '-Command',
-          `Start-Process 'firefox' -ArgumentList '${profilePart.trim()} ${url.replace(/'/g, "''")}'`,
+          buildStartProcessCommand('firefox', firefoxArgs, url),
         ],
       ];
     }

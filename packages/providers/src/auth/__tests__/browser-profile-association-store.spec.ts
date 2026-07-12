@@ -171,7 +171,7 @@ describe('BrowserProfileAssociationStore', () => {
     });
 
     it('treats malformed JSON as empty on read (does not overwrite)', () => {
-      const fs = createInMemoryfsMalformed();
+      const fs = createInMemoryFsMalformed();
       const store = createStore(fs);
 
       expect(store.getAssociation('anthropic', 'default')).toBeUndefined();
@@ -180,6 +180,22 @@ describe('BrowserProfileAssociationStore', () => {
       expect(fs.files.get('/fake/path/oauth-browser-profiles.json')).toBe(
         'not valid json {{{',
       );
+    });
+
+    it('rejects entries with a malformed shape (missing profileDirectory)', () => {
+      const fs = createInMemoryFs({
+        '/fake/path/oauth-browser-profiles.json': JSON.stringify({
+          version: 1,
+          associations: {
+            'anthropic:default': { browser: 'chrome' },
+          },
+        }),
+      });
+      const store = createStore(fs);
+
+      // The malformed entry must not be surfaced to consumers.
+      expect(store.getAssociation('anthropic', 'default')).toBeUndefined();
+      expect(store.listAssociations('anthropic')).toStrictEqual([]);
     });
   });
 
@@ -222,7 +238,7 @@ describe('BrowserProfileAssociationStore', () => {
   });
 });
 
-function createInMemoryfsMalformed(): InMemoryFs {
+function createInMemoryFsMalformed(): InMemoryFs {
   return createInMemoryFs({
     '/fake/path/oauth-browser-profiles.json': 'not valid json {{{',
   });

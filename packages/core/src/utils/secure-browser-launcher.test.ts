@@ -303,13 +303,13 @@ describe('secure-browser-launcher', () => {
 
       expect(mockExecFile).toHaveBeenCalledWith(
         'open',
-        expect.arrayContaining([
+        [
           '-a',
           'Google Chrome',
           '--args',
           '--profile-directory=Profile 1',
           'https://example.com',
-        ]),
+        ],
         expect.any(Object),
       );
     });
@@ -323,10 +323,7 @@ describe('secure-browser-launcher', () => {
 
       expect(mockExecFile).toHaveBeenCalledWith(
         'google-chrome',
-        expect.arrayContaining([
-          '--profile-directory=Default',
-          'https://example.com',
-        ]),
+        ['--profile-directory=Default', 'https://example.com'],
         expect.any(Object),
       );
     });
@@ -338,16 +335,31 @@ describe('secure-browser-launcher', () => {
         profileDirectory: 'Default',
       });
 
-      expect(mockExecFile).toHaveBeenCalledWith(
-        'powershell.exe',
-        expect.arrayContaining([expect.stringContaining('Start-Process')]),
-        expect.any(Object),
-      );
       const commandArg = mockExecFile.mock.calls[0][1] as string[];
       const startProcessArg = commandArg.find((a) =>
         a.includes('Start-Process'),
       );
-      expect(startProcessArg).toContain('--profile-directory=Default');
+      expect(startProcessArg).toBe(
+        "Start-Process 'chrome.exe' -ArgumentList @('--profile-directory=Default','https://example.com')",
+      );
+    });
+
+    it('preserves spaces in Chrome profile directory on Windows', async () => {
+      setPlatform('win32');
+      await openBrowserSecurely('https://example.com', {
+        browser: 'chrome',
+        profileDirectory: 'Profile 1',
+      });
+
+      const commandArg = mockExecFile.mock.calls[0][1] as string[];
+      const startProcessArg = commandArg.find((a) =>
+        a.includes('Start-Process'),
+      );
+      // Each browser arg is a separate single-quoted array element so the
+      // space in "Profile 1" is not split by PowerShell into two args.
+      expect(startProcessArg).toBe(
+        "Start-Process 'chrome.exe' -ArgumentList @('--profile-directory=Profile 1','https://example.com')",
+      );
     });
 
     it('launches Firefox with profile on macOS', async () => {
@@ -359,14 +371,7 @@ describe('secure-browser-launcher', () => {
 
       expect(mockExecFile).toHaveBeenCalledWith(
         'open',
-        expect.arrayContaining([
-          '-a',
-          'Firefox',
-          '--args',
-          '-P',
-          'myprofile',
-          'https://example.com',
-        ]),
+        ['-a', 'Firefox', '--args', '-P', 'myprofile', 'https://example.com'],
         expect.any(Object),
       );
     });
@@ -380,8 +385,24 @@ describe('secure-browser-launcher', () => {
 
       expect(mockExecFile).toHaveBeenCalledWith(
         'firefox',
-        expect.arrayContaining(['-P', 'dev-profile', 'https://example.com']),
+        ['-P', 'dev-profile', 'https://example.com'],
         expect.any(Object),
+      );
+    });
+
+    it('launches Firefox with profile on Windows', async () => {
+      setPlatform('win32');
+      await openBrowserSecurely('https://example.com', {
+        browser: 'firefox',
+        profileDirectory: 'dev-profile',
+      });
+
+      const commandArg = mockExecFile.mock.calls[0][1] as string[];
+      const startProcessArg = commandArg.find((a) =>
+        a.includes('Start-Process'),
+      );
+      expect(startProcessArg).toBe(
+        "Start-Process 'firefox' -ArgumentList @('-P','dev-profile','https://example.com')",
       );
     });
 
