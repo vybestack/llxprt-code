@@ -146,7 +146,7 @@ These control extended thinking / chain-of-thought for models that support it (K
 | Setting                       | Description                                                   | Default          |
 | ----------------------------- | ------------------------------------------------------------- | ---------------- |
 | `reasoning.enabled`           | Enable thinking/reasoning mode                                | `false`          |
-| `reasoning.effort`            | Reasoning effort level (`low`, `medium`, `high`)              | provider default |
+| `reasoning.effort`            | Effort (`minimal`, `low`, `medium`, `high`, `xhigh`, `max`)   | provider default |
 | `reasoning.includeInResponse` | Show thinking blocks in the terminal                          | `true`           |
 | `reasoning.includeInContext`  | Keep thinking in conversation history sent to the model       | `true`           |
 | `reasoning.stripFromContext`  | Prune thinking from older turns (`none`, `all`, `allButLast`) | `none`           |
@@ -266,7 +266,7 @@ Some provider aliases ship with tuned defaults for their models — you get reas
 
 **Anthropic** — sets `maxOutputTokens` to 40K globally and `context-limit` to 200K. For Claude models specifically, enables reasoning with adaptive thinking (lets the model decide how much to think). For Claude Opus models, sets `reasoning.effort` to `high`.
 
-**Codex** — sets `context-limit` to 262K, enables 24-hour prompt caching, sets `reasoning.effort` to `medium`, and enables reasoning summaries. Tuned for long coding sessions with OpenAI's Codex models.
+**Codex** — defaults to GPT-5.6 Sol and lists the Sol, Terra, and Luna tiers. It sets `context-limit` to 262K, enables 24-hour prompt caching, sets `reasoning.effort` to `medium`, and enables reasoning summaries. Use `reasoning.effort max` when maximum GPT-5.6 reasoning is worth the additional latency and tokens.
 
 **Kimi** — sets `context-limit` to 262K and `max_tokens` to 32K. For Kimi models specifically, enables reasoning with `includeInResponse`, `includeInContext`, and `stripFromContext: none` — full thinking visibility with nothing discarded.
 

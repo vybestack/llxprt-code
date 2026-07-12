@@ -198,7 +198,7 @@ export function handleStreamReasoning(
           {
             type: 'thinking',
             thought: cleaned,
-            sourceField: 'reasoning_content',
+            sourceField: rs.fieldName,
             isHidden: false,
           } as ThinkingBlock,
         ],
@@ -244,7 +244,7 @@ export function emitRemainingStreamThinking(
         {
           type: 'thinking',
           thought: cleanedThought,
-          sourceField: 'reasoning_content',
+          sourceField: rs.fieldName,
           isHidden: false,
         } as ThinkingBlock,
       ],
@@ -264,13 +264,14 @@ export function emitRemainingStreamThinking(
     const capturedReasoning = captureBuffer.reasoningChunks.join('');
     const cleanedReasoning = cleanKimiTokensFromThinking(capturedReasoning);
     if (cleanedReasoning.length > 0) {
+      const capturedFieldName = captureBuffer.actualFieldName ?? rs.fieldName;
       items.push({
         speaker: 'ai',
         blocks: [
           {
             type: 'thinking',
             thought: cleanedReasoning,
-            sourceField: 'reasoning_content',
+            sourceField: capturedFieldName,
             isHidden: false,
           } as ThinkingBlock,
         ],
@@ -278,7 +279,7 @@ export function emitRemainingStreamThinking(
       state.hasEmittedThinking = true;
       logger.debug(
         () =>
-          `[OpenAIVercelProvider] Emitted captured reasoning_content: ${cleanedReasoning.length} chars from ${captureBuffer.reasoningChunks.length} chunks`,
+          `[OpenAIVercelProvider] Emitted captured reasoning (${capturedFieldName}): ${cleanedReasoning.length} chars from ${captureBuffer.reasoningChunks.length} chunks`,
       );
     }
   }

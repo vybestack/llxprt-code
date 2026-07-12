@@ -162,7 +162,7 @@ export function buildThinkingBlock(
     return {
       type: 'thinking',
       thought: cleanedThinking,
-      sourceField: 'reasoning_content',
+      sourceField: rs.fieldName,
       isHidden: false,
     } as ThinkingBlock;
   }

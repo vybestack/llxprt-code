@@ -11,7 +11,7 @@ LLxprt Code ships with aliases for these providers — just use `/provider <name
 | Anthropic                     | `anthropic`     | claude-opus-4-8            | OAuth or API key     |
 | Google Gemini                 | `gemini`        | gemini-2.5-pro             | API key or Vertex AI |
 | OpenAI (API)                  | `openai`        | gpt-5.5                    | API key              |
-| OpenAI (ChatGPT subscription) | `codex`         | gpt-5.5                    | OAuth                |
+| OpenAI (ChatGPT subscription) | `codex`         | gpt-5.6-sol                | OAuth                |
 | Qwen                          | `qwen`          | qwen3-coder-plus           | API key              |
 | xAI                           | `xai`           | grok-4                     | API key              |
 | Kimi                          | `kimi`          | kimi-for-coding            | API key              |

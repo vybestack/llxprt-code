@@ -399,6 +399,7 @@ export class ProfileManager {
       'reasoning.stripFromContext',
       'reasoning.effort',
       'reasoning.maxTokens',
+      'reasoning.fieldName',
     ] as const;
 
     for (const key of reasoningKeys) {

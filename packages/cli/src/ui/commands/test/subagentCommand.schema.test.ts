@@ -6,8 +6,9 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createCompletionHandler } from '../schema/index.js';
+import { parseCommandArguments } from '../../hooks/slashCommandPathUtils.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
-import { subagentCommand } from '../subagentCommand.js';
+import { subagentCommand, subagentNameSchema } from '../subagentCommand.js';
 import { assertDefined } from '../../../test-utils/assertions.js';
 
 type MockSubagentDetail = {
@@ -160,3 +161,174 @@ describe('subagent schema resolver integration @plan:PLAN-20250214-AUTOCOMPLETE.
     expect(result.hint).toBe('Enter system prompt for automatic mode');
   });
 });
+
+const getSubCommand = (subName: string) =>
+  subagentCommand.subCommands?.find((cmd) => cmd.name === subName);
+
+const invokeSub = async (
+  subName: string,
+  fullLine: string,
+  input: Parameters<ReturnType<typeof createCompletionHandler>>[1],
+) => {
+  const sub = getSubCommand(subName);
+
+  assertDefined(sub?.schema);
+
+  const handler = createCompletionHandler(sub.schema);
+  return handler(createContext(), input, fullLine);
+};
+
+describe.each(['edit', 'show', 'delete'])(
+  'subagent %s name autocomplete @issue:1115',
+  (subName) => {
+    it('exposes a schema so the completion engine offers argument suggestions', () => {
+      const sub = getSubCommand(subName);
+
+      expect(sub?.schema).toBeDefined();
+    });
+
+    it('suggests existing subagent names on the first argument', async () => {
+      const result = await invokeSub(subName, `/subagent ${subName} `, {
+        args: '',
+        completedArgs: [],
+        partialArg: '',
+        commandPathLength: 2,
+      });
+
+      expect(result.suggestions).toStrictEqual([
+        { value: 'agent1', description: 'Profile: default' },
+        { value: 'agent2', description: 'Profile: custom' },
+        { value: 'code-helper', description: 'Profile: coding' },
+      ]);
+      expect(result.hint).toBe('Enter subagent name');
+      expect(result.position).toBe(1);
+    });
+
+    it('filters the subagent name suggestions by the partial token', async () => {
+      const result = await invokeSub(subName, `/subagent ${subName} a`, {
+        args: 'a',
+        completedArgs: [],
+        partialArg: 'a',
+        commandPathLength: 2,
+      });
+
+      expect(result.suggestions.map((s) => s.value)).toStrictEqual([
+        'agent1',
+        'agent2',
+      ]);
+      expect(result.hint).toBe('Enter subagent name');
+    });
+  },
+);
+
+describe('subagent name completer edge cases @issue:1115', () => {
+  it('returns empty suggestions when no subagents exist', async () => {
+    const ctx = createMockCommandContext({
+      services: {
+        subagentManager: {
+          listSubagents: vi.fn(async () => []),
+          loadSubagent: vi.fn(async () => undefined),
+        },
+      },
+    });
+
+    const handler = createCompletionHandler(subagentNameSchema);
+    const result = await handler(
+      ctx,
+      {
+        args: '',
+        completedArgs: [],
+        partialArg: '',
+        commandPathLength: 2,
+      },
+      '/subagent edit ',
+    );
+
+    expect(result.suggestions).toStrictEqual([]);
+  });
+
+  it('returns empty suggestions when subagentManager is unavailable', async () => {
+    const ctx = createMockCommandContext({
+      services: {},
+    });
+
+    const handler = createCompletionHandler(subagentNameSchema);
+    const result = await handler(
+      ctx,
+      {
+        args: '',
+        completedArgs: [],
+        partialArg: '',
+        commandPathLength: 2,
+      },
+      '/subagent edit ',
+    );
+
+    expect(result.suggestions).toStrictEqual([]);
+  });
+
+  it('falls back to generic description when loadSubagent fails', async () => {
+    const ctx = createMockCommandContext({
+      services: {
+        subagentManager: {
+          listSubagents: vi.fn(async () => ['good', 'broken']),
+          loadSubagent: vi.fn(async (name: string) => {
+            if (name === 'broken') {
+              throw new Error('corrupted file');
+            }
+            return { profile: 'default', source: 'user' };
+          }),
+        },
+      },
+    });
+
+    const handler = createCompletionHandler(subagentNameSchema);
+    const result = await handler(
+      ctx,
+      {
+        args: '',
+        completedArgs: [],
+        partialArg: '',
+        commandPathLength: 2,
+      },
+      '/subagent edit ',
+    );
+
+    expect(result.suggestions).toStrictEqual([
+      { value: 'good', description: 'Profile: default' },
+      { value: 'broken', description: 'Subagent' },
+    ]);
+  });
+});
+
+describe.each(['edit', 'show', 'delete'])(
+  'subagent %s parseCommandArguments integration @issue:1115',
+  (subName) => {
+    it('marks the leaf command as supporting argument completion', () => {
+      const sub = getSubCommand(subName);
+
+      const result = parseCommandArguments(
+        [],
+        true,
+        sub ?? null,
+        subagentCommand.subCommands,
+      );
+
+      expect(result.leafSupportsArguments).toBe(true);
+    });
+
+    it('extracts argument partial when typing a partial name', () => {
+      const sub = getSubCommand(subName);
+
+      const result = parseCommandArguments(
+        ['ag'],
+        false,
+        sub ?? null,
+        subagentCommand.subCommands,
+      );
+
+      expect(result.argumentPartial).toBe('ag');
+      expect(result.leafSupportsArguments).toBe(true);
+    });
+  },
+);

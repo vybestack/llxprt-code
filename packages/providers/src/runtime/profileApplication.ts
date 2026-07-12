@@ -38,6 +38,12 @@ import { maybeRegisterLoadBalancerProfile } from './profile-application/loadBala
 export interface ProviderSelectionResult {
   providerName: string;
   warnings: string[];
+  /**
+   * Always false since issue #2479: a named-but-unavailable provider now
+   * throws instead of silently falling back, so no success path sets this to
+   * true anymore. Retained for API stability (threaded through
+   * ProfileApplicationResult and profileSnapshot consumers).
+   */
   didFallback: boolean;
 
   requestedProvider: string | null;
@@ -129,18 +135,24 @@ export function selectAvailableProvider(
     );
   }
 
-  const fallbackProvider = availableProviders[0];
   if (trimmedRequested) {
-    warnings.push(
-      `Provider '${trimmedRequested}' unavailable, using '${fallbackProvider}'`,
+    // A profile that explicitly names a provider must never be silently
+    // rerouted to a different provider (issue #2479: a corrupt profile
+    // naming an unregistered provider landed the session on gemini with
+    // no error, swallowing all subsequent input). Fail loudly instead.
+    throw new Error(
+      `Provider '${trimmedRequested}' is not available (registered providers: ${availableProviders.join(
+        ', ',
+      )}). Profile not applied.`,
     );
   }
 
+  const fallbackProvider = availableProviders[0];
   return {
     providerName: fallbackProvider,
     warnings,
-    didFallback: Boolean(trimmedRequested),
-    requestedProvider: trimmedRequested || null,
+    didFallback: false,
+    requestedProvider: null,
   };
 }
 
@@ -631,6 +643,7 @@ const PRESERVED_PROFILE_EPHEMERALS = [
   'reasoning.budgetTokens',
   'reasoning.stripFromContext',
   'reasoning.includeInContext',
+  'reasoning.fieldName',
   'task-default-timeout-seconds',
   'task-max-timeout-seconds',
   'shell-default-timeout-seconds',

@@ -10,7 +10,10 @@
  */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ConversationCache } from './ConversationCache.js';
-import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';
+import {
+  resolveOpenAITransport,
+  resolveExplicitTransportMode,
+} from './openaiModelPolicy.js';
 
 // Create a single logger instance for the module (following singleton pattern)
 const logger = new DebugLogger('llxprt:openai:provider');
@@ -23,6 +26,19 @@ export type OpenAIProviderLike = {
   getConversationCache?: () => ConversationCache;
   shouldUseResponses?: (model: string) => boolean;
   conversationCache?: ConversationCache;
+  /**
+   * Reports the effective base URL using the same precedence as
+   * execution (runtime → global → provider). When available, this is
+   * the authoritative source so UI transport matches execution.
+   */
+  getBaseURL?: () => string | undefined;
+  /**
+   * Reports the effective `openaiResponsesEnabled` value using the
+   * same precedence as execution (ephemeral → authOnly → settings →
+   * provider config). When available, this is the authoritative
+   * source so UI transport matches execution (issue #2483).
+   */
+  getOpenaiResponsesEnabled?: () => boolean | undefined;
 };
 
 export interface OpenAIProviderInfo {
@@ -191,21 +207,108 @@ function resolveResponsesApiMode(
   openaiProvider: OpenAIProviderLike | null,
 ): boolean {
   const providerSettings = settingsService.getProviderSettings('openai');
-  const configuredMode =
-    getValidString(providerSettings.apiMode) ??
-    getValidString(providerSettings.responsesMode) ??
-    getValidString(settingsService.get('responses-mode'));
-
-  if (configuredMode !== undefined) {
-    return configuredMode.toLowerCase() === 'responses';
-  }
+  const explicitMode = resolveExplicitTransportMode(
+    getValidString(providerSettings.apiMode),
+    getValidString(providerSettings.responsesMode),
+    getValidString(settingsService.get('responses-mode')),
+  );
   if (!currentModel) {
-    return false;
+    return explicitMode === 'responses';
   }
-  if (openaiProvider?.shouldUseResponses) {
+
+  // Resolve the effective base URL using the same precedence as the
+  // execution path: provider.getBaseURL() (which already accounts for
+  // runtime → global → provider config) is authoritative. Fall back to
+  // settings-based resolution only when the provider instance is
+  // unavailable or does not expose getBaseURL.
+  const baseURL =
+    resolveEffectiveBaseURL(
+      openaiProvider,
+      providerSettings,
+      settingsService,
+    ) ?? 'https://api.openai.com/v1';
+
+  const openaiResponsesEnabled = resolveEffectiveOpenaiResponsesEnabled(
+    openaiProvider,
+    settingsService,
+  );
+
+  // Use the same shared transport decision as the execution path so UI
+  // truth always matches execution truth (issue #2483).
+  const decision = resolveOpenAITransport({
+    model: currentModel,
+    baseURL,
+    explicitMode,
+    openaiResponsesEnabled,
+  });
+
+  if (decision.useResponses) {
+    return true;
+  }
+
+  // The unified policy does not know about provider-instance state for
+  // supports-but-not-requires models. Defer to the provider instance's
+  // shouldUseResponses when no explicit override was set and the model
+  // merely supports (but does not require) Responses.
+  if (
+    explicitMode === undefined &&
+    decision.transport.supportsResponses &&
+    !decision.transport.requiresResponses &&
+    openaiProvider?.shouldUseResponses
+  ) {
     return openaiProvider.shouldUseResponses(currentModel);
   }
-  return (RESPONSES_API_MODELS as readonly string[]).includes(currentModel);
+  return false;
+}
+
+/**
+ * Resolve the effective base URL mirroring the execution-time precedence:
+ * 1. Provider instance's getBaseURL() (handles runtime/global/provider)
+ * 2. Provider-scoped settings 'base-url'
+ * 3. Global 'base-url' ephemeral setting
+ */
+function resolveEffectiveBaseURL(
+  openaiProvider: OpenAIProviderLike | null,
+  providerSettings: ReturnType<ProviderInfoSettings['getProviderSettings']>,
+  settingsService: ProviderInfoSettings,
+): string | undefined {
+  if (
+    openaiProvider !== null &&
+    typeof openaiProvider.getBaseURL === 'function'
+  ) {
+    const providerURL = openaiProvider.getBaseURL();
+    if (providerURL !== undefined && providerURL.trim() !== '') {
+      return providerURL;
+    }
+  }
+  return (
+    getValidString(providerSettings['base-url']) ??
+    getValidString(settingsService.get('base-url'))
+  );
+}
+
+/**
+ * Resolve the effective openaiResponsesEnabled mirroring the execution-time
+ * precedence:
+ * 1. Provider instance's getOpenaiResponsesEnabled() (handles
+ *    ephemeral/authOnly/settings/provider-config — same effective value
+ *    the execution path uses)
+ * 2. Global 'openaiResponsesEnabled' setting (fallback)
+ *
+ * This ensures UI and execution always agree on the effective flag
+ * (issue #2483).
+ */
+function resolveEffectiveOpenaiResponsesEnabled(
+  openaiProvider: OpenAIProviderLike | null,
+  settingsService: ProviderInfoSettings,
+): boolean | undefined {
+  if (
+    openaiProvider !== null &&
+    typeof openaiProvider.getOpenaiResponsesEnabled === 'function'
+  ) {
+    return openaiProvider.getOpenaiResponsesEnabled();
+  }
+  return getValidBoolean(settingsService.get('openaiResponsesEnabled'));
 }
 
 /**
@@ -215,6 +318,10 @@ function getValidString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed !== '' ? trimmed : undefined;
+}
+
+function getValidBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
 }
 
 /**

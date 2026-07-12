@@ -108,7 +108,17 @@ export class SkillManager {
 
   /**
    * Discovers skills from built-in, extension, user and workspace locations.
-   * Precedence: Built-in (lowest) -> Extensions -> User -> Workspace (highest).
+   *
+   * Load order (later loads win for same-named skills):
+   * 1. Built-in
+   * 2. Extensions
+   * 3. User `<OS-standard-config-dir>/skills/`
+   * 4. User `~/.agents/skills/` (cross-tool standard, https://agentskills.io)
+   * 5. Workspace `.llxprt/skills/`
+   * 6. Workspace `.agents/skills/` (highest precedence)
+   *
+   * The overall Workspace > User > Extension > Built-in precedence is
+   * preserved, while `.agents/skills/` wins within each user or workspace tier.
    */
   async discoverSkills(
     storage: Storage,
@@ -143,6 +153,16 @@ export class SkillManager {
       'user',
     );
     this.addSkillsWithPrecedence(userSkills);
+    try {
+      const userAgentSkills = await loadSkillsFromDir(
+        Storage.getUserAgentSkillsDir(),
+        'user',
+      );
+      this.addSkillsWithPrecedence(userAgentSkills);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      debugLogger.warn(`Skipping user .agents/skills discovery: ${reason}`);
+    }
 
     // 4. Workspace skills (highest precedence)
     const projectSkills = await loadSkillsFromDir(
@@ -150,6 +170,11 @@ export class SkillManager {
       'project',
     );
     this.addSkillsWithPrecedence(projectSkills);
+    const projectAgentSkills = await loadSkillsFromDir(
+      storage.getProjectAgentSkillsDir(),
+      'project',
+    );
+    this.addSkillsWithPrecedence(projectAgentSkills);
   }
 
   /**
