@@ -115,7 +115,7 @@ export interface EphemeralSettings {
   dumponerror?: 'enabled' | 'disabled';
   emojifilter?: 'allowed' | 'auto' | 'warn' | 'error';
   'reasoning.enabled'?: boolean;
-  'reasoning.effort'?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  'reasoning.effort'?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   'reasoning.maxTokens'?: number;
   'reasoning.budgetTokens'?: number;
   'reasoning.adaptiveThinking'?: boolean;

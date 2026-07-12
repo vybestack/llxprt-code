@@ -33,7 +33,7 @@ describe('Codex provider alias', () => {
     expect(codexAlias?.config['base-url']).toBe(
       'https://chatgpt.com/backend-api/codex',
     );
-    expect(codexAlias?.config.defaultModel).toBe('gpt-5.5');
+    expect(codexAlias?.config.defaultModel).toBe('gpt-5.6-sol');
   });
 
   it('should set base-url to chatgpt.com/backend-api/codex', () => {
@@ -53,11 +53,11 @@ describe('Codex provider alias', () => {
     expect(codexAlias?.config.baseProvider).toBe('openai-responses');
   });
 
-  it('should set default model to gpt-5.5', () => {
+  it('should set default model to gpt-5.6-sol', () => {
     const aliases = loadProviderAliasEntries();
     const codexAlias = aliases.find((a) => a.alias === 'codex');
 
-    expect(codexAlias?.config.defaultModel).toBe('gpt-5.5');
+    expect(codexAlias?.config.defaultModel).toBe('gpt-5.6-sol');
   });
 
   it('should have a description mentioning Codex', () => {
@@ -74,6 +74,9 @@ describe('Codex provider alias', () => {
     const modelIds = (codexAlias?.config.staticModels ?? []).map((m) => m.id);
 
     expect(modelIds).toStrictEqual([
+      'gpt-5.6-sol',
+      'gpt-5.6-terra',
+      'gpt-5.6-luna',
       'gpt-5.5',
       'gpt-5.4',
       'gpt-5.4-mini',
@@ -97,5 +100,26 @@ describe('Codex provider alias', () => {
     const codexAlias = aliases.find((a) => a.alias === 'codex');
 
     expect(codexAlias?.source).toBe('builtin');
+  });
+
+  it('should retain the 262144 Codex context-limit in ephemeralSettings @issue:2483', () => {
+    const aliases = loadProviderAliasEntries();
+    const codexAlias = aliases.find((a) => a.alias === 'codex');
+
+    expect(codexAlias?.config.ephemeralSettings['context-limit']).toBe(262144);
+  });
+
+  it('sets contextWindow 262144 on GPT-5.6 tier staticModels @issue:2483', () => {
+    const aliases = loadProviderAliasEntries();
+    const codexAlias = aliases.find((a) => a.alias === 'codex');
+    const tiers = ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'];
+
+    for (const tierId of tiers) {
+      const model = codexAlias?.config.staticModels?.find(
+        (m) => m.id === tierId,
+      );
+      expect(model).toBeDefined();
+      expect(model?.contextWindow).toBe(262144);
+    }
   });
 });
