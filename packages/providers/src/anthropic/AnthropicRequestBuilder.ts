@@ -276,8 +276,10 @@ type AnthropicThinkingConfig = {
  * adaptive-capable models. Centralizes the `{ type: 'adaptive' }` literal and
  * the `effort` mapping so future thinking-field changes have one source.
  *
- * `display` is only relevant to Fable 5, which never returns raw
- * chain-of-thought; other adaptive models pass nothing and keep API defaults.
+ * `display` controls whether the API returns thinking text. All adaptive-
+ * capable models pass 'summarized' (default) to get readable thinking
+ * summaries, or 'omitted' when `includeInResponse` is explicitly false.
+ * Fable 5 never returns raw chain-of-thought regardless of this setting.
  */
 function buildAdaptiveConfig(
   thinkingEffort?: 'low' | 'medium' | 'high' | 'max',
@@ -301,17 +303,24 @@ function buildAdaptiveConfig(
  * @issue #1307: Correct adaptive thinking support for Opus 4.6
  * @issue #2289: Extended to Sonnet 5 (also supports adaptive thinking)
  * @issue #2328: Fable 5 is adaptive-only (never budgeted 'enabled' or 'disabled')
+ * @issue #1723: Pass `display: 'summarized'` for all adaptive-capable models
+ *   when reasoning.includeInResponse is true (or unset, default true), so the
+ *   API returns readable thinking text instead of empty blocks. When
+ *   includeInResponse is explicitly false, pass `display: 'omitted'`.
  */
 export function buildThinkingConfig(options: {
   reasoningEnabled: boolean;
   reasoningBudgetTokens?: number;
   adaptiveThinking?: boolean;
+  includeInResponse?: boolean;
   thinkingEffort?: 'low' | 'medium' | 'high' | 'max';
   model: string;
 }): AnthropicThinkingConfig {
   if (!options.reasoningEnabled) {
     return {};
   }
+  const display =
+    options.includeInResponse === false ? 'omitted' : 'summarized';
 
   // Claude Fable 5: adaptive thinking is the only mode and is always on — it
   // cannot be disabled or switched to legacy budgeted 'enabled' thinking.
@@ -320,7 +329,7 @@ export function buildThinkingConfig(options: {
   // never returns raw thinking, so request `display: 'summarized'` to get
   // readable summaries instead of empty thinking blocks.
   if (isFable5(options.model)) {
-    return buildAdaptiveConfig(options.thinkingEffort, 'summarized');
+    return buildAdaptiveConfig(options.thinkingEffort, display);
   }
 
   const adaptiveCapable = supportsAdaptiveThinking(options.model);
@@ -330,13 +339,16 @@ export function buildThinkingConfig(options: {
     options.reasoningBudgetTokens == null &&
     options.adaptiveThinking !== false
   ) {
-    return buildAdaptiveConfig(options.thinkingEffort);
+    return buildAdaptiveConfig(options.thinkingEffort, display);
   }
 
   const config: AnthropicThinkingConfig = {
     thinking: {
       type: 'enabled' as const,
       budget_tokens: options.reasoningBudgetTokens ?? 10000,
+      ...(options.includeInResponse === false
+        ? { display: 'omitted' as const }
+        : {}),
     },
   };
 

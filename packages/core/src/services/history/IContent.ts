@@ -244,6 +244,12 @@ export interface ThinkingBlock {
   /** Signature for Anthropic extended thinking */
   signature?: string;
 
+  /** Provider-scoped stream identity for replacing incremental thinking updates */
+  streamId?: string;
+
+  /** Whether this block is an incremental update or the completed thinking block */
+  streamStatus?: 'delta' | 'complete';
+
   /** Base64-encoded reasoning content (for OpenAI Codex/Responses API) */
   encryptedContent?: string;
 
