@@ -6,7 +6,7 @@
 
 import * as acp from '@agentclientprotocol/sdk';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { DebugLogger, type Config } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:zed-integration:prompt-command');
 
@@ -49,7 +49,6 @@ export function extractPromptText(
 export async function tryHandleZedCommand(
   prompt: readonly acp.ContentBlock[],
   agent: Agent,
-  config: Config,
   sendUpdate: (update: acp.SessionUpdate) => Promise<void>,
 ): Promise<{ response: acp.PromptResponse } | null> {
   const text = extractPromptText(prompt);
@@ -58,7 +57,6 @@ export async function tryHandleZedCommand(
   }
   const result: ZedCommandResult | null = await executeZedCommand(text, {
     agent,
-    config,
   });
   if (result === null) {
     return null;

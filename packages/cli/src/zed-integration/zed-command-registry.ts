@@ -6,13 +6,12 @@
 
 import type * as acp from '@agentclientprotocol/sdk';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { DebugLogger, type Config } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:zed-integration:commands');
 
 export interface ZedCommandContext {
   readonly agent: Agent;
-  readonly config: Config;
 }
 
 export interface ZedCommandResult {

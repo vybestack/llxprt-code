@@ -514,7 +514,6 @@ export class Session {
     const commandResult = await tryHandleZedCommand(
       params.prompt,
       this.agent,
-      this.config,
       (update) => this.sendUpdateStrict(update),
     );
     if (commandResult !== null) return commandResult.response;

@@ -7,7 +7,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type * as acp from '@agentclientprotocol/sdk';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { Config } from '@vybestack/llxprt-code-core';
 import {
   buildAvailableCommandsUpdate,
   executeZedCommand,
@@ -26,8 +25,6 @@ function buildAgent(): Agent {
     tasks: { list: () => [] },
   } as unknown as Agent;
 }
-
-const config = {} as Config;
 
 describe('Zed available commands', () => {
   it('advertises only commands backed by honest Agent API reads/actions', () => {
@@ -53,10 +50,10 @@ describe('Zed available commands', () => {
       args: 'ignored',
     });
     await expect(
-      executeZedCommand('/unknown', { agent: buildAgent(), config }),
+      executeZedCommand('/unknown', { agent: buildAgent() }),
     ).resolves.toBeNull();
     await expect(
-      executeZedCommand('/MODEL', { agent: buildAgent(), config }),
+      executeZedCommand('/MODEL', { agent: buildAgent() }),
     ).resolves.toStrictEqual({ text: 'Current model: test-model' });
   });
 
@@ -66,7 +63,7 @@ describe('Zed available commands', () => {
       new Error('compression unavailable'),
     );
     await expect(
-      executeZedCommand('/compact', { agent, config }),
+      executeZedCommand('/compact', { agent }),
     ).resolves.toStrictEqual({
       text: 'Command /compact failed.',
     });
@@ -77,7 +74,6 @@ describe('Zed available commands', () => {
     const handled = await tryHandleZedCommand(
       [{ type: 'text', text: '/model' }],
       buildAgent(),
-      config,
       async (update) => {
         updates.push(update);
       },
@@ -100,7 +96,6 @@ describe('Zed available commands', () => {
         { type: 'image', data: 'image', mimeType: 'image/png' },
       ],
       buildAgent(),
-      config,
       async (update) => {
         updates.push(update);
       },
