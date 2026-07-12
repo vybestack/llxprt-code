@@ -63,7 +63,8 @@ export function getImageInlineDataSize(part: Part): number {
   if (
     typeof inlineData?.data === 'string' &&
     inlineData.data.length > 0 &&
-    inlineData.mimeType?.toLowerCase().startsWith('image/') === true
+    typeof inlineData.mimeType === 'string' &&
+    inlineData.mimeType.toLowerCase().startsWith('image/')
   ) {
     return inlineData.data.length;
   }
@@ -134,7 +135,9 @@ export function buildOmissionFeedback(
     ...new Set(
       omitted
         .map((img) => img.toolName)
-        .filter((name): name is string => typeof name === 'string'),
+        .filter(
+          (name): name is string => typeof name === 'string' && name.length > 0,
+        ),
     ),
   ];
   const toolList =

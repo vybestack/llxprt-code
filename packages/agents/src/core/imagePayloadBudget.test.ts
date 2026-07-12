@@ -73,6 +73,14 @@ describe('getImageInlineDataSize', () => {
     },
   );
 
+  it.each([null, 42, true])(
+    'returns 0 when inlineData.mimeType is malformed: %s',
+    (mimeType) => {
+      const part = { inlineData: { mimeType, data: 'AA' } } as Part;
+      expect(getImageInlineDataSize(part)).toBe(0);
+    },
+  );
+
   it('returns 0 when inlineData is undefined', () => {
     const part: Part = { text: 'not an image' };
     expect(getImageInlineDataSize(part)).toBe(0);
@@ -324,9 +332,10 @@ describe('buildOmissionFeedback', () => {
     expect(occurrences).toBe(1);
   });
 
-  it('omits the tool list when tool names are all undefined', () => {
+  it('omits the tool list when tool names are missing or empty', () => {
     const feedback = buildOmissionFeedback([
       { toolName: undefined, mimeType: 'image/png', sizeBytes: 5000 },
+      { toolName: '', mimeType: 'image/png', sizeBytes: 5000 },
     ]);
     expect(feedback).not.toContain('tools:');
   });
