@@ -82,6 +82,7 @@ export type {
   ValidatingToolCall,
   WaitingToolCall,
 } from './scheduler/types.js';
+export { accumulateLiveOutput } from './scheduler/liveOutput.js';
 
 export * from './core/contentGenerator.js';
 export * from './core/logger.js';

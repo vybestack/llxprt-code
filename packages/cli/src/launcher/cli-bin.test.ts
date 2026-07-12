@@ -20,6 +20,9 @@ interface RunCliBinOptions {
   spawn?: typeof spawnType;
   resolveBun?: () => string | null;
   resolveEntry?: () => string | null;
+  getPpid?: () => number;
+  selfExitDelayMs?: number;
+  orphanCheckIntervalMs?: number;
 }
 
 type ExitFn = (code?: number) => never;
@@ -103,9 +106,12 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
     vi.restoreAllMocks();
   });
 
-  async function runLauncher(overrides: RunCliBinOptions = {}) {
+  async function runLauncher(
+    overrides: RunCliBinOptions & { autoClose?: boolean } = {},
+  ) {
+    const { autoClose = true, ...cliBinOptions } = overrides;
     const exitCalls: number[] = [];
-    const child = createChildProcess();
+    const child = createChildProcess({ autoClose });
     const spawnFn = vi.fn(() => child);
 
     await runCliBin({
@@ -113,7 +119,7 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
       spawn: spawnFn as unknown as typeof spawnType,
       resolveBun: () => '/path/to/bun',
       resolveEntry: () => '/entry.ts',
-      ...overrides,
+      ...cliBinOptions,
     });
 
     return { child, exitCalls, spawnFn };
@@ -252,5 +258,99 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
   it('exposes runCliBin as a function without executing the launcher on import', () => {
     const bin = loadCliBin();
     expect(typeof bin.runCliBin).toBe('function');
+  });
+
+  it('schedules a self-exit on SIGHUP when the child does not close', async () => {
+    const { child, exitCalls } = await runLauncher({
+      autoClose: false,
+      selfExitDelayMs: 50,
+    });
+
+    process.emit('SIGHUP', 'SIGHUP');
+    expect(child.kill).toHaveBeenCalledWith('SIGHUP');
+
+    await vi.waitFor(() => expect(exitCalls).toStrictEqual([129]));
+  });
+
+  it('cancels the SIGHUP self-exit when the child closes before the grace period', async () => {
+    const { child, exitCalls } = await runLauncher({
+      autoClose: false,
+      selfExitDelayMs: 50,
+    });
+
+    process.emit('SIGHUP', 'SIGHUP');
+    child.emit('close', 0, null);
+
+    await vi.waitFor(() => expect(exitCalls).toStrictEqual([0]));
+
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(exitCalls).toStrictEqual([0]);
+  });
+
+  it('exits when orphaned (ppid=1) after child exit', async () => {
+    const { child, exitCalls } = await runLauncher({
+      autoClose: false,
+      getPpid: () => 1,
+      orphanCheckIntervalMs: 50,
+    });
+
+    child.emit('exit', null, 'SIGTERM');
+
+    await vi.waitFor(() => expect(exitCalls).toStrictEqual([143]));
+  });
+
+  it('does not exit from orphan check when the child is still alive', async () => {
+    const { child, exitCalls } = await runLauncher({
+      autoClose: false,
+      getPpid: () => 1,
+      orphanCheckIntervalMs: 50,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(exitCalls).toStrictEqual([]);
+
+    child.emit('close', 0, null);
+    await vi.waitFor(() => expect(exitCalls).toStrictEqual([0]));
+  });
+
+  it('does not exit from orphan check when not orphaned (ppid!=1)', async () => {
+    const { child, exitCalls } = await runLauncher({
+      autoClose: false,
+      getPpid: () => 12345,
+      orphanCheckIntervalMs: 50,
+    });
+
+    child.emit('exit', 0, null);
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(exitCalls).toStrictEqual([]);
+
+    child.emit('close', 0, null);
+    await vi.waitFor(() => expect(exitCalls).toStrictEqual([0]));
+  });
+
+  it('exits via beforeExit guard when the child has exited but close never fires', async () => {
+    const { child, exitCalls } = await runLauncher({
+      autoClose: false,
+      getPpid: () => 12345,
+    });
+
+    child.emit('exit', 0, null);
+    expect(exitCalls).toStrictEqual([]);
+
+    process.emit('beforeExit', 0);
+    expect(exitCalls).toStrictEqual([0]);
+  });
+
+  it('does not exit via beforeExit when the child is still alive', async () => {
+    const { child, exitCalls } = await runLauncher({
+      autoClose: false,
+    });
+
+    process.emit('beforeExit', 0);
+    expect(exitCalls).toStrictEqual([]);
+
+    child.emit('close', 0, null);
+    await vi.waitFor(() => expect(exitCalls).toStrictEqual([0]));
   });
 });

@@ -93,8 +93,15 @@ export function shouldFailover(
 /**
  * Check if an error should trigger immediate failover (no retry).
  *
+ * "Immediate failover" means: skip same-backend retry and move to the NEXT
+ * backend in THIS rotation. It does NOT mean the overall request is fatal or
+ * non-retryable. When all backends fail in a single pass the aggregate
+ * {@link LoadBalancerFailoverError} carries its own retryability metadata
+ * (issue #2450), allowing the upstream backoff layer to re-attempt a whole
+ * rotation rather than dropping the agent.
+ *
  * These status codes indicate the backend cannot serve requests
- * and retrying would be futile:
+ * and retrying the SAME backend would be futile:
  * - 429: Rate limited
  * - 401: Unauthorized (per Issue #902 spec; OAuth bucket failover has
  *        separate auto-renew logic that doesn't apply to load balancer)

@@ -241,11 +241,21 @@ export interface ThinkingBlock {
   /** Whether this thinking should be hidden from the user */
   isHidden?: boolean;
 
-  /** Source field name for round-trip serialization */
-  sourceField?: 'reasoning_content' | 'thinking' | 'thought' | 'think_tags';
+  /**
+   * Source field name for round-trip serialization.
+   * Known values: 'reasoning_content', 'reasoning', 'thinking', 'thought', 'think_tags'.
+   * May also contain arbitrary user-configured field names (issue #2488).
+   */
+  sourceField?: string;
 
   /** Signature for Anthropic extended thinking */
   signature?: string;
+
+  /** Provider-scoped stream identity for replacing incremental thinking updates */
+  streamId?: string;
+
+  /** Whether this block is an incremental update or the completed thinking block */
+  streamStatus?: 'delta' | 'complete';
 
   /** Base64-encoded reasoning content (for OpenAI Codex/Responses API) */
   encryptedContent?: string;

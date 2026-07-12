@@ -40,29 +40,26 @@ function appendTextContentParts(lastContent: Content, content: Content): void {
   }
 }
 
-/**
- * Merge usage stats, the provider response id, and the responses-stored flag
- * into an AI turn's metadata. The response id is stored as `metadata.id` so
- * it can be threaded back as `previous_response_id` for stateful Responses
- * conversations (#207). The `responsesStored` flag marks turns that were
- * persisted server-side (store=true), making them eligible as stateful
- * conversation parents.
- */
+interface RecordHistoryOptions {
+  userInputWasArray?: boolean;
+  userInputWasFunctionResponse?: boolean;
+  responseId?: string | null;
+  responsesStored?: boolean | null;
+}
+
 function mergeTurnMetadata(
   iContent: IContent,
   usageMetadata: UsageStats | null | undefined,
-  responseId: string | null | undefined,
-  responsesStored: boolean | null | undefined,
+  options: RecordHistoryOptions | undefined,
 ): void {
-  const hasUsage = usageMetadata !== undefined && usageMetadata !== null;
-  const hasResponseId = Boolean(responseId);
-  const hasStoredFlag = responsesStored === true;
-  if (hasUsage || hasResponseId || hasStoredFlag) {
+  const responseId = options?.responseId;
+  const responsesStored = options?.responsesStored === true;
+  if (usageMetadata || responseId || responsesStored) {
     iContent.metadata = {
       ...iContent.metadata,
-      ...(responseId ? { id: responseId } : {}),
       ...(usageMetadata ? { usage: usageMetadata } : {}),
-      ...(hasStoredFlag ? { responsesStored: true } : {}),
+      ...(responseId ? { id: responseId } : {}),
+      ...(responsesStored ? { responsesStored: true } : {}),
     };
   }
 }
@@ -171,21 +168,28 @@ export class ConversationManager {
    * @param modelOutput - Model's output Content array
    * @param automaticFunctionCallingHistory - Optional AFC history from Gemini SDK
    * @param usageMetadata - Optional usage statistics
+   * @param options - Optional overrides for user-input characteristics when the
+   *   recorded `userInput` has been filtered/transformed and no longer reflects
+   *   the original input shape (for example after eagerly recorded tool
+   *   responses are removed before history finalization).
    */
   recordHistory(
     userInput: Content | Content[],
     modelOutput: Content[],
     automaticFunctionCallingHistory?: Content[],
     usageMetadata?: UsageStats | null,
-    responseId?: string | null,
-    responsesStored?: boolean | null,
+    options?: RecordHistoryOptions,
   ): void {
     const newHistoryEntries: IContent[] = [];
 
     // Capture user input characteristics for model turn logic
-    const userInputWasArray = Array.isArray(userInput);
+    const userInputWasArray =
+      options?.userInputWasArray ?? Array.isArray(userInput);
+    const singleUserInput =
+      !userInputWasArray && !Array.isArray(userInput) ? userInput : undefined;
     const userInputWasFunctionResponse =
-      !userInputWasArray && isFunctionResponse(userInput);
+      options?.userInputWasFunctionResponse ??
+      (singleUserInput !== undefined && isFunctionResponse(singleUserInput));
     const hasAfc = !!(
       automaticFunctionCallingHistory &&
       automaticFunctionCallingHistory.length > 0
@@ -202,8 +206,7 @@ export class ConversationManager {
     this._recordModelTurn(
       modelOutput,
       usageMetadata,
-      responseId,
-      responsesStored,
+      options,
       newHistoryEntries,
       userInputWasArray,
       userInputWasFunctionResponse,
@@ -291,8 +294,7 @@ export class ConversationManager {
   private _recordModelTurn(
     modelOutput: Content[],
     usageMetadata: UsageStats | null | undefined,
-    responseId: string | null | undefined,
-    responsesStored: boolean | null | undefined,
+    options: RecordHistoryOptions | undefined,
     newHistoryEntries: IContent[],
     userInputWasArray: boolean,
     userInputWasFunctionResponse: boolean,
@@ -352,8 +354,7 @@ export class ConversationManager {
       consolidatedOutputContents,
       thoughtBlocks,
       usageMetadata,
-      responseId,
-      responsesStored,
+      options,
       newHistoryEntries,
     );
   }
@@ -388,8 +389,7 @@ export class ConversationManager {
     consolidatedOutputContents: Content[],
     thoughtBlocks: ThinkingBlock[],
     usageMetadata: UsageStats | null | undefined,
-    responseId: string | null | undefined,
-    responsesStored: boolean | null | undefined,
+    options: RecordHistoryOptions | undefined,
     newHistoryEntries: IContent[],
   ): void {
     let didAttachThoughtBlocks = false;
@@ -409,8 +409,7 @@ export class ConversationManager {
         didAttachThoughtBlocks = true;
       }
 
-      // Add usage metadata and/or responseId if available
-      mergeTurnMetadata(iContent, usageMetadata, responseId, responsesStored);
+      mergeTurnMetadata(iContent, usageMetadata, options);
 
       // Stamp the generating model so downstream consumers can detect
       // cross-model turns (issue #2335). this.model is the model that produced
@@ -427,7 +426,7 @@ export class ConversationManager {
         blocks: thoughtBlocks,
         metadata: { turnId: turnKey },
       };
-      mergeTurnMetadata(iContent, usageMetadata, responseId, responsesStored);
+      mergeTurnMetadata(iContent, usageMetadata, options);
       newHistoryEntries.push(stampAiTurnModel(iContent, this.model));
     }
   }

@@ -33,6 +33,10 @@ import {
 import {
   runTmux,
   tryTmux,
+  TMUX_ENV_KEYS,
+  getTmuxSocketPath,
+  cleanupTmuxSocketDir,
+  buildTmuxSocketArgs,
   sleep,
   isPrimaryPaneDead,
   waitForPaneDead,
@@ -66,6 +70,10 @@ export {
 export {
   runTmux,
   tryTmux,
+  TMUX_ENV_KEYS,
+  getTmuxSocketPath,
+  cleanupTmuxSocketDir,
+  buildTmuxSocketArgs,
   sleep,
   isPrimaryPaneDead,
   waitForPaneDead,
@@ -594,6 +602,7 @@ async function handleScenarioError({
   console.error(
     [
       `tmux session: ${sessionName}`,
+      ...(options.keepSession ? [`tmux socket: ${getTmuxSocketPath()}`] : []),
       `artifacts: ${outDir}`,
       `scenario: ${script?.steps ? 'script' : scenario}`,
     ].join('\n'),
@@ -680,8 +689,7 @@ async function assertScrollbackResults({
   return null;
 }
 
-async function main() {
-  const options = parseArgs(process.argv.slice(2));
+async function runMain(options) {
   const sessionName = `llxprt_tmux_${Date.now().toString(16)}`;
   const outDir = options.outDir
     ? path.resolve(process.cwd(), options.outDir)
@@ -762,6 +770,7 @@ async function main() {
 
   const summary = [
     `tmux session: ${sessionName}`,
+    ...(options.keepSession ? [`tmux socket: ${getTmuxSocketPath()}`] : []),
     `exited: ${exited ? 'yes' : 'no (killed session)'}`,
     `artifacts: ${outDir}`,
     `scenario: ${script?.steps ? 'script' : scenario}`,
@@ -770,6 +779,17 @@ async function main() {
 
   if (assertionError) {
     throw assertionError;
+  }
+}
+
+async function main() {
+  const options = parseArgs(process.argv.slice(2));
+  try {
+    await runMain(options);
+  } finally {
+    if (!options.keepSession) {
+      cleanupTmuxSocketDir();
+    }
   }
 }
 

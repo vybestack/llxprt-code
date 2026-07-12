@@ -461,11 +461,19 @@ export function classifyMixedParts(parts: Part[]): {
       const thinkingBlock: ThinkingBlock = {
         type: 'thinking',
         thought: part.text ?? '',
-        isHidden: true,
         sourceField: part.llxprtSourceField ?? 'thought',
       };
-      if (part.thoughtSignature) {
+      if (part.llxprtThoughtIsHidden !== undefined) {
+        thinkingBlock.isHidden = part.llxprtThoughtIsHidden;
+      }
+      if (part.thoughtSignature !== undefined) {
         thinkingBlock.signature = part.thoughtSignature;
+      }
+      if (part.llxprtThoughtBlockId !== undefined) {
+        thinkingBlock.streamId = part.llxprtThoughtBlockId;
+      }
+      if (part.llxprtThoughtBlockStatus !== undefined) {
+        thinkingBlock.streamStatus = part.llxprtThoughtBlockStatus;
       }
       blocks.push(thinkingBlock);
       hasAIContent = true;
@@ -534,11 +542,20 @@ export function convertBlocksToParts(blocks: ContentBlock[]): Part[] {
           thought: true,
           text: thinkingBlock.thought,
         };
-        if (thinkingBlock.signature) {
+        if (thinkingBlock.signature !== undefined) {
           thoughtPart.thoughtSignature = thinkingBlock.signature;
         }
-        if (thinkingBlock.sourceField) {
+        if (thinkingBlock.sourceField !== undefined) {
           thoughtPart.llxprtSourceField = thinkingBlock.sourceField;
+        }
+        if (thinkingBlock.streamId !== undefined) {
+          thoughtPart.llxprtThoughtBlockId = thinkingBlock.streamId;
+        }
+        if (thinkingBlock.streamStatus !== undefined) {
+          thoughtPart.llxprtThoughtBlockStatus = thinkingBlock.streamStatus;
+        }
+        if (thinkingBlock.isHidden !== undefined) {
+          thoughtPart.llxprtThoughtIsHidden = thinkingBlock.isHidden;
         }
         parts.push(thoughtPart);
         break;

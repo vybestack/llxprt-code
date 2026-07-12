@@ -1,4 +1,4 @@
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC

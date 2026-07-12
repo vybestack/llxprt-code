@@ -125,7 +125,7 @@ describe('ConversationManager records responseId into history @issue:207', () =>
       MODEL_OUTPUT,
       undefined,
       null,
-      'resp_abc',
+      { responseId: 'resp_abc' },
     );
 
     const all = historyService.getAll();
@@ -140,7 +140,7 @@ describe('ConversationManager records responseId into history @issue:207', () =>
       MODEL_OUTPUT,
       undefined,
       null,
-      null,
+      { responseId: null },
     );
 
     const all = historyService.getAll();
@@ -164,8 +164,7 @@ describe('ConversationManager records responseId into history @issue:207', () =>
       MODEL_OUTPUT,
       undefined,
       null,
-      'resp_stored',
-      true,
+      { responseId: 'resp_stored', responsesStored: true },
     );
 
     const all = historyService.getAll();
@@ -181,8 +180,7 @@ describe('ConversationManager records responseId into history @issue:207', () =>
       MODEL_OUTPUT,
       undefined,
       null,
-      'resp_unstored',
-      false,
+      { responseId: 'resp_unstored', responsesStored: false },
     );
 
     const all = historyService.getAll();
@@ -198,7 +196,7 @@ describe('ConversationManager records responseId into history @issue:207', () =>
       MODEL_OUTPUT,
       undefined,
       null,
-      '',
+      { responseId: '' },
     );
 
     const all = historyService.getAll();

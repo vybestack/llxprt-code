@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect } from 'vitest';
+import { vi, describe, it, expect, afterEach } from 'vitest';
 import { McpClientManager } from './mcp-client-manager.js';
 import { McpClient } from './mcp-client.js';
 import { MCPDiscoveryState } from './mcp-client.js';
@@ -13,6 +13,7 @@ import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
 import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
 import type { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { EventEmitter } from 'node:events';
 import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
 
@@ -27,6 +28,9 @@ vi.mock('./mcp-client.js', () => ({
 }));
 
 describe('McpClientManager', () => {
+  afterEach(() => {
+    vi.mocked(McpClient).mockReset();
+  });
   it('should discover tools from all configured servers', async () => {
     const mockedMcpClient = {
       connect: vi.fn(),
@@ -512,6 +516,117 @@ describe('McpClientManager', () => {
       // Untrusted folder means startConfiguredMcpServers returns early
       // without touching discovery state — stays NOT_STARTED
       expect(manager.getDiscoveryState()).toBe(MCPDiscoveryState.NOT_STARTED);
+    });
+  });
+
+  describe('startExtension background discovery (issue #2325)', () => {
+    const createExtensionManager = (
+      mockedMcpClient: Record<string, ReturnType<typeof vi.fn>>,
+    ) => {
+      vi.mocked(McpClient).mockReturnValue(
+        mockedMcpClient as unknown as McpClient,
+      );
+      const mockConfig = {
+        isTrustedFolder: () => true,
+        getMcpServers: () => ({}),
+        getMcpServerCommand: () => '',
+        getPromptRegistry: () => ({}) as PromptRegistry,
+        getResourceRegistry: () => ({}) as ResourceRegistry,
+        getDebugMode: () => false,
+        getWorkspaceContext: () => ({}) as WorkspaceContext,
+        getEnableExtensionReloading: () => false,
+        getExtensionEvents: () => undefined,
+        getAllowedMcpServers: () => undefined,
+        getBlockedMcpServers: () => undefined,
+        getAgentClient: () => ({
+          isInitialized: () => false,
+        }),
+        refreshMcpContext: vi.fn(),
+      } as unknown as Config;
+      const manager = new McpClientManager(
+        '0.0.1',
+        {} as ToolRegistry,
+        mockConfig,
+      );
+      return { manager, mockConfig };
+    };
+
+    // Partial mock — only fields relevant to MCP discovery are populated.
+    // LlxprtExtension has many internal fields (hooks, commands, etc.) that
+    // are not exercised by startExtension, so a full stub is unnecessary.
+    const makeTestExtension = (): LlxprtExtension =>
+      ({
+        name: 'test-ext',
+        version: '1.0.0',
+        isActive: true,
+        path: '/path/to/ext',
+        contextFiles: [],
+        mcpServers: { 'ext-server': {} },
+      }) as unknown as LlxprtExtension;
+
+    it('should not block startExtension on MCP server discovery (issue #2325)', async () => {
+      let resolveConnect: () => void;
+      const connectPromise = new Promise<void>((resolve) => {
+        resolveConnect = resolve;
+      });
+      const mockedMcpClient = {
+        connect: vi.fn().mockReturnValue(connectPromise),
+        discover: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        getStatus: vi.fn(),
+        getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
+      };
+      const { manager } = createExtensionManager(mockedMcpClient);
+
+      // startExtension should resolve immediately without waiting for connect
+      await manager.startExtension(makeTestExtension());
+
+      // connect was called but the deferred promise hasn't resolved yet
+      expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
+      // discover should NOT have been called yet — it runs after connect
+      expect(mockedMcpClient.discover).not.toHaveBeenCalled();
+
+      // Now resolve the connect promise — discovery completes in background.
+      resolveConnect();
+      await manager.whenDiscoverySettled();
+      // After settling, discover should have been called
+      expect(mockedMcpClient.discover).toHaveBeenCalledOnce();
+    });
+
+    it('whenDiscoverySettled should resolve after background discovery from startExtension', async () => {
+      const mockedMcpClient = {
+        connect: vi.fn().mockResolvedValue(undefined),
+        discover: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        getStatus: vi.fn(),
+        getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
+      };
+      const { manager } = createExtensionManager(mockedMcpClient);
+
+      await manager.startExtension(makeTestExtension());
+      await manager.whenDiscoverySettled();
+      expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
+      expect(mockedMcpClient.discover).toHaveBeenCalledOnce();
+    });
+
+    it('should not throw and whenDiscoverySettled should resolve when connect rejects', async () => {
+      const mockedMcpClient = {
+        connect: vi.fn().mockRejectedValue(new Error('connection refused')),
+        discover: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        getStatus: vi.fn(),
+        getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
+      };
+      const { manager } = createExtensionManager(mockedMcpClient);
+
+      await expect(
+        manager.startExtension(makeTestExtension()),
+      ).resolves.toBeUndefined();
+      await expect(manager.whenDiscoverySettled()).resolves.toBeUndefined();
+      // connect was attempted but discover was never reached
+      expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
+      expect(mockedMcpClient.discover).not.toHaveBeenCalled();
+      expect(manager.getDiscoveryState()).toBe(MCPDiscoveryState.COMPLETED);
     });
   });
 });

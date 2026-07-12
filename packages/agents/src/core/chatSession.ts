@@ -39,8 +39,10 @@ import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import {
   convertPartListUnionToIContent,
   convertIContentToResponse,
+  convertBlocksToParts,
   validateHistory,
 } from './MessageConverter.js';
+import { splitPartsByRole } from './agenticLoop/loopHelpers.js';
 import { resolveCompressionProvider } from './CompressionProfileResolver.js';
 import type { CompressionProfileResolverContext } from './CompressionProfileResolver.js';
 
@@ -547,9 +549,43 @@ export class ChatSession {
 
   recordCompletedToolCalls(
     _model: string,
-    _toolCalls: CompletedToolCall[],
+    toolCalls: CompletedToolCall[],
   ): void {
-    // No-op stub for compatibility
+    const allParts = toolCalls.flatMap((toolCall) => {
+      // Defensive for deserialized/test-cast tool responses that bypass the
+      // static ToolCallResponseInfo contract.
+      const response = toolCall.response as
+        | { responseParts?: unknown }
+        | undefined;
+      const responseParts = response?.responseParts;
+      if (!Array.isArray(responseParts)) {
+        this.logger.warn(
+          () =>
+            `recordCompletedToolCalls: skipping tool call '${toolCall.request.callId}' because responseParts is not an array`,
+        );
+        return [];
+      }
+      return convertBlocksToParts(responseParts);
+    });
+    const { functionResponses } = splitPartsByRole(allParts);
+
+    // Only persist the tool-response side eagerly. The assistant tool_call is
+    // already recorded by the preceding model stream, and any non-tool-response
+    // continuation text can be recorded by the normal next-turn finalization
+    // path. Eagerly persisting only function responses makes tool outcomes
+    // durable across next-stream failures/retries without duplicating model
+    // turns or continuation text when the next stream succeeds.
+    if (functionResponses.length > 0) {
+      this.addHistory({
+        role: 'user',
+        parts: functionResponses,
+      });
+      const responseCallIds = functionResponses
+        .map((response) => response.functionResponse?.id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0);
+      this.turnProcessor.markToolResponsesRecorded(responseCallIds);
+      this.streamProcessor.markToolResponsesRecorded(responseCallIds);
+    }
   }
 
   // Public conversion methods — delegated to standalone functions

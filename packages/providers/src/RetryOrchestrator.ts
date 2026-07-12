@@ -46,6 +46,10 @@ import {
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { AllBucketsExhaustedError } from './errors.js';
 import type { OnAuthErrorHandler } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import {
+  delegateGetStats,
+  delegateGetLoadBalancerConfig,
+} from './loadBalancing/wrappedProviderDelegation.js';
 
 /**
  * Internal shape used to carry an AbortSignal through retry orchestration when
@@ -241,13 +245,16 @@ export class RetryOrchestrator implements IProvider {
    * underlying provider.
    */
   getStats(): unknown {
-    const candidate = this.wrappedProvider as {
-      getStats?: () => unknown;
-    };
-    if (typeof candidate.getStats === 'function') {
-      return candidate.getStats();
-    }
-    return undefined;
+    return delegateGetStats(this.wrappedProvider);
+  }
+
+  /**
+   * Delegate getLoadBalancerConfig() to the wrapped provider when supported
+   * (LoadBalancingProvider), so profile persistence can serialize the active
+   * load balancer through the wrapper chain (issue #2479).
+   */
+  getLoadBalancerConfig(): unknown {
+    return delegateGetLoadBalancerConfig(this.wrappedProvider);
   }
 
   /**

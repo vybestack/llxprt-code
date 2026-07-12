@@ -37,8 +37,12 @@ import type { ResponseOutcome } from '@vybestack/llxprt-code-core/utils/generate
 import { analyzeResponseOutcomeFromParts } from './googlePartHelpers.js';
 import { isFunctionResponse } from '@vybestack/llxprt-code-core/utils/messageInspectors.js';
 import { InvalidStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
-import { isThoughtPart } from './googlePartHelpers.js';
+import { isThoughtPart, type ThoughtPart } from './googlePartHelpers.js';
 import { getResponseId, getResponsesStored } from './responseIdCarrier.js';
+import {
+  filterEagerlyRecordedToolResponses,
+  type FilteredEagerToolResponses,
+} from './agenticLoop/loopHelpers.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 /** Whether a finish reason is missing (null, undefined, or empty string). */
@@ -153,30 +157,113 @@ export function accumulateChunkMetadata(
   }
   acc.allChunks.push(chunk);
 }
+type PreservedThoughtMetadataKey =
+  | 'thoughtSignature'
+  | 'llxprtSourceField'
+  | 'llxprtThoughtIsHidden';
 
-/**
- * Consolidate adjacent text parts.
- *
- * The array index access can return `undefined` at runtime when the array
- * is empty (length-1 == -1), so `lastPart` is annotated `Part | undefined`.
- */
-export function consolidateTextParts(modelResponseParts: Part[]): Part[] {
-  const consolidatedParts: Part[] = [];
-  for (const part of modelResponseParts) {
-    const lastPart = consolidatedParts[consolidatedParts.length - 1] as
-      | Part
-      | undefined;
-    if (
-      lastPart?.text !== undefined &&
-      isValidNonThoughtTextPart(lastPart) &&
-      isValidNonThoughtTextPart(part)
-    ) {
-      lastPart.text += part.text;
-    } else {
-      consolidatedParts.push(part);
+// Stream status is intentionally not preserved: it describes the current delta's
+// lifecycle role, not accumulated block metadata.
+const PRESERVED_THOUGHT_METADATA_KEYS = [
+  'thoughtSignature',
+  'llxprtSourceField',
+  'llxprtThoughtIsHidden',
+] as const satisfies readonly PreservedThoughtMetadataKey[];
+
+function preserveIncomingUndefinedFields(
+  previousThought: ThoughtPart,
+  incomingThought: ThoughtPart,
+): Partial<Pick<ThoughtPart, PreservedThoughtMetadataKey>> {
+  return Object.fromEntries(
+    PRESERVED_THOUGHT_METADATA_KEYS.filter(
+      (key) =>
+        incomingThought[key] === undefined &&
+        previousThought[key] !== undefined,
+    ).map((key) => [key, previousThought[key]]),
+  ) as Partial<Pick<ThoughtPart, PreservedThoughtMetadataKey>>;
+}
+
+function mergeIncrementalThought(
+  previousThought: ThoughtPart,
+  incomingThought: ThoughtPart,
+): ThoughtPart {
+  return {
+    ...previousThought,
+    ...incomingThought,
+    text: incomingThought.text ?? previousThought.text,
+    thought: true,
+    ...preserveIncomingUndefinedFields(previousThought, incomingThought),
+  };
+}
+
+function mergeTextParts(lastPart: Part, part: Part): Part {
+  return {
+    ...lastPart,
+    text: `${lastPart.text ?? ''}${part.text ?? ''}`,
+  };
+}
+
+function consolidateTextPart(result: Part[], part: Part): void {
+  if (result.length === 0) {
+    result.push({ ...part });
+    return;
+  }
+
+  const lastPart = result[result.length - 1];
+  if (isValidNonThoughtTextPart(lastPart) && isValidNonThoughtTextPart(part)) {
+    result[result.length - 1] = mergeTextParts(lastPart, part);
+    return;
+  }
+  result.push({ ...part });
+}
+
+function consolidateThoughtPart(
+  result: Part[],
+  part: ThoughtPart,
+  streamPartIndexes: Map<string, number>,
+): void {
+  const streamId = part.llxprtThoughtBlockId;
+  if (streamId !== undefined) {
+    const existingIndex = streamPartIndexes.get(streamId);
+    if (existingIndex !== undefined) {
+      const previousPart = result[existingIndex];
+      if (isThoughtPart(previousPart)) {
+        result[existingIndex] = mergeIncrementalThought(previousPart, part);
+        return;
+      }
+      streamPartIndexes.delete(streamId);
     }
   }
-  return consolidatedParts;
+
+  result.push({ ...part });
+  if (streamId !== undefined) {
+    streamPartIndexes.set(streamId, result.length - 1);
+  }
+}
+
+/**
+ * Consolidate adjacent text parts and stream-identified thinking updates.
+ *
+ * #1723: A provider-owned stream id represents exactly one thinking block
+ * lifecycle, from its first delta through its complete event. While a lifecycle
+ * is open, later events with the same stream id replace that block even when
+ * text or other thinking blocks are interleaved. A provider must mint a fresh
+ * stream id for each distinct thinking block; text-prefix similarity is not
+ * identity and is intentionally ignored.
+ */
+export function consolidateTextParts(modelResponseParts: Part[]): Part[] {
+  const result: Part[] = [];
+  const streamPartIndexes = new Map<string, number>();
+
+  for (const part of modelResponseParts) {
+    if (isThoughtPart(part)) {
+      consolidateThoughtPart(result, part, streamPartIndexes);
+    } else {
+      consolidateTextPart(result, part);
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -278,6 +365,62 @@ export function validateStreamCompletion(
   }
 }
 
+interface UserInputFlags {
+  readonly userInputWasArray?: boolean;
+  readonly userInputWasFunctionResponse?: boolean;
+}
+
+export interface PreparedHistoryUserInput {
+  readonly historyUserInput: Content | Content[];
+  readonly filteredResults: readonly FilteredEagerToolResponses[];
+  readonly userInputFlags: UserInputFlags | undefined;
+}
+
+export function prepareHistoryUserInput(
+  userInput: Content | Content[],
+  eagerlyRecordedToolResponseCallIds: ReadonlySet<string>,
+): PreparedHistoryUserInput {
+  const filteredResults = (
+    Array.isArray(userInput) ? userInput : [userInput]
+  ).map((content) =>
+    filterEagerlyRecordedToolResponses(
+      content,
+      eagerlyRecordedToolResponseCallIds,
+    ),
+  );
+  const filteredUserInput = filteredResults.flatMap(
+    (result) => result.content ?? [],
+  );
+  const allSingleUserInputPartsWereEagerlyRecorded =
+    !Array.isArray(userInput) && filteredResults[0]?.content === null;
+
+  return {
+    historyUserInput: Array.isArray(userInput)
+      ? filteredUserInput
+      : (filteredResults[0]?.content ?? filteredUserInput),
+    filteredResults,
+    userInputFlags: allSingleUserInputPartsWereEagerlyRecorded
+      ? {
+          // The filtered history input is now an empty array, so keep the shape
+          // flags aligned with what ConversationManager will actually see.
+          userInputWasArray: true,
+          userInputWasFunctionResponse: true,
+        }
+      : undefined,
+  };
+}
+
+export function clearMatchedEagerToolResponseCallIds(
+  filteredResults: readonly FilteredEagerToolResponses[],
+  eagerlyRecordedToolResponseCallIds: Set<string>,
+): void {
+  for (const result of filteredResults) {
+    for (const callId of result.matchedCallIds) {
+      eagerlyRecordedToolResponseCallIds.delete(callId);
+    }
+  }
+}
+
 interface RecordHistoryParams {
   userInput: Content | Content[];
   consolidatedParts: Part[];
@@ -286,18 +429,20 @@ interface RecordHistoryParams {
   historyService: HistoryService;
   compressionHandler: CompressionHandler;
   logger: DebugLogger;
+  userInputFlags?: UserInputFlags;
 }
 
 /**
- * Backward scan for the last chunk carrying a provider response id or the
- * responsesStored flag — avoids allocating the intermediate array produced
- * by slice().reverse().find().
+ * Record history with usage metadata and sync token counts.
+ *
+ * `actualPromptTokens` is typed `number | null` (never `undefined`), so only
+ * the null check is needed — the `!== undefined` comparison was a dead check.
  */
-function findLastChunkWithResponseId(
+function findLastChunkWithProviderMetadata(
   chunks: GenerateContentResponse[],
 ): GenerateContentResponse | undefined {
-  for (let i = chunks.length - 1; i >= 0; i -= 1) {
-    const chunk = chunks[i];
+  for (let index = chunks.length - 1; index >= 0; index -= 1) {
+    const chunk = chunks[index];
     if (
       getResponseId(chunk) !== undefined ||
       getResponsesStored(chunk) !== undefined
@@ -308,12 +453,6 @@ function findLastChunkWithResponseId(
   return undefined;
 }
 
-/**
- * Record history with usage metadata and sync token counts.
- *
- * `actualPromptTokens` is typed `number | null` (never `undefined`), so only
- * the null check is needed — the `!== undefined` comparison was a dead check.
- */
 export async function recordHistoryWithUsage(
   args: RecordHistoryParams,
 ): Promise<void> {
@@ -337,21 +476,24 @@ export async function recordHistoryWithUsage(
     actualPromptTokens = streamingUsageMetadata.promptTokens;
   }
 
-  const lastChunkWithResponseId = findLastChunkWithResponseId(args.allChunks);
-  const streamingResponseId: string | null =
-    (lastChunkWithResponseId && getResponseId(lastChunkWithResponseId)) ?? null;
-  const streamingResponsesStored: boolean | null =
-    (lastChunkWithResponseId
-      ? getResponsesStored(lastChunkWithResponseId)
-      : undefined) ?? null;
+  const providerMetadataChunk = findLastChunkWithProviderMetadata(args.allChunks);
+  const responseId = providerMetadataChunk
+    ? (getResponseId(providerMetadataChunk) ?? null)
+    : null;
+  const responsesStored = providerMetadataChunk
+    ? (getResponsesStored(providerMetadataChunk) ?? null)
+    : null;
 
   args.conversationManager.recordHistory(
     args.userInput,
     modelOutput,
     undefined,
     streamingUsageMetadata,
-    streamingResponseId,
-    streamingResponsesStored,
+    {
+      ...args.userInputFlags,
+      responseId,
+      responsesStored,
+    },
   );
 
   await args.historyService.waitForTokenUpdates();

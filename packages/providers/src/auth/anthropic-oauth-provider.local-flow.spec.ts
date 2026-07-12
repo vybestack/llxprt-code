@@ -12,13 +12,13 @@ vi.mock('./local-oauth-callback.js', () => ({
   startLocalOAuthCallback: vi.fn(),
 }));
 
-import * as coreModule from '@vybestack/llxprt-code-core';
+import * as secureBrowserModule from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
 import { OAuthError, OAuthErrorType } from '@vybestack/llxprt-code-auth';
 import type {
   DeviceCodeResponse,
   OAuthToken,
   TokenStore,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-auth';
 import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
 import type { LocalOAuthCallbackServer } from './local-oauth-callback.js';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
@@ -98,13 +98,13 @@ describe('AnthropicOAuthProvider local callback flow', () => {
       expiry: Math.floor(Date.now() / 1000) + 3600,
       scope: null,
     }));
-    vi.spyOn(coreModule, 'openBrowserSecurely').mockImplementation(
+    vi.spyOn(secureBrowserModule, 'openBrowserSecurely').mockImplementation(
       async (url: string) => {
         openBrowserArgs.push(url);
       },
     );
     shouldLaunchBrowserSpy = vi
-      .spyOn(coreModule, 'shouldLaunchBrowser')
+      .spyOn(secureBrowserModule, 'shouldLaunchBrowser')
       .mockReturnValue(true);
   });
 

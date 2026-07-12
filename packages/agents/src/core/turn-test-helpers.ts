@@ -112,7 +112,7 @@ function partToBlock(part: Record<string, unknown>): ContentBlock | null {
     return {
       type: 'thinking',
       thought: text,
-      isHidden: true,
+      isHidden: false,
       sourceField: 'thought',
     };
   }

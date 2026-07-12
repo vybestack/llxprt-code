@@ -253,6 +253,65 @@ describe('OpenAIResponsesProvider stateful conversations @issue:207', () => {
     expect(users).toContain('second question');
   });
 
+  it('stores the first response when stateful mode has no stored parent yet', async () => {
+    const provider = new OpenAIResponsesProvider(
+      'test-api-key',
+      'https://api.openai.com/v1',
+    );
+    const settings = new SettingsService();
+    settings.setProviderSetting(provider.name, 'model', 'gpt-5.2');
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'first question' }],
+      },
+    ];
+
+    const body = await captureRequestBody(provider, contents, settings, {
+      'responses-stateful': true,
+    });
+
+    expect(body['previous_response_id']).toBeUndefined();
+    expect(body['store']).toBe(true);
+    expect(userMessages(inputItems(body))).toContain('first question');
+  });
+
+  it('keeps full history and disables storage when store=false is explicit', async () => {
+    const provider = new OpenAIResponsesProvider(
+      'test-api-key',
+      'https://api.openai.com/v1',
+    );
+    const settings = new SettingsService();
+    settings.setProviderSetting(provider.name, 'model', 'gpt-5.2');
+    settings.setProviderSetting(provider.name, 'store', false);
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'first question' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'first answer' }],
+        metadata: { id: 'resp_1', responsesStored: true },
+      },
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'second question' }],
+      },
+    ];
+
+    const body = await captureRequestBody(provider, contents, settings, {
+      'responses-stateful': true,
+    });
+
+    expect(body['previous_response_id']).toBeUndefined();
+    expect(body['store']).toBe(false);
+    expect(userMessages(inputItems(body))).toStrictEqual([
+      'first question',
+      'second question',
+    ]);
+  });
+
   it('falls back to full history in stateful mode with no prior AI message metadata.id', async () => {
     const provider = new OpenAIResponsesProvider(
       'test-api-key',

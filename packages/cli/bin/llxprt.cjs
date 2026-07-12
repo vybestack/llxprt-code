@@ -7,6 +7,8 @@ const { basename, dirname, join } = require('node:path');
 
 const BUN_RELAUNCH_ENV = 'LLXPRT_BUN_RELAUNCHED';
 const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK'];
+const SIGHUP_SELF_EXIT_DELAY_MS = 5_000;
+const ORPHAN_CHECK_INTERVAL_MS = 10_000;
 const SIGNAL_EXIT_CODES = {
   SIGHUP: 129,
   SIGINT: 130,
@@ -164,6 +166,10 @@ function describeError(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function bunLaunchErrorMessage(bunPath, error) {
+  return `Failed to launch Bun at "${bunPath}" (${describeError(error)}). Reinstall dependencies with "npm install" to restore the bundled Bun, or ensure a working Bun is executable and on your PATH (see https://bun.sh).`;
+}
+
 function fatalExit(exit, message) {
   process.stderr.write(`${message}\n`);
   exit(43);
@@ -237,25 +243,71 @@ async function runCliBin(options = {}) {
       shell: isWindowsCmdShim(bunPath),
     });
   } catch (error) {
-    fatalExit(
-      exit,
-      `Failed to launch Bun at "${bunPath}" (${describeError(error)}). Reinstall dependencies with "npm install" to restore the bundled Bun, or ensure a working Bun is executable and on your PATH (see https://bun.sh).`,
-    );
+    fatalExit(exit, bunLaunchErrorMessage(bunPath, error));
     return;
   }
 
-  attachChildHandlers(child, bunPath, exit);
+  attachChildHandlers(child, bunPath, exit, {
+    getPpid: options.getPpid,
+    selfExitDelayMs: options.selfExitDelayMs,
+    orphanCheckIntervalMs: options.orphanCheckIntervalMs,
+  });
 }
 
-function attachChildHandlers(child, bunPath, exit) {
+function attachChildHandlers(child, bunPath, exit, options = {}) {
   let settled = false;
+  let childExitInfo = null;
+  let hangupExitTimer = null;
+  let orphanCheckTimer = null;
+
+  const getPpid = options.getPpid ?? (() => process.ppid);
+  const selfExitDelayMs = options.selfExitDelayMs ?? SIGHUP_SELF_EXIT_DELAY_MS;
+  const orphanCheckIntervalMs =
+    options.orphanCheckIntervalMs ?? ORPHAN_CHECK_INTERVAL_MS;
 
   const cleanupListeners = () => {
     child.off('close', onClose);
     child.off('error', onError);
+    child.off('exit', onChildExit);
     for (const signal of FORWARDED_SIGNALS) {
       process.off(signal, forwardSignal);
     }
+    process.off('beforeExit', onBeforeExit);
+    if (hangupExitTimer !== null) {
+      clearTimeout(hangupExitTimer);
+      hangupExitTimer = null;
+    }
+    if (orphanCheckTimer !== null) {
+      clearInterval(orphanCheckTimer);
+      orphanCheckTimer = null;
+    }
+  };
+
+  const prepareSettle = () => {
+    if (settled) {
+      return false;
+    }
+    settled = true;
+    cleanupListeners();
+    child.on('error', () => {});
+    return true;
+  };
+
+  const settle = (exitCode) => {
+    if (!prepareSettle()) {
+      return;
+    }
+    exit(exitCode);
+  };
+
+  const exitCodeFromChild = (code, signal) => {
+    if (code !== null) {
+      return code;
+    }
+    if (signal !== null) {
+      return SIGNAL_EXIT_CODES[signal] ?? 1;
+    }
+    return 1;
   };
 
   const forwardSignal = (signal) => {
@@ -267,41 +319,66 @@ function attachChildHandlers(child, bunPath, exit) {
     } catch {
       // Child may have already exited before the signal handler fired.
     }
+    // SIGHUP indicates the controlling terminal is gone. After forwarding,
+    // schedule a fallback self-exit so the shim cannot become an immortal
+    // husk if the child's close event never fires (e.g. child already
+    // reaped externally, or event loop stalled).
+    if (signal === 'SIGHUP' && hangupExitTimer === null) {
+      hangupExitTimer = setTimeout(() => {
+        settle(SIGNAL_EXIT_CODES['SIGHUP']);
+      }, selfExitDelayMs);
+      hangupExitTimer.unref();
+    }
   };
 
   const onClose = (code, signal) => {
-    if (settled) {
-      return;
-    }
-    settled = true;
-    cleanupListeners();
-    child.on('error', () => {});
-    if (code !== null) {
-      exit(code);
-    } else if (signal !== null) {
-      exit(SIGNAL_EXIT_CODES[signal] ?? 1);
-    } else {
-      exit(1);
-    }
+    settle(exitCodeFromChild(code, signal));
   };
 
   const onError = (error) => {
-    if (settled) {
+    if (!prepareSettle()) {
       return;
     }
-    settled = true;
-    cleanupListeners();
-    child.on('error', () => {});
-    // Best-effort kill the child before reporting the fatal spawn error.
     try {
       child.kill('SIGTERM');
     } catch {
       // Child may have already exited before the async spawn error surfaced.
     }
-    fatalExit(
-      exit,
-      `Failed to launch Bun at "${bunPath}" (${describeError(error)}). Reinstall dependencies with "npm install" to restore the bundled Bun, or ensure a working Bun is executable and on your PATH (see https://bun.sh).`,
-    );
+    process.stderr.write(`${bunLaunchErrorMessage(bunPath, error)}
+`);
+    exit(43);
+  };
+
+  const onChildExit = (code, signal) => {
+    childExitInfo = { code, signal };
+  };
+
+  const onBeforeExit = () => {
+    if (settled || childExitInfo === null) {
+      return;
+    }
+    // Last-resort guard: if the event loop is draining and the child has
+    // already exited (but 'close' never fired, e.g. inherited stdio with
+    // a dead terminal), exit now rather than hanging forever.
+    settle(exitCodeFromChild(childExitInfo.code, childExitInfo.signal));
+  };
+
+  const checkOrphaned = () => {
+    if (settled || childExitInfo === null) {
+      return;
+    }
+    // If the shim has been reparented to init (ppid === 1) and the child
+    // has already exited, the terminal is gone and no signal will arrive.
+    // Force exit to avoid becoming an immortal husk.
+    let orphaned;
+    try {
+      orphaned = getPpid() === 1;
+    } catch {
+      return;
+    }
+    if (orphaned) {
+      settle(exitCodeFromChild(childExitInfo.code, childExitInfo.signal));
+    }
   };
 
   for (const signal of FORWARDED_SIGNALS) {
@@ -309,6 +386,10 @@ function attachChildHandlers(child, bunPath, exit) {
   }
   child.on('error', onError);
   child.on('close', onClose);
+  child.on('exit', onChildExit);
+  process.on('beforeExit', onBeforeExit);
+  orphanCheckTimer = setInterval(checkOrphaned, orphanCheckIntervalMs);
+  orphanCheckTimer.unref();
 }
 
 module.exports = { runCliBin };

@@ -123,6 +123,41 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     persistToProfile: true,
   },
   {
+    key: 'apiMode',
+    category: 'provider-config',
+    description:
+      'Preferred OpenAI transport mode (responses/chat); chat is ignored for models that require the Responses API',
+    type: 'enum',
+    enumValues: ['responses', 'chat'],
+    persistToProfile: true,
+  },
+  {
+    key: 'responsesMode',
+    category: 'provider-config',
+    description:
+      'Fallback transport mode for the OpenAI provider (responses/chat)',
+    type: 'enum',
+    enumValues: ['responses', 'chat'],
+    persistToProfile: true,
+  },
+  {
+    key: 'responses-mode',
+    category: 'cli-behavior',
+    description:
+      'Global fallback transport mode for OpenAI when apiMode and responsesMode are unset (responses/chat)',
+    type: 'enum',
+    enumValues: ['responses', 'chat'],
+    persistToProfile: true,
+  },
+  {
+    key: 'openaiResponsesEnabled',
+    category: 'provider-config',
+    description:
+      'Force-enable the OpenAI Responses API on non-canonical base URLs',
+    type: 'boolean',
+    persistToProfile: true,
+  },
+  {
     key: 'reasoning.enabled',
     category: 'model-behavior',
     description: 'Enable thinking/reasoning for models that support it',
@@ -137,9 +172,9 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     key: 'reasoning.effort',
     category: 'model-behavior',
     description:
-      'How much the model should think before responding (minimal/low/medium/high/xhigh)',
+      'How much the model should think before responding (minimal/low/medium/high/xhigh/max)',
     type: 'enum',
-    enumValues: ['minimal', 'low', 'medium', 'high', 'xhigh'],
+    enumValues: ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
     persistToProfile: true,
   },
   {
@@ -192,6 +227,14 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     description: 'API format for reasoning (native/field)',
     type: 'enum',
     enumValues: ['native', 'field'],
+    persistToProfile: true,
+  },
+  {
+    key: 'reasoning.fieldName',
+    category: 'cli-behavior',
+    description:
+      'Reasoning field name in streaming delta (reasoning_content for OpenAI/vLLM, reasoning for Ollama)',
+    type: 'string',
     persistToProfile: true,
   },
   {

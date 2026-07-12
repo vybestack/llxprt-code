@@ -23,6 +23,7 @@ export interface AnthropicRequestBody {
   thinking?: {
     type: 'adaptive' | 'enabled';
     budget_tokens?: number;
+    display?: 'summarized' | 'omitted';
   };
   output_config?: {
     effort?: 'low' | 'medium' | 'high' | 'max';
