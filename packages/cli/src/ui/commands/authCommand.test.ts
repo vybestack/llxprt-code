@@ -9,15 +9,17 @@ import { AuthCommandExecutor } from './authCommand.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { CommandContext } from './types.js';
 
-// Mock browser profile discovery so tests never touch real disk
-vi.mock(
-  '@vybestack/llxprt-code-core/utils/browser-profile-discovery.js',
-  () => ({
-    discoverBrowserProfiles: vi.fn(),
-  }),
-);
+// Mock browser profile discovery so tests never touch real disk. The source
+// imports discoverBrowserProfiles from the public core barrel
+// (@vybestack/llxprt-code-core), so the mock must target that specifier and
+// preserve all other core exports via importActual.
+vi.mock('@vybestack/llxprt-code-core', async (importActual) => {
+  const actual =
+    await importActual<typeof import('@vybestack/llxprt-code-core')>();
+  return { ...actual, discoverBrowserProfiles: vi.fn() };
+});
 
-import { discoverBrowserProfiles } from '@vybestack/llxprt-code-core/utils/browser-profile-discovery.js';
+import { discoverBrowserProfiles } from '@vybestack/llxprt-code-core';
 
 // Mock OAuth manager and dependencies
 const peekStoredTokenMock = vi.fn();
