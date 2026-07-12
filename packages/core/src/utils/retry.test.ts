@@ -6,7 +6,11 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { HttpError } from './retry.js';
-import { retryWithBackoff, isOverloadError } from './retry.js';
+import {
+  retryWithBackoff,
+  isOverloadError,
+  isRetryableError,
+} from './retry.js';
 import { setSimulate429 } from './testUtils.js';
 
 // Helper to create a mock function that fails a certain number of times
@@ -965,5 +969,101 @@ describe('isOverloadError', () => {
 
   it('returns false for a string error', () => {
     expect(isOverloadError('some string')).toBe(false);
+  });
+});
+
+describe('isRetryableError - self-classifying aggregate marker (issue #2450)', () => {
+  /**
+   * Build an object shaped like the load balancer aggregate error: a `failures`
+   * array plus a precomputed boolean `isRetryable`. `message` is included so we
+   * can prove the aggregate decision overrides message-based heuristics.
+   */
+  function makeAggregate(isRetryable: boolean, message: string) {
+    return {
+      name: 'LoadBalancerFailoverError',
+      message,
+      failures: [{ profile: 'a', error: new Error('inner') }],
+      isRetryable,
+    };
+  }
+
+  it('returns true for an aggregate whose isRetryable === true', () => {
+    expect(isRetryableError(makeAggregate(true, 'all backends 429'))).toBe(
+      true,
+    );
+  });
+
+  it('returns false for an aggregate whose isRetryable === false', () => {
+    expect(
+      isRetryableError(makeAggregate(false, 'mixed backend failures')),
+    ).toBe(false);
+  });
+
+  it('aggregate isRetryable === false is AUTHORITATIVE even when its flattened message contains a network-transient phrase', () => {
+    // Regression guard (issue #2450): the aggregate message flattens child
+    // messages. A mixed aggregate (one network-transient backend + one
+    // permanent failure) is correctly non-retryable, and must NOT be rescued
+    // by the message-based network-transient heuristic seeing the sibling's
+    // "socket hang up" text.
+    const error = makeAggregate(
+      false,
+      'zai: socket hang up; makoraglm51: bad request (status: 400)',
+    );
+    // Sanity: that same phrase WOULD trip the network-transient heuristic on a
+    // non-aggregate error.
+    expect(isRetryableError(new Error('socket hang up'))).toBe(true);
+    // But the aggregate's own decision wins.
+    expect(isRetryableError(error)).toBe(false);
+  });
+
+  it('aggregate isRetryable === true is honored even without any status or transient phrase', () => {
+    expect(
+      isRetryableError(makeAggregate(true, 'all backends rate limited')),
+    ).toBe(true);
+  });
+
+  it('a bare isRetryable marker WITHOUT a failures array is NOT treated as an aggregate', () => {
+    // The marker is intentionally specific to aggregates. A plain error that
+    // merely carries isRetryable (no failures array) is classified by the
+    // normal precedence, so a stray true marker does not make it retryable.
+    const error = new Error('client error') as Error & { isRetryable: boolean };
+    error.isRetryable = true;
+    expect(isRetryableError(error)).toBe(false);
+  });
+
+  it('returns false for a plain Error with no status and no marker', () => {
+    expect(isRetryableError(new Error('something broke'))).toBe(false);
+  });
+
+  it('honors the aggregate marker even for an empty failures array (structural edge case)', () => {
+    // A directly-constructed aggregate with empty failures and isRetryable=true
+    // (bypassing the constructor, which would compute false) is still honored
+    // by the PRIORITY 0 structural check. This documents that isRetryableError
+    // trusts the self-classifying marker regardless of array length — the
+    // constructor's computeAggregateRetryable is the guard, not isRetryableError.
+    const aggregate = {
+      name: 'LoadBalancerFailoverError',
+      message: 'no backends attempted',
+      failures: [] as unknown[],
+      isRetryable: true,
+    };
+    expect(isRetryableError(aggregate)).toBe(true);
+  });
+
+  it('still classifies status-bearing errors correctly (429 → retryable)', () => {
+    const error: HttpError = new Error('rate limited');
+    error.status = 429;
+    expect(isRetryableError(error)).toBe(true);
+  });
+
+  it('still classifies status-bearing errors correctly (400 → not retryable) even with a stray marker', () => {
+    // A 400 with a stray isRetryable marker but no failures array must still be
+    // non-retryable via status-based classification.
+    const error = new Error('bad request') as HttpError & {
+      isRetryable: boolean;
+    };
+    error.status = 400;
+    error.isRetryable = true;
+    expect(isRetryableError(error)).toBe(false);
   });
 });

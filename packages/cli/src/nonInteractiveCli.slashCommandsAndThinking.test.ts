@@ -10,17 +10,19 @@ import {
   isTelemetrySdkInitialized,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
-import type {
-  Agent,
-  AgentEvent,
-  AgentInput,
-  TurnOptions,
+import {
+  type Agent,
+  type AgentEvent,
+  type AgentInput,
+  type TurnOptions,
 } from '@vybestack/llxprt-code-agents';
+import { PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-agents/constants.js';
 import { runNonInteractive } from './nonInteractiveCli.js';
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { Mock, MockInstance } from 'vitest';
 import type { LoadedSettings } from './config/settings.js';
+import type { BootstrapProfileArgs } from './config/profileBootstrap.js';
 
 // Captures the resolved query handed to the fake Agent's stream(), and the
 // AgentEvents it should emit. Reset per-test in beforeEach.
@@ -34,6 +36,30 @@ const agentState = vi.hoisted(() => ({
   streamOpts: null as TurnOptions | null,
   events: [] as AgentEvent[],
 }));
+
+type ConfigWithActivationParams = Config & {
+  _profileModelParams?: Record<string, unknown>;
+  _cliModelParams?: Record<string, unknown>;
+  _bootstrapArgs?: BootstrapProfileArgs;
+};
+
+function makeBootstrapProfileArgs(
+  overrides: Partial<BootstrapProfileArgs> = {},
+): BootstrapProfileArgs {
+  return {
+    profileName: null,
+    profileJson: null,
+    providerOverride: null,
+    modelOverride: null,
+    keyOverride: null,
+    keyfileOverride: null,
+    keyNameOverride: null,
+    baseurlOverride: null,
+    setOverrides: null,
+    debug: null,
+    ...overrides,
+  };
+}
 
 vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
   const original =
@@ -128,6 +154,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       getContentGeneratorConfig: vi.fn().mockReturnValue({}),
       getDebugMode: vi.fn().mockReturnValue(false),
       getProvider: vi.fn().mockReturnValue(undefined),
+      getModel: vi.fn().mockReturnValue(PLACEHOLDER_MODEL),
       getProviderManager: vi.fn().mockReturnValue(undefined),
       getOutputFormat: vi.fn().mockReturnValue('text'),
       getFolderTrust: vi.fn().mockReturnValue(false),
@@ -322,6 +349,82 @@ describe('runNonInteractive - slash commands and thinking output', () => {
 
     expect(vi.mocked(fromConfig)).toHaveBeenCalledTimes(1);
     expect(fakeAgent.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes the resolved config model and merged model params to fromConfig activation when no CLI model override is present', async () => {
+    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
+    const configWithParams = mockConfig as ConfigWithActivationParams;
+    vi.mocked(mockConfig.getProvider).mockReturnValue('openai');
+    vi.mocked(mockConfig.getModel).mockReturnValue('kimi-k2.5');
+    configWithParams._profileModelParams = { temperature: 0.4 };
+    configWithParams._cliModelParams = { top_p: 0.9 };
+    agentState.events = [{ type: 'done', reason: 'stop' }];
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'hello',
+      prompt_id: 'prompt-id-activation-model',
+    });
+
+    expect(vi.mocked(fromConfig)).toHaveBeenCalledTimes(1);
+    const activation = vi.mocked(fromConfig).mock.calls[0][0].activation;
+    expect(activation).toMatchObject({
+      provider: 'openai',
+      model: 'kimi-k2.5',
+      modelParams: { temperature: 0.4, top_p: 0.9 },
+      authMode: 'auto',
+    });
+  });
+
+  it('preserves profile model params when the CLI provider override supplies the activation provider', async () => {
+    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
+    const configWithParams = mockConfig as ConfigWithActivationParams;
+    vi.mocked(mockConfig.getProvider).mockReturnValue(undefined);
+    vi.mocked(mockConfig.getModel).mockReturnValue('kimi-k2.5');
+    configWithParams._profileModelParams = { temperature: 0.4 };
+    configWithParams._cliModelParams = { top_p: 0.9 };
+    configWithParams._bootstrapArgs = makeBootstrapProfileArgs({
+      providerOverride: 'anthropic',
+    });
+    agentState.events = [{ type: 'done', reason: 'stop' }];
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'hello',
+      prompt_id: 'prompt-id-provider-override',
+    });
+
+    expect(vi.mocked(fromConfig)).toHaveBeenCalledTimes(1);
+    const activation = vi.mocked(fromConfig).mock.calls[0][0].activation;
+    expect(activation).toBeDefined();
+    expect(activation).toMatchObject({
+      provider: 'anthropic',
+      model: 'kimi-k2.5',
+      modelParams: { temperature: 0.4, top_p: 0.9 },
+      authMode: 'auto',
+    });
+  });
+
+  it('omits the activation model when the resolved config model is the placeholder sentinel', async () => {
+    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
+    vi.mocked(mockConfig.getProvider).mockReturnValue('openai');
+    vi.mocked(mockConfig.getModel).mockReturnValue(PLACEHOLDER_MODEL);
+    agentState.events = [{ type: 'done', reason: 'stop' }];
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'hello',
+      prompt_id: 'prompt-id-placeholder-model',
+    });
+
+    expect(vi.mocked(fromConfig)).toHaveBeenCalledTimes(1);
+    const activation = vi.mocked(fromConfig).mock.calls[0][0].activation;
+    expect(activation).toBeDefined();
+    expect(activation?.provider).toBe('openai');
+    expect(activation?.model).toBeUndefined();
   });
 
   it('should treat an unknown slash command as a regular prompt', async () => {

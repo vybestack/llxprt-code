@@ -31,6 +31,7 @@ function createMockCompressionHandler() {
 
 function createMockConversationManager() {
   return {
+    recordHistory: vi.fn(),
     recordStreamingHistory: vi.fn(),
   };
 }
@@ -93,6 +94,7 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
       conversationManager: conversation,
       historyService: history,
       logger: new DebugLogger('test'),
+      eagerlyRecordedToolResponseCallIds: new Set<string>(),
     });
 
     // Stub internal methods that processStreamResponse calls post-loop
@@ -101,6 +103,50 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
     (processor as unknown as Record<string, unknown>)[
       '_recordHistoryWithUsage'
     ] = vi.fn().mockResolvedValue(undefined);
+  });
+
+  it('clears eagerly recorded tool-response call IDs even when history recording throws', async () => {
+    const eagerIds = new Set(['call-1']);
+    const conversationManager = {
+      recordHistory: vi.fn(() => {
+        throw new Error('history write failed');
+      }),
+    };
+
+    Object.assign(processor, {
+      conversationManager,
+      eagerlyRecordedToolResponseCallIds: eagerIds,
+    });
+
+    const userInput: Content = {
+      role: 'user',
+      parts: [
+        {
+          functionResponse: {
+            name: 'tool',
+            response: { output: 'ok' },
+            id: 'call-1',
+          },
+        },
+      ],
+    };
+
+    const recordHistoryWithUsage = (
+      StreamProcessor.prototype as unknown as {
+        _recordHistoryWithUsage: (
+          this: StreamProcessor,
+          userInput: Content | Content[],
+          consolidatedParts: Part[],
+          allChunks: GenerateContentResponse[],
+        ) => Promise<void>;
+      }
+    )._recordHistoryWithUsage;
+
+    await expect(
+      recordHistoryWithUsage.call(processor, userInput, [], []),
+    ).rejects.toThrow('history write failed');
+
+    expect(eagerIds.size).toBe(0);
   });
 
   it('yields each chunk before the source stream ends', async () => {

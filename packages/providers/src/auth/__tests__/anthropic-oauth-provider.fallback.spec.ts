@@ -10,12 +10,14 @@ vi.mock('../local-oauth-callback.js', () => ({
   startLocalOAuthCallback: vi.fn(),
 }));
 
-import * as coreModule from '@vybestack/llxprt-code-core';
+import { AnthropicDeviceFlow } from '@vybestack/llxprt-code-auth';
 import type {
   DeviceCodeResponse,
   OAuthToken,
   TokenStore,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-auth';
+import * as secureBrowserModule from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { AnthropicOAuthProvider } from '../anthropic-oauth-provider.js';
 import { startLocalOAuthCallback } from '../local-oauth-callback.js';
 
@@ -33,7 +35,7 @@ const openBrowserArgs: string[] = [];
 describe('AnthropicOAuthProvider fallback behavior', () => {
   let provider: AnthropicOAuthProvider;
   let tokenStore: TokenStore;
-  let deviceFlow: coreModule.AnthropicDeviceFlow;
+  let deviceFlow: AnthropicDeviceFlow;
   const DEVICE_CODE_URL =
     'https://claude.ai/oauth/authorize?redirect_uri=https%3A%2F%2Fconsole.anthropic.com%2Foauth%2Fcode';
 
@@ -61,7 +63,7 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
     provider = new AnthropicOAuthProvider(tokenStore);
     deviceFlow = (
       provider as unknown as {
-        deviceFlow: coreModule.AnthropicDeviceFlow;
+        deviceFlow: AnthropicDeviceFlow;
       }
     ).deviceFlow;
 
@@ -102,12 +104,12 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
       expiry: Math.floor(Date.now() / 1000) + 3600,
       scope: null,
     }));
-    vi.spyOn(coreModule, 'openBrowserSecurely').mockImplementation(
+    vi.spyOn(secureBrowserModule, 'openBrowserSecurely').mockImplementation(
       async (url: string) => {
         openBrowserArgs.push(url);
       },
     );
-    vi.spyOn(coreModule, 'shouldLaunchBrowser').mockReturnValue(true);
+    vi.spyOn(secureBrowserModule, 'shouldLaunchBrowser').mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -130,7 +132,6 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
       });
 
       const debugLogs: string[] = [];
-      const { DebugLogger } = await import('@vybestack/llxprt-code-core');
       vi.spyOn(DebugLogger.prototype, 'log').mockImplementation(
         (...args: unknown[]) => {
           debugLogs.push(args.map(String).join(' '));

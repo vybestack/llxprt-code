@@ -13,15 +13,20 @@ import {
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   type GenerateContentParameters,
   type GenerateContentResponse,
   type GoogleGenAI,
+  type GoogleGenAIOptions,
 } from '@google/genai';
 import {
+  getSettingOrEnv,
+  getVertexAIAuthConfig,
   hasVertexAICredentials,
   setupVertexAIAuth,
   type GeminiAuthMode,
+  type VertexAIAuthConfig,
 } from './geminiAuth.js';
 import { throwIfAborted } from './geminiAbort.js';
 import { resolveModelList } from './geminiModels.js';
@@ -103,7 +108,7 @@ export class GeminiProvider extends BaseProvider {
       return { authMode: 'gemini-api-key', token: standardAuth };
     }
 
-    if (hasVertexAICredentials()) {
+    if (hasVertexAICredentials(this.resolveSettingsServiceIfAvailable())) {
       setupVertexAIAuth();
       return { authMode: 'vertex-ai', token: 'USE_VERTEX_AI' };
     }
@@ -218,7 +223,26 @@ export class GeminiProvider extends BaseProvider {
   }
 
   override isPaidMode(): boolean {
-    return !!process.env.GEMINI_API_KEY || hasVertexAICredentials();
+    const settingsService = this.resolveSettingsServiceIfAvailable();
+    return (
+      !!process.env.GEMINI_API_KEY ||
+      !!getSettingOrEnv(settingsService, 'GOOGLE_API_KEY') ||
+      hasVertexAICredentials(settingsService)
+    );
+  }
+
+  private resolveSettingsServiceIfAvailable(): SettingsService | undefined {
+    try {
+      return this.resolveSettingsService();
+    } catch (error) {
+      this.getLogger().debug(
+        () =>
+          `SettingsService is unavailable for Gemini auth probing: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+      return undefined;
+    }
   }
 
   override clearState(): void {
@@ -291,11 +315,64 @@ export class GeminiProvider extends BaseProvider {
     baseURL?: string,
   ): Promise<GoogleGenAI> {
     const { GoogleGenAI } = await import('@google/genai');
-    return new GoogleGenAI({
+    return new GoogleGenAI(
+      this.buildGoogleGenAIOptions(authToken, authMode, httpOptions, baseURL),
+    );
+  }
+
+  private hasDirectVertexCredentials(
+    settingsService: SettingsService | undefined,
+  ): boolean {
+    return Boolean(
+      getSettingOrEnv(settingsService, 'GOOGLE_APPLICATION_CREDENTIALS'),
+    );
+  }
+
+  private hasCompleteVertexProjectConfig(
+    vertexConfig: VertexAIAuthConfig,
+  ): boolean {
+    return (
+      vertexConfig.project !== undefined && vertexConfig.location !== undefined
+    );
+  }
+
+  private buildVertexAIOptions(
+    isVertex: boolean,
+    vertexConfig: VertexAIAuthConfig,
+  ): Pick<GoogleGenAIOptions, 'project' | 'location'> {
+    if (!isVertex) {
+      return {};
+    }
+    return {
+      ...(vertexConfig.project && { project: vertexConfig.project }),
+      ...(vertexConfig.location && { location: vertexConfig.location }),
+    };
+  }
+
+  private buildGoogleGenAIOptions(
+    authToken: string,
+    authMode: GeminiAuthMode,
+    httpOptions: ReturnType<typeof this.createHttpOptions>,
+    baseURL?: string,
+  ): GoogleGenAIOptions {
+    const isVertex = authMode === 'vertex-ai';
+    const settingsService = this.resolveSettingsServiceIfAvailable();
+    const vertexConfig = getVertexAIAuthConfig(settingsService);
+    if (
+      isVertex &&
+      !this.hasDirectVertexCredentials(settingsService) &&
+      !this.hasCompleteVertexProjectConfig(vertexConfig)
+    ) {
+      throw new Error(
+        'Vertex AI mode is active but project/location are not configured. Set GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION via environment variables or settings service, or provide GOOGLE_APPLICATION_CREDENTIALS.',
+      );
+    }
+    return {
       apiKey: authToken,
-      vertexai: authMode === 'vertex-ai',
+      vertexai: isVertex,
+      ...this.buildVertexAIOptions(isVertex, vertexConfig),
       httpOptions: baseURL ? { ...httpOptions, baseUrl: baseURL } : httpOptions,
-    });
+    };
   }
 
   protected override async *generateChatCompletionWithOptions(
@@ -358,13 +435,14 @@ export class GeminiProvider extends BaseProvider {
     ) => Promise<AsyncIterable<GenerateContentResponse>>;
   }> {
     const { GoogleGenAI } = await import('@google/genai');
-    const genAI = new GoogleGenAI({
-      apiKey: setup.authToken,
-      vertexai: setup.authMode === 'vertex-ai',
-      httpOptions: setup.baseURL
-        ? { ...setup.httpOptions, baseUrl: setup.baseURL }
-        : setup.httpOptions,
-    });
+    const genAI = new GoogleGenAI(
+      this.buildGoogleGenAIOptions(
+        setup.authToken,
+        setup.authMode,
+        setup.httpOptions,
+        setup.baseURL,
+      ),
+    );
     return genAI.models;
   }
 
