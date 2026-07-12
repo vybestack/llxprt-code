@@ -23,8 +23,8 @@ import {
   type ContentGenerator,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { ChatSessionConfig } from './chatSession.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
-import type { Content, GenerateContentConfig } from '@google/genai';
 import {
   createMockConfig,
   createMockStream,
@@ -229,16 +229,12 @@ describe('subagent.ts', () => {
       vi.restoreAllMocks();
     });
 
-    const getGenerationConfigFromMock = (
-      callIndex = 0,
-    ): GenerateContentConfig & { systemInstruction?: string | Content } => {
+    const getGenerationConfigFromMock = (callIndex = 0): ChatSessionConfig => {
       const callArgs = vi.mocked(ChatSession).mock.calls[callIndex];
       const generationConfig = callArgs[2];
       expect(generationConfig).toBeDefined();
       if (!generationConfig) throw new Error('generationConfig is undefined');
-      return generationConfig as GenerateContentConfig & {
-        systemInstruction?: string | Content;
-      };
+      return generationConfig;
     };
 
     it('should correctly template the system prompt and initialize ChatSession', async () => {

@@ -352,11 +352,13 @@ describe('TaskTool', () => {
     await invocation.execute(new AbortController().signal, updateOutput);
 
     // Verify XML wrapping - opening tag, messages without agent prefix, closing tag
+    // Only fragments that already carry \r or \n get a trailing newline via
+    // carriage-return normalization; bare fragments flow together.
     expect(updateOutput).toHaveBeenNthCalledWith(
       1,
       '<subagent name="helper" id="agent-42">\n',
     );
-    expect(updateOutput).toHaveBeenNthCalledWith(2, 'first chunk\n');
+    expect(updateOutput).toHaveBeenNthCalledWith(2, 'first chunk');
     expect(updateOutput).toHaveBeenNthCalledWith(3, 'second chunk\n');
     expect(updateOutput).toHaveBeenNthCalledWith(4, 'third chunk\n');
     expect(updateOutput).toHaveBeenNthCalledWith(5, 'fourth chunk\n');
@@ -420,7 +422,7 @@ describe('TaskTool', () => {
       1,
       '<subagent name="helper" id="agent-42">\n',
     );
-    expect(updateOutput).toHaveBeenNthCalledWith(2, 'actual message\n');
+    expect(updateOutput).toHaveBeenNthCalledWith(2, 'actual message');
     expect(updateOutput).toHaveBeenNthCalledWith(
       3,
       '</subagent name="helper" id="agent-42">\n',

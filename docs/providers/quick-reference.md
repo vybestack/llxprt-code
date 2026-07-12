@@ -70,7 +70,7 @@ Use your ChatGPT Plus or Pro subscription directly — no API key needed:
 ```bash
 /auth codex enable
 /provider codex
-/model gpt-5.5
+/model gpt-5.6-sol
 ```
 
 This uses OAuth to authenticate with your ChatGPT subscription.
@@ -79,7 +79,7 @@ This uses OAuth to authenticate with your ChatGPT subscription.
 
 - Context: 262,144 tokens (Codex OAuth)
 - gpt-5.x reasoning models do NOT support temperature — use `/set reasoning.effort` instead
-- Reasoning effort: `low`, `medium`, `high`, `xhigh`
+- Reasoning effort: `minimal`, `low`, `medium`, `high`, `xhigh`, `max`
 
 ```bash
 /set context-limit 262144
@@ -87,7 +87,7 @@ This uses OAuth to authenticate with your ChatGPT subscription.
 /set reasoning.effort high
 ```
 
-**Common models:** `gpt-5.5`, `gpt-5.3-codex`, `gpt-5.2-codex`
+**Common models:** `gpt-5.6-sol` (default), `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`
 
 ### Anthropic (Claude)
 
@@ -229,17 +229,20 @@ Guidance:
 ```bash
 /provider openai
 /keyfile ~/.openai_key
-/model gpt-5.5
+/model gpt-5.6-sol
 ```
 
 #### Model geometry & recommended settings (OpenAI)
 
-Common models: `gpt-5.5`, `gpt-5.4`, `gpt-5.2`
+Common models: `gpt-5.6` (Sol alias), `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`
+
+GPT-5.6+ models automatically use the Responses API on canonical OpenAI (`api.openai.com`); custom OpenAI-compatible base URLs stay on Chat Completions.
 
 Guidance:
 
+- Context: up to 1,048,576 tokens on the OpenAI API (vs. 262,144 via Codex OAuth — see the Codex section above)
 - gpt-5.x reasoning models do NOT support temperature — use `/set reasoning.effort` instead
-- Reasoning effort: `low`, `medium`, `high`, `xhigh`
+- Reasoning effort: `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. `max` is model/provider-specific; project `minimal` maps to wire `none` for GPT-5.6 Responses.
 
 ```bash
 /set context-limit 400000 # adjust to your model's actual window (check provider docs)

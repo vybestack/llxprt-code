@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Content, GenerateContentConfig, Tool } from '@google/genai';
+import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { ChatSessionConfig } from './chatSession.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import {
@@ -17,7 +18,7 @@ import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js
 import { ChatSession } from './chatSession.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createSettingsProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
@@ -85,12 +86,16 @@ export function buildSettingsSnapshot(
     'reasoning.stripFromContext': config.getEphemeralSetting(
       'reasoning.stripFromContext',
     ) as 'all' | 'allButLast' | 'none' | undefined,
+    'reasoning.fieldName': config.getEphemeralSetting('reasoning.fieldName') as
+      | string
+      | undefined,
     'reasoning.effort': config.getEphemeralSetting('reasoning.effort') as
       | 'minimal'
       | 'low'
       | 'medium'
       | 'high'
       | 'xhigh'
+      | 'max'
       | undefined,
     'reasoning.maxTokens': config.getEphemeralSetting('reasoning.maxTokens') as
       | number
@@ -154,37 +159,61 @@ export interface CreateChatSessionDeps {
   contentGenerator: ContentGenerator;
   storedHistoryService: HistoryService | undefined;
   clearStoredHistoryService: () => void;
-  extraHistory?: Content[];
-  generateContentConfig: GenerateContentConfig;
+  extraHistory?: IContent[];
+  generateContentConfig: ModelGenerationSettings;
   todoContinuationService: TodoContinuationService;
   toolRegistry: ToolRegistry | undefined;
 }
 
 /**
+ * Appends extra history onto a HistoryService with a fresh turn key per entry.
+ * No-op when there is nothing to load.
+ */
+function loadExtraHistory(
+  historyService: HistoryService,
+  extraHistory: IContent[] | undefined,
+  currentModel: string,
+): void {
+  if (!extraHistory || extraHistory.length === 0) {
+    return;
+  }
+  for (const content of extraHistory) {
+    const turnKey = historyService.generateTurnKey();
+    historyService.add(
+      { ...content, metadata: { ...content.metadata, turnId: turnKey } },
+      currentModel,
+    );
+  }
+}
+
+/**
  * Resolves (or creates) the HistoryService and optionally loads extra history.
+ *
+ * A stored service is reused to preserve the live conversation/UI display
+ * across provider/auth rebuilds. However, `extraHistory` (e.g. the carried
+ * `_previousHistory` from a client rebuild during --continue) must not be
+ * silently dropped when the stored service is still empty — otherwise restored
+ * context never reaches the model (issue #2500). When the stored service
+ * already holds content (a mid-session switch), extraHistory is skipped to
+ * avoid duplicating turns.
  */
 function setupHistoryService(
   storedHistoryService: HistoryService | undefined,
-  extraHistory: Content[] | undefined,
+  extraHistory: IContent[] | undefined,
   runtimeState: AgentRuntimeState,
 ): { historyService: HistoryService; reused: boolean } {
   const logger = new DebugLogger('llxprt:client:start');
+  const currentModel = runtimeState.model;
   if (storedHistoryService) {
+    if (storedHistoryService.isEmpty()) {
+      loadExtraHistory(storedHistoryService, extraHistory, currentModel);
+    }
     logger.debug('Reusing stored HistoryService to preserve UI conversation');
     return { historyService: storedHistoryService, reused: true };
   }
 
   const historyService = new HistoryService();
-  if (extraHistory && extraHistory.length > 0) {
-    const currentModel = runtimeState.model;
-    for (const content of extraHistory) {
-      const turnKey = historyService.generateTurnKey();
-      historyService.add(
-        ContentConverters.toIContent(content, undefined, undefined, turnKey),
-        currentModel,
-      );
-    }
-  }
+  loadExtraHistory(historyService, extraHistory, currentModel);
   return { historyService, reused: false };
 }
 
@@ -214,16 +243,19 @@ async function applySystemPromptTokenOffset(
 }
 
 /**
- * Builds the GenerateContentConfig with thinking support if applicable.
+ * Builds the generation settings with thinking support if applicable.
  */
 function buildGenerateContentConfig(
-  baseConfig: GenerateContentConfig,
+  baseConfig: ModelGenerationSettings,
   model: string,
-): GenerateContentConfig {
+): ChatSessionConfig {
   return isThinkingSupported(model)
     ? {
         ...baseConfig,
-        thinkingConfig: { thinkingBudget: -1, includeThoughts: true },
+        reasoning: {
+          ...(baseConfig.reasoning ?? {}),
+          includeInOutput: true,
+        },
       }
     : baseConfig;
 }
@@ -236,7 +268,7 @@ async function buildChatFromRuntime(
   runtimeState: AgentRuntimeState,
   contentGenerator: ContentGenerator,
   historyService: HistoryService,
-  generateContentConfig: GenerateContentConfig,
+  generateContentConfig: ModelGenerationSettings,
   todoContinuationService: TodoContinuationService,
   toolRegistry: ToolRegistry | undefined,
   systemInstruction: string,
@@ -275,7 +307,7 @@ async function buildChatFromRuntime(
   todoContinuationService.updateTodoToolAvailabilityFromDeclarations(
     filteredDeclarations,
   );
-  const tools: Tool[] = [{ functionDeclarations: filteredDeclarations }];
+  const tools = [{ functionDeclarations: filteredDeclarations }];
 
   const chat = new ChatSession(
     runtimeBundle.runtimeContext,

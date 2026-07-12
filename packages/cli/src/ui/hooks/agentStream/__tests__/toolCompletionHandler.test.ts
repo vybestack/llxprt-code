@@ -186,7 +186,7 @@ describe('buildToolResponses', () => {
     });
     const result = buildToolResponses([tool]);
     expect(result).toHaveLength(1);
-    expect(result[0]).toHaveProperty('functionResponse');
+    expect(result[0]).toHaveProperty('type', 'tool_response');
   });
 
   it('excludes functionCall parts', () => {
@@ -196,8 +196,8 @@ describe('buildToolResponses', () => {
     });
     const result = buildToolResponses([tool]);
     expect(result).toHaveLength(1);
-    expect(result[0]).toHaveProperty('functionResponse');
-    expect(result[0]).not.toHaveProperty('functionCall');
+    expect(result[0]).toHaveProperty('type', 'tool_response');
+    expect(result[0]).not.toHaveProperty('type', 'tool_call');
   });
 
   it('includes text/other parts', () => {

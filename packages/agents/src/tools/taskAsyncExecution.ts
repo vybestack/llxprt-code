@@ -51,13 +51,18 @@ export interface AsyncTaskCollaborators {
   buildContextState: () => ContextState;
 }
 
-/** Normalizes a streaming text fragment to a single trailing newline. */
+/**
+ * Normalizes line endings in a streaming text fragment without forcing a
+ * trailing newline. Earlier versions appended '\n' to every fragment, but
+ * that broke LLM token streaming — each word landed on its own line. The
+ * LLM's own whitespace and newlines are authoritative; we only normalize
+ * carriage-return variants to '\n'.
+ */
 export function normalizeSubagentStreamingText(text: string): string {
   if (!text) {
     return '';
   }
-  const lf = text.replace(/\r\n?/g, '\n');
-  return lf.endsWith('\n') ? lf : lf + '\n';
+  return text.replace(/\r\n?/g, '\n');
 }
 
 /**

@@ -127,15 +127,30 @@ export function bindProviderAliasIdentity(
 }
 
 function mapStaticModels(entry: ProviderAliasEntry): IModel[] {
-  return (entry.config.staticModels ?? []).map((model) => ({
-    id: model.id,
-    name: model.name,
-    provider: entry.alias,
-    supportedToolFormats: ['openai'],
-    ...(model.contextWindow !== undefined
-      ? { contextWindow: model.contextWindow }
-      : {}),
-  }));
+  return (entry.config.staticModels ?? []).map((model) => {
+    const hasContextWindow = model.contextWindow !== undefined;
+    const hasMaxOutputTokens = model.maxOutputTokens !== undefined;
+    const geometryAuthority: IModel['geometryAuthority'] = {
+      ...(hasContextWindow ? { contextWindow: true } : {}),
+      ...(hasMaxOutputTokens ? { maxOutputTokens: true } : {}),
+    };
+    return {
+      id: model.id,
+      name: model.name,
+      provider: entry.alias,
+      supportedToolFormats: ['openai'],
+      ...(model.contextWindow !== undefined
+        ? { contextWindow: model.contextWindow }
+        : {}),
+      ...(model.maxOutputTokens !== undefined
+        ? { maxOutputTokens: model.maxOutputTokens }
+        : {}),
+      // Mark static models that have explicit field geometry as
+      // authoritative so registry hydration does not overwrite them
+      // (issue #2483). Field-specific so partial authority works.
+      ...(hasContextWindow || hasMaxOutputTokens ? { geometryAuthority } : {}),
+    };
+  });
 }
 
 function overrideStaticModels(

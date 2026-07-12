@@ -28,7 +28,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { PartListUnion } from '@google/genai';
+import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type {
   ServerAgentStreamEvent,
   ToolCallResponseInfo,
@@ -82,11 +82,10 @@ function makePauseResponse(success: boolean): ToolCallResponseInfo {
     callId: 'pause-call-1',
     responseParts: [
       {
-        functionResponse: {
-          name: 'todo_pause',
-          id: 'pause-call-1',
-          response: success ? { ok: true } : {},
-        },
+        type: 'tool_response',
+        callId: 'pause-call-1',
+        toolName: 'todo_pause',
+        result: success ? { ok: true } : {},
       },
     ],
     resultDisplay: undefined,
@@ -189,7 +188,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
     isSuccessfulTodoPauseResponse:
       options.isSuccessfulTodoPauseResponse ?? vi.fn().mockReturnValue(false),
     isTodoToolCall: vi.fn().mockReturnValue(false),
-    applyPendingReminder: vi.fn((r: PartListUnion) => Promise.resolve(r)),
+    applyPendingReminder: vi.fn((r: AgentMessageInput) => Promise.resolve(r)),
     getTodoReminderForCurrentState: vi.fn().mockResolvedValue({
       todos: activeTodos,
       activeTodos,
@@ -274,7 +273,7 @@ async function collectEvents(
 ): Promise<ServerAgentStreamEvent[]> {
   const events: ServerAgentStreamEvent[] = [];
   for await (const event of orchestrator.execute(
-    [{ text: 'test' }] as PartListUnion,
+    [{ text: 'test' }] as AgentMessageInput,
     new AbortController().signal,
     'prompt-1',
     1,
@@ -378,11 +377,10 @@ describe('MessageStreamOrchestrator — todo_pause loop break (issue #2287)', ()
         callId: 'pause-call-1',
         responseParts: [
           {
-            functionResponse: {
-              name: 'todo_pause',
-              id: 'pause-call-1',
-              response: {},
-            },
+            type: 'tool_response',
+            callId: 'pause-call-1',
+            toolName: 'todo_pause',
+            result: {},
           },
         ],
         resultDisplay: undefined,

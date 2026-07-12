@@ -52,6 +52,7 @@ import {
   toPartListUnion,
   ToolConfirmationOutcome,
 } from './helpers/bootstrapProbe.js';
+import type { IContent, ContentBlock } from './helpers/bootstrapProbe.js';
 
 async function* fromEvents(
   events: readonly AgentEvent[],
@@ -362,6 +363,66 @@ describe('Agent bootstrap helpers @plan:PLAN-20260617-COREAPI.P15 @requirement:R
       expect(toPartListUnion({ text: 'with role', role: 'system' })).toBe(
         'with role',
       );
+    });
+
+    it('passes through a single IContent unchanged (preserving speaker)', () => {
+      const icontent: IContent = {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'hello' }],
+      };
+      const result = toPartListUnion(icontent);
+      expect(result).toBe(icontent);
+    });
+
+    it('passes through IContent[] unchanged (preserving turn boundaries)', () => {
+      const turns: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'question' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'answer' }],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'c1',
+              toolName: 'search',
+              result: 'data',
+            },
+          ],
+        },
+      ];
+      const result = toPartListUnion(turns);
+      expect(Array.isArray(result)).toBe(true);
+      const arr = result as IContent[];
+      expect(arr).toHaveLength(3);
+      expect(arr[0].speaker).toBe('human');
+      expect(arr[1].speaker).toBe('ai');
+      expect(arr[2].speaker).toBe('tool');
+    });
+
+    it('passes through ContentBlock[] as ContentBlock[]', () => {
+      const blocks: ContentBlock[] = [
+        { type: 'text', text: 'block1' },
+        { type: 'text', text: 'block2' },
+      ];
+      const result = toPartListUnion(blocks);
+      expect(Array.isArray(result)).toBe(true);
+      const arr = result as ContentBlock[];
+      expect(arr).toHaveLength(2);
+      expect(arr[0]).toStrictEqual({ type: 'text', text: 'block1' });
+    });
+
+    it('converts legacy [{text}] arrays to ContentBlock[]', () => {
+      const legacy = [{ text: 'legacy text' }];
+      const result = toPartListUnion(legacy);
+      expect(Array.isArray(result)).toBe(true);
+      const arr = result as ContentBlock[];
+      expect(arr[0]).toStrictEqual({ type: 'text', text: 'legacy text' });
     });
   });
 

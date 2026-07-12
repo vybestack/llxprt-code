@@ -11,7 +11,7 @@ import {
   DEFAULT_AGENT_ID,
   isWithinRoot,
   createInkStdio,
-  type ContractPart,
+  type ContentBlock,
   EmojiFilter,
   type FilterConfiguration,
   type TodoUpdateEvent,
@@ -27,6 +27,7 @@ import {
   type AgentEvent,
   type DoneReason,
   type ThoughtSummary,
+  type AgentInput,
 } from '@vybestack/llxprt-code-agents';
 import { Readable, Writable } from 'node:stream';
 import * as path from 'node:path';
@@ -421,7 +422,7 @@ export class Session {
     const promptId = Math.random().toString(16).slice(2);
 
     try {
-      let parts: ContractPart[];
+      let parts: ContentBlock[];
       try {
         parts = await this.pathResolver.resolvePrompt(
           params.prompt,
@@ -485,13 +486,13 @@ export class Session {
   }
 
   private async consumeAgentStream(
-    parts: ContractPart[],
+    parts: ContentBlock[],
     pendingSend: AbortController,
     promptId: string,
     promptGeneration: number,
     batcher: StreamBatcher,
   ): Promise<acp.StopReason | null> {
-    const eventStream = this.agent.stream(parts, {
+    const eventStream = this.agent.stream(parts as AgentInput, {
       signal: pendingSend.signal,
       promptId,
       maxTurns: this.config.getMaxSessionTurns(),

@@ -151,11 +151,11 @@ describe('handleAtCommand (punctuation)', () => {
 
         expect(result).toStrictEqual({
           processedQuery: [
-            { text: query },
-            { text: '\n--- Content from referenced files ---' },
-            { text: `\nContent from @${fileInQuery}:\n` },
-            { text: fileContent },
-            { text: '\n--- End of content ---' },
+            { type: 'text', text: query },
+            { type: 'text', text: '\n--- Content from referenced files ---' },
+            { type: 'text', text: `\nContent from @${fileInQuery}:\n` },
+            { type: 'text', text: fileContent },
+            { type: 'text', text: '\n--- End of content ---' },
           ],
         });
       },
@@ -180,13 +180,13 @@ describe('handleAtCommand (punctuation)', () => {
 
       expect(result).toStrictEqual({
         processedQuery: [
-          { text: query },
-          { text: '\n--- Content from referenced files ---' },
-          { text: '\nContent from @first.txt:\n' },
-          { text: content1 },
-          { text: '\nContent from @second.txt:\n' },
-          { text: content2 },
-          { text: '\n--- End of content ---' },
+          { type: 'text', text: query },
+          { type: 'text', text: '\n--- Content from referenced files ---' },
+          { type: 'text', text: '\nContent from @first.txt:\n' },
+          { type: 'text', text: content1 },
+          { type: 'text', text: '\nContent from @second.txt:\n' },
+          { type: 'text', text: content2 },
+          { type: 'text', text: '\n--- End of content ---' },
         ],
       });
     });
@@ -212,11 +212,11 @@ describe('handleAtCommand (punctuation)', () => {
 
       expect(result).toStrictEqual({
         processedQuery: [
-          { text: 'Check @spaced file.txt, it has spaces.' },
-          { text: '\n--- Content from referenced files ---' },
-          { text: '\nContent from @spaced file.txt:\n' },
-          { text: fileContent },
-          { text: '\n--- End of content ---' },
+          { type: 'text', text: 'Check @spaced file.txt, it has spaces.' },
+          { type: 'text', text: '\n--- Content from referenced files ---' },
+          { type: 'text', text: '\nContent from @spaced file.txt:\n' },
+          { type: 'text', text: fileContent },
+          { type: 'text', text: '\n--- End of content ---' },
         ],
       });
     });
@@ -238,11 +238,11 @@ describe('handleAtCommand (punctuation)', () => {
 
       expect(result).toStrictEqual({
         processedQuery: [
-          { text: query },
-          { text: '\n--- Content from referenced files ---' },
-          { text: '\nContent from @example.d.ts:\n' },
-          { text: fileContent },
-          { text: '\n--- End of content ---' },
+          { type: 'text', text: query },
+          { type: 'text', text: '\n--- Content from referenced files ---' },
+          { type: 'text', text: '\nContent from @example.d.ts:\n' },
+          { type: 'text', text: fileContent },
+          { type: 'text', text: '\n--- End of content ---' },
         ],
       });
     });
@@ -264,11 +264,11 @@ describe('handleAtCommand (punctuation)', () => {
 
       expect(result).toStrictEqual({
         processedQuery: [
-          { text: query },
-          { text: '\n--- Content from referenced files ---' },
-          { text: '\nContent from @config.json:\n' },
-          { text: fileContent },
-          { text: '\n--- End of content ---' },
+          { type: 'text', text: query },
+          { type: 'text', text: '\n--- Content from referenced files ---' },
+          { type: 'text', text: '\nContent from @config.json:\n' },
+          { type: 'text', text: fileContent },
+          { type: 'text', text: '\n--- End of content ---' },
         ],
       });
     });
@@ -290,11 +290,11 @@ describe('handleAtCommand (punctuation)', () => {
 
       expect(result).toStrictEqual({
         processedQuery: [
-          { text: query },
-          { text: '\n--- Content from referenced files ---' },
-          { text: '\nContent from @package.json:\n' },
-          { text: fileContent },
-          { text: '\n--- End of content ---' },
+          { type: 'text', text: query },
+          { type: 'text', text: '\n--- Content from referenced files ---' },
+          { type: 'text', text: '\nContent from @package.json:\n' },
+          { type: 'text', text: fileContent },
+          { type: 'text', text: '\n--- End of content ---' },
         ],
       });
     });
@@ -319,11 +319,11 @@ describe('handleAtCommand (punctuation)', () => {
 
       expect(result).toStrictEqual({
         processedQuery: [
-          { text: query },
-          { text: '\n--- Content from referenced files ---' },
-          { text: '\nContent from @version.1.2.3.txt:\n' },
-          { text: fileContent },
-          { text: '\n--- End of content ---' },
+          { type: 'text', text: query },
+          { type: 'text', text: '\n--- Content from referenced files ---' },
+          { type: 'text', text: '\nContent from @version.1.2.3.txt:\n' },
+          { type: 'text', text: fileContent },
+          { type: 'text', text: '\n--- End of content ---' },
         ],
       });
     });
@@ -345,11 +345,11 @@ describe('handleAtCommand (punctuation)', () => {
 
       expect(result).toStrictEqual({
         processedQuery: [
-          { text: query },
-          { text: '\n--- Content from referenced files ---' },
-          { text: '\nContent from @end.txt:\n' },
-          { text: fileContent },
-          { text: '\n--- End of content ---' },
+          { type: 'text', text: query },
+          { type: 'text', text: '\n--- Content from referenced files ---' },
+          { type: 'text', text: '\nContent from @end.txt:\n' },
+          { type: 'text', text: fileContent },
+          { type: 'text', text: '\n--- End of content ---' },
         ],
       });
     });
@@ -374,11 +374,17 @@ describe('handleAtCommand (punctuation)', () => {
 
       expect(result).toStrictEqual({
         processedQuery: [
-          { text: 'Check @file$with&special#chars.txt for content.' },
-          { text: '\n--- Content from referenced files ---' },
-          { text: '\nContent from @file$with&special#chars.txt:\n' },
-          { text: fileContent },
-          { text: '\n--- End of content ---' },
+          {
+            type: 'text',
+            text: 'Check @file$with&special#chars.txt for content.',
+          },
+          { type: 'text', text: '\n--- Content from referenced files ---' },
+          {
+            type: 'text',
+            text: '\nContent from @file$with&special#chars.txt:\n',
+          },
+          { type: 'text', text: fileContent },
+          { type: 'text', text: '\n--- End of content ---' },
         ],
       });
     });
@@ -403,11 +409,11 @@ describe('handleAtCommand (punctuation)', () => {
 
       expect(result).toStrictEqual({
         processedQuery: [
-          { text: query },
-          { text: '\n--- Content from referenced files ---' },
-          { text: '\nContent from @basicfile.txt:\n' },
-          { text: fileContent },
-          { text: '\n--- End of content ---' },
+          { type: 'text', text: query },
+          { type: 'text', text: '\n--- Content from referenced files ---' },
+          { type: 'text', text: '\nContent from @basicfile.txt:\n' },
+          { type: 'text', text: fileContent },
+          { type: 'text', text: '\n--- End of content ---' },
         ],
       });
     });

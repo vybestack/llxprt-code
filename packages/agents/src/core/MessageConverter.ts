@@ -5,85 +5,19 @@
  */
 
 /**
- * MessageConverter - Pure functions for Gemini SDK ↔ IContent format translation.
+ * MessageConverter - Pure functions for neutral IContent format translation.
  * Handles format conversion, speaker semantics, finish-reason mapping, and validation.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P09
+ * @requirement:REQ-002.4
  */
 
-import type { GenerateContentResponse } from '@google/genai';
-import {
-  type Content,
-  type Part,
-  createUserContent,
-  type PartListUnion,
-  FinishReason,
-} from '@google/genai';
 import type {
   IContent,
   ContentBlock,
-  ToolCallBlock,
-  ToolResponseBlock,
-  ThinkingBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import {
-  type ThoughtPart,
-  isThoughtPart,
-  type UsageMetadataWithCache,
-} from './googlePartHelpers.js';
-import { getResponseTextFromParts } from './googlePartHelpers.js';
-import { setProviderStopReason } from './providerStopReason.js';
-
-const logger = new DebugLogger('llxprt:core:message-converter');
-
-// ---------------------------------------------------------------------------
-// Boundary-validation helpers (typed `unknown` so guards are necessary)
-// ---------------------------------------------------------------------------
-
-/**
- * Returns true if `value` is a non-null object. Items in `PartListUnion`
- * come from external/provider data where `typeof null === 'object'`.
- */
-function isNonNullObject(value: unknown): value is object {
-  return typeof value === 'object' && value !== null;
-}
-
-/**
- * Type-guard for a Part carrying a `functionResponse`. Restores main's
- * `item !== null && typeof item === 'object' && 'functionResponse' in item`
- * check (`'functionResponse' in null` throws).
- */
-function isFunctionResponsePart(item: unknown): boolean {
-  return (
-    typeof item === 'object' && item !== null && 'functionResponse' in item
-  );
-}
-
-/**
- * Returns true if `part` is undefined, null, or an empty object. Restores
- * main's `part === undefined || Object.keys(part).length === 0` guard
- * (`Object.keys(undefined)` throws).
- */
-function isEmptyOrMissingPart(part: unknown): boolean {
-  return (
-    part === undefined ||
-    part === null ||
-    Object.keys(part as Record<string, unknown>).length === 0
-  );
-}
-
-/**
- * Reads a token count from provider usage metadata, defaulting to 0 when the
- * field is absent. `UsageStats` declares these counts as required numbers, but
- * `usage` is provider/runtime-boundary data that may omit them, so the default
- * (main's `?? 0`) must be preserved via boundary validation. Mirrors `?? 0`
- * exactly: only nullish values default; any present value passes through.
- */
-function usageTokenCount(value: unknown): number {
-  if (value === null || value === undefined) {
-    return 0;
-  }
-  return value as number;
-}
+import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { iContentFromAgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 /**
  * Aggregates text from content blocks while preserving spacing around non-text blocks.
@@ -112,166 +46,118 @@ export function aggregateTextWithSpacing(
 }
 
 /**
- * Pushes mixed content items into a parts array, flattening nested arrays.
+ * Builds IContent[] from neutral AgentMessageInput, preserving turn
+ * boundaries/speakers/metadata. Each IContent from the neutral converter
+ * is kept as a separate entry so downstream history recording and provider
+ * submission retain distinct turns.
+ *
+ * Properly handles function response arrays (each response as a separate
+ * ToolResponseBlock in the same IContent) and classifies speaker based on
+ * block composition.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P09
+ * @requirement:REQ-002.4
+ * @requirement:REQ-006.4
+ * @pseudocode lines 20-31
  */
-function pushMixedContentParts(
-  message: Array<Part | string>,
-  parts: Part[],
-): void {
-  for (const item of message) {
-    if (typeof item === 'string') {
-      parts.push({ text: item });
-    } else if (Array.isArray(item)) {
-      for (const subItem of item) {
-        parts.push(subItem);
-      }
-    } else if (isNonNullObject(item)) {
-      parts.push(item);
-    }
+export function createUserContentWithFunctionResponseFix(
+  message: AgentMessageInput,
+): IContent[] {
+  const contents = iContentFromAgentMessageInput(message);
+  if (contents.length > 0) {
+    // Split each entry that mixes tool-response blocks with non-tool blocks
+    // (continuation text) into separate semantic turns. After this split,
+    // every entry is either purely tool-response (speaker: 'tool') or purely
+    // non-tool (speaker preserved, typically 'human'). This prevents
+    // ambiguous mixed-speaker turns from reaching the provider or history.
+    return contents.flatMap((c) => splitMixedEntry(c));
   }
+  // Empty input → empty output. No fabricated placeholder (#2410):
+  // callers must skip the provider turn entirely when contents is empty.
+  return [];
 }
 
 /**
- * Custom createUserContent that properly handles function response arrays.
- * Each response must be a separate Part in the same Content, not nested arrays.
+ * Splits a single IContent entry into separate tool and non-tool semantic
+ * turns when it contains a mix of tool-response blocks and non-tool blocks
+ * (e.g. text continuation). Tool-response blocks become a `tool` turn;
+ * surviving non-tool blocks become a `human` turn. Order is preserved:
+ * tool responses first (they are the result of a prior tool call), then
+ * continuation text.
  *
- * Issue #2410: When `message` is an empty array, this returns a zero-part
- * `{ role: 'user', parts: [] }`. Callers MUST check `result.parts.length`
- * before forwarding to a provider — a zero-part Content will be rejected by
- * strict endpoints (e.g. z.ai error 1213). `HistoryService.addInternal`
- * already drops zero-block turns derived from this.
+ * Entries with only tool-response blocks become a single `tool` turn.
+ * Entries with no tool-response blocks are returned unchanged (preserving
+ * the original speaker).
  */
-export function createUserContentWithFunctionResponseFix(
-  message: PartListUnion,
-): Content {
-  if (typeof message === 'string') {
-    return createUserContent(message);
+function splitMixedEntry(content: IContent): IContent[] {
+  const toolResponseBlocks = content.blocks.filter(
+    (block) => block.type === 'tool_response',
+  );
+  const nonToolBlocks = content.blocks.filter(
+    (block) => block.type !== 'tool_response',
+  );
+
+  // No tool responses — entry is purely non-tool; return unchanged.
+  if (toolResponseBlocks.length === 0) {
+    return [content];
   }
-
-  // Handle array of parts or nested function response arrays
-  const parts: Part[] = [];
-
-  // If the message is an array, process each element
-  if (Array.isArray(message)) {
-    // An empty message array must not produce a fabricated user turn with
-    // function-response semantics — `[].every(...)` is vacuously true and
-    // would create spurious function-response parts. Return a zero-part
-    // user Content so callers (and HistoryService) can detect and drop it
-    // (issue #2410).
-    if (message.length === 0) {
-      return { role: 'user' as const, parts };
-    }
-
-    // First check if this is an array of functionResponse Parts
-    // This happens when multiple tool responses are sent together
-    const allFunctionResponses = message.every((item) =>
-      isFunctionResponsePart(item),
-    );
-
-    if (allFunctionResponses) {
-      // This is already a properly formatted array of function response Parts
-      // Just use them directly without any wrapping
-      // Cast is safe here because we've checked all items are objects with functionResponse
-      parts.push(...(message as Part[]));
-    } else {
-      // Process mixed content
-      pushMixedContentParts(message, parts);
-    }
-  } else {
-    // Not an array, pass through to original createUserContent
-    return createUserContent(message);
+  // All tool responses — single tool turn.
+  if (nonToolBlocks.length === 0) {
+    return [
+      { ...content, speaker: 'tool' as const, blocks: toolResponseBlocks },
+    ];
   }
-
-  return {
-    role: 'user' as const,
-    parts,
-  };
+  // Mixed: split into tool turn (tool responses) then human turn
+  // (continuation text). Order: tool responses come first because they
+  // answer a prior AI tool call; the continuation text follows.
+  return [
+    {
+      ...content,
+      speaker: 'tool' as const,
+      blocks: toolResponseBlocks,
+    },
+    {
+      ...content,
+      speaker: 'human' as const,
+      blocks: nonToolBlocks,
+    },
+  ];
 }
 
 /**
  * Normalizes tool interaction input for the provider.
- * Packages tool responses as user messages.
+ * Returns IContent[] preserving turn boundaries, speakers, and metadata.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P09
+ * @requirement:REQ-002.4
+ * @pseudocode lines 20-31
  */
 export function normalizeToolInteractionInput(
-  message: PartListUnion,
-): Content | Content[] {
-  // Handle simple string input
-  if (typeof message === 'string') {
-    return createUserContent(message);
-  }
-
-  // Handle single Part (not an array)
-  if (!Array.isArray(message)) {
-    return createUserContentWithFunctionResponseFix(message);
-  }
-
-  // An empty array must not be normalized into a fake user message —
-  // `[].every(...)` is vacuously true, producing `{role:'user', parts:[]}`
-  // which providers like z.ai reject with HTTP 400 error 1213 (issue #2410).
-  // Return an empty Content array so callers can skip it without inventing
-  // a zero-block turn.
-  if (message.length === 0) {
-    return [];
-  }
-
-  // Now we have an array of parts - check if it contains tool interactions
-  const parts = message as Part[];
-
-  // Detect if this is a tool response sequence (functionResponse parts only)
-  const hasFunctionResponses = parts.some((part) =>
-    isFunctionResponsePart(part),
-  );
-
-  // If no function responses, fall back to original behavior
-  if (!hasFunctionResponses) {
-    return createUserContentWithFunctionResponseFix(message);
-  }
-
-  // Tool responses go in a user message
-  return createUserContentWithFunctionResponseFix(parts);
+  message: AgentMessageInput,
+): IContent[] {
+  return createUserContentWithFunctionResponseFix(message);
 }
 
 /**
- * Checks if a part contains valid non-thought text content.
+ * Checks if a block contains valid non-thought text content.
  */
-export function isValidNonThoughtTextPart(part: Part): boolean {
-  const hasText = typeof part.text === 'string' && part.thought !== true;
-  const hasNonTextPayload =
-    Boolean(part.functionCall) ||
-    Boolean(part.functionResponse) ||
-    Boolean(part.inlineData) ||
-    Boolean(part.fileData);
-  // Technically, the model should never generate parts that have text and
-  // any of these but we don't trust them so check anyways.
-  return hasText && !hasNonTextPayload;
+export function isValidNonThoughtTextPart(block: ContentBlock): boolean {
+  if (block.type !== 'text') {
+    return false;
+  }
+  // TextBlock is always non-thought (thoughts are ThinkingBlock).
+  return block.text !== '';
 }
 
 /**
- * Returns true if the response is valid, false otherwise.
+ * Validates if IContent has valid blocks.
  */
-export function isValidResponse(response: GenerateContentResponse): boolean {
-  if (response.candidates === undefined || response.candidates.length === 0) {
+export function isValidContent(content: IContent): boolean {
+  if (content.blocks.length === 0) {
     return false;
   }
-  const content = response.candidates[0]?.content;
-  if (content === undefined) {
-    return false;
-  }
-  return isValidContent(content);
-}
-
-/**
- * Validates if Content has valid parts.
- */
-export function isValidContent(content: Content): boolean {
-  if (content.parts === undefined || content.parts.length === 0) {
-    return false;
-  }
-  for (const part of content.parts) {
-    if (isEmptyOrMissingPart(part)) {
-      return false;
-    }
-    if (part.thought !== true && part.text !== undefined && part.text === '') {
+  for (const block of content.blocks) {
+    if (block.type === 'text' && block.text === '') {
       return false;
     }
   }
@@ -279,12 +165,21 @@ export function isValidContent(content: Content): boolean {
 }
 
 /**
- * Validates the history contains the correct roles.
+ * Validates the history contains the correct speakers.
  */
-export function validateHistory(history: Content[]): void {
-  for (const content of history) {
-    if (content.role !== 'user' && content.role !== 'model') {
-      throw new Error(`Role must be user or model, but got ${content.role}.`);
+export function validateHistory(history: readonly unknown[]): void {
+  for (const entry of history) {
+    const record = entry as Record<string, unknown>;
+    const speaker = record.speaker;
+    if (speaker !== 'human' && speaker !== 'ai' && speaker !== 'tool') {
+      throw new Error(
+        `Invalid history entry: missing or invalid speaker. Got: ${String(speaker)}`,
+      );
+    }
+    if (!Array.isArray(record.blocks)) {
+      throw new Error(
+        `Invalid history entry: blocks must be an array. Got: ${typeof record.blocks}`,
+      );
     }
   }
 }
@@ -294,16 +189,16 @@ export function validateHistory(history: Content[]): void {
  * Filters out invalid or empty contents from safety filters or recitation.
  */
 export function extractCuratedHistory(
-  comprehensiveHistory: Content[],
-): Content[] {
+  comprehensiveHistory: IContent[],
+): IContent[] {
   if (comprehensiveHistory.length === 0) {
     return [];
   }
-  const curatedHistory: Content[] = [];
+  const curatedHistory: IContent[] = [];
   const length = comprehensiveHistory.length;
   let i = 0;
   while (i < length) {
-    if (comprehensiveHistory[i].role === 'user') {
+    if (comprehensiveHistory[i].speaker === 'human') {
       curatedHistory.push(comprehensiveHistory[i]);
       i++;
     } else {
@@ -318,17 +213,17 @@ export function extractCuratedHistory(
 }
 
 /**
- * Collects a contiguous run of model-role content, tracking validity.
+ * Collects a contiguous run of AI-speaker content, tracking validity.
  */
 function collectModelRun(
-  history: Content[],
+  history: IContent[],
   startIndex: number,
   length: number,
-): { modelOutput: Content[]; isValid: boolean; nextIndex: number } {
-  const modelOutput: Content[] = [];
+): { modelOutput: IContent[]; isValid: boolean; nextIndex: number } {
+  const modelOutput: IContent[] = [];
   let isValid = true;
   let i = startIndex;
-  while (i < length && history[i].role === 'model') {
+  while (i < length && history[i].speaker === 'ai') {
     modelOutput.push(history[i]);
     if (isValid && !isValidContent(history[i])) {
       isValid = false;
@@ -339,155 +234,104 @@ function collectModelRun(
 }
 
 /**
- * Checks if a Content has text content in the first part.
+ * Checks if an IContent has text content in the first block.
  */
 export function hasTextContent(
-  content: Content | undefined,
-): content is Content & { parts: [{ text: string }, ...Part[]] } {
+  content: IContent | undefined,
+): content is IContent & { blocks: [{ text: string }, ...ContentBlock[]] } {
   if (
-    !content ||
-    content.role !== 'model' ||
-    !content.parts ||
-    content.parts.length === 0
+    content === undefined ||
+    content.speaker !== 'ai' ||
+    content.blocks.length === 0
   ) {
     return false;
   }
-  const firstPartText = content.parts[0].text;
-  return typeof firstPartText === 'string' && firstPartText !== '';
+  const firstBlock = content.blocks[0];
+  return firstBlock.type === 'text' && firstBlock.text !== '';
 }
 
 /**
- * Convert PartListUnion (user input) to IContent format.
+ * Convert AgentMessageInput to IContent format.
  */
-export function convertPartListUnionToIContent(input: PartListUnion): IContent {
+export function convertPartListUnionToIContent(
+  input: AgentMessageInput,
+): IContent {
   if (typeof input === 'string') {
-    // Simple string input from user
     return {
       speaker: 'human',
       blocks: [{ type: 'text', text: input }],
     };
   }
 
-  // Handle Part or Part[] - delegate to helper
-  // After filtering out string case, input is PartUnion[] | PartUnion = (Part | string)[] | Part | string
-  // But we know strings are already handled, so cast to Part[]
-  const parts = (Array.isArray(input) ? input : [input]) as Part[];
-  return convertMixedPartsToIContent(parts);
-}
-
-/**
- * Converts mixed Parts (function calls, responses, text, thoughts) to IContent.
- *
- * Issue #2410: When `parts` is empty, this returns a zero-block
- * `{ speaker: 'human', blocks: [] }`. Callers MUST check `result.blocks.length`
- * before forwarding to a provider. `HistoryService.addInternal` already drops
- * zero-block turns, and `ContentConverters.toIContent` logs a warning when it
- * encounters one.
- */
-export function convertMixedPartsToIContent(parts: Part[]): IContent {
-  // An empty parts array would make `[].every(isFunctionResponsePart)`
-  // vacuously true, producing a fabricated tool message from no content
-  // (issue #2410). Return a zero-block human turn so callers (and
-  // HistoryService) can detect and drop it.
-  if (parts.length === 0) {
-    return { speaker: 'human', blocks: [] };
+  const contents = iContentFromAgentMessageInput(input);
+  if (contents.length > 0) {
+    // If the neutral converter produced a single IContent, return it.
+    // Override speaker to 'tool' when all blocks are tool responses
+    // (iContentFromAgentMessageInput defaults to 'human').
+    if (contents.length === 1) {
+      const single = contents[0];
+      if (
+        single.speaker === 'human' &&
+        single.blocks.length > 0 &&
+        single.blocks.every((b) => b.type === 'tool_response')
+      ) {
+        return { ...single, speaker: 'tool' as const };
+      }
+      return single;
+    }
+    // Merge multiple IContent into one, preserving speaker.
+    const allBlocks = contents.flatMap((c) => c.blocks);
+    const speaker = allBlocks.every((b) => b.type === 'tool_response')
+      ? 'tool'
+      : 'human';
+    return {
+      speaker,
+      blocks: allBlocks,
+    };
   }
 
-  // Fast path: all function responses → tool message
-  const allFunctionResponses = parts.every((part) =>
-    isFunctionResponsePart(part),
-  );
-  if (allFunctionResponses) {
-    return convertAllFunctionResponses(parts);
-  }
-
-  // Mixed content: classify parts and determine speaker
-  const { blocks, hasAIContent, hasToolContent } = classifyMixedParts(parts);
-
+  // Empty array — iContentFromAgentMessageInput already routed any
+  // legacy PartListUnion through the lossless converter. Reaching here
+  // with zero contents means the input was genuinely empty. No
+  // fabricated placeholder content (#2410).
   return {
-    speaker: resolveSpeaker(hasToolContent, hasAIContent),
-    blocks,
+    speaker: 'human',
+    blocks: [],
   };
 }
 
-function resolveSpeaker(
-  hasToolContent: boolean,
-  hasAIContent: boolean,
-): IContent['speaker'] {
-  if (hasToolContent) {
-    return 'tool';
-  }
-  if (hasAIContent) {
-    return 'ai';
-  }
-  return 'human';
+/**
+ * Converts ContentBlock[] to ContentBlock[] — identity pass-through.
+ *
+ * Previously this converted neutral blocks to Google Part[]. Now that the
+ * history recording layer is neutral, this is an identity function kept for
+ * API compatibility with callers that build IContent from blocks.
+ */
+export function convertBlocksToParts(blocks: ContentBlock[]): ContentBlock[] {
+  return blocks;
 }
 
-function convertAllFunctionResponses(parts: Part[]): IContent {
-  const blocks: ContentBlock[] = [];
-  for (const part of parts) {
-    if (
-      isNonNullObject(part) &&
-      'functionResponse' in part &&
-      part.functionResponse
-    ) {
-      blocks.push({
-        type: 'tool_response',
-        callId: part.functionResponse.id ?? '',
-        toolName: part.functionResponse.name ?? '',
-        result: part.functionResponse.response ?? {},
-        error: undefined,
-      } as ToolResponseBlock);
-    }
-  }
-  return { speaker: 'tool', blocks };
-}
-
-export function classifyMixedParts(parts: Part[]): {
+/**
+ * Converts mixed blocks to IContent, classifying the speaker.
+ * Exported for backward compatibility.
+ */
+export function classifyMixedParts(blocks: ContentBlock[]): {
   blocks: ContentBlock[];
   hasAIContent: boolean;
   hasToolContent: boolean;
 } {
-  const blocks: ContentBlock[] = [];
   let hasAIContent = false;
   let hasToolContent = false;
 
-  for (const part of parts) {
-    if (typeof part === 'string') {
-      blocks.push({ type: 'text', text: part });
+  for (const block of blocks) {
+    if (block.type === 'text') {
       hasAIContent = true;
-    } else if (isThoughtPart(part)) {
-      const thinkingBlock: ThinkingBlock = {
-        type: 'thinking',
-        thought: part.text ?? '',
-        isHidden: true,
-        sourceField: part.llxprtSourceField ?? 'thought',
-      };
-      if (part.thoughtSignature) {
-        thinkingBlock.signature = part.thoughtSignature;
-      }
-      blocks.push(thinkingBlock);
+    } else if (block.type === 'thinking') {
       hasAIContent = true;
-    } else if ('text' in part && part.text !== undefined) {
-      blocks.push({ type: 'text', text: part.text });
+    } else if (block.type === 'tool_call') {
       hasAIContent = true;
-    } else if ('functionCall' in part && part.functionCall) {
-      hasAIContent = true;
-      blocks.push({
-        type: 'tool_call',
-        id: part.functionCall.id ?? '',
-        name: part.functionCall.name ?? '',
-        parameters: part.functionCall.args ?? {},
-      } as ToolCallBlock);
-    } else if ('functionResponse' in part && part.functionResponse) {
+    } else if (block.type === 'tool_response') {
       hasToolContent = true;
-      blocks.push({
-        type: 'tool_response',
-        callId: part.functionResponse.id ?? '',
-        toolName: part.functionResponse.name ?? '',
-        result: part.functionResponse.response ?? {},
-        error: undefined,
-      } as ToolResponseBlock);
     }
   }
 
@@ -495,212 +339,17 @@ export function classifyMixedParts(parts: Part[]): {
 }
 
 /**
- * Converts IContent blocks to Gemini Parts array.
+ * Converts mixed blocks to IContent.
  */
-export function convertBlocksToParts(blocks: ContentBlock[]): Part[] {
-  const parts: Part[] = [];
+export function convertMixedPartsToIContent(blocks: ContentBlock[]): IContent {
+  const { hasAIContent, hasToolContent } = classifyMixedParts(blocks);
 
-  for (const block of blocks) {
-    switch (block.type) {
-      case 'text':
-        parts.push({ text: block.text });
-        break;
-      case 'tool_call': {
-        const toolCall = block;
-        parts.push({
-          functionCall: {
-            id: toolCall.id,
-            name: toolCall.name,
-            args: toolCall.parameters as Record<string, unknown>,
-          },
-        });
-        break;
-      }
-      case 'tool_response': {
-        const toolResponse = block;
-        parts.push({
-          functionResponse: {
-            id: toolResponse.callId,
-            name: toolResponse.toolName,
-            response: toolResponse.result as Record<string, unknown>,
-          },
-        });
-        break;
-      }
-      case 'thinking': {
-        const thinkingBlock = block;
-        const thoughtPart: ThoughtPart = {
-          thought: true,
-          text: thinkingBlock.thought,
-        };
-        if (thinkingBlock.signature) {
-          thoughtPart.thoughtSignature = thinkingBlock.signature;
-        }
-        if (thinkingBlock.sourceField) {
-          thoughtPart.llxprtSourceField = thinkingBlock.sourceField;
-        }
-        parts.push(thoughtPart);
-        break;
-      }
-      default:
-        break;
-    }
+  let speaker: IContent['speaker'] = 'human';
+  if (hasToolContent) {
+    speaker = 'tool';
+  } else if (hasAIContent) {
+    speaker = 'ai';
   }
 
-  return parts;
-}
-
-/**
- * Convert IContent to GenerateContentResponse for SDK compatibility.
- */
-export function convertIContentToResponse(
-  input: IContent,
-): GenerateContentResponse {
-  const parts = convertBlocksToParts(input.blocks);
-
-  const response = {
-    candidates: [
-      {
-        content: {
-          role: 'model',
-          parts,
-        },
-      },
-    ],
-    get text() {
-      return getResponseTextFromParts(parts) ?? '';
-    },
-    functionCalls: parts
-      .filter((p) => 'functionCall' in p)
-      .map((p) => p.functionCall!),
-    executableCode: undefined,
-    codeExecutionResult: undefined,
-  } as GenerateContentResponse;
-
-  return applyResponseMetadata(response, input, parts);
-}
-
-/**
- * Maps termination reason (stopReason/finishReason) to Gemini FinishReason
- * and applies it to the first candidate. Logs warnings for unmapped or
- * missing-candidate cases.
- */
-function applyFinishReasonMapping(
-  response: GenerateContentResponse,
-  input: IContent,
-): void {
-  const terminationReason =
-    input.metadata?.stopReason ?? input.metadata?.finishReason;
-
-  if (terminationReason && response.candidates?.[0]) {
-    const finishReasonByTerminationReason: Record<string, FinishReason> = {
-      // Anthropic/Gemini-style values
-      end_turn: FinishReason.STOP,
-      max_tokens: FinishReason.MAX_TOKENS,
-      stop_sequence: FinishReason.STOP,
-      tool_use: FinishReason.STOP,
-      pause_turn: FinishReason.STOP,
-      refusal: FinishReason.STOP,
-      model_context_window_exceeded: FinishReason.MAX_TOKENS,
-      // OpenAI Chat Completions-style values
-      stop: FinishReason.STOP,
-      length: FinishReason.MAX_TOKENS,
-      tool_calls: FinishReason.STOP,
-      function_call: FinishReason.STOP,
-      content_filter: FinishReason.SAFETY,
-      // OpenAI Responses API status values
-      completed: FinishReason.STOP,
-      incomplete: FinishReason.MAX_TOKENS,
-      failed: FinishReason.STOP,
-    };
-    const hasMapping = Object.prototype.hasOwnProperty.call(
-      finishReasonByTerminationReason,
-      terminationReason,
-    );
-    // @issue:2329 — always preserve the raw provider stop reason on the
-    // candidate (even when it has no coarse FinishReason mapping) so
-    // downstream consumers (agent loop, CLI) can distinguish e.g. a
-    // safety-classifier refusal from a generic stop. Stored on the
-    // repo-owned providerStopReason field — NOT the SDK's finishMessage,
-    // which is a human-readable description that native responses may set.
-    setProviderStopReason(response.candidates[0], terminationReason);
-    if (hasMapping) {
-      const mappedReason = finishReasonByTerminationReason[terminationReason];
-      response.candidates[0].finishReason = mappedReason;
-      logger.debug(
-        () => `[stream:message-converter] applied terminal metadata`,
-        {
-          speaker: input.speaker,
-          blockCount: input.blocks.length,
-          stopReason: input.metadata?.stopReason,
-          finishReason: input.metadata?.finishReason,
-          terminationReason,
-          mappedFinishReason: mappedReason,
-        },
-      );
-    } else {
-      logger.warn(
-        () =>
-          `[stream:message-converter] terminal metadata did not map to Gemini finishReason`,
-        {
-          speaker: input.speaker,
-          blockCount: input.blocks.length,
-          stopReason: input.metadata?.stopReason,
-          finishReason: input.metadata?.finishReason,
-          terminationReason,
-        },
-      );
-    }
-  } else if (input.metadata?.stopReason || input.metadata?.finishReason) {
-    logger.warn(
-      () =>
-        `[stream:message-converter] terminal metadata present but response candidate missing`,
-      {
-        speaker: input.speaker,
-        blockCount: input.blocks.length,
-        stopReason: input.metadata.stopReason,
-        finishReason: input.metadata.finishReason,
-        hasCandidate: Boolean(response.candidates?.[0]),
-      },
-    );
-  }
-}
-
-/**
- * Adds usage metadata, finish reason, and data property to the response.
- */
-export function applyResponseMetadata(
-  response: GenerateContentResponse,
-  input: IContent,
-  _parts: Part[],
-): GenerateContentResponse {
-  // Add data property that returns self-reference
-  // Make it non-enumerable to avoid circular reference in JSON.stringify
-  Object.defineProperty(response, 'data', {
-    get() {
-      return response;
-    },
-    enumerable: false,
-    configurable: true,
-  });
-
-  // Add usage metadata if present
-  if (input.metadata?.usage) {
-    const usageMetadata: UsageMetadataWithCache = {
-      promptTokenCount: usageTokenCount(input.metadata.usage.promptTokens),
-      candidatesTokenCount: usageTokenCount(
-        input.metadata.usage.completionTokens,
-      ),
-      totalTokenCount: usageTokenCount(input.metadata.usage.totalTokens),
-      cache_read_input_tokens:
-        input.metadata.usage.cache_read_input_tokens ?? 0,
-      cache_creation_input_tokens:
-        input.metadata.usage.cache_creation_input_tokens ?? 0,
-    };
-    response.usageMetadata = usageMetadata;
-  }
-
-  applyFinishReasonMapping(response, input);
-
-  return response;
+  return { speaker, blocks };
 }

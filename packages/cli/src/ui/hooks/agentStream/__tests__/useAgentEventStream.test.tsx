@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ContractPartListUnion } from '@vybestack/llxprt-code-core';
+import type { IContent, ContentBlock } from '@vybestack/llxprt-code-core';
 
 /**
  * Behavioral tests for useAgentEventStream — the CLI's consumer of the public
@@ -100,7 +100,7 @@ describe('useAgentEventStream', () => {
     const controller = new AbortController();
     await act(async () => {
       await result.current.runStream(
-        'test' as ContractPartListUnion,
+        'test' as string | ContentBlock[] | IContent,
         controller.signal,
         'prompt-1',
       );
@@ -143,7 +143,7 @@ describe('useAgentEventStream', () => {
     // Start streaming, then abort after first chunk
     const promise = act(async () => {
       const p = result.current.runStream(
-        'test' as ContractPartListUnion,
+        'test' as string | ContentBlock[] | IContent,
         controller.signal,
         'prompt-abort',
       );
@@ -196,14 +196,14 @@ describe('useAgentEventStream', () => {
       // Start both runs "simultaneously" — the second is queued behind the
       // first via the inflightRunRef serialization chain.
       const p1 = result.current.runStream(
-        'a' as ContractPartListUnion,
+        'a' as string | ContentBlock[] | IContent,
         controller.signal,
         'p1',
       );
       // Let the microtask queue flush so run 1 starts before run 2 is called
       await new Promise((r) => setTimeout(r, 0));
       const p2 = result.current.runStream(
-        'b' as ContractPartListUnion,
+        'b' as string | ContentBlock[] | IContent,
         controller.signal,
         'p2',
       );

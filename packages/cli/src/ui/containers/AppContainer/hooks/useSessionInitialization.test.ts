@@ -210,8 +210,8 @@ describe('useSessionInitialization', () => {
       expect.any(Number),
     );
     expect(addHistory).toHaveBeenCalledWith({
-      role: 'user',
-      parts: [{ text: 'extra context' }],
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'extra context' }],
     });
   });
 

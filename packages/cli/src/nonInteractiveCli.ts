@@ -17,7 +17,7 @@ import {
   type UserFeedbackPayload,
   type EmojiFilterMode,
   type MessageBus,
-  type ContractPart,
+  type AgentRequestInput,
   PLACEHOLDER_MODEL,
 } from '@vybestack/llxprt-code-core';
 import {
@@ -30,6 +30,7 @@ import {
   fromConfig,
   type Agent,
   type AgentToolHandle,
+  type AgentInput,
   type ProviderActivationIntent,
 } from '@vybestack/llxprt-code-agents';
 
@@ -222,7 +223,7 @@ async function resolveSlashQuery(
   abortController: AbortController,
   config: Config,
   settings: LoadedSettings,
-): Promise<ContractPart[] | undefined> {
+): Promise<AgentRequestInput | undefined> {
   if (!isSlashCommand(input)) {
     return undefined;
   }
@@ -236,7 +237,7 @@ async function resolveSlashQuery(
     slashCommandResult !== undefined &&
     (typeof slashCommandResult !== 'string' || slashCommandResult.length > 0)
   ) {
-    return slashCommandResult as ContractPart[];
+    return slashCommandResult as AgentRequestInput;
   }
   return undefined;
 }
@@ -246,7 +247,7 @@ async function resolveAtQuery(
   abortController: AbortController,
   config: Config,
   getToolHandle: (name: string) => AgentToolHandle | undefined,
-): Promise<ContractPart[]> {
+): Promise<AgentRequestInput> {
   const { processedQuery, error } = await handleAtCommand({
     query: input,
     config,
@@ -265,7 +266,7 @@ async function resolveAtQuery(
         : 'Exiting due to an error processing the @ command.';
     throw new FatalInputError(fatalMessage);
   }
-  return processedQuery as ContractPart[];
+  return processedQuery;
 }
 
 function emitUserMessage(
@@ -338,7 +339,7 @@ function collectActivationModelParams(
 }
 
 async function processQuery(
-  query: ContractPart[],
+  query: AgentRequestInput,
   agent: Agent,
   params: RunNonInteractiveParams,
   options: {
@@ -350,7 +351,7 @@ async function processQuery(
     startTime: number;
   },
 ): Promise<void> {
-  const eventStream = agent.stream(query, {
+  const eventStream = agent.stream(query as AgentInput, {
     signal: options.abortController.signal,
     promptId: params.prompt_id,
     maxTurns: params.config.getMaxSessionTurns(),

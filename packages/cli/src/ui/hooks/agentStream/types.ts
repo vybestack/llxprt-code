@@ -9,7 +9,7 @@
  * Only cross-module stable types belong here.
  */
 
-import { type ContractPartListUnion } from '@vybestack/llxprt-code-core';
+import { type AgentRequestInput } from '@vybestack/llxprt-code-core';
 
 export enum StreamProcessingStatus {
   Completed,
@@ -18,7 +18,7 @@ export enum StreamProcessingStatus {
 }
 
 export interface QueuedSubmission {
-  query: ContractPartListUnion;
+  query: AgentRequestInput;
   options?: { isContinuation: boolean };
   promptId?: string;
 }

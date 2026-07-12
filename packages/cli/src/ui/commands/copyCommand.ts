@@ -29,8 +29,8 @@ export const copyCommand: SlashCommand = {
     const chat = client.getChat();
     const history = chat.getHistory();
 
-    // Get the last message from the AI (model role)
-    const lastAiMessage = history.filter((item) => item.role === 'model').pop();
+    // Get the last message from the AI (ai speaker)
+    const lastAiMessage = history.filter((item) => item.speaker === 'ai').pop();
 
     if (!lastAiMessage) {
       return {
@@ -39,10 +39,13 @@ export const copyCommand: SlashCommand = {
         content: 'No output in history',
       };
     }
-    // Extract text from the parts
-    const lastAiOutput = lastAiMessage.parts
-      ?.filter((part) => part.text)
-      .map((part) => part.text)
+    // Extract text from the blocks
+    const lastAiOutput = lastAiMessage.blocks
+      .filter(
+        (block): block is { type: 'text'; text: string } =>
+          block.type === 'text',
+      )
+      .map((block) => block.text)
       .join('');
 
     if (lastAiOutput) {

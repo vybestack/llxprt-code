@@ -1,24 +1,23 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { describe, expect, it } from 'vitest';
-import type { Content } from '@google/genai';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { prepareHistoryUserInput } from './streamResponseHelpers.js';
 
 describe('prepareHistoryUserInput', () => {
-  it('keeps userInputWasArray aligned with filtered empty array history input when a single eager function response is fully removed', () => {
-    const userInput: Content = {
-      role: 'user',
-      parts: [
+  it('keeps userInputWasArray aligned with filtered empty array history input when a single eager tool response is fully removed', () => {
+    const userInput: IContent = {
+      speaker: 'tool',
+      blocks: [
         {
-          functionResponse: {
-            name: 'tool',
-            response: { output: 'ok' },
-            id: 'call-1',
-          },
+          type: 'tool_response',
+          callId: 'call-1',
+          toolName: 'tool',
+          result: { output: 'ok' },
         },
       ],
     };

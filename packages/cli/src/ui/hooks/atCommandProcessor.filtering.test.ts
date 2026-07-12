@@ -70,7 +70,7 @@ describe('handleAtCommand (filtering)', () => {
       });
 
       expect(result).toStrictEqual({
-        processedQuery: [{ text: query }],
+        processedQuery: [{ type: 'text', text: query }],
       });
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
         'Path node_modules/package.json is git-ignored and will be skipped.',
@@ -105,11 +105,11 @@ describe('handleAtCommand (filtering)', () => {
 
       expect(result).toStrictEqual({
         processedQuery: [
-          { text: `@${relativePath}` },
-          { text: '\n--- Content from referenced files ---' },
-          { text: `\nContent from @${relativePath}:\n` },
-          { text: 'globalThis.console.log("Hello world");' },
-          { text: '\n--- End of content ---' },
+          { type: 'text', text: `@${relativePath}` },
+          { type: 'text', text: '\n--- Content from referenced files ---' },
+          { type: 'text', text: `\nContent from @${relativePath}:\n` },
+          { type: 'text', text: 'globalThis.console.log("Hello world");' },
+          { type: 'text', text: '\n--- End of content ---' },
         ],
       });
     });
@@ -137,11 +137,11 @@ describe('handleAtCommand (filtering)', () => {
 
       expect(result).toStrictEqual({
         processedQuery: [
-          { text: `@${relativePath1} @${relativePath2}` },
-          { text: '\n--- Content from referenced files ---' },
-          { text: `\nContent from @${relativePath1}:\n` },
-          { text: '# Project README' },
-          { text: '\n--- End of content ---' },
+          { type: 'text', text: `@${relativePath1} @${relativePath2}` },
+          { type: 'text', text: '\n--- Content from referenced files ---' },
+          { type: 'text', text: `\nContent from @${relativePath1}:\n` },
+          { type: 'text', text: '# Project README' },
+          { type: 'text', text: '\n--- End of content ---' },
         ],
       });
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
@@ -170,7 +170,7 @@ describe('handleAtCommand (filtering)', () => {
       });
 
       expect(result).toStrictEqual({
-        processedQuery: [{ text: query }],
+        processedQuery: [{ type: 'text', text: query }],
       });
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
         'Path .git/config is git-ignored and will be skipped.',
@@ -203,7 +203,9 @@ describe('handleAtCommand (filtering)', () => {
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
         `Glob tool not found. Path ${invalidFile} will be skipped.`,
       );
-      expect(result.processedQuery).toStrictEqual([{ text: query }]);
+      expect(result.processedQuery).toStrictEqual([
+        { type: 'text', text: query },
+      ]);
       expect(result.processedQuery).not.toBeNull();
       expect(result.error).toBeUndefined();
     });
@@ -232,7 +234,7 @@ describe('handleAtCommand (filtering)', () => {
       });
 
       expect(result).toStrictEqual({
-        processedQuery: [{ text: query }],
+        processedQuery: [{ type: 'text', text: query }],
       });
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
         'Path build/output.js is llxprt-ignored and will be skipped.',
@@ -267,11 +269,11 @@ describe('handleAtCommand (filtering)', () => {
 
     expect(result).toStrictEqual({
       processedQuery: [
-        { text: `@${relativePath}` },
-        { text: '\n--- Content from referenced files ---' },
-        { text: `\nContent from @${relativePath}:\n` },
-        { text: 'globalThis.console.log("Hello world");' },
-        { text: '\n--- End of content ---' },
+        { type: 'text', text: `@${relativePath}` },
+        { type: 'text', text: '\n--- Content from referenced files ---' },
+        { type: 'text', text: `\nContent from @${relativePath}:\n` },
+        { type: 'text', text: 'globalThis.console.log("Hello world");' },
+        { type: 'text', text: '\n--- End of content ---' },
       ],
     });
   });
@@ -305,11 +307,11 @@ describe('handleAtCommand (filtering)', () => {
 
     expect(result).toStrictEqual({
       processedQuery: [
-        { text: `@${relativePath1} @${relativePath2}` },
-        { text: '\n--- Content from referenced files ---' },
-        { text: `\nContent from @${relativePath1}:\n` },
-        { text: '// Main application entry' },
-        { text: '\n--- End of content ---' },
+        { type: 'text', text: `@${relativePath1} @${relativePath2}` },
+        { type: 'text', text: '\n--- Content from referenced files ---' },
+        { type: 'text', text: `\nContent from @${relativePath1}:\n` },
+        { type: 'text', text: '// Main application entry' },
+        { type: 'text', text: '\n--- End of content ---' },
       ],
     });
     expect(mockOnDebugMessage).toHaveBeenCalledWith(

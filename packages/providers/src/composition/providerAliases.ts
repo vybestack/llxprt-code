@@ -33,6 +33,7 @@ export interface StaticModelEntry {
   id: string;
   name: string;
   contextWindow?: number;
+  maxOutputTokens?: number;
 }
 
 export interface ModelDefaultRule {

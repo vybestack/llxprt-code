@@ -4,11 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  ContractContent,
-  ContractPart,
-  ContractPartListUnion,
-} from '@vybestack/llxprt-code-core';
+import type { IContent, ContentBlock } from '@vybestack/llxprt-code-core';
 
 /**
  * Structural input for {@link extractToolResultText}: the LLM-content and
@@ -22,20 +18,20 @@ export interface ToolResultTextInput {
 }
 
 /**
- * Extracts visible text from legacy ContractPart[] — filters thought parts and joins
+ * Extracts visible text from ContentBlock[] — filters thought blocks and joins
  * text segments. Local replacement for the retired core helper
  * getResponseTextFromParts (which migrated to ContentBlock[]).
  */
-function isHiddenThoughtPart(part: ContractPart): boolean {
-  return 'thought' in part && part.thought === true;
+function isHiddenThoughtBlock(block: ContentBlock): boolean {
+  return block.type === 'thinking';
 }
 
-function getResponseTextFromPartsLocal(
-  parts: ContractPart[],
+function getResponseTextFromBlocksLocal(
+  blocks: ContentBlock[],
 ): string | undefined {
-  const textSegments = parts
-    .filter((part) => !isHiddenThoughtPart(part))
-    .map((part) => part.text)
+  const textSegments = blocks
+    .filter((block) => !isHiddenThoughtBlock(block))
+    .map((block) => (block.type === 'text' ? block.text : undefined))
     .filter((text): text is string => typeof text === 'string');
   if (textSegments.length === 0) {
     return undefined;
@@ -46,11 +42,11 @@ function getResponseTextFromPartsLocal(
 export function extractToolResultText(
   toolResult: ToolResultTextInput,
 ): string | null {
-  // llmContent is a ContractPartListUnion at runtime for every producer (core tools
+  // llmContent is a string | ContentBlock[] | IContent at runtime for every producer (core tools
   // and the public agent handle projection); the structural input widens it
   // to unknown so both result types are accepted.
   const textFromLlmContent = extractTextFromPartList(
-    toolResult.llmContent as ContractPartListUnion | undefined,
+    toolResult.llmContent as string | ContentBlock[] | IContent | undefined,
   );
   if (textFromLlmContent !== null) {
     return textFromLlmContent;
@@ -67,7 +63,7 @@ export function extractToolResultText(
 }
 
 export function extractTextFromPartList(
-  llmContent: ContractPartListUnion | undefined,
+  llmContent: string | ContentBlock[] | IContent | undefined,
 ): string | null {
   if (llmContent === undefined) {
     return null;
@@ -79,7 +75,7 @@ export function extractTextFromPartList(
   }
 
   const parts = normalizeToParts(llmContent);
-  const text = getResponseTextFromPartsLocal(parts);
+  const text = getResponseTextFromBlocksLocal(parts);
   if (text !== undefined) {
     const trimmed = text.trim();
     if (trimmed.length > 0) {
@@ -88,8 +84,10 @@ export function extractTextFromPartList(
   }
 
   for (const part of parts) {
-    const response = part.functionResponse?.response;
-    const extracted = extractOutputString(response);
+    if (part.type !== 'tool_response') {
+      continue;
+    }
+    const extracted = extractOutputString(part.result);
     if (extracted !== null) {
       return extracted;
     }
@@ -98,22 +96,22 @@ export function extractTextFromPartList(
   return null;
 }
 
-export function normalizeToParts(input: ContractPartListUnion): ContractPart[] {
+export function normalizeToParts(
+  input: string | ContentBlock[] | IContent,
+): ContentBlock[] {
   if (typeof input === 'string') {
-    return [{ text: input }];
+    return [{ type: 'text', text: input }];
   }
 
   if (Array.isArray(input)) {
-    return input.flatMap((item) =>
-      normalizeToParts(item as ContractPartListUnion),
-    );
+    return input;
   }
 
   if (isContent(input)) {
-    return input.parts ?? [];
+    return input.blocks;
   }
 
-  return [input];
+  return [];
 }
 
 export function extractOutputString(response: unknown): string | null {
@@ -142,9 +140,9 @@ export function extractOutputString(response: unknown): string | null {
 
   if (responseRecord.content !== undefined) {
     const contentParts = normalizeToParts(
-      responseRecord.content as ContractPartListUnion,
+      responseRecord.content as string | ContentBlock[] | IContent,
     );
-    const text = getResponseTextFromPartsLocal(contentParts);
+    const text = getResponseTextFromBlocksLocal(contentParts);
     if (text !== undefined) {
       const trimmed = text.trim();
       if (trimmed.length > 0) {
@@ -156,11 +154,11 @@ export function extractOutputString(response: unknown): string | null {
   return null;
 }
 
-function isContent(value: unknown): value is ContractContent {
+function isContent(value: unknown): value is IContent {
   if (value === undefined || value === null || typeof value !== 'object') {
     return false;
   }
 
-  const candidate = value as Partial<ContractContent>;
-  return Array.isArray(candidate.parts);
+  const candidate = value as Partial<IContent>;
+  return Array.isArray(candidate.blocks);
 }

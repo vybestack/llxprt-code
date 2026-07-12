@@ -7,30 +7,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ServerAgentStreamEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
-import type { GenerateContentResponse, Part } from '@google/genai';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
-import {
-  type MockedChatInstance,
-  mockResponseToChunk,
-} from './turn-test-helpers.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
   mockGetHistory: vi.fn(),
 }));
-
-vi.mock('@google/genai', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@google/genai')>();
-  const MockChat = vi.fn().mockImplementation(() => ({
-    sendMessageStream: mockSendMessageStream,
-    getHistory: mockGetHistory,
-  }));
-  return {
-    ...actual,
-    Chat: MockChat,
-  };
-});
 
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
@@ -38,43 +23,17 @@ vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
 
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
-  () => ({
-    getResponseText: (resp: GenerateContentResponse) =>
-      resp.candidates?.[0]?.content?.parts
-        ?.filter((part) => (part as { thought?: boolean }).thought !== true)
-        .map((part) => part.text)
-        .join('') ?? undefined,
-    getFunctionCalls: (resp: GenerateContentResponse) =>
-      resp.functionCalls ?? [],
-    getFunctionCallsFromParts: (parts: Part[]) => {
-      const functionCalls = parts
-        .filter((part) => part.functionCall !== undefined)
-        .map((part) => part.functionCall!);
-      return functionCalls.length > 0 ? functionCalls : undefined;
-    },
-    analyzeResponseOutcome: (parts: Part[]) => {
-      let hasVisibleText = false;
-      let hasThinking = false;
-      let hasToolCalls = false;
-      for (const part of parts) {
-        const isThinking = (part as { thought?: boolean }).thought === true;
-        if (isThinking) hasThinking = true;
-        if (part.functionCall !== undefined) hasToolCalls = true;
-        if (
-          !isThinking &&
-          typeof part.text === 'string' &&
-          part.text.trim() !== ''
-        )
-          hasVisibleText = true;
-      }
-      return {
-        hasVisibleText,
-        hasThinking,
-        hasToolCalls,
-        isActionable: hasVisibleText || hasToolCalls,
-      };
-    },
-  }),
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js')
+      >();
+    return {
+      // analyzeResponseOutcome now operates on ContentBlock[]; delegate to the
+      // real implementation so thinking/tool_call/text detection is correct.
+      analyzeResponseOutcome: actual.analyzeResponseOutcome,
+    };
+  },
 );
 
 describe('Turn - stream idle timeout behavioral tests', () => {
@@ -143,23 +102,19 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [{ content: { parts: [{ text: 'First chunk' }] } }],
-        }),
+        value: mockChunk({ text: 'First chunk' }),
       };
       // Inter-chunk gap that exceeds the 30s inter-chunk idle timeout.
       await vi.advanceTimersByTimeAsync(45_000);
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [{ content: { parts: [{ text: 'Late response' }] } }],
-        }),
+        value: mockChunk({ text: 'Late response' }),
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
     const events: ServerAgentStreamEvent[] = [];
-    const reqParts: Part[] = [{ text: 'Hi' }];
+    const reqParts: ContentBlock[] = [{ type: 'text', text: 'Hi' }];
     const signal = new AbortController().signal;
 
     const iterator = turn.run(reqParts, signal);
@@ -217,15 +172,13 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [{ content: { parts: [{ text: 'Fast response' }] } }],
-        }),
+        value: mockChunk({ text: 'Fast response' }),
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
     const events: ServerAgentStreamEvent[] = [];
-    const reqParts: Part[] = [{ text: 'Hi' }];
+    const reqParts: ContentBlock[] = [{ type: 'text', text: 'Hi' }];
     const signal = new AbortController().signal;
 
     for await (const event of turn.run(reqParts, signal)) {
@@ -276,15 +229,13 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       await iteratorPromise;
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [{ content: { parts: [{ text: 'Finally' }] } }],
-        }),
+        value: mockChunk({ text: 'Finally' }),
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
     const events: ServerAgentStreamEvent[] = [];
-    const reqParts: Part[] = [{ text: 'Hi' }];
+    const reqParts: ContentBlock[] = [{ type: 'text', text: 'Hi' }];
     const abortController = new AbortController();
 
     const runPromise = (async () => {
@@ -346,23 +297,19 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [{ content: { parts: [{ text: 'First chunk' }] } }],
-        }),
+        value: mockChunk({ text: 'First chunk' }),
       };
       // Inter-chunk gap exceeding the env-driven 15s inter-chunk timeout.
       await vi.advanceTimersByTimeAsync(30_000);
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [{ content: { parts: [{ text: 'Late response' }] } }],
-        }),
+        value: mockChunk({ text: 'Late response' }),
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
     const events: ServerAgentStreamEvent[] = [];
-    const reqParts: Part[] = [{ text: 'Hi' }];
+    const reqParts: ContentBlock[] = [{ type: 'text', text: 'Hi' }];
     const signal = new AbortController().signal;
 
     const runPromise = (async () => {
@@ -425,15 +372,13 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       await iteratorPromise;
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [{ content: { parts: [{ text: 'Finally' }] } }],
-        }),
+        value: mockChunk({ text: 'Finally' }),
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
     const events: ServerAgentStreamEvent[] = [];
-    const reqParts: Part[] = [{ text: 'Hi' }];
+    const reqParts: ContentBlock[] = [{ type: 'text', text: 'Hi' }];
     const abortController = new AbortController();
 
     const runPromise = (async () => {

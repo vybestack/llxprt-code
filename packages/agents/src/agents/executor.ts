@@ -11,12 +11,9 @@ import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRunti
 import { type ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createSettingsProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import { createAgentRuntimeStateFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeStateFactory.js';
-import type {
-  Content,
-  FunctionCall,
-  GenerateContentConfig,
-  FunctionDeclaration,
-} from '@google/genai';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
+
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -26,6 +23,8 @@ import { CoreToolRegistryHostAdapter } from '@vybestack/llxprt-code-core/tools-a
 import type {
   AgentDefinition,
   AgentInputs,
+  FunctionCall,
+  FunctionDeclaration,
   OutputObject,
   SubagentActivityEvent,
 } from './types.js';
@@ -47,6 +46,7 @@ import {
   handleProtocolViolation,
 } from './recovery.js';
 import { templateString } from './utils.js';
+import type { SubagentActivityEventType } from './types.js';
 import { type z } from 'zod';
 import {
   processFunctionCalls as processFunctionCallsDispatch,
@@ -54,12 +54,26 @@ import {
 } from './executor-tool-dispatch.js';
 import { callModelAndConsumeStream } from './executor-stream-processor.js';
 
+/**
+ * Provider-neutral generation config shape.
+ *
+ * Structurally compatible with the Google `GenerateContentConfig` expected by
+ * `ChatSession` so that the executor can configure model parameters without
+ * importing the Gemini SDK.
+ */
+type AgentGenerateContentConfig = {
+  temperature?: number;
+  topP?: number;
+  thinkingConfig?: { includeThoughts?: boolean; thinkingBudget?: number };
+  systemInstruction?: string;
+};
+
 /** Result type for a single agent loop iteration. */
 type AgentLoopIterationResult =
   | {
       kind: 'continue';
       recoveryState: RecoveryState;
-      currentMessage: Content;
+      currentMessage: IContent;
       recoveryModelResponseUsed: boolean | undefined;
       turnCounter: number;
       finalResult: string | null;
@@ -220,10 +234,10 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       const query = this.definition.promptConfig.query
         ? templateString(this.definition.promptConfig.query, inputs)
         : 'Get Started!';
-      const initialMessage: Content = {
-        role: 'user',
-        parts: [{ text: query }],
-      };
+      const initialMessage: IContent = iContentFromBlocks(
+        [{ type: 'text', text: query }],
+        'human',
+      );
 
       const { terminateReason, finalResult } = await this.runAgentLoop(
         chat,
@@ -256,7 +270,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
   private async runAgentLoop(
     chat: ChatSession,
     tools: FunctionDeclaration[],
-    initialMessage: Content,
+    initialMessage: IContent,
     signal: AbortSignal,
     startTime: number,
     turnCounter: number,
@@ -265,7 +279,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     finalResult: string | null;
   }> {
     let finalResult: string | null = null;
-    let currentMessage: Content = initialMessage;
+    let currentMessage: IContent = initialMessage;
     let recoveryState: RecoveryState = { phase: 'none' };
     let recoveryModelResponseUsed = false;
 
@@ -303,7 +317,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     startTime: number,
     turnCounter: number,
     finalResult: string | null,
-    currentMessage: Content,
+    currentMessage: IContent,
     recoveryState: RecoveryState,
     recoveryModelResponseUsed: boolean,
   ): Promise<AgentLoopIterationResult> {
@@ -355,7 +369,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     startTime: number,
     turnCounter: number,
     finalResult: string | null,
-    currentMessage: Content,
+    currentMessage: IContent,
     recoveryState: RecoveryState,
     recoveryModelResponseUsed: boolean,
   ): Promise<AgentLoopIterationResult> {
@@ -399,7 +413,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     chat: ChatSession,
     tools: FunctionDeclaration[],
     signal: AbortSignal,
-    currentMessage: Content,
+    currentMessage: IContent,
     recoveryState: RecoveryState,
     recoveryModelResponseUsed: boolean,
     finalResult: string | null,
@@ -423,7 +437,8 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         recoveryAbort?.signal ?? signal,
         promptId,
         this.runtimeContext,
-        (type, data) => this.emitActivity(type, data),
+        (type: SubagentActivityEventType, data: Record<string, unknown>) =>
+          this.emitActivity(type, data),
       );
       return { kind: 'ok', functionCalls: modelResult.functionCalls };
     } catch (error) {
@@ -749,8 +764,8 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
   private buildGenerationConfig(
     modelConfig: AgentDefinition<z.ZodTypeAny>['modelConfig'],
     systemInstruction?: string,
-  ): GenerateContentConfig {
-    const generationConfig: GenerateContentConfig = {
+  ): AgentGenerateContentConfig {
+    const generationConfig: AgentGenerateContentConfig = {
       temperature: modelConfig.temp,
       topP: modelConfig.top_p,
       thinkingConfig: {
@@ -889,12 +904,12 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
    *
    * @param initialMessages The initial messages from the prompt config.
    * @param inputs The validated input parameters for this invocation.
-   * @returns A new array of `Content` with templated strings.
+   * @returns A new array of `IContent` with templated strings.
    */
   private applyTemplateToInitialMessages(
-    initialMessages: Content[],
+    initialMessages: IContent[],
     inputs: AgentInputs,
-  ): Content[] {
+  ): IContent[] {
     return applyTemplateToInitialMessages(initialMessages, inputs);
   }
 

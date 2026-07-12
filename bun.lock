@@ -203,7 +203,6 @@
       "name": "@vybestack/llxprt-code-agents",
       "version": "0.10.0",
       "dependencies": {
-        "@google/genai": "1.30.0",
         "@vybestack/llxprt-code-auth": "file:../auth",
         "@vybestack/llxprt-code-core": "file:../core",
         "@vybestack/llxprt-code-ide-integration": "file:../ide-integration",
@@ -396,6 +395,8 @@
         "zod": "^3.25.76",
       },
       "devDependencies": {
+        "@stryker-mutator/core": "^9.6.1",
+        "@stryker-mutator/vitest-runner": "^9.6.1",
         "@types/debug": "^4.1.12",
         "@types/diff": "^7.0.2",
         "@types/fast-levenshtein": "^0.0.4",

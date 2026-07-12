@@ -14,10 +14,14 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type ToolCallRequestInfo, AgentEventType, Turn } from './turn.js';
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
-import { type Content, type Part } from '@google/genai';
+import type {
+  IContent,
+  ContentBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 import { type ChatSession } from './chatSession.js';
-import { isHookRestrictedToolCall } from './hookToolRestrictions.js';
+import { isToolNameRestricted } from './hookToolRestrictions.js';
 import type {
   AgentRuntimeContext,
   ToolRegistryView,
@@ -365,7 +369,7 @@ export class SubAgentScope {
     return { chat, abortController, functionDeclarations };
   }
 
-  private buildInitialMessages(context: ContextState): Content[] {
+  private buildInitialMessages(context: ContextState): IContent[] {
     const behaviourPrompts =
       (context.get('task_behaviour_prompts') as string[] | undefined) ?? [];
     const initialInstruction =
@@ -374,10 +378,7 @@ export class SubAgentScope {
         : 'Follow the task directives provided in the system prompt.';
 
     return [
-      {
-        role: 'user',
-        parts: [{ text: initialInstruction }],
-      },
+      iContentFromBlocks([{ type: 'text', text: initialInstruction }], 'human'),
     ];
   }
 
@@ -391,7 +392,7 @@ export class SubAgentScope {
     startTime: number,
     turnCounter: number,
     currentTurn: number,
-  ): Promise<Content[] | null> {
+  ): Promise<IContent[] | null> {
     const recheck = checkTerminationConditions(turnCounter, startTime, execCtx);
     if (recheck.shouldStop) return null;
 
@@ -464,7 +465,7 @@ export class SubAgentScope {
    */
   private async runInteractiveLoopIteration(
     chat: ChatSession,
-    currentMessages: Content[],
+    currentMessages: IContent[],
     abortController: AbortController,
     turnCounter: number,
     startTime: number,
@@ -481,7 +482,7 @@ export class SubAgentScope {
   ): Promise<
     | { action: 'stop' }
     | { action: 'abort' }
-    | { action: 'continue'; messages: Content[]; turnCounter: number }
+    | { action: 'continue'; messages: IContent[]; turnCounter: number }
   > {
     const check = checkTerminationConditions(turnCounter, startTime, execCtx);
     if (check.shouldStop) return { action: 'stop' };
@@ -546,7 +547,7 @@ export class SubAgentScope {
 
   private async runInteractiveTurn(
     chat: ChatSession,
-    currentMessages: Content[],
+    currentMessages: IContent[],
     abortController: AbortController,
     turnIndex: number,
     execCtx: ExecutionLoopContext,
@@ -561,11 +562,11 @@ export class SubAgentScope {
       | undefined;
     const providerName = providerNameOrDefault(providerRaw);
     const turn = new Turn(chat, promptId, this.subagentId, providerName);
-    const parts = currentMessages[0]?.parts ?? [];
+    const blocks = currentMessages[0]?.blocks ?? [];
 
     let textResponse = '';
     try {
-      const stream = turn.run(parts, abortController.signal);
+      const stream = turn.run(blocks, abortController.signal);
       for await (const event of stream) {
         if (abortController.signal.aborted === true) break;
         const eventText = processInteractiveStreamEvent(event, execCtx);
@@ -587,22 +588,20 @@ export class SubAgentScope {
 
   private partitionInteractiveToolRequests(
     toolRequests: ToolCallRequestInfo[],
-  ): { manualParts: Part[]; schedulerRequests: ToolCallRequestInfo[] } {
-    const manualParts: Part[] = [];
+  ): {
+    manualBlocks: ContentBlock[];
+    schedulerRequests: ToolCallRequestInfo[];
+  } {
+    const manualBlocks: ContentBlock[] = [];
     const schedulerRequests: ToolCallRequestInfo[] = [];
 
     for (const request of toolRequests) {
       const hookRestrictedAllowedTools = request.hookRestrictedAllowedTools;
-      const functionCall = {
-        name: request.name,
-        args: request.args,
-        id: request.callId,
-      };
-      if (isHookRestrictedToolCall(functionCall, hookRestrictedAllowedTools)) {
+      if (isToolNameRestricted(request.name, hookRestrictedAllowedTools)) {
         continue;
       }
       if (request.name === 'self_emitvalue') {
-        manualParts.push(
+        manualBlocks.push(
           ...handleEmitValueCall(request, {
             output: this.output,
             onMessage: this.onMessage,
@@ -615,7 +614,7 @@ export class SubAgentScope {
       }
     }
 
-    return { manualParts, schedulerRequests };
+    return { manualBlocks, schedulerRequests };
   }
 
   private async handleInteractiveToolCalls(
@@ -632,13 +631,13 @@ export class SubAgentScope {
     chat: ChatSession,
     abortController: AbortController,
     execCtx: ExecutionLoopContext,
-  ): Promise<Content[] | null> {
+  ): Promise<IContent[] | null> {
     if (toolRequests.length === 0) return null;
 
-    const { manualParts, schedulerRequests } =
+    const { manualBlocks, schedulerRequests } =
       this.partitionInteractiveToolRequests(toolRequests);
 
-    let responseParts: Part[] = [...manualParts];
+    let responseBlocks: ContentBlock[] = [...manualBlocks];
 
     if (schedulerRequests.length > 0) {
       const completionPromise = scheduler.awaitCompletedCalls(
@@ -660,7 +659,7 @@ export class SubAgentScope {
         );
       }
 
-      responseParts = responseParts.concat(
+      responseBlocks = responseBlocks.concat(
         buildPartsFromCompletedCalls(completedCalls, {
           onMessage: this.onMessage,
           subagentId: this.subagentId,
@@ -681,21 +680,22 @@ export class SubAgentScope {
           () =>
             `Subagent ${this.subagentId} cannot use tool '${fatalCall.request.name}': ${fatalMessage}`,
         );
-        responseParts.push({ text: fatalMessage });
+        responseBlocks.push({ type: 'text', text: fatalMessage });
         execCtx.output.final_message = fatalMessage;
       }
     }
 
-    if (responseParts.length === 0) {
-      if (manualParts.length === 0 && schedulerRequests.length === 0) {
+    if (responseBlocks.length === 0) {
+      if (manualBlocks.length === 0 && schedulerRequests.length === 0) {
         return null;
       }
-      responseParts.push({
+      responseBlocks.push({
+        type: 'text',
         text: 'All tool calls failed. Please analyze the errors and try an alternative approach.',
       });
     }
 
-    return [{ role: 'user', parts: responseParts }];
+    return [iContentFromBlocks(responseBlocks, 'tool')];
   }
 
   private async cleanupInteractive(
@@ -741,7 +741,7 @@ export class SubAgentScope {
 
     await executeNonInteractiveRun(
       chat,
-      toolsList,
+      toolsList as unknown as Parameters<typeof executeNonInteractiveRun>[1],
       abortController,
       initialMessages,
       startTime,

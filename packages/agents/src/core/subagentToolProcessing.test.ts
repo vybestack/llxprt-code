@@ -7,6 +7,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { ToolCallBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   toSnakeCase,
   isFatalToolError,
@@ -21,7 +22,6 @@ import {
   type BuildPartsContext,
   type ProcessFunctionCallsContext,
 } from './subagentToolProcessing.js';
-import { setHookRestrictedAllowedToolsOnFunctionCall } from './hookToolRestrictions.js';
 import {
   SubagentTerminateMode,
   type OutputObject,
@@ -124,7 +124,7 @@ describe('subagentToolProcessing', () => {
           ? {
               name,
               description: '',
-              parameterSchema: { type: 'OBJECT', properties: {} },
+              parameterSchema: { type: 'object', properties: {} },
             }
           : undefined,
     };
@@ -305,7 +305,7 @@ describe('subagentToolProcessing', () => {
       };
     }
 
-    it('should store emitted variable and return functionResponse', () => {
+    it('should store emitted variable and return tool_response', () => {
       const ctx = makeCtx();
       const parts = handleEmitValueCall(
         {
@@ -320,7 +320,7 @@ describe('subagentToolProcessing', () => {
       );
       expect(ctx.output.emitted_vars['result']).toBe('hello');
       expect(parts).toHaveLength(1);
-      expect(parts[0]).toHaveProperty('functionResponse');
+      expect(parts[0]).toMatchObject({ type: 'tool_response' });
     });
 
     it('should call onMessage when provided', () => {
@@ -356,8 +356,8 @@ describe('subagentToolProcessing', () => {
       );
       expect(parts).toHaveLength(1);
       const resp = (
-        parts[0] as { functionResponse: { response: { error: string } } }
-      ).functionResponse.response;
+        parts[0] as { type: 'tool_response'; result: { error?: string } }
+      ).result;
       expect(resp.error).toContain('requires');
     });
   });
@@ -375,7 +375,7 @@ describe('subagentToolProcessing', () => {
       };
     }
 
-    it('should extract functionResponse parts from completed calls', () => {
+    it('should extract tool_response blocks from completed calls', () => {
       const parts = buildPartsFromCompletedCalls(
         [
           {
@@ -392,11 +392,10 @@ describe('subagentToolProcessing', () => {
               callId: 'c1',
               responseParts: [
                 {
-                  functionResponse: {
-                    id: 'c1',
-                    name: 'tool_a',
-                    response: { output: 'ok' },
-                  },
+                  type: 'tool_response',
+                  callId: 'c1',
+                  toolName: 'tool_a',
+                  result: { output: 'ok' },
                 },
               ],
               agentId: 'a1',
@@ -406,10 +405,10 @@ describe('subagentToolProcessing', () => {
         makeCtx(),
       );
       expect(parts.length).toBe(1);
-      expect(parts[0]).toHaveProperty('functionResponse');
+      expect(parts[0]).toMatchObject({ type: 'tool_response' });
     });
 
-    it('should create fallback functionResponse when no responseParts', () => {
+    it('should create fallback tool_response when no responseParts', () => {
       const parts = buildPartsFromCompletedCalls(
         [
           {
@@ -428,7 +427,7 @@ describe('subagentToolProcessing', () => {
         makeCtx(),
       );
       expect(parts.length).toBe(1);
-      expect(parts[0]).toHaveProperty('functionResponse');
+      expect(parts[0]).toMatchObject({ type: 'tool_response' });
     });
 
     it('should not call onMessage for tools with canUpdateOutput=true', () => {
@@ -486,7 +485,7 @@ describe('subagentToolProcessing', () => {
       expect(onMessage).toHaveBeenCalledWith('output text');
     });
 
-    it('should filter out functionCall parts (Anthropic boundary)', () => {
+    it('should filter out tool_call blocks (Anthropic boundary)', () => {
       const parts = buildPartsFromCompletedCalls(
         [
           {
@@ -502,13 +501,17 @@ describe('subagentToolProcessing', () => {
             response: {
               callId: 'c5',
               responseParts: [
-                { functionCall: { name: 'tool_e', args: {} } },
                 {
-                  functionResponse: {
-                    id: 'c5',
-                    name: 'tool_e',
-                    response: { ok: true },
-                  },
+                  type: 'tool_call',
+                  callId: 'c5',
+                  toolName: 'tool_e',
+                  args: {},
+                },
+                {
+                  type: 'tool_response',
+                  callId: 'c5',
+                  toolName: 'tool_e',
+                  result: { ok: true },
                 },
               ],
               agentId: 'a1',
@@ -518,9 +521,9 @@ describe('subagentToolProcessing', () => {
         makeCtx(),
       );
       expect(parts.length).toBe(1);
-      expect(parts[0]).toHaveProperty('functionResponse');
+      expect(parts[0]).toMatchObject({ type: 'tool_response' });
 
-      expect(parts[0]).not.toHaveProperty('functionCall');
+      expect(parts[0]).not.toMatchObject({ type: 'tool_call' });
     });
   });
 
@@ -548,25 +551,21 @@ describe('subagentToolProcessing', () => {
     }
 
     it('does not execute hook-restricted provider-emitted function calls', async () => {
-      const allowedCall = {
+      const allowedCall: ToolCallBlock = {
+        type: 'tool_call',
         id: 'allowed-call',
         name: 'self_emitvalue',
-        args: {
+        parameters: {
           emit_variable_name: 'result',
           emit_variable_value: 'allowed',
         },
       };
-      const blockedCall = {
+      const blockedCall: ToolCallBlock = {
+        type: 'tool_call',
         id: 'blocked-call',
         name: 'run_shell_command',
-        args: { command: 'echo blocked' },
+        parameters: { command: 'echo blocked' },
       };
-      setHookRestrictedAllowedToolsOnFunctionCall(allowedCall, [
-        'self_emitvalue',
-      ]);
-      setHookRestrictedAllowedToolsOnFunctionCall(blockedCall, [
-        'self_emitvalue',
-      ]);
 
       const ctx = makeProcessContext();
       const content = await processFunctionCalls(
@@ -574,6 +573,7 @@ describe('subagentToolProcessing', () => {
         new AbortController(),
         'prompt-1',
         ctx,
+        ['self_emitvalue'], // only self_emitvalue is allowed
       );
 
       expect(ctx.output.emitted_vars['result']).toBe('allowed');
@@ -585,12 +585,12 @@ describe('subagentToolProcessing', () => {
     });
 
     it('returns empty content when every provider-emitted function call is hook-restricted', async () => {
-      const blockedCall = {
+      const blockedCall: ToolCallBlock = {
+        type: 'tool_call',
         id: 'blocked-call',
         name: 'run_shell_command',
-        args: { command: 'echo blocked' },
+        parameters: { command: 'echo blocked' },
       };
-      setHookRestrictedAllowedToolsOnFunctionCall(blockedCall, []);
 
       const ctx = makeProcessContext();
       const content = await processFunctionCalls(
@@ -598,6 +598,7 @@ describe('subagentToolProcessing', () => {
         new AbortController(),
         'prompt-1',
         ctx,
+        [], // empty allowed list — everything is restricted
       );
 
       expect(content).toStrictEqual([]);

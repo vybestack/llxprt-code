@@ -7,31 +7,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ServerToolCallRequestEvent, ServerErrorEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
-import type { Part, Content } from '@google/genai';
+import type {
+  ContentBlock,
+  IContent,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import type { ChatSession } from './chatSession.js';
 import { InvalidStreamError, StreamEventType } from './chatSession.js';
-import {
-  type MockedChatInstance,
-  mockResponseToChunk,
-} from './turn-test-helpers.js';
+import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
   mockGetHistory: vi.fn(),
 }));
-
-vi.mock('@google/genai', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@google/genai')>();
-  const MockChat = vi.fn().mockImplementation(() => ({
-    sendMessageStream: mockSendMessageStream,
-    getHistory: mockGetHistory,
-  }));
-  return {
-    ...actual,
-    Chat: MockChat,
-  };
-});
 
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
@@ -74,21 +62,17 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [{ content: { parts: [{ text: 'Hello' }] } }],
-          }),
+          value: mockChunk({ text: 'Hello' }),
         };
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [{ content: { parts: [{ text: ' world' }] } }],
-          }),
+          value: mockChunk({ text: ' world' }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
       const events = [];
-      const reqParts: Part[] = [{ text: 'Hi' }];
+      const reqParts: ContentBlock[] = [{ text: 'Hi' }];
       for await (const event of turn.run(
         reqParts,
         new AbortController().signal,
@@ -115,31 +99,21 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [
-              { content: { parts: [{ text: 'LLXPRT2208_ALPHA' }] } },
-            ],
-          }),
+          value: mockChunk({ text: 'LLXPRT2208_ALPHA' }),
         };
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [{ content: { parts: [{ text: '\n\n' }] } }],
-          }),
+          value: mockChunk({ text: '\n\n' }),
         };
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [
-              { content: { parts: [{ text: 'Alpha paragraph one.' }] } },
-            ],
-          }),
+          value: mockChunk({ text: 'Alpha paragraph one.' }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
       const events = [];
-      const reqParts: Part[] = [{ text: 'Hi' }];
+      const reqParts: ContentBlock[] = [{ text: 'Hi' }];
       for await (const event of turn.run(
         reqParts,
         new AbortController().signal,
@@ -166,23 +140,17 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [{ content: { parts: [{ text: '\n\n' }] } }],
-          }),
+          value: mockChunk({ text: '\n\n' }),
         };
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [
-              { content: { parts: [{ text: 'LLXPRT2208_ALPHA' }] } },
-            ],
-          }),
+          value: mockChunk({ text: 'LLXPRT2208_ALPHA' }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
       const events = [];
-      const reqParts: Part[] = [{ text: 'Hi' }];
+      const reqParts: ContentBlock[] = [{ text: 'Hi' }];
       for await (const event of turn.run(
         reqParts,
         new AbortController().signal,
@@ -203,27 +171,10 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [
-              {
-                content: {
-                  parts: [
-                    {
-                      functionCall: {
-                        id: 'fc1',
-                        name: 'tool1',
-                        args: { arg1: 'val1' },
-                      },
-                    },
-                    {
-                      functionCall: {
-                        name: 'tool2',
-                        args: { arg2: 'val2' },
-                      },
-                    },
-                  ],
-                },
-              },
+          value: mockChunk({
+            toolCalls: [
+              { id: 'fc1', name: 'tool1', args: { arg1: 'val1' } },
+              { name: 'tool2', args: { arg2: 'val2' } },
             ],
           }),
         };
@@ -231,7 +182,7 @@ describe('Turn', () => {
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
       const events = [];
-      const reqParts: Part[] = [{ text: 'Use tools' }];
+      const reqParts: ContentBlock[] = [{ text: 'Use tools' }];
       for await (const event of turn.run(
         reqParts,
         new AbortController().signal,
@@ -272,7 +223,7 @@ describe('Turn', () => {
         'NO_FINISH_REASON',
       );
       mockSendMessageStream.mockRejectedValue(error);
-      const reqParts: Part[] = [{ text: 'Trigger invalid stream' }];
+      const reqParts: ContentBlock[] = [{ text: 'Trigger invalid stream' }];
 
       const events = [];
       for await (const event of turn.run(
@@ -290,9 +241,9 @@ describe('Turn', () => {
     it('should yield Error event and report if sendMessageStream throws', async () => {
       const error = new Error('API Error');
       mockSendMessageStream.mockRejectedValue(error);
-      const reqParts: Part[] = [{ text: 'Trigger error' }];
-      const historyContent: Content[] = [
-        { role: 'model', parts: [{ text: 'Previous history' }] },
+      const reqParts: ContentBlock[] = [{ text: 'Trigger error' }];
+      const historyContent: IContent[] = [
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'Previous history' }] },
       ];
       mockGetHistory.mockReturnValue(historyContent);
 
@@ -323,35 +274,11 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [
-              {
-                content: {
-                  parts: [
-                    {
-                      functionCall: {
-                        id: 'fc1',
-                        name: undefined,
-                        args: { arg1: 'val1' },
-                      },
-                    },
-                    {
-                      functionCall: {
-                        id: 'fc2',
-                        name: 'tool2',
-                        args: undefined,
-                      },
-                    },
-                    {
-                      functionCall: {
-                        id: 'fc3',
-                        name: undefined,
-                        args: undefined,
-                      },
-                    },
-                  ],
-                },
-              },
+          value: mockChunk({
+            toolCalls: [
+              { id: 'fc1', name: undefined, args: { arg1: 'val1' } },
+              { id: 'fc2', name: 'tool2', args: undefined },
+              { id: 'fc3', name: undefined, args: undefined },
             ],
           }),
         };
@@ -394,19 +321,14 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [
-              {
-                content: { parts: [{ text: 'Partial response' }] },
-                finishReason: 'STOP',
-              },
-            ],
-            usageMetadata: {
-              promptTokenCount: 17,
-              candidatesTokenCount: 50,
-              cachedContentTokenCount: 10,
-              thoughtsTokenCount: 5,
-              toolUsePromptTokenCount: 2,
+          value: mockChunk({
+            text: 'Partial response',
+            finishReason: 'STOP',
+            usage: {
+              promptTokens: 17,
+              completionTokens: 50,
+              cachedTokens: 10,
+              reasoningTokens: 5,
             },
           }),
         };
@@ -453,24 +375,16 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [
-              {
-                content: {
-                  parts: [
-                    { text: 'This is a long response that was cut off...' },
-                  ],
-                },
-                finishReason: 'MAX_TOKENS',
-              },
-            ],
+          value: mockChunk({
+            text: 'This is a long response that was cut off...',
+            finishReason: 'MAX_TOKENS',
           }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
       const events = [];
-      const reqParts: Part[] = [{ text: 'Generate long text' }];
+      const reqParts: ContentBlock[] = [{ text: 'Generate long text' }];
       for await (const event of turn.run(
         reqParts,
         new AbortController().signal,
@@ -504,20 +418,16 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [
-              {
-                content: { parts: [{ text: 'Content blocked' }] },
-                finishReason: 'SAFETY',
-              },
-            ],
+          value: mockChunk({
+            text: 'Content blocked',
+            finishReason: 'SAFETY',
           }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
       const events = [];
-      const reqParts: Part[] = [{ text: 'Test safety' }];
+      const reqParts: ContentBlock[] = [{ text: 'Test safety' }];
       for await (const event of turn.run(
         reqParts,
         new AbortController().signal,
@@ -551,21 +461,15 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [
-              {
-                content: {
-                  parts: [{ text: 'Response without finish reason' }],
-                },
-              },
-            ],
+          value: mockChunk({
+            text: 'Response without finish reason',
           }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
       const events = [];
-      const reqParts: Part[] = [{ text: 'Test no finish reason' }];
+      const reqParts: ContentBlock[] = [{ text: 'Test no finish reason' }];
       for await (const event of turn.run(
         reqParts,
         new AbortController().signal,
@@ -586,30 +490,17 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [
-              {
-                content: { parts: [{ text: 'First part' }] },
-              },
-            ],
-          }),
+          value: mockChunk({ text: 'First part' }),
         };
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [
-              {
-                content: { parts: [{ text: 'Second part' }] },
-                finishReason: 'OTHER',
-              },
-            ],
-          }),
+          value: mockChunk({ text: 'Second part', finishReason: 'OTHER' }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
       const events = [];
-      const reqParts: Part[] = [{ text: 'Test multiple responses' }];
+      const reqParts: ContentBlock[] = [{ text: 'Test multiple responses' }];
       for await (const event of turn.run(
         reqParts,
         new AbortController().signal,
@@ -649,9 +540,7 @@ describe('Turn', () => {
         yield { type: StreamEventType.RETRY };
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [{ content: { parts: [{ text: 'Success' }] } }],
-          }),
+          value: mockChunk({ text: 'Success' }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -671,10 +560,7 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [{ content: { parts: [{ text: 'Hello' }] } }],
-            responseId: 'trace-123',
-          }),
+          value: mockChunk({ text: 'Hello', responseId: 'trace-123' }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -696,14 +582,8 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [
-              {
-                content: {
-                  parts: [{ text: '[Thought: thinking]', thought: true }],
-                },
-              },
-            ],
+          value: mockChunk({
+            thought: '[Thought: thinking]',
             responseId: 'trace-456',
           }),
         };

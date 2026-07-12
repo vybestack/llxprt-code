@@ -7,7 +7,7 @@
 import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ContractContent } from '@vybestack/llxprt-code-core';
+import type { ContentBlock, IContent } from '@vybestack/llxprt-code-core';
 
 /**
  * Sanitizes a transcript by redacting sensitive credentials and keys.
@@ -110,28 +110,26 @@ export function sanitizeTranscript(text: string): string {
 }
 
 /**
- * Formats a single part of a history item to markdown.
+ * Formats a single block of a history item to markdown.
  */
-function formatPartToMarkdown(
-  part: NonNullable<ContractContent['parts']>[number],
-): string {
-  if (part.text) {
-    return `${part.text}\n\n`;
+function formatBlockToMarkdown(block: ContentBlock): string {
+  if (block.type === 'text') {
+    return `${block.text}\n\n`;
   }
-  if (part.functionCall) {
-    let result = `**Function Call:** \`${part.functionCall.name}\`\n\n`;
-    if (part.functionCall.args) {
+  if (block.type === 'tool_call') {
+    let result = `**Function Call:** \`${block.name}\`\n\n`;
+    if (block.parameters !== undefined) {
       result += '```json\n';
-      result += JSON.stringify(part.functionCall.args, null, 2);
+      result += JSON.stringify(block.parameters, null, 2);
       result += '\n```\n\n';
     }
     return result;
   }
-  if (part.functionResponse) {
-    let result = `**Function Response:** \`${part.functionResponse.name}\`\n\n`;
-    if (part.functionResponse.response) {
+  if (block.type === 'tool_response') {
+    let result = `**Function Response:** \`${block.toolName}\`\n\n`;
+    if (block.result !== undefined) {
       result += '```json\n';
-      result += JSON.stringify(part.functionResponse.response, null, 2);
+      result += JSON.stringify(block.result, null, 2);
       result += '\n```\n\n';
     }
     return result;
@@ -142,19 +140,27 @@ function formatPartToMarkdown(
 /**
  * Formats conversation history into a markdown transcript.
  *
- * @param history - Array of ContractContent objects from the conversation
+ * @param history - Array of IContent objects from the conversation
  */
-function formatHistoryAsMarkdown(history: ContractContent[]): string {
+function speakerToTranscriptRole(speaker: IContent['speaker']): string {
+  if (speaker === 'human') {
+    return 'User';
+  }
+  if (speaker === 'tool') {
+    return 'Tool';
+  }
+  return 'Assistant';
+}
+
+function formatHistoryAsMarkdown(history: IContent[]): string {
   let transcript = '# LLxprt Code Conversation Transcript\n\n';
 
   for (const item of history) {
-    const role = item.role === 'user' ? 'User' : 'Assistant';
+    const role = speakerToTranscriptRole(item.speaker);
     transcript += `## ${role}\n\n`;
 
-    if (item.parts) {
-      for (const part of item.parts) {
-        transcript += formatPartToMarkdown(part);
-      }
+    for (const block of item.blocks) {
+      transcript += formatBlockToMarkdown(block);
     }
 
     transcript += '---\n\n';
@@ -166,11 +172,11 @@ function formatHistoryAsMarkdown(history: ContractContent[]): string {
 /**
  * Exports conversation history to a temporary file for bug reporting.
  *
- * @param history - Array of ContractContent objects from the conversation
+ * @param history - Array of IContent objects from the conversation
  * @returns Object containing the export file path and sanitized content
  */
 export async function exportHistoryForBugReport(
-  history: ContractContent[],
+  history: IContent[],
 ): Promise<{ filePath: string; sanitized: string }> {
   // Format history as markdown
   const markdown = formatHistoryAsMarkdown(history);

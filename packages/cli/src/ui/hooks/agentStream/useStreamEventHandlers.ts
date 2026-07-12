@@ -23,7 +23,7 @@ import {
   type ThinkingBlock,
   type ThoughtSummary,
   type ServerContentEvent,
-  type ContractPartListUnion,
+  type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
 import {
   logUserPrompt,
@@ -112,12 +112,12 @@ interface StreamEventHandlersResult {
     userMessageTimestamp: number,
   ) => void;
   prepareQueryForAgent: (
-    query: ContractPartListUnion,
+    query: AgentRequestInput,
     userMessageTimestamp: number,
     abortSignal: AbortSignal,
     promptId: string,
   ) => Promise<{
-    queryToSend: ContractPartListUnion | null;
+    queryToSend: AgentRequestInput | null;
     shouldProceed: boolean;
   }>;
 }
@@ -143,7 +143,7 @@ interface StreamEventHandlerDeps {
   turnCancelledRef: React.MutableRefObject<boolean>;
   queuedSubmissionsRef: React.MutableRefObject<
     Array<{
-      query: ContractPartListUnion;
+      query: AgentRequestInput;
       options?: { isContinuation: boolean };
       promptId?: string;
     }>
@@ -161,7 +161,7 @@ interface StreamEventHandlerDeps {
   abortActiveStream: (reason?: unknown) => void;
   handleShellCommand: (query: string, signal: AbortSignal) => boolean;
   handleSlashCommand: (
-    cmd: ContractPartListUnion,
+    cmd: AgentRequestInput,
   ) => Promise<SlashCommandProcessorResult | false>;
   logger:
     | { logMessage: (sender: MessageSenderType, text: string) => Promise<void> }
@@ -463,7 +463,7 @@ function usePrepareQueryForAgent(deps: StreamEventHandlerDeps) {
   const prepareQueryDeps = usePrepareQueryDeps(deps);
   return useCallback(
     async (
-      query: ContractPartListUnion,
+      query: AgentRequestInput,
       userMessageTimestamp: number,
       abortSignal: AbortSignal,
       prompt_id: string,

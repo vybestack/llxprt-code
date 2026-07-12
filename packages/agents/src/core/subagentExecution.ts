@@ -21,7 +21,11 @@ import {
   type SchedulerCallbacks,
   type SchedulerOptions,
 } from '@vybestack/llxprt-code-core/config/config.js';
-import type { Content, FunctionCall } from '@google/genai';
+import type {
+  IContent,
+  ToolCallBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { EmojiFilter } from '@vybestack/llxprt-code-core/filters/EmojiFilter.js';
 import type { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
 import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -39,10 +43,7 @@ import {
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AnsiLine } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
-import {
-  isHookRestrictedToolCall,
-  setHookRestrictedAllowedToolsOnFunctionCall,
-} from './hookToolRestrictions.js';
+import { isToolNameRestricted } from './hookToolRestrictions.js';
 
 // ---------------------------------------------------------------------------
 // Shared execution context — all loop helpers receive this instead of `this`
@@ -156,13 +157,15 @@ export async function checkGoalCompletion(
   >,
   todoReminder: string | null,
   currentTurn: number,
-): Promise<Content[] | null> {
+): Promise<IContent[] | null> {
   if (todoReminder) {
     ctx.logger.debug(
       () =>
         `Subagent ${ctx.subagentId} postponing completion until outstanding todos are addressed`,
     );
-    return [{ role: 'user', parts: [{ text: todoReminder }] }];
+    return [
+      iContentFromBlocks([{ type: 'text', text: todoReminder }], 'human'),
+    ];
   }
 
   if (!ctx.outputConfig || Object.keys(ctx.outputConfig.outputs).length === 0) {
@@ -192,7 +195,7 @@ export async function checkGoalCompletion(
       `Subagent ${ctx.subagentId} nudging for outputs: ${remainingVars.join(', ')}`,
   );
 
-  return [{ role: 'user', parts: [{ text: nudgeMessage }] }];
+  return [iContentFromBlocks([{ type: 'text', text: nudgeMessage }], 'human')];
 }
 
 // ---------------------------------------------------------------------------
@@ -200,7 +203,7 @@ export async function checkGoalCompletion(
 // ---------------------------------------------------------------------------
 
 export interface NonInteractiveTextResult {
-  functionCalls: FunctionCall[];
+  functionCalls: ToolCallBlock[];
   cleanedText: string;
 }
 
@@ -210,7 +213,7 @@ export interface NonInteractiveTextResult {
  */
 export function processNonInteractiveTextResponse(
   textResponse: string,
-  existingFunctionCalls: FunctionCall[],
+  existingFunctionCalls: ToolCallBlock[],
   ctx: Pick<
     ExecutionLoopContext,
     | 'emojiFilter'
@@ -349,8 +352,8 @@ function synthesizeToolCalls(
     toolsView: ToolRegistryView,
   ) => string | null,
   hookRestrictedAllowedTools: readonly string[] | undefined,
-): FunctionCall[] {
-  const synthesized: FunctionCall[] = [];
+): ToolCallBlock[] {
+  const synthesized: ToolCallBlock[] = [];
   toolCalls.forEach((call, index) => {
     const normalizedName = resolveToolNameFn(call.name, ctx.toolsView);
     if (!normalizedName) {
@@ -360,23 +363,20 @@ function synthesizeToolCalls(
       );
       return;
     }
-    const functionCall = {
+    const toolCallBlock: ToolCallBlock = {
+      type: 'tool_call',
       id: `parsed_${ctx.subagentId}_${Date.now()}_${index}`,
       name: normalizedName,
-      args: call.arguments ?? {},
+      parameters: call.arguments ?? {},
     };
-    setHookRestrictedAllowedToolsOnFunctionCall(
-      functionCall,
-      hookRestrictedAllowedTools,
-    );
-    if (isHookRestrictedToolCall(functionCall, hookRestrictedAllowedTools)) {
+    if (isToolNameRestricted(toolCallBlock.name, hookRestrictedAllowedTools)) {
       ctx.logger.debug(
         () =>
-          `Subagent ${ctx.subagentId} skipped hook-restricted textual tool '${functionCall.name}'`,
+          `Subagent ${ctx.subagentId} skipped hook-restricted textual tool '${toolCallBlock.name}'`,
       );
       return;
     }
-    synthesized.push(functionCall);
+    synthesized.push(toolCallBlock);
   });
   return synthesized;
 }
