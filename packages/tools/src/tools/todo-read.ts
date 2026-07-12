@@ -7,7 +7,7 @@
 import { BaseTool, type ToolResult, Kind } from './tools.js';
 import { type Todo } from '../types/todo-schemas.js';
 import { TodoStore } from './todo-store.js';
-import { Type } from '@google/genai';
+import { Type } from '../types/schema-type.js';
 import { TodoReminderService } from '../utils/todoReminderService.js';
 import { formatTodoListForDisplay } from '../utils/todoFormatter.js';
 import type { ITodoService } from '../interfaces/ITodoService.js';

@@ -6,7 +6,12 @@
 
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Tool as McpTool } from '@modelcontextprotocol/sdk/types.js';
-import type { CallableTool, FunctionCall, Part, Tool } from '@google/genai';
+import type {
+  CallableTool,
+  GeminiFunctionCall as FunctionCall,
+  GeminiPart as Part,
+  GeminiTool as Tool,
+} from '../types/gemini-neutral.js';
 
 /**
  * Adapts an MCP tool definition to the genai CallableTool interface so it can

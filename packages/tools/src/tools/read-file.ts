@@ -6,7 +6,7 @@
 
 import path from 'node:path';
 import process from 'node:process';
-import { type PartUnion } from '@google/genai';
+import { type PartUnion } from '../types/gemini-neutral.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,

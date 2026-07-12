@@ -23,7 +23,7 @@ import {
   getSpecificMimeType,
   DEFAULT_MAX_LINES_TEXT_FILE,
 } from '../utils/fileUtils.js';
-import { type PartUnion } from '@google/genai';
+import { type PartUnion } from '../types/gemini-neutral.js';
 import { stat } from 'fs/promises';
 import { ToolErrorType } from '../types/tool-error.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';

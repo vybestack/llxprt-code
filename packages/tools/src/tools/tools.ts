@@ -5,10 +5,10 @@
  */
 
 import {
-  type FunctionCall,
-  type FunctionDeclaration,
+  type GeminiFunctionCall as FunctionCall,
+  type GeminiFunctionDeclaration as FunctionDeclaration,
   type PartListUnion,
-} from '@google/genai';
+} from '../types/gemini-neutral.js';
 import { randomUUID } from 'node:crypto';
 import {
   type IToolMessageBus,
@@ -459,7 +459,7 @@ export interface ToolBuilder<
   kind: Kind;
 
   /**
-   * Function declaration schema from @google/genai.
+   * Function declaration schema (neutral structural type).
    */
   schema: FunctionDeclaration;
 

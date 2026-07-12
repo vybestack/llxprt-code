@@ -5,7 +5,7 @@
  */
 
 import path from 'path';
-import { type PartUnion } from '@google/genai';
+import { type PartUnion } from '../types/gemini-neutral.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,

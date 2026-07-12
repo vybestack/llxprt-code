@@ -15,7 +15,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { PartListUnion } from '@google/genai';
+import type { PartListUnion } from '../types/gemini-neutral.js';
 import { GlobTool, type GlobToolParams } from '../tools/glob.js';
 import { createRealToolHost as createRealHost } from './helpers/create-real-tool-host.js';
 import type { IToolHost } from '../interfaces/index.js';

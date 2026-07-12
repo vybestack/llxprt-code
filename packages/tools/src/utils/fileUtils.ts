@@ -6,7 +6,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { type PartUnion } from '@google/genai';
+import { type PartUnion } from '../types/gemini-neutral.js';
 import mime from 'mime-types';
 import { ToolErrorType } from '../types/tool-error.js';
 import { debugLogger } from './debugLogger.js';

@@ -12,7 +12,10 @@ import {
   generateValidName,
   generateMcpToolName,
 } from './mcp-tool.js'; // Added getStringifiedResultForDisplayimport type { ToolResult } from'@vybestack/llxprt-code-tools';
-import type { CallableTool, Part } from '@google/genai';
+import type {
+  CallableTool,
+  GeminiPart as Part,
+} from '../types/gemini-neutral.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 
 // DiscoveredMCPToolInvocation stores an allowlist on its constructor (static).
