@@ -43,7 +43,7 @@ Add entries under `mcpServers`:
 }
 ```
 
-**SSE** — connects to a remote HTTP server:
+**SSE** — legacy remote transport for servers that have not migrated to Streamable HTTP:
 
 ```json
 {
@@ -53,7 +53,7 @@ Add entries under `mcpServers`:
 }
 ```
 
-**Streamable HTTP** — modern HTTP transport:
+**Streamable HTTP** — preferred transport for remote MCP servers:
 
 ```json
 {
@@ -571,7 +571,7 @@ llxprt mcp add [options] <name> <commandOrUrl> [args...]
 ```
 
 - `<name>`: A unique name for the server.
-- `<commandOrUrl>`: The command to execute (for `stdio`) or the URL (for `http`/`sse`).
+- `<commandOrUrl>`: The command to execute (for `stdio`) or the URL (for `http`, `streamable-http`, or `sse`).
 - `[args...]`: Optional arguments for a `stdio` command.
 
 **Options (Flags):**
