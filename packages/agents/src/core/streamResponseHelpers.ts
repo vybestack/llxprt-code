@@ -476,7 +476,9 @@ export async function recordHistoryWithUsage(
     actualPromptTokens = streamingUsageMetadata.promptTokens;
   }
 
-  const providerMetadataChunk = findLastChunkWithProviderMetadata(args.allChunks);
+  const providerMetadataChunk = findLastChunkWithProviderMetadata(
+    args.allChunks,
+  );
   const responseId = providerMetadataChunk
     ? (getResponseId(providerMetadataChunk) ?? null)
     : null;

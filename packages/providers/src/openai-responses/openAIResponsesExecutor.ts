@@ -57,6 +57,10 @@ import type {
   OpenAIResponsesRequest,
   ResponsesInputItem,
 } from './OpenAIResponsesTypes.js';
+import {
+  applyStatefulConversation,
+  computeStatefulConversation,
+} from './openAIResponsesStateful.js';
 
 /**
  * Provider-specific capabilities that the executor needs to do its work.
@@ -99,14 +103,6 @@ interface RequestContext {
   responsesStored: boolean;
   request: OpenAIResponsesRequest;
 }
-
-interface StatefulConversation {
-  enabled: boolean;
-  parentId: string | undefined;
-  content: IContent[];
-}
-
-const RESPONSES_STATEFUL_KEY = 'responses-stateful';
 
 interface ReasoningOptions {
   enabled: boolean;
@@ -177,7 +173,7 @@ async function buildRequestContext(
     patchedContent,
     invocationEphemerals,
     explicitUserStore,
-    deps,
+    deps.logger,
   );
   const input = buildInput(
     options,
@@ -204,7 +200,7 @@ async function buildRequestContext(
   applyTextVerbosity(request, options, invocationEphemerals, deps);
   applyCodexRequestSettings(request, isCodex, deps);
   applyPromptCaching(request, options, invocationEphemerals, isCodex, deps);
-  applyStatefulConversation(request, stateful, explicitUserStore, deps);
+  applyStatefulConversation(request, stateful, explicitUserStore, deps.logger);
   return {
     apiKey,
     baseURL,
@@ -613,83 +609,6 @@ function applyCodexRequestSettings(
       () => 'Codex mode: removed unsupported max_output_tokens from request',
     );
   }
-}
-
-function computeStatefulConversation(
-  options: NormalizedGenerateChatOptions,
-  content: IContent[],
-  invocationEphemerals: Record<string, unknown>,
-  explicitUserStore: boolean | undefined,
-  deps: ResponsesExecutorDeps,
-): StatefulConversation {
-  const requested =
-    ((invocationEphemerals[RESPONSES_STATEFUL_KEY] as boolean | undefined) ??
-      options.invocation.getModelBehavior<boolean>(RESPONSES_STATEFUL_KEY) ??
-      false) === true;
-  if (!requested || explicitUserStore === false) {
-    return { enabled: false, parentId: undefined, content };
-  }
-
-  let parentIndex = -1;
-  for (let index = content.length - 1; index >= 0; index -= 1) {
-    const entry = content[index];
-    if (
-      entry.speaker === 'ai' &&
-      entry.metadata?.responsesStored === true &&
-      typeof entry.metadata.id === 'string' &&
-      entry.metadata.id !== ''
-    ) {
-      parentIndex = index;
-      break;
-    }
-  }
-
-  if (parentIndex === -1) {
-    deps.logger.debug(
-      () => 'responses-stateful starting a new stored conversation.',
-    );
-    return { enabled: true, parentId: undefined, content };
-  }
-
-  const trimmedContent = content.slice(parentIndex + 1);
-  if (trimmedContent.length === 0) {
-    deps.logger.debug(
-      () => 'responses-stateful has no content after its parent; using full history.',
-    );
-    return { enabled: false, parentId: undefined, content };
-  }
-
-  return {
-    enabled: true,
-    parentId: content[parentIndex].metadata?.id,
-    content: trimmedContent,
-  };
-}
-
-function applyStatefulConversation(
-  request: OpenAIResponsesRequest,
-  stateful: StatefulConversation,
-  explicitUserStore: boolean | undefined,
-  deps: ResponsesExecutorDeps,
-): void {
-  if (explicitUserStore === false) {
-    request.store = false;
-    delete request.previous_response_id;
-    deps.logger.debug(
-      () => 'responses-stateful disabled because the user set store=false.',
-    );
-    return;
-  }
-  if (!stateful.enabled) return;
-
-  request.store = true;
-  if (stateful.parentId !== undefined) {
-    request.previous_response_id = stateful.parentId;
-  }
-  deps.logger.debug(
-    () =>
-      `responses-stateful activated: previous_response_id=${stateful.parentId ?? 'none'}, store=true.`,
-  );
 }
 
 function applyPromptCaching(
