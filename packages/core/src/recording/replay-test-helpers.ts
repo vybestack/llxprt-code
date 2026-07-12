@@ -201,7 +201,7 @@ export function _directoriesChangedLine(
 
 /**
  * Build a valid JSONL line for a session_metadata event (issue #1611).
- * The title is tri-state: string, null, or undefined (omitted from payload).
+ * The title is either a concrete string or explicit null.
  */
 export function sessionMetadataLine(seq: number, title: string | null): string {
   return JSON.stringify({

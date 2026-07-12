@@ -390,7 +390,7 @@ describe('session_metadata title takes precedence over legacy first-human-text (
     expect(result.sessions[0]).not.toHaveProperty('title');
   });
 
-  it('includes createdAt in the listing for immutable ordering (issue #1611)', async () => {
+  it('exposes the creation timestamp as updatedAt for an untouched durable session', async () => {
     const root = await mkdtemp(join(tmpdir(), 'zed-session-list-'));
     roots.push(root);
     const chatsDir = join(root, 'chats');

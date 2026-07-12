@@ -532,10 +532,11 @@ export class Session {
         }
       }
     } finally {
-      // Finding 3: exact-once metadata finally shared by command and prompt
-      // paths (success, cancel, or error). Best-effort transport — sendUpdate
-      // swallows transient errors so metadata never replaces the turn outcome.
-      await this.emitTurnMetadata(eligibility);
+      try {
+        await this.emitTurnMetadata(eligibility);
+      } catch (error) {
+        this.logger.debug(() => `emitTurnMetadata ERROR: ${String(error)}`);
+      }
     }
   }
 
