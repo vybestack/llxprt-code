@@ -65,6 +65,14 @@ describe('getImageInlineDataSize', () => {
     expect(getImageInlineDataSize(part)).toBe(0);
   });
 
+  it.each([null, 42, true])(
+    'returns 0 when inlineData.data is malformed: %s',
+    (data) => {
+      const part = { inlineData: { mimeType: 'image/png', data } } as Part;
+      expect(getImageInlineDataSize(part)).toBe(0);
+    },
+  );
+
   it('returns 0 when inlineData is undefined', () => {
     const part: Part = { text: 'not an image' };
     expect(getImageInlineDataSize(part)).toBe(0);

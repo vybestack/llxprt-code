@@ -61,7 +61,7 @@ export interface BudgetEnforcementResult {
 export function getImageInlineDataSize(part: Part): number {
   const inlineData = part.inlineData;
   if (
-    inlineData?.data !== undefined &&
+    typeof inlineData?.data === 'string' &&
     inlineData.data.length > 0 &&
     inlineData.mimeType?.toLowerCase().startsWith('image/') === true
   ) {
