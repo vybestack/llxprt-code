@@ -643,6 +643,7 @@ const PRESERVED_PROFILE_EPHEMERALS = [
   'reasoning.budgetTokens',
   'reasoning.stripFromContext',
   'reasoning.includeInContext',
+  'reasoning.fieldName',
   'task-default-timeout-seconds',
   'task-max-timeout-seconds',
   'shell-default-timeout-seconds',

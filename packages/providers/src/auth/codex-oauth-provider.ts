@@ -16,12 +16,12 @@ import type {
   OAuthToken,
   TokenStore,
 } from '@vybestack/llxprt-code-auth';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import {
-  DebugLogger,
   openBrowserSecurely,
   shouldLaunchBrowser,
-  debugLogger,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
 import { CODEX_CONFIG } from '@vybestack/llxprt-code-auth';
 import type { OAuthProvider } from './types.js';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';

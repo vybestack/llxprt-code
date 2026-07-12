@@ -16,6 +16,11 @@
       "bun": "./index.ts",
       "import": "./dist/index.js"
     },
+    "./auth-factories.js": {
+      "types": "./dist/src/auth-factories.d.ts",
+      "bun": "./src/auth-factories.ts",
+      "import": "./dist/src/auth-factories.js"
+    },
     "./code_assist/codeAssist.js": {
       "bun": "./src/code_assist/codeAssist.ts",
       "import": "./dist/src/code_assist/codeAssist.js"
@@ -321,6 +326,10 @@
     "./scheduler/types.js": {
       "bun": "./src/scheduler/types.ts",
       "import": "./dist/src/scheduler/types.js"
+    },
+    "./scheduler/liveOutput.js": {
+      "bun": "./src/scheduler/liveOutput.ts",
+      "import": "./dist/src/scheduler/liveOutput.js"
     },
     "./code_assist/types.js": {
       "bun": "./src/code_assist/types.ts",
