@@ -69,4 +69,4 @@ export function resumeSessionIndexOutOfRangeMessage(
  * final (envelope-wrapped) detail string to inspect.
  */
 export const RESUME_SESSION_INDEX_OUT_OF_RANGE_RE =
-  /Session index \d+ out of range/;
+  /^(?:Failed to resume session: )?Session index \d+ out of range \(1-\d+\)$/;

@@ -142,6 +142,10 @@ export class StreamBatcher {
       this.batchTimer = null;
     }
     this.pendingChunks = [];
+    // Drop residual streaming state without emitting after the prompt boundary.
+    // The batcher/filter are per-prompt, but draining here also makes disposal
+    // complete if that ownership model changes later.
+    this.emojiFilter.flushBuffer();
   }
 
   private async flushEmojiBuffer(): Promise<void> {

@@ -42,8 +42,8 @@ import {
   SESSION_FILE_ID_PREFIX_LENGTH,
 } from '@vybestack/llxprt-code-core';
 
-/** JSON-RPC code ACP assigns to resourceNotFound (-32002). */
-const RESOURCE_NOT_FOUND_CODE = acp.RequestError.resourceNotFound('').code;
+/** JSON-RPC code ACP assigns to resourceNotFound. */
+const RESOURCE_NOT_FOUND_CODE = -32002;
 
 /**
  * Module logger (mirroring the zedIntegration.ts / sessionControl.ts precedent

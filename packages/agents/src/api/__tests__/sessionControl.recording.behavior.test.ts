@@ -225,7 +225,7 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
       // fixture's raw id is not asserted — the pairing invariant is what the
       // #1604 replay's tool_call/tool_call_update matching depends on).
       const blocks = raw
-        .split(String.fromCharCode(10))
+        .split('\n')
         .filter((line) => line.trim().length > 0)
         .map((line) => JSON.parse(line) as Record<string, unknown>)
         .flatMap((entry) => {
