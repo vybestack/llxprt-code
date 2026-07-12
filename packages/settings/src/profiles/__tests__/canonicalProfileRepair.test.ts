@@ -5,22 +5,31 @@
  * without going through the CLI orchestrator. Uses real temp directories.
  *
  * Covers:
- * - Corrupt profile detection and repair
- * - Narrow eligibility (only known historical defect signature)
- * - Marker semantics (none/repaired/busy/error outcomes)
- * - modelParams normalization at the parseProfile boundary
+ * - Corrupt profile detection and repair (GENERALIZED — no hardcoded
+ *   profile name/provider/model/endpoint/auth constants).
+ * - Conservative corruption signature based only on the historical
+ *   malformed shape: untyped standard-v1 profile whose provider is the
+ *   virtual non-loadable provider 'load-balancer', with empty modelParams
+ *   and empty ephemeralSettings, which parses as a standard profile.
+ * - A same-name legacy replacement is eligible iff it parses as a valid
+ *   standard profile, is not a genuine loadbalancer, does not itself
+ *   match the corrupt structural signature, and does not have provider
+ *   'load-balancer'.
+ * - modelParams normalization (absent → {}) in the serialized output.
  * - Lock busy as benign deferral (no marker, no error)
  * - Backup preservation
+ * - Negative tests for genuine loadbalancer, explicit type, nonempty
+ *   settings/params, invalid replacement, and already-valid profiles.
+ *
+ * Outcome/no-candidate/I-O-error tests are in
+ * canonicalProfileRepair.outcomes.test.ts.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
-import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import {
   repairCanonicalProfiles,
-  isCorruptStandardProfile,
   isCorruptStandardProfileFromRaw,
   CORRUPT_PROVIDER,
 } from '../canonicalProfileRepair.js';
@@ -28,129 +37,35 @@ import { parseProfile } from '../../settings/validation.js';
 import { isLoadBalancerProfile } from '../types.js';
 import { acquireProfilesLockSync } from '../profileStore.js';
 import { ProfileManager } from '../ProfileManager.js';
+import {
+  type TestEnv,
+  setupEnv,
+  teardownEnv,
+  writeProfile,
+  corruptCanonicalProfile,
+  corruptCanonicalProfileNonGeminiModel,
+  corruptCanonicalProfileOmittedModelParams,
+  validLegacyProfile,
+  validLegacyProfileAlternative,
+  genuineLbProfile,
+} from './canonicalProfileRepair.testHelpers.js';
 
-async function makeTempDir(): Promise<string> {
-  return fsp.mkdtemp(path.join(os.tmpdir(), 'llxprt-canonical-repair-test-'));
-}
+// ─── Corruption signature: conservative raw structural predicate ────────────
 
-function validLegacyProfile(): Record<string, unknown> {
-  return {
-    version: 1,
-    provider: 'anthropic',
-    model: 'glm-5.2',
-    modelParams: { temperature: 1 },
-    ephemeralSettings: {
-      'base-url': 'https://api.z.ai/api/anthropic',
-      'auth-key-name': 'zai',
-      'context-limit': 200000,
-    },
-  };
-}
-
-function corruptCanonicalProfile(): Record<string, unknown> {
-  return {
-    version: 1,
-    provider: CORRUPT_PROVIDER,
-    model: 'gemini-2.5-pro',
-    modelParams: {},
-    ephemeralSettings: {},
-  };
-}
-
-function genuineLbProfile(): Record<string, unknown> {
-  return {
-    version: 1,
-    type: 'loadbalancer',
-    policy: 'roundrobin',
-    profiles: ['p1'],
-    provider: 'load-balancer',
-    model: 'default',
-    modelParams: {},
-    ephemeralSettings: {},
-  };
-}
-
-interface TestEnv {
-  canonicalDir: string;
-  legacyDir: string;
-  legacyProfilesDir: string;
-}
-
-async function setupEnv(): Promise<TestEnv> {
-  const canonicalDir = await makeTempDir();
-  const legacyDir = await makeTempDir();
-  const legacyProfilesDir = path.join(legacyDir, 'profiles');
-  fs.mkdirSync(legacyProfilesDir, { recursive: true });
-  return { canonicalDir, legacyDir, legacyProfilesDir };
-}
-
-async function teardownEnv(env: TestEnv): Promise<void> {
-  await fsp.rm(env.canonicalDir, { recursive: true, force: true });
-  await fsp.rm(env.legacyDir, { recursive: true, force: true });
-}
-
-function writeProfile(
-  dir: string,
-  name: string,
-  data: Record<string, unknown>,
-): void {
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, name), JSON.stringify(data));
-}
-
-describe('isCorruptStandardProfile — narrow eligibility', () => {
-  it('identifies a standard profile with provider load-balancer + gemini-2.5-pro as corrupt', () => {
-    const profile = parseProfile(corruptCanonicalProfile());
-    expect(isCorruptStandardProfile(profile)).toBe(true);
-  });
-
-  it('does NOT identify a genuine loadbalancer profile as corrupt', () => {
-    const profile = parseProfile(genuineLbProfile());
-    expect(isCorruptStandardProfile(profile)).toBe(false);
-  });
-
-  it('does NOT identify a valid standard profile as corrupt', () => {
-    const profile = parseProfile(validLegacyProfile());
-    expect(isCorruptStandardProfile(profile)).toBe(false);
-  });
-
-  it('does NOT identify a standard profile with load-balancer provider but a CUSTOM model as corrupt (#4)', () => {
-    // A manually-authored profile with the load-balancer provider but a
-    // custom model is NOT the reported defect signature. Skip it.
-    const customModelProfile = {
-      version: 1,
-      provider: 'load-balancer',
-      model: 'my-custom-model',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-    const profile = parseProfile(customModelProfile);
-    expect(isCorruptStandardProfile(profile)).toBe(false);
-  });
-
-  it('does NOT identify a standard profile with load-balancer provider but a manual/default model as corrupt (#4)', () => {
-    const manualModelProfile = {
-      version: 1,
-      provider: 'load-balancer',
-      model: 'default',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-    const profile = parseProfile(manualModelProfile);
-    expect(isCorruptStandardProfile(profile)).toBe(false);
-  });
-});
-
-describe('isCorruptStandardProfileFromRaw — raw object eligibility (#3)', () => {
-  it('identifies the exact defect signature: no type, load-balancer, gemini-2.5-pro', () => {
+describe('isCorruptStandardProfileFromRaw — conservative structural signature', () => {
+  it('identifies the exact historical defect: untyped + load-balancer + empty params/settings', () => {
     expect(isCorruptStandardProfileFromRaw(corruptCanonicalProfile())).toBe(
       true,
     );
   });
 
-  it('does NOT identify a profile with type: standard as corrupt (#3 negative)', () => {
-    // A profile with explicit type:'standard' is NOT the corrupt shape —
-    // the corrupt signature never carried a type field.
+  it('identifies a corrupt signature with a non-Gemini fallback model', () => {
+    expect(
+      isCorruptStandardProfileFromRaw(corruptCanonicalProfileNonGeminiModel()),
+    ).toBe(true);
+  });
+
+  it('does NOT identify a profile with type: standard as corrupt', () => {
     const standardTyped = {
       version: 1,
       type: 'standard',
@@ -162,20 +77,8 @@ describe('isCorruptStandardProfileFromRaw — raw object eligibility (#3)', () =
     expect(isCorruptStandardProfileFromRaw(standardTyped)).toBe(false);
   });
 
-  it('does NOT identify a profile with type: loadbalancer as corrupt', () => {
+  it('does NOT identify a genuine loadbalancer profile as corrupt', () => {
     expect(isCorruptStandardProfileFromRaw(genuineLbProfile())).toBe(false);
-  });
-
-  it('does NOT identify a profile with a custom model as corrupt', () => {
-    expect(
-      isCorruptStandardProfileFromRaw({
-        version: 1,
-        provider: 'load-balancer',
-        model: 'my-custom-model',
-        modelParams: {},
-        ephemeralSettings: {},
-      }),
-    ).toBe(false);
   });
 
   it('does NOT identify a profile with a real provider as corrupt', () => {
@@ -190,6 +93,53 @@ describe('isCorruptStandardProfileFromRaw — raw object eligibility (#3)', () =
     ).toBe(false);
   });
 
+  it('does NOT identify a corrupt-provider profile with nonempty modelParams as corrupt', () => {
+    expect(
+      isCorruptStandardProfileFromRaw({
+        version: 1,
+        provider: CORRUPT_PROVIDER,
+        model: 'gemini-2.5-pro',
+        modelParams: { temperature: 0.5 },
+        ephemeralSettings: {},
+      }),
+    ).toBe(false);
+  });
+
+  it('does NOT identify a corrupt-provider profile with nonempty ephemeralSettings as corrupt', () => {
+    expect(
+      isCorruptStandardProfileFromRaw({
+        version: 1,
+        provider: CORRUPT_PROVIDER,
+        model: 'gemini-2.5-pro',
+        modelParams: {},
+        ephemeralSettings: { 'base-url': 'https://example.com' },
+      }),
+    ).toBe(false);
+  });
+
+  it('does NOT identify a corrupt-provider profile with absent ephemeralSettings as corrupt', () => {
+    expect(
+      isCorruptStandardProfileFromRaw({
+        version: 1,
+        provider: CORRUPT_PROVIDER,
+        model: 'gemini-2.5-pro',
+        modelParams: {},
+      }),
+    ).toBe(false);
+  });
+
+  it('does NOT identify a corrupt-provider profile with a non-v1 version as corrupt', () => {
+    expect(
+      isCorruptStandardProfileFromRaw({
+        version: 2,
+        provider: CORRUPT_PROVIDER,
+        model: 'gemini-2.5-pro',
+        modelParams: {},
+        ephemeralSettings: {},
+      }),
+    ).toBe(false);
+  });
+
   it('does NOT identify non-object values as corrupt', () => {
     expect(isCorruptStandardProfileFromRaw(null)).toBe(false);
     expect(isCorruptStandardProfileFromRaw('string')).toBe(false);
@@ -198,7 +148,9 @@ describe('isCorruptStandardProfileFromRaw — raw object eligibility (#3)', () =
   });
 });
 
-describe('repairCanonicalProfiles — corrupt profile repair', () => {
+// ─── Repair: generalized — arbitrary names/providers/models/endpoints ───────
+
+describe('repairCanonicalProfiles — generalized corrupt profile repair', () => {
   let env: TestEnv;
 
   beforeEach(async () => {
@@ -208,9 +160,9 @@ describe('repairCanonicalProfiles — corrupt profile repair', () => {
     await teardownEnv(env);
   });
 
-  it('repairs a corrupt canonical zai profile when a valid legacy exists', () => {
-    writeProfile(env.canonicalDir, 'zai.json', corruptCanonicalProfile());
-    writeProfile(env.legacyProfilesDir, 'zai.json', validLegacyProfile());
+  it('repairs a corrupt canonical profile with an arbitrary name', () => {
+    writeProfile(env.canonicalDir, 'mycustom.json', corruptCanonicalProfile());
+    writeProfile(env.legacyProfilesDir, 'mycustom.json', validLegacyProfile());
 
     const result = repairCanonicalProfiles(
       env.canonicalDir,
@@ -221,7 +173,7 @@ describe('repairCanonicalProfiles — corrupt profile repair', () => {
     expect(result.kind === 'repaired' ? result.profilesRepaired : 0).toBe(1);
 
     const repaired = JSON.parse(
-      fs.readFileSync(path.join(env.canonicalDir, 'zai.json'), 'utf-8'),
+      fs.readFileSync(path.join(env.canonicalDir, 'mycustom.json'), 'utf-8'),
     );
     expect(repaired.provider).toBe('anthropic');
     expect(repaired.model).toBe('glm-5.2');
@@ -229,6 +181,62 @@ describe('repairCanonicalProfiles — corrupt profile repair', () => {
       'https://api.z.ai/api/anthropic',
     );
     expect(repaired.ephemeralSettings['auth-key-name']).toBe('zai');
+  });
+
+  it('repairs a corrupt canonical profile with a non-Gemini fallback model', () => {
+    writeProfile(
+      env.canonicalDir,
+      'broken.json',
+      corruptCanonicalProfileNonGeminiModel(),
+    );
+    writeProfile(
+      env.legacyProfilesDir,
+      'broken.json',
+      validLegacyProfileAlternative(),
+    );
+
+    const result = repairCanonicalProfiles(
+      env.canonicalDir,
+      env.legacyProfilesDir,
+    );
+
+    expect(result.kind).toBe('repaired');
+
+    const repaired = JSON.parse(
+      fs.readFileSync(path.join(env.canonicalDir, 'broken.json'), 'utf-8'),
+    );
+    expect(repaired.provider).toBe('openai');
+    expect(repaired.model).toBe('gpt-4o');
+    expect(repaired.ephemeralSettings['base-url']).toBe(
+      'https://api.openai.com/v1',
+    );
+    expect(repaired.ephemeralSettings['auth-key']).toBe('sk-test-key');
+  });
+
+  it('repairs using a legacy replacement with arbitrary provider/model/endpoint/auth', () => {
+    writeProfile(env.canonicalDir, 'acme.json', corruptCanonicalProfile());
+    writeProfile(
+      env.legacyProfilesDir,
+      'acme.json',
+      validLegacyProfileAlternative(),
+    );
+
+    repairCanonicalProfiles(env.canonicalDir, env.legacyProfilesDir);
+
+    const repaired = JSON.parse(
+      fs.readFileSync(path.join(env.canonicalDir, 'acme.json'), 'utf-8'),
+    );
+    expect(repaired.provider).toBe('openai');
+    expect(repaired.model).toBe('gpt-4o');
+    expect(repaired.modelParams).toStrictEqual({
+      temperature: 0.7,
+      max_tokens: 4096,
+    });
+    expect(repaired.ephemeralSettings['base-url']).toBe(
+      'https://api.openai.com/v1',
+    );
+    expect(repaired.ephemeralSettings['auth-key']).toBe('sk-test-key');
+    expect(repaired.ephemeralSettings['context-limit']).toBe(128000);
   });
 
   it('preserves the corrupt canonical file as a quarantine backup', () => {
@@ -259,175 +267,52 @@ describe('repairCanonicalProfiles — corrupt profile repair', () => {
     ).toBe(legacyData);
   });
 
-  it('does not repair an unrelated same-name-independent profile', () => {
-    writeProfile(env.canonicalDir, 'zai.json', corruptCanonicalProfile());
-    writeProfile(env.canonicalDir, 'other.json', corruptCanonicalProfile());
-    writeProfile(env.legacyProfilesDir, 'zai.json', validLegacyProfile());
-    writeProfile(env.legacyProfilesDir, 'other.json', {
-      version: 1,
-      provider: 'openai',
-      model: 'gpt-4o',
-      modelParams: {},
-      ephemeralSettings: {},
-    });
+  it('repairs at most one candidate per call (sorted by name)', () => {
+    writeProfile(env.canonicalDir, 'aaa.json', corruptCanonicalProfile());
+    writeProfile(env.canonicalDir, 'zzz.json', corruptCanonicalProfile());
+    writeProfile(env.legacyProfilesDir, 'aaa.json', validLegacyProfile());
+    writeProfile(env.legacyProfilesDir, 'zzz.json', validLegacyProfile());
 
     const first = repairCanonicalProfiles(
       env.canonicalDir,
       env.legacyProfilesDir,
     );
     expect(first.kind).toBe('repaired');
-    expect(first.kind === 'repaired' ? first.profilesRepaired : 0).toBe(1);
+
+    // aaa repaired first (sorted), zzz still corrupt.
     expect(
       JSON.parse(
-        fs.readFileSync(path.join(env.canonicalDir, 'zai.json'), 'utf-8'),
+        fs.readFileSync(path.join(env.canonicalDir, 'aaa.json'), 'utf-8'),
       ).provider,
     ).toBe('anthropic');
     expect(
       JSON.parse(
-        fs.readFileSync(path.join(env.canonicalDir, 'other.json'), 'utf-8'),
+        fs.readFileSync(path.join(env.canonicalDir, 'zzz.json'), 'utf-8'),
       ).provider,
     ).toBe(CORRUPT_PROVIDER);
 
-    const second = repairCanonicalProfiles(
-      env.canonicalDir,
-      env.legacyProfilesDir,
-    );
-    expect(second.kind).toBe('none');
-  });
-});
-
-describe('repairCanonicalProfiles — no candidates / none outcome', () => {
-  let env: TestEnv;
-
-  beforeEach(async () => {
-    env = await setupEnv();
-  });
-  afterEach(async () => {
-    await teardownEnv(env);
-  });
-
-  it('returns none when canonical profiles dir does not exist', () => {
-    const result = repairCanonicalProfiles(
-      path.join(env.canonicalDir, 'nonexistent'),
-      env.legacyProfilesDir,
-    );
-    expect(result.kind).toBe('none');
-  });
-
-  it('returns none when no corrupt profiles exist', () => {
-    writeProfile(env.canonicalDir, 'good.json', validLegacyProfile());
-    writeProfile(env.legacyProfilesDir, 'good.json', validLegacyProfile());
-
-    const result = repairCanonicalProfiles(
-      env.canonicalDir,
-      env.legacyProfilesDir,
-    );
-    expect(result.kind).toBe('none');
-  });
-
-  it('returns none when corrupt canonical has no valid legacy replacement', () => {
-    writeProfile(env.canonicalDir, 'zai.json', corruptCanonicalProfile());
-    // No legacy file at all.
-
-    const result = repairCanonicalProfiles(
-      env.canonicalDir,
-      env.legacyProfilesDir,
-    );
-    expect(result.kind).toBe('none');
-  });
-
-  it('returns none when legacy is a loadbalancer (not a valid standard replacement)', () => {
-    writeProfile(env.canonicalDir, 'zai.json', corruptCanonicalProfile());
-    writeProfile(env.legacyProfilesDir, 'zai.json', genuineLbProfile());
-
-    const result = repairCanonicalProfiles(
-      env.canonicalDir,
-      env.legacyProfilesDir,
-    );
-    expect(result.kind).toBe('none');
-
-    // Canonical NOT replaced.
-    expect(
-      JSON.parse(
-        fs.readFileSync(path.join(env.canonicalDir, 'zai.json'), 'utf-8'),
-      ).provider,
-    ).toBe(CORRUPT_PROVIDER);
-  });
-
-  it('returns none when canonical is a genuine loadbalancer', () => {
-    writeProfile(env.canonicalDir, 'lb.json', genuineLbProfile());
-    writeProfile(env.legacyProfilesDir, 'lb.json', validLegacyProfile());
-
-    const result = repairCanonicalProfiles(
-      env.canonicalDir,
-      env.legacyProfilesDir,
-    );
-    expect(result.kind).toBe('none');
-
-    // LB profile untouched.
-    const after = JSON.parse(
-      fs.readFileSync(path.join(env.canonicalDir, 'lb.json'), 'utf-8'),
-    );
-    expect(after.type).toBe('loadbalancer');
-  });
-
-  it('returns none when legacy replacement is also corrupt', () => {
-    writeProfile(env.canonicalDir, 'zai.json', corruptCanonicalProfile());
-    writeProfile(env.legacyProfilesDir, 'zai.json', corruptCanonicalProfile());
-
-    const result = repairCanonicalProfiles(
-      env.canonicalDir,
-      env.legacyProfilesDir,
-    );
-    expect(result.kind).toBe('none');
-  });
-});
-
-// ─── Marker semantics: no stamp when no repair performed ────────────────────
-
-describe('repairCanonicalProfiles — marker semantics (#4)', () => {
-  let env: TestEnv;
-
-  beforeEach(async () => {
-    env = await setupEnv();
-  });
-  afterEach(async () => {
-    await teardownEnv(env);
-  });
-
-  it('initial: no candidate / no canonical dir → none (no marker)', () => {
-    const result = repairCanonicalProfiles(
-      path.join(env.canonicalDir, 'no-such-dir'),
-      env.legacyProfilesDir,
-    );
-    expect(result.kind).toBe('none');
-  });
-
-  it('later: affected canonical+legacy appears → repaired on next startup', () => {
-    // First run: empty canonical dir, nothing to repair.
-    const first = repairCanonicalProfiles(
-      env.canonicalDir,
-      env.legacyProfilesDir,
-    );
-    expect(first.kind).toBe('none');
-
-    // Later: affected files appear.
-    writeProfile(env.canonicalDir, 'zai.json', corruptCanonicalProfile());
-    writeProfile(env.legacyProfilesDir, 'zai.json', validLegacyProfile());
-
-    // Next startup repairs.
     const second = repairCanonicalProfiles(
       env.canonicalDir,
       env.legacyProfilesDir,
     );
     expect(second.kind).toBe('repaired');
-    expect(second.kind === 'repaired' ? second.profilesRepaired : 0).toBe(1);
+    expect(
+      JSON.parse(
+        fs.readFileSync(path.join(env.canonicalDir, 'zzz.json'), 'utf-8'),
+      ).provider,
+    ).toBe('anthropic');
+
+    const third = repairCanonicalProfiles(
+      env.canonicalDir,
+      env.legacyProfilesDir,
+    );
+    expect(third.kind).toBe('none');
   });
 });
 
-// ─── modelParams normalization at parseProfile boundary (#6) ────────────────
+// ─── modelParams normalization at parseProfile boundary ────────────────────
 
-describe('repairCanonicalProfiles — modelParams normalization (#6)', () => {
+describe('repairCanonicalProfiles — modelParams normalization', () => {
   let env: TestEnv;
 
   beforeEach(async () => {
@@ -484,11 +369,36 @@ describe('repairCanonicalProfiles — modelParams normalization (#6)', () => {
     );
     expect(repaired.modelParams).toStrictEqual({ temperature: 1 });
   });
+
+  it('repairs a corrupt canonical that omits modelParams entirely', () => {
+    // The corrupt canonical profile omits modelParams (rather than having
+    // an explicit {}). This is still the structural defect — absent
+    // modelParams is treated the same as empty modelParams.
+    writeProfile(
+      env.canonicalDir,
+      'no-params.json',
+      corruptCanonicalProfileOmittedModelParams(),
+    );
+    writeProfile(env.legacyProfilesDir, 'no-params.json', validLegacyProfile());
+
+    const result = repairCanonicalProfiles(
+      env.canonicalDir,
+      env.legacyProfilesDir,
+    );
+    expect(result.kind).toBe('repaired');
+
+    const repaired = JSON.parse(
+      fs.readFileSync(path.join(env.canonicalDir, 'no-params.json'), 'utf-8'),
+    );
+    expect(repaired.provider).toBe('anthropic');
+    expect(repaired.model).toBe('glm-5.2');
+    expect(repaired.modelParams).toStrictEqual({ temperature: 1 });
+  });
 });
 
-// ─── Behavioral: repaired zai profile loads via ProfileManager (#9) ─────────
+// ─── Behavioral: repaired profile loads via ProfileManager ─────────────────
 
-describe('repairCanonicalProfiles — repaired zai loads/preparation (#9)', () => {
+describe('repairCanonicalProfiles — repaired profile loads via ProfileManager', () => {
   let env: TestEnv;
 
   beforeEach(async () => {
@@ -498,14 +408,12 @@ describe('repairCanonicalProfiles — repaired zai loads/preparation (#9)', () =
     await teardownEnv(env);
   });
 
-  it('repaired zai profile loads via ProfileManager preserving anthropic/glm-5.2/base-url/auth-key-name', async () => {
+  it('repaired profile loads via ProfileManager preserving all fields', async () => {
     writeProfile(env.canonicalDir, 'zai.json', corruptCanonicalProfile());
     writeProfile(env.legacyProfilesDir, 'zai.json', validLegacyProfile());
 
     repairCanonicalProfiles(env.canonicalDir, env.legacyProfilesDir);
 
-    // Load the repaired profile through the real ProfileManager (no
-    // network, no mock theater) to verify it preserves the expected fields.
     const pm = new ProfileManager(env.canonicalDir);
     const loaded = await pm.loadProfile('zai');
 
@@ -519,7 +427,31 @@ describe('repairCanonicalProfiles — repaired zai loads/preparation (#9)', () =
     expect(loaded.ephemeralSettings['context-limit']).toBe(200000);
   });
 
-  // ─── Exact end-to-end zai application through ProfileManager (#5) ───────────
+  it('repaired profile with alternative provider loads via ProfileManager', async () => {
+    writeProfile(
+      env.canonicalDir,
+      'alt.json',
+      corruptCanonicalProfileNonGeminiModel(),
+    );
+    writeProfile(
+      env.legacyProfilesDir,
+      'alt.json',
+      validLegacyProfileAlternative(),
+    );
+
+    repairCanonicalProfiles(env.canonicalDir, env.legacyProfilesDir);
+
+    const pm = new ProfileManager(env.canonicalDir);
+    const loaded = await pm.loadProfile('alt');
+
+    expect(loaded.provider).toBe('openai');
+    expect(loaded.model).toBe('gpt-4o');
+    expect(isLoadBalancerProfile(loaded)).toBe(false);
+    expect(loaded.modelParams.max_tokens).toBe(4096);
+    expect(loaded.ephemeralSettings['base-url']).toBe(
+      'https://api.openai.com/v1',
+    );
+  });
 
   /**
    * Captured settings data from the fake SettingsService boundary.
@@ -533,8 +465,7 @@ describe('repairCanonicalProfiles — repaired zai loads/preparation (#9)', () =
   }
 
   /**
-   * Minimal shape matching ProfileManager's ProfileSettingsServiceLike for
-   * testing applyLoadedProfile without network/mock theater.
+   * Minimal shape matching ProfileManager's ProfileSettingsServiceLike.
    */
   interface CapturingSettingsService {
     setCurrentProfileName(name: string | null): void;
@@ -542,10 +473,6 @@ describe('repairCanonicalProfiles — repaired zai loads/preparation (#9)', () =
     set(key: string, value: unknown): void;
   }
 
-  /**
-   * Type guard for the profile import data shape (narrowing unknown without
-   * a type assertion).
-   */
   function isImportData(value: unknown): value is {
     defaultProvider: string;
     providers: Record<string, Record<string, unknown>>;
@@ -600,57 +527,34 @@ describe('repairCanonicalProfiles — repaired zai loads/preparation (#9)', () =
     return { service, captured };
   }
 
-  describe('repairCanonicalProfiles — exact zai end-to-end application (#5)', () => {
-    let env: TestEnv;
+  it('repaired profile applies through ProfileManager end-to-end', async () => {
+    writeProfile(env.canonicalDir, 'zai.json', corruptCanonicalProfile());
+    writeProfile(env.legacyProfilesDir, 'zai.json', validLegacyProfile());
 
-    beforeEach(async () => {
-      env = await setupEnv();
-    });
-    afterEach(async () => {
-      await teardownEnv(env);
-    });
+    repairCanonicalProfiles(env.canonicalDir, env.legacyProfilesDir);
 
-    it('repaired zai profile applies through ProfileManager with anthropic/glm-5.2/z.ai base URL/auth-key-name together', async () => {
-      writeProfile(env.canonicalDir, 'zai.json', corruptCanonicalProfile());
-      writeProfile(env.legacyProfilesDir, 'zai.json', validLegacyProfile());
+    const pm = new ProfileManager(env.canonicalDir);
 
-      repairCanonicalProfiles(env.canonicalDir, env.legacyProfilesDir);
+    const { service, captured } = createCapturingSettingsService();
+    await pm.load('zai', service);
 
-      // Load the repaired profile via ProfileManager (real file I/O).
-      const pm = new ProfileManager(env.canonicalDir);
+    expect(captured.currentProfileName).toBe('zai');
+    expect(captured.defaultProvider).toBe('anthropic');
 
-      // Apply through the real applyLoadedProfile seam with a capturing fake
-      // at the SettingsService boundary (no network, no mock theater).
-      // pm.load() internally calls loadProfile + applyLoadedProfile, handling
-      // the LB check. Since this is a standard profile, load succeeds.
-      const { service, captured } = createCapturingSettingsService();
-      await pm.load('zai', service);
+    const providerSettings = captured.providers['anthropic'];
+    expect(providerSettings).toBeDefined();
+    expect(providerSettings.model).toBe('glm-5.2');
+    expect(providerSettings['base-url']).toBe('https://api.z.ai/api/anthropic');
 
-      // Assert all zai fields resolve together through the application path.
-      expect(captured.currentProfileName).toBe('zai');
-      expect(captured.defaultProvider).toBe('anthropic');
-
-      const providerSettings = captured.providers['anthropic'];
-      expect(providerSettings).toBeDefined();
-      expect(providerSettings.model).toBe('glm-5.2');
-      expect(providerSettings['base-url']).toBe(
-        'https://api.z.ai/api/anthropic',
-      );
-
-      // auth-key-name is an ephemeral setting preserved in the profile and
-      // resolved through the settings data — the key name 'zai' enables
-      // secure-store key resolution at the provider boundary. Verify by
-      // loading the raw repaired file.
-      const loaded = await pm.loadProfile('zai');
-      expect(loaded.ephemeralSettings['auth-key-name']).toBe('zai');
-      expect(providerSettings.enabled).toBe(true);
-    });
+    const loaded = await pm.loadProfile('zai');
+    expect(loaded.ephemeralSettings['auth-key-name']).toBe('zai');
+    expect(providerSettings.enabled).toBe(true);
   });
 });
 
-// ─── Lock busy as benign deferral (#3) ──────────────────────────────────────
+// ─── Lock busy as benign deferral ──────────────────────────────────────────
 
-describe('repairCanonicalProfiles — lock busy is benign deferral (#3)', () => {
+describe('repairCanonicalProfiles — lock busy is benign deferral', () => {
   let env: TestEnv;
 
   beforeEach(async () => {
@@ -685,9 +589,9 @@ describe('repairCanonicalProfiles — lock busy is benign deferral (#3)', () => 
   });
 });
 
-// ─── Narrow eligibility: negative tests for manually-authored LB (#5) ───────
+// ─── Narrow eligibility: negative tests ────────────────────────────────────
 
-describe('repairCanonicalProfiles — narrow eligibility negative tests (#5)', () => {
+describe('repairCanonicalProfiles — narrow eligibility negative tests', () => {
   let env: TestEnv;
 
   beforeEach(async () => {
@@ -698,8 +602,6 @@ describe('repairCanonicalProfiles — narrow eligibility negative tests (#5)', (
   });
 
   it('does NOT repair a manually-authored loadbalancer profile with provider load-balancer', () => {
-    // A genuine LB profile has type:'loadbalancer' — it is never corrupt
-    // even if its provider field is 'load-balancer'.
     writeProfile(env.canonicalDir, 'mylb.json', genuineLbProfile());
     writeProfile(env.legacyProfilesDir, 'mylb.json', validLegacyProfile());
 
@@ -738,97 +640,37 @@ describe('repairCanonicalProfiles — narrow eligibility negative tests (#5)', (
     expect(after.provider).toBe('openai');
   });
 
-  it('does NOT repair a standard profile with load-balancer provider but a CUSTOM model (#4)', () => {
-    // The reported defect signature requires model gemini-2.5-pro. A
-    // manually-authored profile with a custom model must NOT be touched.
-    const customModel = {
-      version: 1,
-      provider: 'load-balancer',
-      model: 'my-custom-model',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-    writeProfile(env.canonicalDir, 'custom.json', customModel);
-    writeProfile(env.legacyProfilesDir, 'custom.json', validLegacyProfile());
+  it('repairs the historical defect shape regardless of fallback model', () => {
+    writeProfile(env.canonicalDir, 'gem.json', corruptCanonicalProfile());
+    writeProfile(env.legacyProfilesDir, 'gem.json', validLegacyProfile());
 
-    const result = repairCanonicalProfiles(
+    writeProfile(
+      env.canonicalDir,
+      'other.json',
+      corruptCanonicalProfileNonGeminiModel(),
+    );
+    writeProfile(
+      env.legacyProfilesDir,
+      'other.json',
+      validLegacyProfileAlternative(),
+    );
+
+    const first = repairCanonicalProfiles(
       env.canonicalDir,
       env.legacyProfilesDir,
     );
-    expect(result.kind).toBe('none');
+    expect(first.kind).toBe('repaired');
 
-    const after = JSON.parse(
-      fs.readFileSync(path.join(env.canonicalDir, 'custom.json'), 'utf-8'),
-    );
-    expect(after.model).toBe('my-custom-model');
-    expect(after.provider).toBe('load-balancer');
-  });
-
-  it('does NOT repair a standard profile with load-balancer provider but a manual/default model (#4)', () => {
-    const manualModel = {
-      version: 1,
-      provider: 'load-balancer',
-      model: 'default',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-    writeProfile(env.canonicalDir, 'manual.json', manualModel);
-    writeProfile(env.legacyProfilesDir, 'manual.json', validLegacyProfile());
-
-    const result = repairCanonicalProfiles(
+    const second = repairCanonicalProfiles(
       env.canonicalDir,
       env.legacyProfilesDir,
     );
-    expect(result.kind).toBe('none');
+    expect(second.kind).toBe('repaired');
 
-    const after = JSON.parse(
-      fs.readFileSync(path.join(env.canonicalDir, 'manual.json'), 'utf-8'),
-    );
-    expect(after.model).toBe('default');
-  });
-
-  it('repairs the EXACT reported defect: load-balancer + gemini-2.5-pro (#4 positive)', () => {
-    // The exact issue payload from #2479/#2477: standard v1, provider
-    // load-balancer, model gemini-2.5-pro (the fallback model).
-    writeProfile(env.canonicalDir, 'zai.json', corruptCanonicalProfile());
-    writeProfile(env.legacyProfilesDir, 'zai.json', validLegacyProfile());
-
-    const result = repairCanonicalProfiles(
+    const third = repairCanonicalProfiles(
       env.canonicalDir,
       env.legacyProfilesDir,
     );
-    expect(result.kind).toBe('repaired');
-
-    const repaired = JSON.parse(
-      fs.readFileSync(path.join(env.canonicalDir, 'zai.json'), 'utf-8'),
-    );
-    expect(repaired.provider).toBe('anthropic');
-    expect(repaired.model).toBe('glm-5.2');
-  });
-});
-
-// ─── I/O error outcomes ─────────────────────────────────────────────────────
-
-describe('repairCanonicalProfiles — I/O error outcomes', () => {
-  let env: TestEnv;
-
-  beforeEach(async () => {
-    env = await setupEnv();
-  });
-  afterEach(async () => {
-    await teardownEnv(env);
-  });
-
-  it('returns error when canonical profiles path is a file, not a directory', () => {
-    fs.mkdirSync(env.canonicalDir, { recursive: true });
-    // Replace the canonicalDir with a file.
-    fs.rmSync(env.canonicalDir, { recursive: true, force: true });
-    fs.writeFileSync(env.canonicalDir, 'not a directory');
-
-    const result = repairCanonicalProfiles(
-      env.canonicalDir,
-      env.legacyProfilesDir,
-    );
-    expect(result.kind).toBe('error');
+    expect(third.kind).toBe('none');
   });
 });

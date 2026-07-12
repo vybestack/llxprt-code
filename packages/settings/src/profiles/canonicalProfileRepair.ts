@@ -26,47 +26,7 @@ import {
  */
 export const CORRUPT_PROVIDER = 'load-balancer';
 
-/**
- * The fallback model observed in the reported defect. When the runtime fell
- * back to the first registered provider (gemini), it used this model.
- * Repair eligibility requires this exact model so that manually-authored
- * standard profiles with a custom model are never touched (#4).
- */
-export const CORRUPT_FALLBACK_MODEL = 'gemini-2.5-pro';
-
-const REPORTED_PROFILE_NAME = 'zai';
-const REPORTED_PROVIDER = 'anthropic';
-const REPORTED_MODEL = 'glm-5.2';
-const REPORTED_BASE_URL = 'https://api.z.ai/api/anthropic';
-const REPORTED_AUTH_KEY_NAME = 'zai';
-const REPORTED_CONTEXT_LIMIT = 200_000;
 const REPAIR_BACKUP_SUFFIX = '.pre-repair.bak';
-
-/**
- * Result of a canonical profile repair pass.
- */
-export interface CanonicalRepairResult {
-  /** Number of profiles that were actually repaired (>= 0). */
-  readonly profilesRepaired: number;
-  /** Diagnostic errors encountered (non-fatal). */
-  readonly errors: readonly string[];
-}
-
-/**
- * A candidate repair: a corrupt canonical profile that has a valid same-name
- * legacy replacement available.
- */
-interface RepairCandidate {
-  readonly name: string;
-  readonly canonicalPath: string;
-  readonly canonicalRaw: string;
-  readonly replacement: string;
-}
-
-type VerifyResult =
-  | { readonly kind: 'repair' }
-  | { readonly kind: 'skip' }
-  | { readonly kind: 'error'; readonly error: Error };
 
 /**
  * Discriminated result of {@link repairCanonicalProfiles}.
@@ -89,6 +49,17 @@ export type CanonicalRepairOutcome =
   | { readonly kind: 'error'; readonly errors: readonly string[] };
 
 /**
+ * @deprecated Use {@link CanonicalRepairOutcome} instead. This type is
+ *             preserved solely for package-root API compatibility with
+ *             consumers that imported the older non-discriminated result
+ *             shape. It is not used internally.
+ */
+export type CanonicalRepairResult = {
+  readonly profilesRepaired: number;
+  readonly errors: readonly string[];
+};
+
+/**
  * Structural guard for a raw parsed profile object (the JSON-parsed value
  * before it goes through parseProfile). Used to inspect the `type` field
  * directly on the raw object so that eligibility does not depend on the
@@ -104,19 +75,26 @@ function isRawObject(value: unknown): value is Record<string, unknown> {
 
 /**
  * Determine whether a RAW parsed JSON object matches the known historical
- * defect signature (issue #2479/#2477). Inspects the raw object directly to
- * ensure eligibility is exact (#3):
+ * defect signature (issue #2479/#2477). This is the single conservative
+ * structural predicate used by both the canonical scan and the replacement
+ * validation. Inspects the raw object directly to ensure eligibility is
+ * exact (#3):
  *
  * - `type` must be ABSENT (not 'loadbalancer' and not 'standard'). The
  *   corrupt shape never carried a type field.
  * - `provider` must be exactly {@link CORRUPT_PROVIDER} ('load-balancer').
- * - `model` must be exactly {@link CORRUPT_FALLBACK_MODEL} ('gemini-2.5-pro').
- * - Must parse as a valid standard v1 profile via parseProfile.
+ * - `version` must be exactly 1.
+ * - `modelParams` must be absent or an empty object — the historical defect
+ *   always had empty modelParams.
+ * - `ephemeralSettings` must be an empty object — the historical defect
+ *   always had empty ephemeralSettings.
+ * - Must parse as a valid standard v1 profile via parseProfile (not an LB).
  *
- * This is deliberately conservative (#4): a genuine loadbalancer profile
- * (type='loadbalancer') is NEVER corrupt even if its provider field happens
- * to be 'load-balancer'. A standard profile with a custom model is NOT the
- * reported defect. Only the exact reported defect signature is repaired.
+ * This is deliberately conservative: a genuine loadbalancer profile
+ * (type='loadbalancer') is NEVER corrupt. A standard profile with nonempty
+ * modelParams or ephemeralSettings is manually-authored and NOT the defect.
+ * The model value is NOT constrained — the corruption is structural, so any
+ * fallback model in this shape is corrupt.
  *
  * @param rawParsed The JSON-parsed raw object (NOT a typed Profile).
  */
@@ -132,10 +110,6 @@ export function isCorruptStandardProfileFromRaw(rawParsed: unknown): boolean {
   if (typeof provider !== 'string' || provider !== CORRUPT_PROVIDER) {
     return false;
   }
-  const model = rawParsed['model'];
-  if (typeof model !== 'string' || model !== CORRUPT_FALLBACK_MODEL) {
-    return false;
-  }
   if (rawParsed['version'] !== 1) {
     return false;
   }
@@ -147,7 +121,10 @@ export function isCorruptStandardProfileFromRaw(rawParsed: unknown): boolean {
     return false;
   }
   const ephemeralSettings = rawParsed['ephemeralSettings'];
-  if (!isRawObject(ephemeralSettings)) {
+  if (
+    !isRawObject(ephemeralSettings) ||
+    Object.keys(ephemeralSettings).length !== 0
+  ) {
     return false;
   }
   // Validate it parses as a standard v1 profile (not an LB, not garbage).
@@ -161,24 +138,6 @@ export function isCorruptStandardProfileFromRaw(rawParsed: unknown): boolean {
     return false;
   }
   return true;
-}
-
-/**
- * Backward-compatible overload: accepts a parsed Profile. Delegates to the
- * raw-object inspection by reconstructing the eligibility checks. Kept for
- * existing callers/tests that pass a typed Profile.
- *
- * @deprecated Prefer {@link isCorruptStandardProfileFromRaw} for exact
- *             eligibility on raw parsed objects.
- */
-export function isCorruptStandardProfile(profile: Profile): boolean {
-  if (isLoadBalancerProfile(profile)) {
-    return false;
-  }
-  if (profile.provider !== CORRUPT_PROVIDER) {
-    return false;
-  }
-  return profile.model === CORRUPT_FALLBACK_MODEL;
 }
 
 /**
@@ -218,14 +177,29 @@ function readAndParseProfile(filePath: string):
 }
 
 /**
+ * A candidate repair: a corrupt canonical profile that has a valid same-name
+ * legacy replacement available.
+ */
+interface RepairCandidate {
+  readonly name: string;
+  readonly canonicalPath: string;
+  readonly canonicalRaw: string;
+  readonly replacement: string;
+}
+
+/**
  * Determine if a legacy file is a valid replacement for a corrupt canonical.
- * The legacy profile must parse as a standard profile with a non-corrupt
- * defect signature (not provider load-balancer + model gemini-2.5-pro).
- * Returns the serialized replacement JSON, or null if the legacy is not a
- * valid replacement.
+ * The legacy profile is eligible iff:
+ * - It parses as a valid standard profile (not invalid JSON, not garbage).
+ * - It is NOT a genuine loadbalancer profile.
+ * - It does NOT itself match the corrupt structural signature.
  *
- * modelParams normalization is now handled by parseProfile at the shared
- * boundary, so we just parse and validate here.
+ * There are NO restrictions on provider, model, base-url, auth-key, or
+ * context-limit — any valid standard profile that is not itself corrupt is
+ * an acceptable replacement.
+ *
+ * Returns the serialized replacement JSON (with modelParams normalized so
+ * absent becomes {}), or null if the legacy is not a valid replacement.
  */
 function validateLegacyReplacement(legacyPath: string): string | null {
   const result = readProfileFileSync(legacyPath);
@@ -257,31 +231,24 @@ function validateLegacyReplacement(legacyPath: string): string | null {
   if (isLoadBalancerProfile(profile)) {
     return null;
   }
-  if (isCorruptStandardProfile(profile)) {
+  // The replacement must not itself match the corrupt structural signature.
+  if (isCorruptStandardProfileFromRaw(parsed)) {
+    return null;
+  }
+  // Reject any standard profile whose provider is the virtual non-loadable
+  // 'load-balancer'. Such a profile cannot be loaded at runtime (no
+  // registered provider), so replacing one non-loadable profile with
+  // another is not a repair. This catches shapes that escape the narrow
+  // canonical corrupt signature (e.g. nonempty modelParams).
+  if (profile.provider === CORRUPT_PROVIDER) {
     return null;
   }
 
-  if (
-    profile.provider !== REPORTED_PROVIDER ||
-    profile.model !== REPORTED_MODEL
-  ) {
-    return null;
-  }
-  const ephemeralSettings = profile.ephemeralSettings;
-  if (
-    ephemeralSettings['base-url'] !== REPORTED_BASE_URL ||
-    ephemeralSettings['auth-key-name'] !== REPORTED_AUTH_KEY_NAME ||
-    ephemeralSettings['context-limit'] !== REPORTED_CONTEXT_LIMIT
-  ) {
-    return null;
-  }
-
-  // parseProfile normalizes modelParams at the boundary, so re-serialize
-  // the normalized input (not the original) for canonical bytes.
-  const modelParams =
-    parsed['modelParams'] === undefined ? {} : parsed['modelParams'];
-  const normalized = { ...parsed, modelParams };
-  return JSON.stringify(normalized, null, 2);
+  // Serialize the normalized Profile returned by parseProfile so absent
+  // modelParams becomes {} at the shared parse boundary. This produces
+  // canonical bytes regardless of whether the legacy source omitted
+  // modelParams.
+  return JSON.stringify(profile, null, 2);
 }
 
 /**
@@ -314,6 +281,8 @@ function collectRepairCandidates(
 /**
  * Examine a single canonical profile file for repair candidacy.
  * Returns the candidate if corrupt+replaceable, or an error string.
+ *
+ * Any profile name is eligible — there is no hardcoded name restriction.
  */
 function examineProfileForRepair(
   file: string,
@@ -321,9 +290,6 @@ function examineProfileForRepair(
   legacyProfilesDir: string,
 ): { readonly candidate?: RepairCandidate; readonly error?: string } {
   const name = file.slice(0, -5);
-  if (name !== REPORTED_PROFILE_NAME) {
-    return {};
-  }
   const canonicalPath = path.join(canonicalDir, file);
 
   const canonical = readAndParseProfile(canonicalPath);
@@ -333,7 +299,7 @@ function examineProfileForRepair(
   if (canonical.kind !== 'parsed') {
     return {};
   }
-  // Eligibility: inspect the raw parsed object for exact signature (#3).
+  // Eligibility: inspect the raw parsed object for the structural signature.
   if (!isCorruptStandardProfileFromRaw(canonical.rawParsed)) {
     return {};
   }
@@ -353,6 +319,11 @@ function examineProfileForRepair(
     },
   };
 }
+
+type VerifyResult =
+  | { readonly kind: 'repair' }
+  | { readonly kind: 'skip' }
+  | { readonly kind: 'error'; readonly error: Error };
 
 function verifyCanonicalUnchanged(candidate: RepairCandidate): VerifyResult {
   const current = readProfileFileSync(candidate.canonicalPath);
@@ -453,11 +424,8 @@ function cleanupTemp(tmpPath: string): void {
 function validateReplacementFile(filePath: string): void {
   const content = fs.readFileSync(filePath, 'utf-8');
   const parsed: unknown = JSON.parse(content);
-  const profile = parseProfile(parsed);
-  if (
-    isCorruptStandardProfileFromRaw(parsed) ||
-    isCorruptStandardProfile(profile)
-  ) {
+  // The replacement must not still match the corrupt structural signature.
+  if (isCorruptStandardProfileFromRaw(parsed)) {
     throw new Error('replacement file still has the corrupt defect signature');
   }
 }
@@ -507,11 +475,18 @@ function claimBackup(
  * Cohesive settings-owned API for repairing corrupt canonical profiles.
  *
  * Scans canonical profile files for the known historical defect signature
- * (standard profile with provider 'load-balancer' and model 'gemini-2.5-pro'
- * from issue #2479/#2477) and replaces one deterministic candidate with its
- * valid same-name legacy profile. Repairing at most one profile per startup
- * keeps the mutation boundary to one atomic rename; later startups repair any
- * remaining candidates.
+ * (untyped standard-v1 profile whose provider is the virtual non-loadable
+ * provider 'load-balancer', with empty modelParams and empty
+ * ephemeralSettings, from issue #2479/#2477) and replaces one deterministic
+ * candidate with its valid same-name legacy profile. Repairing at most one
+ * profile per startup keeps the mutation boundary to one atomic rename;
+ * later startups repair any remaining candidates.
+ *
+ * The corruption signature is structural and conservative: it does not
+ * depend on a specific profile name, provider, model, endpoint, or auth
+ * setting. A same-name legacy replacement is eligible iff it parses as a
+ * valid standard profile, is not a genuine loadbalancer, and does not
+ * itself match the corrupt structural signature.
  *
  * Composability (#4): repair and migration are separate operations. The
  * existing canonical no-overwrite publication (hard-link/COPYFILE_EXCL) and
@@ -530,7 +505,7 @@ function claimBackup(
  * leaves a stale lock requiring explicit manual removal. Manual recovery is
  * supported ONLY after stopping all possible LLxprt/profile owner processes.
  * The token check is an accidental guard, NOT a guarantee that release is
- * safe against external replacement — unlink/recreate while the owner is
+ * safe against external replacement — unlink/recreate whilst the owner is
  * live is unsupported external interference.
  *
  * @param canonicalProfilesDir The canonical profiles directory
@@ -602,6 +577,13 @@ function repairCanonicalProfilesLocked(
   candidates.sort((left, right) => left.name.localeCompare(right.name));
   if (candidates.length === 0) {
     return errors.length === 0 ? { kind: 'none' } : { kind: 'error', errors };
+  }
+
+  // If scan/preflight errors exist alongside a repair candidate, do NOT
+  // mutate anything. Return error before repair so the caller sees the
+  // problem and no partial state is committed.
+  if (errors.length > 0) {
+    return { kind: 'error', errors };
   }
 
   try {
