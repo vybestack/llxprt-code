@@ -725,23 +725,14 @@ describe('isDestructiveCommand', () => {
     });
   });
 
-  describe('process substitution <() and >()', () => {
-    it.each<[string, boolean]>([
-      ['cat <(rm -rf /)', true],
-      ['tee >(rm -rf /)', true],
-      ['cat <(ls)', false],
-      ['diff <(ls) <(cat foo)', false],
-    ])('"%s" -> %s', (command, expected) => {
-      expect(isDestructiveCommand(command)).toBe(expected);
-    });
-  });
-
-  describe('Fix A: process substitution inside double quotes is literal (false positive)', () => {
+  describe('Fix A: process substitution <() and >() real vs quoted-literal', () => {
     it.each<[string, boolean]>([
       ['echo "<(rm -rf /)"', false],
       ['echo ">(rm -rf /)"', false],
       ['printf "%s" "<(rm -rf /)"', false],
       ["echo '<(rm -rf /)'", false],
+      ['cat <(ls)', false],
+      ['diff <(ls) <(cat foo)', false],
       ['cat <(rm -rf /)', true],
       ['tee >(rm -rf /)', true],
       ['echo "$(rm -rf /)"', true],
