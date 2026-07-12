@@ -655,6 +655,24 @@ describe('connectToMcpServer with OAuth', () => {
         ),
       ).rejects.toThrow(/streamable-http/);
     });
+
+    it('does not reinterpret a stdio process error as an SSE endpoint configuration error', async () => {
+      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+        new Error('SSE is no longer supported in this subprocess'),
+      );
+
+      await expect(
+        connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          { command: 'test-command' },
+          false,
+          workspaceContext,
+        ),
+      ).rejects.toThrow(
+        /Connection failed for 'test-server': SSE is no longer supported/,
+      );
+    });
   });
 
   describe('getInstructions', () => {

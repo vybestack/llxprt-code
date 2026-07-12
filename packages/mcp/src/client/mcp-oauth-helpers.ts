@@ -131,9 +131,12 @@ export function detectDeprecatedSSEEndpoint(
   }
   if (signalEnd === -1) return null;
 
-  // Search for a URL in the text after the deprecation signal.
-  const lowerHttpIdx = lower.indexOf('http', signalEnd);
-  if (lowerHttpIdx === -1) return '';
+  // Search for an HTTP(S) URL in the text after the deprecation signal.
+  const httpIndex = lower.indexOf('http://', signalEnd);
+  const httpsIndex = lower.indexOf('https://', signalEnd);
+  const urlIndexes = [httpIndex, httpsIndex].filter((index) => index !== -1);
+  if (urlIndexes.length === 0) return '';
+  const lowerHttpIdx = Math.min(...urlIndexes);
   const rest = errorString.slice(lowerHttpIdx);
   const lowerRest = lower.slice(lowerHttpIdx);
   let endIdx = rest.length;
@@ -144,11 +147,6 @@ export function detectDeprecatedSSEEndpoint(
     }
   }
   const url = rest.slice(0, endIdx);
-  // Validate that the extracted text is actually a URL (must contain "://")
-  const schemeEnd = lower
-    .slice(lowerHttpIdx, lowerHttpIdx + endIdx)
-    .indexOf('://');
-  if (schemeEnd === -1) return '';
   // Trim trailing punctuation that may be part of the sentence, not the URL.
   // Comma is only trimmed when the URL has no query string or fragment, since
   // commas are valid in query parameters and fragments (RFC 3986).

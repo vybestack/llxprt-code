@@ -4,8 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
-import { detectDeprecatedSSEEndpoint } from './mcp-oauth-helpers.js';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { MCPOAuthProvider } from '../auth/oauth-provider.js';
+import { OAuthUtils } from '../auth/oauth-utils.js';
+import {
+  detectDeprecatedSSEEndpoint,
+  handleAutomaticOAuth,
+} from './mcp-oauth-helpers.js';
 
 describe('detectDeprecatedSSEEndpoint', () => {
   it('should detect "SSE is no longer supported" message', () => {
@@ -88,6 +93,13 @@ describe('detectDeprecatedSSEEndpoint', () => {
     expect(result).toBe('');
   });
 
+  it('should reject schemes that merely start with http', () => {
+    const result = detectDeprecatedSSEEndpoint(
+      'SSE is no longer supported. Use httpx://mcp.example.com/mcp',
+    );
+    expect(result).toBe('');
+  });
+
   it('should ignore URLs that appear before the deprecation signal', () => {
     const result = detectDeprecatedSSEEndpoint(
       'Error: see https://docs.example.com/help for details. SSE is no longer supported. Use https://mcp.example.com/mcp',
@@ -107,5 +119,72 @@ describe('detectDeprecatedSSEEndpoint', () => {
       'SSE is no longer supported. Use https://mcp.example.com/mcp, then reconnect.',
     );
     expect(result).toBe('https://mcp.example.com/mcp');
+  });
+});
+
+describe('handleAutomaticOAuth', () => {
+  const oauthConfig = {
+    authorizationUrl: 'https://auth.example.com/authorize',
+    tokenUrl: 'https://auth.example.com/token',
+    scopes: ['read'],
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('shares one browser authentication flow across concurrent requests for the same server', async () => {
+    vi.spyOn(OAuthUtils, 'discoverOAuthConfig').mockResolvedValue(oauthConfig);
+
+    let finishAuthentication: (() => void) | undefined;
+    const authentication = new Promise<void>((resolve) => {
+      finishAuthentication = resolve;
+    });
+    const authenticate = vi
+      .spyOn(MCPOAuthProvider, 'authenticate')
+      .mockReturnValue(authentication);
+
+    const first = handleAutomaticOAuth(
+      'webflow',
+      { url: 'https://mcp.webflow.com/mcp', type: 'streamable-http' },
+      '',
+    );
+    const second = handleAutomaticOAuth(
+      'webflow',
+      { url: 'https://mcp.webflow.com/mcp', type: 'streamable-http' },
+      '',
+    );
+
+    await vi.waitFor(() => expect(authenticate).toHaveBeenCalledTimes(1));
+    finishAuthentication?.();
+    await expect(Promise.all([first, second])).resolves.toStrictEqual([
+      true,
+      true,
+    ]);
+  });
+
+  it('clears the guard after a failed authentication so the server can retry', async () => {
+    vi.spyOn(OAuthUtils, 'discoverOAuthConfig').mockResolvedValue(oauthConfig);
+    const authenticate = vi
+      .spyOn(MCPOAuthProvider, 'authenticate')
+      .mockRejectedValueOnce(new Error('authorization rejected'))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(
+      handleAutomaticOAuth(
+        'webflow',
+        { url: 'https://mcp.webflow.com/mcp' },
+        '',
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      handleAutomaticOAuth(
+        'webflow',
+        { url: 'https://mcp.webflow.com/mcp' },
+        '',
+      ),
+    ).resolves.toBe(true);
+    expect(authenticate).toHaveBeenCalledTimes(2);
   });
 });
