@@ -34,11 +34,7 @@ describe('neutral Type enum runtime values', () => {
 
 describe('todo tools schema preserves exact runtime values', () => {
   it('TodoWrite schema has type: "OBJECT" at root (not a symbol or enum object)', () => {
-    const tool = new TodoWrite(
-      undefined as never,
-      undefined as never,
-      undefined as never,
-    );
+    const tool = new TodoWrite(undefined, undefined);
     const schema = tool.schema;
     const jsonSchema = schema.parametersJsonSchema as Record<string, unknown>;
     expect(jsonSchema['type']).toBe('OBJECT');
@@ -65,11 +61,7 @@ describe('todo tools schema preserves exact runtime values', () => {
 
 describe('schema is JSON-serializable (no enum symbols leak)', () => {
   it('TodoWrite schema round-trips through JSON.stringify without data loss', () => {
-    const tool = new TodoWrite(
-      undefined as never,
-      undefined as never,
-      undefined as never,
-    );
+    const tool = new TodoWrite(undefined, undefined);
     const schema = tool.schema;
     const serialized = JSON.stringify(schema);
     const parsed = JSON.parse(serialized);
