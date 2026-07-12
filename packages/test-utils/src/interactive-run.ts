@@ -11,7 +11,11 @@ import type * as pty from '@lydell/node-pty';
 import stripAnsi from 'strip-ansi';
 import type { DiagnosticsSink } from './diagnostics.js';
 import { getDefaultTimeout, poll } from './util.js';
-import { detectQuotaSignal, tripQuotaGuard } from './quota-guard.js';
+import {
+  detectQuotaSignal,
+  isQuotaGuardActive,
+  tripQuotaGuard,
+} from './quota-guard.js';
 
 /**
  * Construction-time options for {@link InteractiveRun}.
@@ -72,9 +76,21 @@ export class InteractiveRun {
    * echoing phrases like "rate limit". No-op (returns `null`) when the guard is
    * disabled for this run. Returns the human-readable reason when a signal is
    * found, otherwise `null`.
+   *
+   * Two independent gates must both be open before any scanning happens:
+   *   1. `_quotaGuardEnabled` — the per-run fake-response gate. A fake-backed
+   *      interactive session never touches a real provider, so fixture text
+   *      that merely echoes "rate limit" must not trip the guard.
+   *   2. {@link isQuotaGuardActive} — the shared global gate. Under
+   *      `LLXPRT_QUOTA_GUARD_DISABLED=true` (or with no sentinel state dir)
+   *      `tripQuotaGuard` silently no-ops, so returning a reason here would
+   *      mislabel an ordinary timeout / non-zero exit as `[QUOTA/RATE-LIMIT]`
+   *      even though nothing was recorded. Reusing the guard's own predicate
+   *      keeps this path in lockstep with the sentinel instead of re-deriving
+   *      the disabled-state logic.
    */
   private detectAndTripQuota(): string | null {
-    if (!this._quotaGuardEnabled) {
+    if (!this._quotaGuardEnabled || !isQuotaGuardActive()) {
       return null;
     }
     const reason = detectQuotaSignal(stripAnsi(this.output));

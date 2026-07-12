@@ -7,6 +7,7 @@
 import {
   existsSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -30,6 +31,18 @@ function makeTempDir(): string {
   const dir = mkdtempSync(join(tmpdir(), 'quota-guard-'));
   tempDirs.push(dir);
   return dir;
+}
+
+/**
+ * Names of any leftover atomic-publication temp files in `dir`. The guard
+ * stages the payload as `<SENTINEL_FILENAME>.<pid>.<uuid>.tmp` in the sentinel's
+ * own directory before hard-linking it into place, so a correct implementation
+ * leaves none of these behind on any path.
+ */
+function leftoverTempFiles(dir: string): string[] {
+  return readdirSync(dir).filter(
+    (name) => name.startsWith(SENTINEL_FILENAME) && name.endsWith('.tmp'),
+  );
 }
 
 function callsIncludeAnnotation(
@@ -173,6 +186,42 @@ describe('quota-guard', () => {
       });
     });
 
+    it('leaves no temp file behind after a winning publication', () => {
+      const dir = makeTempDir();
+      vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
+      vi.stubEnv('GITHUB_ACTIONS', 'false');
+
+      tripQuotaGuard('winner reason');
+
+      // The sentinel is published and the staged temp inode was unlinked in the
+      // finally block — only the sentinel itself remains.
+      expect(getQuotaGuardTrip()).toStrictEqual({ reason: 'winner reason' });
+      expect(leftoverTempFiles(dir)).toStrictEqual([]);
+    });
+
+    it('leaves no temp file behind when it loses the publication race (EEXIST)', () => {
+      const dir = makeTempDir();
+      vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
+      vi.stubEnv('GITHUB_ACTIONS', 'false');
+
+      // Pre-create the sentinel so this worker's hard-link fails with EEXIST.
+      // The loser still stages a temp file first; it must clean that temp up in
+      // the finally block rather than leaking one temp per losing worker/retry.
+      const sentinelPath = join(dir, SENTINEL_FILENAME);
+      writeFileSync(
+        sentinelPath,
+        JSON.stringify({
+          reason: 'first winner',
+          timestamp: new Date().toISOString(),
+        }),
+      );
+
+      tripQuotaGuard('losing reason');
+
+      expect(getQuotaGuardTrip()).toStrictEqual({ reason: 'first winner' });
+      expect(leftoverTempFiles(dir)).toStrictEqual([]);
+    });
+
     it('does not emit a CI annotation when it loses the exclusive-create race', () => {
       const dir = makeTempDir();
       vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
@@ -276,6 +325,24 @@ describe('quota-guard', () => {
 
       const sentinelPath = join(dir, SENTINEL_FILENAME);
       writeFileSync(sentinelPath, JSON.stringify({ reason: 42 }));
+
+      expect(getQuotaGuardTrip()).toBeNull();
+    });
+
+    it('returns null when the sentinel JSON is a top-level array carrying a reason index', () => {
+      // A top-level JSON array is malformed for our schema even though
+      // `typeof [] === 'object'`. Because the array's index 0 holds the string
+      // "reason", a record guard that failed to exclude arrays would read
+      // `value['reason']` as the array METHOD/undefined and could mis-narrow;
+      // more importantly the guard must treat this structurally-wrong payload as
+      // malformed → null rather than surfacing a bogus trip. Arrays are excluded
+      // explicitly in isRecord, so this stays null.
+      const dir = makeTempDir();
+      vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
+      vi.stubEnv('GITHUB_ACTIONS', 'false');
+
+      const sentinelPath = join(dir, SENTINEL_FILENAME);
+      writeFileSync(sentinelPath, JSON.stringify(['reason', 'still an array']));
 
       expect(getQuotaGuardTrip()).toBeNull();
     });

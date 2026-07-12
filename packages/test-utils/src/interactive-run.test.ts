@@ -41,7 +41,19 @@ function activateGuard(): string {
   const dir = makeTempDir();
   vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
   vi.stubEnv('GITHUB_ACTIONS', 'false');
+  vi.stubEnv('LLXPRT_QUOTA_GUARD_DISABLED', undefined);
   clearQuotaGuard();
+  return dir;
+}
+
+/**
+ * Like {@link activateGuard} but with the global disable switch on. Even with
+ * `quotaGuardEnabled: true` at construction, a globally disabled guard must not
+ * relabel interactive failures as `[QUOTA/RATE-LIMIT]` nor record a sentinel.
+ */
+function activateDisabledGuard(): string {
+  const dir = activateGuard();
+  vi.stubEnv('LLXPRT_QUOTA_GUARD_DISABLED', 'true');
   return dir;
 }
 
@@ -190,6 +202,52 @@ describe('InteractiveRun quota guard integration', () => {
       );
 
       expect(error.message).not.toContain('[QUOTA/RATE-LIMIT]');
+      expect(getQuotaGuardTrip()).toBeNull();
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'preserves the ordinary expectExit timeout (no quota label, no trip) when the guard is globally disabled',
+    async () => {
+      // Disable-switch regression on the interactive TIMEOUT classification
+      // path (_exitTimeoutError): even though quotaGuardEnabled is true and the
+      // hung child's output carries a 429, a globally disabled guard must yield
+      // the plain "did not exit" timeout error — exactly like the non-disabled
+      // "rejects with a plain timeout error" case for non-quota output — and
+      // must record no trip.
+      const dir = activateDisabledGuard();
+      const run = spawnInteractive(
+        dir,
+        keepAliveScript('HTTP 429 Too Many Requests'),
+        true,
+      );
+
+      const error = await captureRejection(run.expectExit(1000));
+
+      expect(error.message).not.toContain('[QUOTA/RATE-LIMIT]');
+      expect(error.message).toContain('did not exit');
+      expect(getQuotaGuardTrip()).toBeNull();
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'resolves with the exit code (no quota label, no trip) on a non-zero quota exit when the guard is globally disabled',
+    async () => {
+      // Disable-switch regression on the interactive NON-ZERO EXIT path: a
+      // quota-looking non-zero exit must resolve with the ordinary exit code
+      // (not reject with a labelled quota error) and record no trip.
+      const dir = activateDisabledGuard();
+      const run = spawnInteractive(
+        dir,
+        printThenExitScript('Rate limit exceeded. Please wait a moment', 1),
+        true,
+      );
+
+      const exitCode = await run.expectExit(5000);
+
+      expect(exitCode).toBe(1);
       expect(getQuotaGuardTrip()).toBeNull();
     },
     TEST_TIMEOUT_MS,

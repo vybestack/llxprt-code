@@ -10,6 +10,7 @@ import type { Writable } from 'node:stream';
 import {
   detectQuotaSignal,
   getQuotaGuardTrip,
+  isQuotaGuardActive,
   tripQuotaGuard,
 } from './quota-guard.js';
 
@@ -60,20 +61,39 @@ export interface RunContext {
 }
 
 /**
- * Whether the E2E quota guard should observe this run.
+ * Whether this run uses fake responses (and therefore must NOT be observed by
+ * the quota guard).
  *
  * Runs backed by fake responses never touch a real provider, so quota/
  * rate-limit detection is meaningless for them and could produce false trips
- * from fixture text. The guard therefore does NOT apply when
- * `LLXPRT_FAKE_RESPONSES` is set in the child environment (or, when the child
- * inherits the parent environment, in `process.env`).
+ * from fixture text. Applicability is read from the child environment when the
+ * caller supplies one, otherwise from `process.env` (the child inherits it).
  */
-function guardApplies(ctx: RunContext): boolean {
+function usesFakeResponses(ctx: RunContext): boolean {
   const fakeResponses =
     ctx.childEnv !== undefined
       ? ctx.childEnv['LLXPRT_FAKE_RESPONSES']
       : process.env['LLXPRT_FAKE_RESPONSES'];
-  return fakeResponses === undefined || fakeResponses === '';
+  return fakeResponses !== undefined && fakeResponses !== '';
+}
+
+/**
+ * Whether the E2E quota guard should observe this run.
+ *
+ * Two independent conditions must both hold:
+ *   1. The run is NOT fake-response-backed (see {@link usesFakeResponses}).
+ *   2. The shared guard is globally active ({@link isQuotaGuardActive}) — i.e.
+ *      a sentinel state dir is configured and `LLXPRT_QUOTA_GUARD_DISABLED` is
+ *      not `true`.
+ *
+ * Folding the global predicate in here means that with the guard disabled,
+ * `tripQuotaGuard` (which no-ops) is never even reached and, crucially, the
+ * failure-classification paths keep the ORIGINAL exit/timeout error instead of
+ * relabelling it `[QUOTA/RATE-LIMIT]`. Reusing the guard's own predicate keeps
+ * this in lockstep with the sentinel rather than re-deriving disabled-state.
+ */
+function guardApplies(ctx: RunContext): boolean {
+  return !usesFakeResponses(ctx) && isQuotaGuardActive();
 }
 
 /**

@@ -4,14 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { randomUUID } from 'node:crypto';
 import {
   appendFileSync,
   existsSync,
+  linkSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 /**
  * Filename of the cross-process trip sentinel written into
@@ -108,7 +110,7 @@ function getStateDir(): string | null {
 /**
  * The guard is only usable for cleanup (clear) when we know where the sentinel
  * lives. `clearQuotaGuard` intentionally works even when the guard is disabled,
- * so it relies on this rather than {@link isGuardActive}.
+ * so it relies on this rather than {@link isQuotaGuardActive}.
  */
 function getSentinelPath(): string | null {
   const dir = getStateDir();
@@ -118,7 +120,20 @@ function getSentinelPath(): string | null {
   return join(dir, SENTINEL_FILENAME);
 }
 
-function isGuardActive(): boolean {
+/**
+ * Whether the cross-process quota guard is live for the current process.
+ *
+ * The guard is active only when a sentinel state directory is configured
+ * (`INTEGRATION_TEST_FILE_DIR`) AND it has not been explicitly switched off via
+ * `LLXPRT_QUOTA_GUARD_DISABLED=true`. This is the single source of truth for
+ * "should quota/rate-limit detection do anything at all": {@link tripQuotaGuard}
+ * and {@link getQuotaGuardTrip} both gate on it, and the harness failure-
+ * classification paths (interactive-run.ts, process-run.ts) reuse it so the
+ * documented disable switch restores ordinary timeout/exit failures instead of
+ * relabelling them `[QUOTA/RATE-LIMIT]`. Exported so those callers share exactly
+ * this predicate rather than re-deriving the disabled-state logic and drifting.
+ */
+export function isQuotaGuardActive(): boolean {
   if (getStateDir() === null) {
     return false;
   }
@@ -129,8 +144,17 @@ interface QuotaGuardTrip {
   readonly reason: string;
 }
 
+/**
+ * Narrow an unknown value to a non-null, non-array object.
+ *
+ * `typeof [] === 'object'` in JavaScript, so a bare `typeof`/`!== null` check
+ * would wrongly admit arrays as `Record<string, unknown>`. The explicit
+ * `Array.isArray` exclusion keeps the guard semantically correct so that a
+ * malformed sentinel whose top-level JSON is an array (even one that happens to
+ * carry a `reason` index) is not mistaken for a {@link QuotaGuardTrip}.
+ */
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isQuotaGuardTrip(value: unknown): value is QuotaGuardTrip {
@@ -138,13 +162,62 @@ function isQuotaGuardTrip(value: unknown): value is QuotaGuardTrip {
 }
 
 /**
- * Narrows an unknown caught value to a Node `EEXIST` filesystem error without a
- * type assertion, so the exclusive-create trip path can recognise "another
- * worker already won the race" while complying with strict lint rules (no
- * `any`, no `as NodeJS.ErrnoException` cast).
+ * Best-effort removal of a staged temp file. A leftover uniquely-named temp is
+ * harmless (it can never masquerade as the sentinel), so any failure here is
+ * swallowed — the run must never fail because of guard bookkeeping I/O.
  */
-function isEexistError(error: unknown): boolean {
-  return error instanceof Error && 'code' in error && error.code === 'EEXIST';
+function removeTempFile(tempPath: string): void {
+  try {
+    rmSync(tempPath, { force: true });
+  } catch {
+    // Ignore — a stray temp file is harmless and OS/CI-reclaimed.
+  }
+}
+
+/**
+ * Atomically publish the sentinel with first-writer-wins / no-replace
+ * semantics, returning `true` only for the process that actually wins the race.
+ *
+ * The payload is first written *in full* to a uniquely-named temp file in the
+ * SAME directory as the sentinel (exclusive `wx` create), then hard-linked to
+ * the sentinel path. `linkSync` publishes atomically and fails with `EEXIST`
+ * without replacing an existing sentinel, so exactly one writer wins even
+ * across concurrent vitest worker processes. Crucially, because the link merely
+ * exposes the already-complete temp inode, a reader can never observe a
+ * zero-length or partially-written sentinel (the window the previous
+ * `writeFileSync(..., 'wx')` left open, which {@link getQuotaGuardTrip} would
+ * treat as malformed → `null`, letting a second provider call slip through).
+ * The temp file is always cleaned up. A loser (`EEXIST`) and any other I/O
+ * failure both return `false`, so only the winner emits the CI annotation.
+ */
+function publishSentinel(sentinelPath: string, reason: string): boolean {
+  const payload = JSON.stringify({
+    reason,
+    timestamp: new Date().toISOString(),
+  });
+  const tempPath = join(
+    dirname(sentinelPath),
+    `${SENTINEL_FILENAME}.${process.pid}.${randomUUID()}.tmp`,
+  );
+  try {
+    writeFileSync(tempPath, payload, { flag: 'wx' });
+  } catch {
+    // Could not even stage the payload (ENOSPC, EACCES, a missing parent dir,
+    // or an astronomically unlikely temp-name collision). Nothing was published
+    // and there is no temp file to remove.
+    return false;
+  }
+  try {
+    linkSync(tempPath, sentinelPath);
+    return true;
+  } catch {
+    // EEXIST => another worker already published the first reason; any other
+    // error => the sentinel was never created. Either way this process is not
+    // the winner and must stay silent.
+    return false;
+  } finally {
+    removeTempFile(tempPath);
+  }
 }
 
 /**
@@ -190,55 +263,35 @@ function emitGitHubAnnotations(reason: string): void {
  *
  * No-op when the guard is inactive (no state dir, or explicitly disabled).
  * Idempotent, and the FIRST reason wins even across concurrent vitest worker
- * processes: the sentinel is created with the exclusive `wx` flag, so exactly
- * one writer succeeds. A separate `existsSync` pre-check would be a TOCTOU race
- * (two workers could both observe "absent" and the LAST write would clobber the
- * first reason); the atomic exclusive create closes that window.
+ * processes. Publication is atomic (see {@link publishSentinel}): the payload
+ * is written in full to a unique temp file in the sentinel's own directory and
+ * then hard-linked into place, so a reader never observes a zero-length or
+ * partial sentinel and exactly one writer wins. A plain `existsSync` pre-check
+ * would be a TOCTOU race (two workers could both observe "absent" and the LAST
+ * write would clobber the first reason); the atomic link closes that window.
  *
  * The CI annotation is emitted ONLY when this process actually wins the
- * exclusive create, i.e. it now owns the sentinel latch. A worker that loses
- * the race (EEXIST) stays silent, and — crucially — so does a worker whose
- * write fails for any OTHER reason (ENOSPC, EACCES, missing parent dir): with
- * no sentinel there is no latch to dedupe against, so emitting would let every
- * worker announce its own wall and flood CI with duplicates. Sentinel I/O is
- * therefore best-effort and never throws; the quota wall is still surfaced by
- * the failing test itself.
+ * publication, i.e. it now owns the sentinel latch. A worker that loses the
+ * race (link `EEXIST`) stays silent, and — crucially — so does a worker whose
+ * staging or link fails for any OTHER reason (ENOSPC, EACCES, missing parent
+ * dir): with no sentinel there is no latch to dedupe against, so emitting would
+ * let every worker announce its own wall and flood CI with duplicates. Sentinel
+ * I/O is therefore best-effort and never throws; the quota wall is still
+ * surfaced by the failing test itself.
  */
 export function tripQuotaGuard(reason: string): void {
-  if (!isGuardActive()) {
+  if (!isQuotaGuardActive()) {
     return;
   }
   const sentinelPath = getSentinelPath();
   if (sentinelPath === null) {
     return;
   }
-  try {
-    writeFileSync(
-      sentinelPath,
-      JSON.stringify({ reason, timestamp: new Date().toISOString() }),
-      { flag: 'wx' },
-    );
-  } catch (error) {
-    if (isEexistError(error)) {
-      // Another worker won the race and recorded the first reason. Stay silent:
-      // do not overwrite it, and do not emit a duplicate annotation.
-      return;
-    }
-    // Any other error (ENOSPC, EACCES, ENOENT for a missing parent dir, ...):
-    // the sentinel — which IS the cross-process latch in the success/EEXIST
-    // paths — was never written, so there is nothing to dedupe subsequent
-    // callers against. Emitting here would make EVERY worker (and every retry)
-    // hit this same failing write and announce its own wall, flooding CI with
-    // duplicate annotations and breaking the "first reason wins / losers stay
-    // silent" guarantee. Return without emitting; the quota wall is still
-    // surfaced by the failing test itself, and we never fail the run because of
-    // sentinel I/O.
-    return;
+  if (publishSentinel(sentinelPath, reason)) {
+    // Reached only when THIS process won the atomic publication, i.e. it is the
+    // sole owner of the sentinel latch.
+    emitGitHubAnnotations(reason);
   }
-
-  // Reached only when the exclusive create above actually succeeded, i.e. this
-  // process is the sole winner that owns the sentinel latch.
-  emitGitHubAnnotations(reason);
 }
 
 /**
@@ -246,7 +299,7 @@ export function tripQuotaGuard(reason: string): void {
  * `null` when the guard is inactive, unset, unreadable, or malformed.
  */
 export function getQuotaGuardTrip(): { reason: string } | null {
-  if (!isGuardActive()) {
+  if (!isQuotaGuardActive()) {
     return null;
   }
   const sentinelPath = getSentinelPath();

@@ -37,7 +37,20 @@ function activateGuard(): string {
   vi.stubEnv('INTEGRATION_TEST_FILE_DIR', dir);
   vi.stubEnv('GITHUB_ACTIONS', 'false');
   vi.stubEnv('LLXPRT_FAKE_RESPONSES', undefined);
+  vi.stubEnv('LLXPRT_QUOTA_GUARD_DISABLED', undefined);
   clearQuotaGuard();
+  return dir;
+}
+
+/**
+ * Like {@link activateGuard} but with the global disable switch flipped on.
+ * A configured state dir proves the ONLY thing suppressing the guard is
+ * `LLXPRT_QUOTA_GUARD_DISABLED=true`, so failure classification must fall back
+ * to the ordinary (non-quota) error even on quota-looking output.
+ */
+function activateDisabledGuard(): string {
+  const dir = activateGuard();
+  vi.stubEnv('LLXPRT_QUOTA_GUARD_DISABLED', 'true');
   return dir;
 }
 
@@ -109,6 +122,53 @@ describe('process-run quota guard integration', () => {
 
     expect(error.message).not.toContain('[QUOTA/RATE-LIMIT]');
     expect(error.message).toContain('Process exited with code');
+    expect(getQuotaGuardTrip()).toBeNull();
+  });
+
+  it('preserves the ordinary exit failure (no quota label, no trip) when the guard is disabled', async () => {
+    // Regression for the disable switch: with LLXPRT_QUOTA_GUARD_DISABLED=true
+    // the guard no-ops, so a failing run whose output DOES contain a quota
+    // signal must still surface as the plain "exited with code" error and must
+    // NOT be relabelled [QUOTA/RATE-LIMIT] nor record a sentinel.
+    const dir = activateDisabledGuard();
+    const ctx: RunContext = {
+      command: process.execPath,
+      commandArgs: [
+        '-e',
+        'console.error("HTTP 429 Too Many Requests"); process.exit(1)',
+      ],
+      testDir: dir,
+    };
+
+    const error = await captureRejection(
+      spawnRun(ctx, {}, false, identityTransform),
+    );
+
+    expect(error.message).not.toContain('[QUOTA/RATE-LIMIT]');
+    expect(error.message).toContain('Process exited with code');
+    expect(getQuotaGuardTrip()).toBeNull();
+  });
+
+  it('preserves the ordinary timeout failure (no quota label, no trip) when the guard is disabled', async () => {
+    // Same disable-switch regression on the timeout classification path: a
+    // quota-looking hang must time out as the plain timeout error, never the
+    // labelled quota timeout, and must not trip the sentinel.
+    const dir = activateDisabledGuard();
+    const ctx: RunContext = {
+      command: process.execPath,
+      commandArgs: [
+        '-e',
+        'console.error("Rate limit exceeded. Please wait"); setTimeout(() => {}, 10000)',
+      ],
+      testDir: dir,
+    };
+
+    const error = await captureRejection(
+      spawnRunWithTimeout(ctx, {}, false, identityTransform, 800),
+    );
+
+    expect(error.message).not.toContain('[QUOTA/RATE-LIMIT]');
+    expect(error.message).toContain('timed out');
     expect(getQuotaGuardTrip()).toBeNull();
   });
 
