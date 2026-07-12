@@ -524,14 +524,17 @@ describe('McpClientManager', () => {
 
   // Shared helpers for extension-based discovery tests (issue #2325 + #2516).
   const createExtensionManager = (
-    mockedMcpClient: Record<string, ReturnType<typeof vi.fn>>,
+    mockedMcpClient?: Record<string, ReturnType<typeof vi.fn>>,
+    servers: Record<string, unknown> = {},
   ) => {
-    vi.mocked(McpClient).mockReturnValue(
-      mockedMcpClient as unknown as McpClient,
-    );
+    if (mockedMcpClient !== undefined) {
+      vi.mocked(McpClient).mockReturnValue(
+        mockedMcpClient as unknown as McpClient,
+      );
+    }
     const mockConfig = {
       isTrustedFolder: () => true,
-      getMcpServers: () => ({}),
+      getMcpServers: () => servers,
       getMcpServerCommand: () => '',
       getPromptRegistry: () => ({}) as PromptRegistry,
       getResourceRegistry: () => ({}) as ResourceRegistry,
@@ -666,10 +669,9 @@ describe('McpClientManager', () => {
 
         await manager.startExtension(makeTestExtension());
 
-        // Start the bounded wait FIRST so its timeout timer is registered, then
-        // advance fake timers past the settle bound. The never-settling connect
-        // means discoveryPromise never resolves, so ONLY the timeout can settle
-        // the gate.
+        // Start the bounded wait before advancing fake timers so its timeout is
+        // registered. The never-settling connect means discoveryPromise never
+        // resolves, so only the timeout can settle the gate.
         const settled = manager.whenDiscoverySettled();
         await vi.advanceTimersByTimeAsync(
           DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS + 1,
@@ -712,32 +714,10 @@ describe('McpClientManager', () => {
         return client as unknown as McpClient;
       });
 
-      const mockConfig = {
-        isTrustedFolder: () => true,
-        getMcpServers: () => ({
-          'good-server': {},
-          'bad-server': {},
-        }),
-        getMcpServerCommand: () => '',
-        getPromptRegistry: () => ({}) as PromptRegistry,
-        getResourceRegistry: () => ({}) as ResourceRegistry,
-        getDebugMode: () => false,
-        getWorkspaceContext: () => ({}) as WorkspaceContext,
-        getEnableExtensionReloading: () => false,
-        getExtensionEvents: () => undefined,
-        getAllowedMcpServers: () => undefined,
-        getBlockedMcpServers: () => undefined,
-        getAgentClient: () => ({
-          isInitialized: () => false,
-        }),
-        refreshMcpContext: vi.fn(),
-      } as unknown as Config;
-
-      const manager = new McpClientManager(
-        '0.0.1',
-        {} as ToolRegistry,
-        mockConfig,
-      );
+      const { manager } = createExtensionManager(undefined, {
+        'good-server': {},
+        'bad-server': {},
+      });
 
       await manager.startConfiguredMcpServers();
       await manager.whenDiscoverySettled();
