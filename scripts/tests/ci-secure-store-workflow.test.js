@@ -176,7 +176,7 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
     expect(setup.run).toContain('libsecret-1-0');
   });
 
-  it('creates and cleans up a private runtime directory before starting D-Bus', () => {
+  it('isolates runtime and keyring data before starting the private D-Bus session', () => {
     const backendStep = stepNamed(
       secureStoreJob,
       'Run SecureStore backend tests',
@@ -193,12 +193,22 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
       runtimePermissions,
     );
     const sessionStart = backendStep.run.indexOf('dbus-run-session', cleanup);
+    const privateData = backendStep.run.indexOf(
+      'export XDG_DATA_HOME="$XDG_RUNTIME_DIR/data"',
+      sessionStart,
+    );
+    const privateDataCreate = backendStep.run.indexOf(
+      'install -d -m 700 "$XDG_DATA_HOME"',
+      privateData,
+    );
 
     expect(backendStep.run).toContain('export XDG_RUNTIME_DIR');
     expect(runtimeCreate).toBeGreaterThanOrEqual(0);
     expect(runtimePermissions).toBeGreaterThan(runtimeCreate);
     expect(cleanup).toBeGreaterThan(runtimePermissions);
     expect(sessionStart).toBeGreaterThan(cleanup);
+    expect(privateData).toBeGreaterThan(sessionStart);
+    expect(privateDataCreate).toBeGreaterThan(privateData);
   });
 
   it('safely imports only expected keyring environment assignments', () => {
@@ -219,19 +229,27 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
     expect(backendStep.run).toContain('Unsafe gnome-keyring-daemon assignment');
   });
 
-  it('runs Ubuntu tests after Secret Service is ready inside the shared D-Bus session', () => {
+  it('initializes and unlocks GNOME keyring before running tests in the same D-Bus session', () => {
     const backendStep = stepNamed(
       secureStoreJob,
       'Run SecureStore backend tests',
     );
-    expect(backendStep.run).toContain('gnome-keyring-daemon');
-    expect(backendStep.run).toContain('--unlock');
-    expect(backendStep.run).toContain('--components=secrets');
+    expect(backendStep.run).not.toContain(
+      'gnome-keyring-daemon --unlock --components=secrets',
+    );
     expect(backendStep.run).toContain('DBUS_SESSION_BUS_ADDRESS');
     const sessionStart = backendStep.run.indexOf('dbus-run-session');
-    const daemonStart = backendStep.run.indexOf(
-      'gnome-keyring-daemon',
+    const loginStart = backendStep.run.indexOf(
+      'gnome-keyring-daemon --login',
       sessionStart,
+    );
+    const loginPassword = backendStep.run.lastIndexOf(
+      'printf "%s" "$KEYRING_PASSWORD"',
+      loginStart,
+    );
+    const daemonStart = backendStep.run.indexOf(
+      'gnome-keyring-daemon --start --components=secrets',
+      loginStart,
     );
     const readinessProbe = backendStep.run.indexOf(
       'org.freedesktop.DBus.NameHasOwner',
@@ -242,20 +260,33 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
       readinessProbe,
     );
     const ownerCheck = backendStep.run.indexOf(
-      '[[ "$secret_service_owner" == "(true,)" ]]',
+      'if [[ "$secret_service_owner" != "(true,)" ]]',
       secretServiceName,
+    );
+    const collectionProbe = backendStep.run.indexOf(
+      '/org/freedesktop/secrets/collection/login',
+      ownerCheck,
+    );
+    const unlockedCheck = backendStep.run.indexOf(
+      'if [[ "$login_collection_locked" != "(<false>,)" ]]',
+      collectionProbe,
     );
     const nativeTestStart = backendStep.run.indexOf(
       'npm run test:ci --workspace @vybestack/llxprt-code-storage',
-      ownerCheck,
+      unlockedCheck,
     );
     const sessionEnd = backendStep.run.indexOf("\n  '\nelse", nativeTestStart);
+
     expect(sessionStart).toBeGreaterThanOrEqual(0);
-    expect(daemonStart).toBeGreaterThan(sessionStart);
+    expect(loginPassword).toBeGreaterThan(sessionStart);
+    expect(loginStart).toBeGreaterThan(loginPassword);
+    expect(daemonStart).toBeGreaterThan(loginStart);
     expect(readinessProbe).toBeGreaterThan(daemonStart);
     expect(secretServiceName).toBeGreaterThan(readinessProbe);
     expect(ownerCheck).toBeGreaterThan(secretServiceName);
-    expect(nativeTestStart).toBeGreaterThan(ownerCheck);
+    expect(collectionProbe).toBeGreaterThan(ownerCheck);
+    expect(unlockedCheck).toBeGreaterThan(collectionProbe);
+    expect(nativeTestStart).toBeGreaterThan(unlockedCheck);
     expect(sessionEnd).toBeGreaterThan(nativeTestStart);
   });
 

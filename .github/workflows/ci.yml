@@ -837,35 +837,61 @@ jobs:
             chmod 700 "$XDG_RUNTIME_DIR"
             trap 'rm -rf "$XDG_RUNTIME_DIR"' EXIT
             dbus-run-session -- bash -euo pipefail -c '
-              daemon_env="$(printf "%s" "$KEYRING_PASSWORD" | gnome-keyring-daemon --unlock --components=secrets)"
-              while IFS= read -r assignment; do
-                [[ -z "$assignment" ]] && continue
-                case "$assignment" in
-                  GNOME_KEYRING_CONTROL=*|GNOME_KEYRING_PID=*|GPG_AGENT_INFO=*|SSH_AUTH_SOCK=*)
-                    variable_name="${assignment%%=*}"
-                    variable_value="${assignment#*=}"
-                    export_suffix="; export $variable_name;"
-                    if [[ "$variable_value" == *"$export_suffix" ]]; then
-                      variable_value="${variable_value%"$export_suffix"}"
-                    elif [[ "$variable_value" == *";"* ]]; then
-                      printf "Unsafe gnome-keyring-daemon assignment: %s\n" "$assignment" >&2
+              export XDG_DATA_HOME="$XDG_RUNTIME_DIR/data"
+              install -d -m 700 "$XDG_DATA_HOME"
+
+              import_keyring_environment() {
+                local assignment export_suffix variable_name variable_value
+                while IFS= read -r assignment; do
+                  [[ -z "$assignment" ]] && continue
+                  case "$assignment" in
+                    GNOME_KEYRING_CONTROL=*|GNOME_KEYRING_PID=*|GPG_AGENT_INFO=*|SSH_AUTH_SOCK=*)
+                      variable_name="${assignment%%=*}"
+                      variable_value="${assignment#*=}"
+                      export_suffix="; export $variable_name;"
+                      if [[ "$variable_value" == *"$export_suffix" ]]; then
+                        variable_value="${variable_value%"$export_suffix"}"
+                      elif [[ "$variable_value" == *";"* ]]; then
+                        printf "Unsafe gnome-keyring-daemon assignment: %s\n" "$assignment" >&2
+                        exit 1
+                      fi
+                      export "$variable_name=$variable_value"
+                      ;;
+                    *)
+                      printf "Unexpected gnome-keyring-daemon output: %s\n" "$assignment" >&2
                       exit 1
-                    fi
-                    export "$variable_name=$variable_value"
-                    ;;
-                  *)
-                    printf "Unexpected gnome-keyring-daemon output: %s\n" "$assignment" >&2
-                    exit 1
-                    ;;
-                esac
-              done <<<"$daemon_env"
-              [[ -n "$DBUS_SESSION_BUS_ADDRESS" ]]
+                      ;;
+                  esac
+                done <<<"$1"
+              }
+
+              login_env="$(printf "%s" "$KEYRING_PASSWORD" | gnome-keyring-daemon --login)"
+              import_keyring_environment "$login_env"
+              daemon_env="$(gnome-keyring-daemon --start --components=secrets)"
+              import_keyring_environment "$daemon_env"
+
+              if [[ -z "$DBUS_SESSION_BUS_ADDRESS" ]]; then
+                printf "dbus-run-session did not provide a session bus address\n" >&2
+                exit 1
+              fi
               secret_service_owner="$(gdbus call --session \
                 --dest org.freedesktop.DBus \
                 --object-path /org/freedesktop/DBus \
                 --method org.freedesktop.DBus.NameHasOwner \
                 org.freedesktop.secrets)"
-              [[ "$secret_service_owner" == "(true,)" ]]
+              if [[ "$secret_service_owner" != "(true,)" ]]; then
+                printf "org.freedesktop.secrets has no owner: %s\n" "$secret_service_owner" >&2
+                exit 1
+              fi
+              login_collection_locked="$(gdbus call --session \
+                --dest org.freedesktop.secrets \
+                --object-path /org/freedesktop/secrets/collection/login \
+                --method org.freedesktop.DBus.Properties.Get \
+                org.freedesktop.Secret.Collection Locked)"
+              if [[ "$login_collection_locked" != "(<false>,)" ]]; then
+                printf "GNOME login collection is not unlocked: %s\n" "$login_collection_locked" >&2
+                exit 1
+              fi
               npm run test:ci --workspace @vybestack/llxprt-code-storage -- --config "$TEST_CONFIG"
             '
           else
