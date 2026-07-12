@@ -32,6 +32,7 @@ import {
 } from './googlePartHelpers.js';
 import { getResponseTextFromParts } from './googlePartHelpers.js';
 import { setProviderStopReason } from './providerStopReason.js';
+import { setResponseId } from './responseIdCarrier.js';
 
 const logger = new DebugLogger('llxprt:core:message-converter');
 
@@ -715,6 +716,16 @@ export function applyResponseMetadata(
         input.metadata.usage.cache_creation_input_tokens ?? 0,
     };
     response.usageMetadata = usageMetadata;
+  }
+
+  // Carry the provider response id and stored flag onto the synthetic response
+  // so they survive the Gemini intermediate and reach recorded history.
+  if (input.metadata?.id) {
+    setResponseId(
+      response,
+      input.metadata.id,
+      input.metadata.responsesStored === true ? true : undefined,
+    );
   }
 
   applyFinishReasonMapping(response, input);

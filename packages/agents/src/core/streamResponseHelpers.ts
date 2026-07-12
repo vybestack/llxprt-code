@@ -38,6 +38,7 @@ import { analyzeResponseOutcomeFromParts } from './googlePartHelpers.js';
 import { isFunctionResponse } from '@vybestack/llxprt-code-core/utils/messageInspectors.js';
 import { InvalidStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { isThoughtPart, type ThoughtPart } from './googlePartHelpers.js';
+import { getResponseId, getResponsesStored } from './responseIdCarrier.js';
 import {
   filterEagerlyRecordedToolResponses,
   type FilteredEagerToolResponses,
@@ -437,6 +438,21 @@ interface RecordHistoryParams {
  * `actualPromptTokens` is typed `number | null` (never `undefined`), so only
  * the null check is needed — the `!== undefined` comparison was a dead check.
  */
+function findLastChunkWithProviderMetadata(
+  chunks: GenerateContentResponse[],
+): GenerateContentResponse | undefined {
+  for (let index = chunks.length - 1; index >= 0; index -= 1) {
+    const chunk = chunks[index];
+    if (
+      getResponseId(chunk) !== undefined ||
+      getResponsesStored(chunk) !== undefined
+    ) {
+      return chunk;
+    }
+  }
+  return undefined;
+}
+
 export async function recordHistoryWithUsage(
   args: RecordHistoryParams,
 ): Promise<void> {
@@ -460,12 +476,26 @@ export async function recordHistoryWithUsage(
     actualPromptTokens = streamingUsageMetadata.promptTokens;
   }
 
+  const providerMetadataChunk = findLastChunkWithProviderMetadata(
+    args.allChunks,
+  );
+  const responseId = providerMetadataChunk
+    ? (getResponseId(providerMetadataChunk) ?? null)
+    : null;
+  const responsesStored = providerMetadataChunk
+    ? (getResponsesStored(providerMetadataChunk) ?? null)
+    : null;
+
   args.conversationManager.recordHistory(
     args.userInput,
     modelOutput,
     undefined,
     streamingUsageMetadata,
-    args.userInputFlags,
+    {
+      ...args.userInputFlags,
+      responseId,
+      responsesStored,
+    },
   );
 
   await args.historyService.waitForTokenUpdates();

@@ -49,6 +49,8 @@ export interface ParseResponsesStreamOptions {
    * Defaults to true.
    */
   includeThinkingInResponse?: boolean;
+  /** Marks response IDs emitted by requests whose results were stored. */
+  responsesStored?: boolean;
 }
 
 /**
@@ -362,6 +364,15 @@ function createTerminalStreamError(
   });
 }
 
+function getIncompleteReason(
+  event: ResponsesEvent,
+  terminalReason: string,
+): string | undefined {
+  return terminalReason === 'incomplete'
+    ? event.response?.incomplete_details?.reason
+    : undefined;
+}
+
 /**
  * Handle response.completed / response.done / response.incomplete events.
  */
@@ -370,16 +381,13 @@ function* handleResponseCompleted(
   state: DispatchState,
   includeThinkingInResponse: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+  responsesStored: boolean,
 ): Generator<IContent, DispatchState> {
   let nextState = state;
   let newHasEmitted = state.hasEmittedVisibleThinking;
 
-  // Usage data
   const terminalReason = event.response?.status ?? 'completed';
-  const incompleteReason =
-    terminalReason === 'incomplete'
-      ? event.response?.incomplete_details?.reason
-      : undefined;
+  const incompleteReason = getIncompleteReason(event, terminalReason);
 
   // Defensive: some implementations send failure via response.completed with
   // status "failed" rather than a standalone response.failed event.
@@ -421,18 +429,25 @@ function* handleResponseCompleted(
     nextState = closeReasoningStream(nextState);
   }
 
-  if (event.response?.usage) {
+  const responseId = event.response?.id;
+  if (event.response?.usage || responseId) {
     yield {
       speaker: 'ai',
       blocks: [],
       metadata: {
-        usage: {
-          promptTokens: event.response.usage.input_tokens,
-          completionTokens: event.response.usage.output_tokens,
-          totalTokens: event.response.usage.total_tokens,
-          cachedTokens:
-            event.response.usage.input_tokens_details?.cached_tokens ?? 0,
-        },
+        ...(event.response?.usage
+          ? {
+              usage: {
+                promptTokens: event.response.usage.input_tokens,
+                completionTokens: event.response.usage.output_tokens,
+                totalTokens: event.response.usage.total_tokens,
+                cachedTokens:
+                  event.response.usage.input_tokens_details?.cached_tokens ?? 0,
+              },
+            }
+          : {}),
+        ...(responseId ? { id: responseId } : {}),
+        ...(responsesStored ? { responsesStored: true } : {}),
         stopReason: mapFinishReasonToStopReason(terminalReason),
         finishReason: terminalReason,
         ...(incompleteReason ? { incompleteReason } : {}),
@@ -718,12 +733,14 @@ function* handleCompletedEvent(
   state: DispatchState,
   includeThinkingInResponse: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+  responsesStored: boolean,
 ): Generator<IContent, DispatchState> {
   return yield* handleResponseCompleted(
     event,
     state,
     includeThinkingInResponse,
     emittedThoughts,
+    responsesStored,
   );
 }
 
@@ -733,6 +750,7 @@ function* dispatchEventCases(
   functionCalls: Map<string, FunctionCallState>,
   includeThinkingInResponse: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+  responsesStored: boolean,
 ): Generator<IContent, DispatchState> {
   switch (event.type) {
     case 'response.output_text.delta':
@@ -780,6 +798,7 @@ function* dispatchEventCases(
         state,
         includeThinkingInResponse,
         emittedThoughts,
+        responsesStored,
       );
       break;
     case 'response.failed':
@@ -805,6 +824,7 @@ function* dispatchEvent(
   functionCalls: Map<string, FunctionCallState>,
   includeThinkingInResponse: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+  responsesStored: boolean,
   lastLoggedType: string | undefined,
 ): Generator<IContent, DispatchResult> {
   const newLastLoggedType = logSseEvent(event, lastLoggedType);
@@ -815,6 +835,7 @@ function* dispatchEvent(
     functionCalls,
     includeThinkingInResponse,
     emittedThoughts,
+    responsesStored,
   );
 
   return {
@@ -834,6 +855,7 @@ async function* tryDispatchEvent(
   functionCalls: Map<string, FunctionCallState>,
   includeThinkingInResponse: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+  responsesStored: boolean,
   lastLoggedType: string | undefined,
 ): AsyncGenerator<IContent, DispatchResult> {
   let event: ResponsesEvent;
@@ -853,6 +875,7 @@ async function* tryDispatchEvent(
     functionCalls,
     includeThinkingInResponse,
     emittedThoughts,
+    responsesStored,
     lastLoggedType,
   );
 }
@@ -861,7 +884,7 @@ export async function* parseResponsesStream(
   stream: ReadableStream<Uint8Array>,
   options: ParseResponsesStreamOptions = {},
 ): AsyncIterableIterator<IContent> {
-  const { includeThinkingInResponse = true } = options;
+  const { includeThinkingInResponse = true, responsesStored = false } = options;
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -907,6 +930,7 @@ export async function* parseResponsesStream(
           functionCalls,
           includeThinkingInResponse,
           emittedThoughts,
+          responsesStored,
           lastLoggedType,
         );
         state = dispatchState;
