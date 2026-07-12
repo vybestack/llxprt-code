@@ -167,6 +167,7 @@ function handleSessionStart(
     provider: startPayload.provider,
     model: startPayload.model,
     workspaceDirs: resolveWorkspaceDirs(startPayload.workspaceDirs),
+    ...(typeof startPayload.cwd === 'string' ? { cwd: startPayload.cwd } : {}),
     startTime: startPayload.startTime,
   };
   return undefined;

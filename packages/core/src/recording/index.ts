@@ -57,6 +57,7 @@ export {
 export {
   listSessions,
   deleteSession,
+  deleteSessionById,
   type ListSessionsResult,
   type DeleteSessionResult,
   type DeleteSessionError,

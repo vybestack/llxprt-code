@@ -3,7 +3,6 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
 import {
   type Config,
   getErrorStatus,
@@ -30,14 +29,10 @@ import {
 import { Readable, Writable } from 'node:stream';
 import { type LoadedSettings } from '../config/settings.js';
 import { randomUUID } from 'crypto';
-import {
-  loadProfileByName,
-  setCliRuntimeContext,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
 import { runExitCleanup } from '../utils/cleanup.js';
 import { AcpFileSystemService } from './fileSystemService.js';
 import {
-  parseZedAuthMethodId,
   buildAvailableModes,
   buildSessionModes,
   buildUsageUpdate,
@@ -67,38 +62,31 @@ import {
   type ChatSessionFileLister,
 } from './zed-session-loader.js';
 import { StreamBatcher } from './zed-stream-batcher.js';
+import { SessionLifecycle } from './zed-session-lifecycle.js';
+import type { LifecycleSession } from './zed-session-pagination.js';
+import { authenticateZedAgent, initializeZedAgent } from './zed-initialize.js';
 import {
   createSessionScopedConfig,
   resolveSessionTargetDir,
 } from './zed-session-config.js';
-
 export { parseZedAuthMethodId } from './zed-helpers.js';
 export { createSessionScopedConfig } from './zed-session-config.js';
-
 export async function runZedIntegration(
   config: Config,
   settings: LoadedSettings,
 ): Promise<void> {
   const logger = new DebugLogger('llxprt:zed-integration');
   logger.debug(() => 'Starting Zed integration');
-
   const { stdout: workingStdout } = createInkStdio();
   const stdout = Writable.toWeb(workingStdout) as WritableStream;
   const stdin = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
-
   logger.debug(() => 'Streams created');
-
-  // Deliberate foreground hand-off: the Zed integration replaces the CLI
-  // bootstrap runtime as the process default. allowDefaultHandoff opts past the
-  // write-once guard for this one intentional transition (issue #2300).
   setCliRuntimeContext(config.getSettingsService(), config, {
     runtimeId: 'cli.runtime.zed',
     metadata: { source: 'zed-integration', stage: 'bootstrap' },
     allowDefaultHandoff: true,
   });
-
   let zedAgent: ZedAgent | undefined;
-
   try {
     const stream = acp.ndJsonStream(stdout, stdin);
     const connection = new acp.AgentSideConnection((conn) => {
@@ -107,7 +95,6 @@ export async function runZedIntegration(
       return zedAgent;
     }, stream);
     logger.debug(() => 'AgentSideConnection created successfully');
-
     try {
       await connection.closed;
     } finally {
@@ -119,80 +106,39 @@ export async function runZedIntegration(
     throw e;
   }
 }
-
 export class ZedAgent {
   private sessions: Map<string, Session> = new Map();
-  /**
-   * Per-sessionId serialization of in-flight loadSession calls (FINDING F5).
-   * Two concurrent session/load calls for the SAME id must not both build agents
-   * and race to install (the later install would overwrite the earlier, orphaning
-   * its recording lock). Each load chains after any in-flight load for the same
-   * id; distinct ids stay fully parallel. The entry is cleared in finally only
-   * when it is still the same promise (a later chained load may have replaced it).
-   */
-  private loadSessionQueues: Map<string, Promise<acp.LoadSessionResponse>> =
-    new Map();
   private clientCapabilities: acp.ClientCapabilities | undefined;
-  private logger: DebugLogger;
-
-  /**
-   * Directory lister used by the loadSession re-attach probe (#1604) to decide
-   * whether an on-disk recording already exists for a session id. Defaults to
-   * the real `node:fs/promises` readdir wrapper; injectable via the constructor
-   * as an HONEST readdir-like seam (returns directory entry names) so tests can
-   * exercise the real chats-dir derivation + filename matching without stubbing
-   * our own decision logic.
-   */
+  private logger = new DebugLogger('llxprt:zed-integration');
+  private readonly lifecycle: SessionLifecycle;
   private readonly sessionFileLister: ChatSessionFileLister;
-
   constructor(
     private config: Config,
     _settings: LoadedSettings,
     private connection: acp.AgentSideConnection,
     sessionFileLister: ChatSessionFileLister = nodeChatSessionFileLister,
   ) {
-    this.logger = new DebugLogger('llxprt:zed-integration');
     this.sessionFileLister = sessionFileLister;
+    this.lifecycle = new SessionLifecycle(
+      config,
+      this.sessions,
+      (sessionId, cwd) => this.buildAndResumeSession(sessionId, cwd),
+    );
   }
-
   async initialize(
     args: acp.InitializeRequest,
   ): Promise<acp.InitializeResponse> {
     this.clientCapabilities = args.clientCapabilities;
-    const profileManager = this.config.getProfileManager();
-    const profileNames = profileManager
-      ? await profileManager.listProfiles()
-      : [];
-    const authMethods = profileNames.map((name) => ({
-      id: name,
-      name,
-      description: null,
-    }));
-
-    return {
-      protocolVersion: acp.PROTOCOL_VERSION,
-      authMethods,
-      agentCapabilities: {
-        loadSession: true,
-        promptCapabilities: {
-          image: true,
-          audio: true,
-          embeddedContext: true,
-        },
-      },
-    };
+    return initializeZedAgent(this.config);
   }
-
-  async authenticate({ methodId }: acp.AuthenticateRequest): Promise<void> {
-    const profileManager = this.config.getProfileManager();
-    const availableProfiles = profileManager
-      ? await profileManager.listProfiles()
-      : [];
-    const profileName = parseZedAuthMethodId(methodId, availableProfiles);
-
-    await loadProfileByName(profileName);
+  listSessions(
+    params: acp.ListSessionsRequest,
+  ): Promise<acp.ListSessionsResponse> {
+    return this.lifecycle.list(params);
   }
-
+  authenticate({ methodId }: acp.AuthenticateRequest): Promise<void> {
+    return authenticateZedAgent(this.config, methodId);
+  }
   async newSession({
     cwd,
     mcpServers: _mcpServers,
@@ -203,19 +149,13 @@ export class ZedAgent {
         sessionId,
         cwd,
       );
-      // Enable continuous session recording so the conversation is persisted to
-      // a JSONL session file (under <projectTempDir>/chats) and can later be
-      // resumed via loadSession. Recording must never break session creation, so
-      // a startup failure is logged and swallowed.
       await this.enableRecording(agent, sessionId);
-
       const session = await this.buildSessionForAgent(
         sessionId,
         agent,
         sessionConfig,
       );
       this.sessions.set(sessionId, session);
-
       return {
         sessionId,
         modes: buildSessionModes(agent.getApprovalMode()),
@@ -225,14 +165,6 @@ export class ZedAgent {
       throw error;
     }
   }
-
-  /**
-   * Constructs the Session wrapper for a freshly built agent, disposing the
-   * agent (releasing its recording lock) if the Session constructor throws
-   * (FINDING F12), so a ctor failure never leaks the agent — mirroring the
-   * loadSession-side guard in buildAndResumeSession. A dispose failure during
-   * cleanup is logged and swallowed so the ORIGINAL ctor error is rethrown.
-   */
   private async buildSessionForAgent(
     sessionId: string,
     agent: Agent,
@@ -252,117 +184,31 @@ export class ZedAgent {
       throw error;
     }
   }
-
-  /**
-   * Loads (resumes) a previously recorded session so its conversation can be
-   * continued (issue #1604). The history is replayed to the client as ordered
-   * session/update notifications BEFORE this resolves, so the Zed transcript is
-   * reconstructed.
-   *
-   * Two paths, chosen by whether a recording exists on disk (see
-   * {@link performLoadSession}):
-   *
-   * 1. RE-ATTACH (live session, no on-disk recording): a session that was created
-   *    via session/new but never prompted has NO recording file — SessionRecordingService
-   *    materializes the JSONL only on the FIRST content event — so a disk resume
-   *    would fail with "No sessions found for this project" AND the destroy-first
-   *    step would have thrown away a perfectly healthy live session. Instead we
-   *    KEEP the live session, replay its IN-MEMORY history (empty for a fresh
-   *    unprompted session → zero updates), and return its modes. This keeps ACP
-   *    loadSession conformant (an agent that advertises loadSession must not error
-   *    on a just-created session) and lets a Zed reconnect to an unprompted session
-   *    succeed. Because the live session is healthy, a replay failure here does NOT
-   *    dispose it — the wrapped internalError is simply propagated.
-   *
-   * 2. DISK RESUME (recording present, or no live session): a fresh Agent (bound
-   *    to a session-scoped Config + AcpFileSystemService, identical to newSession)
-   *    is created and `agent.session.resume` restores the recorded history AND
-   *    re-subscribes continuous recording so subsequent turns keep appending to the
-   *    SAME file. Replace-order + lock semantics: an already-loaded same-id Session
-   *    holds the on-disk session lock (SessionLockManager), so the fresh agent's
-   *    resume CANNOT acquire the lock until the prior Session is disposed; disposing
-   *    first is therefore unavoidable. To keep the destructive step safe we (a)
-   *    dispose the prior Session AND remove it from this.sessions up front so no
-   *    half-dead entry survives a subsequent failure, then (b) build + resume the
-   *    replacement; if that fails, the fresh agent is disposed and a precise
-   *    RequestError (carrying the lower-layer reason, see mapResumeError) is thrown,
-   *    leaving this.sessions with NO entry for the id so a later retry can cleanly
-   *    load again. On success the replacement is installed and the restored
-   *    transcript is streamed.
-   *
-   * Concurrency: same-id loads are SERIALIZED (FINDING F5) via loadSessionQueues
-   * so two concurrent session/load calls for one id cannot both build agents and
-   * race to install (which would orphan the earlier load's recording lock);
-   * distinct ids remain fully parallel. The re-attach probe + replay run INSIDE
-   * this serialization too.
-   */
+  resumeSession(
+    params: acp.ResumeSessionRequest,
+  ): Promise<acp.ResumeSessionResponse> {
+    return this.lifecycle.resume(params);
+  }
   async loadSession(
     params: acp.LoadSessionRequest,
   ): Promise<acp.LoadSessionResponse> {
-    const { sessionId } = params;
-    // Chain this load after any in-flight load for the SAME id so the
-    // dispose-prior -> build -> resume -> install sequence runs to completion
-    // before the next same-id load begins (FINDING F5). We chain off the prior
-    // load's settlement (ignoring its outcome) rather than awaiting it directly
-    // so a rejected prior load does not reject this one.
-    const prior = this.loadSessionQueues.get(sessionId);
-    const run = (prior ?? Promise.resolve()).then(
-      () => this.performLoadSession(params),
-      () => this.performLoadSession(params),
+    return this.lifecycle.runSerialized(params.sessionId, () =>
+      this.performLoadSession(params),
     );
-    this.loadSessionQueues.set(sessionId, run);
-    try {
-      return await run;
-    } finally {
-      // Clear the queue entry only if it is still THIS load (a later chained
-      // same-id load may have replaced it); deleting unconditionally could drop
-      // a newer in-flight load's entry.
-      if (this.loadSessionQueues.get(sessionId) === run) {
-        this.loadSessionQueues.delete(sessionId);
-      }
-    }
   }
-
-  /**
-   * Performs a single (already-serialized, see {@link loadSession}) session/load.
-   *
-   * Decision: if a live same-id session exists AND no recording file exists on
-   * disk for it, RE-ATTACH the live session (an unprompted session has no
-   * recording — the file materializes on first content — so a disk resume would
-   * both fail and needlessly destroy the healthy live session). Otherwise fall
-   * back to the disk path: dispose any prior same-id Session to release its
-   * on-disk lock, then build + resume + install the replacement and stream the
-   * restored transcript.
-   */
   private async performLoadSession(
     params: acp.LoadSessionRequest,
   ): Promise<acp.LoadSessionResponse> {
     const { sessionId } = params;
     this.logger.debug(() => `loadSession - loading session ${sessionId}`);
-
     const reattached = await this.tryReattachLiveSession(sessionId);
     if (reattached !== null) {
       return { modes: buildSessionModes(reattached.getApprovalMode()) };
     }
-
     await this.disposePriorSession(sessionId);
     const session = await this.installResumedSession(sessionId, params.cwd);
     return { modes: buildSessionModes(session.getApprovalMode()) };
   }
-
-  /**
-   * RE-ATTACH decision + replay (#1604). Returns the live same-id Session (after
-   * replaying its in-memory history) when one exists AND has no on-disk recording
-   * yet (an unprompted session, whose JSONL file has not materialized) — a disk
-   * resume would both fail and needlessly destroy the healthy live session, so we
-   * keep it and replay instead. Returns null (so the caller takes the disk-resume
-   * path) when there is no live session OR a recording file already exists. For a
-   * fresh unprompted session the in-memory history is empty, so ZERO replay
-   * updates are sent. A replay failure is propagated (already wrapped as a precise
-   * RequestError by Session.streamHistory) WITHOUT disposing the session — it was
-   * healthy and the client can retry — the re-attach cleanup contract (no destroy
-   * on failure), distinct from the disk path's destroy-on-failure.
-   */
   private async tryReattachLiveSession(
     sessionId: string,
   ): Promise<Session | null> {
@@ -386,7 +232,6 @@ export class ZedAgent {
     await existing.replayLiveHistory();
     return existing;
   }
-
   /**
    * Disposes + drops any prior same-id Session FIRST so it releases the on-disk
    * session lock the replacement resume needs, and so a later failure cannot
@@ -399,7 +244,6 @@ export class ZedAgent {
       await existing.dispose();
     }
   }
-
   /**
    * Builds + resumes the replacement Session, installs it in this.sessions, then
    * replays the restored transcript to the client BEFORE returning. Install
@@ -423,10 +267,6 @@ export class ZedAgent {
       await session.streamHistory(history);
     } catch (error) {
       this.sessions.delete(sessionId);
-      // FINDING F13: guard the cleanup dispose so a dispose failure does not
-      // mask the ORIGINAL replay error. The replay error is the actionable one
-      // the client must see; a dispose failure is logged and swallowed, and the
-      // original error is rethrown.
       try {
         await session.dispose();
       } catch (disposeError) {
@@ -440,19 +280,6 @@ export class ZedAgent {
     }
     return session;
   }
-
-  /**
-   * Builds the replacement Agent for a loadSession and resumes its recorded
-   * history. Everything AFTER fromConfig runs under a guard that disposes the
-   * fresh agent before rethrowing (FINDING E), so neither a resume rejection nor
-   * a throw while constructing the Session (after resume already adopted the
-   * recording + lock) can leak the lock/recording. A resume rejection is mapped
-   * to a precise ACP RequestError (see resumeAgentHistory / classifyResumeFailure:
-   * not-found-but-file-present becomes internalError, genuine missing becomes
-   * resourceNotFound); any other post-fromConfig throw is wrapped as internalError
-   * (an already-constructed RequestError passes through unchanged). Extracted from
-   * loadSession so the orchestration stays within the lint complexity/line budgets.
-   */
   private async buildAndResumeSession(
     sessionId: string,
     cwd: string | undefined,
@@ -462,9 +289,6 @@ export class ZedAgent {
       cwd,
     );
     try {
-      // FINDING C1: pass the SAME injected lister the re-attach probe uses so
-      // BOTH on-disk session-file probes (re-attach + corrupt-vs-missing resume)
-      // read through one injectable seam rather than one hardcoding readdir.
       const history = await resumeAgentHistory(
         agent,
         sessionId,
@@ -484,7 +308,6 @@ export class ZedAgent {
       throw toLoadRequestError(sessionId, error);
     }
   }
-
   /**
    * Shared per-session Agent construction used by BOTH newSession and
    * loadSession: builds the session-scoped Config proxy (with an
@@ -511,21 +334,13 @@ export class ZedAgent {
       sessionFileSystemService,
       resolveSessionTargetDir(this.config, cwd),
     );
-
     this.logger.debug(() => `buildSessionAgent - session ${sessionId}`);
-
     const agent = await fromConfig({
       config: sessionConfig,
       sessionId,
     });
     return { agent, config: sessionConfig };
   }
-
-  /**
-   * Enables continuous session recording for a freshly created session. Failures
-   * are logged and swallowed so recording startup can never break session
-   * creation (the session remains fully usable, just unrecorded).
-   */
   private async enableRecording(
     agent: Agent,
     sessionId: string,
@@ -538,7 +353,16 @@ export class ZedAgent {
       );
     }
   }
-
+  deleteSession(
+    params: acp.DeleteSessionRequest,
+  ): Promise<acp.DeleteSessionResponse> {
+    return this.lifecycle.delete(params);
+  }
+  closeSession(
+    params: acp.CloseSessionRequest,
+  ): Promise<acp.CloseSessionResponse> {
+    return this.lifecycle.close(params);
+  }
   async setSessionMode(
     params: acp.SetSessionModeRequest,
   ): Promise<acp.SetSessionModeResponse> {
@@ -548,15 +372,11 @@ export class ZedAgent {
     }
     return session.setMode(params.modeId);
   }
-
   async cancel(params: acp.CancelNotification): Promise<void> {
     const session = this.sessions.get(params.sessionId);
-    if (!session) {
-      throw new Error(`Session not found: ${params.sessionId}`);
-    }
+    if (!session) throw new Error(`Session not found: ${params.sessionId}`);
     await session.cancelPendingPrompt();
   }
-
   async prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {
     const session = this.sessions.get(params.sessionId);
     if (!session) {
@@ -564,14 +384,12 @@ export class ZedAgent {
     }
     return session.prompt(params);
   }
-
   async disposeAll(): Promise<void> {
     const sessions = [...this.sessions.values()];
     this.sessions.clear();
     await Promise.allSettled(sessions.map((session) => session.dispose()));
   }
 }
-
 export class Session {
   private pendingPrompt: AbortController | null = null;
   private emojiFilter: EmojiFilter;
@@ -587,7 +405,7 @@ export class Session {
   >();
   private promptGeneration = 0;
   private readonly todoListener: (event: TodoUpdateEvent) => void;
-
+  private readonly createdAt = new Date().toISOString();
   constructor(
     private readonly id: string,
     private readonly agent: Agent,
@@ -601,11 +419,9 @@ export class Session {
     const emojiFilterMode = configuredEmojiFilterMode ?? 'auto';
     const filterConfig: FilterConfiguration = { mode: emojiFilterMode };
     this.emojiFilter = new EmojiFilter(filterConfig);
-
     this.pathResolver = new ZedPathResolver(this.config, (msg) =>
       this.debug(msg),
     );
-
     this.todoListener = (event: TodoUpdateEvent) => {
       const eventAgentId = event.agentId ?? DEFAULT_AGENT_ID;
       if (event.sessionId === this.id && eventAgentId === DEFAULT_AGENT_ID) {
@@ -616,7 +432,6 @@ export class Session {
     };
     todoEvents.onTodoUpdated(this.todoListener);
   }
-
   setMode(modeId: acp.SessionModeId): acp.SetSessionModeResponse {
     const availableModes = buildAvailableModes();
     const mode = availableModes.find((m) => m.id === modeId);
@@ -626,7 +441,6 @@ export class Session {
     this.agent.setApprovalMode(mode.id as ApprovalMode);
     return {};
   }
-
   /**
    * Returns the session's current approval mode, delegating to the underlying
    * Agent. Used by loadSession to advertise the resumed session's currentModeId
@@ -635,7 +449,13 @@ export class Session {
   getApprovalMode(): ApprovalMode {
     return this.agent.getApprovalMode();
   }
-
+  getLifecycleInfo(): LifecycleSession {
+    return {
+      sessionId: this.id,
+      cwd: this.config.getProjectRoot(),
+      updatedAt: this.createdAt,
+    };
+  }
   async cancelPendingPrompt(): Promise<void> {
     this.settleActiveConfirmation();
     if (!this.pendingPrompt) {
@@ -644,14 +464,11 @@ export class Session {
     this.pendingPrompt.abort();
     this.pendingPrompt = null;
   }
-
   private settleActiveConfirmation(): void {
     const confirmations = [...this.activeConfirmations.entries()];
     this.activeConfirmations.clear();
     for (const [confirmationId, state] of confirmations) {
-      if (state.settled) {
-        continue;
-      }
+      if (state.settled) continue;
       state.settled = true;
       try {
         this.agent.tools.respondToConfirmation(
@@ -665,7 +482,6 @@ export class Session {
       }
     }
   }
-
   private settleConfirmation(confirmationId: string): void {
     const state = this.activeConfirmations.get(confirmationId);
     if (state === undefined) {
@@ -687,16 +503,13 @@ export class Session {
       state.cancelWaiter();
     }
   }
-
   async prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {
     await this.cancelPendingPrompt();
     const pendingSend = new AbortController();
     this.pendingPrompt = pendingSend;
     this.promptGeneration += 1;
     const promptGeneration = this.promptGeneration;
-
     const promptId = Math.random().toString(16).slice(2);
-
     try {
       let parts: ContractPart[];
       try {
@@ -713,12 +526,10 @@ export class Session {
         }
         throw error;
       }
-
       const batcher = new StreamBatcher(this.emojiFilter, (u) =>
         this.sendUpdate(u),
       );
       let terminalStopReason: acp.StopReason | null = null;
-
       try {
         terminalStopReason = await this.consumeAgentStream(
           parts,
@@ -754,15 +565,12 @@ export class Session {
           batcher.dispose();
         }
       }
-
       if (pendingSend.signal.aborted && terminalStopReason !== 'cancelled') {
         return { stopReason: 'cancelled' };
       }
-
       if (terminalStopReason !== null) {
         return { stopReason: terminalStopReason };
       }
-
       return { stopReason: 'end_turn' };
     } finally {
       if (this.pendingPrompt === pendingSend) {
@@ -770,7 +578,6 @@ export class Session {
       }
     }
   }
-
   private async consumeAgentStream(
     parts: ContractPart[],
     pendingSend: AbortController,
@@ -803,7 +610,6 @@ export class Session {
     }
     return terminalStopReason;
   }
-
   private async handleAgentEvent(
     event: AgentEvent,
     batcher: StreamBatcher,
@@ -893,7 +699,6 @@ export class Session {
       }
     }
   }
-
   private async sendUsageUpdate(
     usage: Extract<AgentEvent, { type: 'usage' }>['usage'],
   ): Promise<void> {
@@ -909,7 +714,6 @@ export class Session {
       await this.sendUpdate(update);
     }
   }
-
   private isPromptStale(
     promptGeneration: number,
     pendingSend: AbortController,
@@ -920,7 +724,6 @@ export class Session {
       pendingSend.signal.aborted
     );
   }
-
   private async handleToolConfirmation(
     event: Extract<AgentEvent, { type: 'tool-confirmation' }>,
     promptGeneration: number,
@@ -934,12 +737,10 @@ export class Session {
         settled: false,
       });
     });
-
     if (this.isPromptStale(promptGeneration, pendingSend)) {
       this.settleConfirmation(confirmationId);
       return;
     }
-
     let result: PermissionRoundTripResult | null;
     try {
       result = await Promise.race([
@@ -956,7 +757,6 @@ export class Session {
       this.settleConfirmation(confirmationId);
       throw error;
     }
-
     const state = this.activeConfirmations.get(confirmationId);
     if (
       result === null ||
@@ -966,7 +766,6 @@ export class Session {
     ) {
       return;
     }
-
     state.settled = true;
     this.activeConfirmations.delete(confirmationId);
     try {
@@ -983,26 +782,10 @@ export class Session {
       );
     }
   }
-
-  /**
-   * STRICT delivery of a single session/update: rethrows any transport failure.
-   * Used ONLY by streamHistory (ACP session/load replay) so a dead/failing
-   * client connection fails the load rather than silently losing the transcript
-   * while loadSession still resolves successfully (FINDING A). The best-effort
-   * live path (sendUpdate) must NOT use this.
-   */
   private async sendUpdateStrict(update: acp.SessionUpdate): Promise<void> {
     this.logger.debug(() => describeSessionUpdateForLog(update));
     await this.connection.sessionUpdate({ sessionId: this.id, update });
-    this.logger.debug(() => 'sendUpdate: delivered');
   }
-
-  /**
-   * BEST-EFFORT delivery for the LIVE prompt path: a transient client error
-   * must not abort an in-flight turn, so delivery failures are logged and
-   * swallowed. Replay uses sendUpdateStrict instead so lost history surfaces as
-   * a failed load.
-   */
   private async sendUpdate(update: acp.SessionUpdate): Promise<void> {
     try {
       await this.sendUpdateStrict(update);
@@ -1013,13 +796,11 @@ export class Session {
       );
     }
   }
-
   debug(msg: string) {
     if (this.config.getDebugMode()) {
       debugLogger.warn(msg);
     }
   }
-
   private async sendPlanUpdate(todos: Todo[]): Promise<void> {
     const entries: acp.PlanEntry[] = todos.map((todo) => ({
       content: todo.content,
@@ -1028,7 +809,6 @@ export class Session {
     }));
     await this.sendUpdate({ sessionUpdate: 'plan', entries });
   }
-
   /**
    * Replays a resumed conversation (ordered IContent[]) to the client as
    * session/update notifications, in order, for ACP session/load (issue #1604).
@@ -1055,7 +835,6 @@ export class Session {
       }
     }
   }
-
   /**
    * Re-attach replay for ACP session/load (#1604): replays this live session's
    * IN-MEMORY conversation, used when a load targets a still-live session with
@@ -1070,7 +849,6 @@ export class Session {
       await readAgentHistoryForReplay(this.agent, this.id),
     );
   }
-
   async dispose(): Promise<void> {
     try {
       todoEvents.offTodoUpdated(this.todoListener);
@@ -1078,11 +856,7 @@ export class Session {
       this.pendingPrompt?.abort();
       this.pendingPrompt = null;
     } finally {
-      try {
-        await this.agent.dispose();
-      } catch (error) {
-        debugLogger.error('Failed to dispose Zed session agent:', error);
-      }
+      await this.agent.dispose();
     }
   }
 }

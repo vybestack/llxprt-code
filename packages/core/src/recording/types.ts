@@ -74,6 +74,8 @@ export interface SessionStartPayload {
   sessionId: string;
   projectHash: string;
   workspaceDirs: string[];
+  /** Effective absolute working directory, when recorded by newer clients. */
+  cwd?: string;
   provider: string;
   model: string;
   /** ISO-8601 timestamp of when the session started. */
@@ -141,6 +143,8 @@ export interface SessionRecordingServiceConfig {
   projectHash: string;
   chatsDir: string;
   workspaceDirs: string[];
+  /** Effective absolute working directory for lifecycle discovery. */
+  cwd?: string;
   provider: string;
   model: string;
 }
@@ -159,6 +163,7 @@ export interface SessionMetadata {
   provider: string;
   model: string;
   workspaceDirs: string[];
+  cwd?: string;
   startTime: string;
 }
 
@@ -199,4 +204,5 @@ export interface SessionSummary {
   fileSize: number;
   provider: string;
   model: string;
+  cwd?: string;
 }

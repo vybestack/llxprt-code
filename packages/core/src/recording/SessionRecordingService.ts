@@ -71,6 +71,7 @@ export class SessionRecordingService {
       sessionId: config.sessionId,
       projectHash: config.projectHash,
       workspaceDirs: config.workspaceDirs,
+      ...(config.cwd === undefined ? {} : { cwd: config.cwd }),
       provider: config.provider,
       model: config.model,
       startTime: new Date().toISOString(),

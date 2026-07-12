@@ -34,7 +34,11 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { SessionLockManager } from './SessionLockManager.js';
-import { listSessions, deleteSession } from './sessionManagement.js';
+import {
+  listSessions,
+  deleteSession,
+  deleteSessionById,
+} from './sessionManagement.js';
 import { type SessionRecordingServiceConfig } from './types.js';
 import { type IContent } from '../services/history/IContent.js';
 
@@ -401,6 +405,35 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
         expect(result.deletedSessionId).toBe(sessionId);
       }
     });
+  });
+
+  describe('deleteSessionById', () => {
+    itProp(
+      'deletes only an exact session ID and never resolves a prefix',
+      async () => {
+        const sessionId = 'exact-session-identifier';
+        const { filePath } = await createTestSession(chatsDir, { sessionId });
+
+        const prefixResult = await deleteSessionById(
+          'exact-session',
+          chatsDir,
+          PROJECT_HASH,
+        );
+        expect(prefixResult.ok).toBe(false);
+        expect(await fileExists(filePath)).toBe(true);
+
+        const exactResult = await deleteSessionById(
+          sessionId,
+          chatsDir,
+          PROJECT_HASH,
+        );
+        expect(exactResult).toStrictEqual({
+          ok: true,
+          deletedSessionId: sessionId,
+        });
+        expect(await fileExists(filePath)).toBe(false);
+      },
+    );
   });
 
   // =========================================================================

@@ -314,6 +314,7 @@ async function readSessionSummary(
     fileSize: stat.size,
     provider: header.provider,
     model: header.model,
+    ...(typeof header.cwd === 'string' ? { cwd: header.cwd } : {}),
   };
 }
 
