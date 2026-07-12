@@ -323,7 +323,7 @@ function mapToolUpdateStatus(
   }
 }
 
-const TOOL_KIND_BY_NAME = new Map<string, acp.ToolKind>([
+export const TOOL_KIND_BY_NAME: ReadonlyMap<string, acp.ToolKind> = new Map([
   ...[
     'read_file',
     'read_line_range',

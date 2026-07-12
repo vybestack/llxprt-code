@@ -305,7 +305,7 @@ export class SessionControl implements AgentSessionControl {
     try {
       subscribed = this.attachIntegrationToHistory(integration);
     } catch (error) {
-      integration.dispose();
+      this.disposeIntegrationQuietly(integration);
       await this.disposeServiceQuietly(result.recording);
       await this.releaseLockQuietly(result.lockHandle);
       throw error;
@@ -392,7 +392,7 @@ export class SessionControl implements AgentSessionControl {
     } catch (error) {
       this.integration = null;
       this.integrationNeedsSubscribe = false;
-      integration.dispose();
+      this.disposeIntegrationQuietly(integration);
       logger.warn(
         () =>
           `ensureSubscribed: re-attach failed for session ${this.deps.sessionId()}; ` +
@@ -400,6 +400,15 @@ export class SessionControl implements AgentSessionControl {
             error instanceof Error ? error.message : String(error)
           }`,
       );
+    }
+  }
+
+  /** Best-effort integration dispose for failure/rollback paths. */
+  private disposeIntegrationQuietly(integration: RecordingIntegration): void {
+    try {
+      integration.dispose();
+    } catch {
+      // Best-effort: the triggering error is rethrown by the caller.
     }
   }
 
@@ -612,8 +621,8 @@ export class SessionControl implements AgentSessionControl {
     try {
       subscribed = this.attachIntegrationToHistory(integration);
     } catch (error) {
-      integration.dispose();
-      await service.dispose();
+      this.disposeIntegrationQuietly(integration);
+      await this.disposeServiceQuietly(service);
       throw error;
     }
     this.recording = service;
@@ -681,18 +690,23 @@ export class SessionControl implements AgentSessionControl {
    */
   private async releaseRecording(): Promise<void> {
     const integration = this.integration;
-    if (integration !== null) {
-      this.integration = null;
-      this.integrationNeedsSubscribe = false;
-      integration.dispose();
-    }
     const service = this.recording;
-    if (service === null) {
-      return;
-    }
+    this.integration = null;
+    this.integrationNeedsSubscribe = false;
     this.recording = null;
     this.deps.config.setSessionRecordingService(undefined);
-    await service.dispose();
+    const errors: unknown[] = [];
+    if (integration !== null) {
+      this.guardSync(errors, () => integration.dispose());
+    }
+    await this.guard(errors, async () => {
+      if (service !== null) {
+        await service.dispose();
+      }
+    });
+    if (errors.length > 0) {
+      throw errors[0];
+    }
   }
 
   /**

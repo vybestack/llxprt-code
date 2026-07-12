@@ -214,7 +214,7 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
         buildDeps(config, client.contract, sessionId),
       );
 
-      // Fire resume() and setRecording(false) (stopRecording) concurrently.
+      // Fire resume() and setRecording({ enabled: false }) concurrently.
       // Without the op-chain mutex the stop could read/dispose the recording +
       // release the lock that resume is mid-way through adopting (use-after-free
       // / a "completed" stop that nonetheless leaves recording enabled, or an
@@ -375,19 +375,11 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       expect(liveHistory.listenerCount('contentAdded')).toBe(0);
       client.setHistoryService(liveHistory);
 
-      // A subsequent state-mutating operation runs ensureSubscribed() at its
-      // start, re-attaching the previously-dead integration. Toggling recording
-      // off would dispose it, so instead trigger a no-op-ish operation that
-      // still runs ensureSubscribed: a second setRecording(true) which, via
-      // startRecording, calls ensureSubscribed BEFORE swapping. To observe the
-      // re-attach on the ORIGINAL integration we instead emit on the history and
-      // assert the recording captured it after re-attach.
-      //
-      // Drive re-attach explicitly through resume of a nonexistent session so
-      // ensureSubscribed runs first (re-attaching the live integration) before
-      // the resume attempt fails on no-such-session — proving the re-attach
-      // happens at the START of the next operation independent of that op's
-      // outcome.
+      // Drive re-attach through resume of a nonexistent session: resume calls
+      // ensureSubscribed() FIRST, re-attaching the ORIGINAL integration, and it
+      // only replaces/disposes that integration after a successful lookup.
+      // Therefore the expected lookup failure leaves the re-attached listener
+      // available for direct observation below.
       const beforeCount = liveHistory.listenerCount('contentAdded');
       await expect(control.resume('does-not-exist-id')).rejects.toThrow(
         /Failed to resume session/,

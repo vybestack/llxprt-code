@@ -199,7 +199,7 @@ describe('mapHistoryToSessionUpdates — malformed persisted history (issue #160
     expect(mapHistoryToSessionUpdates(history)).toStrictEqual([]);
   });
 
-  it('falls back the tool_call title to the id when name is missing but keeps the (valid) id (FINDING D4)', () => {
+  it("falls back the tool_call's title to the id when name is missing but keeps the (valid) id (FINDING D4)", () => {
     const history = [
       {
         speaker: 'ai',
