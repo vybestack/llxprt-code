@@ -13,9 +13,7 @@ import type {
   McpServerDetail,
 } from '@vybestack/llxprt-code-agents';
 import {
-  getMCPDiscoveryState,
   getMCPServerStatus,
-  MCPDiscoveryState,
   MCPServerStatus,
   mcpServerRequiresOAuth,
 } from '@vybestack/llxprt-code-mcp';
@@ -452,14 +450,15 @@ export async function buildMcpStatusMessage(
   const connectingServers = serverNames.filter(
     (name) => getMCPServerStatus(name) === MCPServerStatus.CONNECTING,
   );
-  const discoveryState = getMCPDiscoveryState();
+  // Read discovery state from the live manager instance (via the Agent
+  // surface) rather than the stale module global — issue #2516: the global was
+  // never updated for background/extension discovery, so the startup banner
+  // flickered or never showed.
+  const discoveryState = agent.mcp.discoveryState();
 
   let message = '';
 
-  if (
-    discoveryState === MCPDiscoveryState.IN_PROGRESS ||
-    connectingServers.length > 0
-  ) {
+  if (discoveryState === 'pending' || connectingServers.length > 0) {
     message += `${COLOR_YELLOW}MCP servers are starting up (${connectingServers.length} initializing)...${RESET_COLOR}\n`;
     message += `${COLOR_CYAN}Note: First startup may take longer. Tool availability will update automatically.${RESET_COLOR}\n\n`;
   }

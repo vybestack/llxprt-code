@@ -236,7 +236,6 @@ const baseExcludePatterns = [
   '**/ui/hooks/useAgentStream.thought.test.tsx',
   '**/ui/hooks/useAgentStream.loopdetect.test.tsx',
   '**/ui/hooks/useAgentStream.hooks.test.tsx',
-  '**/ui/hooks/useAgentStream.mcp.test.tsx',
   '**/ui/hooks/useKeypress.test.tsx',
   '**/ui/hooks/usePermissionsModifyTrust.test.tsx',
   '**/ui/privacy/**/*.test.tsx',

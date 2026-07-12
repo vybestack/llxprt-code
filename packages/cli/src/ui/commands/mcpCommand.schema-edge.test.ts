@@ -9,9 +9,7 @@ import { mcpCommand } from './mcpCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import {
   MCPServerStatus,
-  MCPDiscoveryState,
   getMCPServerStatus,
-  getMCPDiscoveryState,
   DiscoveredMCPTool,
 } from '@vybestack/llxprt-code-mcp';
 import type { MessageActionReturn } from './types.js';
@@ -30,7 +28,6 @@ vi.mock('@vybestack/llxprt-code-mcp', async (importOriginal) => {
   return {
     ...actual,
     getMCPServerStatus: vi.fn(),
-    getMCPDiscoveryState: vi.fn(),
     mcpServerRequiresOAuth: new Map<string, boolean>(),
     MCPOAuthProvider: { authenticate: vi.fn() },
     MCPOAuthTokenStorage: {
@@ -138,9 +135,6 @@ describe('mcpCommand', () => {
     vi.clearAllMocks();
     delete process.env.SANDBOX;
     vi.mocked(getMCPServerStatus).mockReturnValue(MCPServerStatus.CONNECTED);
-    vi.mocked(getMCPDiscoveryState).mockReturnValue(
-      MCPDiscoveryState.COMPLETED,
-    );
     mockConfig = {
       getMcpServers: vi.fn().mockReturnValue({}),
       getBlockedMcpServers: vi.fn().mockReturnValue([]),

@@ -31,6 +31,20 @@ describe('McpClientManager', () => {
   afterEach(() => {
     vi.mocked(McpClient).mockReset();
   });
+
+  // Shared by the issue #2325 and issue #2516 extension-discovery suites.
+  // Partial mock — only fields relevant to MCP discovery are populated.
+  // LlxprtExtension has many internal fields (hooks, commands, etc.) that
+  // are not exercised by startExtension, so a full stub is unnecessary.
+  const makeTestExtension = (): LlxprtExtension =>
+    ({
+      name: 'test-ext',
+      version: '1.0.0',
+      isActive: true,
+      path: '/path/to/ext',
+      contextFiles: [],
+      mcpServers: { 'ext-server': {} },
+    }) as unknown as LlxprtExtension;
   it('should discover tools from all configured servers', async () => {
     const mockedMcpClient = {
       connect: vi.fn(),
@@ -551,19 +565,6 @@ describe('McpClientManager', () => {
       return { manager, mockConfig };
     };
 
-    // Partial mock — only fields relevant to MCP discovery are populated.
-    // LlxprtExtension has many internal fields (hooks, commands, etc.) that
-    // are not exercised by startExtension, so a full stub is unnecessary.
-    const makeTestExtension = (): LlxprtExtension =>
-      ({
-        name: 'test-ext',
-        version: '1.0.0',
-        isActive: true,
-        path: '/path/to/ext',
-        contextFiles: [],
-        mcpServers: { 'ext-server': {} },
-      }) as unknown as LlxprtExtension;
-
     it('should not block startExtension on MCP server discovery (issue #2325)', async () => {
       let resolveConnect: () => void;
       const connectPromise = new Promise<void>((resolve) => {
@@ -627,6 +628,116 @@ describe('McpClientManager', () => {
       expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
       expect(mockedMcpClient.discover).not.toHaveBeenCalled();
       expect(manager.getDiscoveryState()).toBe(MCPDiscoveryState.COMPLETED);
+    });
+  });
+
+  describe('discovery failure recording and bounded settle (issue #2516)', () => {
+    const makeExtensionManager = (
+      mockedMcpClient: Record<string, ReturnType<typeof vi.fn>>,
+    ) => {
+      vi.mocked(McpClient).mockReturnValue(
+        mockedMcpClient as unknown as McpClient,
+      );
+      const mockConfig = {
+        isTrustedFolder: () => true,
+        getMcpServers: () => ({}),
+        getMcpServerCommand: () => '',
+        getPromptRegistry: () => ({}) as PromptRegistry,
+        getResourceRegistry: () => ({}) as ResourceRegistry,
+        getDebugMode: () => false,
+        getWorkspaceContext: () => ({}) as WorkspaceContext,
+        getEnableExtensionReloading: () => false,
+        getExtensionEvents: () => undefined,
+        getAllowedMcpServers: () => undefined,
+        getBlockedMcpServers: () => undefined,
+        getAgentClient: () => ({ isInitialized: () => false }),
+        refreshMcpContext: vi.fn(),
+      } as unknown as Config;
+      return new McpClientManager('0.0.1', {} as ToolRegistry, mockConfig);
+    };
+
+    it('records a real connect/discover failure as a per-server discovery failure', async () => {
+      // The REAL catch path in connectAndDiscover must populate
+      // discoveryFailures keyed by the server name, so the gate can surface a
+      // per-server warning instead of aborting the turn.
+      const mockedMcpClient = {
+        connect: vi.fn().mockResolvedValue(undefined),
+        discover: vi.fn().mockRejectedValue(new Error('boom-from-discover')),
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        getStatus: vi.fn(),
+        getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
+      };
+      const manager = makeExtensionManager(mockedMcpClient);
+
+      await manager.startExtension(makeTestExtension());
+      await manager.whenDiscoverySettled();
+
+      const failures = manager.getDiscoveryFailures();
+      expect(failures.get('ext-server')).toContain('boom-from-discover');
+      await manager.stop();
+    });
+
+    it('clears a stale per-server failure when that server is rediscovered successfully', async () => {
+      // First pass: discovery fails.
+      const failingClient = {
+        connect: vi.fn().mockResolvedValue(undefined),
+        discover: vi.fn().mockRejectedValue(new Error('first-fail')),
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        getStatus: vi.fn(),
+        getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
+      };
+      const manager = makeExtensionManager(failingClient);
+      await manager.startExtension(makeTestExtension());
+      await manager.whenDiscoverySettled();
+      expect(manager.getDiscoveryFailures().get('ext-server')).toBeDefined();
+
+      // Second pass: rediscovery succeeds — the stale failure must clear.
+      const okClient = {
+        connect: vi.fn().mockResolvedValue(undefined),
+        discover: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        getStatus: vi.fn(),
+        getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
+      };
+      // Clear the cached failing client so the next startExtension builds a
+      // fresh (succeeding) client from the updated mock.
+      await manager.stop();
+      vi.mocked(McpClient).mockReturnValue(okClient as unknown as McpClient);
+      await manager.startExtension(makeTestExtension());
+      await manager.whenDiscoverySettled();
+      expect(manager.getDiscoveryFailures().has('ext-server')).toBe(false);
+    });
+
+    it('resolves within a bounded timeout when a server never settles and records it as a failure', async () => {
+      // A server whose connect() never resolves must not hang the gate. The
+      // bounded whenDiscoverySettled resolves and records the still-pending
+      // server as a failure (issue #2516). Fake timers drive the 10s bound
+      // deterministically.
+      vi.useFakeTimers();
+      try {
+        const neverResolvingConnect = new Promise<void>(() => {});
+        const mockedMcpClient = {
+          connect: vi.fn().mockReturnValue(neverResolvingConnect),
+          discover: vi.fn().mockResolvedValue(undefined),
+          disconnect: vi.fn().mockResolvedValue(undefined),
+          getStatus: vi.fn(),
+          getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
+        };
+        const manager = makeExtensionManager(mockedMcpClient);
+        await manager.startExtension(makeTestExtension());
+
+        const settled = manager.whenDiscoverySettled();
+        // Advance past the 10s bound.
+        await vi.advanceTimersByTimeAsync(10_500);
+        await expect(settled).resolves.toBeUndefined();
+
+        const failures = manager.getDiscoveryFailures();
+        expect(failures.has('ext-server')).toBe(true);
+        expect(failures.get('ext-server')).toMatch(/did not settle/i);
+        await manager.stop();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

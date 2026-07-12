@@ -153,7 +153,6 @@
     "src/ui/hooks/useAgentStream.thought.test.tsx",
     "src/ui/hooks/useAgentStream.loopdetect.test.tsx",
     "src/ui/hooks/useAgentStream.hooks.test.tsx",
-    "src/ui/hooks/useAgentStream.mcp.test.tsx",
     "src/ui/hooks/useAgentStream.ordering.test.tsx",
     "src/ui/hooks/useMemoryMonitor.test.ts",
     "src/ui/hooks/useMemoryMonitor.test.tsx",

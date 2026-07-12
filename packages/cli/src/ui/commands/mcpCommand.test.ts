@@ -9,9 +9,7 @@ import { mcpCommand } from './mcpCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import {
   MCPServerStatus,
-  MCPDiscoveryState,
   getMCPServerStatus,
-  getMCPDiscoveryState,
   DiscoveredMCPTool,
 } from '@vybestack/llxprt-code-mcp';
 import type { MessageActionReturn } from './types.js';
@@ -34,7 +32,6 @@ vi.mock('@vybestack/llxprt-code-mcp', async (importOriginal) => {
   return {
     ...actual,
     getMCPServerStatus: vi.fn(),
-    getMCPDiscoveryState: vi.fn(),
     mcpServerRequiresOAuth: new Map<string, boolean>(),
     MCPOAuthProvider: {
       authenticate: vi.fn(),
@@ -111,6 +108,8 @@ interface MockAgentOptions {
   tools?: DiscoveredMCPTool[];
   resources?: Array<{ serverName: string; resource: McpResourceInfo }>;
   blockedServers?: Array<{ name: string; extensionName: string }>;
+  /** Drives the "starting up" banner via the live manager-instance state. */
+  discoveryState?: string;
 }
 
 /**
@@ -154,7 +153,7 @@ function createMockAgent(opts: MockAgentOptions = {}): Agent {
       listServers: vi.fn().mockReturnValue([]),
       toolsByServer: vi.fn().mockReturnValue({}),
       auth: vi.fn(),
-      discoveryState: vi.fn().mockReturnValue('ready'),
+      discoveryState: vi.fn().mockReturnValue(opts.discoveryState ?? 'ready'),
       authenticate: vi.fn(),
     },
     tools: {
@@ -181,9 +180,6 @@ describe('mcpCommand', () => {
     vi.clearAllMocks();
     delete process.env.SANDBOX;
     vi.mocked(getMCPServerStatus).mockReturnValue(MCPServerStatus.CONNECTED);
-    vi.mocked(getMCPDiscoveryState).mockReturnValue(
-      MCPDiscoveryState.COMPLETED,
-    );
     mockConfig = {
       getMcpServers: vi.fn().mockReturnValue({}),
       getBlockedMcpServers: vi.fn().mockReturnValue([]),
@@ -454,17 +450,16 @@ describe('mcpCommand', () => {
         return MCPServerStatus.DISCONNECTED;
       });
 
-      vi.mocked(getMCPDiscoveryState).mockReturnValue(
-        MCPDiscoveryState.IN_PROGRESS,
-      );
-
       const tools = [
         createMockMCPTool('server1_tool1', 'server1'),
         createMockMCPTool('server2_tool1', 'server2'),
       ];
 
       const testContext = createMockCommandContext({
-        services: { config: mockConfig, agent: createMockAgent({ tools }) },
+        services: {
+          config: mockConfig,
+          agent: createMockAgent({ tools, discoveryState: 'pending' }),
+        },
         ui: { reloadCommands: vi.fn() },
       });
 
@@ -561,6 +556,7 @@ describe('mcpCommand', () => {
           refresh: vi.fn().mockResolvedValue(undefined),
           status: vi.fn(),
           listServers: vi.fn().mockReturnValue([]),
+          discoveryState: vi.fn().mockReturnValue('ready'),
         },
         tools: { list: vi.fn().mockReturnValue([]) },
       } as unknown as Agent;

@@ -36,11 +36,6 @@ export enum MCPDiscoveryState {
 const serverStatuses: Map<string, MCPServerStatus> = new Map();
 
 /**
- * Track the overall MCP discovery state
- */
-let mcpDiscoveryState: MCPDiscoveryState = MCPDiscoveryState.NOT_STARTED;
-
-/**
  * Map to track which MCP servers have been discovered to require OAuth
  */
 export const mcpServerRequiresOAuth: Map<string, boolean> = new Map();
@@ -100,18 +95,4 @@ export function getMCPServerStatus(serverName: string): MCPServerStatus {
  */
 export function getAllMCPServerStatuses(): Map<string, MCPServerStatus> {
   return new Map(serverStatuses);
-}
-
-/**
- * Get the current MCP discovery state
- */
-export function getMCPDiscoveryState(): MCPDiscoveryState {
-  return mcpDiscoveryState;
-}
-
-/**
- * Set the MCP discovery state (used by discoverMcpTools).
- */
-export function setMCPDiscoveryState(state: MCPDiscoveryState): void {
-  mcpDiscoveryState = state;
 }

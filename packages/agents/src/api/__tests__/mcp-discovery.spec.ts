@@ -19,9 +19,10 @@
  *        skill entries via fake MCP infra.
  * - T12b agent.mcp.listServers/status/toolsByServer; discovery-blocking honored.
  * - T20  discovery gating — default chat()/stream() await MCP readiness;
- *        TurnOptions.mcpDiscovery:'skip' opts out; discovery FAILURE yields
- *        AgentError{code:'mcp_discovery_failed'} + exactly one done:error;
- *        mcp.status/listTools still callable while pending.
+ *        TurnOptions.mcpDiscovery:'skip' opts out; a per-server discovery
+ *        FAILURE is NON-FATAL (issue #2516): a `notice` warning is emitted for
+ *        the failing server and the turn proceeds; mcp.status/listTools still
+ *        callable while pending.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -185,10 +186,12 @@ describe('MCP discovery @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-013 @re
     );
     server.setTools([{ name: 'skip_op', enabled: true }]);
     server.setDiscoveryLatencyMs(1000); // would block if awaited
-    // This discovery would ALSO fail if the gate ran — so a 'skip' that bypasses
-    // the gate must yield a SUCCESSFUL turn (no error), whereas a mutant that
-    // removed the `mcpDiscovery === 'skip'` short-circuit would run the gate and
-    // surface a mcp_discovery_failed error instead.
+    // This discovery would ALSO fail if the gate ran — so a 'skip' that
+    // bypasses the gate yields a turn with NO discovery warning, whereas a
+    // mutant that removed the `mcpDiscovery === 'skip'` short-circuit would
+    // run the gate and emit a per-server `notice` warning (issue #2516 makes
+    // per-server failures non-fatal, so the turn still succeeds either way —
+    // the distinguishing signal is the absence of the warning notice).
     server.failDiscovery('would block and fail if awaited');
 
     const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
@@ -208,7 +211,7 @@ describe('MCP discovery @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-013 @re
     }
   });
 
-  it('T20 discovery FAILURE yields AgentError{code:mcp_discovery_failed} via the buffered result surface + exactly one done:error on the stream @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-013', async () => {
+  it('T20 discovery FAILURE is non-fatal: emits a per-server warning and the turn still proceeds (issue #2516) @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-013', async () => {
     const server: FakeMcpServerHandle = registry.registerServer(
       'broken-tools',
       stdioFakeConfig('fake-broken-mcp'),
@@ -216,38 +219,27 @@ describe('MCP discovery @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-013 @re
     server.setTools([{ name: 'broken_op', enabled: true }]);
     server.failDiscovery('connection refused');
 
-    // Assert the typed failure code through the BUFFERED result surface —
-    // AgentResult.error.code is a fully-typed AgentErrorCode union member;
-    // NO casts. The stream error event payload (StructuredError) has no
-    // `code` field, so the code MUST be read from the buffered result.
+    // Issue #2516: a failing MCP server must disable only its own tools and
+    // surface a warning — it must NOT abort the whole turn or drop the prompt.
+    // The buffered result surface therefore completes a NORMAL turn (the model
+    // still runs); the per-server failure is carried as a stream `notice`.
     const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
       mcpServers: { 'broken-tools': server.config },
     });
     try {
       const result = await agent.chat('trigger broken discovery');
-      expect(result.finishReason).toBe('error');
-      expect(result.error?.code).toBe('mcp_discovery_failed');
-      // The gate-failure result is an EMPTY turn: no text and no tool calls are
-      // produced (the model turn never runs). Mutants that replace the empty
-      // string/array literals would leak non-empty content here.
-      expect(result.text).toBe('');
-      expect(result.toolCalls).toStrictEqual([]);
-      // The failure message embeds the failing server name and its reason in
-      // the `${server}: ${message}` form joined by '; '. Mutants on the join
-      // separator, the arrow projection, or the message template would not
-      // produce this exact substring.
-      expect(result.error?.message).toContain(
-        'broken-tools: connection refused',
-      );
-      expect(result.error?.message).toContain('MCP discovery failed');
+      // The turn proceeds: the model produced text and there is no gate error.
+      expect(result.text.length).toBeGreaterThan(0);
+      expect(result.finishReason).not.toBe('error');
+      expect(result.error).toBeUndefined();
     } finally {
       await cleanup();
     }
 
-    // SEPARATE fresh agent: assert the STREAM invariant (exactly one `done`
-    // with reason `error`) via the existing cast-free predicates. A distinct
-    // agent instance avoids reusing one agent for two turns against a
-    // single-line fixture.
+    // SEPARATE fresh agent: assert the STREAM invariant — exactly one `done`
+    // whose reason is NOT `error` (the turn completed), preceded by a
+    // `notice` warning naming the failing server. A distinct agent instance
+    // avoids reusing one agent for two turns against a single-line fixture.
     const { agent: streamAgent, cleanup: streamCleanup } = await buildAgent(
       'plain-text.jsonl',
       { mcpServers: { 'broken-tools': server.config } },
@@ -260,9 +252,16 @@ describe('MCP discovery @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-013 @re
 
       const done = events.filter(isDoneEvent);
       expect(done).toHaveLength(1);
-      expect(done[0].reason).toBe('error');
+      expect(done[0].reason).not.toBe('error');
       expect(types[types.length - 1]).toBe('done');
       expect(countType(events, 'done')).toBe(1);
+
+      // The per-server failure surfaces as a notice warning naming the server.
+      const notices = events.filter((e) => e.type === 'notice');
+      expect(notices.length).toBeGreaterThan(0);
+      const noticeText = notices.map((n) => n.message).join('\n');
+      expect(noticeText).toContain('broken-tools');
+      expect(noticeText).toContain('connection refused');
     } finally {
       await streamCleanup();
     }

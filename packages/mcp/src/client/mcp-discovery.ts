@@ -28,12 +28,7 @@ import {
   isEnabled,
   populateMcpServerCommand,
 } from './mcp-discovery-helpers.js';
-import {
-  MCPServerStatus,
-  MCPDiscoveryState,
-  setMCPDiscoveryState,
-  updateMCPServerStatus,
-} from './mcp-status.js';
+import { MCPServerStatus, updateMCPServerStatus } from './mcp-status.js';
 import { MCP_DEFAULT_TIMEOUT_MSEC } from './mcp-transport.js';
 import { connectToMcpServer } from './mcp-connection.js';
 
@@ -52,27 +47,22 @@ export async function discoverMcpTools(
   workspaceContext: WorkspaceContext,
   cliConfig: Config,
 ): Promise<void> {
-  setMCPDiscoveryState(MCPDiscoveryState.IN_PROGRESS);
-  try {
-    const servers = populateMcpServerCommand(mcpServers, mcpServerCommand);
+  const servers = populateMcpServerCommand(mcpServers, mcpServerCommand);
 
-    const discoveryPromises = Object.entries(servers).map(
-      ([mcpServerName, mcpServerConfig]) =>
-        connectAndDiscover(
-          clientVersion,
-          mcpServerName,
-          mcpServerConfig,
-          toolRegistry,
-          promptRegistry,
-          debugMode,
-          workspaceContext,
-          cliConfig,
-        ),
-    );
-    await Promise.all(discoveryPromises);
-  } finally {
-    setMCPDiscoveryState(MCPDiscoveryState.COMPLETED);
-  }
+  const discoveryPromises = Object.entries(servers).map(
+    ([mcpServerName, mcpServerConfig]) =>
+      connectAndDiscover(
+        clientVersion,
+        mcpServerName,
+        mcpServerConfig,
+        toolRegistry,
+        promptRegistry,
+        debugMode,
+        workspaceContext,
+        cliConfig,
+      ),
+  );
+  await Promise.all(discoveryPromises);
 }
 
 /**

@@ -35,6 +35,14 @@ import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 const logger = new DebugLogger('llxprt:mcp-client-manager');
 
 /**
+ * Maximum time {@link McpClientManager.whenDiscoverySettled} will wait for an
+ * in-flight discovery pass before resolving anyway. A server whose transport
+ * or discovery never settles must never hang the agent gate (issue #2516), so
+ * callers resolve after this bound even if discovery is still pending.
+ */
+const MCP_DISCOVERY_SETTLE_TIMEOUT_MS = 10_000;
+
+/**
  * Manages the lifecycle of multiple MCP clients, including local child processes.
  * This class is responsible for starting, stopping, and discovering tools from
  * a collection of MCP servers defined in the configuration.
@@ -47,6 +55,12 @@ export class McpClientManager {
   // If we have ongoing MCP client discovery, this completes once that is done.
   private discoveryPromise: Promise<void> | undefined;
   private discoveryState: MCPDiscoveryState = MCPDiscoveryState.NOT_STARTED;
+  /**
+   * Names of servers whose individual discovery is currently in flight. Tracked
+   * so {@link whenDiscoverySettled} can record the still-pending servers as
+   * failures when its bounded timeout fires (issue #2516).
+   */
+  private readonly pendingDiscoveryServers: Set<string> = new Set();
   private readonly eventEmitter?: EventEmitter;
   private pendingRefreshPromise: Promise<void> | null = null;
   private refreshRequestedWhilePending = false;
@@ -208,11 +222,14 @@ export class McpClientManager {
     config: MCPServerConfig,
     existing: McpClient | undefined,
   ): Promise<void> {
+    this.discoveryFailures.delete(name);
+    this.pendingDiscoveryServers.add(name);
     return new Promise<void>((resolve, _reject) => {
       void (async () => {
         try {
           await this.connectAndDiscover(name, config, existing);
         } finally {
+          this.pendingDiscoveryServers.delete(name);
           resolve();
         }
       })();
@@ -266,6 +283,7 @@ export class McpClientManager {
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
         clients: new Map(this.clients),
       });
+      this.discoveryFailures.set(name, getErrorMessage(error));
       if (!isAuthenticationError(error)) {
         coreEvents.emitFeedback(
           'error',
@@ -468,13 +486,55 @@ export class McpClientManager {
    * is in flight this resolves immediately. Used by the public Agent discovery
    * gate to await MCP readiness before a model turn.
    *
+   * The wait is bounded by {@link MCP_DISCOVERY_SETTLE_TIMEOUT_MS}: a server
+   * whose transport/discovery never settles must never hang the agent gate
+   * (issue #2516). When the bound is hit, any still-pending servers are
+   * recorded as failures so they surface as per-server warnings rather than
+   * an unresolved promise.
+   *
    * @plan:PLAN-20260617-COREAPI.P22
    * @requirement:REQ-013
    */
   async whenDiscoverySettled(): Promise<void> {
     const pending = this.discoveryPromise;
-    if (pending !== undefined) {
-      await pending;
+    if (pending === undefined) {
+      return;
+    }
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, MCP_DISCOVERY_SETTLE_TIMEOUT_MS).unref();
+    });
+    try {
+      await Promise.race([pending, timeout]);
+      // If the timeout won the race, `pending` keeps running in the background.
+      // Attach a no-op rejection handler so an unexpected rejection during the
+      // abandoned aggregate-discovery work can never surface as an unhandled
+      // promise rejection (issue #2516).
+      void pending.catch(() => {});
+      if (this.pendingDiscoveryServers.size > 0) {
+        this.recordPendingDiscoveryTimeouts();
+      }
+    } finally {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  /**
+   * Records any servers still marked as pending as discovery failures. Called
+   * when {@link whenDiscoverySettled} hits its bounded timeout so a server
+   * that never settles is surfaced as a per-server warning instead of an
+   * unresolved gate (issue #2516).
+   */
+  private recordPendingDiscoveryTimeouts(): void {
+    for (const name of this.pendingDiscoveryServers) {
+      if (!this.discoveryFailures.has(name)) {
+        this.discoveryFailures.set(
+          name,
+          `discovery did not settle within ${MCP_DISCOVERY_SETTLE_TIMEOUT_MS}ms`,
+        );
+      }
     }
   }
 

@@ -1,0 +1,58 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 40,
+    "historyLimit": 100000,
+    "scrollbackLines": 20000,
+    "initialWaitMs": 8000
+  },
+  "yolo": true,
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000
+    },
+    { "type": "capture", "label": "00-startup", "scope": "screen" },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "1 MCP server"
+    },
+
+    { "type": "line", "text": "/mcp list", "submitKeys": [] },
+    { "type": "wait", "ms": 700 },
+    { "type": "key", "key": "Escape" },
+    { "type": "wait", "ms": 300 },
+    { "type": "key", "key": "Enter" },
+    { "type": "wait", "ms": 4000 },
+    { "type": "capture", "label": "01-mcp-list", "scope": "screen" },
+    {
+      "type": "expect",
+      "scope": "scrollback",
+      "contains": "[READY] playwright - Ready"
+    },
+    {
+      "type": "expect",
+      "scope": "scrollback",
+      "contains": "24 tools"
+    },
+
+    { "type": "line", "text": "issue2516 prompt not dropped during mcp discovery", "submitKeys": ["Enter"] },
+    { "type": "wait", "ms": 4000 },
+    { "type": "capture", "label": "02-prompt-accepted", "scope": "screen" },
+    {
+      "type": "waitForNot",
+      "scope": "scrollback",
+      "contains": "Waiting for MCP servers to initialize",
+      "timeoutMs": 3000
+    },
+    { "type": "line", "text": "/quit", "submitKeys": [] },
+    { "type": "wait", "ms": 600 },
+    { "type": "key", "key": "Escape" },
+    { "type": "wait", "ms": 300 },
+    { "type": "key", "key": "Enter" },
+    { "type": "waitForExit", "timeoutMs": 15000 }
+  ]
+}

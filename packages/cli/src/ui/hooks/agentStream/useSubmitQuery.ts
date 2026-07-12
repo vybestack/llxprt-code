@@ -12,7 +12,6 @@
  */
 
 import { useCallback, useEffect, useRef } from 'react';
-import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   type MessageSenderType,
@@ -358,17 +357,6 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
 
       const turn = initTurn(cbd, query, prompt_id, cbd.getPromptCount);
 
-      if (isMcpDiscoveryBlocking(cbd.runtime, turn.trimmedStr)) {
-        cbd.addItem(
-          {
-            type: 'info' as const,
-            text: 'Waiting for MCP servers to initialize... Slash commands are still available.',
-          },
-          Date.now(),
-        );
-        return;
-      }
-
       if (shouldDisplayUserMessage(turn.trimmedStr)) {
         cbd.displayUserMessage(turn.trimmedStr, turn.userMessageTimestamp);
       }
@@ -448,25 +436,6 @@ function isQueueable(streamingState: StreamingState): boolean {
 
 function shouldDisplayUserMessage(trimmedStr: string): boolean {
   return !!trimmedStr && !isSlashCommand(trimmedStr);
-}
-
-function isMcpDiscoveryBlocking(
-  runtime: StreamRuntime,
-  trimmedStr: string,
-): boolean {
-  if (!trimmedStr) return false;
-  if (isSlashCommand(trimmedStr)) return false;
-
-  const mcpManager = runtime.mcp.getMcpClientManager();
-  const discoveryState = mcpManager?.getDiscoveryState();
-  const configuredMcpServers =
-    mcpManager !== undefined
-      ? Object.keys(runtime.mcp.getMcpServers() ?? {}).length
-      : 0;
-
-  return (
-    configuredMcpServers > 0 && discoveryState !== MCPDiscoveryState.COMPLETED
-  );
 }
 
 interface TurnInit {
