@@ -139,34 +139,35 @@ describe('repairProfiles — corrupt profile repair (#2477)', () => {
     expect(repaired.ephemeralSettings['auth-key-name']).toBe('zai');
   });
 
-  it('repairs only the reported zai profile', () => {
+  it('repairs at most one candidate per call (sorted by name)', () => {
     writeFiles(env.destinations.configDir, {
-      'profiles/zai.json': JSON.stringify(corruptCanonicalProfile()),
-      'profiles/other.json': JSON.stringify(corruptCanonicalProfile()),
+      'profiles/aaa.json': JSON.stringify(corruptCanonicalProfile()),
+      'profiles/zzz.json': JSON.stringify(corruptCanonicalProfile()),
     });
     writeFiles(env.legacyDir, {
-      'profiles/zai.json': JSON.stringify(validLegacyProfile()),
-      'profiles/other.json': JSON.stringify({
-        version: 1,
-        provider: 'openai',
-        model: 'gpt-4o',
-        modelParams: {},
-        ephemeralSettings: {},
-      }),
+      'profiles/aaa.json': JSON.stringify(validLegacyProfile()),
+      'profiles/zzz.json': JSON.stringify(validLegacyProfile()),
       'settings.json': '{}',
     });
 
     const first = repairProfiles(env.legacyDir, env.destinations);
     expect(first.profilesRepaired).toBe(1);
-    expect(readProfile(env.destinations.configDir, 'zai.json').provider).toBe(
+    // aaa sorted before zzz — repaired first.
+    expect(readProfile(env.destinations.configDir, 'aaa.json').provider).toBe(
       'anthropic',
     );
-    expect(readProfile(env.destinations.configDir, 'other.json').provider).toBe(
+    expect(readProfile(env.destinations.configDir, 'zzz.json').provider).toBe(
       'load-balancer',
     );
 
     const second = repairProfiles(env.legacyDir, env.destinations);
-    expect(second.profilesRepaired).toBeUndefined();
+    expect(second.profilesRepaired).toBe(1);
+    expect(readProfile(env.destinations.configDir, 'zzz.json').provider).toBe(
+      'anthropic',
+    );
+
+    const third = repairProfiles(env.legacyDir, env.destinations);
+    expect(third.profilesRepaired).toBeUndefined();
   });
 
   it('reports profilesRepaired as undefined when no profiles are repaired', () => {
@@ -364,9 +365,11 @@ describe('repairProfiles — corrupt profile repair (#2477)', () => {
     ).toBe('load-balancer');
   });
 
-  it('does NOT repair a standard profile with load-balancer provider but a CUSTOM model (#4)', () => {
-    // The reported defect signature requires model gemini-2.5-pro. A
-    // manually-authored profile with a custom model must NOT be touched.
+  it('repairs a corrupt profile with an arbitrary fallback model (structural signature is model-agnostic)', () => {
+    // The corruption signature is structural — it does NOT depend on a
+    // specific model value. Any untyped v1 profile with provider
+    // 'load-balancer', empty modelParams, and empty ephemeralSettings is
+    // corrupt regardless of whether the fallback model is custom.
     writeFiles(env.destinations.configDir, {
       'profiles/custom.json': JSON.stringify({
         version: 1,
@@ -380,18 +383,19 @@ describe('repairProfiles — corrupt profile repair (#2477)', () => {
       'profiles/custom.json': JSON.stringify(validLegacyProfile()),
       'settings.json': '{}',
     });
-    repairProfiles(env.legacyDir, env.destinations);
+    const result = repairProfiles(env.legacyDir, env.destinations);
+    expect(result.profilesRepaired).toBe(1);
     const after = JSON.parse(
       fs.readFileSync(
         path.join(env.destinations.configDir, 'profiles/custom.json'),
         'utf-8',
       ),
     );
-    expect(after.model).toBe('my-custom-model');
-    expect(after.provider).toBe('load-balancer');
+    expect(after.model).toBe('glm-5.2');
+    expect(after.provider).toBe('anthropic');
   });
 
-  it('does NOT repair a standard profile with load-balancer provider but a manual/default model (#4)', () => {
+  it('repairs a corrupt profile with a default fallback model (structural signature is model-agnostic)', () => {
     writeFiles(env.destinations.configDir, {
       'profiles/manual.json': JSON.stringify({
         version: 1,
@@ -405,15 +409,16 @@ describe('repairProfiles — corrupt profile repair (#2477)', () => {
       'profiles/manual.json': JSON.stringify(validLegacyProfile()),
       'settings.json': '{}',
     });
-    repairProfiles(env.legacyDir, env.destinations);
+    const result = repairProfiles(env.legacyDir, env.destinations);
+    expect(result.profilesRepaired).toBe(1);
     const after = JSON.parse(
       fs.readFileSync(
         path.join(env.destinations.configDir, 'profiles/manual.json'),
         'utf-8',
       ),
     );
-    expect(after.model).toBe('default');
-    expect(after.provider).toBe('load-balancer');
+    expect(after.model).toBe('glm-5.2');
+    expect(after.provider).toBe('anthropic');
   });
 });
 
