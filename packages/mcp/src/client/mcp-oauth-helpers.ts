@@ -181,8 +181,12 @@ export function detectDeprecatedSSEEndpoint(
     .filter((url) => url !== undefined);
   if (urls.length === 0) return '';
   return (
-    urls.find(({ parsed }) => parsed.pathname.endsWith('/mcp'))?.raw ??
-    urls[0].raw
+    urls.find(({ parsed }) => {
+      const pathname = parsed.pathname.endsWith('/')
+        ? parsed.pathname.slice(0, -1)
+        : parsed.pathname;
+      return pathname.endsWith('/mcp');
+    })?.raw ?? urls[0].raw
   );
 }
 
