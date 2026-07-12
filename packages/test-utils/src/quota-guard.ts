@@ -47,7 +47,7 @@ const QUOTA_SIGNAL_PATTERNS: readonly QuotaSignalPattern[] = [
   // "-ed"/"error" suffix ("rate limited", "rate_limit_error", "rate-limit-error")
   // or a trailing exhaustion verb ("rate limit exceeded/reached/hit").
   {
-    label: 'rate limit error',
+    label: 'rate limited or rate limit error',
     regex: /\brate[\s_-]?limit(?:ed|[\s_-]?error)\b/i,
   },
   {
@@ -266,7 +266,7 @@ function publishSentinel(sentinelPath: string, reason: string): boolean {
  * `title`) need the additional `:`/`,` escaping, but this guard's title is
  * static, so only the message data is escaped here.
  */
-function escapeAnnotationData(data: string): string {
+function escapeWorkflowCommandMessage(data: string): string {
   return data.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
 }
 
@@ -275,7 +275,7 @@ function emitGitHubAnnotations(reason: string): void {
     return;
   }
   process.stdout.write(
-    `::error title=E2E quota guard tripped::${escapeAnnotationData(reason)}\n`,
+    `::error title=E2E quota guard tripped::${escapeWorkflowCommandMessage(reason)}\n`,
   );
 
   const summaryPath = process.env['GITHUB_STEP_SUMMARY'];

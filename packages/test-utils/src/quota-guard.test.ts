@@ -150,22 +150,19 @@ describe('quota-guard', () => {
       expect(formatted.startsWith(`${QUOTA_ERROR_PREFIX} `)).toBe(true);
       // Reason comes first for at-a-glance triage.
       expect(formatted).toContain('matched HTTP 429 status');
-      expect(formatted).toContain(
-        String.fromCharCode(10) + 'Process exited with code 1',
-      );
+      expect(formatted).toContain('\nProcess exited with code 1');
     });
 
     it('separates reason and context with exactly one newline', () => {
       const formatted = formatQuotaError('reason-here', 'context-here');
       const withoutPrefix = formatted.slice(`${QUOTA_ERROR_PREFIX} `.length);
-      expect(withoutPrefix).toBe(
-        'reason-here' + String.fromCharCode(10) + 'context-here',
-      );
+      expect(withoutPrefix).toBe('reason-here\ncontext-here');
     });
 
     it('preserves multi-line context verbatim', () => {
-      const nl = String.fromCharCode(10);
-      const multiLineContext = ['Line one', 'Line two', 'Line three'].join(nl);
+      const multiLineContext = ['Line one', 'Line two', 'Line three'].join(
+        '\n',
+      );
       const formatted = formatQuotaError('quota wall', multiLineContext);
       expect(formatted).toContain(multiLineContext);
     });
