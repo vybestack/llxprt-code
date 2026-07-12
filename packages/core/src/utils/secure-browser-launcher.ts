@@ -12,6 +12,35 @@ import { URL } from 'node:url';
 const execFileAsync = promisify(execFile);
 
 /**
+ * Shared exec options for browser launches. Both the default-browser path
+ * and the specific-browser path use these so behavior stays consistent.
+ */
+const browserExecOptions: Record<string, unknown> = {
+  env: { ...process.env, SHELL: undefined },
+  detached: true,
+  stdio: 'ignore',
+};
+
+/**
+ * Candidate Chrome/Chromium binary names on Linux/BSD, tried in order when
+ * the preferred name is not installed. Different distros ship the browser
+ * under different names (google-chrome, google-chrome-stable, chromium,
+ * chromium-browser).
+ */
+const LINUX_CHROME_BINARIES = [
+  'google-chrome',
+  'google-chrome-stable',
+  'chromium',
+  'chromium-browser',
+];
+
+/**
+ * Candidate Firefox binary names on Linux/BSD (firefox, firefox-esr on
+ * Debian/Ubuntu).
+ */
+const LINUX_FIREFOX_BINARIES = ['firefox', 'firefox-esr'];
+
+/**
  * Supported browser kinds for targeted launching.
  */
 export type BrowserKind = 'chrome' | 'firefox' | 'safari';
@@ -157,14 +186,8 @@ async function openDefaultBrowser(url: string): Promise<void> {
       throw new Error(`Unsupported platform: ${platformName}`);
   }
 
-  const execOptions: Record<string, unknown> = {
-    env: { ...process.env, SHELL: undefined },
-    detached: true,
-    stdio: 'ignore',
-  };
-
   try {
-    await execFileAsync(command, args, execOptions);
+    await execFileAsync(command, args, browserExecOptions);
   } catch (error) {
     const isLinuxLike =
       platformName === 'linux' ||
@@ -181,7 +204,7 @@ async function openDefaultBrowser(url: string): Promise<void> {
       const succeeded = await tryFallbackBrowserCommands(
         fallbackCommands,
         url,
-        execOptions,
+        browserExecOptions,
       );
       if (succeeded) {
         return;
@@ -263,12 +286,6 @@ async function tryFallbackBrowserCommands(
   return false;
 }
 
-const specificBrowserExecOptions: Record<string, unknown> = {
-  env: { ...process.env, SHELL: undefined },
-  detached: true,
-  stdio: 'ignore',
-};
-
 /**
  * Launch a specific browser binary with an optional profile directory.
  *
@@ -316,12 +333,74 @@ async function openSpecificBrowser(
   }
 
   try {
-    await execFileAsync(command, args, specificBrowserExecOptions);
+    await execFileAsync(command, args, browserExecOptions);
   } catch (error) {
+    const succeeded = await tryLinuxFallbackBinaries(
+      platformName,
+      browser,
+      command,
+      args,
+    );
+    if (succeeded) {
+      return;
+    }
     throw new Error(
       `Failed to open ${browser}: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
   }
+}
+
+/**
+ * On Linux/BSD, the preferred Chrome/Firefox binary name varies by distro
+ * (google-chrome vs. chromium, firefox vs. firefox-esr). This helper tries
+ * the known fallback binaries for the given browser and resolves true if one
+ * succeeded (so the caller can suppress the original error).
+ *
+ * Resolves false when the platform is not Linux/BSD, the browser has no
+ * fallback list, or every fallback binary failed.
+ */
+async function tryLinuxFallbackBinaries(
+  platformName: NodeJS.Platform,
+  browser: BrowserKind,
+  primaryCommand: string,
+  args: string[],
+): Promise<boolean> {
+  const isLinuxLike =
+    platformName === 'linux' ||
+    platformName === 'freebsd' ||
+    platformName === 'openbsd';
+  if (!isLinuxLike) {
+    return false;
+  }
+  const fallbacks = linuxBrowserFallbacks(browser);
+  const tried = new Set<string>([primaryCommand]);
+  for (const fallback of fallbacks) {
+    if (tried.has(fallback)) {
+      continue;
+    }
+    tried.add(fallback);
+    try {
+      await execFileAsync(fallback, args, browserExecOptions);
+      return true;
+    } catch {
+      // Try the next fallback binary.
+    }
+  }
+  return false;
+}
+
+/**
+ * Resolve the candidate fallback binary names for a browser on Linux/BSD.
+ * Returns an empty array for browsers without known alternates (e.g. Safari).
+ */
+function linuxBrowserFallbacks(browser: BrowserKind): string[] {
+  if (browser === 'chrome') {
+    return LINUX_CHROME_BINARIES;
+  }
+  if (browser === 'firefox') {
+    return LINUX_FIREFOX_BINARIES;
+  }
+  return [];
 }
 
 /**
@@ -350,7 +429,7 @@ function buildStartProcessCommand(
     browserArgs.length > 0
       ? `@(${browserArgs.join(',')},${quotedUrl})`
       : quotedUrl;
-  return `Start-Process '${executable}' -ArgumentList ${argList}`;
+  return `Start-Process ${powershellQuote(executable)} -ArgumentList ${argList}`;
 }
 
 /**

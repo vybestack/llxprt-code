@@ -197,6 +197,24 @@ describe('BrowserProfileAssociationStore', () => {
       expect(store.getAssociation('anthropic', 'default')).toBeUndefined();
       expect(store.listAssociations('anthropic')).toStrictEqual([]);
     });
+
+    it('rejects persisted data missing the required version field', () => {
+      const fs = createInMemoryFs({
+        '/fake/path/oauth-browser-profiles.json': JSON.stringify({
+          associations: {
+            'anthropic:default': {
+              browser: 'chrome',
+              profileDirectory: 'Default',
+            },
+          },
+        }),
+      });
+      const store = createStore(fs);
+
+      // Without a numeric version the file does not satisfy the schema and
+      // must be treated as empty rather than partially consumed.
+      expect(store.getAssociation('anthropic', 'default')).toBeUndefined();
+    });
   });
 
   describe('immutability', () => {

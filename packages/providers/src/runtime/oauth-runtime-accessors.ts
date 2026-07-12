@@ -65,7 +65,7 @@ export function buildOAuthRuntimeAccessors(): OAuthRuntimeAccessors {
       }
     },
 
-    getBrowserProfileAssociation: (provider, bucket) => {
+    getBrowserProfileAssociation: (provider: string, bucket?: string) => {
       try {
         const store = getBrowserProfileAssociationStore();
         return store.getAssociation(provider, bucket);

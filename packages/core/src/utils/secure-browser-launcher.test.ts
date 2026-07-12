@@ -484,5 +484,29 @@ describe('secure-browser-launcher', () => {
       const args = mockExecFile.mock.calls[0][1] as string[];
       expect(args).not.toContain('--args');
     });
+
+    it('falls back to an alternate Chrome binary when google-chrome is missing on Linux', async () => {
+      setPlatform('linux');
+      // google-chrome fails, then google-chrome-stable fails; chromium
+      // succeeds — proving the fallback chain is walked in order.
+      mockExecFile
+        .mockRejectedValueOnce(new Error('not found'))
+        .mockRejectedValueOnce(new Error('not found'))
+        .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+      await openBrowserSecurely('https://example.com', {
+        browser: 'chrome',
+        profileDirectory: 'Default',
+      });
+
+      const calls = mockExecFile.mock.calls;
+      expect(calls[0][0]).toBe('google-chrome');
+      expect(calls[1][0]).toBe('google-chrome-stable');
+      expect(calls[2][0]).toBe('chromium');
+      expect(calls[2][1]).toStrictEqual([
+        '--profile-directory=Default',
+        'https://example.com',
+      ]);
+    });
   });
 });

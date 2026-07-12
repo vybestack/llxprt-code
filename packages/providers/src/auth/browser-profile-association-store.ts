@@ -80,6 +80,9 @@ function isAssociationFileData(value: unknown): value is AssociationFileData {
     return false;
   }
   const record = value as Record<string, unknown>;
+  if (typeof record.version !== 'number') {
+    return false;
+  }
   const associations = record.associations;
   if (typeof associations !== 'object' || associations === null) {
     return false;
