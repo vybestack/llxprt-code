@@ -12,8 +12,24 @@ import {
   type Profile,
   type ProfileManager,
 } from '@vybestack/llxprt-code-settings';
+import {
+  resolveRuntimeProfile,
+  buildActivationCliOverrides,
+  type RuntimeProfileResolution,
+} from './subagentProfileResolution.js';
+import {
+  getNumberSetting,
+  getStringSetting,
+} from './subagentSettingsAccess.js';
+import {
+  createSettingsSnapshot,
+  normalizeDefaultToolSet,
+  populatePostActivationSettings,
+  populatePreActivationSettings,
+} from './subagentSettingsPopulation.js';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import { SubAgentScope } from './subagent.js';
+import type { SubAgentScope as SubAgentScopeInstance } from './subagent.js';
 import type {
   ModelConfig,
   PromptConfig,
@@ -21,9 +37,7 @@ import type {
   ToolConfig,
   OutputConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import fs from 'node:fs';
-import path from 'node:path';
-import { homedir } from 'node:os';
+
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
@@ -45,7 +59,17 @@ import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/co
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
-import { canonicalizeToolName } from './toolGovernance.js';
+import {
+  createIsolatedRuntimeContext,
+  runWithRuntimeScope,
+  type IsolatedRuntimeContextHandle,
+} from '@vybestack/llxprt-code-providers/runtime.js';
+import { applyProfileWithGuards } from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
+import { registerProvidersOntoManager } from '../api/createAgent.js';
+import { executeProviderActivation } from '../api/providerActivationExecutor.js';
+import { AggregateDisposeError } from '../api/disposeErrors.js';
+
+const LOAD_BALANCER_PROVIDER_NAME = 'load-balancer';
 
 type RuntimeLoader = (
   options: AgentRuntimeLoaderOptions,
@@ -53,15 +77,13 @@ type RuntimeLoader = (
 
 type ScopeFactory = typeof SubAgentScope.create;
 
-type RuntimeProfileResolution = {
-  effectiveProfile: Profile;
-};
-
 const createAbortError = (message: string): Error => {
   const error = new Error(message);
   error.name = 'AbortError';
   return error;
 };
+
+export const DEFAULT_DISABLED_TOOLS = [] as const;
 
 export interface SubagentLaunchRequest {
   name: string;
@@ -107,6 +129,9 @@ export class SubagentOrchestrator {
   private readonly runtimeLoader: RuntimeLoader;
   private readonly scopeFactory: ScopeFactory;
   private readonly idFactory: () => string;
+  private readonly defaultDisabledTools = normalizeDefaultToolSet(
+    DEFAULT_DISABLED_TOOLS,
+  );
 
   constructor(private readonly options: SubagentOrchestratorOptions) {
     this.runtimeLoader = options.runtimeLoader ?? loadAgentRuntime;
@@ -118,17 +143,22 @@ export class SubagentOrchestrator {
   private buildScopeDispose(
     scope: SubAgentScope,
     runtimeResult: AgentRuntimeLoaderResult,
+    isolatedHandle: IsolatedRuntimeContextHandle,
   ): () => Promise<void> {
     return async () => {
-      if (typeof scope.dispose === 'function') {
-        scope.dispose();
-      }
-
       const history = firstDefinedHistory(
         runtimeResult.history,
         scope.runtimeContext.history,
       );
-      disposeHistoryLike(history);
+      await runCleanupSteps([
+        () => {
+          if (typeof scope.dispose === 'function') {
+            scope.dispose();
+          }
+        },
+        () => disposeHistoryLike(history),
+        () => isolatedHandle.cleanup(),
+      ]);
     };
   }
 
@@ -180,7 +210,10 @@ export class SubagentOrchestrator {
       signal,
       'Subagent launch aborted while loading profile.',
     );
-    const runtimeProfile = await this.resolveRuntimeProfile(profile);
+    const runtimeProfile = await resolveRuntimeProfile(
+      profile,
+      this.options.profileManager,
+    );
     this.throwIfAborted(
       signal,
       'Subagent launch aborted while resolving runtime profile.',
@@ -190,7 +223,9 @@ export class SubagentOrchestrator {
       subagent.systemPrompt,
       request.behaviourPrompts,
     );
-    const modelConfig = this.buildModelConfig(runtimeProfile.effectiveProfile);
+    const modelConfig = this.buildModelConfig(
+      SubagentOrchestrator.getRuntimeStateProfile(runtimeProfile),
+    );
     const runConfig = this.buildRunConfig(profile, request.runConfig);
     this.throwIfAborted(
       signal,
@@ -198,40 +233,99 @@ export class SubagentOrchestrator {
     );
 
     const agentRuntimeId = this.createRuntimeId(subagent.name);
-    const runtimeResult = await this.createRuntimeBundle(
+    const { runtimeResult, isolatedHandle } = await this.createRuntimeBundle(
       { subagent, runtimeProfile, modelConfig, agentRuntimeId },
       signal,
     );
-    this.throwIfAborted(
-      signal,
-      'Subagent launch aborted after runtime assembly completed.',
-    );
 
-    const scope = await this.createScopeWithEnvironment(
-      subagent,
-      promptConfig,
-      modelConfig,
-      runConfig,
-      request,
-      runtimeResult,
-      signal,
-    );
-    this.throwIfAborted(signal, 'Subagent launch aborted before completion.');
+    let scope: SubAgentScopeInstance | undefined;
+    try {
+      this.throwIfAborted(
+        signal,
+        'Subagent launch aborted after runtime assembly completed.',
+      );
 
-    const agentId =
-      typeof scope.getAgentId === 'function'
-        ? scope.getAgentId()
-        : `${subagent.name}-${agentRuntimeId}`;
+      scope = await this.createScopeWithEnvironment(
+        subagent,
+        promptConfig,
+        modelConfig,
+        runConfig,
+        request,
+        runtimeResult,
+        signal,
+      );
+      this.throwIfAborted(signal, 'Subagent launch aborted before completion.');
 
-    return {
-      agentId,
-      scope,
-      prompt: promptConfig,
-      profile,
-      config: subagent,
-      runtime: runtimeResult,
-      dispose: this.buildScopeDispose(scope, runtimeResult),
-    };
+      const agentId =
+        typeof scope.getAgentId === 'function'
+          ? scope.getAgentId()
+          : `${subagent.name}-${agentRuntimeId}`;
+
+      return {
+        agentId,
+        scope,
+        prompt: promptConfig,
+        profile,
+        config: subagent,
+        runtime: runtimeResult,
+        dispose: this.buildScopeDispose(scope, runtimeResult, isolatedHandle),
+      };
+    } catch (error) {
+      await this.cleanupAfterLaunchFailure(
+        scope,
+        runtimeResult,
+        isolatedHandle,
+      );
+      throw error;
+    }
+  }
+
+  private async cleanupAfterLaunchFailure(
+    scope: SubAgentScopeInstance | undefined,
+    runtimeResult: AgentRuntimeLoaderResult,
+    isolatedHandle: IsolatedRuntimeContextHandle,
+  ): Promise<void> {
+    try {
+      if (scope !== undefined) {
+        await this.buildScopeDispose(scope, runtimeResult, isolatedHandle)();
+      } else {
+        await this.cleanupRuntimeArtifacts(runtimeResult, isolatedHandle);
+      }
+    } catch (disposeError) {
+      debugLogger.warn(
+        `SubagentOrchestrator: cleanup after launch failure also failed: ${
+          disposeError instanceof Error
+            ? disposeError.message
+            : String(disposeError)
+        }`,
+      );
+    }
+  }
+
+  private async cleanupRuntimeArtifacts(
+    runtimeResult: AgentRuntimeLoaderResult,
+    isolatedHandle: IsolatedRuntimeContextHandle,
+  ): Promise<void> {
+    await runCleanupSteps([
+      () => disposeHistoryLike(runtimeResult.history),
+      () => isolatedHandle.cleanup(),
+    ]);
+  }
+
+  private async cleanupIsolatedHandleAfterFailure(
+    isolatedHandle: IsolatedRuntimeContextHandle,
+  ): Promise<void> {
+    try {
+      await isolatedHandle.cleanup();
+    } catch (cleanupError) {
+      debugLogger.warn(
+        `SubagentOrchestrator: isolated runtime cleanup failed: ${
+          cleanupError instanceof Error
+            ? cleanupError.message
+            : String(cleanupError)
+        }`,
+      );
+    }
   }
 
   private throwIfAborted(signal: AbortSignal | undefined, message: string) {
@@ -303,8 +397,35 @@ export class SubagentOrchestrator {
     };
   }
 
+  private static getActivationProfile(
+    runtimeProfile: RuntimeProfileResolution,
+  ): Profile {
+    return isLoadBalancerProfile(runtimeProfile.effectiveProfile)
+      ? runtimeProfile.effectiveProfile
+      : runtimeProfile.primaryProfile;
+  }
+
+  private static getRuntimeStateProfile(
+    runtimeProfile: RuntimeProfileResolution,
+  ): Profile {
+    if (!isLoadBalancerProfile(runtimeProfile.effectiveProfile)) {
+      return runtimeProfile.primaryProfile;
+    }
+    // Keep load-balancer profile metadata/settings while stamping runtime
+    // provider/model to the registered load-balancer provider identity.
+    return {
+      ...runtimeProfile.effectiveProfile,
+      ephemeralSettings: {
+        ...runtimeProfile.effectiveProfile.ephemeralSettings,
+      },
+      modelParams: { ...runtimeProfile.effectiveProfile.modelParams },
+      provider: LOAD_BALANCER_PROVIDER_NAME,
+      model: LOAD_BALANCER_PROVIDER_NAME,
+    };
+  }
+
   private buildRunConfig(profile: Profile, custom?: RunConfig): RunConfig {
-    const profileMaxTime = this.getNumberSetting(profile.ephemeralSettings, [
+    const profileMaxTime = getNumberSetting(profile.ephemeralSettings, [
       'subagent.max_time_minutes',
       'max_time_minutes',
     ]);
@@ -314,7 +435,7 @@ export class SubagentOrchestrator {
         custom?.max_time_minutes ?? profileMaxTime ?? Number.POSITIVE_INFINITY,
     };
 
-    const profileMaxTurns = this.getNumberSetting(profile.ephemeralSettings, [
+    const profileMaxTurns = getNumberSetting(profile.ephemeralSettings, [
       'maxTurnsPerPrompt',
     ]);
 
@@ -353,31 +474,6 @@ export class SubagentOrchestrator {
     return undefined;
   }
 
-  private async resolveRuntimeProfile(
-    profile: Profile,
-  ): Promise<RuntimeProfileResolution> {
-    if (!isLoadBalancerProfile(profile)) {
-      return { effectiveProfile: profile };
-    }
-
-    const firstProfileName = profile.profiles[0];
-    if (!firstProfileName) {
-      throw new Error(
-        'Load balancer subagent profile must reference a profile.',
-      );
-    }
-
-    const effectiveProfile =
-      await this.options.profileManager.loadProfile(firstProfileName);
-    if (isLoadBalancerProfile(effectiveProfile)) {
-      throw new Error(
-        `Load balancer subagent profile cannot use nested load balancer profile '${firstProfileName}'.`,
-      );
-    }
-
-    return { effectiveProfile };
-  }
-
   private baseSessionId(): string {
     const { foregroundConfig } = this.options;
     if (typeof foregroundConfig.getSessionId === 'function') {
@@ -398,10 +494,8 @@ export class SubagentOrchestrator {
     profile: Profile,
     modelConfig: ModelConfig,
   ): ContentGeneratorConfig {
-    const authKey = this.getStringSetting(profile.ephemeralSettings, [
-      'auth-key',
-    ]);
-    const proxy = this.getStringSetting(profile.ephemeralSettings, [
+    const authKey = getStringSetting(profile.ephemeralSettings, ['auth-key']);
+    const proxy = getStringSetting(profile.ephemeralSettings, [
       'proxy',
       'proxy-url',
     ]);
@@ -413,290 +507,20 @@ export class SubagentOrchestrator {
     };
   }
 
-  private createSettingsSnapshot(profile: Profile): ReadonlySettingsSnapshot {
-    const allowed = this.getStringArraySetting(profile.ephemeralSettings, [
-      'tools.allowed',
-      'tools_allowed',
-    ]);
-    const disabled = this.dedupeDisabledTools(
-      this.getStringArraySetting(profile.ephemeralSettings, [
-        'tools.disabled',
-        'disabled-tools',
-      ]),
-    );
-
-    return {
-      compressionThreshold: this.getNumberSetting(profile.ephemeralSettings, [
-        'compression-threshold',
-      ]),
-      contextLimit: this.getNumberSetting(profile.ephemeralSettings, [
-        'context-limit',
-      ]),
-      preserveThreshold: this.getNumberSetting(profile.ephemeralSettings, [
-        'compression-preserve-threshold',
-      ]),
-      toolFormatOverride: this.getStringSetting(profile.ephemeralSettings, [
-        'tool-format',
-      ]),
-      tools: {
-        allowed,
-        disabled,
-      },
-    };
-  }
-
-  private populateProviderSettings(
-    service: SettingsService,
-    provider: string,
-    profile: Profile,
-  ): void {
-    const temperature = profile.modelParams.temperature;
-    if (typeof temperature === 'number') {
-      service.set(`providers.${provider}.temperature`, temperature);
-    }
-
-    const maxTokens = profile.modelParams.max_tokens;
-    if (typeof maxTokens === 'number') {
-      service.set(`providers.${provider}.maxTokens`, maxTokens);
-    }
-
-    const baseUrl = this.getStringSetting(profile.ephemeralSettings, [
-      'base-url',
-    ]);
-    if (baseUrl) {
-      service.set(`providers.${provider}.base-url`, baseUrl);
-    } else {
-      service.set(`providers.${provider}.base-url`, undefined);
-    }
-  }
-
-  private populateAuthSettings(
-    service: SettingsService,
-    provider: string,
-    profile: Profile,
-  ): void {
-    const authKey = this.getStringSetting(profile.ephemeralSettings, [
-      'auth-key',
-    ]);
-    if (authKey) {
-      service.set('auth-key', authKey);
-      service.set(`providers.${provider}.auth-key`, authKey);
-    }
-    const authKeyName = this.getStringSetting(profile.ephemeralSettings, [
-      'auth-key-name',
-    ]);
-    if (authKeyName) {
-      service.set('auth-key-name', authKeyName);
-    }
-
-    const authKeyfile = this.getStringSetting(profile.ephemeralSettings, [
-      'auth-keyfile',
-    ]);
-    if (authKeyfile) {
-      const expandedKeyfile = authKeyfile.replace(/^~(?=$|[\\/])/, homedir());
-      service.set('auth-keyfile', expandedKeyfile);
-      service.set(`providers.${provider}.auth-keyfile`, expandedKeyfile);
-      const authKey = service.get(`providers.${provider}.auth-key`);
-      const isNullOrUndefined = authKey === undefined || authKey === null;
-      const isEmptyPrimitive =
-        authKey === '' || authKey === false || authKey === 0;
-      const isNumericNaN = typeof authKey === 'number' && Number.isNaN(authKey);
-      const shouldLoadApiKeyfile =
-        isNullOrUndefined || isEmptyPrimitive || isNumericNaN;
-      if (shouldLoadApiKeyfile) {
-        this.tryLoadApiKeyFromKeyfile(provider, expandedKeyfile, service);
-      }
-    }
-  }
-
-  private tryLoadApiKeyFromKeyfile(
-    provider: string,
-    expandedKeyfile: string,
-    service: SettingsService,
-  ): void {
-    try {
-      const resolvedPath = path.resolve(expandedKeyfile);
-      if (fs.existsSync(resolvedPath)) {
-        const content = fs.readFileSync(resolvedPath, 'utf8').trim();
-        if (content !== '') {
-          service.set(`providers.${provider}.auth-key`, content);
-        }
-      }
-    } catch (error) {
-      debugLogger.warn(
-        `SubagentOrchestrator: unable to read auth key file '${expandedKeyfile}': ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  }
-
-  private populateCompressionSettings(
-    service: SettingsService,
-    profile: Profile,
-  ): void {
-    const contextLimit = this.getNumberSetting(profile.ephemeralSettings, [
-      'context-limit',
-    ]);
-    if (contextLimit !== undefined) {
-      service.set('context-limit', contextLimit);
-    }
-
-    const compressionThreshold = this.getNumberSetting(
-      profile.ephemeralSettings,
-      ['compression-threshold'],
-    );
-    if (compressionThreshold !== undefined) {
-      service.set('compression-threshold', compressionThreshold);
-    }
-
-    const preserveThreshold = this.getNumberSetting(profile.ephemeralSettings, [
-      'compression-preserve-threshold',
-    ]);
-    if (preserveThreshold !== undefined) {
-      service.set('compression-preserve-threshold', preserveThreshold);
-    }
-  }
-
-  private populateToolAndMiscSettings(
-    service: SettingsService,
-    profile: Profile,
-  ): void {
-    const toolFormat = this.getStringSetting(profile.ephemeralSettings, [
-      'tool-format',
-    ]);
-    if (toolFormat) {
-      service.set('tool-format-override', toolFormat);
-    }
-
-    const allowed = this.getStringArraySetting(profile.ephemeralSettings, [
-      'tools.allowed',
-      'tools_allowed',
-    ]);
-    if (allowed) {
-      service.set('tools.allowed', allowed);
-    }
-
-    const disabled = this.dedupeDisabledTools(
-      this.getStringArraySetting(profile.ephemeralSettings, [
-        'tools.disabled',
-        'disabled-tools',
-      ]),
-    );
-    if (disabled) {
-      service.set('tools.disabled', disabled);
-    }
-
-    const userAgent = this.getStringSetting(profile.ephemeralSettings, [
-      'user-agent',
-    ]);
-    if (userAgent) {
-      service.set('user-agent', userAgent);
-    }
-  }
-
-  private populateSettingsService(
-    service: SettingsService,
-    profile: Profile,
-    profileName: string,
-  ): void {
-    const provider = profile.provider;
-    service.setCurrentProfileName(profileName);
-    service.set('activeProvider', provider);
-    service.set(`providers.${provider}.model`, profile.model);
-    this.populateProviderSettings(service, provider, profile);
-    this.populateAuthSettings(service, provider, profile);
-    this.populateCompressionSettings(service, profile);
-    this.populateToolAndMiscSettings(service, profile);
-  }
-
-  private getNumberSetting(
-    settings: Profile['ephemeralSettings'],
-    keys: string[],
-  ): number | undefined {
-    for (const key of keys) {
-      const value = this.getSetting(settings, key);
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        return value;
-      }
-      if (typeof value === 'string' && value.trim().length > 0) {
-        const parsed = Number(value);
-        if (Number.isFinite(parsed)) {
-          return parsed;
-        }
-      }
-    }
-    return undefined;
-  }
-
-  private getStringSetting(
-    settings: Profile['ephemeralSettings'],
-    keys: string[],
-  ): string | undefined {
-    for (const key of keys) {
-      const value = this.getSetting(settings, key);
-      if (typeof value === 'string' && value.trim().length > 0) {
-        return value;
-      }
-    }
-    return undefined;
-  }
-
-  private getStringArraySetting(
-    settings: Profile['ephemeralSettings'],
-    keys: string[],
-  ): string[] | undefined {
-    for (const key of keys) {
-      const value = this.getSetting(settings, key);
-      if (Array.isArray(value)) {
-        return value.map(String);
-      }
-    }
-    return undefined;
-  }
-
-  private getSetting(
-    settings: Profile['ephemeralSettings'],
-    key: string,
-  ): unknown {
-    return (settings as Record<string, unknown>)[key];
-  }
-
-  private dedupeDisabledTools(
-    disabled: string[] | undefined,
-  ): string[] | undefined {
-    const disabledSource = Array.isArray(disabled) ? disabled : [];
-
-    const merged: string[] = [];
-    const seen = new Set<string>();
-    for (const toolName of disabledSource) {
-      const canonical = canonicalizeToolName(toolName);
-      if (!canonical || seen.has(canonical)) {
-        continue;
-      }
-      seen.add(canonical);
-      merged.push(canonical);
-    }
-
-    return merged.length > 0 ? merged : undefined;
-  }
-
   private createRuntimeState(
     profile: Profile,
     modelConfig: ModelConfig,
     agentRuntimeId: string,
   ): AgentRuntimeState {
     const sessionId = `${this.baseSessionId()}::${agentRuntimeId}`;
-    const baseUrl = this.getStringSetting(profile.ephemeralSettings, [
-      'base-url',
-    ]);
+    const baseUrl = getStringSetting(profile.ephemeralSettings, ['base-url']);
 
     return createAgentRuntimeState({
       runtimeId: agentRuntimeId,
       provider: profile.provider,
       model: modelConfig.model,
       baseUrl,
-      proxyUrl: this.getStringSetting(profile.ephemeralSettings, [
+      proxyUrl: getStringSetting(profile.ephemeralSettings, [
         'proxy',
         'proxy-url',
       ]),
@@ -717,69 +541,254 @@ export class SubagentOrchestrator {
       agentRuntimeId: string;
     },
     signal?: AbortSignal,
-  ): Promise<AgentRuntimeLoaderResult> {
+  ): Promise<{
+    runtimeResult: AgentRuntimeLoaderResult;
+    isolatedHandle: IsolatedRuntimeContextHandle;
+  }> {
     const { runtimeProfile, modelConfig, agentRuntimeId, subagent } = params;
     const { effectiveProfile } = runtimeProfile;
+    const activationProfile =
+      SubagentOrchestrator.getActivationProfile(runtimeProfile);
+    const runtimeStateProfile =
+      SubagentOrchestrator.getRuntimeStateProfile(runtimeProfile);
+    const isLoadBalancerActivation = isLoadBalancerProfile(activationProfile);
 
     this.throwIfAborted(
       signal,
       'Subagent launch aborted before runtime state.',
     );
     const runtimeState = this.createRuntimeState(
-      effectiveProfile,
+      runtimeStateProfile,
       modelConfig,
       agentRuntimeId,
     );
     const settingsService = createRuntimeSettingsService();
-    this.populateSettingsService(
-      settingsService,
-      effectiveProfile,
-      subagent.profile,
-    );
-
-    const providerRuntime: ProviderRuntimeContext =
-      createSettingsProviderRuntimeContext({
+    if (!isLoadBalancerActivation) {
+      populatePreActivationSettings(
         settingsService,
-        config: this.options.foregroundConfig,
-        runtimeId: agentRuntimeId,
-        metadata: {
-          source: 'SubagentOrchestrator',
-          subagent: subagent.name,
-        },
-      });
-
-    const settingsSnapshot = this.createSettingsSnapshot(effectiveProfile);
-    const contentGeneratorConfig = this.buildContentGeneratorConfig(
-      effectiveProfile,
-      modelConfig,
-    );
-    const providerManager =
-      typeof this.options.foregroundConfig.getProviderManager === 'function'
-        ? this.options.foregroundConfig.getProviderManager()
-        : undefined;
-    if (providerManager) {
-      contentGeneratorConfig.providerManager = providerManager;
+        runtimeStateProfile,
+        subagent.profile,
+      );
+    } else {
+      settingsService.setCurrentProfileName(subagent.profile);
+      settingsService.set('activeProvider', LOAD_BALANCER_PROVIDER_NAME);
+      settingsService.set(
+        `providers.${LOAD_BALANCER_PROVIDER_NAME}.model`,
+        LOAD_BALANCER_PROVIDER_NAME,
+      );
     }
 
+    const isolatedHandle = await this.createIsolatedRuntime(
+      settingsService,
+      activationProfile,
+      runtimeStateProfile,
+      subagent.profile,
+      subagent.name,
+      agentRuntimeId,
+      isLoadBalancerActivation,
+    );
+
+    try {
+      const runtimeResult = await this.loadRuntimeInIsolatedScope({
+        subagentName: subagent.name,
+        isolatedHandle,
+        runtimeState,
+        runtimeStateProfile,
+        effectiveProfile,
+        modelConfig,
+        signal,
+      });
+      return { runtimeResult, isolatedHandle };
+    } catch (error) {
+      await this.cleanupIsolatedHandleAfterFailure(isolatedHandle);
+      throw error;
+    }
+  }
+
+  private async loadRuntimeInIsolatedScope(params: {
+    subagentName: string;
+    isolatedHandle: IsolatedRuntimeContextHandle;
+    runtimeState: AgentRuntimeState;
+    runtimeStateProfile: Profile;
+    effectiveProfile: Profile;
+    modelConfig: ModelConfig;
+    signal?: AbortSignal;
+  }): Promise<AgentRuntimeLoaderResult> {
+    const providerRuntime = createSettingsProviderRuntimeContext({
+      settingsService: params.isolatedHandle.settingsService,
+      config: params.isolatedHandle.config,
+      runtimeId: params.isolatedHandle.runtimeId,
+      metadata: {
+        source: 'SubagentOrchestrator',
+        subagent: params.subagentName,
+      },
+    });
+    const settingsSnapshot = createSettingsSnapshot(
+      params.effectiveProfile,
+      this.defaultDisabledTools,
+    );
+    const contentGeneratorConfig = this.buildContentGeneratorConfig(
+      params.runtimeStateProfile,
+      params.modelConfig,
+    );
+    contentGeneratorConfig.providerManager =
+      params.isolatedHandle.providerManager;
+    const loaderOptions = this.buildRuntimeLoaderOptions({
+      isolatedHandle: params.isolatedHandle,
+      runtimeState: params.runtimeState,
+      settingsSnapshot,
+      providerRuntime,
+      contentGeneratorConfig,
+      signal: params.signal,
+    });
+    return runWithRuntimeScope(
+      {
+        runtimeId: params.isolatedHandle.runtimeId,
+        metadata: params.isolatedHandle.metadata,
+      },
+      () => this.runtimeLoader(loaderOptions),
+    );
+  }
+
+  private buildRuntimeLoaderOptions(params: {
+    isolatedHandle: IsolatedRuntimeContextHandle;
+    runtimeState: AgentRuntimeState;
+    settingsSnapshot: ReadonlySettingsSnapshot;
+    providerRuntime: ProviderRuntimeContext;
+    contentGeneratorConfig: ContentGeneratorConfig;
+    signal?: AbortSignal;
+  }): AgentRuntimeLoaderOptions {
     const toolRegistry: ToolRegistry | undefined =
       typeof this.options.foregroundConfig.getToolRegistry === 'function'
         ? this.options.foregroundConfig.getToolRegistry()
         : undefined;
 
-    const loaderOptions: AgentRuntimeLoaderOptions = {
+    return {
       profile: {
-        config: this.options.foregroundConfig,
-        state: runtimeState,
-        settings: settingsSnapshot,
-        providerRuntime,
-        contentGeneratorConfig,
+        config: params.isolatedHandle.config,
+        state: params.runtimeState,
+        settings: params.settingsSnapshot,
+        providerRuntime: params.providerRuntime,
+        contentGeneratorConfig: params.contentGeneratorConfig,
         toolRegistry,
-        providerManager,
+        providerManager: params.isolatedHandle.providerManager,
       },
-      signal,
+      signal: params.signal,
     };
+  }
 
-    return this.runtimeLoader(loaderOptions);
+  /**
+   * Builds, registers providers onto, activates, and runs provider
+   * activation for an isolated runtime so the subagent uses its OWN provider
+   * instead of the parent's active provider (Issue #2410).
+   */
+  private async createIsolatedRuntime(
+    settingsService: SettingsService,
+    activationProfile: Profile,
+    runtimeStateProfile: Profile,
+    profileName: string,
+    subagentName: string,
+    agentRuntimeId: string,
+    isLoadBalancerActivation: boolean,
+  ): Promise<IsolatedRuntimeContextHandle> {
+    // Do NOT pass the foreground config — the isolated runtime must get its
+    // own Config so activation operates on the subagent's provider, not the
+    // parent's (Issue #2410). Load-balancer profiles intentionally activate via
+    // the foreground profile-application path inside this isolated runtime so
+    // the real load-balancer provider is registered and selected.
+    const handle = createIsolatedRuntimeContext({
+      runtimeId: agentRuntimeId,
+      settingsService,
+      profileManager: this.options.profileManager,
+      messageBus: this.options.messageBus,
+      model: activationProfile.model,
+      metadata: {
+        source: 'SubagentOrchestrator',
+        subagent: subagentName,
+      },
+      prepare: (context) => {
+        registerProvidersOntoManager(
+          context.providerManager,
+          {
+            settingsService: context.settingsService,
+            runtimeId: context.runtimeId,
+            metadata: context.metadata,
+          },
+          context.config,
+        );
+      },
+    });
+
+    try {
+      await handle.activate();
+
+      // Run provider activation INSIDE the isolated runtime's async scope.
+      // executeProviderActivation -> switchActiveProvider resolves the active
+      // runtime from AsyncLocalStorage (resolveActiveRuntimeIdentity). Because
+      // handle.activate() binds the scope via enterWith (a persistent, NOT
+      // callback-scoped mutation), two subagents launched in parallel (the task
+      // tool runs tool calls via Promise.all) would clobber each other's
+      // ambient scope, so one subagent would activate against the other's
+      // runtime and hang. Wrapping the activation in runWithRuntimeScope pins it
+      // to THIS subagent's runtime deterministically, regardless of interleaving
+      // (Issue #2410 — parallel subagents).
+      await runWithRuntimeScope(
+        { runtimeId: handle.runtimeId, metadata: handle.metadata },
+        async () => {
+          if (isLoadBalancerActivation) {
+            // applyProfileWithGuards reads getCliRuntimeServices(), which is
+            // scoped by runWithRuntimeScope above to this isolated runtime id.
+            await applyProfileWithGuards(activationProfile, {
+              profileName,
+              profileManager: this.options.profileManager,
+            });
+          } else {
+            await executeProviderActivation(handle.config, {
+              provider: activationProfile.provider,
+              model: activationProfile.model,
+              modelParams: activationProfile.modelParams,
+              // Carry the profile's credential/endpoint ephemerals into the
+              // activation so the isolated provider talks to the RIGHT endpoint
+              // with the RIGHT key. Without base-url, a profile like zai
+              // (provider 'anthropic', base-url https://api.z.ai/api/anthropic)
+              // would fall back to the provider default (api.anthropic.com) and
+              // its z.ai key would never authenticate — the request stalls until
+              // the 5-minute first-response timeout and the subagent returns an
+              // empty result. auth-key-name/auth-keyfile are resolved the same
+              // way the CLI bootstrap applies them (Issue #2410).
+              cliOverrides: buildActivationCliOverrides(activationProfile),
+            });
+          }
+          populatePostActivationSettings(
+            settingsService,
+            runtimeStateProfile,
+            profileName,
+            this.defaultDisabledTools,
+          );
+        },
+      );
+    } catch (error) {
+      await handle.cleanup();
+      throw error;
+    }
+
+    return handle;
+  }
+}
+
+async function runCleanupSteps(
+  steps: ReadonlyArray<() => unknown | Promise<unknown>>,
+): Promise<void> {
+  const errors: unknown[] = [];
+  for (const step of steps) {
+    try {
+      await step();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) {
+    throw new AggregateDisposeError(errors);
   }
 }
 

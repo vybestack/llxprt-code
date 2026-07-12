@@ -12,7 +12,7 @@ import {
   createTestOAuthManager,
   createBucketFailoverHandler,
 } from './test-utils.js';
-import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
+import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
 
 const PROVIDER = 'anthropic';
 

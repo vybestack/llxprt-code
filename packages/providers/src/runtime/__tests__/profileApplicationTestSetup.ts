@@ -168,6 +168,11 @@ export const providerManagerStub = {
   },
   registerProvider(provider: { name: string }) {
     this.providerLookup.set(provider.name, provider);
+    // Mirror the real ProviderManager: listProviders() reflects every
+    // registered provider, so registration must update the available list.
+    if (!this.available.includes(provider.name)) {
+      this.available.push(provider.name);
+    }
   },
 };
 export const isCliStatelessProviderModeEnabledMock = vi

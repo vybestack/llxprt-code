@@ -34,13 +34,8 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import { convertIContentToResponse } from './MessageConverter.js';
 import { logApiResponse, logApiError } from './turnLogging.js';
-import {
-  EmptyStreamError,
-  isSchemaDepthError,
-} from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { ResponseOutcome } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
-import { hasCycleInSchema } from '@vybestack/llxprt-code-tools';
-import { isStructuredError } from '@vybestack/llxprt-code-core/utils/quotaErrorDetection.js';
 import {
   AgentExecutionStoppedError,
   AgentExecutionBlockedError,
@@ -77,6 +72,8 @@ import {
   extractResponseText,
   validateStreamCompletion,
   recordHistoryWithUsage,
+  prepareHistoryUserInput,
+  clearMatchedEagerToolResponseCallIds,
   trackPromptTokens,
   isMissingFinishReason,
   type StreamAccumulator,
@@ -109,6 +106,7 @@ interface BeforeModelHookFireResult {
 
 export class StreamProcessor {
   private logger = new DebugLogger('llxprt:gemini:stream-processor');
+  private eagerlyRecordedToolResponseCallIds = new Set<string>();
 
   constructor(
     private readonly runtimeContext: AgentRuntimeContext,
@@ -122,6 +120,14 @@ export class StreamProcessor {
     private readonly historyService: HistoryService,
     private readonly generationConfig: GenerateContentConfig,
   ) {}
+
+  markToolResponsesRecorded(callIds: readonly string[]): void {
+    for (const callId of callIds) {
+      if (typeof callId === 'string' && callId.length > 0) {
+        this.eagerlyRecordedToolResponseCallIds.add(callId);
+      }
+    }
+  }
 
   /** Resolves the provider, sends the request with retry, and returns a response stream. */
   async makeApiCallAndProcessStream(
@@ -878,46 +884,27 @@ export class StreamProcessor {
     consolidatedParts: Part[],
     allChunks: GenerateContentResponse[],
   ): Promise<void> {
-    await recordHistoryWithUsage({
+    const preparedHistoryUserInput = prepareHistoryUserInput(
       userInput,
-      consolidatedParts,
-      allChunks,
-      conversationManager: this.conversationManager,
-      historyService: this.historyService,
-      compressionHandler: this.compressionHandler,
-      logger: this.logger,
-    });
-  }
+      this.eagerlyRecordedToolResponseCallIds,
+    );
 
-  /**
-   * Enrich schema depth errors with diagnostic information.
-   * Adapted from maybeIncludeSchemaDepthContext in chatSession.ts.
-   */
-  _enrichSchemaDepthError(error: unknown): void {
-    // Check for potentially problematic cyclic tools with cyclic schemas
-    // and include a recommendation to remove potentially problematic tools.
-    if (isStructuredError(error) && isSchemaDepthError(error.message)) {
-      const toolNames = this.runtimeContext.tools.listToolNames();
-      const cyclicSchemaTools: string[] = [];
-
-      // Check each tool's metadata for cyclic schemas
-      for (const toolName of toolNames) {
-        const metadata = this.runtimeContext.tools.getToolMetadata(toolName);
-        if (
-          metadata?.parameterSchema &&
-          hasCycleInSchema(metadata.parameterSchema)
-        ) {
-          cyclicSchemaTools.push(toolName);
-        }
-      }
-
-      if (cyclicSchemaTools.length > 0) {
-        const extraDetails =
-          `\n\nThis error was probably caused by cyclic schema references in one of the following tools, try disabling them:\n\n - ` +
-          cyclicSchemaTools.join(`\n - `) +
-          `\n`;
-        error.message += extraDetails;
-      }
+    try {
+      await recordHistoryWithUsage({
+        userInput: preparedHistoryUserInput.historyUserInput,
+        consolidatedParts,
+        allChunks,
+        conversationManager: this.conversationManager,
+        historyService: this.historyService,
+        compressionHandler: this.compressionHandler,
+        logger: this.logger,
+        userInputFlags: preparedHistoryUserInput.userInputFlags,
+      });
+    } finally {
+      clearMatchedEagerToolResponseCallIds(
+        preparedHistoryUserInput.filteredResults,
+        this.eagerlyRecordedToolResponseCallIds,
+      );
     }
   }
 }

@@ -22,16 +22,21 @@ import { ClipboardService } from './ClipboardService.js';
 import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 
 // Mock the device flow implementation
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
-  return {
-    ...actual,
-    // Mock shouldLaunchBrowser to return true for tests
-    shouldLaunchBrowser: vi.fn().mockReturnValue(true),
-    // Mock openBrowserSecurely to prevent actual browser opening
-    openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
-  };
-});
+vi.mock(
+  '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js',
+  async () => {
+    const actual = await vi.importActual(
+      '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js',
+    );
+    return {
+      ...actual,
+      // Mock shouldLaunchBrowser to return true for tests
+      shouldLaunchBrowser: vi.fn().mockReturnValue(true),
+      // Mock openBrowserSecurely to prevent actual browser opening
+      openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
+    };
+  },
+);
 
 vi.mock('@vybestack/llxprt-code-auth', async () => {
   const actual = await vi.importActual('@vybestack/llxprt-code-auth');

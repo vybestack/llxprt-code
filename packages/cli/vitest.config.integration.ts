@@ -12,6 +12,7 @@ export default defineConfig({
     include: ['src/providers/integration/**/*.test.ts'],
     environment: 'node',
     globals: true,
+    setupFiles: ['./test-setup-storage-isolation.ts'],
     reporters: ['default', 'junit'],
     silent: true,
     outputFile: {

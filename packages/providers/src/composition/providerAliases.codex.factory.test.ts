@@ -79,6 +79,17 @@ describe('codex alias factory getModels (@issue:2272)', () => {
     );
   });
 
+  it('returns the GPT-5.6 tiers and defaults to Sol', async () => {
+    const provider = buildCodexProvider();
+
+    const models = await provider.getModels();
+
+    expect(provider.getDefaultModel()).toBe('gpt-5.6-sol');
+    expect(models.map((model) => model.id)).toStrictEqual(
+      expect.arrayContaining(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']),
+    );
+  });
+
   it('reports provider name as codex and supportedToolFormats as [openai]', async () => {
     const provider = buildCodexProvider();
 
@@ -103,6 +114,36 @@ describe('codex alias factory getModels (@issue:2272)', () => {
 
     expect(spark).toBeDefined();
     expect(spark?.contextWindow).toBe(expectedSpark?.contextWindow);
+  });
+
+  it('preserves contextWindow 262144 on GPT-5.6 tiers from staticModels @issue:2483', async () => {
+    const provider = buildCodexProvider();
+    const models = await provider.getModels();
+    const tiers = ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'];
+
+    for (const tierId of tiers) {
+      const model = models.find((m) => m.id === tierId);
+      expect(model).toBeDefined();
+      expect(model?.contextWindow).toBe(262144);
+    }
+  });
+
+  it('sets field-specific geometryAuthority on static models that have explicit contextWindow @issue:2483', async () => {
+    const provider = buildCodexProvider();
+    const models = await provider.getModels();
+
+    // Models with explicit contextWindow must carry field-specific
+    // geometryAuthority so registry hydration does not overwrite their geometry.
+    const withGeometry = models.filter((m) => m.contextWindow !== undefined);
+    for (const model of withGeometry) {
+      expect(model.geometryAuthority?.contextWindow).toBe(true);
+    }
+
+    // Models without explicit contextWindow must NOT carry the marker
+    const withoutGeometry = models.filter((m) => m.contextWindow === undefined);
+    for (const model of withoutGeometry) {
+      expect(model.geometryAuthority).toBeUndefined();
+    }
   });
 
   it('does not call fetch (static models, no network)', async () => {

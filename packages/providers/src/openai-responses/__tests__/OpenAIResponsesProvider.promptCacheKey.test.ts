@@ -10,6 +10,7 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
+import { sanitizePromptCacheKey } from '../sanitizePromptCacheKey.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createProviderRuntimeContext,
@@ -557,5 +558,157 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     expect(cacheKey).not.toBe(longRuntimeId);
     // non-Codex still gets retention
     expect(requestBody.prompt_cache_retention).toBe('24h');
+  });
+
+  it('should clamp an over-long prompt_cache_key injected via modelParams (issue #2135)', async () => {
+    const provider = new OpenAIResponsesProvider(
+      'test-api-key',
+      'https://api.openai.com/v1',
+    );
+
+    let capturedBody: string | undefined;
+    mockFetch.mockImplementation(
+      async (
+        _input: RequestInfo | URL,
+        init?: RequestInit,
+      ): Promise<Response> => {
+        if (init?.body != null) {
+          capturedBody =
+            typeof init.body === 'string'
+              ? init.body
+              : await new Response(init.body).text();
+        }
+        return createMockStreamingResponse();
+      },
+    );
+
+    // Mirrors a subagent runtimeId: <uuid>#<subagent-name>#<8-char id> (69 chars)
+    const overlongKey =
+      '0d4429a9-79b0-4b64-a63e-d5d7a45f1878#fallbacktypescriptcoder#a1b2c3d4';
+    expect(overlongKey.length).toBeGreaterThan(64);
+
+    const settings = new SettingsService();
+    settings.set('activeProvider', provider.name);
+    settings.setProviderSetting(provider.name, 'model', 'o3-mini');
+
+    const config = createRuntimeConfigStub(settings);
+    const runtime = createProviderRuntimeContext({
+      settingsService: settings,
+      runtimeId: 'short-runtime-id',
+      config,
+    });
+
+    // Unknown ephemeral settings pass through separateSettings() as
+    // modelParams, which translateRequestOverrides() copies onto the request.
+    const invocation = createRuntimeInvocationContext({
+      runtime,
+      settings,
+      providerName: provider.name,
+      ephemeralsSnapshot: {
+        'prompt-caching': '1h',
+        prompt_cache_key: overlongKey,
+      },
+    });
+
+    const options = createProviderCallOptions({
+      settings,
+      config,
+      runtime,
+      invocation,
+      providerName: provider.name,
+      contents: [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'test message' }] },
+      ],
+      ephemeralSettings: { 'prompt-caching': '1h' },
+    });
+
+    const generator = provider.generateChatCompletion(options);
+    for await (const _content of generator) {
+      // drain
+    }
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(capturedBody).toBeDefined();
+    const requestBody = JSON.parse(capturedBody!);
+
+    const cacheKey = requestBody.prompt_cache_key as string;
+    expect(typeof cacheKey).toBe('string');
+    expect(cacheKey.length).toBeLessThanOrEqual(64);
+    expect(cacheKey).not.toBe(overlongKey);
+    // The explicitly injected (sanitized) modelParams key wins over the
+    // runtimeId-derived default, proving the translateRequestOverrides path
+    // was exercised rather than applyPromptCaching overwriting it.
+    expect(cacheKey).toBe(sanitizePromptCacheKey(overlongKey));
+    expect(cacheKey).not.toBe(sanitizePromptCacheKey('short-runtime-id'));
+  });
+
+  it('should drop a non-string prompt_cache_key injected via modelParams instead of forwarding it', async () => {
+    const provider = new OpenAIResponsesProvider(
+      'test-api-key',
+      'https://api.openai.com/v1',
+    );
+
+    let capturedBody: string | undefined;
+    mockFetch.mockImplementation(
+      async (
+        _input: RequestInfo | URL,
+        init?: RequestInit,
+      ): Promise<Response> => {
+        if (init?.body != null) {
+          capturedBody =
+            typeof init.body === 'string'
+              ? init.body
+              : await new Response(init.body).text();
+        }
+        return createMockStreamingResponse();
+      },
+    );
+
+    const settings = new SettingsService();
+    settings.set('activeProvider', provider.name);
+    settings.setProviderSetting(provider.name, 'model', 'o3-mini');
+
+    const config = createRuntimeConfigStub(settings);
+    const runtime = createProviderRuntimeContext({
+      settingsService: settings,
+      runtimeId: 'short-runtime-id',
+      config,
+    });
+
+    const invocation = createRuntimeInvocationContext({
+      runtime,
+      settings,
+      providerName: provider.name,
+      ephemeralsSnapshot: {
+        'prompt-caching': '1h',
+        prompt_cache_key: 12345,
+      },
+    });
+
+    const options = createProviderCallOptions({
+      settings,
+      config,
+      runtime,
+      invocation,
+      providerName: provider.name,
+      contents: [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'test message' }] },
+      ],
+      ephemeralSettings: { 'prompt-caching': '1h' },
+    });
+
+    const generator = provider.generateChatCompletion(options);
+    for await (const _content of generator) {
+      // drain
+    }
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(capturedBody).toBeDefined();
+    const requestBody = JSON.parse(capturedBody!);
+
+    // The invalid non-string override must not survive; the provider's own
+    // runtimeId-derived key (a valid string) is applied instead.
+    const cacheKey = requestBody.prompt_cache_key as string;
+    expect(cacheKey).toBe(sanitizePromptCacheKey('short-runtime-id'));
   });
 });

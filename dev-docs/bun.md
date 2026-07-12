@@ -441,3 +441,70 @@ npm install
 
 Both commands produce a working, hoisted `node_modules` tree for all 16
 workspaces.
+
+## Bun-backed Test Orchestration (issue #2463)
+
+### Why `bun test` does not work as a root test entry point
+
+`bun test` invokes Bun's **native test runner**, which provides `bun:test`
+APIs (`describe`, `test`, `expect` from Bun). The repository's tests are
+written for **Vitest** and use Vitest-specific helper APIs that have no Bun
+equivalent:
+
+- `vi.stubEnv` / `vi.unstubAllEnvs` — environment-variable stubbing
+- `vi.mocked` — typed mock introspection
+- `vi.setSystemTime` — fake clock control
+- `it.runIf` — conditional test execution
+
+Additionally, Bun's `bun run <script>` does **not** invoke npm lifecycle
+hooks (`pretest` / `posttest`) the way `npm run <script>` does. The agents
+package uses a `pretest` hook to run its API-surface guard
+(`scripts/check-agents-api-surface.mjs`); running tests via `bun run test`
+would silently skip it.
+
+### The `test:bun` entry point
+
+The root `package.json` defines `test:bun`:
+
+```json
+"test:bun": "bun scripts/test.ts"
+```
+
+This script is a Bun-backed orchestrator that mirrors `npm run test
+--workspaces --if-present` (plus `test:scripts`). It:
+
+1. **Discovers all 16 workspaces** from the root `package.json` `workspaces`
+   array, reading each workspace's `package.json` to determine its `test`
+   and `pretest` scripts.
+
+2. **Runs `pretest` before `test`** for each workspace that declares one
+   (currently only `packages/agents`). This preserves the agents
+   API-surface guard and any future pretest hooks.
+
+3. **Runs each workspace's `test` script** (typically `vitest run`) in the
+   workspace directory with `node_modules/.bin` on `PATH`. Tests still run
+   under **Vitest**, not Bun's native test runner, so all Vitest APIs and
+   per-package `vitest.config.ts` configuration remain fully available.
+
+4. **Runs the script harness tests** (`scripts/tests/`) after workspace
+   tests, matching the root `test:scripts` script.
+
+### CLI flags
+
+| Flag                  | Shorthand | Description                                 |
+| --------------------- | --------- | ------------------------------------------- |
+| `--workspace <name>`  | `-w`      | Run only the matching workspace             |
+| `--skip-scripts`      |           | Skip the script harness tests               |
+| `--skip-pretest`      |           | Skip pretest lifecycle hooks                |
+| `--continue-on-error` | `-c`      | Continue after failures instead of stopping |
+
+The `--workspace` flag matches by directory name (`core`), relative path
+(`packages/core`), or package name (`@vybestack/llxprt-code-core`).
+
+### Relationship to `npm run test`
+
+Both paths run the same workspace Vitest suites and preserve the same
+pretest guards. The npm path (`npm run test`) remains the primary CI
+verification path; `test:bun` is the supported Bun-backed alternative. The
+npm path is not removed until the Bun-backed path is proven equivalent
+across all CI matrix legs.
