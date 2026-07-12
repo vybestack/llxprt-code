@@ -804,21 +804,31 @@ function matchesCredentialWriteWithCanonical(
   canonical: CanonicalSegment,
 ): boolean {
   if (
-    findCredentialRedirectTargets(rawSegment).some((target) =>
-      isCredentialPath(canonicalizeText(target)),
-    )
+    findCredentialRedirectTargets(rawSegment).some(isCredentialTargetExpression)
   ) {
     return true;
   }
   if (canonical.name === 'tee' || canonical.name === 'truncate') {
-    return canonical.argTokens.some(isCredentialPath);
+    return canonical.argTokens.some(isCredentialTargetExpression);
   }
   if (canonical.name === 'dd') {
-    return canonical.argTokens.some(
-      (token) => token.startsWith('of=') && isCredentialPath(token.slice(3)),
+    const outputOperand = rawSegment.match(/(?:^|\s)of=(\$\([^)]*\)|\S+)/);
+    return (
+      outputOperand !== null && isCredentialTargetExpression(outputOperand[1])
     );
   }
   return false;
+}
+
+function isCredentialTargetExpression(target: string): boolean {
+  const canonicalTarget = canonicalizeText(target);
+  if (isCredentialPath(canonicalTarget)) {
+    return true;
+  }
+  return extractSubstitutions(target).some((substitution) => {
+    const canonical = canonicalizeSegment(substitution);
+    return canonical.argTokens.some(isCredentialPath);
+  });
 }
 
 /**

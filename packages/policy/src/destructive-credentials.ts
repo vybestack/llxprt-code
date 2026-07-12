@@ -164,6 +164,7 @@ const extractRedirectTarget = (after: string): string => {
   let end = start;
   let inSingle = false;
   let inDouble = false;
+  let substitutionDepth = 0;
   while (end < after.length) {
     const ch = after[end];
     if (
@@ -178,7 +179,18 @@ const extractRedirectTarget = (after: string): string => {
     } else if (ch === '"' && !inSingle) {
       inDouble = !inDouble;
       end++;
-    } else if (!inSingle && !inDouble && isWhitespaceChar(ch)) {
+    } else if (!inSingle && !inDouble && ch === '$' && after[end + 1] === '(') {
+      substitutionDepth++;
+      end += 2;
+    } else if (!inSingle && !inDouble && ch === ')' && substitutionDepth > 0) {
+      substitutionDepth--;
+      end++;
+    } else if (
+      !inSingle &&
+      !inDouble &&
+      substitutionDepth === 0 &&
+      isWhitespaceChar(ch)
+    ) {
       break;
     } else {
       end++;

@@ -243,8 +243,13 @@ function scanPosixDefinitions(
   let i = 0;
   while (i < collapsed.length) {
     const ch = collapsed[i];
+    const substitutionSpan = inSingle
+      ? 0
+      : substitutionSpanLength(collapsed, i);
     if (isEscapedChar(collapsed, i, inSingle)) {
       i += 2;
+    } else if (substitutionSpan > 0) {
+      i += substitutionSpan;
     } else if (ch === "'" && !inDouble) {
       inSingle = !inSingle;
       i++;
@@ -381,6 +386,12 @@ function extractInvocationFromOriginal(
     i = skipWhitespaceAndSeparators(original, i, () => {
       progressed = true;
     });
+    if (original[i] === '#') {
+      const newline = original.indexOf(NEWLINE, i);
+      i = newline < 0 ? original.length : newline + 1;
+      progressed = true;
+      continue;
+    }
     const redir = redirectLengthInOriginal(original, i);
     if (redir > 0) {
       i += redir;
@@ -593,8 +604,13 @@ function scanKeywordDefinitions(
   let i = 0;
   while (i < collapsed.length) {
     const ch = collapsed[i];
+    const substitutionSpan = inSingle
+      ? 0
+      : substitutionSpanLength(collapsed, i);
     if (isEscapedChar(collapsed, i, inSingle)) {
       i += 2;
+    } else if (substitutionSpan > 0) {
+      i += substitutionSpan;
     } else if (ch === "'" && !inDouble) {
       inSingle = !inSingle;
       i++;
@@ -809,7 +825,7 @@ function isDefinitionTerminator(s: string, afterBrace: number): boolean {
     return true;
   }
   const ch = s[afterBrace];
-  if (ch === ';' || ch === '&' || ch === '|' || ch === NEWLINE) {
+  if ([';', '&', '|', '#', NEWLINE].includes(ch)) {
     return true;
   }
   if (ch === '>' || ch === '<') {

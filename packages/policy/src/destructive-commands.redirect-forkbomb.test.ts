@@ -427,6 +427,18 @@ describe('Fix E: ~/.aws directory prefix (coverage gap)', () => {
   });
 });
 
+describe('credential targets emitted by command substitutions', () => {
+  it.each<[string, boolean]>([
+    ['echo test > $(echo ~/.ssh/id_rsa)', true],
+    ['tee $(echo ~/.aws/credentials)', true],
+    ['dd if=/dev/zero of=$(echo ~/.ssh/authorized_keys)', true],
+    ['echo $(echo ~/.ssh/id_rsa) > output.txt', false],
+    ['echo test > $(echo output.txt)', false],
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});
+
 describe('Fix F: quote/escape-aware redirect target extraction (robustness)', () => {
   it.each<[string, boolean]>([
     ['echo x > "~/.aws/old config/credentials"', true],
@@ -567,6 +579,18 @@ describe('multiline and nested-substitution fork-bomb parsing', () => {
     [':(){ echo $(printf "}"); :|:& };:', true],
     ['bomb(){ echo `printf "}"`; bomb|bomb& }; bomb', true],
     ['safe(){ echo $(printf "}"); }; safe', false],
+    [':(){ :|:& } # comment\n:', true],
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});
+
+describe('top-level substitutions are not function definitions', () => {
+  it.each<[string, boolean]>([
+    ['echo $(printf ":(){ :|:& };:")', false],
+    ['echo `printf ":(){ :|:& };:"`', false],
+    ['echo $(printf "function foo { foo|foo& }; foo")', false],
+    ['echo `printf "function foo { foo|foo& }; foo"`', false],
   ])('"%s" -> %s', (command, expected) => {
     expect(isDestructiveCommand(command)).toBe(expected);
   });
