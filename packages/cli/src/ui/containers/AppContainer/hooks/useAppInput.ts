@@ -30,6 +30,7 @@ import { useSlashCommandActions } from './useSlashCommandActions.js';
 import { useExitHandling } from './useExitHandling.js';
 import { useInputHandling } from './useInputHandling.js';
 import { useShellFocusAutoReset } from './useShellFocusAutoReset.js';
+import { useSteer } from './useSteer.js';
 import * as fs from 'fs';
 import type { AppBootstrapResult } from './useAppBootstrap.js';
 import type { AppDialogsResult } from './useAppDialogs.js';
@@ -355,31 +356,6 @@ function useInputStreamSetup(
   return { ...bufferSetup, geminiResult };
 }
 
-/** Creates a steer callback bound to the agent and streaming state. */
-function useSteer(
-  agent: AppInputParams['agent'],
-  streamingState: StreamingState,
-  sanitizeContent: (text: string) => {
-    text: string;
-    blocked: boolean;
-    feedback?: string;
-  },
-): (text: string) => boolean {
-  return useCallback(
-    (text: string): boolean => {
-      if (streamingState !== StreamingState.Responding) {
-        return false;
-      }
-      const sanitized = sanitizeContent(text);
-      if (sanitized.blocked || sanitized.text.length === 0) {
-        return false;
-      }
-      agent.injectSteer(sanitized.text);
-      return true;
-    },
-    [streamingState, agent, sanitizeContent],
-  );
-}
 function useInputStreamWiring(
   p: AppInputParams,
   core: ReturnType<typeof useInputCore>,
@@ -445,6 +421,8 @@ function useInputStreamWiring(
     p.agent,
     geminiResult.streamingState,
     geminiResult.sanitizeContent,
+    pendingHistoryItems,
+    addMessage,
   );
   const {
     activeShellPtyId: _ptyIdFromGemini,
