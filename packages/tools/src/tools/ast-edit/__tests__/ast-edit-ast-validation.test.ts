@@ -109,7 +109,7 @@ describe('ast_edit AST validation: Python', () => {
     expect(result.error).toBeUndefined();
     const output = String(result.llmContent);
     expect(output).toContain('AST validation: FAILED');
-    expect(output).toMatch(/line \d+/);
+    expect(output).toMatch(/Syntax error at line \d+, column \d+/);
   });
 
   it('reports AST PASSED for indentation change that produces valid code', async () => {
