@@ -108,7 +108,6 @@ async function captureRequestBody(
     // drain
   }
 
-  expect(capturedBody).toBeDefined();
   if (capturedBody === undefined) {
     throw new Error('Request body was not captured');
   }
