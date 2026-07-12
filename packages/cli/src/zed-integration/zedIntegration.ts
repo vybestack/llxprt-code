@@ -123,7 +123,7 @@ export async function runZedIntegration(
 export class ZedAgent {
   private sessions: Map<string, Session> = new Map();
   private clientCapabilities: acp.ClientCapabilities | undefined;
-  private readonly logger = new DebugLogger('llxprt:zed');
+  private readonly logger = new DebugLogger('llxprt:zed-integration');
   private readonly lifecycle: SessionLifecycle;
   constructor(
     private config: Config,
@@ -149,7 +149,7 @@ export class ZedAgent {
   ): Promise<acp.ListSessionsResponse> {
     return this.lifecycle.list(params);
   }
-  authenticate({ methodId }: acp.AuthenticateRequest) {
+  authenticate({ methodId }: acp.AuthenticateRequest): Promise<void> {
     return authenticateZedAgent(this.config, methodId);
   }
   async newSession({
@@ -185,19 +185,23 @@ export class ZedAgent {
   resumeSession(params: acp.ResumeSessionRequest) {
     return this.lifecycle.resume(params);
   }
-  private configEnabled = () =>
+  private supportsConfigOptions = () =>
     this.clientCapabilities?.session?.configOptions != null;
   private createSession(id: string, agent: Agent, config: Config) {
     return buildZedSession(
       agent,
       () =>
-        new Session(id, agent, config, this.connection, this.configEnabled()),
+        new Session(
+          id,
+          agent,
+          config,
+          this.connection,
+          this.supportsConfigOptions(),
+        ),
       (error) => this.logger.debug(() => `Session cleanup failed: ${error}`),
     );
   }
-  async loadSession(
-    params: acp.LoadSessionRequest,
-  ): Promise<acp.LoadSessionResponse> {
+  async loadSession(params: acp.LoadSessionRequest) {
     return this.lifecycle.runSerialized(params.sessionId, () =>
       this.performLoadSession(params),
     );
@@ -294,7 +298,13 @@ export class ZedAgent {
         sessionConfig,
         this.sessionFileLister,
       );
-      const session = await this.createSession(sessionId, agent, sessionConfig);
+      const session = new Session(
+        sessionId,
+        agent,
+        sessionConfig,
+        this.connection,
+        this.supportsConfigOptions(),
+      );
       return { session, history };
     } catch (error) {
       await agent.dispose().catch(() => undefined);
@@ -333,7 +343,7 @@ export class ZedAgent {
   closeSession(params: acp.CloseSessionRequest) {
     return this.lifecycle.close(params);
   }
-  async setSessionMode(params: acp.SetSessionModeRequest) {
+  setSessionMode(params: acp.SetSessionModeRequest) {
     const session = this.sessions.get(params.sessionId);
     if (!session) {
       throw new Error(`Session not found: ${params.sessionId}`);
@@ -345,7 +355,7 @@ export class ZedAgent {
       dispatchZedConfigOption(this.clientCapabilities, this.sessions, params),
     );
   }
-  async cancel({ sessionId }: acp.CancelNotification): Promise<void> {
+  async cancel({ sessionId }: acp.CancelNotification) {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
     await session.cancelPendingPrompt();
@@ -357,7 +367,7 @@ export class ZedAgent {
     }
     return session.prompt(params);
   }
-  async disposeAll(): Promise<void> {
+  async disposeAll() {
     const sessions = [...this.sessions.values()];
     this.sessions.clear();
     await Promise.allSettled(sessions.map((session) => session.dispose()));
@@ -365,7 +375,7 @@ export class ZedAgent {
 }
 export class Session {
   private pendingPrompt: AbortController | null = null;
-  private readonly logger = new DebugLogger('llxprt:zed');
+  private readonly logger = new DebugLogger('llxprt:zed-integration');
   private pathResolver: ZedPathResolver;
   private activeConfirmations = new Map<
     string,
@@ -419,10 +429,7 @@ export class Session {
   getApprovalMode(): ApprovalMode {
     return this.agent.getApprovalMode();
   }
-  async setConfigOption(
-    configId: string,
-    value: string | boolean,
-  ): Promise<acp.SetSessionConfigOptionResponse> {
+  setConfigOption(configId: string, value: string | boolean) {
     return setZedConfigOption(this.agent, this.config, configId, value);
   }
   getConfigOptions = () => buildZedConfigOptions(this.agent, this.config);
@@ -778,12 +785,12 @@ export class Session {
       }
     }
   }
-  async replayLiveHistory(): Promise<void> {
+  async replayLiveHistory() {
     await this.streamHistory(
       await readAgentHistoryForReplay(this.agent, this.id),
     );
   }
-  async dispose(): Promise<void> {
+  async dispose() {
     try {
       todoEvents.offTodoUpdated(this.todoListener);
       this.stopConfigUpdates();

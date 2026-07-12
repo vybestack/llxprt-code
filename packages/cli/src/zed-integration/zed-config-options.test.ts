@@ -55,7 +55,7 @@ describe('Zed config options', () => {
       { id: 'reasoning.effort', currentValue: 'high' },
       { id: 'emojifilter', currentValue: 'warn' },
     ]);
-    expect(options[0]).toMatchObject({
+    expect(options.find(({ id }) => id === 'model')).toMatchObject({
       category: 'model',
       options: [
         { value: 'alpha', name: 'Alpha' },
@@ -140,7 +140,9 @@ describe('Zed config options', () => {
     );
 
     expect(setModel).toHaveBeenCalledWith('beta');
-    expect(result.configOptions).toHaveLength(3);
+    expect(result.configOptions.find(({ id }) => id === 'model')).toMatchObject(
+      { currentValue: 'beta' },
+    );
   });
 
   it('publishes agent-side setting changes and removes listeners on teardown', async () => {
