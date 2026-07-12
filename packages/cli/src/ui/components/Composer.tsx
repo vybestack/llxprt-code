@@ -73,6 +73,7 @@ export const Composer = ({
       inputWidth={inputWidth}
       suggestionsWidth={suggestionsWidth}
       onSubmit={uiActions.handleUserInputSubmit}
+      onSteer={uiActions.handleSteer}
       userMessages={inputHistory}
       onClearScreen={uiActions.handleClearScreen}
       config={config}

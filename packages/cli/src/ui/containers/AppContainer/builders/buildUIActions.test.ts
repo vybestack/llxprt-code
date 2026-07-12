@@ -16,6 +16,7 @@ const makeParams = (): UIActionsParams => ({
 
   // Input actions
   handleUserInputSubmit: vi.fn(),
+  handleSteer: vi.fn(),
   handleClearScreen: vi.fn(),
 
   // Theme dialog
@@ -164,6 +165,7 @@ describe('buildUIActions', () => {
     expect(result.loadHistory).toBeDefined();
     expect(result.refreshStatic).toBeDefined();
     expect(result.handleUserInputSubmit).toBeDefined();
+    expect(result.handleSteer).toBeDefined();
     expect(result.handleClearScreen).toBeDefined();
     expect(result.openThemeDialog).toBeDefined();
     expect(result.handleThemeSelect).toBeDefined();
@@ -241,6 +243,7 @@ describe('buildUIActions', () => {
     expect(result.loadHistory).toBe(params.loadHistory);
     expect(result.refreshStatic).toBe(params.refreshStatic);
     expect(result.handleUserInputSubmit).toBe(params.handleUserInputSubmit);
+    expect(result.handleSteer).toBe(params.handleSteer);
     expect(result.handleClearScreen).toBe(params.handleClearScreen);
     expect(result.openThemeDialog).toBe(params.openThemeDialog);
     expect(result.handleThemeSelect).toBe(params.handleThemeSelect);
