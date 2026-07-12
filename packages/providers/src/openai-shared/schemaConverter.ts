@@ -106,6 +106,9 @@ function normalizeType(type: unknown): string {
     };
     return typeMap[type] ?? 'string';
   }
+  // Non-string, non-enum values default to 'string'. This preserves the
+  // original converters' tolerant fallback rather than throwing on malformed
+  // input; a bad enum value still yields a usable (if imprecise) schema.
   return 'string';
 }
 
@@ -118,6 +121,9 @@ function toNumber(value: unknown): number | undefined {
     return value;
   }
   if (typeof value === 'string') {
+    // parseFloat is intentionally tolerant (e.g. "10px" -> 10). This matches
+    // the original converters' coercion; tightening to Number() would turn
+    // partially-numeric constraints into undefined and silently drop them.
     const num = parseFloat(value);
     return isNaN(num) ? undefined : num;
   }
@@ -217,6 +223,8 @@ function applyHandledNormalizations(
   }
 
   if (Array.isArray(node.enum)) {
+    // Coerce to strings: OpenAI's JSON Schema enum expects string members,
+    // and Gemini may supply numeric enum codes.
     result.enum = node.enum.map((v) => String(v));
   }
 
@@ -240,6 +248,8 @@ function applyHandledNormalizations(
   // `required` is handled independently of `properties` so that a nested
   // object schema declaring `required` without an inline `properties` block
   // (e.g. one referencing $defs) does not silently drop its required fields.
+  // OpenAI requires `required` to always be present as an array, so object
+  // schemas without an explicit `required` default to an empty array.
   if (Array.isArray(node.required)) {
     result.required = node.required.map((r) => String(r));
   } else if (result.type === 'object' && result.properties !== undefined) {
@@ -290,7 +300,11 @@ function normalizeSchemaNode(
 }
 
 /**
- * Convert a properties object recursively.
+ * Convert a properties object recursively. Non-schema property values
+ * (strings/numbers/booleans/null) are skipped: per JSON Schema, each
+ * `properties` entry must itself be a schema object, so a non-object value is
+ * malformed input rather than data to preserve. This matches the original
+ * converters' behavior.
  */
 function convertProperties(
   properties: Record<string, unknown>,
