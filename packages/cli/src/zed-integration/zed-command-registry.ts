@@ -154,12 +154,12 @@ export async function executeZedCommand(
   context: ZedCommandContext,
 ): Promise<ZedCommandResult | null> {
   const parsed = parseZedCommandPrompt(prompt);
-  const command = parsed === null ? undefined : COMMAND_MAP.get(parsed.name);
+  if (parsed === null) return null;
+  const command = COMMAND_MAP.get(parsed.name.toLowerCase());
   if (command === undefined) return null;
   try {
-    return await command.handler(context, parsed?.args ?? '');
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    return { text: `Command /${command.name} failed: ${detail}` };
+    return await command.handler(context, parsed.args);
+  } catch {
+    return { text: `Command /${command.name} failed.` };
   }
 }

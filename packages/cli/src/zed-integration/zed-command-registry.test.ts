@@ -55,6 +55,9 @@ describe('Zed available commands', () => {
     await expect(
       executeZedCommand('/unknown', { agent: buildAgent(), config }),
     ).resolves.toBeNull();
+    await expect(
+      executeZedCommand('/MODEL', { agent: buildAgent(), config }),
+    ).resolves.toStrictEqual({ text: 'Current model: test-model' });
   });
 
   it('returns a protocol-visible error when command execution fails', async () => {
@@ -65,7 +68,7 @@ describe('Zed available commands', () => {
     await expect(
       executeZedCommand('/compact', { agent, config }),
     ).resolves.toStrictEqual({
-      text: 'Command /compact failed: compression unavailable',
+      text: 'Command /compact failed.',
     });
   });
 

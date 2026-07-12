@@ -515,11 +515,9 @@ export class Session {
       params.prompt,
       this.agent,
       this.config,
-      (u) => this.sendUpdateStrict(u),
+      (update) => this.sendUpdateStrict(update),
     );
-    if (commandResult !== null) {
-      return commandResult.response;
-    }
+    if (commandResult !== null) return commandResult.response;
     const pendingSend = new AbortController();
     this.pendingPrompt = pendingSend;
     this.promptGeneration += 1;
@@ -810,8 +808,11 @@ export class Session {
   async streamHistory(items: readonly IContent[]): Promise<void> {
     const updates = mapHistoryToSessionUpdates(items);
     for (const update of updates) {
-      try { await this.sendUpdateStrict(update); }
-      catch (error) { throw wrapReplayFailure(this.id, error); }
+      try {
+        await this.sendUpdateStrict(update);
+      } catch (error) {
+        throw wrapReplayFailure(this.id, error);
+      }
     }
   }
   async replayLiveHistory(): Promise<void> {

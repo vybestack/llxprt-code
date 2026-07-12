@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type * as acp from '@agentclientprotocol/sdk';
+import * as acp from '@agentclientprotocol/sdk';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { Config } from '@vybestack/llxprt-code-core';
 
@@ -61,10 +61,17 @@ export async function tryHandleZedCommand(
   if (result === null) {
     return null;
   }
-  await sendUpdate({
-    sessionUpdate: 'agent_message_chunk',
-    content: { type: 'text', text: result.text },
-  });
+  try {
+    await sendUpdate({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: result.text },
+    });
+  } catch {
+    throw acp.RequestError.internalError(
+      {},
+      'Command response delivery failed.',
+    );
+  }
   return {
     response: { stopReason: result.stopReason ?? 'end_turn' },
   };
