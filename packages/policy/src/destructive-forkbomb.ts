@@ -26,6 +26,9 @@ const NEWLINE = String.fromCharCode(10);
 /** The backslash character (escape operator outside single quotes). */
 const BACKSLASH = String.fromCharCode(92);
 
+/** The backtick character (opens/closes a command substitution). */
+const BACKTICK = String.fromCharCode(96);
+
 /**
  * True iff the character at `s[i]` is a backslash that escapes the following
  * character, so quote/brace scanners should skip both chars. In POSIX shell a
@@ -675,27 +678,118 @@ function parseKeywordAt(
  * any other character (e.g. a quoted `}` or a merged token). Linear-time.
  */
 function findMatchingBraceEnd(s: string, openBraceIndex: number): number {
-  let depth = 0;
-  let inSingle = false;
-  let inDouble = false;
-  for (let i = openBraceIndex; i < s.length; i++) {
-    const ch = s[i];
-    if (isEscapedChar(s, i, inSingle)) {
-      i++;
-    } else if (ch === "'" && !inDouble) {
-      inSingle = !inSingle;
-    } else if (ch === '"' && !inSingle) {
-      inDouble = !inDouble;
-    } else if (!inSingle && !inDouble && ch === '{') {
-      depth++;
-    } else if (!inSingle && !inDouble && ch === '}') {
-      depth--;
-      if (depth === 0) {
+  const state: BraceScanState = { depth: 0, inSingle: false, inDouble: false };
+  let i = openBraceIndex;
+  while (i < s.length) {
+    // Command substitutions (`$( … )` and backticks) are active outside single
+    // quotes. Skipping the whole span keeps braces INSIDE a substitution — even
+    // unquoted ones like `$(printf })` — from affecting the function-body depth.
+    const span = state.inSingle ? 0 : substitutionSpanLength(s, i);
+    if (isEscapedChar(s, i, state.inSingle)) {
+      i += 2;
+    } else if (span > 0) {
+      i += span;
+    } else {
+      const closedAtDepthZero = advanceBraceScan(s[i], state);
+      if (closedAtDepthZero) {
         return isDefinitionTerminator(s, i + 1) ? i : -1;
       }
+      i++;
     }
   }
   return -1;
+}
+
+/** Mutable quote/brace-depth state threaded through the brace scanner. */
+interface BraceScanState {
+  depth: number;
+  inSingle: boolean;
+  inDouble: boolean;
+}
+
+/**
+ * Applies a single character `ch` to the brace-scan `state`: toggles single/
+ * double quote parity and tracks `{`/`}` nesting depth, all OUTSIDE quotes.
+ * Returns true iff `ch` is the `}` that returns depth to 0 (the function-body
+ * close), so the caller can validate the following terminator. A brace inside
+ * the opposite quote context is ignored. Mirrors the mutable-state scanner
+ * pattern used by `splitCommands` in shell-utils.
+ */
+function advanceBraceScan(ch: string, state: BraceScanState): boolean {
+  if (ch === "'" && !state.inDouble) {
+    state.inSingle = !state.inSingle;
+  } else if (ch === '"' && !state.inSingle) {
+    state.inDouble = !state.inDouble;
+  } else if (!state.inSingle && !state.inDouble && ch === '{') {
+    state.depth++;
+  } else if (!state.inSingle && !state.inDouble && ch === '}') {
+    state.depth--;
+    return state.depth === 0;
+  }
+  return false;
+}
+
+/**
+ * If a command substitution begins at `s[i]` — either `$( … )` or a
+ * backtick-delimited `` ` … ` `` span — returns the character length of the
+ * whole span (including both delimiters). Returns 0 when `s[i]` does not open a
+ * substitution or the span is unterminated. Callers use this to treat a
+ * substitution as an opaque unit so shell metacharacters inside it (braces,
+ * separators) are ignored. Linear-time.
+ */
+function substitutionSpanLength(s: string, i: number): number {
+  if (s[i] === '$' && s[i + 1] === '(') {
+    return dollarParenSpanLength(s, i);
+  }
+  if (s[i] === BACKTICK) {
+    return backtickSpanLength(s, i);
+  }
+  return 0;
+}
+
+/**
+ * Length of a `$( … )` substitution starting at the `$` in `s[start]`, tracking
+ * nested parentheses and inner quotes so a `)` inside a quoted string does not
+ * close the span prematurely. Returns 0 if the closing `)` is never found.
+ * Linear-time.
+ */
+function dollarParenSpanLength(s: string, start: number): number {
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  for (let j = start + 1; j < s.length; j++) {
+    if (isEscapedChar(s, j, inSingle)) {
+      j++;
+    } else if (s[j] === "'" && !inDouble) {
+      inSingle = !inSingle;
+    } else if (s[j] === '"' && !inSingle) {
+      inDouble = !inDouble;
+    } else if (!inSingle && !inDouble && s[j] === '(') {
+      depth++;
+    } else if (!inSingle && !inDouble && s[j] === ')') {
+      depth--;
+      if (depth === 0) {
+        return j - start + 1;
+      }
+    }
+  }
+  return 0;
+}
+
+/**
+ * Length of a backtick substitution `` ` … ` `` starting at `s[start]`. A
+ * backslash escapes the following character (so `` ` `` does not close the
+ * span). Returns 0 if the closing backtick is never found. Linear-time.
+ */
+function backtickSpanLength(s: string, start: number): number {
+  for (let j = start + 1; j < s.length; j++) {
+    if (isEscapedChar(s, j, false)) {
+      j++;
+    } else if (s[j] === BACKTICK) {
+      return j - start + 1;
+    }
+  }
+  return 0;
 }
 
 /**

@@ -83,12 +83,34 @@ const SAFE_PSEUDO_DEVICES: ReadonlySet<string> = new Set([
   '/dev/console',
 ]);
 
-/** Matches a complete symbolic chmod mode token like `+x`, `u+rw`, `ug+rwxs` (anchored so filenames after `--` like `+s_file` do not match). */
-const CHMOD_SYMBOLIC_MODE = /^[ugoa]*\+[rwxXst]*$/;
+/**
+ * Matches a complete chmod SYMBOLIC mode token: one or more comma-separated
+ * clauses of the form `[ugoa]*[-+=][perms]`, where perms are drawn from
+ * `rwxXsStugo`. Covers assignment (`u=s`), the setuid/setgid `S` form, and
+ * comma lists (`u+s,g+s`). Anchored so filenames after `--` (e.g. `+s_file`)
+ * do not match.
+ */
+const CHMOD_SYMBOLIC_MODE =
+  /^[ugoa]*[-+=][rwxXsStugo]*(?:,[ugoa]*[-+=][rwxXsStugo]*)*$/;
 
-/** True if a token is a symbolic chmod mode that sets the setuid/setgid bit `s`. */
+/** Extracts the `[+-=]` operator and permission characters of a single clause. */
+const CHMOD_CLAUSE = /^[ugoa]*([-+=])([rwxXsStugo]*)$/;
+
+/**
+ * True if a token is a symbolic chmod mode where at least one ADDITIVE clause
+ * (operator `+` or `=`) sets the setuid/setgid bit (`s` or `S`). Bit REMOVAL
+ * (`-s`) is not dangerous. The sticky bit (`t`/`T`) is intentionally excluded
+ * to stay consistent with the octal policy, which flags `[2-7]777`
+ * (setuid/setgid) but treats sticky-only `1777` as benign.
+ */
 function isSetuidSymbolic(token: string): boolean {
-  return CHMOD_SYMBOLIC_MODE.test(token) && token.includes('s');
+  if (!CHMOD_SYMBOLIC_MODE.test(token)) {
+    return false;
+  }
+  return token.split(',').some((clause) => {
+    const match = CHMOD_CLAUSE.exec(clause);
+    return match !== null && match[1] !== '-' && /[sS]/.test(match[2]);
+  });
 }
 
 /** Matches octal world-writable-with-special-bit modes: 2777, 3777, 4777, 5777, 6777, 7777 (with arbitrary leading-zero padding). */

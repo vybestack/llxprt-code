@@ -572,6 +572,48 @@ describe('multiline and nested-substitution fork-bomb parsing', () => {
   });
 });
 
+describe('Fix H: brace matcher ignores unbalanced braces inside substitutions (false negative)', () => {
+  it.each<[string, boolean]>([
+    // A lone `}` inside $(...) must not be treated as the body-closing brace.
+    [':(){ :|:& $(printf }) };:', true],
+    // A lone `{` inside $(...) must not inflate brace depth.
+    [':(){ :|:& $(echo {) };:', true],
+    // Backtick substitution with an unbalanced brace inside.
+    ['bomb(){ bomb|bomb& `printf }` }; bomb', true],
+    // Balanced braces inside $(...) still detected (regression anchor).
+    [':(){ :|:&$(echo { } ) };:', true],
+    // Benign function whose substitution contains a stray brace stays benign.
+    ['safe(){ echo $(printf }); }; safe', false],
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});
+
+describe('Fix G: chmod setuid/setgid symbolic S/=/comma forms (false negative)', () => {
+  it.each<[string, boolean]>([
+    // Uppercase S sets setuid/setgid without execute — still a privilege bit.
+    ['chmod u+S /usr/bin/foo', true],
+    ['chmod g+S /usr/bin/foo', true],
+    // Assignment operator `=` sets the setuid/setgid bit just like `+`.
+    ['chmod u=s /usr/bin/foo', true],
+    ['chmod g=s /usr/bin/foo', true],
+    // Comma-separated clauses: any clause adding s/S is dangerous.
+    ['chmod u+s,g+s /usr/bin/foo', true],
+    ['chmod u+s,o+x /usr/bin/foo', true],
+    ['chmod o+x,g=s /usr/bin/foo', true],
+    // Removal of the bit is NOT dangerous.
+    ['chmod u-s /usr/bin/foo', false],
+    ['chmod g-s /usr/bin/foo', false],
+    // Sticky bit (t/T) is benign, consistent with octal 1777 being allowed.
+    ['chmod +t /tmp', false],
+    ['chmod o+T /shared', false],
+    ['chmod a=rwx file', false],
+    ['chmod u+x,g+x file', false],
+  ])('"%s" -> %s', (command, expected) => {
+    expect(isDestructiveCommand(command)).toBe(expected);
+  });
+});
+
 describe('escaped quotes and wrapper operands', () => {
   it.each<[string, boolean]>([
     [':(){ :|:& } >"file\\"name";:', true],
