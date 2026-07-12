@@ -19,6 +19,7 @@ export interface LifecycleSessionHandle {
   getApprovalMode(): ApprovalMode;
   getLifecycleInfo(): LifecycleSession;
   dispose(): Promise<void>;
+  sendAvailableCommands(): Promise<void>;
 }
 
 interface RestoredSession {
@@ -86,6 +87,7 @@ export class SessionLifecycle {
       if (live.getLifecycleInfo().cwd !== params.cwd) {
         throw acp.RequestError.resourceNotFound(params.sessionId);
       }
+      await live.sendAvailableCommands();
       return { modes: buildSessionModes(live.getApprovalMode()) };
     }
     const listed = await this.list({ cwd: params.cwd });
@@ -93,6 +95,7 @@ export class SessionLifecycle {
       throw acp.RequestError.resourceNotFound(params.sessionId);
     }
     const { session } = await this.restore(params.sessionId, params.cwd);
+    await session.sendAvailableCommands();
     this.sessions.set(params.sessionId, session);
     return { modes: buildSessionModes(session.getApprovalMode()) };
   }

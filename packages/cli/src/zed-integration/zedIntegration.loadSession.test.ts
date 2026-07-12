@@ -739,14 +739,14 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     mockFromConfig.mockResolvedValue(stub.agent);
 
     const connection = new RecordingConnection();
-    // Dead transport: the first (and only) replay update rejects.
-    connection.failSessionUpdateAfter(0, new Error('transport is dead'));
     const zedAgent = await makeZedAgent(connection, emptyChatsLister);
 
     const created = await zedAgent.newSession({
       cwd: '/project',
       mcpServers: [],
     } as acp.NewSessionRequest);
+    connection.clearSessionUpdateFailure();
+    connection.failSessionUpdateAfter(0, new Error('transport is dead'));
 
     let caught: unknown;
     try {

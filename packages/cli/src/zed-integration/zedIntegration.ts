@@ -69,6 +69,8 @@ import {
   createSessionScopedConfig,
   resolveSessionTargetDir,
 } from './zed-session-config.js';
+import { buildAvailableCommandsUpdate } from './zed-command-registry.js';
+import { tryHandleZedCommand } from './zed-prompt-command.js';
 export { parseZedAuthMethodId } from './zed-helpers.js';
 export { createSessionScopedConfig } from './zed-session-config.js';
 export async function runZedIntegration(
@@ -155,6 +157,7 @@ export class ZedAgent {
         agent,
         sessionConfig,
       );
+      await session.sendAvailableCommands();
       this.sessions.set(sessionId, session);
       return {
         sessionId,
@@ -203,10 +206,12 @@ export class ZedAgent {
     this.logger.debug(() => `loadSession - loading session ${sessionId}`);
     const reattached = await this.tryReattachLiveSession(sessionId);
     if (reattached !== null) {
+      await reattached.sendAvailableCommands();
       return { modes: buildSessionModes(reattached.getApprovalMode()) };
     }
     await this.disposePriorSession(sessionId);
     const session = await this.installResumedSession(sessionId, params.cwd);
+    await session.sendAvailableCommands();
     return { modes: buildSessionModes(session.getApprovalMode()) };
   }
   private async tryReattachLiveSession(
@@ -506,6 +511,15 @@ export class Session {
   async prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {
     this.updatedAt = new Date().toISOString();
     await this.cancelPendingPrompt();
+    const commandResult = await tryHandleZedCommand(
+      params.prompt,
+      this.agent,
+      this.config,
+      (u) => this.sendUpdateStrict(u),
+    );
+    if (commandResult !== null) {
+      return commandResult.response;
+    }
     const pendingSend = new AbortController();
     this.pendingPrompt = pendingSend;
     this.promptGeneration += 1;
@@ -554,12 +568,6 @@ export class Session {
         }
         throw error;
       } finally {
-        // Flush any buffered chunks, THEN dispose so the batch timer is cleared
-        // on completion/abort and no delayed flush fires after the turn ends
-        // (FINDING F9). The batcher is per-prompt, so disposing here bounds its
-        // timer to the prompt lifecycle. dispose() runs even when flush()
-        // rejects (e.g. a dead transport) — otherwise the pending timer would
-        // leak past the turn.
         try {
           await batcher.flush();
         } finally {
@@ -664,13 +672,9 @@ export class Session {
           event.info.systemMessage ?? 'Agent stopped by a hook blocker.',
         );
       case 'loop-detected':
-        // The agent detects a tool-call loop. Map to end_turn so the client
-        // sees a clean turn end rather than an indefinite hang.
         await batcher.flush();
         return 'end_turn';
       case 'notice':
-        // Informational notices have no direct ACP SessionUpdate; surface as
-        // an agent message so the user sees them.
         await batcher.flush();
         await this.sendUpdate({
           sessionUpdate: 'agent_message_chunk',
@@ -687,14 +691,8 @@ export class Session {
       case 'model-info':
       case 'retry':
       case 'citation':
-        // These variants have no faithful ACP translation: usage is mapped
-        // separately, compression/model-info/citation are metadata, retry is
-        // an internal agent detail, and context-warning is advisory. They are
-        // intentionally consumed without surfacing to ACP.
         return null;
       default: {
-        // Exhaustiveness guard: any future AgentEvent variant added to the
-        // union without an explicit case above will fail to type-check here.
         const exhaustive: never = event;
         throw new Error(`Unhandled agent event: ${String(exhaustive)}`);
       }
@@ -703,10 +701,6 @@ export class Session {
   private async sendUsageUpdate(
     usage: Extract<AgentEvent, { type: 'usage' }>['usage'],
   ): Promise<void> {
-    // size = the configured context window (user override -> provider limit ->
-    // model lookup, the shared #2251 resolver), used = tokens now in context —
-    // so the client renders consumption against the real window (issue #1607)
-    // instead of the previous used===size placeholder.
     const update = buildUsageUpdate(
       usage,
       getTokenLimitForConfiguredContext(this.config.getModel(), this.config),
@@ -787,6 +781,9 @@ export class Session {
     this.logger.debug(() => describeSessionUpdateForLog(update));
     await this.connection.sessionUpdate({ sessionId: this.id, update });
   }
+  async sendAvailableCommands(): Promise<void> {
+    await this.sendUpdateStrict(buildAvailableCommandsUpdate());
+  }
   private async sendUpdate(update: acp.SessionUpdate): Promise<void> {
     try {
       await this.sendUpdateStrict(update);
@@ -810,41 +807,13 @@ export class Session {
     }));
     await this.sendUpdate({ sessionUpdate: 'plan', entries });
   }
-  /**
-   * Replays a resumed conversation (ordered IContent[]) to the client as
-   * session/update notifications, in order, for ACP session/load (issue #1604).
-   * The neutral history is mapped to ACP updates by the pure
-   * mapHistoryToSessionUpdates helper (human text -> user_message_chunk, ai text
-   * -> agent_message_chunk, ai thinking -> agent_thought_chunk, ai tool_call ->
-   * tool_call, tool tool_response -> tool_call_update). Replay text is sent
-   * verbatim (NOT routed through the EmojiFilter): the recorded transcript was
-   * already filtered when first streamed, so re-filtering on replay would be
-   * redundant and could double-alter historical content.
-   */
   async streamHistory(items: readonly IContent[]): Promise<void> {
     const updates = mapHistoryToSessionUpdates(items);
     for (const update of updates) {
-      // STRICT: a failed delivery here (dead/failing transport) must reject so
-      // loadSession can clean up and report the failure instead of resolving as
-      // a success with a lost transcript (FINDING A). wrapReplayFailure maps the
-      // rejection to a precise internalError (passing an existing RequestError
-      // through unchanged) for loadSession's catch path.
-      try {
-        await this.sendUpdateStrict(update);
-      } catch (error) {
-        throw wrapReplayFailure(this.id, error);
-      }
+      try { await this.sendUpdateStrict(update); }
+      catch (error) { throw wrapReplayFailure(this.id, error); }
     }
   }
-  /**
-   * Re-attach replay for ACP session/load (#1604): replays this live session's
-   * IN-MEMORY conversation, used when a load targets a still-live session with
-   * no on-disk recording yet (unprompted; JSONL not materialized). History is
-   * read + wrapped by readAgentHistoryForReplay and maps through the SAME
-   * strict {@link streamHistory} path a disk resume uses (empty history → zero
-   * updates). Any failure rejects as a well-formed replay RequestError; the
-   * caller deliberately does NOT dispose the session — it remains healthy.
-   */
   async replayLiveHistory(): Promise<void> {
     await this.streamHistory(
       await readAgentHistoryForReplay(this.agent, this.id),
