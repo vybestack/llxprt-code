@@ -105,15 +105,6 @@ export function extractWWWAuthenticateHeader(
   return null;
 }
 
-/**
- * Detect deprecated SSE endpoint rejections (e.g. "SSE is no longer
- * supported, use https://mcp.example.com/mcp") and extract the suggested
- * replacement URL if present.
- *
- * @returns The suggested replacement URL, or an empty string if the
- * deprecation signal was detected but no URL was embedded, or null if no
- * deprecation signal was found.
- */
 function extractUrlAt(errorString: string, urlStart: number): string {
   let urlEnd = errorString.length;
   for (let i = urlStart; i < errorString.length; i++) {
@@ -155,6 +146,15 @@ function findUrlStarts(lower: string, start: number): number[] {
   return starts;
 }
 
+/**
+ * Detect deprecated SSE endpoint rejections (e.g. "SSE is no longer
+ * supported, use https://mcp.example.com/mcp") and extract the suggested
+ * replacement URL if present.
+ *
+ * @returns The suggested replacement URL, or an empty string if the
+ * deprecation signal was detected but no URL was embedded, or null if no
+ * deprecation signal was found.
+ */
 export function detectDeprecatedSSEEndpoint(
   errorString: string,
 ): string | null {
@@ -169,18 +169,20 @@ export function detectDeprecatedSSEEndpoint(
   }
   if (signalEnd === -1) return null;
 
-  const urls = findUrlStarts(lower, signalEnd).map((urlStart) =>
-    extractUrlAt(errorString, urlStart),
-  );
+  const urls = findUrlStarts(lower, signalEnd)
+    .map((urlStart) => extractUrlAt(errorString, urlStart))
+    .map((url) => {
+      try {
+        return { raw: url, parsed: new URL(url) };
+      } catch {
+        return undefined;
+      }
+    })
+    .filter((url) => url !== undefined);
   if (urls.length === 0) return '';
   return (
-    urls.find((url) => {
-      try {
-        return new URL(url).pathname.endsWith('/mcp');
-      } catch {
-        return false;
-      }
-    }) ?? urls[0]
+    urls.find(({ parsed }) => parsed.pathname.endsWith('/mcp'))?.raw ??
+    urls[0].raw
   );
 }
 

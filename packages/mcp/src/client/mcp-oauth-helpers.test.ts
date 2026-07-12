@@ -114,6 +114,13 @@ describe('detectDeprecatedSSEEndpoint', () => {
     expect(result).toBe('https://mcp.example.com/mcp');
   });
 
+  it('should prefer a later valid URL when the first extracted URL is malformed', () => {
+    const result = detectDeprecatedSSEEndpoint(
+      'SSE is deprecated. See https://bad.example.com:99999/ then use https://fallback.example.com/endpoint',
+    );
+    expect(result).toBe('https://fallback.example.com/endpoint');
+  });
+
   it('should preserve trailing comma in URL query string', () => {
     const result = detectDeprecatedSSEEndpoint(
       'SSE is no longer supported. Use https://mcp.example.com/mcp?scopes=a,b,',
