@@ -364,6 +364,15 @@ function createTerminalStreamError(
   });
 }
 
+function getIncompleteReason(
+  event: ResponsesEvent,
+  terminalReason: string,
+): string | undefined {
+  return terminalReason === 'incomplete'
+    ? event.response?.incomplete_details?.reason
+    : undefined;
+}
+
 /**
  * Handle response.completed / response.done / response.incomplete events.
  */
@@ -377,12 +386,8 @@ function* handleResponseCompleted(
   let nextState = state;
   let newHasEmitted = state.hasEmittedVisibleThinking;
 
-  // Usage data
   const terminalReason = event.response?.status ?? 'completed';
-  const incompleteReason =
-    terminalReason === 'incomplete'
-      ? event.response?.incomplete_details?.reason
-      : undefined;
+  const incompleteReason = getIncompleteReason(event, terminalReason);
 
   // Defensive: some implementations send failure via response.completed with
   // status "failed" rather than a standalone response.failed event.

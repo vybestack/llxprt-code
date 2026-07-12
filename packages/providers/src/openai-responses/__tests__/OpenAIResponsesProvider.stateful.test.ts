@@ -345,6 +345,7 @@ describe('OpenAIResponsesProvider stateful conversations @issue:207', () => {
     const users = userMessages(items);
     expect(users).toContain('first question');
     expect(users).toContain('second question');
+    expect(assistantMessages(items)).toContain('first answer');
   });
 
   it('preserves function_call_output for the new turn in stateful tool-response mode', async () => {
