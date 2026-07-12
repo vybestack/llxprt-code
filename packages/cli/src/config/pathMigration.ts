@@ -14,8 +14,9 @@ import { copyProfilesDirNormalized } from './legacyProfileNormalization.js';
 import {
   hasErrnoCode,
   uniqueTempPath,
-  markerVersionAtLeast,
+  parseMarkerStatus,
   fsyncDirSync,
+  type MarkerStatus,
 } from './localFsHelpers.js';
 import type {
   MigrationDestinations,
@@ -129,6 +130,41 @@ export function isMigrationComplete(
   );
 }
 
+/** Log why a parsed marker is not current without parsing it again. */
+function logMarkerReRun(markerPath: string, status: MarkerStatus): void {
+  switch (status.kind) {
+    case 'malformed-json':
+      logger.debug(
+        `Marker ${markerPath} is malformed (not valid JSON); re-running to self-heal.`,
+      );
+      return;
+    case 'invalid-object':
+      logger.debug(
+        `Marker ${markerPath} is corrupt (not a JSON object); re-running to self-heal.`,
+      );
+      return;
+    case 'missing-version':
+      logger.debug(
+        `Marker ${markerPath} is missing the version field; re-running to self-heal.`,
+      );
+      return;
+    case 'invalid-type':
+      logger.debug(
+        `Marker ${markerPath} has a non-numeric version; re-running to self-heal.`,
+      );
+      return;
+    case 'older':
+      logger.debug(
+        `Marker ${markerPath} is outdated (version ${status.version}); re-running to self-heal.`,
+      );
+      return;
+    case 'current':
+      return;
+    default:
+      status satisfies never;
+  }
+}
+
 function isMarkerAtVersion(markerPath: string, minVersion: number): boolean {
   let raw: string;
   try {
@@ -140,15 +176,11 @@ function isMarkerAtVersion(markerPath: string, minVersion: number): boolean {
     return false;
   }
 
-  if (markerVersionAtLeast(raw, minVersion)) {
+  const status = parseMarkerStatus(raw, minVersion);
+  if (status.kind === 'current') {
     return true;
   }
-  // Marker exists but is corrupt or wrong version — re-run to self-heal.
-  if (!raw.trim().startsWith('{') || raw.includes('"version"')) {
-    logger.debug(
-      `Marker ${markerPath} is corrupt or outdated; re-running to self-heal.`,
-    );
-  }
+  logMarkerReRun(markerPath, status);
   return false;
 }
 
@@ -453,7 +485,7 @@ export function runStartupMigrationWithPath(
       logger.error('Configuration migration failed:', error);
       migration = {
         migrated: false,
-        reason: `migration error: ${String(error)}`,
+        reason: 'configuration migration encountered an internal error',
         filesCopied: 0,
         error: true,
       };
@@ -500,6 +532,7 @@ function finalizeMigrationMarker(
     logMigrationStatus(legacyDir, destinations, migration);
     return migration;
   }
+  logPartialMigration(legacyDir, destinations, migration);
   return {
     migrated: false,
     reason: 'migration completed but marker write failed',
@@ -559,6 +592,31 @@ export function logMigrationStatus(
         `The old directory at ${legacyDir} can be removed manually once verified.\n`,
     );
   }
+}
+
+function logPartialMigration(
+  legacyDir: string,
+  destinations: MigrationDestinations,
+  result: MigrationResult,
+): void {
+  const fileWord = result.filesCopied === 1 ? 'file' : 'files';
+  const copySummary =
+    result.filesCopied === 0
+      ? 'Configuration migration could not be finalized (no files copied)'
+      : `Configuration partially migrated (${result.filesCopied} ${fileWord} copied)`;
+  const outcome =
+    result.filesCopied === 0
+      ? 'No files required copying, and the finalization marker failed; '
+      : 'The copying succeeded, but the finalization marker failed; ';
+  process.stderr.write(
+    `${copySummary} because the migration marker could not be written.\n` +
+      `  Config: ${destinations.configDir}\n` +
+      `  Data:   ${destinations.dataDir}\n` +
+      `  Cache:  ${destinations.cacheDir}\n` +
+      `  Logs:   ${destinations.logDir}\n` +
+      outcome +
+      `please retain the old directory at ${legacyDir} until the migration completes on a future startup.\n`,
+  );
 }
 
 export interface StartupReport {
@@ -625,6 +683,13 @@ function executeRepair(
       return repair;
     }
 
+    // Explicit error-first: if the repair itself failed, do NOT stamp the
+    // marker. Return the error result before considering the no-op or
+    // success cases.
+    if (repair.error === true) {
+      return repair;
+    }
+
     // Directive #4: only stamp the repair marker when >=1 actual repair
     // happened. If no candidates were found ('none'), do NOT stamp so a
     // later appearance of affected profiles is not suppressed.
@@ -632,13 +697,9 @@ function executeRepair(
       repair.profilesRepaired === undefined ||
       repair.profilesRepaired === 0
     ) {
-      // No actual repair — do not stamp marker (unless it was an error).
       return repair;
     }
 
-    if (repair.error === true) {
-      return repair;
-    }
     const markerWritten = markRepairComplete(destinations);
     if (markerWritten) {
       return repair;
@@ -654,7 +715,7 @@ function executeRepair(
     logger.error('Profile repair failed:', error);
     return {
       migrated: false,
-      reason: `repair error: ${String(error)}`,
+      reason: 'profile repair encountered an internal error',
       filesCopied: 0,
       error: true,
     };

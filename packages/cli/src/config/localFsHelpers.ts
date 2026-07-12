@@ -17,9 +17,14 @@ import * as crypto from 'node:crypto';
 
 // ─── Structural error guard ─────────────────────────────────────────────────
 
+/**
+ * Structural guard for Node.js filesystem errors that carry a `code`
+ * property. Avoids `as NodeJS.ErrnoException` type assertions. Only `code`
+ * is required; `message` may be absent on values that pass the guard.
+ */
 export interface ErrnoError {
   readonly code: string;
-  readonly message: string;
+  readonly message?: string;
 }
 
 /**
@@ -30,11 +35,15 @@ export function hasErrnoCode(
   error: unknown,
   expectedCode: string,
 ): error is ErrnoError {
+  return isObjectWithCode(error) && error.code === expectedCode;
+}
+
+function isObjectWithCode(error: unknown): error is ErrnoError {
   return (
     typeof error === 'object' &&
     error !== null &&
     'code' in error &&
-    error.code === expectedCode
+    typeof error.code === 'string'
   );
 }
 
@@ -166,25 +175,47 @@ function isDirFsyncUnsupported(error: unknown): boolean {
 // ─── Marker version guard ───────────────────────────────────────────────────
 
 /**
- * Structural guard for the migration/repair marker JSON. Parses and
- * validates that `version` is a number, avoiding `as { version?: number }`
- * type assertions.
+ * Discriminated status of a parsed marker JSON blob. The marker is parsed
+ * exactly once so callers can use the same result for both the version
+ * decision and the diagnostic log.
  */
-export function markerVersionAtLeast(
+export type MarkerStatus =
+  | { readonly kind: 'current'; readonly version: number }
+  | { readonly kind: 'older'; readonly version: number }
+  | { readonly kind: 'missing-version' }
+  | { readonly kind: 'invalid-type'; readonly version: unknown }
+  | { readonly kind: 'invalid-object' }
+  | { readonly kind: 'malformed-json' };
+
+/**
+ * Parse a raw marker JSON blob exactly once into a discriminated
+ * {@link MarkerStatus}. Both the version decision (is the marker current?)
+ * and the diagnostic log (why is it not current?) consume this single parse
+ * so the JSON is never parsed twice.
+ */
+export function parseMarkerStatus(
   rawJson: string,
   minVersion: number,
-): boolean {
+): MarkerStatus {
   let parsed: unknown;
   try {
     parsed = JSON.parse(rawJson);
   } catch {
-    return false;
+    return { kind: 'malformed-json' };
   }
   if (!isPlainObject(parsed)) {
-    return false;
+    return { kind: 'invalid-object' };
+  }
+  if (!('version' in parsed)) {
+    return { kind: 'missing-version' };
   }
   const version = parsed['version'];
-  return typeof version === 'number' && version >= minVersion;
+  if (typeof version !== 'number') {
+    return { kind: 'invalid-type', version };
+  }
+  return version >= minVersion
+    ? { kind: 'current', version }
+    : { kind: 'older', version };
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

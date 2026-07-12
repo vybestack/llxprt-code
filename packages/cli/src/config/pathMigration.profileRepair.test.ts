@@ -253,14 +253,15 @@ describe('repairProfiles — corrupt profile repair (#2477)', () => {
   });
 
   it('does not overwrite a valid canonical profile even if legacy is richer', () => {
+    const canonicalProfile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4o',
+      modelParams: {},
+      ephemeralSettings: { 'context-limit': 100000 },
+    };
     writeFiles(env.destinations.configDir, {
-      'profiles/myprof.json': JSON.stringify({
-        version: 1,
-        provider: 'openai',
-        model: 'gpt-4o',
-        modelParams: {},
-        ephemeralSettings: { 'context-limit': 100000 },
-      }),
+      'profiles/myprof.json': JSON.stringify(canonicalProfile),
     });
     writeFiles(env.legacyDir, {
       'profiles/myprof.json': JSON.stringify({
@@ -283,7 +284,9 @@ describe('repairProfiles — corrupt profile repair (#2477)', () => {
         'utf-8',
       ),
     );
-    expect(after.model).toBe('gpt-4o');
+    // Deep-equal the entire profile against the original canonical to verify
+    // no legacy fields (base-url, auth-key-name) were merged in.
+    expect(after).toStrictEqual(canonicalProfile);
     const profilesDir = path.join(env.destinations.configDir, 'profiles');
     expect(
       fs
@@ -338,7 +341,8 @@ describe('repairProfiles — corrupt profile repair (#2477)', () => {
   });
 
   it('does not replace corrupt canonical when legacy is a loadbalancer profile', () => {
-    setupRepairCase(env, corruptCanonicalProfile(), genuineLbProfile());
+    const corrupt = corruptCanonicalProfile();
+    setupRepairCase(env, corrupt, genuineLbProfile());
     repairProfiles(env.legacyDir, env.destinations);
     const after = JSON.parse(
       fs.readFileSync(
@@ -346,8 +350,9 @@ describe('repairProfiles — corrupt profile repair (#2477)', () => {
         'utf-8',
       ),
     );
-    expect(after.provider).toBe('load-balancer');
-    expect(after.type).not.toBe('loadbalancer');
+    // Deep-equal against the original corrupt canonical to verify NO fields
+    // were modified — not just a single field that happens to be undefined.
+    expect(after).toStrictEqual(corrupt);
   });
 
   it('does not replace corrupt canonical when legacy is not a valid profile', () => {
@@ -716,6 +721,21 @@ describe('runStartupMigrationWithPath — logging', () => {
     expect(repairLog).toBeDefined();
     expect(repairLog).toContain('1 profile');
     expect(writes.find((w) => w.includes('files copied'))).toBeUndefined();
+  });
+
+  it('a successful repair never carries the error flag', () => {
+    fs.mkdirSync(env.destinations.dataDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(env.destinations.dataDir, '.migration-complete.json'),
+      JSON.stringify({ version: 1 }),
+    );
+    setupRepairCase(env, corruptCanonicalProfile(), validLegacyProfile());
+    const result = runStartupMigrationWithPath(env.legacyDir, env.destinations);
+    // A successful repair must be migrated:true with NO error flag — never
+    // the contradictory { migrated: true, error: true } state.
+    expect(result.repair.profilesRepaired).toBe(1);
+    expect(result.repair.migrated).toBe(true);
+    expect(result.repair.error).not.toBe(true);
   });
 });
 

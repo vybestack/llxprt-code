@@ -12,7 +12,6 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import * as childProcess from 'node:child_process';
 import {
   acquireProfilesLock,
   acquireProfilesLockSync,
@@ -21,9 +20,11 @@ import {
   atomicWriteFile,
   writeProfileFile,
   deleteProfileFile,
+  withProfilesLockSync,
+  withProfilesLock,
+  hasErrnoCode,
   LockBusyError,
 } from '../profileStore.js';
-import { ProfileManager } from '../ProfileManager.js';
 
 async function makeTempDir(): Promise<string> {
   return fsp.mkdtemp(path.join(os.tmpdir(), 'llxprt-profilestore-test-'));
@@ -34,6 +35,42 @@ describe('profileStore — lockPathForProfilesDir', () => {
     expect(lockPathForProfilesDir('/foo/profiles')).toBe(
       path.join('/foo/profiles', '.profiles.lock'),
     );
+  });
+});
+
+describe('profileStore — hasErrnoCode guard', () => {
+  it('narrows for an object with matching string code', () => {
+    const error: unknown = { code: 'ENOENT', message: 'no such file' };
+    expect(hasErrnoCode(error, 'ENOENT')).toBe(true);
+  });
+
+  it('accepts a matching errno code when message is absent', () => {
+    const error: unknown = { code: 'ENOENT' };
+    expect(hasErrnoCode(error, 'ENOENT')).toBe(true);
+  });
+
+  it('rejects when code does not match', () => {
+    const error: unknown = { code: 'EACCES', message: 'permission denied' };
+    expect(hasErrnoCode(error, 'ENOENT')).toBe(false);
+  });
+
+  it('rejects non-object values', () => {
+    expect(hasErrnoCode('ENOENT', 'ENOENT')).toBe(false);
+    expect(hasErrnoCode(42, 'ENOENT')).toBe(false);
+    expect(hasErrnoCode(null, 'ENOENT')).toBe(false);
+    expect(hasErrnoCode(undefined, 'ENOENT')).toBe(false);
+  });
+
+  it('rejects objects whose code is not a string (e.g. number)', () => {
+    const error: unknown = { code: 2, message: 'no such file' };
+    // A numeric code must NOT match even if the number coerces to a
+    // different string — type-safety requires typeof string.
+    expect(hasErrnoCode(error, '2')).toBe(false);
+  });
+
+  it('rejects objects without a code property', () => {
+    const error: unknown = { message: 'something went wrong' };
+    expect(hasErrnoCode(error, 'ENOENT')).toBe(false);
   });
 });
 
@@ -465,9 +502,20 @@ describe('profileStore — deleteProfileFile', () => {
   });
 });
 
-// ─── Real cross-process lock contention (deterministic) ─────────────────────
+// ─── Dual failure normalization (toError) ──────────────────────────────────
 
-describe('profileStore — real cross-process lock contention', () => {
+/**
+ * Assert that the caught value is an AggregateError and return it narrowed.
+ * Lives outside test bodies so it does not trigger no-conditional-in-test.
+ */
+function asAggregateError(caught: unknown): AggregateError {
+  if (!(caught instanceof AggregateError)) {
+    throw new Error(`expected AggregateError, got ${typeof caught}`);
+  }
+  return caught;
+}
+
+describe('profileStore — dual failure normalization (#5)', () => {
   let tempDir: string;
 
   beforeEach(async () => {
@@ -478,280 +526,220 @@ describe('profileStore — real cross-process lock contention', () => {
     await fsp.rm(tempDir, { recursive: true, force: true });
   });
 
-  it('child process cannot acquire the lock while parent holds it', async () => {
-    const lock = await acquireProfilesLock(tempDir);
-
-    const childResult = await runChildLockAttempt(tempDir);
-    // Child should fail with EEXIST (non-zero exit).
-    expect(childResult.exitCode).not.toBe(0);
-    expect(childResult.stderr).toContain('EEXIST');
-
-    await lock.release();
-  });
-
-  it('child process acquires the lock after parent releases it', async () => {
-    const lock = await acquireProfilesLock(tempDir);
-    await lock.release();
-
-    const childResult = await runChildLockAttempt(tempDir);
-    expect(childResult.exitCode).toBe(0);
-  });
-});
-
-// ─── Deterministic process test: READY/RELEASE protocol ─────────────────────
-// Replaces fixed sleep/elapsed assertions with explicit synchronization.
-
-describe('profileStore — deterministic cross-process serialization', () => {
-  let tempDir: string;
-
-  beforeEach(async () => {
-    tempDir = await makeTempDir();
-  });
-
-  afterEach(async () => {
-    await fsp.rm(tempDir, { recursive: true, force: true });
-  });
-
-  it('ProfileManager save waits for child-process lock to release (READY/RELEASE)', async () => {
-    const profilesDir = tempDir;
-    const profilePath = path.join(profilesDir, 'concurrent-test.json');
-
-    // Spawn a child that acquires the lock, emits READY, waits for RELEASE,
-    // then releases and exits. Uses stdin/stdout for synchronization.
-    const child = childProcess.spawn(
-      process.execPath,
-      ['-e', buildReadyReleaseChildScript(profilesDir)],
-      { stdio: ['pipe', 'pipe', 'pipe'] },
-    );
-
-    // Set up exit listener early so we don't miss the event.
-    const exitPromise = waitForExit(child, 10000);
-
-    // Wait for child to signal READY (lock acquired).
-    await waitForStdout(child, 'READY', 5000);
-
-    // Verify the lock file exists while child holds it.
-    expect(fs.existsSync(lockPathForProfilesDir(profilesDir))).toBe(true);
-
-    // Verify the profile does NOT exist yet.
-    expect(fs.existsSync(profilePath)).toBe(false);
-
-    // Start a real ProfileManager write — it should block waiting for the lock.
-    const pm = new ProfileManager(profilesDir);
-    const writePromise = pm.saveProfile('concurrent-test', {
-      version: 1,
-      provider: 'openai',
-      model: 'gpt-4',
-      modelParams: {},
-      ephemeralSettings: {},
-    });
-
-    // Give the write a moment to start waiting.
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Profile should still NOT exist (write is blocked).
-    expect(fs.existsSync(profilePath)).toBe(false);
-
-    // Signal child to RELEASE the lock.
-    child.stdin.write('RELEASE\n');
-
-    // Wait for the write to complete.
-    await writePromise;
-
-    // Now the profile exists with the correct content.
-    expect(fs.existsSync(profilePath)).toBe(true);
-    const content = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
-    expect(content.provider).toBe('openai');
-
-    // Lock released after ProfileManager save.
-    expect(fs.existsSync(lockPathForProfilesDir(profilesDir))).toBe(false);
-
-    // Child exited cleanly.
-    const exitCode = await exitPromise;
-    expect(exitCode).toBe(0);
-  });
-
-  it('repair-vs-writer: sync lock holder blocks async writer, then releases', async () => {
-    const profilesDir = tempDir;
-    const profilePath = path.join(profilesDir, 'repair-test.json');
-
-    // Child holds the sync lock using READY/RELEASE protocol.
-    const child = childProcess.spawn(
-      process.execPath,
-      ['-e', buildReadyReleaseChildScript(profilesDir)],
-      { stdio: ['pipe', 'pipe', 'pipe'] },
-    );
-
-    const exitPromise = waitForExit(child, 10000);
-    await waitForStdout(child, 'READY', 5000);
-
-    // While child holds lock, a ProfileManager write must be blocked.
-    const pm = new ProfileManager(profilesDir);
-    const writePromise = pm.saveProfile('repair-test', {
-      version: 1,
-      provider: 'anthropic',
-      model: 'glm-5.2',
-      modelParams: {},
-      ephemeralSettings: {},
-    });
-
-    // Not done yet.
-    let writeDone = false;
-    void writePromise.then(() => {
-      writeDone = true;
-    });
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    expect(writeDone).toBe(false);
-
-    // Release child lock.
-    child.stdin.write('RELEASE\n');
-    await writePromise;
-    await exitPromise;
-
-    // Final bytes are correct.
-    const content = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
-    expect(content.provider).toBe('anthropic');
-    expect(content.model).toBe('glm-5.2');
-  });
-});
-
-// ─── Helpers for child-process contention tests ─────────────────────────────
-
-interface ChildResult {
-  exitCode: number | null;
-  stdout: string;
-  stderr: string;
-}
-
-/**
- * Run a child process that attempts to acquire the sync lock on tempDir and
- * exits immediately. Returns non-zero if the lock was held (LockBusyError).
- */
-async function runChildLockAttempt(tempDir: string): Promise<ChildResult> {
-  const lockPath = lockPathForProfilesDir(tempDir);
-  const script = `
-    const fs = require('node:fs');
-    const path = require('node:path');
-    const lockPath = ${JSON.stringify(lockPath)};
+  it('aggregates Error throws from both operation and release as Error elements', () => {
+    // Overwrite the lock file with a different token after acquisition so
+    // release() throws — combined with the operation throwing, this
+    // exercises the dual-failure AggregateError path.
+    const lockPath = lockPathForProfilesDir(tempDir);
+    let caught: unknown;
     try {
-      fs.openSync(lockPath, 'wx', 0o600);
-      fs.unlinkSync(lockPath);
-      process.exit(0);
-    } catch (e) {
-      process.stderr.write(e.message + ' ' + (e.code || ''));
-      process.exit(1);
-    }
-  `;
-  return runChildScript(script);
-}
-
-/**
- * Build a child-process script that uses the READY/RELEASE synchronization
- * protocol. The child:
- * 1. Acquires the lock via O_EXCL (open wx).
- * 2. Writes READY to stdout.
- * 3. Waits for RELEASE on stdin (line-based).
- * 4. Removes the lock file and exits 0.
- */
-function buildReadyReleaseChildScript(profilesDir: string): string {
-  const lockPath = lockPathForProfilesDir(profilesDir);
-  return `
-    const fs = require('node:fs');
-    const readline = require('node:readline');
-    const lockPath = ${JSON.stringify(lockPath)};
-    let fd;
-    try {
-      fd = fs.openSync(lockPath, 'wx', 0o600);
-      const meta = JSON.stringify({ pid: process.pid, token: 'child-' + process.pid, created: new Date().toISOString() });
-      fs.writeSync(fd, meta);
-      fs.fsyncSync(fd);
-      fs.closeSync(fd);
-    } catch (e) {
-      process.stderr.write('LockBusyError: ' + e.message + '\\n');
-      process.exit(1);
-    }
-    process.stdout.write('READY\\n');
-    const rl = readline.createInterface({ input: process.stdin });
-    rl.on('line', (line) => {
-      if (line.trim() === 'RELEASE') {
-        try { fs.unlinkSync(lockPath); } catch {}
-        process.exit(0);
-      }
-    });
-  `;
-}
-
-function waitForStdout(
-  child: childProcess.ChildProcess,
-  expected: string,
-  timeoutMs: number,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`Timeout waiting for stdout "${expected}"`));
-    }, timeoutMs);
-
-    child.stdout?.on('data', (data: Buffer) => {
-      if (data.toString().includes(expected)) {
-        clearTimeout(timer);
-        resolve();
-      }
-    });
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-    child.on('exit', (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(
-          new Error(`Child exited with code ${code} before "${expected}"`),
+      withProfilesLockSync(tempDir, () => {
+        // Simulate a different owner on disk before release.
+        fs.writeFileSync(
+          lockPath,
+          JSON.stringify({
+            pid: 1,
+            token: 'other',
+            created: new Date().toISOString(),
+          }),
+          { mode: 0o600 },
         );
-      }
-    });
-  });
-}
+        throw new Error('operation failed');
+      });
+    } catch (error) {
+      caught = error;
+    }
 
-function waitForExit(
-  child: childProcess.ChildProcess,
-  timeoutMs: number,
-): Promise<number | null> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error('Timeout waiting for child exit'));
-    }, timeoutMs);
-    child.on('exit', (code) => {
-      clearTimeout(timer);
-      resolve(code);
-    });
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
+    expect(caught).toBeInstanceOf(AggregateError);
+    const aggregate = asAggregateError(caught);
+    // Both elements must be Error instances (not raw throws).
+    expect(aggregate.errors).toHaveLength(2);
+    for (const el of aggregate.errors) {
+      expect(el).toBeInstanceOf(Error);
+    }
+    // The original operation error message is preserved exactly.
+    expect(aggregate.errors[0]?.message).toBe('operation failed');
+    // The release error message is preserved exactly.
+    expect(aggregate.errors[1]?.message).toContain('ownership changed');
   });
-}
 
-async function runChildScript(script: string): Promise<ChildResult> {
-  return new Promise((resolve) => {
-    const child = childProcess.execFile(
-      process.execPath,
-      ['-e', script],
-      {
-        cwd: process.cwd(),
-        timeout: 10000,
-      },
-      (error, stdout, stderr) => {
-        let exitCode = 0;
-        if (error !== null) {
-          exitCode = typeof error.code === 'number' ? error.code : 1;
-        }
-        resolve({
-          exitCode,
-          stdout,
-          stderr,
-        });
-      },
-    );
-    void child;
+  it('normalizes a string throw into an Error inside the aggregate (no crash)', () => {
+    const lockPath = lockPathForProfilesDir(tempDir);
+    // Assign to a variable so the throw is not a literal (lint), and to
+    // exercise the non-Error normalization path.
+    const stringError: unknown = 'string error';
+    let caught: unknown;
+    try {
+      withProfilesLockSync(tempDir, () => {
+        fs.writeFileSync(
+          lockPath,
+          JSON.stringify({
+            pid: 1,
+            token: 'other',
+            created: new Date().toISOString(),
+          }),
+          { mode: 0o600 },
+        );
+        throw stringError;
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(AggregateError);
+    const aggregate = asAggregateError(caught);
+    // Every element must be an Error — the string must have been normalized.
+    for (const el of aggregate.errors) {
+      expect(el).toBeInstanceOf(Error);
+    }
+    // The string throw is normalized to an Error with that exact message.
+    expect(aggregate.errors[0]).toBeInstanceOf(Error);
+    expect(aggregate.errors[0].message).toBe('string error');
   });
-}
+
+  it('does not crash when a thrown value has a hostile toString (dual failure)', () => {
+    const lockPath = lockPathForProfilesDir(tempDir);
+    const hostile: unknown = {
+      toString() {
+        throw new Error('hostile toString');
+      },
+    };
+    let caught: unknown;
+    try {
+      withProfilesLockSync(tempDir, () => {
+        fs.writeFileSync(
+          lockPath,
+          JSON.stringify({
+            pid: 1,
+            token: 'other',
+            created: new Date().toISOString(),
+          }),
+          { mode: 0o600 },
+        );
+        throw hostile;
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    // The hostile toString must not crash the normalization — an
+    // AggregateError with Error elements is still produced.
+    expect(caught).toBeInstanceOf(AggregateError);
+    const aggregate = asAggregateError(caught);
+    for (const el of aggregate.errors) {
+      expect(el).toBeInstanceOf(Error);
+    }
+    // The hostile object is normalized to the hostile-fallback sentinel,
+    // not the result of its throwing toString.
+    expect(aggregate.errors[0]).toBeInstanceOf(Error);
+    expect(aggregate.errors[0].message).toBe('(unrepresentable value)');
+  });
+});
+
+// ─── Async dual failure normalization (toError) ────────────────────────────
+
+describe('profileStore — async dual failure normalization (#5 async)', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await makeTempDir();
+  });
+
+  afterEach(async () => {
+    await fsp.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('async: aggregates Error throws from both operation and release', async () => {
+    const lockPath = lockPathForProfilesDir(tempDir);
+    let caught: unknown;
+    try {
+      await withProfilesLock(tempDir, async () => {
+        fs.writeFileSync(
+          lockPath,
+          JSON.stringify({
+            pid: 1,
+            token: 'other',
+            created: new Date().toISOString(),
+          }),
+          { mode: 0o600 },
+        );
+        throw new Error('async operation failed');
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(AggregateError);
+    const aggregate = asAggregateError(caught);
+    expect(aggregate.errors).toHaveLength(2);
+    for (const el of aggregate.errors) {
+      expect(el).toBeInstanceOf(Error);
+    }
+    expect(aggregate.errors[0]?.message).toBe('async operation failed');
+    expect(aggregate.errors[1]?.message).toContain('ownership changed');
+  });
+
+  it('async: normalizes a non-Error throw into an Error in the aggregate', async () => {
+    const lockPath = lockPathForProfilesDir(tempDir);
+    const stringError: unknown = 'async string error';
+    let caught: unknown;
+    try {
+      await withProfilesLock(tempDir, async () => {
+        fs.writeFileSync(
+          lockPath,
+          JSON.stringify({
+            pid: 1,
+            token: 'other',
+            created: new Date().toISOString(),
+          }),
+          { mode: 0o600 },
+        );
+        throw stringError;
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(AggregateError);
+    const aggregate = asAggregateError(caught);
+    for (const el of aggregate.errors) {
+      expect(el).toBeInstanceOf(Error);
+    }
+    expect(aggregate.errors[0]).toBeInstanceOf(Error);
+    expect(aggregate.errors[0].message).toBe('async string error');
+  });
+
+  it('async: does not crash when thrown value has hostile toString', async () => {
+    const lockPath = lockPathForProfilesDir(tempDir);
+    const hostile: unknown = {
+      toString() {
+        throw new Error('hostile toString');
+      },
+    };
+    let caught: unknown;
+    try {
+      await withProfilesLock(tempDir, async () => {
+        fs.writeFileSync(
+          lockPath,
+          JSON.stringify({
+            pid: 1,
+            token: 'other',
+            created: new Date().toISOString(),
+          }),
+          { mode: 0o600 },
+        );
+        throw hostile;
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(AggregateError);
+    const aggregate = asAggregateError(caught);
+    for (const el of aggregate.errors) {
+      expect(el).toBeInstanceOf(Error);
+    }
+    expect(aggregate.errors[0]).toBeInstanceOf(Error);
+    expect(aggregate.errors[0].message).toBe('(unrepresentable value)');
+  });
+});

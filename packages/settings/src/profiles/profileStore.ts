@@ -8,6 +8,15 @@ import * as fsSync from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
+import { channel } from 'node:diagnostics_channel';
+
+/**
+ * diagnostics_channel name published exactly once per async lock acquisition
+ * when the first EEXIST is observed. The payload is `{ lockPath: string }`.
+ * Tests subscribe to this channel to deterministically observe lock
+ * contention without sleeps.
+ */
+export const LOCK_CONTENTION_CHANNEL = 'llxprt:profilesLock:contention';
 
 const LOCK_FILE_NAME = '.profiles.lock';
 
@@ -50,22 +59,37 @@ const DIR_FSYNC_UNSUPPORTED_CODES: ReadonlySet<string> = new Set([
 /**
  * Structural guard for Node.js filesystem errors that carry a `code`
  * property (ENOENT, EEXIST, EACCES, etc.). Avoids `as NodeJS.ErrnoException`
- * type assertions at every catch site.
+ * type assertions at every catch site. Only `code` is required; `message`
+ * may be absent on values that pass the guard (the guard itself only checks
+ * for the presence and type of `code`).
  */
 export interface ErrnoError {
-  readonly code?: string;
-  readonly message: string;
+  readonly code: string;
+  readonly message?: string;
+}
+
+/**
+ * A value that has been structurally verified to carry a string `code`
+ * property. This is the narrowed form used by internal guards so that
+ * `error.code` is always `string` (never `undefined`) after narrowing.
+ */
+interface CodedError {
+  readonly code: string;
 }
 
 export function hasErrnoCode(
   error: unknown,
   expectedCode: string,
 ): error is ErrnoError {
+  return isObjectWithCode(error) && error.code === expectedCode;
+}
+
+function isObjectWithCode(error: unknown): error is CodedError {
   return (
     typeof error === 'object' &&
     error !== null &&
     'code' in error &&
-    error.code === expectedCode
+    typeof error.code === 'string'
   );
 }
 
@@ -390,6 +414,7 @@ export async function acquireProfilesLock(
   await fs.mkdir(profilesDir, { recursive: true, mode: 0o700 });
   const lockPath = lockPathForProfilesDir(profilesDir);
   const deadline = Date.now() + (deadlineMs ?? ASYNC_LOCK_DEADLINE_MS);
+  let contentionPublished = false;
 
   for (;;) {
     const { metadata, serialized } = buildOwnerMetadata();
@@ -406,6 +431,13 @@ export async function acquireProfilesLock(
     } catch (error) {
       if (!hasErrnoCode(error, 'EEXIST')) {
         throw error;
+      }
+      // Publish a contention event once per acquisition after the first
+      // EEXIST, carrying a minimal lockPath payload. Tests subscribe to
+      // this channel to observe lock contention without sleeps.
+      if (!contentionPublished) {
+        contentionPublished = true;
+        channel(LOCK_CONTENTION_CHANNEL).publish({ lockPath });
       }
     }
 
@@ -520,7 +552,7 @@ export function withProfilesLockSync<T>(
   } catch (releaseError) {
     if (outcome.kind === 'error') {
       throw new AggregateError(
-        [outcome.error, releaseError],
+        [toError(outcome.error), toError(releaseError)],
         'profiles operation and lock release both failed',
       );
     }
@@ -533,7 +565,30 @@ export function withProfilesLockSync<T>(
   return outcome.value;
 }
 
-async function withProfilesLock<T>(
+/**
+ * Normalize a caught `unknown` value into an `Error` for inclusion in an
+ * `AggregateError`. If the value is already an Error, it is returned as-is.
+ * Otherwise, a best-effort description is produced without throwing, even
+ * if the value's toString is hostile.
+ */
+function toError(value: unknown): Error {
+  if (value instanceof Error) {
+    return value;
+  }
+  let description: string;
+  try {
+    if (typeof value === 'string') {
+      description = value;
+    } else {
+      description = String(value);
+    }
+  } catch {
+    description = '(unrepresentable value)';
+  }
+  return new Error(description);
+}
+
+export async function withProfilesLock<T>(
   profilesDir: string,
   operation: () => Promise<T>,
 ): Promise<T> {
@@ -550,7 +605,7 @@ async function withProfilesLock<T>(
   } catch (releaseError) {
     if (outcome.kind === 'error') {
       throw new AggregateError(
-        [outcome.error, releaseError],
+        [toError(outcome.error), toError(releaseError)],
         'profiles operation and lock release both failed',
       );
     }
@@ -631,15 +686,7 @@ export async function fsyncDir(dirPath: string): Promise<void> {
  * code that should be silently ignored (#5).
  */
 function isDirFsyncUnsupported(error: unknown): boolean {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    typeof error.code === 'string'
-  ) {
-    return DIR_FSYNC_UNSUPPORTED_CODES.has(error.code);
-  }
-  return false;
+  return isObjectWithCode(error) && DIR_FSYNC_UNSUPPORTED_CODES.has(error.code);
 }
 
 // ─── File read helper ───────────────────────────────────────────────────────

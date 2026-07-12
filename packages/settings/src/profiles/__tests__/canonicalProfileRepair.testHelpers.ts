@@ -97,6 +97,11 @@ export function validLegacyProfileAlternative(): Record<string, unknown> {
   };
 }
 
+/**
+ * A genuine load-balancer profile with valid type, policy, and profiles
+ * settings. Such a profile is NOT corrupt — the type field disqualifies it
+ * from the canonical corrupt signature.
+ */
 export function genuineLbProfile(): Record<string, unknown> {
   return {
     version: 1,

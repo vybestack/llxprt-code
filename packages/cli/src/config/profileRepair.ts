@@ -42,7 +42,7 @@ export function repairProfiles(
     logger.error('Profile repair failed:', error);
     return {
       migrated: false,
-      reason: `repair error: ${String(error)}`,
+      reason: 'profile repair encountered an internal error',
       filesCopied: 0,
       error: true,
     };
@@ -69,7 +69,6 @@ function translateOutcome(outcome: CanonicalRepairOutcome): MigrationResult {
         reason: 'profile repair complete',
         filesCopied: 0,
         profilesRepaired: outcome.profilesRepaired,
-        error: outcome.errors.length > 0 || undefined,
       };
     case 'none':
       return {
@@ -85,9 +84,10 @@ function translateOutcome(outcome: CanonicalRepairOutcome): MigrationResult {
         filesCopied: 0,
       };
     case 'error':
+      logger.debug('Profile repair errors:', outcome.errors);
       return {
         migrated: false,
-        reason: `profile repair incomplete: ${outcome.errors.join('; ')}`,
+        reason: 'profile repair encountered an internal error',
         filesCopied: 0,
         error: true,
       };

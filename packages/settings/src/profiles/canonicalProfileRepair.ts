@@ -42,7 +42,6 @@ export type CanonicalRepairOutcome =
   | {
       readonly kind: 'repaired';
       readonly profilesRepaired: number;
-      readonly errors: readonly string[];
     }
   | { readonly kind: 'none' }
   | { readonly kind: 'busy' }
@@ -589,7 +588,7 @@ function repairCanonicalProfilesLocked(
   try {
     const repaired = repairOneCandidate(candidates[0]);
     if (repaired) {
-      return { kind: 'repaired', profilesRepaired: 1, errors };
+      return { kind: 'repaired', profilesRepaired: 1 };
     }
     return errors.length === 0 ? { kind: 'none' } : { kind: 'error', errors };
   } catch (error) {

@@ -6,7 +6,7 @@
  * Uses real temp directories and the actual filesystem — no mocking.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'node:path';
 import * as os from 'os';
@@ -384,6 +384,120 @@ describe('runStartupMigrationWithPath — marker write failure scenarios', () =>
     expect(result.migration.reason).toContain('marker write failed');
   });
 
+  it('logs partial-success when marker write fails: copied count reported, no removal advice', () => {
+    writeFiles(env.legacyDir, { 'settings.json': '{"theme": "dark"}' });
+    fs.mkdirSync(env.destinations.dataDir, { recursive: true });
+    // Block the marker by creating a directory at the marker path.
+    fs.mkdirSync(
+      path.join(env.destinations.dataDir, '.migration-complete.json'),
+      { recursive: true },
+    );
+
+    const writes: string[] = [];
+    const captureWrite = (chunk: string | Uint8Array): boolean => {
+      writes.push(typeof chunk === 'string' ? chunk : String(chunk));
+      return true;
+    };
+    const spy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(captureWrite);
+    try {
+      const result = runStartupMigrationWithPath(
+        env.legacyDir,
+        env.destinations,
+      );
+      // Migration files were copied, but marker failed.
+      expect(result.migration.error).toBe(true);
+
+      // The partial-success log must report the copied count so the user
+      // sees what was accomplished.
+      const partialLog = writes.find((w) => w.includes('partially migrated'));
+      expect(partialLog).toBeDefined();
+      // Must include the files-copied count with singular wording for 1.
+      expect(partialLog).toContain('1 file copied');
+      // Must accurately state copying succeeded but marker failed.
+      expect(partialLog).toContain('copying succeeded');
+      expect(partialLog).toContain('marker failed');
+      // Must explicitly advise RETAINING the legacy dir (no removal advice).
+      expect(partialLog).toContain('retain');
+      expect(partialLog).toContain(env.legacyDir);
+      // Must NOT advise removal of the legacy directory.
+      expect(partialLog).not.toContain('can be removed');
+      // Must NOT claim full success.
+      expect(partialLog).not.toContain('migrated successfully');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('logs partial-success with plural count when multiple files copied and marker fails', () => {
+    writeFiles(env.legacyDir, {
+      'settings.json': '{"theme": "dark"}',
+      'LLXPRT.md': '# config',
+    });
+    fs.mkdirSync(env.destinations.dataDir, { recursive: true });
+    fs.mkdirSync(
+      path.join(env.destinations.dataDir, '.migration-complete.json'),
+      { recursive: true },
+    );
+
+    const writes: string[] = [];
+    const captureWrite = (chunk: string | Uint8Array): boolean => {
+      writes.push(typeof chunk === 'string' ? chunk : String(chunk));
+      return true;
+    };
+    const spy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(captureWrite);
+    try {
+      runStartupMigrationWithPath(env.legacyDir, env.destinations);
+
+      const partialLog = writes.find((w) => w.includes('partially migrated'));
+      expect(partialLog).toBeDefined();
+      // Plural wording for count > 1.
+      expect(partialLog).toContain('2 files copied');
+      expect(partialLog).not.toContain('2 file copied');
+      // Copying succeeded but finalization marker failed.
+      expect(partialLog).toContain('copying succeeded');
+      expect(partialLog).toContain('marker failed');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('does not describe a zero-copy marker failure as a partial migration', () => {
+    fs.mkdirSync(path.join(env.legacyDir, 'profiles'), { recursive: true });
+    fs.mkdirSync(env.destinations.dataDir, { recursive: true });
+    fs.mkdirSync(
+      path.join(env.destinations.dataDir, '.migration-complete.json'),
+      { recursive: true },
+    );
+
+    const writes: string[] = [];
+    const spy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation((chunk: string | Uint8Array) => {
+        writes.push(typeof chunk === 'string' ? chunk : String(chunk));
+        return true;
+      });
+    try {
+      const result = runStartupMigrationWithPath(
+        env.legacyDir,
+        env.destinations,
+      );
+      expect(result.migration.filesCopied).toBe(0);
+      expect(result.migration.error).toBe(true);
+      const finalizationLog = writes.find((write) =>
+        write.includes('no files copied'),
+      );
+      expect(finalizationLog).toContain('could not be finalized');
+      expect(finalizationLog).toContain('No files required copying');
+      expect(finalizationLog).not.toContain('partially migrated');
+      expect(finalizationLog).not.toContain('copying succeeded');
+    } finally {
+      spy.mockRestore();
+    }
+  });
   it('migration marker write failure produces a warning in reportStartupResult', () => {
     const report = reportStartupResult(
       {
