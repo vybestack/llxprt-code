@@ -6,7 +6,9 @@
 
 import type * as acp from '@agentclientprotocol/sdk';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { Config } from '@vybestack/llxprt-code-core';
+import { DebugLogger, type Config } from '@vybestack/llxprt-code-core';
+
+const logger = new DebugLogger('llxprt:zed-integration:commands');
 
 export interface ZedCommandContext {
   readonly agent: Agent;
@@ -159,7 +161,8 @@ export async function executeZedCommand(
   if (command === undefined) return null;
   try {
     return await command.handler(context, parsed.args);
-  } catch {
+  } catch (error) {
+    logger.debug(() => `Command /${command.name} failed: ${String(error)}`);
     return { text: `Command /${command.name} failed.` };
   }
 }

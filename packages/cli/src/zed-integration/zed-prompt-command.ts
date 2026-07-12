@@ -6,7 +6,9 @@
 
 import * as acp from '@agentclientprotocol/sdk';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { Config } from '@vybestack/llxprt-code-core';
+import { DebugLogger, type Config } from '@vybestack/llxprt-code-core';
+
+const logger = new DebugLogger('llxprt:zed-integration:prompt-command');
 
 import {
   executeZedCommand,
@@ -66,7 +68,8 @@ export async function tryHandleZedCommand(
       sessionUpdate: 'agent_message_chunk',
       content: { type: 'text', text: result.text },
     });
-  } catch {
+  } catch (error) {
+    logger.debug(() => `Command response delivery failed: ${String(error)}`);
     throw acp.RequestError.internalError(
       {},
       'Command response delivery failed.',
