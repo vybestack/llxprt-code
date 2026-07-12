@@ -5,17 +5,14 @@
  */
 
 import dns from 'node:dns';
-import {
-  type Config,
-  setGitStatsService,
-  DebugLogger,
-  debugLogger,
-} from '@vybestack/llxprt-code-core';
+import { type Config, setGitStatsService } from '@vybestack/llxprt-code-core';
+import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { loadProfileByName } from '@vybestack/llxprt-code-providers/runtime.js';
 import {
-  executeProviderActivation,
+  preflightAgentActivation,
   type ProviderActivationIntent,
+  type ActivationPreflightToken,
 } from '@vybestack/llxprt-code-agents';
 import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
 import { validateDnsResolutionOrder } from './cliBootstrap.js';
@@ -116,18 +113,32 @@ function buildActivationCliOverrides(
  * provider when none was explicitly requested). Returns true if the initial
  * authentication attempt failed.
  *
- * WHY THIS RUNS PRE-AGENT (#2374 round-3 Fix 3): the interactive CLI bootstrap
- * needs the auth outcome BEFORE the Agent is constructed — the sandbox-hop
- * decision (maybeHopIntoSandbox) and the fatal-exit path
+ * WHY THIS RUNS PRE-AGENT (#2374 round-3 Fix 3, #2378): the interactive CLI
+ * bootstrap needs the auth outcome BEFORE the Agent is constructed — the
+ * sandbox-hop decision (maybeHopIntoSandbox) and the fatal-exit path
  * (FATAL_AUTHENTICATION_ERROR) depend on whether auth succeeded. Constructing
  * the Agent first and then checking auth would defer the fatal-exit past agent
  * construction, changing the observable process lifecycle.
+ *
+ * The CLI builds a DECLARATIVE {@link ProviderActivationIntent} and calls the
+ * public {@link preflightAgentActivation} agent-bootstrap entrypoint (#2378).
+ * The CLI does NOT import or execute the runtime activation primitive
+ * (`executeProviderActivation`) directly; preflight owns that internally and
+ * returns the typed declarative result. The SAME Config is later adopted by
+ * `createForegroundAgent` → `fromConfig`, whose executor fast-path adopts this
+ * preflight state without re-running a second activation sequence.
  */
+export interface ConfiguredProviderActivationResult {
+  readonly authFailed: boolean;
+  readonly token?: ActivationPreflightToken;
+  readonly intent?: ProviderActivationIntent;
+}
+
 export async function activateConfiguredProvider(
   config: Config,
   providerManager: CliProviderManager,
   argv: ParsedCliArgs,
-): Promise<boolean> {
+): Promise<ConfiguredProviderActivationResult> {
   const configProvider = config.getProvider();
   const cliModelOverride = (config as Config & { _cliModelOverride?: string })
     ._cliModelOverride;
@@ -147,18 +158,21 @@ export async function activateConfiguredProvider(
   };
   let result;
   try {
-    result = await executeProviderActivation(config, intent);
+    result = await preflightAgentActivation(config, intent);
   } catch (error) {
     const bootstrapLogger = new DebugLogger('llxprt:bootstrap');
     bootstrapLogger.error(
       () =>
-        `[bootstrap] activateConfiguredProvider executor threw: ${
+        `[bootstrap] activateConfiguredProvider preflight threw: ${
           error instanceof Error ? error.message : String(error)
         }`,
     );
-    return true;
+    return { authFailed: true };
   }
-  return result.authFailed;
+  return {
+    authFailed: result.authFailed,
+    ...(result.token !== undefined ? { token: result.token, intent } : {}),
+  };
 }
 
 /**
@@ -258,7 +272,9 @@ export async function connectIdeClientIfEnabled(config: Config): Promise<void> {
 
 /**
  * In ACP/Zed mode authentication happens through the protocol; just ensure the
- * configured provider is set as active when one is available. Best-effort.
+ * configured provider is set as active when one is available. Best-effort:
+ * never throws or produces an unhandled rejection, but logs failures so they
+ * are observable.
  */
 export function ensureAcpProviderActivated(config: Config): void {
   const providerManagerForAcp = config.getProviderManager();
@@ -266,15 +282,27 @@ export function ensureAcpProviderActivated(config: Config): void {
   if (!configProvider || !providerManagerForAcp) {
     return;
   }
+  if (providerManagerForAcp.hasActiveProvider()) {
+    return;
+  }
   try {
-    if (!providerManagerForAcp.hasActiveProvider()) {
-      const activation =
-        providerManagerForAcp.setActiveProvider(configProvider);
-      if (activation instanceof Promise) {
-        activation.catch(() => undefined);
-      }
+    const activation = providerManagerForAcp.setActiveProvider(configProvider);
+    if (activation instanceof Promise) {
+      activation.catch((error) => {
+        debugLogger.warn(
+          () =>
+            `[bootstrap] ensureAcpProviderActivated: async provider activation failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+        );
+      });
     }
-  } catch {
-    // Non-fatal - continue without provider; auth can still happen via ACP.
+  } catch (error) {
+    debugLogger.warn(
+      () =>
+        `[bootstrap] ensureAcpProviderActivated: provider activation failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+    );
   }
 }

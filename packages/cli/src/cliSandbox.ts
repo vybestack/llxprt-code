@@ -13,7 +13,7 @@ import {
   parseDockerMemoryToMB,
 } from './utils/bootstrap.js';
 import { runExitCleanup } from './utils/cleanup.js';
-import { sessionId } from '@vybestack/llxprt-code-core';
+import { sessionId } from '@vybestack/llxprt-code-telemetry';
 import { ExtensionStorage } from './config/extension.js';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 import type { LoadedSettings } from './config/settings.js';

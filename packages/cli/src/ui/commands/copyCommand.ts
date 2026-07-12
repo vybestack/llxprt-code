@@ -7,7 +7,7 @@
 import { copyToClipboard } from '../utils/commandUtils.js';
 import type { SlashCommand, SlashCommandActionReturn } from './types.js';
 import { CommandKind } from './types.js';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 export const copyCommand: SlashCommand = {
   name: 'copy',

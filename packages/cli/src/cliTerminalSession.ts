@@ -5,13 +5,16 @@
  */
 
 import { writeFileSync } from 'node:fs';
+import { type Config, OutputFormat } from '@vybestack/llxprt-code-core';
 import {
-  type Config,
-  type MessageBus,
-  OutputFormat,
   uiTelemetryService,
   debugLogger,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-telemetry';
+import type {
+  Agent,
+  ActivationPreflightToken,
+  ProviderActivationIntent,
+} from '@vybestack/llxprt-code-agents';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { setupTerminalAndTheme } from './utils/terminalTheme.js';
 import { drainStdinBuffer } from './ui/utils/terminalContract.js';
@@ -21,6 +24,7 @@ import { appEvents, AppEvent } from './utils/events.js';
 import type { LoadedSettings } from './config/settings.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
 import { registerDynamicToolSettings } from './cliBootstrap.js';
+import { createForegroundAgent } from './cliAgentBootstrap.js';
 
 /**
  * Initialize Config, showing an MCP initialization spinner when interactive and
@@ -89,10 +93,26 @@ async function renderInitializingSpinner(initialTotal: number): Promise<
   }
 }
 
-export async function initializeConfigWithSpinner(
+/**
+ * Construct the single foreground {@link Agent} for this run, showing an MCP
+ * initialization spinner when interactive and MCP servers are configured.
+ *
+ * Per #2378 the Agent (via `createForegroundAgent` → `fromConfig`) OWNS
+ * `Config.initialize()` and the single session {@link MessageBus}: this
+ * function NEVER calls `Config.initialize()` itself. The spinner simply wraps
+ * the async Agent construction (which drives the background MCP discovery
+ * `initialize()` performs) so the connecting-to-MCP-servers UI still appears
+ * during startup. Registers dynamic tool settings afterwards, exactly as the
+ * previous `initializeConfigWithSpinner` did.
+ *
+ * @plan:PLAN-20270110-ISSUE2378.P02
+ * @requirement:REQ-2378-002
+ */
+export async function constructAgentWithSpinner(
   config: Config,
-  sessionMessageBus: MessageBus,
-): Promise<void> {
+  activationPreflightToken?: ActivationPreflightToken,
+  activationPreflightIntent?: ProviderActivationIntent,
+): Promise<Agent> {
   const mcpServers = config.getMcpServers();
   const mcpServersCount = mcpServers ? Object.keys(mcpServers).length : 0;
 
@@ -105,11 +125,13 @@ export async function initializeConfigWithSpinner(
     : undefined;
 
   try {
-    await (
-      config as typeof config & {
-        initialize(dependencies?: { messageBus?: MessageBus }): Promise<void>;
-      }
-    ).initialize({ messageBus: sessionMessageBus });
+    const agent = await createForegroundAgent({
+      config,
+      activationPreflightToken,
+      activationPreflightIntent,
+    });
+    registerDynamicToolSettings(config);
+    return agent;
   } finally {
     if (spinnerInstance) {
       await new Promise((f) => setTimeout(f, 100));
@@ -117,8 +139,6 @@ export async function initializeConfigWithSpinner(
       spinnerInstance.unmount();
     }
   }
-
-  registerDynamicToolSettings(config);
 }
 
 /** Register a cleanup hook that writes session metrics to --session-summary. */

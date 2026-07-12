@@ -7,7 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 const logger = new DebugLogger('llxprt:config:pathMigration');
 

@@ -5,7 +5,8 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { DebugLogger, ExitCodes } from '@vybestack/llxprt-code-core';
+import { ExitCodes } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { LoadedSettings, Settings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import {

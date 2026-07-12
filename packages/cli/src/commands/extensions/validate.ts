@@ -5,7 +5,7 @@
  */
 
 import type { CommandModule } from 'yargs';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import semver from 'semver';

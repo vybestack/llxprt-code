@@ -1,21 +1,20 @@
 import {
   type Config,
-  type MessageBus,
+  writeToStderr,
+  triggerSessionEndHook,
+  SessionEndReason,
+} from '@vybestack/llxprt-code-core';
+import {
   debugLogger,
   isTelemetrySdkInitialized,
   shutdownTelemetry,
-  writeToStderr,
-  triggerSessionStartHook,
-  triggerSessionEndHook,
-  SessionStartSource,
-  SessionEndReason,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-telemetry';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../config/settings.js';
 import { getStartupWarnings } from '../utils/startupWarnings.js';
 import { getUserStartupWarnings } from '../utils/userStartupWarnings.js';
 import { runNonInteractive } from '../nonInteractiveCli.js';
 import type { SessionRecordingSetup } from '../cliSessionBootstrap.js';
-import { createForegroundAgent } from '../cliAgentBootstrap.js';
 import { validateNonInteractiveAuth } from '../validateNonInteractiveAuth.js';
 import { runExitCleanup } from '../utils/cleanup.js';
 import { initializeOutputListenersAndFlush } from './outputListeners.js';
@@ -37,16 +36,16 @@ function safeReportNonInteractiveError(config: Config, error: unknown): void {
 
 export interface NonInteractiveSessionOptions {
   config: Config;
+  agent: Agent;
   settings: LoadedSettings;
   input: string;
   prompt_id: string;
-  sessionMessageBus: MessageBus;
 }
 
 export interface PipedOrPromptSessionOptions {
   config: Config;
+  agent: Agent;
   settings: LoadedSettings;
-  sessionMessageBus: MessageBus;
   initialInput: string | undefined;
   hasPipedInput: boolean;
   readStdinData: () => Promise<string>;
@@ -54,9 +53,16 @@ export interface PipedOrPromptSessionOptions {
 
 export interface SessionDispatchOptions {
   config: Config;
+  /**
+   * The single session Agent created at the CLI composition root (#2378). It is
+   * threaded into the interactive UI and reused by the non-interactive run; the
+   * session MessageBus is read from `agent.getMessageBus()` rather than passed
+   * separately. The composition root owns the Agent's lifecycle (dispose on
+   * cleanup).
+   */
+  agent: Agent;
   settings: LoadedSettings;
   workspaceRoot: string;
-  sessionMessageBus: MessageBus;
   recording: SessionRecordingSetup;
   hasPipedInput: boolean;
   readStdinData: () => Promise<string>;
@@ -68,14 +74,18 @@ export interface SessionDispatchOptions {
  */
 export async function dispatchInteractiveOrNonInteractive({
   config,
+  agent,
   settings,
   workspaceRoot,
-  sessionMessageBus,
   recording,
   hasPipedInput,
   readStdinData,
 }: SessionDispatchOptions): Promise<void> {
   const input = config.getQuestion();
+
+  // The single session bus is owned by the Agent (#2378); consumers read it
+  // from the public accessor rather than a separately-threaded instance.
+  const sessionMessageBus = agent.getMessageBus();
 
   // Render UI, passing necessary config values. Check that there is no command line question.
   if (typeof config.isInteractive === 'function' && config.isInteractive()) {
@@ -88,12 +98,11 @@ export async function dispatchInteractiveOrNonInteractive({
     ]);
     const startupWarnings = [...systemWarnings, ...userWarnings];
 
-    // Create the single interactive Agent at the composition root. `fromConfig`
-    // fires the SessionStart hook internally via the same core hook, so the
-    // interactive branch no longer fires it explicitly (the non-interactive
-    // branch keeps its own explicit call since it builds no Agent).
-    const agent = await createForegroundAgent({ config, sessionMessageBus });
-
+    // The single interactive Agent was created at the composition root and is
+    // threaded in here. `fromConfig` fired the SessionStart hook internally
+    // during that construction, so the interactive branch does not fire it
+    // explicitly (the non-interactive branch keeps its own explicit call for
+    // parity with the pre-#2378 behavior).
     await startInteractiveUI(
       config,
       agent,
@@ -111,8 +120,8 @@ export async function dispatchInteractiveOrNonInteractive({
 
   await runPipedOrPromptSession({
     config,
+    agent,
     settings,
-    sessionMessageBus,
     initialInput: input,
     hasPipedInput,
     readStdinData,
@@ -125,8 +134,8 @@ export async function dispatchInteractiveOrNonInteractive({
  */
 async function runPipedOrPromptSession({
   config,
+  agent,
   settings,
-  sessionMessageBus,
   initialInput,
   hasPipedInput,
   readStdinData,
@@ -162,10 +171,10 @@ ${existingInput}`
   try {
     nonInteractiveExitCode = await runNonInteractiveSession({
       config,
+      agent,
       settings,
       input,
       prompt_id,
-      sessionMessageBus,
     });
   } catch (error) {
     nonInteractiveExitCode = 1;
@@ -191,10 +200,10 @@ ${existingInput}`
  */
 async function runNonInteractiveSession({
   config,
+  agent,
   settings,
   input,
   prompt_id,
-  sessionMessageBus,
 }: NonInteractiveSessionOptions): Promise<number> {
   // Validate auth BEFORE installing the SIGINT handler: on auth failure
   // validateNonInteractiveAuth calls process.exit, which bypasses the finally
@@ -230,31 +239,28 @@ async function runNonInteractiveSession({
   try {
     initializeOutputListenersAndFlush();
 
-    // Fire SessionStart hook for non-interactive mode and inject context
-    const sessionStartOutput = await triggerSessionStartHook(
-      nonInteractiveConfig,
-      SessionStartSource.Startup,
-    );
+    // Agent owns SessionStart; invoke it once and consume its public output.
+    const sessionStartOutput = await agent.hooks.triggerSessionStart();
     let finalInput = input;
-    if (sessionStartOutput) {
-      if (sessionStartOutput.systemMessage) {
-        writeToStderr(`${sessionStartOutput.systemMessage}
+    if (sessionStartOutput.systemMessage) {
+      writeToStderr(`${sessionStartOutput.systemMessage}
 `);
-      }
-      const additionalContext = sessionStartOutput.getAdditionalContext();
-      if (additionalContext) {
-        finalInput = `${additionalContext}
+    }
+    if (sessionStartOutput.additionalContext) {
+      finalInput = `${sessionStartOutput.additionalContext}
 
 ${finalInput}`;
-      }
     }
 
     await runNonInteractive({
       config: nonInteractiveConfig,
+      // Reuse the composition-root Agent (#2378) instead of building a second
+      // one; the session bus is the Agent's own bus.
+      agent,
       settings,
       input: finalInput,
       prompt_id,
-      runtimeMessageBus: sessionMessageBus,
+      runtimeMessageBus: agent.getMessageBus(),
       deferTelemetryShutdown: true,
     });
 

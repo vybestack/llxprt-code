@@ -9,7 +9,7 @@ import type {
   ContractSendMessageParameters,
   ContractGenerateContentConfig,
 } from '@vybestack/llxprt-code-core';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { getRuntimeBridge } from '../contexts/RuntimeContext.js';
 import {
   createDetachedAutoPromptClient,

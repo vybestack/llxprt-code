@@ -110,7 +110,7 @@ export function getTestRuntimeMessageBus(config: Config): MessageBusType {
   return bus;
 }
 
-function attachTestAgentFactories(config: Config): void {
+export function attachTestAgentFactories(config: Config): void {
   const target = config as Config & {
     agentClientFactory?: unknown;
     toolSchedulerFactory?: unknown;

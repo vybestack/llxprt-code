@@ -10,10 +10,12 @@ import {
   JsonStreamEventType,
   type StreamJsonFormatter,
   type EmojiFilter,
-  type SessionMetrics,
   FatalTurnLimitedError,
-  debugLogger,
 } from '@vybestack/llxprt-code-core';
+import {
+  type SessionMetrics,
+  debugLogger,
+} from '@vybestack/llxprt-code-telemetry';
 import type {
   AgentEvent,
   AgentToolResult,

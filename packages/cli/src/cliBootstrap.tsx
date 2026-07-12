@@ -21,11 +21,13 @@ import {
   ExitCodes,
   writeToStderr,
   writeToStdout,
+  type Config,
+} from '@vybestack/llxprt-code-core';
+import {
   debugLogger,
   ConfigurationManager,
-  type Config,
   DebugLogger,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-telemetry';
 import { runExitCleanup } from './utils/cleanup.js';
 import { getCliVersion } from './utils/version.js';
 

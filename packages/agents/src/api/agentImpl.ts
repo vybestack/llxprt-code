@@ -762,6 +762,19 @@ export class AgentImpl implements Agent {
     return this.deps.runtimeId;
   }
 
+  /**
+   * Returns the single session MessageBus the facade owns — the SAME instance
+   * threaded through the loop, scheduler, and OAuth manager (no second bus).
+   * When fromConfig adopted a caller-supplied bus, this returns that exact
+   * instance so UI / non-interactive CLI consumers use the agent-owned bus
+   * instead of constructing their own (#2378).
+   * @plan:PLAN-20270110-ISSUE2378.P01
+   * @requirement:REQ-2378-001
+   */
+  getMessageBus(): MessageBus {
+    return this.deps.messageBus;
+  }
+
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 20-22 */
   getEphemeralSetting(key: string): unknown {
     return this.deps.config.getEphemeralSetting(key);

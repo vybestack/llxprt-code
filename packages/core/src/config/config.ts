@@ -122,13 +122,41 @@ export class Config extends ConfigBase {
   // mid-discovery.
   private mcpDiscoveryPromise: Promise<void> | undefined;
 
-  /**
-   * Must only be called once, throws if called again.
-   */
-  async initialize(dependencies?: { messageBus?: MessageBus }): Promise<void> {
-    if (this.initialized) {
+  private initializationPromise: Promise<void> | undefined;
+
+  /** Must only be called once; use ensureInitialized for idempotent adoption. */
+  initialize(dependencies?: { messageBus?: MessageBus }): Promise<void> {
+    if (this.initializationPromise !== undefined) {
       throw Error('Config was already initialized');
     }
+    this.initializationPromise = this.performInitialization(dependencies);
+    // Return the exact stored promise so callers (ensureInitialized) that
+    // observe this.initializationPromise see the SAME object identity. A
+    // plain `return` (not async) preserves referential identity.
+    return this.initializationPromise;
+  }
+
+  /**
+   * Initializes once and shares the original result with adopting callers.
+   * A failed initialization remains failed rather than exposing partial state.
+   */
+  ensureInitialized(
+    dependencies?:
+      | { messageBus?: MessageBus }
+      | (() => { messageBus: MessageBus }),
+  ): Promise<void> {
+    if (this.initializationPromise === undefined) {
+      const resolvedDependencies =
+        typeof dependencies === 'function' ? dependencies() : dependencies;
+      this.initializationPromise =
+        this.performInitialization(resolvedDependencies);
+    }
+    return this.initializationPromise;
+  }
+
+  private async performInitialization(dependencies?: {
+    messageBus?: MessageBus;
+  }): Promise<void> {
     const initializationMessageBus = dependencies?.messageBus;
     if (!initializationMessageBus) {
       throw new Error(

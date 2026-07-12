@@ -17,9 +17,9 @@ import {
   DEFAULT_AGENT_ID,
   type AnsiOutput,
   type ShellOutputEvent,
-  debugLogger,
   type ContractPartListUnion,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type UseHistoryManagerReturn } from './useHistoryManager.js';
 import { SHELL_COMMAND_NAME } from '../constants.js';

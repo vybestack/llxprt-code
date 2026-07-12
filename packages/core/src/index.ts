@@ -38,6 +38,7 @@ export * from './hooks/index.js';
 // Export skills system
 export * from './skills/skillManager.js';
 export * from './skills/skillLoader.js';
+export * from './skills/skillDiscovery.js';
 
 // Export environment sanitization
 export * from './services/environmentSanitization.js';

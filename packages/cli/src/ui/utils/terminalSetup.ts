@@ -31,7 +31,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { terminalCapabilityManager } from './terminalCapabilityManager.js';
 import { VSCODE_SHIFT_ENTER_SEQUENCE } from './platformConstants.js';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 const execAsync = promisify(exec);
 
