@@ -90,12 +90,13 @@ Default keyboard shortcuts for editing, navigation, and UI control.
 
 ## Text Input
 
-| Action                                                          | Keys                                                                   |
-| --------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Submit the current prompt.                                      | `Enter (no Ctrl, no Shift, no Cmd)`                                    |
-| Insert a newline without submitting.                            | `Ctrl + Enter`<br />`Cmd + Enter`<br />`Shift + Enter`<br />`Ctrl + J` |
-| Open the current prompt in an external editor.                  | `Ctrl + X`                                                             |
-| Paste from the clipboard (image preferred, falls back to text). | `Ctrl + V`<br />`Cmd + V`                                              |
+| Action                                                                                                     | Keys                                                                   |
+| ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Submit the current prompt.                                                                                 | `Enter (no Ctrl, no Shift, no Cmd)`                                    |
+| Steer the active agent mid-turn by injecting input at the next tool-call boundary (only during streaming). | `Ctrl + Enter`                                                         |
+| Insert a newline without submitting.                                                                       | `Ctrl + Enter`<br />`Cmd + Enter`<br />`Shift + Enter`<br />`Ctrl + J` |
+| Open the current prompt in an external editor.                                                             | `Ctrl + X`                                                             |
+| Paste from the clipboard (image preferred, falls back to text).                                            | `Ctrl + V`<br />`Cmd + V`                                              |
 
 ## App Controls
 

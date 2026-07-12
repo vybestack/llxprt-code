@@ -27,6 +27,7 @@ import * as http from 'http';
 import * as https from 'https';
 import * as net from 'net';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import { OPENAI_TRANSPORT_SELECTOR_KEYS } from './openaiModelPolicy.js';
 
 /**
  * Create HTTP/HTTPS agents with socket configuration for local AI servers
@@ -112,6 +113,11 @@ export function extractModelParamsFromOptions(
   options: NormalizedGenerateChatOptions,
 ): Record<string, unknown> | undefined {
   const modelParams = { ...options.invocation.modelParams };
+
+  // Transport-selector keys are control-plane settings, not model params
+  for (const selectorKey of OPENAI_TRANSPORT_SELECTOR_KEYS) {
+    delete modelParams[selectorKey];
+  }
 
   // Translate generic maxOutputTokens ephemeral to OpenAI's max_tokens
   const rawMaxOutput = options.settings.get('maxOutputTokens');

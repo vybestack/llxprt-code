@@ -97,6 +97,7 @@ export interface ConfigConstructorTarget {
   debugMode: boolean;
   outputFormat: OutputFormat;
   question: string | undefined;
+  quiet: boolean;
 
   // Tool governance
   coreTools: string[] | undefined;
@@ -258,6 +259,7 @@ function applyCoreIdentity(
   config.debugMode = params.debugMode;
   config.outputFormat = params.outputFormat ?? OutputFormat.TEXT;
   config.question = params.question;
+  config.quiet = params.quiet ?? false;
 }
 
 function applyToolGovernance(

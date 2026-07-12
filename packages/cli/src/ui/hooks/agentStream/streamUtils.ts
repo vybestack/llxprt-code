@@ -282,30 +282,6 @@ export function deduplicateToolCallRequests(
 }
 
 /**
- * Creates a ThinkingBlock from a thought event, deduplicating against existing blocks.
- * Returns null if the thought is empty or already present in existingBlocks.
- */
-export function buildThinkingBlock(
-  thoughtText: string,
-  existingBlocks: ThinkingBlock[],
-): ThinkingBlock | null {
-  if (!thoughtText) {
-    return null;
-  }
-  const alreadyHasThought = existingBlocks.some(
-    (tb) => tb.thought === thoughtText,
-  );
-  if (alreadyHasThought) {
-    return null;
-  }
-  return {
-    type: 'thinking',
-    thought: thoughtText,
-    sourceField: 'thought',
-  };
-}
-
-/**
  * Builds the full-split pending history item for the no-split case in
  * handleContentEvent. Preserves the existing item's type and profileName.
  *

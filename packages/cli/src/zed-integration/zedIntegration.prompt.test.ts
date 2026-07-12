@@ -124,6 +124,44 @@ describe('Zed Session.prompt (Agent API) - streaming output', () => {
     };
     expect(update.content.text).toContain('blocked due to emoji detection');
   });
+
+  it('flushes pending text before returning for loop detection', async () => {
+    const { agent } = buildFakeAgent([
+      { type: 'text', text: 'before loop' },
+      { type: 'loop-detected' },
+    ]);
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    const response = await runPrompt(session);
+
+    expect(response.stopReason).toBe('end_turn');
+    expect(connection.sessionUpdateKinds()).toStrictEqual([
+      'agent_message_chunk',
+    ]);
+  });
+
+  it('flushes pending text before processing usage', async () => {
+    const { agent } = buildFakeAgent([
+      { type: 'text', text: 'before usage' },
+      {
+        type: 'usage',
+        usage: { promptTokenCount: 10, candidatesTokenCount: 5 },
+      },
+      { type: 'done', reason: 'stop' },
+    ]);
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    await runPrompt(session);
+
+    expect(connection.sessionUpdateKinds()).toStrictEqual([
+      'agent_message_chunk',
+      'usage_update',
+    ]);
+  });
 });
 
 describe('Zed Session.prompt (Agent API) - tool-call status progression', () => {

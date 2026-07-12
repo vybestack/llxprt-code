@@ -64,6 +64,18 @@ export function partListUnionToParts(req: PartListUnion): Part[] {
   return [req];
 }
 
+/** True when a Part[] contains at least one functionResponse part. */
+export function hasFunctionResponsePart(parts: Part[]): boolean {
+  return parts.some((p) => 'functionResponse' in p);
+}
+
+/** Extracts the text from any { text: string } part in a Part[]. */
+export function textParts(parts: Part[]): string[] {
+  return parts
+    .filter((p): p is Part & { text: string } => 'text' in p)
+    .map((p) => p.text);
+}
+
 /** Shared mutable state for a scripted agent client. */
 interface ScriptedClientState {
   scriptQueue: TurnScript[];

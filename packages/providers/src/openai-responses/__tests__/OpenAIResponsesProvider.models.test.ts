@@ -70,13 +70,13 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
   });
 
   describe('getDefaultModel', () => {
-    it('should return gpt-5.5 as default model when in Codex mode', () => {
+    it('should return gpt-5.6-sol as default model when in Codex mode', () => {
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
         CODEX_BASE_URL,
       );
       const defaultModel = provider.getDefaultModel();
-      expect(defaultModel).toBe('gpt-5.5');
+      expect(defaultModel).toBe('gpt-5.6-sol');
     });
 
     it('should return o3-mini as default model when in standard OpenAI mode', () => {
