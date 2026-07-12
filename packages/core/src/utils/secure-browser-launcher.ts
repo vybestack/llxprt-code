@@ -12,6 +12,19 @@ import { URL } from 'node:url';
 const execFileAsync = promisify(execFile);
 
 /**
+ * Supported browser kinds for targeted launching.
+ */
+export type BrowserKind = 'chrome' | 'firefox' | 'safari';
+
+/**
+ * Options for launching a specific browser binary with an optional profile.
+ */
+export interface BrowserLaunchOptions {
+  browser?: BrowserKind;
+  profileDirectory?: string;
+}
+
+/**
  * Validates that a URL is safe to open in a browser.
  * Only allows HTTP and HTTPS URLs to prevent command injection.
  *
@@ -45,33 +58,83 @@ function validateUrl(url: string): void {
 }
 
 /**
+ * Strict allowlist for profile directory names.
+ * Matches Chrome's "Profile 1", "Default", Firefox profile names, etc.
+ * Rejects path traversal (..), separators (/ \), control chars, and shell
+ * metacharacters to prevent command injection.
+ */
+const PROFILE_DIRECTORY_PATTERN = /^[A-Za-z0-9 _.-]+$/;
+
+/**
+ * Validates a profile directory name against a strict allowlist.
+ *
+ * Security: This guard prevents command injection by rejecting any character
+ * that could be interpreted as a path separator, shell metacharacter, or
+ * control character. Only alphanumeric, space, underscore, dot, and hyphen
+ * are permitted.
+ *
+ * @param dir The profile directory name to validate
+ * @throws Error if the name contains disallowed characters
+ */
+export function validateProfileDirectory(dir: string): void {
+  if (!dir || typeof dir !== 'string' || !PROFILE_DIRECTORY_PATTERN.test(dir)) {
+    throw new Error(
+      `Invalid profile directory: "${dir}". Only alphanumeric, space, underscore, dot, and hyphen are allowed.`,
+    );
+  }
+}
+
+/**
  * Opens a URL in the default browser using platform-specific commands.
  * This implementation avoids shell injection vulnerabilities by:
  * 1. Validating the URL to ensure it's HTTP/HTTPS only
  * 2. Using execFile instead of exec to avoid shell interpretation
  * 3. Passing the URL as an argument rather than constructing a command string
  *
+ * When `options.browser` is set, launches that specific browser binary
+ * directly (instead of the OS default browser), optionally with a specific
+ * profile directory. This ensures OAuth always uses the intended browser
+ * profile for the given bucket.
+ *
  * @param url The URL to open
+ * @param options Optional browser and profile directory selection
  * @throws Error if the URL is invalid or if opening the browser fails
  */
-export async function openBrowserSecurely(url: string): Promise<void> {
-  // Validate the URL first
+export async function openBrowserSecurely(
+  url: string,
+  options?: BrowserLaunchOptions,
+): Promise<void> {
   validateUrl(url);
 
+  if (options?.browser) {
+    if (options.profileDirectory) {
+      validateProfileDirectory(options.profileDirectory);
+    }
+    await openSpecificBrowser(url, options.browser, options.profileDirectory);
+    return;
+  }
+
+  await openDefaultBrowser(url);
+}
+
+/**
+ * Open the OS-default browser for the given URL. This preserves the original
+ * platform-specific behaviour (including the Linux fallback chain) used when
+ * no particular browser/profile is requested.
+ */
+async function openDefaultBrowser(url: string): Promise<void> {
   const platformName = platform();
   let command: string;
   let args: string[];
 
   switch (platformName) {
     case 'darwin':
-      // macOS
       command = 'open';
       args = [url];
       break;
 
     case 'win32':
-      // Windows - use PowerShell with Start-Process
-      // This avoids the cmd.exe shell which is vulnerable to injection
+      // PowerShell Start-Process avoids the cmd.exe shell injection surface.
       command = 'powershell.exe';
       args = [
         '-NoProfile',
@@ -86,8 +149,6 @@ export async function openBrowserSecurely(url: string): Promise<void> {
     case 'linux':
     case 'freebsd':
     case 'openbsd':
-      // Linux and BSD variants
-      // Try xdg-open first, fall back to other options
       command = 'xdg-open';
       args = [url];
       break;
@@ -96,28 +157,20 @@ export async function openBrowserSecurely(url: string): Promise<void> {
       throw new Error(`Unsupported platform: ${platformName}`);
   }
 
-  const options: Record<string, unknown> = {
-    // Don't inherit parent's environment to avoid potential issues
-    env: {
-      ...process.env,
-      // Ensure we're not in a shell that might interpret special characters
-      SHELL: undefined,
-    },
-    // Detach the browser process so it doesn't block
+  const execOptions: Record<string, unknown> = {
+    env: { ...process.env, SHELL: undefined },
     detached: true,
     stdio: 'ignore',
   };
 
   try {
-    await execFileAsync(command, args, options);
+    await execFileAsync(command, args, execOptions);
   } catch (error) {
-    // For Linux, try fallback commands if xdg-open fails
-    if (
-      (platformName === 'linux' ||
-        platformName === 'freebsd' ||
-        platformName === 'openbsd') &&
-      command === 'xdg-open'
-    ) {
+    const isLinuxLike =
+      platformName === 'linux' ||
+      platformName === 'freebsd' ||
+      platformName === 'openbsd';
+    if (isLinuxLike && command === 'xdg-open') {
       const fallbackCommands = [
         'gnome-open',
         'kde-open',
@@ -125,18 +178,16 @@ export async function openBrowserSecurely(url: string): Promise<void> {
         'chromium',
         'google-chrome',
       ];
-
       const succeeded = await tryFallbackBrowserCommands(
         fallbackCommands,
         url,
-        options,
+        execOptions,
       );
       if (succeeded) {
         return;
       }
     }
 
-    // Re-throw the error if all attempts failed
     throw new Error(
       `Failed to open browser: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
@@ -210,4 +261,168 @@ async function tryFallbackBrowserCommands(
     }
   }
   return false;
+}
+
+const specificBrowserExecOptions: Record<string, unknown> = {
+  env: { ...process.env, SHELL: undefined },
+  detached: true,
+  stdio: 'ignore',
+};
+
+/**
+ * Launch a specific browser binary with an optional profile directory.
+ *
+ * Uses execFile (no shell) throughout to prevent command injection.
+ * Profile directory names are validated by the caller via
+ * {@link validateProfileDirectory} before reaching this function.
+ */
+async function openSpecificBrowser(
+  url: string,
+  browser: BrowserKind,
+  profileDirectory: string | undefined,
+): Promise<void> {
+  const platformName = platform();
+  let command: string;
+  let args: string[];
+
+  switch (browser) {
+    case 'chrome':
+      [command, args] = buildChromeLaunchArgs(
+        platformName,
+        profileDirectory,
+        url,
+      );
+      break;
+
+    case 'firefox':
+      [command, args] = buildFirefoxLaunchArgs(
+        platformName,
+        profileDirectory,
+        url,
+      );
+      break;
+
+    case 'safari':
+      if (platformName !== 'darwin') {
+        throw new Error('Safari is only available on macOS');
+      }
+      // Safari has no profile concept; launch the app with the URL
+      command = 'open';
+      args = ['-a', 'Safari', url];
+      break;
+
+    default:
+      throw new Error(`Unsupported browser: ${browser}`);
+  }
+
+  try {
+    await execFileAsync(command, args, specificBrowserExecOptions);
+  } catch (error) {
+    throw new Error(
+      `Failed to open ${browser}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    );
+  }
+}
+
+/**
+ * Build the command and arguments to launch Chrome/Chromium with a profile.
+ */
+function buildChromeLaunchArgs(
+  platformName: NodeJS.Platform,
+  profileDirectory: string | undefined,
+  url: string,
+): [string, string[]] {
+  switch (platformName) {
+    case 'darwin': {
+      const args = ['-a', 'Google Chrome'];
+      if (profileDirectory) {
+        args.push('--args', `--profile-directory=${profileDirectory}`);
+      }
+      args.push(url);
+      return ['open', args];
+    }
+
+    case 'win32': {
+      // Use Start-Process with chrome.exe and the profile arg.
+      // The profile directory was already validated against the strict
+      // allowlist, so it contains only [A-Za-z0-9 _.-].
+      const profileArg = profileDirectory
+        ? ` --profile-directory=${profileDirectory}`
+        : '';
+      return [
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-WindowStyle',
+          'Hidden',
+          '-Command',
+          `Start-Process 'chrome.exe' -ArgumentList '${profileArg.trim()} ${url.replace(/'/g, "''")}'`,
+        ],
+      ];
+    }
+
+    case 'linux':
+    case 'freebsd':
+    case 'openbsd': {
+      const args: string[] = [];
+      if (profileDirectory) {
+        args.push(`--profile-directory=${profileDirectory}`);
+      }
+      args.push(url);
+      return ['google-chrome', args];
+    }
+
+    default:
+      throw new Error(`Unsupported platform for Chrome: ${platformName}`);
+  }
+}
+
+/**
+ * Build the command and arguments to launch Firefox with a profile.
+ */
+function buildFirefoxLaunchArgs(
+  platformName: NodeJS.Platform,
+  profileDirectory: string | undefined,
+  url: string,
+): [string, string[]] {
+  switch (platformName) {
+    case 'darwin': {
+      const args = ['-a', 'Firefox'];
+      if (profileDirectory) {
+        args.push('--args', '-P', profileDirectory);
+      }
+      args.push(url);
+      return ['open', args];
+    }
+
+    case 'win32': {
+      const profilePart = profileDirectory ? ` -P ${profileDirectory}` : '';
+      return [
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-WindowStyle',
+          'Hidden',
+          '-Command',
+          `Start-Process 'firefox' -ArgumentList '${profilePart.trim()} ${url.replace(/'/g, "''")}'`,
+        ],
+      ];
+    }
+
+    case 'linux':
+    case 'freebsd':
+    case 'openbsd': {
+      const args: string[] = [];
+      if (profileDirectory) {
+        args.push('-P', profileDirectory);
+      }
+      args.push(url);
+      return ['firefox', args];
+    }
+
+    default:
+      throw new Error(`Unsupported platform for Firefox: ${platformName}`);
+  }
 }

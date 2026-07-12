@@ -12,6 +12,7 @@ import {
 } from './runtimeAccessors.js';
 import { oauthRuntimeBridge } from '../auth/index.js';
 import type { OAuthRuntimeAccessors } from '../auth/index.js';
+import { getBrowserProfileAssociationStore } from './browser-profile-association-store-instance.js';
 
 /**
  * Build the concrete {@link OAuthRuntimeAccessors} backed by the real CLI
@@ -61,6 +62,15 @@ export function buildOAuthRuntimeAccessors(): OAuthRuntimeAccessors {
           : ((settingsService.get('currentProfile') as string | null) ?? null);
       } catch {
         return null;
+      }
+    },
+
+    getBrowserProfileAssociation: (provider, bucket) => {
+      try {
+        const store = getBrowserProfileAssociationStore();
+        return store.getAssociation(provider, bucket);
+      } catch {
+        return undefined;
       }
     },
   };

@@ -292,4 +292,176 @@ describe('secure-browser-launcher', () => {
       expect(shouldLaunchBrowser()).toBe(false);
     });
   });
+
+  describe('Browser-specific launch with profile directory', () => {
+    it('launches Chrome with profile directory on macOS', async () => {
+      setPlatform('darwin');
+      await openBrowserSecurely('https://example.com', {
+        browser: 'chrome',
+        profileDirectory: 'Profile 1',
+      });
+
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'open',
+        expect.arrayContaining([
+          '-a',
+          'Google Chrome',
+          '--args',
+          '--profile-directory=Profile 1',
+          'https://example.com',
+        ]),
+        expect.any(Object),
+      );
+    });
+
+    it('launches Chrome with profile directory on Linux', async () => {
+      setPlatform('linux');
+      await openBrowserSecurely('https://example.com', {
+        browser: 'chrome',
+        profileDirectory: 'Default',
+      });
+
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'google-chrome',
+        expect.arrayContaining([
+          '--profile-directory=Default',
+          'https://example.com',
+        ]),
+        expect.any(Object),
+      );
+    });
+
+    it('launches Chrome with profile directory on Windows', async () => {
+      setPlatform('win32');
+      await openBrowserSecurely('https://example.com', {
+        browser: 'chrome',
+        profileDirectory: 'Default',
+      });
+
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'powershell.exe',
+        expect.arrayContaining([expect.stringContaining('Start-Process')]),
+        expect.any(Object),
+      );
+      const commandArg = mockExecFile.mock.calls[0][1] as string[];
+      const startProcessArg = commandArg.find((a) =>
+        a.includes('Start-Process'),
+      );
+      expect(startProcessArg).toContain('--profile-directory=Default');
+    });
+
+    it('launches Firefox with profile on macOS', async () => {
+      setPlatform('darwin');
+      await openBrowserSecurely('https://example.com', {
+        browser: 'firefox',
+        profileDirectory: 'myprofile',
+      });
+
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'open',
+        expect.arrayContaining([
+          '-a',
+          'Firefox',
+          '--args',
+          '-P',
+          'myprofile',
+          'https://example.com',
+        ]),
+        expect.any(Object),
+      );
+    });
+
+    it('launches Firefox with profile on Linux', async () => {
+      setPlatform('linux');
+      await openBrowserSecurely('https://example.com', {
+        browser: 'firefox',
+        profileDirectory: 'dev-profile',
+      });
+
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'firefox',
+        expect.arrayContaining(['-P', 'dev-profile', 'https://example.com']),
+        expect.any(Object),
+      );
+    });
+
+    it('launches Safari on macOS (ignoring profile directory)', async () => {
+      setPlatform('darwin');
+      await openBrowserSecurely('https://example.com', {
+        browser: 'safari',
+        profileDirectory: 'ignored',
+      });
+
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'open',
+        expect.arrayContaining(['-a', 'Safari', 'https://example.com']),
+        expect.any(Object),
+      );
+    });
+
+    it('throws on Safari on non-darwin platforms', async () => {
+      setPlatform('linux');
+      await expect(
+        openBrowserSecurely('https://example.com', { browser: 'safari' }),
+      ).rejects.toThrow('Safari');
+    });
+
+    it('rejects profile directory with path traversal', async () => {
+      setPlatform('darwin');
+      await expect(
+        openBrowserSecurely('https://example.com', {
+          browser: 'chrome',
+          profileDirectory: '../etc/passwd',
+        }),
+      ).rejects.toThrow('Invalid profile directory');
+    });
+
+    it('rejects profile directory with shell metacharacters', async () => {
+      setPlatform('darwin');
+      await expect(
+        openBrowserSecurely('https://example.com', {
+          browser: 'chrome',
+          profileDirectory: 'Profile; rm -rf /',
+        }),
+      ).rejects.toThrow('Invalid profile directory');
+    });
+
+    it('rejects profile directory with control characters', async () => {
+      setPlatform('darwin');
+      await expect(
+        openBrowserSecurely('https://example.com', {
+          browser: 'chrome',
+          profileDirectory: 'Profile\nmalicious',
+        }),
+      ).rejects.toThrow('Invalid profile directory');
+    });
+
+    it('accepts valid Chrome profile directory names', async () => {
+      setPlatform('darwin');
+      const validNames = ['Default', 'Profile 1', 'Profile_2', 'my.profile'];
+      for (const name of validNames) {
+        mockExecFile.mockClear();
+        await openBrowserSecurely('https://example.com', {
+          browser: 'chrome',
+          profileDirectory: name,
+        });
+        expect(mockExecFile).toHaveBeenCalled();
+      }
+    });
+
+    it('launches Chrome without profile directory when browser is set but no profile', async () => {
+      setPlatform('darwin');
+      await openBrowserSecurely('https://example.com', {
+        browser: 'chrome',
+      });
+
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'open',
+        expect.arrayContaining(['-a', 'Google Chrome', 'https://example.com']),
+        expect.any(Object),
+      );
+      const args = mockExecFile.mock.calls[0][1] as string[];
+      expect(args).not.toContain('--args');
+    });
+  });
 });

@@ -30,6 +30,8 @@
  * throws, the bridge propagates the error so callers can catch it.
  */
 
+import type { BrowserProfileAssociation } from './browser-profile-association-store.js';
+
 /**
  * Narrow interface describing the runtime accessors the auth cluster needs.
  * Implemented by the CLI side via buildOAuthRuntimeAccessors().
@@ -49,6 +51,16 @@ export interface OAuthRuntimeAccessors {
   getRuntimeContext(): { runtimeId?: string } | undefined;
   /** Resolve the current profile name, or null when unavailable. */
   getCurrentProfileName(): string | null;
+  /**
+   * Look up the browser profile association for a provider+bucket.
+   * MUST be safe to call even when runtime isn't fully up (providers call
+   * it during browser launch). Returns undefined when no association exists.
+   * Optional: older accessor implementations need not provide it.
+   */
+  getBrowserProfileAssociation?(
+    provider: string,
+    bucket?: string,
+  ): BrowserProfileAssociation | undefined;
 }
 
 /**
@@ -121,6 +133,26 @@ class OAuthRuntimeBridge {
    */
   getCurrentProfileName(): string | null {
     return this.requireAccessors().getCurrentProfileName();
+  }
+
+  /**
+   * Look up a browser profile association.
+   *
+   * Unlike the other accessors, this is SAFE to call when no accessor is
+   * registered — returns undefined instead of throwing. This is because
+   * providers call it during browser launch (an early code path) where the
+   * runtime may not yet be fully initialized.
+   */
+  getBrowserProfileAssociation(
+    provider: string,
+    bucket?: string,
+  ): BrowserProfileAssociation | undefined {
+    try {
+      const fn = this.accessors?.getBrowserProfileAssociation;
+      return fn ? fn(provider, bucket) : undefined;
+    } catch {
+      return undefined;
+    }
   }
 }
 
