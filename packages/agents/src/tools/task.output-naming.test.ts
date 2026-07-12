@@ -68,6 +68,10 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
       ).toBeNull();
     });
 
+    it('returns null for an empty map', () => {
+      expect(validateOutputSpec({}, 'expected_outputs')).toBeNull();
+    });
+
     it('returns an error for a JSON-Schema-shaped object value', () => {
       const error = validateOutputSpec(
         {
@@ -124,6 +128,21 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
       expect(normalized.outputSpec).toStrictEqual({
         result: 'from expected_outputs',
       });
+    });
+
+    it('validates the output_spec alias when expected_outputs takes precedence', () => {
+      expect(() =>
+        normalizeTaskParams({
+          subagent_name: 'helper',
+          goal_prompt: 'Do work',
+          expected_outputs: { result: 'preferred' },
+          output_spec: {
+            result: { type: 'string', description: 'invalid alias' },
+          } as unknown as Record<string, string>,
+        }),
+      ).toThrow(
+        "output_spec 'result' must be a plain string description, not a JSON Schema object.",
+      );
     });
 
     it('falls back to output_spec alias when expected_outputs is absent', () => {

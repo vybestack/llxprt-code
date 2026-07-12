@@ -179,7 +179,10 @@ export function validateOutputParams(params: TaskToolParams): string | null {
   const preferred =
     params.expected_outputs ?? params.expectedOutputs ?? undefined;
   if (preferred !== undefined) {
-    return validateOutputSpec(preferred, 'expected_outputs');
+    const error = validateOutputSpec(preferred, 'expected_outputs');
+    if (error !== null) {
+      return error;
+    }
   }
 
   const legacy = params.output_spec ?? params.outputSpec ?? undefined;
@@ -198,7 +201,8 @@ export function validateOutputParams(params: TaskToolParams): string | null {
  * Output-spec resolution precedence (Issue #2255):
  *   1. expected_outputs / expectedOutputs (preferred, non-schema-suggestive)
  *   2. output_spec / outputSpec (deprecated alias)
- * Throws when either source contains non-string values (JSON-Schema-shaped).
+ *
+ * @throws When either source contains non-string values.
  */
 export function normalizeTaskParams(
   params: TaskToolParams,
@@ -219,6 +223,10 @@ export function normalizeTaskParams(
     .map((tool) => tool.trim())
     .filter((tool): tool is string => Boolean(tool));
 
+  const outputError = validateOutputParams(params);
+  if (outputError !== null) {
+    throw new Error(outputError);
+  }
   const outputSpec = resolveOutputSpec(params);
 
   const context =
