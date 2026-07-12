@@ -16,6 +16,7 @@ import {
   type EditorType,
   type AnsiOutput,
   type MessageBus,
+  accumulateLiveOutput,
 } from '@vybestack/llxprt-code-core';
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 
@@ -111,7 +112,13 @@ function updatePendingItemWithOutput(
     tools: prevItem.tools.map((toolDisplay) =>
       toolDisplay.callId === toolCallId &&
       toolDisplay.status === ToolCallStatus.Executing
-        ? { ...toolDisplay, resultDisplay: outputChunk }
+        ? {
+            ...toolDisplay,
+            resultDisplay: accumulateLiveOutput(
+              toolDisplay.resultDisplay,
+              outputChunk,
+            ),
+          }
         : toolDisplay,
     ),
   };
@@ -145,7 +152,10 @@ function updateCallsWithLiveOutput(
 ): TrackedToolCall[] {
   return prevCalls.map((call) =>
     call.request.callId === toolCallId && call.status === 'executing'
-      ? { ...call, liveOutput: outputChunk }
+      ? {
+          ...call,
+          liveOutput: accumulateLiveOutput(call.liveOutput, outputChunk),
+        }
       : call,
   );
 }

@@ -297,7 +297,7 @@ describe('AgenticLoop with caller display callbacks', () => {
     expect(completedEvents[0].completed[0].status).toBe('success');
   });
 
-  it('forwards onAllToolCallsComplete with the SAME batch as the tools_complete event, AFTER history recording', async () => {
+  it('forwards onAllToolCallsComplete with the SAME batch as the tools_complete event, BEFORE next-turn history finalization', async () => {
     const tool = new MockTool({ name: 'complete_cb_tool' });
     tool.executeFn.mockResolvedValue({
       llmContent: 'ok',
@@ -325,7 +325,8 @@ describe('AgenticLoop with caller display callbacks', () => {
     const displayCompletions: CompletedToolCall[][] = [];
     let onCompleteCallCount = 0;
     // Capture how many recorded-tool-call batches exist WHEN the callback fires,
-    // so we can assert the callback fires AFTER history recording.
+    // so we can assert parent-loop callbacks fire before next-turn history
+    // finalization.
     let recordedCountAtCallback = -1;
 
     const loop = new AgenticLoop({
@@ -349,9 +350,10 @@ describe('AgenticLoop with caller display callbacks', () => {
 
     // The callback fired exactly once (one turn with completed tools).
     expect(onCompleteCallCount).toBe(1);
-    // History was recorded BEFORE the callback (best-effort recordCompletedToolCalls
-    // ran before the callback).
-    expect(recordedCountAtCallback).toBe(1);
+    // Completed-tool callbacks fire before any next-turn history finalization in
+    // the parent loop; eager durability is scoped to subagents, so no completed
+    // tool batch is pre-recorded here.
+    expect(recordedCountAtCallback).toBe(0);
 
     // The callback received the SAME batch as the tools_complete event.
     const completedEvents = events.filter(isToolsComplete);
@@ -484,5 +486,69 @@ describe('AgenticLoop with caller display callbacks', () => {
         return ev.value;
       });
     expect(streamContents).toContain('survived-async');
+  });
+
+  it('accumulates string output chunks into liveOutput instead of replacing (fixes #2008)', async () => {
+    const tool = new MockTool({
+      name: 'delta_streaming_tool',
+      canUpdateOutput: true,
+    });
+    tool.executeFn.mockImplementation(
+      async (
+        _params: Record<string, unknown>,
+        _signal: AbortSignal,
+        updateOutput?: (output: string) => void,
+      ) => {
+        updateOutput?.('Hello ');
+        updateOutput?.('world');
+        updateOutput?.('!');
+        return { llmContent: 'done', returnDisplay: 'done' };
+      },
+    );
+
+    const toolRegistry = createToolRegistryForTest([tool]);
+    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+    const config = createTestConfig({
+      messageBus,
+      toolRegistry,
+      policyEngine: createAllowPolicyEngine(),
+      interactive: false,
+      approvalMode: ApprovalMode.YOLO,
+    });
+
+    const toolUpdatesByStatus: ToolCall[] = [];
+
+    const { client } = createScriptedAgentClient([
+      [
+        toolCallRequestEvent('delta_streaming_tool', 'call-acc', { x: 1 }),
+        finishedEvent(),
+      ],
+      [contentEvent('final'), finishedEvent()],
+    ]);
+
+    const loop = new AgenticLoop({
+      agentClient: client,
+      config,
+      messageBus,
+      displayCallbacks: {
+        onToolCallsUpdate: (toolCalls) => {
+          toolUpdatesByStatus.push(...toolCalls);
+        },
+        getPreferredEditor: () => undefined,
+      },
+    });
+
+    await collectEvents(loop, 'go', new AbortController().signal);
+
+    const executingUpdates = toolUpdatesByStatus.filter(
+      (tc) => tc.request.callId === 'call-acc' && tc.status === 'executing',
+    );
+    expect(executingUpdates.length).toBeGreaterThanOrEqual(1);
+
+    // The last executing update (after all three chunks) must contain the
+    // full accumulated string, proving deltas are appended not replaced.
+    expect(executingUpdates[executingUpdates.length - 1]).toMatchObject({
+      liveOutput: 'Hello world!',
+    });
   });
 });

@@ -64,6 +64,10 @@ import {
   accumulateTokenUsage,
   resolveLoggingConfig,
 } from './logging/tokenAccumulator.js';
+import {
+  delegateGetStats,
+  delegateGetLoadBalancerConfig,
+} from './loadBalancing/wrappedProviderDelegation.js';
 
 export type { ConversationDataRedactor };
 
@@ -970,17 +974,13 @@ export class LoggingProviderWrapper implements IProvider {
     return this.performanceTracker.getLatestMetrics();
   }
 
-  /**
-   * Delegate getStats() to wrapped provider if it supports it (e.g., LoadBalancingProvider)
-   * @returns Stats from the underlying provider, or undefined if not supported
-   */
+  /** Delegate getStats() to the wrapped provider (e.g., LoadBalancingProvider). */
   getStats(): unknown {
-    if (
-      'getStats' in this.wrapped &&
-      typeof this.wrapped.getStats === 'function'
-    ) {
-      return (this.wrapped as { getStats: () => unknown }).getStats();
-    }
-    return undefined;
+    return delegateGetStats(this.wrapped);
+  }
+
+  /** Delegate getLoadBalancerConfig() down the wrapper chain (issue #2479). */
+  getLoadBalancerConfig(): unknown {
+    return delegateGetLoadBalancerConfig(this.wrapped);
   }
 }

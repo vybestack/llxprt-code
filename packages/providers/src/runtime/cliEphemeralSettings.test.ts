@@ -67,6 +67,14 @@ describe('applyCliSetArguments', () => {
     expect(target.getValue('reasoning.effort')).toBe('xhigh');
   });
 
+  it('accepts reasoning.effort=max', () => {
+    const target = new TestTarget();
+
+    applyCliSetArguments(target, ['reasoning.effort=max']);
+
+    expect(target.getValue('reasoning.effort')).toBe('max');
+  });
+
   it('collects model parameter entries and returns them separately', () => {
     const target = new TestTarget();
 

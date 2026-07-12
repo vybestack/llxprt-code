@@ -16,7 +16,8 @@ import {
 } from './types.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import { ProviderRegistry } from './provider-registry.js';
-import { type MessageBus, type Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type {
   OAuthManager as AuthOAuthManagerInterface,
   OAuthTokenRequestMetadata as AuthOAuthTokenRequestMetadata,
@@ -30,6 +31,7 @@ import {
   getAnthropicUsageInfo,
   getAllAnthropicUsageInfo,
   getAllCodexUsageInfo,
+  getAllCodexRateLimitResetCredits,
   getHigherPriorityAuth,
 } from './provider-usage-info.js';
 
@@ -457,6 +459,17 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    */
   async getAllCodexUsageInfo(): Promise<Map<string, Record<string, unknown>>> {
     return getAllCodexUsageInfo(this.tokenStore, this.config);
+  }
+
+  /**
+   * Get Codex rate-limit-reset credits for all authenticated buckets.
+   * Returns a map of bucket name to reset-credits info for all buckets that
+   * have valid OAuth tokens with account_id.
+   */
+  async getAllCodexRateLimitResetCredits(): ReturnType<
+    typeof getAllCodexRateLimitResetCredits
+  > {
+    return getAllCodexRateLimitResetCredits(this.tokenStore, this.config);
   }
 
   private async getCurrentProfileSessionMetadata(

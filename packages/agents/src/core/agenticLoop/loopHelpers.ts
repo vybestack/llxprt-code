@@ -13,7 +13,7 @@
  * → 'user' role, to maintain well-formed Gemini turn history).
  */
 
-import type { Part } from '@google/genai';
+import type { Content, Part } from '@google/genai';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -88,16 +88,61 @@ export function buildToolResponses(geminiTools: CompletedToolCall[]): Part[] {
   );
 }
 
+export interface FilteredEagerToolResponses {
+  readonly content: Content | null;
+  readonly matchedCallIds: readonly string[];
+}
+
+export function filterEagerlyRecordedToolResponses(
+  content: Content,
+  eagerlyRecordedToolResponseCallIds: ReadonlySet<string>,
+): FilteredEagerToolResponses {
+  if (eagerlyRecordedToolResponseCallIds.size === 0) {
+    return { content, matchedCallIds: [] };
+  }
+
+  const remainingParts: Part[] = [];
+  const matchedCallIds: string[] = [];
+
+  for (const part of content.parts ?? []) {
+    const callId = part.functionResponse?.id;
+    if (
+      typeof callId === 'string' &&
+      eagerlyRecordedToolResponseCallIds.has(callId)
+    ) {
+      matchedCallIds.push(callId);
+      continue;
+    }
+    remainingParts.push(part);
+  }
+
+  if (matchedCallIds.length === 0) {
+    return { content, matchedCallIds };
+  }
+  if (remainingParts.length === 0) {
+    return { content: null, matchedCallIds };
+  }
+
+  return {
+    content: {
+      ...content,
+      parts: remainingParts,
+    },
+    matchedCallIds,
+  };
+}
+
 /**
- * Records cancelled tool history via `agentClient.addHistory`, splitting parts
+ * Records completed tool history via `agentClient.addHistory`, splitting parts
  * by role so functionCalls land under 'model' and functionResponses under
- * 'user'. Used when a turn is cancelled so the model sees a well-formed
- * functionResponse for every functionCall it emitted.
+ * 'user'. This eagerly persists tool outcomes before the next provider stream
+ * starts, so a later stream failure/retry cannot orphan the prior tool_call and
+ * trigger a synthetic null "interrupted or cancelled" placeholder.
  *
- * Awaits both writes so callers that exit the loop immediately afterwards can
- * guarantee the cancelled-tool history is persisted before the turn ends.
+ * Awaits both writes so callers that continue or exit the loop immediately
+ * afterwards can guarantee the tool history is durable before the next turn.
  */
-export async function recordCancelledToolHistory(
+async function recordCompletedToolHistory(
   tools: CompletedToolCall[],
   agentClient: AgentClientContract,
 ): Promise<void> {
@@ -116,4 +161,16 @@ export async function recordCancelledToolHistory(
       parts: [...functionResponses, ...otherParts],
     });
   }
+}
+
+/**
+ * Records cancelled tool history eagerly using the same role-splitting logic as
+ * successful completed tools. Kept as a dedicated helper to preserve the
+ * existing call site semantics and readability at the cancelled-tools boundary.
+ */
+export async function recordCancelledToolHistory(
+  tools: CompletedToolCall[],
+  agentClient: AgentClientContract,
+): Promise<void> {
+  await recordCompletedToolHistory(tools, agentClient);
 }
