@@ -60,15 +60,14 @@ export interface InlineContentProps {
 }
 
 export function InlineContent(props: InlineContentProps) {
+  const shouldHideThought =
+    props.streamingState === StreamingState.WaitingForConfirmation ||
+    props.disableLoadingPhrases;
+
   return (
     <>
       <LoadingIndicator
-        thought={
-          props.streamingState === StreamingState.WaitingForConfirmation ||
-          props.disableLoadingPhrases
-            ? undefined
-            : props.thought
-        }
+        thought={shouldHideThought ? undefined : props.thought}
         currentLoadingPhrase={
           props.disableLoadingPhrases ? undefined : props.currentLoadingPhrase
         }
