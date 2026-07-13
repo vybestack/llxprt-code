@@ -10,6 +10,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
 import type { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from './mcp-errors.js';
 
 const connection = vi.hoisted(() => ({
   client: undefined as Client | undefined,
@@ -83,9 +84,7 @@ describe('connectAndDiscover authorization', () => {
 
     expect(result).toMatchObject({
       error: {
-        message: expect.stringContaining(
-          'MCP capability is no longer authorized',
-        ),
+        message: expect.stringContaining(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE),
       },
     });
     expect(callTool).not.toHaveBeenCalled();

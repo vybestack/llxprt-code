@@ -41,6 +41,10 @@ import {
 } from './trustedFolders.js';
 import type { Settings } from './settings.js';
 
+function createErrorWithCode(message: string, code: string): Error {
+  return Object.assign(new Error(message), { code });
+}
+
 vi.mock('fs', async (importOriginal) => {
   const actualFs = await importOriginal<typeof fs>();
   return {
@@ -297,9 +301,7 @@ describe('Trusted Folders Loading', () => {
   it('commits the file when stat reports that POSIX modes are unsupported', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
-    const unsupportedError = Object.assign(new Error('stat unsupported'), {
-      code: 'ENOSYS',
-    });
+    const unsupportedError = createErrorWithCode('stat unsupported', 'ENOSYS');
     const warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
     mockFsStatSync.mockImplementationOnce(() => {
       throw unsupportedError;
@@ -377,16 +379,21 @@ describe('Trusted Folders Loading', () => {
 
     loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
 
-    expect(mockFsRenameSync).toHaveBeenCalledTimes(1);
+    expect(mockFsWriteFileSync).toHaveBeenCalledOnce();
+    expect(mockFsChmodSync).toHaveBeenCalledOnce();
+    expect(mockFsStatSync).toHaveBeenCalledOnce();
+    expect(mockFsRenameSync).toHaveBeenCalledOnce();
     expect(mockFsUnlinkSync).not.toHaveBeenCalled();
     const renameOrder = mockFsRenameSync.mock.invocationCallOrder[0];
-    expect(
-      Math.max(
-        ...vi.mocked(fs.writeFileSync).mock.invocationCallOrder,
-        ...mockFsChmodSync.mock.invocationCallOrder,
-        ...mockFsStatSync.mock.invocationCallOrder,
-      ),
-    ).toBeLessThan(renameOrder);
+    expect(mockFsWriteFileSync.mock.invocationCallOrder[0]).toBeLessThan(
+      renameOrder,
+    );
+    expect(mockFsChmodSync.mock.invocationCallOrder[0]).toBeLessThan(
+      renameOrder,
+    );
+    expect(mockFsStatSync.mock.invocationCallOrder[0]).toBeLessThan(
+      renameOrder,
+    );
   });
 });
 

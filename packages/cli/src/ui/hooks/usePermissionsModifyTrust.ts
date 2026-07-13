@@ -30,8 +30,6 @@ const emptyIdeState: Pick<PermissionsTrustRuntime, 'getIdeClient'> = {
 };
 
 export interface UsePermissionsModifyTrustReturn {
-  /** Current trust level for the working directory */
-  currentTrustLevel: TrustLevel | undefined;
   /** Pending trust level change (before commit) */
   pendingTrustLevel: TrustLevel | undefined;
   /** Set a pending trust level change */
@@ -105,12 +103,12 @@ export function usePermissionsModifyTrust(
         return { success: true };
       }
 
-      setPendingTrustLevel(nextLevel);
       try {
         trustedFolders.setValue(normalizedCwd, nextLevel);
       } catch (error) {
         return { success: false, phase: 'persistence', error };
       }
+      setPendingTrustLevel(nextLevel);
       setCommittedLevel(nextLevel);
 
       try {
@@ -137,7 +135,6 @@ export function usePermissionsModifyTrust(
   const trustChanged = committedLevel !== undefined;
 
   return {
-    currentTrustLevel,
     pendingTrustLevel,
     setPendingTrustLevel,
     commitTrustLevel,

@@ -54,8 +54,12 @@ vi.mock('../hooks/hookSystem.js', () => ({
 }));
 
 import type { ConfigParameters } from './config.js';
-import { Config } from './config.js';
+import { ApprovalMode, Config } from './config.js';
 import { initializeTestConfig } from '../test-utils/config.js';
+
+const MAX_RETAINED_TRANSITION_FAILURES = 100;
+const TRANSITIONS_EXCEEDING_RETENTION_LIMIT =
+  MAX_RETAINED_TRANSITION_FAILURES + 1;
 
 const baseParams: ConfigParameters = {
   sessionId: 'test',
@@ -96,6 +100,42 @@ describe('Config MCP wiring on folder trust change', () => {
     await config.whenTrustTransitionSettled();
 
     expect(instances[0].onFolderTrustRevoked).toHaveBeenCalledTimes(1);
+  });
+
+  it('contains synchronous revocation failures while completing fail-safe steps', async () => {
+    const config = new Config({ ...baseParams, trustedFolder: true });
+    await initializeTestConfig(config);
+    config.setApprovalMode(ApprovalMode.YOLO);
+    const policyFailure = new Error('policy cleanup failed');
+    vi.spyOn(
+      config.getPolicyEngine(),
+      'removeRulesBySource',
+    ).mockImplementationOnce(() => {
+      throw policyFailure;
+    });
+
+    expect(() => config.setTrustedFolderLive(false)).not.toThrow();
+
+    expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
+    expect(instances[0].quarantineForTrustRevocation).toHaveBeenCalledOnce();
+    await expect(config.whenTrustTransitionSettled()).rejects.toBe(
+      policyFailure,
+    );
+  });
+
+  it('captures quarantine failures without crashing the trust-change source', async () => {
+    const config = new Config({ ...baseParams, trustedFolder: true });
+    await initializeTestConfig(config);
+    const quarantineFailure = new Error('quarantine failed');
+    instances[0].quarantineForTrustRevocation.mockImplementationOnce(() => {
+      throw quarantineFailure;
+    });
+
+    expect(() => config.setTrustedFolderLive(false)).not.toThrow();
+
+    await expect(config.whenTrustTransitionSettled()).rejects.toBe(
+      quarantineFailure,
+    );
   });
 
   it('does not call MCP methods on a no-op transition', async () => {
@@ -391,7 +431,11 @@ describe('Config MCP wiring on folder trust change', () => {
       mock.onFolderTrustGained.mockRejectedValue(new Error('gain failed'));
       mock.onFolderTrustRevoked.mockRejectedValue(new Error('revoke failed'));
 
-      for (let index = 0; index < 101; index++) {
+      for (
+        let index = 0;
+        index < TRANSITIONS_EXCEEDING_RETENTION_LIMIT;
+        index++
+      ) {
         config.setTrustedFolderLive(index % 2 !== 0);
       }
 
@@ -402,7 +446,9 @@ describe('Config MCP wiring on folder trust change', () => {
         failure = error;
       }
       expect(failure).toBeInstanceOf(AggregateError);
-      expect(asAggregateError(failure).errors).toHaveLength(100);
+      expect(asAggregateError(failure).errors).toHaveLength(
+        MAX_RETAINED_TRANSITION_FAILURES,
+      );
     });
   });
 });

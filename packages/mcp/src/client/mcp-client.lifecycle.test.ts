@@ -21,6 +21,7 @@ import {
   ToolListChangedNotificationSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { McpClient } from './mcp-client.js';
+import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from './mcp-errors.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
 vi.mock('@modelcontextprotocol/sdk/client/stdio.js');
@@ -555,15 +556,15 @@ describe('mcp-client', () => {
         .build({})
         .execute(new AbortController().signal);
       await expect(stalePrompt.invoke({})).rejects.toThrow(
-        'MCP capability is no longer authorized',
+        MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE,
       );
       await expect(client.readResource('file:///resource')).rejects.toThrow(
-        'MCP capability is no longer authorized',
+        MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE,
       );
       expect(toolResult).toMatchObject({
         error: {
           message: expect.stringContaining(
-            'MCP capability is no longer authorized',
+            MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE,
           ),
         },
       });

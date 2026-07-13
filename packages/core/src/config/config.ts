@@ -113,7 +113,7 @@ import {
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 import type { ToolSchedulerContract } from '../core/toolSchedulerContract.js';
 
-const MAX_RETAINED_TRUST_TRANSITION_FAILURES = 100;
+const MAX_TRUST_FAILURES = 100;
 
 export class Config extends ConfigBase {
   private static readonly logger = new DebugLogger('llxprt:config');
@@ -554,12 +554,7 @@ export class Config extends ConfigBase {
    * 'false' for untrusted.
    */
   isTrustedFolder(): boolean {
-    return (
-      this.ideTrust ??
-      ideContext.getIdeContext()?.workspaceState?.isTrusted ??
-      this.trustedFolder ??
-      true
-    );
+    return this.getIdeTrust() ?? this.trustedFolder ?? true;
   }
 
   getIdeTrust(): boolean | undefined {
@@ -594,21 +589,26 @@ export class Config extends ConfigBase {
     if (updateLocalFallback) {
       this.trustedFolder = trusted;
     }
-    this.policyEngine.removeRulesBySource(MCP_TRUSTED_POLICY_SOURCE);
-    if (!trusted) {
-      this.mcpClientManager?.quarantineForTrustRevocation();
-      if (this.approvalMode !== ApprovalMode.DEFAULT) {
-        this.approvalMode = ApprovalMode.DEFAULT;
-      }
-    } else {
-      for (const rule of buildMcpTrustedRules({
-        mcpServers: this.getMcpServers(),
-      })) {
-        this.policyEngine.addRule(rule);
-      }
+    if (!trusted && this.approvalMode !== ApprovalMode.DEFAULT) {
+      this.approvalMode = ApprovalMode.DEFAULT;
     }
+    this.runTrustTransitionStep(() =>
+      this.policyEngine.removeRulesBySource(MCP_TRUSTED_POLICY_SOURCE),
+    );
+    const updateTrustPolicy = trusted
+      ? () => {
+          for (const rule of buildMcpTrustedRules({
+            mcpServers: this.getMcpServers(),
+          })) {
+            this.policyEngine.addRule(rule);
+          }
+        }
+      : () => this.mcpClientManager?.quarantineForTrustRevocation();
+    this.runTrustTransitionStep(updateTrustPolicy);
     this.enqueueTrustTransition(trusted);
-    coreEvents.emitFolderTrustChanged(trusted);
+    this.runTrustTransitionStep(() =>
+      coreEvents.emitFolderTrustChanged(trusted),
+    );
   }
 
   setPtyTerminalSize(
@@ -870,6 +870,16 @@ export class Config extends ConfigBase {
   private ideTrust: boolean | undefined;
   private cachedEffectiveTrust: boolean;
 
+  private runTrustTransitionStep(step: () => void): void {
+    try {
+      step();
+    } catch (error) {
+      Config.logger.error(`Trust step failed: ${getErrorMessage(error)}`);
+      const failures = [...this.trustTransitionFailures, error];
+      this.trustTransitionFailures = failures.slice(-MAX_TRUST_FAILURES);
+    }
+  }
+
   /**
    * Serializes trust-transition side-effects (MCP connect/disconnect, hook
    * re-initialization) per-Config instance while preserving every ordered
@@ -909,7 +919,7 @@ export class Config extends ConfigBase {
       this.trustTransitionFailures = [
         ...this.trustTransitionFailures,
         ...failures,
-      ].slice(-MAX_RETAINED_TRUST_TRANSITION_FAILURES);
+      ].slice(-MAX_TRUST_FAILURES);
     });
   }
 

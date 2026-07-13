@@ -271,7 +271,7 @@ function useTrustDialogState(
   config?: PermissionsTrustRuntime,
 ) {
   const {
-    currentTrustLevel,
+    pendingTrustLevel,
     effectiveLocalTrustLevel,
     commitTrustLevel,
     isIdeTrusted,
@@ -291,7 +291,7 @@ function useTrustDialogState(
   const { options, initialIndex } = useTrustFormOptions(
     workingDirectory,
     parentFolderName,
-    currentTrustLevel,
+    pendingTrustLevel,
   );
   const handleSelect = useCallback(
     (level: TrustLevel) => {
@@ -310,7 +310,7 @@ function useTrustDialogState(
         addItem,
         workingDirectory,
         level,
-        currentTrustLevel,
+        pendingTrustLevel,
         getLocalTrustLevelDisplay(level),
       );
       if (changed) {
@@ -319,7 +319,7 @@ function useTrustDialogState(
         onExit();
       }
     },
-    [commitTrustLevel, currentTrustLevel, addItem, workingDirectory, onExit],
+    [commitTrustLevel, pendingTrustLevel, addItem, workingDirectory, onExit],
   );
 
   const warningMessage = getWarningMessage(
@@ -334,7 +334,6 @@ function useTrustDialogState(
   );
 
   return {
-    currentTrustLevel,
     effectiveLocalTrustLevel,
     committedTrustLevel,
     effectiveTrustDisplay: trustUpdateDisplay.effectiveNow,

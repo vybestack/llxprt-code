@@ -337,15 +337,27 @@ export class McpClientManager {
   ): Promise<void> {
     if (this.clients.get(name) === client) {
       this.clients.delete(name);
-      this.removeServerArtifacts(name);
-      this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-        clients: new Map(this.clients),
-      });
+      try {
+        this.removeServerArtifacts(name);
+      } catch (error) {
+        logger.warn(
+          `Error removing artifacts for MCP client '${name}': ${getErrorMessage(error)}`,
+        );
+      }
+      try {
+        this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+          clients: new Map(this.clients),
+        });
+      } catch (error) {
+        logger.warn(
+          `Error emitting cleanup for MCP client '${name}': ${getErrorMessage(error)}`,
+        );
+      }
     }
     try {
       await this.disconnectMcpClient(client);
     } catch {
-      // Best-effort cleanup
+      logger.warn(`Error cleaning up failed MCP client '${name}'.`);
     }
   }
 
@@ -657,18 +669,36 @@ export class McpClientManager {
       ...this.connectingClients.entries(),
     ]);
     for (const [name, client] of clientsToQuarantine) {
-      client.invalidateCapabilities();
+      try {
+        client.invalidateCapabilities();
+      } catch (error) {
+        debugLogger.error(
+          `Error invalidating client '${name}' on trust revocation: ${getErrorMessage(error)}`,
+        );
+      }
       this.retiredClients.add(client);
       this.quarantinedClients.set(name, client);
     }
     this.clients.clear();
     this.connectingClients.clear();
     for (const name of serverNames) {
-      this.removeServerArtifacts(name);
+      try {
+        this.removeServerArtifacts(name);
+      } catch (error) {
+        debugLogger.error(
+          `Error removing server '${name}' artifacts on trust revocation: ${getErrorMessage(error)}`,
+        );
+      }
     }
-    this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-      clients: new Map(this.clients),
-    });
+    try {
+      this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+        clients: new Map(this.clients),
+      });
+    } catch (error) {
+      debugLogger.error(
+        `Error emitting MCP client update on trust revocation: ${getErrorMessage(error)}`,
+      );
+    }
   }
 
   async onFolderTrustRevoked(): Promise<void> {

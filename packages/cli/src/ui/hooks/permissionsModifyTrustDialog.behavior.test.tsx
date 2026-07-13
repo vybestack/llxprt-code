@@ -7,8 +7,8 @@
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '../../test-utils/render.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { TrustLevel } from '../../config/trustedFolders.js';
+import type { PermissionsTrustRuntime } from './usePermissionsModifyTrust.js';
 import {
   getTrustCommitErrorMessage,
   getTrustLevelDisplay,
@@ -97,13 +97,13 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
         throw new Error('live update failed');
       })
       .mockImplementation(() => undefined);
-    const config = {
+    const config: PermissionsTrustRuntime = {
       getWorkingDir: () => '/configured/workspace',
       getFolderTrust: () => true,
       getIdeClient: () => undefined,
       isTrustedFolder: () => true,
       setTrustedFolderLive,
-    } as unknown as CliUiRuntime;
+    };
     const { result } = renderHook(() => usePermissionsModifyTrust(config));
 
     let firstResult: ReturnType<typeof result.current.commitTrustLevel> | null =
@@ -136,21 +136,47 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     expect(result.current.effectiveTrust).toBe(true);
   });
 
+  it('preserves the pending selection when persistence fails', () => {
+    mockedUserConfig.value = {
+      '/configured/workspace': TrustLevel.DO_NOT_TRUST,
+    };
+    mockedSetValue.mockImplementationOnce(() => {
+      throw new Error('disk full');
+    });
+    const config: PermissionsTrustRuntime = {
+      getWorkingDir: () => '/configured/workspace',
+      getFolderTrust: () => true,
+      getIdeClient: () => undefined,
+      isTrustedFolder: () => false,
+      setTrustedFolderLive: vi.fn(),
+    };
+    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+
+    act(() => {
+      expect(
+        result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER),
+      ).toMatchObject({ success: false, phase: 'persistence' });
+    });
+
+    expect(result.current.pendingTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
+    expect(result.current.committedTrustLevel).toBeUndefined();
+  });
+
   it('reads and persists the direct rule by normalized working directory', () => {
     mockedUserConfig.value = {
       '/configured/workspace': TrustLevel.DO_NOT_TRUST,
     };
-    const config = {
+    const config: PermissionsTrustRuntime = {
       getWorkingDir: () => '/configured/child/../workspace',
       getFolderTrust: () => true,
       getIdeClient: () => undefined,
       isTrustedFolder: () => false,
       setTrustedFolderLive: vi.fn(),
-    } as unknown as CliUiRuntime;
+    };
 
     const { result } = renderHook(() => usePermissionsModifyTrust(config));
 
-    expect(result.current.currentTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
+    expect(result.current.pendingTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
     expect(result.current.workingDirectory).toBe('/configured/workspace');
     act(() => {
       result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);

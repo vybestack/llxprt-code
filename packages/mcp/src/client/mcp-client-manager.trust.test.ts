@@ -166,6 +166,40 @@ describe('McpClientManager trust transitions', () => {
       expect(clientB.disconnect).not.toHaveBeenCalled();
     });
 
+    it('continues quarantining all clients when one invalidation throws', async () => {
+      const clientA = createMockMcpClient();
+      const clientB = createMockMcpClient();
+      vi.mocked(clientA.invalidateCapabilities).mockImplementationOnce(() => {
+        throw new Error('invalidation failed');
+      });
+      vi.mocked(McpClient)
+        .mockReturnValueOnce(clientA)
+        .mockReturnValueOnce(clientB);
+      const promptRegistry = new PromptRegistry();
+      const resourceRegistry = new ResourceRegistry();
+      const config = createMockConfig({
+        getPromptRegistry: () => promptRegistry,
+        getResourceRegistry: () => resourceRegistry,
+      });
+      const toolRegistry = createToolRegistry(config);
+      const removeTools = vi.spyOn(toolRegistry, 'removeMcpToolsByServer');
+      const removePrompts = vi.spyOn(promptRegistry, 'removePromptsByServer');
+      const removeResources = vi.spyOn(
+        resourceRegistry,
+        'removeResourcesByServer',
+      );
+      const manager = new McpClientManager('0.0.1', toolRegistry, config);
+      await manager.startConfiguredMcpServers();
+
+      expect(() => manager.quarantineForTrustRevocation()).not.toThrow();
+
+      expect(clientB.invalidateCapabilities).toHaveBeenCalledOnce();
+      expect(manager.getMcpServerCount()).toBe(0);
+      expect(removeTools).toHaveBeenCalledTimes(2);
+      expect(removePrompts).toHaveBeenCalledTimes(2);
+      expect(removeResources).toHaveBeenCalledTimes(2);
+    });
+
     it('removes all clients from the internal map after revocation', async () => {
       const clientA = createMockMcpClient();
       vi.mocked(McpClient).mockReturnValue(clientA);
@@ -452,6 +486,39 @@ describe('McpClientManager trust transitions', () => {
 
       // Resolve discover — the client should already be gone; no re-registration
       resolveDiscover();
+      await manager.whenDiscoverySettled();
+
+      expect(manager.getMcpServerCount()).toBe(0);
+      expect(client.disconnect).toHaveBeenCalledOnce();
+    });
+
+    it('disconnects once when invalid discovery cleanup encounters a registry failure', async () => {
+      let trusted = true;
+      let resolveDiscover: (() => void) | undefined;
+      const client = createMockMcpClient();
+      vi.mocked(client.discover).mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveDiscover = resolve;
+          }),
+      );
+      vi.mocked(McpClient).mockReturnValue(client);
+      const config = createMockConfig({
+        getMcpServers: () => ({ 'server-a': {} }),
+        isTrustedFolder: () => trusted,
+      });
+      const toolRegistry = createToolRegistry(config);
+      vi.spyOn(toolRegistry, 'removeMcpToolsByServer').mockImplementationOnce(
+        () => {
+          throw new Error('registry cleanup failed');
+        },
+      );
+      const manager = new McpClientManager('0.0.1', toolRegistry, config);
+
+      void manager.startConfiguredMcpServers();
+      await vi.waitFor(() => expect(client.discover).toHaveBeenCalledOnce());
+      trusted = false;
+      resolveDiscover?.();
       await manager.whenDiscoverySettled();
 
       expect(manager.getMcpServerCount()).toBe(0);

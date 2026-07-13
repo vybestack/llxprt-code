@@ -771,10 +771,11 @@ describe('McpClientManager', () => {
         return client as unknown as McpClient;
       });
 
-      const { manager } = createExtensionManager(undefined, {
-        'good-server': {},
-        'bad-server': {},
-      });
+      const { manager, promptRegistry, resourceRegistry, toolRegistry } =
+        createExtensionManager(undefined, {
+          'good-server': {},
+          'bad-server': {},
+        });
 
       await manager.startConfiguredMcpServers();
       await manager.whenDiscoverySettled();
@@ -790,6 +791,15 @@ describe('McpClientManager', () => {
       // The failed client is cleaned up while the good server remains usable.
       expect(manager.getMcpServerCount()).toBe(1);
       expect(badClient.disconnect).toHaveBeenCalledOnce();
+      expect(toolRegistry.removeMcpToolsByServer).toHaveBeenCalledWith(
+        'bad-server',
+      );
+      expect(promptRegistry.removePromptsByServer).toHaveBeenCalledWith(
+        'bad-server',
+      );
+      expect(resourceRegistry.removeResourcesByServer).toHaveBeenCalledWith(
+        'bad-server',
+      );
       const instructions = manager.getMcpInstructions();
       expect(instructions).toContain('good-server instructions');
     });

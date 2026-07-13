@@ -36,6 +36,7 @@ import {
 } from './mcp-status.js';
 import { MCP_DEFAULT_TIMEOUT_MSEC } from './mcp-transport.js';
 import { connectToMcpServer } from './mcp-connection.js';
+import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from './mcp-errors.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 
@@ -338,7 +339,7 @@ export async function invokeMcpPrompt(
 ): Promise<GetPromptResult> {
   try {
     if (!isAuthorized()) {
-      throw new Error('MCP capability is no longer authorized');
+      throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
     }
     const sanitizedParams: Record<string, string> = {};
     for (const [key, value] of Object.entries(promptParams)) {

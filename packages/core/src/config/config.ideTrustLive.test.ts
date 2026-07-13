@@ -102,6 +102,23 @@ describe('Config live IDE trust', () => {
     expect(mcpManager.onFolderTrustRevoked).toHaveBeenCalledOnce();
   });
 
+  it('contains synchronous transition failures from IDE event sources', async () => {
+    const config = new Config({ ...baseParams, trustedFolder: true });
+    await initializeTestConfig(config);
+    const listener = trustChangeListener;
+    const quarantineFailure = new Error('quarantine failed');
+    mcpManager.quarantineForTrustRevocation.mockImplementationOnce(() => {
+      throw quarantineFailure;
+    });
+
+    expect(() => listener?.(false)).not.toThrow();
+
+    expect(config.isTrustedFolder()).toBe(false);
+    await expect(config.whenTrustTransitionSettled()).rejects.toBe(
+      quarantineFailure,
+    );
+  });
+
   it('deduplicates IDE notifications that do not change effective trust', async () => {
     const config = new Config({ ...baseParams, trustedFolder: true });
     await initializeTestConfig(config);

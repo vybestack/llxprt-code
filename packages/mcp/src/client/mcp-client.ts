@@ -49,6 +49,7 @@ import {
   invokeMcpPrompt,
 } from './mcp-discovery.js';
 import { connectToMcpServer } from './mcp-connection.js';
+import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from './mcp-errors.js';
 import {
   hasNetworkTransport,
   isEnabled,
@@ -382,7 +383,7 @@ export class McpClient {
     this.assertConnected();
     const client = this.client!;
     if (!this.createCapabilityAuthorization(client)()) {
-      throw new Error('MCP capability is no longer authorized');
+      throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
     }
     return client.request(
       {

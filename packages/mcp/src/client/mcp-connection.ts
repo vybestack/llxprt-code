@@ -45,8 +45,12 @@ import { MCPOAuthProvider } from '../auth/oauth-provider.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 
-function abortError(): DOMException {
-  return new DOMException('MCP connection was cancelled', 'AbortError');
+function abortError(cause?: unknown): DOMException {
+  const error = new DOMException('MCP connection was cancelled', 'AbortError');
+  if (cause !== undefined) {
+    Object.defineProperty(error, 'cause', { value: cause });
+  }
+  return error;
 }
 
 function closeTransport(transport?: Transport): Promise<void> {
@@ -55,6 +59,10 @@ function closeTransport(transport?: Transport): Promise<void> {
     : Promise.resolve();
 }
 
+/**
+ * Races an operation against cancellation while ensuring its cleanup path runs
+ * at most once, including when abort and promise settlement happen together.
+ */
 function abortable<T>(
   promise: Promise<T>,
   signal: AbortSignal,
@@ -495,7 +503,7 @@ export async function connectToMcpServer(
   } catch (error) {
     if (signal?.aborted === true) {
       void mcpClient.close().catch(() => {});
-      throw abortError();
+      throw abortError(error);
     }
     const recoveryPromise = handleConnectionError(
       mcpClient,

@@ -12,6 +12,7 @@ import type {
   ContentPart as Part,
   ToolDeclarations as Tool,
 } from '@vybestack/llxprt-code-tools';
+import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from './mcp-errors.js';
 
 /**
  * Adapts an MCP tool definition to the neutral CallableTool interface so it
@@ -49,7 +50,7 @@ export class McpCallableTool implements CallableTool {
 
     try {
       if (!this.isAuthorized()) {
-        throw new Error('MCP capability is no longer authorized');
+        throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
       }
       const result = await this.client.callTool(
         {

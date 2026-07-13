@@ -18,6 +18,11 @@ import { type HistoryItemWithoutId, MessageType } from '../types.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import process from 'node:process';
 
+export type FolderTrustRuntime = Pick<
+  CliUiRuntime,
+  'getWorkingDir' | 'setTrustedFolderLive'
+>;
+
 const debug = new DebugLogger('llxprt:ui:useFolderTrust');
 
 type AddItemFn = (item: HistoryItemWithoutId, timestamp: number) => number;
