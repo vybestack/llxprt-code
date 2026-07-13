@@ -209,19 +209,21 @@ export class RecordingConnection {
    * a `terminal` content block) has been recorded — i.e., the Session has
    * created and registered a terminal.
    */
-  waitForTerminalCreated(): Promise<void> {
-    return this.hasTerminalContentUpdate()
-      ? Promise.resolve()
-      : new Promise<void>((resolve) => {
-          const check = (): void => {
-            if (this.hasTerminalContentUpdate()) {
-              resolve();
-            } else {
-              setTimeout(check, 5);
-            }
-          };
+  waitForTerminalCreated(timeoutMs = 5000): Promise<void> {
+    if (this.hasTerminalContentUpdate()) return Promise.resolve();
+    const deadline = Date.now() + timeoutMs;
+    return new Promise<void>((resolve, reject) => {
+      const check = (): void => {
+        if (this.hasTerminalContentUpdate()) {
+          resolve();
+        } else if (Date.now() >= deadline) {
+          reject(new Error('waitForTerminalCreated timed out'));
+        } else {
           setTimeout(check, 5);
-        });
+        }
+      };
+      setTimeout(check, 5);
+    });
   }
 
   private hasTerminalContentUpdate(): boolean {

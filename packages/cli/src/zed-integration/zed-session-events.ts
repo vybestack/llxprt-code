@@ -71,7 +71,11 @@ export async function consumeAgentStream(
     return terminalStopReason;
   } finally {
     if (deps.terminals !== null) {
-      await deps.terminals.settleAll();
+      try {
+        await deps.terminals.settleAll();
+      } catch {
+        // Swallow cleanup errors so they don't mask the original error
+      }
     }
   }
 }
@@ -141,6 +145,7 @@ export async function runPromptTurn(
     (u) => deps.streamDeps.sendUpdate(u),
   );
   let terminalStopReason: acp.StopReason | null = null;
+  let thrownError: unknown = null;
   try {
     terminalStopReason = await consumeAgentStream(
       deps.streamDeps,
@@ -151,21 +156,21 @@ export async function runPromptTurn(
       batcher,
     );
   } catch (error) {
-    if (getErrorStatus(error) === 429) {
-      await safeFlush(batcher);
+    thrownError = error;
+  }
+  await safeFlush(batcher);
+  batcher.dispose();
+  if (thrownError !== null) {
+    if (getErrorStatus(thrownError) === 429) {
       throw new acp.RequestError(429, 'Rate limit exceeded. Try again later.');
     }
     if (
       pendingSend.signal.aborted ||
-      (error instanceof Error && error.name === 'AbortError')
+      (thrownError instanceof Error && thrownError.name === 'AbortError')
     ) {
-      await safeFlush(batcher);
       return { stopReason: 'cancelled' };
     }
-    await safeFlush(batcher);
-    throw error;
-  } finally {
-    batcher.dispose();
+    throw thrownError;
   }
   if (pendingSend.signal.aborted && terminalStopReason !== 'cancelled') {
     return { stopReason: 'cancelled' };

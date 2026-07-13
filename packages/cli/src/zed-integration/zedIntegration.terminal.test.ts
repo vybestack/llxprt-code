@@ -218,7 +218,7 @@ describe('Zed Session — terminal capability integration', () => {
       await session.cancelPendingPrompt();
       await promptPromise;
 
-      expect(connection.killCalls).toBeGreaterThanOrEqual(1);
+      expect(connection.killCalls).toBe(1);
     });
 
     it('kills and releases terminals on dispose', async () => {
@@ -244,7 +244,7 @@ describe('Zed Session — terminal capability integration', () => {
       await session.dispose();
       await promptPromise.catch(() => undefined);
 
-      expect(connection.killCalls).toBeGreaterThanOrEqual(1);
+      expect(connection.killCalls).toBe(1);
     });
   });
 
