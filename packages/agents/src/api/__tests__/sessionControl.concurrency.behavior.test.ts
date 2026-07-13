@@ -31,11 +31,8 @@
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, rmSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import {
-  SessionRecordingService,
-  getProjectHash,
-} from '@vybestack/llxprt-code-core';
+import { join, basename } from 'node:path';
+import { SessionRecordingService } from '@vybestack/llxprt-code-core';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -150,7 +147,7 @@ async function recordResumableSession(
 ): Promise<void> {
   const service = new SessionRecordingService({
     sessionId,
-    projectHash: getProjectHash(projectRoot),
+    projectHash: basename(projectRoot),
     chatsDir: chatsDirOf(projectRoot),
     workspaceDirs: [projectRoot],
     provider: 'fake',

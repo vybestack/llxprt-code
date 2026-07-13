@@ -185,7 +185,7 @@ export async function readAgentHistoryForReplay(
  * (FINDING C3).
  */
 function chatsDirFor(config: Config): string {
-  const storage = (config as Record<string, unknown>).storage;
+  const storage = (config as unknown as Record<string, unknown>).storage;
   if (storage === undefined || storage === null) {
     throw new Error(
       'Cannot resolve chats directory: config.storage is not available',

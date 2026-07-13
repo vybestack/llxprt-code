@@ -21,7 +21,11 @@ import {
 const createdSessions: Session[] = [];
 // Derived from the production buildCommandToExecute so the wrapping format
 // stays in sync automatically.
-const preparedEcho = buildCommandToExecute('echo hello', false, '/tmp/shell.tmp');
+const preparedEcho = buildCommandToExecute(
+  'echo hello',
+  false,
+  '/tmp/shell.tmp',
+);
 
 function terminalManager(
   connection: RecordingConnection,

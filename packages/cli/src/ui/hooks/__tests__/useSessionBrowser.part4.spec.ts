@@ -181,7 +181,15 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
 
   afterEach(async () => {
     await Promise.all(lockHandles.map((handle) => handle.release()));
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {
+      // Retry once — the hook's async session refresh may still be
+      // writing a lock file, causing an ENOTEMPTY race.
+      return new Promise<void>((resolve) => {
+        setTimeout(() => {
+          fs.rm(tempDir, { recursive: true, force: true }).finally(resolve);
+        }, 100);
+      });
+    });
   });
 
   describe('Delete Flow @requirement:REQ-DL-001', () => {
