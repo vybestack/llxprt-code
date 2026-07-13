@@ -273,13 +273,11 @@ export function isWorkspaceTrusted(
   workingDirectory: string = process.cwd(),
   ideTrust: boolean | undefined = getIdeTrust(),
 ): boolean | undefined {
-  if (!isFolderTrustEnabled(settings) || ideTrust !== undefined) {
-    return resolveWorkspaceTrust(
-      settings,
-      loadTrustedFolders(),
-      workingDirectory,
-      ideTrust,
-    );
+  if (!isFolderTrustEnabled(settings)) {
+    return true;
+  }
+  if (ideTrust !== undefined) {
+    return ideTrust;
   }
 
   const trustedFolders = loadTrustedFolders();

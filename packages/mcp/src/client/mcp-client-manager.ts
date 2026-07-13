@@ -399,22 +399,7 @@ export class McpClientManager {
   ): Promise<void> {
     const generationBeforeConnect = this.trustGeneration;
 
-    const client =
-      existing ??
-      new McpClient(
-        name,
-        config,
-        this.toolRegistry,
-        this.cliConfig.getPromptRegistry(),
-        this.cliConfig.getResourceRegistry(),
-        this.cliConfig.getWorkspaceContext(),
-        this.cliConfig,
-        this.cliConfig.getDebugMode(),
-        this.clientVersion,
-        async () => {
-          await this.scheduleMcpContextRefresh();
-        },
-      );
+    const client = existing ?? this.createClient(name, config);
     if (!existing) {
       this.clients.set(name, client);
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {

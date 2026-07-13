@@ -421,6 +421,7 @@ describe('isWorkspaceTrusted with IDE override', () => {
       JSON.stringify({ [process.cwd()]: TrustLevel.DO_NOT_TRUST }),
     );
     expect(isWorkspaceTrusted(mockSettings)).toBe(true);
+    expect(fs.readFileSync).not.toHaveBeenCalled();
   });
 
   it('should return false when ideTrust is false, ignoring config', () => {
@@ -430,6 +431,7 @@ describe('isWorkspaceTrusted with IDE override', () => {
       JSON.stringify({ [process.cwd()]: TrustLevel.TRUST_FOLDER }),
     );
     expect(isWorkspaceTrusted(mockSettings)).toBe(false);
+    expect(fs.readFileSync).not.toHaveBeenCalled();
   });
 
   it('should fall back to config when ideTrust is undefined', () => {

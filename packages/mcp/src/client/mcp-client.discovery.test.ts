@@ -109,7 +109,7 @@ describe('mcp-client', () => {
       await client.discover({} as Config);
       expect(mockedClient.listTools).toHaveBeenCalledWith(
         {},
-        { timeout: 600000 },
+        expect.objectContaining({ timeout: 600000 }),
       );
     });
 

@@ -87,7 +87,7 @@ describe('Config live IDE trust', () => {
   it('applies IDE trust changes live', async () => {
     const config = new Config({ ...baseParams, trustedFolder: true });
     await initializeTestConfig(config);
-    const listener = ideClient.addTrustChangeListener.mock.calls[0]?.[0] as (
+    const listener = ideClient.addTrustChangeListener.mock.lastCall?.[0] as (
       trusted: boolean | undefined,
     ) => void;
 
@@ -101,7 +101,7 @@ describe('Config live IDE trust', () => {
   it('deduplicates IDE notifications that do not change effective trust', async () => {
     const config = new Config({ ...baseParams, trustedFolder: true });
     await initializeTestConfig(config);
-    const listener = ideClient.addTrustChangeListener.mock.calls[0]?.[0] as (
+    const listener = ideClient.addTrustChangeListener.mock.lastCall?.[0] as (
       trusted: boolean | undefined,
     ) => void;
 
@@ -129,7 +129,7 @@ describe('Config live IDE trust', () => {
     async ({ localTrust, ideTrust, expectedTransition }) => {
       const config = new Config({ ...baseParams, trustedFolder: localTrust });
       await initializeTestConfig(config);
-      const listener = ideClient.addTrustChangeListener.mock.calls[0]?.[0] as (
+      const listener = ideClient.addTrustChangeListener.mock.lastCall?.[0] as (
         trusted: boolean | undefined,
       ) => void;
 
@@ -148,7 +148,7 @@ describe('Config live IDE trust', () => {
       ideContext.setIdeContext({ workspaceState: { isTrusted: !localTrust } });
       const config = new Config({ ...baseParams, trustedFolder: !localTrust });
       await initializeTestConfig(config);
-      const listener = ideClient.addTrustChangeListener.mock.calls[0]?.[0] as (
+      const listener = ideClient.addTrustChangeListener.mock.lastCall?.[0] as (
         trusted: boolean | undefined,
       ) => void;
 
@@ -166,7 +166,7 @@ describe('Config live IDE trust', () => {
   it('removes the IDE listener during disposal', async () => {
     const config = new Config({ ...baseParams, trustedFolder: true });
     await initializeTestConfig(config);
-    const listener = ideClient.addTrustChangeListener.mock.calls[0]?.[0];
+    const listener = ideClient.addTrustChangeListener.mock.lastCall?.[0];
 
     await config.dispose();
 

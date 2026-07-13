@@ -341,7 +341,10 @@ describe('PermissionsModifyTrustDialog', () => {
     stdin.write('\u001B[B');
     stdin.write('\r');
     await waitFor(() => {
-      expect(mockedSetValue).toHaveBeenCalledWith('/test/dir', 'TRUST_PARENT');
+      expect(mockedSetValue).toHaveBeenCalledWith(
+        '/test/dir',
+        TrustLevel.TRUST_PARENT,
+      );
     });
     expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(false);
   });

@@ -58,20 +58,31 @@ function closeTransport(transport?: Transport): Promise<void> {
 function abortable<T>(
   promise: Promise<T>,
   signal: AbortSignal,
-  cleanup: (value?: T) => void | Promise<void>,
+  cleanup: (value: T) => void | Promise<void>,
+  cleanupOnAbort?: () => void | Promise<void>,
 ): Promise<T> {
-  const runCleanup = (value?: T) => {
-    Promise.resolve(cleanup(value)).catch(() => {});
+  let cleaned = false;
+  const runCleanup = (cleanupOperation: () => void | Promise<void>) => {
+    if (cleaned) return;
+    cleaned = true;
+    Promise.resolve(cleanupOperation()).catch(() => {});
+  };
+  const cleanupResolvedValue = (value: T) => runCleanup(() => cleanup(value));
+  const cleanupAfterAbort = () => {
+    if (cleanupOnAbort !== undefined) {
+      runCleanup(cleanupOnAbort);
+    } else {
+      void promise.then(cleanupResolvedValue, () => {});
+    }
   };
   if (signal.aborted) {
-    runCleanup();
-    void promise.then(runCleanup, () => {});
+    cleanupAfterAbort();
     return Promise.reject(abortError());
   }
 
   return new Promise<T>((resolve, reject) => {
     const onAbort = () => {
-      runCleanup();
+      cleanupAfterAbort();
       reject(abortError());
     };
     signal.addEventListener('abort', onAbort, { once: true });
@@ -79,7 +90,7 @@ function abortable<T>(
       (value) => {
         signal.removeEventListener('abort', onAbort);
         if (signal.aborted) {
-          runCleanup(value);
+          cleanupResolvedValue(value);
           reject(abortError());
         } else {
           resolve(value);
@@ -440,8 +451,11 @@ export async function connectToMcpServer(
         }),
       );
       if (signal !== undefined) {
-        await abortable(connectPromise, signal, () =>
-          closeTransport(transport),
+        await abortable(
+          connectPromise,
+          signal,
+          () => closeTransport(transport),
+          () => closeTransport(transport),
         );
       } else {
         await connectPromise;
@@ -450,7 +464,6 @@ export async function connectToMcpServer(
       return mcpClient;
     } catch (error) {
       if (signal?.aborted === true) {
-        void closeTransport(transport).catch(() => {});
         throw error;
       }
       await closeTransport(transport);
@@ -472,7 +485,12 @@ export async function connectToMcpServer(
       httpReturned404,
     );
     return signal !== undefined
-      ? abortable(recoveryPromise, signal, () => mcpClient.close())
+      ? abortable(
+          recoveryPromise,
+          signal,
+          () => mcpClient.close(),
+          () => mcpClient.close(),
+        )
       : recoveryPromise;
   }
 }

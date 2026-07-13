@@ -256,13 +256,28 @@ export class McpClient {
     this.connectionAbortController = undefined;
     const client = this.client;
     this.client = undefined;
-    if (this.transport) {
-      await this.transport.close();
+    const transport = this.transport;
+    this.transport = undefined;
+    let closeError: unknown;
+    try {
+      if (transport) {
+        await transport.close();
+      }
+    } catch (error) {
+      closeError = error;
     }
-    if (client) {
-      await client.close();
+    try {
+      if (client) {
+        await client.close();
+      }
+    } catch (error) {
+      closeError ??= error;
+    } finally {
+      this.updateStatus(MCPServerStatus.DISCONNECTED);
     }
-    this.updateStatus(MCPServerStatus.DISCONNECTED);
+    if (closeError !== undefined) {
+      throw closeError;
+    }
   }
 
   getStatus(): MCPServerStatus {

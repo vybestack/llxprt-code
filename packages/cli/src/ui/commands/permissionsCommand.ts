@@ -117,6 +117,7 @@ export const permissionsCommand: SlashCommand = {
       if (config) {
         const cwd = config.getWorkingDir();
         config.setTrustedFolderLive(
+          // An unmatched local rule means the active workspace is not trusted.
           resolveLocalWorkspaceTrust(
             { folderTrust: config.getFolderTrust() },
             trustedFolders,

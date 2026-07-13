@@ -96,6 +96,28 @@ describe('connectToMcpServer with OAuth', () => {
     vi.clearAllMocks();
   });
 
+  it('cleans an already-aborted transport exactly once', async () => {
+    const transport = { close: vi.fn().mockResolvedValue(undefined) };
+    vi.mocked(mockedClient.close).mockResolvedValue(undefined);
+    vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+      transport as unknown as SdkClientStdioLib.StdioClientTransport,
+    );
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      connectToMcpServer(
+        '0.0.1',
+        'test-server',
+        { command: 'test-command' },
+        false,
+        workspaceContext,
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.waitFor(() => expect(transport.close).toHaveBeenCalledOnce());
+  });
+
   it('should handle automatic OAuth flow on 401 with stored token', async () => {
     const serverUrl = 'http://test-server.com/';
 

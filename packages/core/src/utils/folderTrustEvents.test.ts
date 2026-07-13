@@ -48,4 +48,20 @@ describe('FolderTrustChanged event', () => {
 
     expect(received).toStrictEqual([]);
   });
+
+  it('does not throw when emitted without listeners', () => {
+    expect(() => events.emitFolderTrustChanged(true)).not.toThrow();
+  });
+
+  it('broadcasts the same trust value to every subscriber', () => {
+    const first: boolean[] = [];
+    const second: boolean[] = [];
+    events.on(CoreEvent.FolderTrustChanged, (trusted) => first.push(trusted));
+    events.on(CoreEvent.FolderTrustChanged, (trusted) => second.push(trusted));
+
+    events.emitFolderTrustChanged(false);
+
+    expect(first).toStrictEqual([false]);
+    expect(second).toStrictEqual([false]);
+  });
 });
