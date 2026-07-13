@@ -84,7 +84,7 @@ describe('Kitty Sequence Parsing', () => {
     vi.useRealTimers();
   });
 
-  describe('C0 control characters above Ctrl+Z (issue #2296)', () => {
+  describe('C0 control characters above Ctrl+Z', () => {
     // Terminals send \x1c-\x1f for Ctrl+\, Ctrl+], Ctrl+^, Ctrl+_.
     // The parser must recognize these as ctrl key events, not insertable
     // characters. Without this support, Ctrl+] (the queued-messages panel

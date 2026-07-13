@@ -252,7 +252,26 @@ describe('QueuedMessagesPanel content preparation', () => {
       });
 
       expect(view.kind === 'expanded' ? view.messages[0].preview : '').toBe(
-        'This queued m...',
+        'This queued ...',
+      );
+    });
+
+    it('accounts for shell padding and each numbered prefix when truncating', () => {
+      const messages = Array.from({ length: 100 }, () =>
+        makeSubmission('abcdefghijklmnopqrst'),
+      );
+      const view = prepareQueuedMessagesPanelView({
+        width: 20,
+        messages,
+        columns: 20,
+        rows: 510,
+      });
+
+      expect(view.kind === 'expanded' ? view.messages[0].preview : '').toBe(
+        'abcdefghijkl...',
+      );
+      expect(view.kind === 'expanded' ? view.messages[99].preview : '').toBe(
+        'abcdefghij...',
       );
     });
 

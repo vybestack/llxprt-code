@@ -26,7 +26,6 @@ interface QueuedMessagesPanelProps {
 
 const PANEL_HEIGHT_RATIO = 0.2;
 const COLLAPSED_PREVIEW_WIDTH_RATIO = 0.55;
-const EXPANDED_CONTENT_WIDTH_OFFSET = 4;
 const FALLBACK_KEY_PREVIEW_LENGTH = 20;
 const MIN_EXPANDED_PANEL_HEIGHT = 3;
 const QUEUED_MESSAGES_KEY_HINT = getDefaultKeyBindingHint(
@@ -175,6 +174,15 @@ function queuedMessageSummary(messageCount: number): string {
   return `${messageCount} queued ${messageCount === 1 ? 'message' : 'messages'}`;
 }
 
+function calculateExpandedPreviewWidth(
+  panelWidth: number,
+  messageNumber: number,
+): number {
+  const shellPaddingWidth = panelWidth > 2 ? 2 : 0;
+  const numberPrefixWidth = `${messageNumber}. `.length;
+  return Math.max(1, panelWidth - shellPaddingWidth - numberPrefixWidth);
+}
+
 export function prepareQueuedMessagesPanelView({
   width,
   collapsed = false,
@@ -218,10 +226,6 @@ export function prepareQueuedMessagesPanelView({
     messages.length,
   );
   const visibleMessages = messages.slice(0, maxVisibleItems);
-  const contentWidth = Math.max(
-    1,
-    boundedWidth - EXPANDED_CONTENT_WIDTH_OFFSET,
-  );
   const moreCount = messages.length - visibleMessages.length;
 
   return {
@@ -231,10 +235,14 @@ export function prepareQueuedMessagesPanelView({
     heading: `Queued Messages (${messages.length})`,
     messages: visibleMessages.map((message, index) => {
       const preview = extractPreviewText(message.query);
+      const messageNumber = index + 1;
       return {
         key: stableKey(message, index, preview),
-        number: index + 1,
-        preview: truncateEnd(preview, contentWidth),
+        number: messageNumber,
+        preview: truncateEnd(
+          preview,
+          calculateExpandedPreviewWidth(boundedWidth, messageNumber),
+        ),
       };
     }),
     moreCount,
@@ -349,11 +357,11 @@ function ExpandedQueuedMessagesPanel({
   );
 }
 
-export const QueuedMessagesPanel: React.FC<QueuedMessagesPanelProps> = ({
+export function QueuedMessagesPanel({
   width,
   collapsed = false,
   messages,
-}) => {
+}: QueuedMessagesPanelProps) {
   const { columns, rows } = useTerminalSize();
   const view = useMemo(
     () =>
@@ -377,4 +385,4 @@ export const QueuedMessagesPanel: React.FC<QueuedMessagesPanelProps> = ({
     return <CollapsedQueuedMessagesPanel view={view} />;
   }
   return <ExpandedQueuedMessagesPanel view={view} />;
-};
+}

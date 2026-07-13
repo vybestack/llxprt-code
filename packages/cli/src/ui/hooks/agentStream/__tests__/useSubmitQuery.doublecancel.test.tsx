@@ -47,13 +47,14 @@ import { createFakeAgentFromMockClient } from '../../useAgentStream-test-helpers
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 // useSubmitQuery internally calls useStreamEventHandlers and useSessionStats.
 // We stub them so the test can isolate the turn-lifecycle / finally logic.
+const prepareQueryForAgentMock = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ queryToSend: 'test-query', shouldProceed: true }),
+);
 
 vi.mock('../useStreamEventHandlers.js', () => ({
   useStreamEventHandlers: () => ({
     displayUserMessage: vi.fn(),
-    prepareQueryForAgent: vi
-      .fn()
-      .mockResolvedValue({ queryToSend: 'test-query', shouldProceed: true }),
+    prepareQueryForAgent: prepareQueryForAgentMock,
     handleLoopDetectedEvent: vi.fn(),
   }),
 }));
@@ -483,6 +484,82 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     }
   });
 
+  it('drops a permanently failing queued submission and continues draining', async () => {
+    vi.useFakeTimers();
+    const queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]> = {
+      current: [],
+    };
+    const queueOperations = createQueueOperations(queuedSubmissionsRef);
+    const submitQueryRef: React.MutableRefObject<SubmissionExecutor | null> = {
+      current: null,
+    };
+    const processedQueries: string[] = [];
+    const rendered = renderUseSubmitQuery(
+      createDeps(),
+      {
+        queuedSubmissionsRef,
+        queueOperations,
+        submitQueryRef,
+      },
+      { initialStreamingState: StreamingState.Idle },
+    );
+
+    try {
+      submitQueryRef.current = async (query) => {
+        if (query === 'permanent failure') {
+          throw new Error('permanent failure');
+        }
+        if (typeof query === 'string') {
+          processedQueries.push(query);
+        }
+        return 'consumed';
+      };
+      queueOperations.enqueueSubmission({ query: 'permanent failure' });
+      queueOperations.enqueueSubmission({ query: 'next submission' });
+
+      act(() => {
+        rendered.result.current.scheduleNextQueuedSubmission();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      for (let retry = 0; retry < 3; retry += 1) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1000);
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1);
+        });
+      }
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+
+      expect(queuedSubmissionsRef.current).toStrictEqual([]);
+      expect(processedQueries).toStrictEqual(['next submission']);
+    } finally {
+      rendered.unmount();
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects the public submission when query preparation fails', async () => {
+    const preparationError = new Error('query preparation failed');
+    prepareQueryForAgentMock.mockRejectedValueOnce(preparationError);
+    const { result, unmount } = renderUseSubmitQuery(createDeps());
+
+    try {
+      await act(async () => {
+        await expect(result.current.submitQuery('prepare me')).rejects.toBe(
+          preparationError,
+        );
+      });
+    } finally {
+      unmount();
+    }
+  });
+
   it('processes a non-string submission immediately even when MCP discovery is in progress (issue #2516)', async () => {
     const discoveryState = MCPDiscoveryState.IN_PROGRESS;
     const mcpManager: UiMcpClientManager = {
@@ -701,7 +778,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       await turnPromise.catch(() => {});
     });
   });
-  it('preserves queued submissions across Ctrl+C cancel then drains them (issue #2296 integration)', async () => {
+  it('preserves queued submissions across Ctrl+C cancel then drains them', async () => {
     // Integration regression for issue #2296: queued messages must survive
     // Ctrl+C cancel. The old code cleared queuedSubmissionsRef inside
     // cancelOngoingRequest; the fix removed that so queued messages persist
@@ -829,7 +906,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     });
   });
 
-  it('prevents double-drain when idle-effect and finally fire concurrently (issue #2296 race)', async () => {
+  it('prevents double-drain when idle-effect and finally fire concurrently', async () => {
     // This test proves the serialized drain owner prevents the double-drain
     // race: when a turn settles, BOTH the finally block (via setIsResponding)
     // and the idle-effect trigger scheduleNextQueuedSubmission. Without the

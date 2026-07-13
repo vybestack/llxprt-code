@@ -149,14 +149,14 @@ function StatusBarRight(props: InlineContentProps) {
   ) {
     return null;
   }
-  const showAutoAcceptIndicator = !props.shellModeActive;
+  const shouldShowAutoAcceptIndicator = !props.shellModeActive;
 
   return (
     <Box
       paddingTop={props.isNarrow ? 1 : 0}
       marginLeft={props.hideContextSummary ? 1 : 2}
     >
-      {showAutoAcceptIndicator && (
+      {shouldShowAutoAcceptIndicator && (
         <AutoAcceptIndicator approvalMode={props.showAutoAcceptIndicator} />
       )}
       {props.shellModeActive && <ShellModeIndicator />}

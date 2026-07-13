@@ -462,7 +462,7 @@ describe('useKeybindings', () => {
     expect(harness.handleSlashCommand).toHaveBeenCalledWith('/ide status');
   });
 
-  describe('toggle keybindings regression (issue #2296)', () => {
+  describe('toggle keybindings regression', () => {
     it('Ctrl+] collapses queued messages panel when currently expanded (collapsed=false)', () => {
       const harness = createHarness();
 

@@ -47,6 +47,9 @@ export type SubmissionDisposition =
   | 'requeue'
   | 'requeue-await-event';
 
+const MAX_QUEUED_SUBMISSION_RETRIES = 3;
+// A one-second pause avoids a tight failure loop while keeping transient
+// submitter-initialization races responsive.
 const QUEUED_SUBMISSION_RETRY_DELAY_MS = 1000;
 
 export type SubmissionExecutor = (
@@ -216,6 +219,8 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
   });
   const submitQuery = useCallback<UseSubmitQueryReturn['submitQuery']>(
     async (query, options, promptId) => {
+      // Dispositions are an internal queue-drain protocol; the public API
+      // intentionally remains Promise<void> for existing callers.
       await executeSubmission(query, options, promptId);
     },
     [executeSubmission],
@@ -370,6 +375,7 @@ function useDrainSubmission(
   drainTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
   retryTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
   pendingSubmissionRef: React.MutableRefObject<QueuedSubmission | null>,
+  retryCountRef: React.MutableRefObject<number>,
   scheduleRef: React.MutableRefObject<() => void>,
   submitQueryRef: UseSubmitQueryDeps['submitQueryRef'],
   requeueSubmission: UseSubmitQueryDeps['requeueSubmission'],
@@ -396,20 +402,40 @@ function useDrainSubmission(
       } catch (error: unknown) {
         debugLogger.error('Queued submission failed unexpectedly:', error);
       } finally {
-        if (pendingSubmissionRef.current === next) {
+        const ownsPendingSubmission = pendingSubmissionRef.current === next;
+        const shouldRetry =
+          ownsPendingSubmission &&
+          disposition === 'requeue-await-event' &&
+          retryCountRef.current < MAX_QUEUED_SUBMISSION_RETRIES;
+        const retryLimitReached =
+          ownsPendingSubmission &&
+          disposition === 'requeue-await-event' &&
+          !shouldRetry;
+
+        if (ownsPendingSubmission) {
           pendingSubmissionRef.current = null;
-          if (disposition !== 'consumed') {
+          if (disposition !== 'consumed' && !retryLimitReached) {
             requeueSubmission(next);
           }
           releaseDrain();
-          if (disposition === 'requeue-await-event') {
-            retryTimeoutRef.current = setTimeout(() => {
-              retryTimeoutRef.current = null;
-              scheduleRef.current();
-            }, QUEUED_SUBMISSION_RETRY_DELAY_MS);
-          } else {
+        }
+
+        if (shouldRetry) {
+          retryCountRef.current += 1;
+          retryTimeoutRef.current = setTimeout(() => {
+            retryTimeoutRef.current = null;
             scheduleRef.current();
+          }, QUEUED_SUBMISSION_RETRY_DELAY_MS);
+        }
+
+        if (ownsPendingSubmission && !shouldRetry) {
+          retryCountRef.current = 0;
+          if (retryLimitReached) {
+            debugLogger.error(
+              'Dropping queued submission after repeated drain failures.',
+            );
           }
+          scheduleRef.current();
         }
       }
     },
@@ -417,6 +443,7 @@ function useDrainSubmission(
       drainTimeoutRef,
       retryTimeoutRef,
       pendingSubmissionRef,
+      retryCountRef,
       scheduleRef,
       submitQueryRef,
       requeueSubmission,
@@ -440,6 +467,7 @@ function useScheduleNext(
   const drainTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSubmissionRef = useRef<QueuedSubmission | null>(null);
+  const retryCountRef = useRef(0);
   const mountedRef = useRef(true);
   // The mutable indirection breaks the schedule/drain callback cycle while
   // allowing delayed retries to invoke the latest stable scheduler.
@@ -459,6 +487,7 @@ function useScheduleNext(
     drainTimeoutRef,
     retryTimeoutRef,
     pendingSubmissionRef,
+    retryCountRef,
     scheduleRef,
     submitQueryRef,
     requeueSubmission,
@@ -572,27 +601,27 @@ async function runSubmitQueryCore(
   query: AgentRequestInput,
   turn: TurnInit,
 ): Promise<void> {
+  const { queryToSend, shouldProceed } = await cbd.prepareQueryForAgent(
+    query,
+    turn.userMessageTimestamp,
+    turn.abortSignal,
+    turn.promptId,
+  );
+  if (!shouldProceed || queryToSend === null) {
+    return;
+  }
+
+  await prepareTurnForQuery(
+    false,
+    cbd.runtime,
+    cbd.startNewPrompt,
+    cbd.setThought,
+    cbd.thinkingBlocksRef,
+  );
+  cbd.setIsResponding(true);
+  cbd.setInitError(null);
+
   try {
-    const { queryToSend, shouldProceed } = await cbd.prepareQueryForAgent(
-      query,
-      turn.userMessageTimestamp,
-      turn.abortSignal,
-      turn.promptId,
-    );
-    if (!shouldProceed || queryToSend === null) {
-      return;
-    }
-
-    await prepareTurnForQuery(
-      false,
-      cbd.runtime,
-      cbd.startNewPrompt,
-      cbd.setThought,
-      cbd.thinkingBlocksRef,
-    );
-    cbd.setIsResponding(true);
-    cbd.setInitError(null);
-
     await executeStream(cbd, cbd.handleLoopDetectedEvent, queryToSend, turn);
   } catch (error: unknown) {
     // Only surface errors for the active turn. A superseded turn's stale
@@ -608,6 +637,8 @@ async function runSubmitQueryCore(
       );
     }
   } finally {
+    // A superseded turn no longer owns responding state; stale cleanup here
+    // would clear the newer turn's active indicator.
     if (isCurrentTurn(cbd, turn)) {
       cbd.setIsResponding(false);
     }
