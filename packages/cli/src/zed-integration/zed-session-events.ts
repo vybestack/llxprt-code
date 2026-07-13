@@ -96,23 +96,16 @@ async function processStreamEvent(
   ) {
     await deps.terminals.handleToolCall(event.call);
   }
-  try {
-    const stopReason = await handleZedAgentEvent(event, batcher, {
-      sendUpdate: deps.sendUpdate,
-      sendUsage: deps.sendUsage,
-      handleConfirmation: deps.handleConfirmation,
-      resolveToolKind: (toolName) => deps.agent.tools.get(toolName)?.kind,
-    });
-    if (event.type === 'tool-result' && deps.terminals !== null) {
-      await deps.terminals.releaseTerminal(event.result.id);
-    }
-    return stopReason;
-  } catch (error) {
-    if (deps.terminals !== null) {
-      await deps.terminals.settleAll();
-    }
-    throw error;
+  const stopReason = await handleZedAgentEvent(event, batcher, {
+    sendUpdate: deps.sendUpdate,
+    sendUsage: deps.sendUsage,
+    handleConfirmation: deps.handleConfirmation,
+    resolveToolKind: (toolName) => deps.agent.tools.get(toolName)?.kind,
+  });
+  if (event.type === 'tool-result' && deps.terminals !== null) {
+    await deps.terminals.releaseTerminal(event.result.id);
   }
+  return stopReason;
 }
 
 export interface PromptTurnDeps {

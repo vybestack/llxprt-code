@@ -42,7 +42,7 @@ export async function handleZedAgentEvent(
     case 'thinking':
       return handleThinking(event, batcher);
     case 'tool-call':
-      return handleToolEvent(event, batcher, handlers, emitToolCallStart);
+      return handleToolEvent(event, batcher, handlers);
     case 'tool-status':
       return handleToolUpdate(event, batcher, handlers);
     case 'tool-result':
@@ -103,10 +103,9 @@ async function handleToolEvent(
   event: Extract<AgentEvent, { type: 'tool-call' }>,
   batcher: StreamBatcher,
   handlers: AgentEventHandlers,
-  emit: typeof emitToolCallStart,
 ): Promise<null> {
   await batcher.flush();
-  await emit(
+  await emitToolCallStart(
     event.call,
     handlers.sendUpdate,
     handlers.resolveToolKind(event.call.name),
@@ -156,5 +155,9 @@ async function handleNotice(
 }
 
 function assertNever(event: never): never {
-  throw new Error(`Unhandled agent event: ${String(event)}`);
+  const detail =
+    typeof event === 'object' && 'type' in event
+      ? String((event as { type: unknown }).type)
+      : JSON.stringify(event);
+  throw new Error(`Unhandled agent event: ${detail}`);
 }

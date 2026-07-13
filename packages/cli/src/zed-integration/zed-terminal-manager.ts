@@ -56,13 +56,28 @@ export class TerminalManager {
       typeof call.args['dir_path'] === 'string'
         ? call.args['dir_path']
         : this.targetDir;
+    let handle: TerminalHandleLike;
     try {
-      const handle = await this.connection.createTerminal({
+      handle = await this.connection.createTerminal({
         command,
         cwd,
         sessionId: this.sessionId,
       });
-      this.activeTerminals.set(call.id, handle);
+    } catch (error) {
+      this.logger.debug(() => `Failed to create ACP terminal: ${error}`);
+      return;
+    }
+    const existing = this.activeTerminals.get(call.id);
+    if (existing !== undefined) {
+      this.activeTerminals.delete(call.id);
+      try {
+        await existing.release();
+      } catch (error) {
+        this.logger.debug(() => `Prior terminal release failed: ${error}`);
+      }
+    }
+    this.activeTerminals.set(call.id, handle);
+    try {
       await this.sendUpdate({
         sessionUpdate: 'tool_call_update',
         toolCallId: call.id,
@@ -70,7 +85,13 @@ export class TerminalManager {
         content: [{ type: 'terminal', terminalId: handle.id }],
       });
     } catch (error) {
-      this.logger.debug(() => `Failed to create ACP terminal: ${error}`);
+      this.activeTerminals.delete(call.id);
+      try {
+        await handle.release();
+      } catch (releaseError) {
+        this.logger.debug(() => `Terminal release failed: ${releaseError}`);
+      }
+      this.logger.debug(() => `Terminal update send failed: ${error}`);
     }
   }
 
