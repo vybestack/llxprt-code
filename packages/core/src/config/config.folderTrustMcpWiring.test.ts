@@ -57,9 +57,7 @@ import type { ConfigParameters } from './config.js';
 import { ApprovalMode, Config } from './config.js';
 import { initializeTestConfig } from '../test-utils/config.js';
 
-const MAX_RETAINED_TRANSITION_FAILURES = 100;
-const TRANSITIONS_EXCEEDING_RETENTION_LIMIT =
-  MAX_RETAINED_TRANSITION_FAILURES + 1;
+const FAILED_TRANSITION_COUNT = 101;
 
 const baseParams: ConfigParameters = {
   sessionId: 'test',
@@ -501,18 +499,14 @@ describe('Config MCP wiring on folder trust change', () => {
       });
     });
 
-    it('bounds retained transition failures when callers do not drain them', async () => {
+    it('retains every transition failure when callers do not drain them', async () => {
       const config = new Config({ ...baseParams, trustedFolder: true });
       await initializeTestConfig(config);
       const mock = instances[0];
       mock.onFolderTrustGained.mockRejectedValue(new Error('gain failed'));
       mock.onFolderTrustRevoked.mockRejectedValue(new Error('revoke failed'));
 
-      for (
-        let index = 0;
-        index < TRANSITIONS_EXCEEDING_RETENTION_LIMIT;
-        index++
-      ) {
+      for (let index = 0; index < FAILED_TRANSITION_COUNT; index++) {
         config.setTrustedFolderLive(index % 2 !== 0);
       }
 
@@ -524,7 +518,7 @@ describe('Config MCP wiring on folder trust change', () => {
       }
       expect(failure).toBeInstanceOf(AggregateError);
       expect(asAggregateError(failure).errors).toHaveLength(
-        MAX_RETAINED_TRANSITION_FAILURES,
+        FAILED_TRANSITION_COUNT,
       );
     });
   });
