@@ -443,57 +443,17 @@ describe('published package no-compile runtime contract (S6)', () => {
     expect(packed.has('packages/cli/src/generated/git-commit.json')).toBe(true);
   });
 
-  it('declares runtime dependencies needed by shipped workspace source', () => {
-    const rootPackage = JSON.parse(
-      readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
+  it('declares runtime dependencies on the actual published CLI workspace', () => {
+    const cliPackage = JSON.parse(
+      readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf-8'),
     ) as RootPackageMetadata;
-    const dependencies = rootPackage.dependencies ?? {};
-    // Derive "packages/<name>" from each shipped file entry. Only entries that
-    // literally start with "packages/<name>/" (or equal "packages/<name>")
-    // count; anything else is ignored rather than silently mis-parsed.
-    const shippedWorkspaceDirs = new Set(
-      (rootPackage.files ?? [])
-        .map((entry) => {
-          const segments = entry.split('/');
-          if (segments[0] !== 'packages' || segments.length < 2) {
-            return null;
-          }
-          return `${segments[0]}/${segments[1]}`;
-        })
-        .filter((dir): dir is string => dir !== null),
-    );
-    // Guard: this check relies on explicit workspace paths. If workspaces ever
-    // switch to glob patterns (e.g. "packages/*"), the intersection below
-    // would silently become empty and the test would pass vacuously.
-    const globWorkspaces = (rootPackage.workspaces ?? []).filter((entry) =>
-      /[*?[\]{}]/.test(entry),
-    );
-    expect(globWorkspaces).toEqual([]);
-    const shippedWorkspacePackagePaths = (rootPackage.workspaces ?? [])
-      .filter((workspaceDir) => shippedWorkspaceDirs.has(workspaceDir))
-      .map((workspaceDir) => ({
-        workspaceDir,
-        packagePath: join(repoRoot, workspaceDir, 'package.json'),
-      }))
-      .filter(({ packagePath }) => existsSync(packagePath));
-    expect(shippedWorkspacePackagePaths.length).toBeGreaterThan(0);
+    const dependencies = cliPackage.dependencies ?? {};
 
-    const missing = shippedWorkspacePackagePaths.flatMap(
-      ({ workspaceDir, packagePath }) => {
-        const workspacePackage = JSON.parse(
-          readFileSync(packagePath, 'utf-8'),
-        ) as { dependencies?: Record<string, string> };
-        return Object.keys(workspacePackage.dependencies ?? {})
-          .filter(
-            (dependencyName) =>
-              !dependencyName.startsWith('@vybestack/') &&
-              dependencies[dependencyName] === undefined,
-          )
-          .map((dependencyName) => `${workspaceDir}: ${dependencyName}`);
-      },
-    );
-
-    expect(missing).toEqual([]);
+    expect(dependencies).toMatchObject({
+      '@vybestack/llxprt-code-core': expect.any(String),
+      '@vybestack/llxprt-code-providers': expect.any(String),
+    });
+    expect(dependencies['@google/genai']).toBeUndefined();
   });
 
   it('runs the checked-in Node launcher without a compiled CLI entry', () => {

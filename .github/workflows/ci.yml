@@ -264,6 +264,10 @@ jobs:
         run: |-
           npm run lint:cli-boundary
 
+      - name: 'Run genai-enclave boundary guard'
+        run: |-
+          npm run lint:genai-enclave
+
       - name: 'Run agents neutral gate (anti-#2424 enforcement)'
         run: |-
           npm run gate:agents-neutral

@@ -15,13 +15,13 @@
  */
 
 import { readFileSync } from 'node:fs';
-import type { Content } from '@google/genai';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IModel } from '../IModel.js';
 import type {
   IContent,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { GeminiContent } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 
 /**
@@ -40,7 +40,7 @@ type LegacyResponseLine = {
 
 type LegacyGenerateContentResponse = {
   candidates?: Array<{
-    content?: Content;
+    content?: GeminiContent;
     finishReason?: unknown;
   }>;
   usageMetadata?: {
