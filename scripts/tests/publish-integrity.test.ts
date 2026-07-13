@@ -446,7 +446,7 @@ describe('published package no-compile runtime contract (S6)', () => {
   it('declares runtime dependencies on the actual published CLI workspace', () => {
     const cliPackage = JSON.parse(
       readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf-8'),
-    ) as RootPackageMetadata;
+    ) as CliPackageMetadata;
     const dependencies = cliPackage.dependencies ?? {};
 
     expect(dependencies).toMatchObject({

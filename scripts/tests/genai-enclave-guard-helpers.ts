@@ -22,9 +22,6 @@ export const REPO_ROOT = join(SCRIPT_DIR, '..', '..');
 export const SCRIPT = join(REPO_ROOT, 'scripts', 'check-genai-enclave.ts');
 export const RUNTIME = process.env.BUN_EXECUTABLE ?? 'bun';
 
-export const missingBunMessage =
-  '[genai-enclave] Bun runtime not found — install Bun or set BUN_EXECUTABLE.';
-
 let cachedBunAvailable: boolean | undefined;
 
 export function bunAvailable(): boolean {
