@@ -25,9 +25,9 @@ import {
 const createdSessions: Session[] = [];
 
 async function disposeCreatedSessions(): Promise<void> {
-  for (const session of createdSessions.splice(0)) {
-    await session.dispose();
-  }
+  await Promise.allSettled(
+    createdSessions.splice(0).map((session) => session.dispose()),
+  );
 }
 
 describe('Zed Session - session_info_update findings (issue #1611 remediation)', () => {

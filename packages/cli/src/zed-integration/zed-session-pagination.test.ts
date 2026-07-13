@@ -160,7 +160,7 @@ describe('session lifecycle pagination', () => {
     ]);
   });
 
-  it('rejects a legacy v1 cursor (version mismatch)', () => {
+  it('continues from a legacy v1 cursor using its updatedAt boundary', () => {
     const v1Cursor = Buffer.from(
       JSON.stringify({
         version: 1,
@@ -169,8 +169,15 @@ describe('session lifecycle pagination', () => {
         sessionId: 'b',
       }),
     ).toString('base64url');
-    expect(() =>
-      paginateSessions(sessions, { cwd: null, cursor: v1Cursor }, 2),
-    ).toThrow(/cursor/i);
+    const result = paginateSessions(
+      sessions,
+      { cwd: null, cursor: v1Cursor },
+      2,
+    );
+
+    expect(result.sessions.map((session) => session.sessionId)).toStrictEqual([
+      'a',
+      'c',
+    ]);
   });
 });

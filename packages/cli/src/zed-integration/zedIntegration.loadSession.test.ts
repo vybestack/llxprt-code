@@ -112,6 +112,7 @@ function buildStubAgent(options: {
   resumeError?: Error;
   liveHistory?: readonly AgentMessage[];
   streamText?: string;
+  recordingError?: Error;
 }): StubAgentHandle {
   const resume = vi.fn(async () => {
     if (options.resumeError !== undefined) {
@@ -119,7 +120,11 @@ function buildStubAgent(options: {
     }
     return options.resumeHistory ?? [];
   });
-  const setRecording = vi.fn(async () => undefined);
+  const setRecording = vi.fn(async () => {
+    if (options.recordingError !== undefined) {
+      throw options.recordingError;
+    }
+  });
   const dispose = vi.fn(async () => undefined);
   const getHistory = vi.fn(async () => options.liveHistory ?? []);
   const streamText = options.streamText;
@@ -225,6 +230,38 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
   // to need.
   beforeEach(() => {
     mockFromConfig.mockReset();
+  });
+
+  it('continues creating a session when optional recording setup fails', async () => {
+    const stub = buildStubAgent({
+      recordingError: new Error('recording unavailable'),
+    });
+    mockFromConfig.mockResolvedValue(stub.agent);
+    const zedAgent = await makeZedAgent(
+      new RecordingConnection(),
+      emptyChatsLister,
+    );
+
+    const created = await zedAgent.newSession({
+      cwd: '/project',
+      mcpServers: [],
+    });
+
+    expect(created.sessionId).toStrictEqual(expect.any(String));
+    expect(stub.dispose).not.toHaveBeenCalled();
+  });
+
+  it('disposes a new session when initial command advertisement fails', async () => {
+    const stub = buildStubAgent({});
+    mockFromConfig.mockResolvedValue(stub.agent);
+    const connection = new RecordingConnection();
+    connection.failSessionUpdateAfter(0, new Error('transport unavailable'));
+    const zedAgent = await makeZedAgent(connection, emptyChatsLister);
+
+    await expect(
+      zedAgent.newSession({ cwd: '/project', mcpServers: [] }),
+    ).rejects.toThrow('transport unavailable');
+    expect(stub.dispose).toHaveBeenCalledTimes(1);
   });
 
   it('resumeSession reattaches a live session without replaying history', async () => {

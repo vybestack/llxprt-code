@@ -188,6 +188,27 @@ describe('Zed config options', () => {
     );
   });
 
+  it('wraps model switch failures as structured ACP internal errors', async () => {
+    const failure = applyZedConfigOption(
+      {
+        setModel: async () => {
+          throw new Error('provider disconnected');
+        },
+        getModel: () => 'alpha',
+        getProviderStatus: () => ({
+          provider: 'test',
+          model: 'alpha',
+          authStatus: 'authenticated' as const,
+        }),
+      } as unknown as Agent,
+      configFixture(),
+      'model',
+      'beta',
+    );
+
+    await expect(failure).rejects.toMatchObject({ code: -32603 });
+  });
+
   it('publishes agent-side setting changes and removes listeners on teardown', async () => {
     const sendUpdate = vi.fn(async () => undefined);
     const stop = observeZedConfigOptions(
@@ -204,11 +225,15 @@ describe('Zed config options', () => {
       vi.fn(),
     );
 
-    coreEvents.emitSettingsChanged();
-    await vi.waitFor(() => expect(sendUpdate).toHaveBeenCalledOnce());
-    stop();
-    coreEvents.emitSettingsChanged();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(sendUpdate).toHaveBeenCalledOnce();
+    try {
+      coreEvents.emitSettingsChanged();
+      await vi.waitFor(() => expect(sendUpdate).toHaveBeenCalledOnce());
+      stop();
+      coreEvents.emitSettingsChanged();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(sendUpdate).toHaveBeenCalledOnce();
+    } finally {
+      stop();
+    }
   });
 });

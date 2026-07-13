@@ -155,10 +155,5 @@ async function handleNotice(
 }
 
 function assertNever(event: never): never {
-  const record = event as Record<string, unknown> | null;
-  const detail =
-    record !== null && typeof record.type === 'string'
-      ? record.type
-      : String(event);
-  throw new Error(`Unhandled agent event: ${detail}`);
+  throw new Error(`Unhandled agent event: ${String(event)}`);
 }

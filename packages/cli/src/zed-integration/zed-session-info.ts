@@ -5,13 +5,10 @@
  */
 
 import type * as acp from '@agentclientprotocol/sdk';
-import type { IContent } from '@vybestack/llxprt-code-core';
-
-/**
- * Maximum title length, matching SessionDiscovery.readFirstUserMessage so the
- * live session_info_update title and the durable on-disk listing title agree.
- */
-const TITLE_MAX_LENGTH = 120;
+import {
+  SESSION_TITLE_MAX_LENGTH,
+  type IContent,
+} from '@vybestack/llxprt-code-core';
 
 /**
  * Derives a human-readable title from the first user prompt by concatenating
@@ -44,8 +41,8 @@ function extractTitleText(
   if (text.length === 0) {
     return null;
   }
-  return text.length > TITLE_MAX_LENGTH
-    ? text.slice(0, TITLE_MAX_LENGTH)
+  return text.length > SESSION_TITLE_MAX_LENGTH
+    ? text.slice(0, SESSION_TITLE_MAX_LENGTH)
     : text;
 }
 

@@ -26,13 +26,10 @@ export interface DeleteSessionRequest {
 
 export type DeleteSessionResponse = Record<string, never>;
 
-export interface ClientCapabilitiesWithSession {
-  readonly fs?: {
-    readonly readTextFile?: boolean;
-    readonly writeTextFile?: boolean;
-  };
-  readonly terminal?: boolean;
+export type ClientCapabilitiesWithSession = NonNullable<
+  acp.InitializeRequest['clientCapabilities']
+> & {
   readonly session?: {
     readonly configOptions?: boolean;
   };
-}
+};

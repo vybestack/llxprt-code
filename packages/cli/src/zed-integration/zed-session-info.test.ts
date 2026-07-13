@@ -21,7 +21,10 @@
 
 import { describe, it, expect } from 'vitest';
 import type * as acp from '@agentclientprotocol/sdk';
-import type { IContent } from '@vybestack/llxprt-code-core';
+import {
+  SESSION_TITLE_MAX_LENGTH,
+  type IContent,
+} from '@vybestack/llxprt-code-core';
 import {
   deriveSessionTitle,
   deriveTitleFromHistory,
@@ -48,9 +51,8 @@ describe('deriveSessionTitle (issue #1611: first-prompt title)', () => {
   it('truncates a long prompt to the bounded length used by the listing', () => {
     const long = 'x'.repeat(500);
     const title = deriveSessionTitle([{ type: 'text', text: long }]);
-    // Consistent with SessionDiscovery.readFirstUserMessage (maxLength 120).
-    expect(title).toHaveLength(120);
-    expect(title).toBe(long.slice(0, 120));
+    expect(title).toHaveLength(SESSION_TITLE_MAX_LENGTH);
+    expect(title).toBe(long.slice(0, SESSION_TITLE_MAX_LENGTH));
   });
 
   it('ignores non-text blocks (images, resource links) and still titles from text', () => {
@@ -168,7 +170,9 @@ describe('deriveTitleFromHistory (issue #1611: restored-session title hydration)
   it('truncates long history text to the bounded length', () => {
     const long = 'y'.repeat(500);
     const history: IContent[] = [humanContent(long)];
-    expect(deriveTitleFromHistory(history)).toBe(long.slice(0, 120));
+    expect(deriveTitleFromHistory(history)).toBe(
+      long.slice(0, SESSION_TITLE_MAX_LENGTH),
+    );
   });
 
   it('does NOT trim or collapse newlines, matching durable behavior (finding 5)', () => {

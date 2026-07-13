@@ -25,9 +25,9 @@ import {
 const createdSessions: Session[] = [];
 
 async function disposeCreatedSessions(): Promise<void> {
-  for (const session of createdSessions.splice(0)) {
-    await session.dispose();
-  }
+  await Promise.allSettled(
+    createdSessions.splice(0).map((session) => session.dispose()),
+  );
 }
 
 describe('Zed Session.prompt (Agent API) - streaming output', () => {
@@ -806,7 +806,7 @@ describe('Zed Session.prompt (Agent API) - session_info_update (issue #1611)', (
       sessionId: 'test-session-id',
       prompt: [{ type: 'text', text: 'First prompt here' }],
     });
-    connection.messages.length = 0;
+    const firstInfoUpdates = connection.sessionInfoUpdates();
 
     await session.prompt({
       sessionId: 'test-session-id',
@@ -814,9 +814,10 @@ describe('Zed Session.prompt (Agent API) - session_info_update (issue #1611)', (
     });
 
     const infoUpdates = connection.sessionInfoUpdates();
-    expect(infoUpdates).toHaveLength(1);
-    expect(infoUpdates[0].updatedAt).toStrictEqual(expect.any(String));
-    expect(infoUpdates[0].title).toBeUndefined();
+    expect(firstInfoUpdates).toHaveLength(1);
+    expect(infoUpdates).toHaveLength(2);
+    expect(infoUpdates[1].updatedAt).toStrictEqual(expect.any(String));
+    expect(infoUpdates[1].title).toBeUndefined();
   });
 
   it('emits updatedAt after a cancelled turn', async () => {

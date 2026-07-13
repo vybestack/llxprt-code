@@ -314,7 +314,7 @@ function handleSessionMetadata(
     return;
   }
   const title = payload.title;
-  if (title === null || typeof title === 'string') {
+  if (title === null || title === undefined || typeof title === 'string') {
     acc.metadata.title = title;
   } else {
     acc.malformedCount++;

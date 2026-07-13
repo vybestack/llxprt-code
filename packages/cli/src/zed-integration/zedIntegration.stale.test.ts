@@ -20,9 +20,9 @@ import {
 const createdSessions: Session[] = [];
 
 async function disposeCreatedSessions(): Promise<void> {
-  for (const session of createdSessions.splice(0)) {
-    await session.dispose();
-  }
+  await Promise.allSettled(
+    createdSessions.splice(0).map((session) => session.dispose()),
+  );
 }
 
 describe('Zed Session.prompt (Agent API) - stale prompt terminal events', () => {
@@ -79,6 +79,40 @@ describe('Zed Session.prompt (Agent API) - stale prompt terminal events', () => 
 
     expect(firstResponse.stopReason).toBe('cancelled');
     expect(secondResponse.stopReason).toBe('end_turn');
+  });
+
+  it('stops consuming a stream at the first event after a prompt becomes stale', async () => {
+    let promptCount = 0;
+    let staleEventsProduced = 0;
+    const { agent } = buildScriptedAgent(() => []);
+    agent.stream = async function* () {
+      promptCount += 1;
+      if (promptCount === 1) {
+        yield {
+          type: 'tool-call',
+          call: { id: 'stale-stop-tool', name: 'edit', args: {} },
+        } as const;
+        yield editConfirmation('stale-stop-confirmation', 'stale-stop-tool');
+        staleEventsProduced += 1;
+        yield { type: 'text', text: 'first stale event' } as const;
+        staleEventsProduced += 1;
+        yield { type: 'text', text: 'second stale event' } as const;
+        return;
+      }
+      yield { type: 'done', reason: 'stop' } as const;
+    };
+    const connection = new RecordingConnection();
+    const gate = connection.armPermissionGate();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    const firstPrompt = runPrompt(session);
+    await gate.arrived;
+    const secondPrompt = runPrompt(session);
+    await firstPrompt;
+    await secondPrompt;
+
+    expect(staleEventsProduced).toBe(1);
   });
 
   it('returns cancelled (not an error) when a cancelled prompt ends with done:hook-stopped', async () => {

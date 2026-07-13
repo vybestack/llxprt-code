@@ -49,6 +49,10 @@ describe('Zed available commands', () => {
       name: 'model',
       args: 'ignored',
     });
+    expect(parseZedCommandPrompt('/model')).toStrictEqual({
+      name: 'model',
+      args: '',
+    });
     await expect(
       executeZedCommand('/unknown', { agent: buildAgent() }),
     ).resolves.toBeNull();

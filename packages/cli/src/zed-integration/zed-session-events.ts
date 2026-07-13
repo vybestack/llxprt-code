@@ -90,7 +90,7 @@ async function processStreamEvent(
   pendingSend: AbortController,
 ): Promise<acp.StopReason | null | 'cancelled'> {
   if (deps.isPromptStale(promptGeneration, pendingSend)) {
-    return event.type === 'done' ? 'cancelled' : null;
+    return 'cancelled';
   }
   const stopReason = await handleZedAgentEvent(event, batcher, {
     sendUpdate: deps.sendUpdate,

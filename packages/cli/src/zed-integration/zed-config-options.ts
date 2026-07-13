@@ -114,7 +114,11 @@ export async function applyZedConfigOption(
     ) {
       throw acp.RequestError.invalidParams({ value }, 'Unavailable model.');
     }
-    await agent.setModel(value);
+    try {
+      await agent.setModel(value);
+    } catch (error) {
+      throw acp.RequestError.internalError({ configId, error: String(error) });
+    }
     return buildZedConfigOptions(agent, config);
   }
   if (configId !== 'reasoning.effort' && configId !== 'emojifilter') {

@@ -33,6 +33,13 @@ interface CursorPayload {
   readonly sessionId: string;
 }
 
+interface LegacyCursorPayload {
+  readonly version: 1;
+  readonly cwd: string | null;
+  readonly updatedAt: string;
+  readonly sessionId: string;
+}
+
 interface PaginationRequest {
   readonly cwd: string | null;
   readonly cursor: string | null;
@@ -148,10 +155,11 @@ function decodeCursor(
     const value: unknown = JSON.parse(
       Buffer.from(cursor, 'base64url').toString('utf8'),
     );
-    if (!isCursorPayload(value) || value.cwd !== cwd) {
+    const decoded = normalizeCursorPayload(value);
+    if (decoded === null || decoded.cwd !== cwd) {
       throw new Error('cursor does not match this request');
     }
-    return value;
+    return decoded;
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'invalid encoding';
     throw acp.RequestError.invalidParams(
@@ -161,20 +169,51 @@ function decodeCursor(
   }
 }
 
+function normalizeCursorPayload(value: unknown): CursorPayload | null {
+  if (isCursorPayload(value)) {
+    return value;
+  }
+  if (!isLegacyCursorPayload(value)) {
+    return null;
+  }
+  return {
+    v: 2,
+    cwd: value.cwd,
+    createdAt: new Date(Date.parse(value.updatedAt)).toISOString(),
+    sessionId: value.sessionId,
+  };
+}
+
 function isCursorPayload(value: unknown): value is CursorPayload {
   if (value === null || typeof value !== 'object') {
     return false;
   }
   const record = value as Record<string, unknown>;
+  return (
+    record.v === 2 &&
+    hasValidCursorIdentity(record) &&
+    isCanonicalTimestamp(record.createdAt)
+  );
+}
+
+function isLegacyCursorPayload(value: unknown): value is LegacyCursorPayload {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === 1 &&
+    hasValidCursorIdentity(record) &&
+    typeof record.updatedAt === 'string' &&
+    Number.isFinite(Date.parse(record.updatedAt))
+  );
+}
+
+function hasValidCursorIdentity(record: Record<string, unknown>): boolean {
   const hasValidCwd = record.cwd === null || typeof record.cwd === 'string';
   const hasValidSessionId =
     typeof record.sessionId === 'string' && record.sessionId.length > 0;
-  return (
-    record.v === 2 &&
-    hasValidCwd &&
-    isCanonicalTimestamp(record.createdAt) &&
-    hasValidSessionId
-  );
+  return hasValidCwd && hasValidSessionId;
 }
 
 function isCanonicalTimestamp(value: unknown): value is string {

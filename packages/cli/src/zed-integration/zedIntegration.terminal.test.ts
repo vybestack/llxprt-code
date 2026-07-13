@@ -112,6 +112,76 @@ describe('Zed terminal execution', () => {
     expect(connection.releaseCalls).toBe(1);
   });
 
+  it('correlates a raw command that already ends with a semicolon', async () => {
+    const connection = new RecordingConnection();
+    const terminals = terminalManager(connection);
+    await terminals.observeToolCall({
+      id: 'shell-semicolon',
+      name: 'run_shell_command',
+      args: { command: 'echo hello;' },
+    });
+
+    await terminals.executeShellCommand(
+      preparedEcho,
+      '/project',
+      () => undefined,
+      new AbortController().signal,
+    );
+
+    expect(connection.onlySessionUpdates()).toContainEqual(
+      expect.objectContaining({
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'shell-semicolon',
+        content: [{ type: 'terminal', terminalId: 'terminal-1' }],
+      }),
+    );
+  });
+
+  it('retries terminal correlation after update delivery fails', async () => {
+    const connection = new RecordingConnection();
+    connection.delayTerminalExit();
+    let deliveryAttempt = 0;
+    const terminals = terminalManager(connection, async (update) => {
+      deliveryAttempt += 1;
+      if (deliveryAttempt === 1) {
+        throw new Error('transport unavailable');
+      }
+      await connection.sessionUpdate({
+        sessionId: 'test-session-id',
+        update,
+      });
+    });
+    const execution = terminals.executeShellCommand(
+      preparedEcho,
+      '/project',
+      () => undefined,
+      new AbortController().signal,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await expect(
+      terminals.observeToolCall({
+        id: 'shell-retry',
+        name: 'run_shell_command',
+        args: { command: 'echo hello' },
+      }),
+    ).rejects.toThrow('transport unavailable');
+    await terminals.observeToolCall({
+      id: 'shell-retry',
+      name: 'run_shell_command',
+      args: { command: 'echo hello' },
+    });
+    connection.resolveDelayedTerminalExit();
+    await execution;
+
+    expect(connection.onlySessionUpdates()).toContainEqual(
+      expect.objectContaining({
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'shell-retry',
+      }),
+    );
+  });
+
   it('does not create a terminal for an already-cancelled execution', async () => {
     const connection = new RecordingConnection();
     const controller = new AbortController();

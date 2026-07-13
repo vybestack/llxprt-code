@@ -43,7 +43,6 @@ export function extractPromptText(
  *
  * @param prompt The raw ACP content blocks from the prompt request.
  * @param agent The session's real Agent.
- * @param config The session's real Config.
  * @param sendUpdate Callback to stream an `agent_message_chunk`.
  */
 export async function tryHandleZedCommand(

@@ -177,7 +177,12 @@ export class ZedAgent {
         sessionConfig,
         terminals,
       );
-      await session.sendAvailableCommands();
+      try {
+        await session.sendAvailableCommands();
+      } catch (error) {
+        await session.dispose();
+        throw error;
+      }
       this.sessions.set(sessionId, session);
       return {
         sessionId,
@@ -193,7 +198,9 @@ export class ZedAgent {
       throw error;
     }
   }
-  resumeSession(params: acp.ResumeSessionRequest): Promise<acp.ResumeSessionResponse> {
+  resumeSession(
+    params: acp.ResumeSessionRequest,
+  ): Promise<acp.ResumeSessionResponse> {
     return this.lifecycle.resume(params);
   }
   private supportsConfigOptions(): boolean {
@@ -222,7 +229,9 @@ export class ZedAgent {
       (error) => this.logger.debug(() => `Session cleanup failed: ${error}`),
     );
   }
-  async loadSession(params: acp.LoadSessionRequest): Promise<acp.LoadSessionResponse> {
+  async loadSession(
+    params: acp.LoadSessionRequest,
+  ): Promise<acp.LoadSessionResponse> {
     return this.lifecycle.runSerialized(params.sessionId, () =>
       this.performLoadSession(params),
     );
@@ -262,7 +271,9 @@ export class ZedAgent {
     if (recordingExists) {
       return null;
     }
-    this.logger.debug(() => `loadSession - re-attaching live session ${sessionId}`);
+    this.logger.debug(
+      () => `loadSession - re-attaching live session ${sessionId}`,
+    );
     await existing.replayLiveHistory();
     return existing;
   }
@@ -286,7 +297,11 @@ export class ZedAgent {
       await session.streamHistory(history);
     } catch (error) {
       this.sessions.delete(sessionId);
-      try { await session.dispose(); } catch { /* original error rethrown */ }
+      try {
+        await session.dispose();
+      } catch {
+        /* original error rethrown */
+      }
       this.logger.debug(() => `loadSession - replay failed: ${error}`);
       throw error;
     }

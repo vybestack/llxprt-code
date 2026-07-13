@@ -38,7 +38,7 @@ describe('buildZedTerminalSetup', () => {
       new DebugLogger('llxprt:zed-terminal-setup-test'),
     );
 
-    expect(setup.registry.getTool('run_shell_command')).toBeUndefined();
+    expect(setup.registry.getTool(ShellTool.Name)).toBeUndefined();
   });
 
   it('registers a terminal-backed ShellTool when the base registry includes one', () => {

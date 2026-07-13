@@ -78,7 +78,12 @@ export class TerminalManager {
       return;
     }
     active.toolCallId = pending.id;
-    await this.sendTerminalUpdate(active);
+    try {
+      await this.sendTerminalUpdate(active);
+    } catch (error) {
+      active.toolCallId = undefined;
+      throw error;
+    }
   }
 
   completeToolCall(toolCallId: string): void {
@@ -265,7 +270,8 @@ function commandsMatch(preparedCommand: string, rawCommand: string): boolean {
   if (preparedCommand === trimmed) {
     return true;
   }
-  const terminated = trimmed.endsWith('&') ? trimmed : `${trimmed};`;
+  const terminated =
+    trimmed.endsWith('&') || trimmed.endsWith(';') ? trimmed : `${trimmed};`;
   return preparedCommand.startsWith(`{ ${terminated} }; __code=$?;`);
 }
 

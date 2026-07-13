@@ -28,7 +28,11 @@ import { createReadStream } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
-import { type SessionSummary, type SessionStartPayload } from './types.js';
+import {
+  SESSION_TITLE_MAX_LENGTH,
+  type SessionSummary,
+  type SessionStartPayload,
+} from './types.js';
 import { readSessionHeader } from './ReplayEngine.js';
 import {
   resumeSessionIndexOutOfRangeMessage,
@@ -274,7 +278,7 @@ export class SessionDiscovery {
    */
   static async readFirstUserMessage(
     filePath: string,
-    maxLength: number = 120,
+    maxLength: number = SESSION_TITLE_MAX_LENGTH,
   ): Promise<string | null> {
     try {
       const fileContent = await fs.readFile(filePath, 'utf-8');
@@ -301,32 +305,26 @@ export class SessionDiscovery {
   static async readSessionMetadataTitle(
     filePath: string,
   ): Promise<string | null | undefined> {
+    const stream = createReadStream(filePath, { encoding: 'utf8' });
     let reader: readline.Interface | undefined;
     try {
-      const stream = createReadStream(filePath, { encoding: 'utf8' });
-      const streamError = new Promise<never>((_, reject) => {
-        stream.on('error', (err: NodeJS.ErrnoException) => reject(err));
-      });
-      const rl = readline.createInterface({
+      reader = readline.createInterface({
         input: stream,
         crlfDelay: Infinity,
       });
-      reader = rl;
       let title: string | null | undefined;
-      const iterate = (async () => {
-        for await (const line of rl) {
-          const result = extractSessionMetadataTitle(line);
-          if (result !== undefined) {
-            title = result;
-          }
+      for await (const line of reader) {
+        const result = extractSessionMetadataTitle(line);
+        if (result !== undefined) {
+          title = result;
         }
-      })();
-      await Promise.race([iterate, streamError]);
+      }
       return title;
     } catch {
       return undefined;
     } finally {
       reader?.close();
+      stream.destroy();
     }
   }
 }

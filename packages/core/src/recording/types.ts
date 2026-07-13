@@ -25,6 +25,8 @@
 
 import { type IContent } from '../services/history/IContent.js';
 
+export const SESSION_TITLE_MAX_LENGTH = 120;
+
 // ---------------------------------------------------------------------------
 // Event type discriminator
 // ---------------------------------------------------------------------------

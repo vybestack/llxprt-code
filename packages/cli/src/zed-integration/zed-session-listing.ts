@@ -76,12 +76,14 @@ async function toLifecycleSession(
   summary: SessionSummary,
   fallbackCwd: string,
 ): Promise<LifecycleSession> {
-  const metadataTitle = await SessionDiscovery.readSessionMetadataTitle(
-    summary.filePath,
+  const metadataTitle = await readTitleSafe(() =>
+    SessionDiscovery.readSessionMetadataTitle(summary.filePath),
   );
   const displayTitle =
     metadataTitle === undefined
-      ? await SessionDiscovery.readFirstUserMessage(summary.filePath)
+      ? await readTitleSafe(() =>
+          SessionDiscovery.readFirstUserMessage(summary.filePath),
+        )
       : metadataTitle;
   return {
     sessionId: summary.sessionId,
@@ -92,6 +94,16 @@ async function toLifecycleSession(
       : {}),
     ...(typeof displayTitle === 'string' ? { title: displayTitle } : {}),
   };
+}
+
+async function readTitleSafe(
+  read: () => Promise<string | null | undefined>,
+): Promise<string | null | undefined> {
+  try {
+    return await read();
+  } catch {
+    return undefined;
+  }
 }
 
 function toSessionInfo(session: LifecycleSession): acp.SessionInfo {
