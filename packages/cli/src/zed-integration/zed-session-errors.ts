@@ -97,11 +97,11 @@ export function mapResumeError(
  * (`session-<timestamp>-<first-12-of-id>.jsonl`), the session exists but could
  * not be read/replayed (corrupt or incompatible) and an internalError carrying
  * the filename is returned instead of the misleading resourceNotFound. When no
- * entry matches, the genuine resourceNotFound is returned. When `probe` itself
- * rejects (e.g. a readdir error), the plain mapping is returned unchanged so the
- * original resume failure is never masked. Non-not-found mappings (and
- * already-constructed RequestErrors, via the {@link mapResumeError} passthrough)
- * are returned without probing.
+ * entry matches (including an absent chats directory), the genuine
+ * resourceNotFound is returned. A non-ENOENT probe failure makes existence
+ * indeterminate and therefore becomes internalError with the probe detail.
+ * Non-not-found mappings and already-constructed RequestErrors are returned
+ * without probing.
  */
 export async function classifyResumeFailure(
   sessionId: string,

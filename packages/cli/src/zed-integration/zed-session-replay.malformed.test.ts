@@ -213,8 +213,7 @@ describe('mapHistoryToSessionUpdates — malformed persisted history (issue #160
       } as unknown as IContent,
     ];
     const [start, synthetic] = mapHistoryToSessionUpdates(history);
-    // The start carries the id as toolCallId AND as the title fallback; kind is
-    // omitted for the unknown (non-string) name.
+    // The id is also the title fallback, and an invalid name maps to other.
     expect(start).toStrictEqual({
       sessionUpdate: 'tool_call',
       toolCallId: 'call-noname',
@@ -225,7 +224,6 @@ describe('mapHistoryToSessionUpdates — malformed persisted history (issue #160
       locations: [],
       rawInput: { foo: 'bar' },
     });
-    expect(start).toHaveProperty('kind', 'other');
     // Still pending at end-of-history → the usual synthetic failed terminal.
     expect(synthetic).toStrictEqual({
       sessionUpdate: 'tool_call_update',

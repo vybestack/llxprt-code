@@ -110,7 +110,7 @@ export function mapHistoryToSessionUpdates(
   }
   // Every id still pending had no delivered response (an interrupted turn):
   // synthesize its terminal failed update now, in start order, so the client
-  // does not render a perpetually-running tool. Set iteration order is the
+  // does not render a perpetually-running tool. Map iteration preserves the
   // insertion (call-start) order.
   for (const [toolCallId, kind] of pending) {
     updates.push(buildSyntheticFailedUpdate(toolCallId, kind));

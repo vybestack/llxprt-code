@@ -126,7 +126,7 @@ describe('Zed Session.prompt (Agent API) - streaming output', () => {
     expect(update.content.text).toContain('blocked due to emoji detection');
   });
 
-  it('flushes the emoji buffer on a blocked chunk so a following clean chunk is emitted (not re-blocked) (FINDING F10)', async () => {
+  it('flushes the emoji buffer on a blocked chunk so a following clean chunk is emitted instead of re-blocked', async () => {
     // Error mode: the first chunk carries an emoji and is blocked. The blocking
     // content stays in the EmojiFilter's internal buffer; without flushing it on
     // the blocked path, the NEXT (clean) chunk would be concatenated with the
@@ -202,8 +202,7 @@ describe('Zed Session.prompt (Agent API) - tool-call status progression', () => 
     expect(startUpdate.locations).toStrictEqual([
       { path: '/project/file.txt', line: 7 },
     ]);
-    // FINDING F: the LIVE tool_call start carries rawInput (the tool args) for
-    // parity with the replay start shape and ACP debugging conformance.
+    // The live tool_call start carries rawInput for replay parity and ACP debugging.
     expect(startUpdate.rawInput).toStrictEqual({
       absolute_path: '/project/file.txt',
       offset: 7,
