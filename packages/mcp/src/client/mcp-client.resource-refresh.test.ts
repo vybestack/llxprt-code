@@ -31,6 +31,77 @@ vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
 }));
 
 describe('McpClient resource refresh', () => {
+  it('aborts an in-flight resource refresh when disconnected', async () => {
+    let resourceListHandler:
+      | ((notification: unknown) => Promise<void> | void)
+      | undefined;
+    let refreshSignal: AbortSignal | undefined;
+    const mockedClient = {
+      connect: vi.fn(),
+      close: vi.fn().mockResolvedValue(undefined),
+      registerCapabilities: vi.fn(),
+      setRequestHandler: vi.fn(),
+      setNotificationHandler: vi.fn((schema, handler) => {
+        if (schema === ResourceListChangedNotificationSchema) {
+          resourceListHandler = handler;
+        }
+      }),
+      getServerCapabilities: vi
+        .fn()
+        .mockReturnValue({ resources: { listChanged: true } }),
+      request: vi.fn().mockResolvedValue({ resources: [] }),
+    };
+    vi.mocked(ClientLib.Client).mockReturnValue(
+      mockedClient as unknown as Client,
+    );
+    vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue({
+      close: vi.fn().mockResolvedValue(undefined),
+    } as unknown as SdkClientStdioLib.StdioClientTransport);
+    const trustedConfig = { isTrustedFolder: () => true } as Config;
+    const client = new McpClient(
+      'test-server',
+      { command: 'test-command' },
+      {
+        registerTool: vi.fn(),
+        sortTools: vi.fn(),
+        removeMcpToolsByServer: vi.fn(),
+        getMessageBus: vi.fn(),
+      } as unknown as ToolRegistry,
+      { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
+      {
+        setResourcesForServer: vi.fn(),
+        removeResourcesByServer: vi.fn(),
+      } as unknown as ResourceRegistry,
+      new WorkspaceContext('/workspace'),
+      trustedConfig,
+      false,
+      '0.0.1',
+    );
+    await client.connect();
+    mockedClient.request.mockImplementation((_request, _schema, options) => {
+      refreshSignal = options?.signal;
+      return new Promise((_resolve, reject) => {
+        options?.signal?.addEventListener(
+          'abort',
+          () => reject(new DOMException('Aborted', 'AbortError')),
+          { once: true },
+        );
+      });
+    });
+
+    const refresh = Promise.resolve(
+      resourceListHandler?.({
+        method: 'notifications/resources/list_changed',
+      }),
+    );
+    await vi.waitFor(() => expect(refreshSignal).toBeDefined());
+
+    await client.disconnect();
+
+    expect(refreshSignal?.aborted).toBe(true);
+    await refresh;
+  });
+
   it('clears the refresh timeout when registry publication fails', async () => {
     let resourceListHandler:
       | ((notification: unknown) => Promise<void> | void)

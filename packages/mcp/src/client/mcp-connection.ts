@@ -421,6 +421,16 @@ async function handleConnectionError(
   return throwConnectionError(mcpServerName, error);
 }
 
+async function closeAfterConnectionFailure(
+  close: () => Promise<void>,
+): Promise<void> {
+  try {
+    await close();
+  } catch (cleanupError) {
+    debugLogger.warn('MCP transport cleanup failed:', cleanupError);
+  }
+}
+
 /**
  * Creates and connects an MCP client to a server based on the provided configuration.
  */
@@ -473,7 +483,7 @@ export async function connectToMcpServer(
       updateMCPServerStatus(mcpServerName, MCPServerStatus.CONNECTED);
       return mcpClient;
     } catch (error) {
-      await closeConnectedTransport();
+      await closeAfterConnectionFailure(closeConnectedTransport);
       if (signal?.aborted === true) {
         throw error;
       }

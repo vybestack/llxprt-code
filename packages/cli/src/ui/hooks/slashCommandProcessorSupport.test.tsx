@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { CommandKind, type SlashCommand } from '../commands/types.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
-import { coreEvents } from '@vybestack/llxprt-code-core';
+import { CoreEvent, coreEvents } from '@vybestack/llxprt-code-core';
 import { useCommandReload } from './slashCommandProcessorSupport.js';
 
 const loaderState = vi.hoisted(() => ({
@@ -128,29 +128,21 @@ describe('useCommandReload', () => {
     await waitFor(() => expect(result.current).toStrictEqual([]));
   });
 
-  it('stops reloading commands after unmount', async () => {
+  it('stops listening for folder trust changes after unmount', async () => {
     const config = {} as CliUiRuntime;
-    const offSpy = vi.spyOn(coreEvents, 'off');
+    const listenersBeforeMount = coreEvents.listenerCount(
+      CoreEvent.FolderTrustChanged,
+    );
     const { result, unmount } = renderHook(() => useCommandRegistry(config));
     await waitFor(() => expect(result.current).toStrictEqual([]));
-    unmount();
-
-    expect(offSpy).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(Function),
+    expect(coreEvents.listenerCount(CoreEvent.FolderTrustChanged)).toBe(
+      listenersBeforeMount + 1,
     );
 
-    loaderState.fileCommands = [
-      {
-        name: 'late-file-command',
-        description: 'Must not load after unmount',
-        kind: CommandKind.FILE,
-      },
-    ];
-    act(() => {
-      coreEvents.emitFolderTrustChanged(true);
-    });
+    unmount();
 
-    expect(result.current).toStrictEqual([]);
+    expect(coreEvents.listenerCount(CoreEvent.FolderTrustChanged)).toBe(
+      listenersBeforeMount,
+    );
   });
 });

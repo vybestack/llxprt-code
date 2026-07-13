@@ -25,6 +25,7 @@ import {
   beforeEach,
   afterEach,
   type Mocked,
+  type MockedFunction,
   type Mock,
 } from 'vitest';
 import * as fs from 'fs';
@@ -62,7 +63,11 @@ vi.mock('strip-json-comments', () => ({
 describe('Trusted Folders Loading', () => {
   let mockFsExistsSync: Mocked<typeof fs.existsSync>;
   let mockStripJsonComments: Mocked<typeof stripJsonComments>;
-  let mockFsWriteFileSync: Mocked<typeof fs.writeFileSync>;
+  let mockFsWriteFileSync: MockedFunction<typeof fs.writeFileSync>;
+  let mockFsChmodSync: MockedFunction<typeof fs.chmodSync>;
+  let mockFsStatSync: MockedFunction<typeof fs.statSync>;
+  let mockFsRenameSync: MockedFunction<typeof fs.renameSync>;
+  let mockFsUnlinkSync: MockedFunction<typeof fs.unlinkSync>;
 
   beforeEach(() => {
     resetTrustedFoldersForTesting();
@@ -70,6 +75,10 @@ describe('Trusted Folders Loading', () => {
     mockFsExistsSync = vi.mocked(fs.existsSync);
     mockStripJsonComments = vi.mocked(stripJsonComments);
     mockFsWriteFileSync = vi.mocked(fs.writeFileSync);
+    mockFsChmodSync = vi.mocked(fs.chmodSync);
+    mockFsStatSync = vi.mocked(fs.statSync);
+    mockFsRenameSync = vi.mocked(fs.renameSync);
+    mockFsUnlinkSync = vi.mocked(fs.unlinkSync);
     vi.mocked(osActual.homedir).mockReturnValue('/mock/home/user');
     (mockStripJsonComments as unknown as Mock).mockImplementation(
       (jsonString: string) => jsonString,
@@ -224,23 +233,23 @@ describe('Trusted Folders Loading', () => {
       { encoding: 'utf-8', mode: 0o600, flag: 'wx' },
     );
     const temporaryPath = vi.mocked(fs.writeFileSync).mock.calls[0][0];
-    expect(fs.chmodSync).toHaveBeenCalledWith(temporaryPath, 0o600);
-    expect(fs.statSync).toHaveBeenCalledWith(temporaryPath);
-    expect(fs.renameSync).toHaveBeenCalledWith(
+    expect(mockFsChmodSync).toHaveBeenCalledWith(temporaryPath, 0o600);
+    expect(mockFsStatSync).toHaveBeenCalledWith(temporaryPath);
+    expect(mockFsRenameSync).toHaveBeenCalledWith(
       temporaryPath,
       getTrustedFoldersPath(),
     );
     expect(
       vi.mocked(fs.writeFileSync).mock.invocationCallOrder[0],
-    ).toBeLessThan(vi.mocked(fs.chmodSync).mock.invocationCallOrder[0]);
+    ).toBeLessThan(mockFsChmodSync.mock.invocationCallOrder[0]);
     expect(
       vi.mocked(fs.writeFileSync).mock.invocationCallOrder[0],
-    ).toBeLessThan(vi.mocked(fs.statSync).mock.invocationCallOrder[0]);
-    expect(vi.mocked(fs.chmodSync).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(fs.renameSync).mock.invocationCallOrder[0],
+    ).toBeLessThan(mockFsStatSync.mock.invocationCallOrder[0]);
+    expect(mockFsChmodSync.mock.invocationCallOrder[0]).toBeLessThan(
+      mockFsRenameSync.mock.invocationCallOrder[0],
     );
-    expect(vi.mocked(fs.statSync).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(fs.renameSync).mock.invocationCallOrder[0],
+    expect(mockFsStatSync.mock.invocationCallOrder[0]).toBeLessThan(
+      mockFsRenameSync.mock.invocationCallOrder[0],
     );
   });
 
@@ -248,7 +257,7 @@ describe('Trusted Folders Loading', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
     loadedFolders.user.config['/existing/path'] = TrustLevel.DO_NOT_TRUST;
-    vi.mocked(fs.chmodSync).mockImplementationOnce(() => {
+    mockFsChmodSync.mockImplementationOnce(() => {
       throw new Error('chmod denied');
     });
 
@@ -256,7 +265,7 @@ describe('Trusted Folders Loading', () => {
       loadedFolders.setValue('/existing/path', TrustLevel.TRUST_FOLDER),
     ).toThrow('chmod denied');
 
-    expect(fs.renameSync).not.toHaveBeenCalled();
+    expect(mockFsRenameSync).not.toHaveBeenCalled();
     expect(loadedFolders.user.config['/existing/path']).toBe(
       TrustLevel.DO_NOT_TRUST,
     );
@@ -265,7 +274,7 @@ describe('Trusted Folders Loading', () => {
   it('removes the temporary file when the atomic rename fails', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
-    vi.mocked(fs.renameSync).mockImplementationOnce(() => {
+    mockFsRenameSync.mockImplementationOnce(() => {
       throw new Error('rename denied');
     });
 
@@ -274,7 +283,7 @@ describe('Trusted Folders Loading', () => {
     ).toThrow('rename denied');
 
     const temporaryPath = vi.mocked(fs.writeFileSync).mock.calls[0][0];
-    expect(fs.unlinkSync).toHaveBeenCalledWith(temporaryPath);
+    expect(mockFsUnlinkSync).toHaveBeenCalledWith(temporaryPath);
     expect(loadedFolders.user.config['/new/path']).toBeUndefined();
   });
   it('warns when a failed atomic rename cannot remove its temporary file', () => {
@@ -282,10 +291,10 @@ describe('Trusted Folders Loading', () => {
     const cleanupError = new Error('unlink denied');
     const warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
     const loadedFolders = loadTrustedFolders();
-    vi.mocked(fs.renameSync).mockImplementationOnce(() => {
+    mockFsRenameSync.mockImplementationOnce(() => {
       throw new Error('rename denied');
     });
-    vi.mocked(fs.unlinkSync).mockImplementationOnce(() => {
+    mockFsUnlinkSync.mockImplementationOnce(() => {
       throw cleanupError;
     });
 
@@ -308,9 +317,9 @@ describe('Trusted Folders Loading', () => {
     loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
 
     const temporaryPath = vi.mocked(fs.writeFileSync).mock.calls[0][0];
-    expect(fs.chmodSync).not.toHaveBeenCalled();
-    expect(fs.statSync).not.toHaveBeenCalled();
-    expect(fs.renameSync).toHaveBeenCalledWith(
+    expect(mockFsChmodSync).not.toHaveBeenCalled();
+    expect(mockFsStatSync).not.toHaveBeenCalled();
+    expect(mockFsRenameSync).toHaveBeenCalledWith(
       temporaryPath,
       getTrustedFoldersPath(),
     );
@@ -322,14 +331,14 @@ describe('Trusted Folders Loading', () => {
 
     loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
 
-    expect(fs.renameSync).toHaveBeenCalledTimes(1);
-    expect(fs.unlinkSync).not.toHaveBeenCalled();
-    const renameOrder = vi.mocked(fs.renameSync).mock.invocationCallOrder[0];
+    expect(mockFsRenameSync).toHaveBeenCalledTimes(1);
+    expect(mockFsUnlinkSync).not.toHaveBeenCalled();
+    const renameOrder = mockFsRenameSync.mock.invocationCallOrder[0];
     expect(
       Math.max(
         ...vi.mocked(fs.writeFileSync).mock.invocationCallOrder,
-        ...vi.mocked(fs.chmodSync).mock.invocationCallOrder,
-        ...vi.mocked(fs.statSync).mock.invocationCallOrder,
+        ...mockFsChmodSync.mock.invocationCallOrder,
+        ...mockFsStatSync.mock.invocationCallOrder,
       ),
     ).toBeLessThan(renameOrder);
   });

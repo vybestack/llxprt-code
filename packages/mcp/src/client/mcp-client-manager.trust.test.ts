@@ -239,7 +239,7 @@ describe('McpClientManager trust transitions', () => {
 
   describe('race: CONNECTING/discovery vs revoke', () => {
     it('prevents a concurrent discovery from registering after revoke clears clients', async () => {
-      let resolveConnect: () => void = () => {};
+      let resolveConnect: (value?: void) => void = () => {};
       const client = createMockMcpClient();
       (client.connect as ReturnType<typeof vi.fn>).mockImplementation(
         () =>
@@ -279,7 +279,7 @@ describe('McpClientManager trust transitions', () => {
     });
 
     it('rechecks trust before registering a client in connectAndDiscover', async () => {
-      let resolveConnect: () => void = () => {};
+      let resolveConnect: (value?: void) => void = () => {};
       const client = createMockMcpClient();
       (client.connect as ReturnType<typeof vi.fn>).mockImplementation(
         () =>
@@ -400,8 +400,8 @@ describe('McpClientManager trust transitions', () => {
 
   describe('race: discovery completion vs revoke', () => {
     it('disconnects a client if trust is revoked between connect and discover', async () => {
-      let resolveConnect: () => void = () => {};
-      let resolveDiscover: () => void = () => {};
+      let resolveConnect: (value?: void) => void = () => {};
+      let resolveDiscover: (value?: void) => void = () => {};
       const client = createMockMcpClient();
       (client.connect as ReturnType<typeof vi.fn>).mockImplementation(
         () =>

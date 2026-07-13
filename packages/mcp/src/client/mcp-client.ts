@@ -102,6 +102,7 @@ export class McpClient {
   private connectionGeneration = 0;
   private connectionAbortController: AbortController | undefined;
   private discoveryAbortController: AbortController | undefined;
+  private readonly refreshAbortControllers = new Set<AbortController>();
   private capabilityGeneration = 0;
   private activeCapabilityGeneration: number | undefined;
 
@@ -280,6 +281,10 @@ export class McpClient {
     this.connectionAbortController = undefined;
     this.discoveryAbortController?.abort();
     this.discoveryAbortController = undefined;
+    for (const controller of this.refreshAbortControllers) {
+      controller.abort();
+    }
+    this.refreshAbortControllers.clear();
     const client = this.client;
     this.client = undefined;
     const transport = this.transport;
@@ -323,15 +328,21 @@ export class McpClient {
     }
   }
 
+  private getConnectedClient(): Client {
+    this.assertConnected();
+    if (!this.client) {
+      throw new Error(
+        `Client '${this.serverName}' is connected without an active SDK client.`,
+      );
+    }
+    return this.client;
+  }
+
   private async discoverTools(
     cliConfig: Config,
     options?: { timeout?: number; signal?: AbortSignal },
   ): Promise<DiscoveredMCPTool[]> {
-    this.assertConnected();
-    const client = this.client;
-    if (!client) {
-      return [];
-    }
+    const client = this.getConnectedClient();
     const isAuthorized = this.createCapabilityAuthorization(client);
     return discoverTools(
       this.serverName,
@@ -349,17 +360,18 @@ export class McpClient {
   }
 
   private async discoverPrompts(): Promise<Prompt[]> {
-    this.assertConnected();
-    return discoverPrompts(this.serverName, this.client!);
+    return discoverPrompts(this.serverName, this.getConnectedClient());
   }
 
   private async discoverResources(options?: {
     timeout?: number;
     signal?: AbortSignal;
   }): Promise<Resource[]> {
-    this.assertConnected();
-    const client = this.client;
-    return client ? discoverResources(this.serverName, client, options) : [];
+    return discoverResources(
+      this.serverName,
+      this.getConnectedClient(),
+      options,
+    );
   }
 
   private updateResourceRegistry(resources: Resource[]): void {
@@ -460,6 +472,18 @@ export class McpClient {
     }
   }
 
+  private isRefreshGenerationCurrent(
+    client: Client,
+    connectionGeneration: number,
+    capabilityGeneration: number | undefined,
+  ): boolean {
+    return (
+      this.client === client &&
+      this.connectionGeneration === connectionGeneration &&
+      this.activeCapabilityGeneration === capabilityGeneration
+    );
+  }
+
   private isRefreshAuthorized(
     client: Client,
     connectionGeneration: number,
@@ -479,6 +503,22 @@ export class McpClient {
     );
   }
 
+  private removeToolsForCurrentRefresh(
+    client: Client,
+    connectionGeneration: number,
+    capabilityGeneration: number | undefined,
+  ): void {
+    if (
+      this.isRefreshGenerationCurrent(
+        client,
+        connectionGeneration,
+        capabilityGeneration,
+      )
+    ) {
+      this.toolRegistry.removeMcpToolsByServer(this.serverName);
+    }
+  }
+
   private async refreshToolsOnce(): Promise<boolean> {
     const client = this.client;
     if (this.status !== MCPServerStatus.CONNECTED || !client) {
@@ -489,6 +529,7 @@ export class McpClient {
 
     const timeoutMs = this.serverConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC;
     const abortController = new AbortController();
+    this.refreshAbortControllers.add(abortController);
     const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
 
     try {
@@ -524,7 +565,11 @@ export class McpClient {
         try {
           await this.onToolsUpdated(abortController.signal);
         } catch (error) {
-          this.toolRegistry.removeMcpToolsByServer(this.serverName);
+          this.removeToolsForCurrentRefresh(
+            client,
+            connectionGeneration,
+            capabilityGeneration,
+          );
           throw error;
         }
         if (
@@ -546,6 +591,7 @@ export class McpClient {
       return true;
     } finally {
       clearTimeout(timeoutId);
+      this.refreshAbortControllers.delete(abortController);
     }
   }
 
@@ -591,6 +637,7 @@ export class McpClient {
 
     const timeoutMs = this.serverConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC;
     const abortController = new AbortController();
+    this.refreshAbortControllers.add(abortController);
     const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
 
     try {
@@ -625,6 +672,7 @@ export class McpClient {
       return true;
     } finally {
       clearTimeout(timeoutId);
+      this.refreshAbortControllers.delete(abortController);
     }
   }
 

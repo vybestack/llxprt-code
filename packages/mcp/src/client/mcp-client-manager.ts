@@ -337,11 +337,11 @@ export class McpClientManager {
   ): Promise<void> {
     if (this.clients.get(name) === client) {
       this.clients.delete(name);
+      this.removeServerArtifacts(name);
+      this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+        clients: new Map(this.clients),
+      });
     }
-    this.removeServerArtifacts(name);
-    this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-      clients: new Map(this.clients),
-    });
     try {
       await this.disconnectMcpClient(client);
     } catch {

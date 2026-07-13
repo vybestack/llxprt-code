@@ -559,7 +559,13 @@ describe('McpClientManager', () => {
       refreshMcpContext: vi.fn(),
     } as unknown as Config;
     const manager = new McpClientManager('0.0.1', toolRegistry, mockConfig);
-    return { manager, mockConfig };
+    return {
+      manager,
+      mockConfig,
+      promptRegistry,
+      resourceRegistry,
+      toolRegistry,
+    };
   };
 
   const makeTestExtension = (): LlxprtExtension =>
@@ -648,7 +654,8 @@ describe('McpClientManager', () => {
         getStatus: vi.fn(),
         getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
       };
-      const { manager } = createExtensionManager(mockedMcpClient);
+      const { manager, promptRegistry, resourceRegistry, toolRegistry } =
+        createExtensionManager(mockedMcpClient);
 
       await manager.startExtension(makeTestExtension());
       await manager.whenDiscoverySettled();
@@ -656,6 +663,15 @@ describe('McpClientManager', () => {
       const failures = manager.getDiscoveryFailures();
       expect(failures.has('ext-server')).toBe(true);
       expect(failures.get('ext-server')).toContain('ECONNREFUSED');
+      expect(toolRegistry.removeMcpToolsByServer).toHaveBeenCalledWith(
+        'ext-server',
+      );
+      expect(promptRegistry.removePromptsByServer).toHaveBeenCalledWith(
+        'ext-server',
+      );
+      expect(resourceRegistry.removeResourcesByServer).toHaveBeenCalledWith(
+        'ext-server',
+      );
     });
 
     it('resolves whenDiscoverySettled via bounded timeout for a never-settling server', async () => {
@@ -697,7 +713,7 @@ describe('McpClientManager', () => {
     it('clears a timeout failure when the same discovery eventually succeeds', async () => {
       vi.useFakeTimers();
       try {
-        let resolveConnect: () => void = () => {};
+        let resolveConnect: (value?: void) => void = () => {};
         const connectPromise = new Promise<void>((resolve) => {
           resolveConnect = resolve;
         });

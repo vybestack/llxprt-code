@@ -17,12 +17,12 @@ import { TrustLevel } from '../../config/trustedFolders.js';
 import type { HistoryItemWithoutId } from '../types.js';
 import { MessageType } from '../types.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { PermissionsTrustRuntime } from '../hooks/usePermissionsModifyTrust.js';
 
 interface PermissionsModifyTrustDialogProps {
   onExit: () => void;
   addItem: UseHistoryManagerReturn['addItem'];
-  config?: CliUiRuntime;
+  config?: PermissionsTrustRuntime;
 }
 
 function getLocalTrustLevelDisplay(level: TrustLevel | undefined): string {
@@ -268,7 +268,7 @@ export function getTrustCommitErrorMessage(
 function useTrustDialogState(
   onExit: () => void,
   addItem: UseHistoryManagerReturn['addItem'],
-  config?: CliUiRuntime,
+  config?: PermissionsTrustRuntime,
 ) {
   const {
     currentTrustLevel,

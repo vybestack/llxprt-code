@@ -16,7 +16,16 @@ import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useIdeTrustListener } from './useIdeTrustListener.js';
 import process from 'node:process';
 
-const emptyIdeState: Pick<CliUiRuntime, 'getIdeClient'> = {
+export type PermissionsTrustRuntime = Pick<
+  CliUiRuntime,
+  | 'getWorkingDir'
+  | 'getFolderTrust'
+  | 'getIdeClient'
+  | 'isTrustedFolder'
+  | 'setTrustedFolderLive'
+>;
+
+const emptyIdeState: Pick<PermissionsTrustRuntime, 'getIdeClient'> = {
   getIdeClient: () => undefined,
 };
 
@@ -59,7 +68,7 @@ export interface UsePermissionsModifyTrustReturn {
  * and live Config updates via setTrustedFolderLive.
  */
 export function usePermissionsModifyTrust(
-  config?: CliUiRuntime,
+  config?: PermissionsTrustRuntime,
 ): UsePermissionsModifyTrustReturn {
   const cwd = config?.getWorkingDir() ?? process.cwd();
   const normalizedCwd = path.resolve(cwd);
@@ -138,7 +147,7 @@ export function usePermissionsModifyTrust(
     trustChanged,
     committedTrustLevel: committedLevel,
     effectiveTrust,
-    workingDirectory: cwd,
+    workingDirectory: normalizedCwd,
     parentFolderName,
     trustedFolders,
   };

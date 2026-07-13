@@ -92,6 +92,7 @@ describe('connectToMcpServer with OAuth', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -115,7 +116,29 @@ describe('connectToMcpServer with OAuth', () => {
       ),
     ).rejects.toMatchObject({ name: 'AbortError' });
     await vi.waitFor(() => expect(transport.close).toHaveBeenCalledOnce());
-    expect(mockedClient.close).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(mockedClient.close).toHaveBeenCalledOnce());
+  });
+
+  it('preserves the connection failure when transport cleanup also fails', async () => {
+    const transport = {
+      close: vi.fn().mockRejectedValue(new Error('transport cleanup failed')),
+    };
+    vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+      transport as unknown as SdkClientStdioLib.StdioClientTransport,
+    );
+    vi.mocked(mockedClient.connect).mockRejectedValue(
+      new Error('primary connection failure'),
+    );
+
+    await expect(
+      connectToMcpServer(
+        '0.0.1',
+        'test-server',
+        { command: 'test-command' },
+        false,
+        workspaceContext,
+      ),
+    ).rejects.toThrow('primary connection failure');
   });
 
   it('closes the transport when cancellation races a rejected connect', async () => {

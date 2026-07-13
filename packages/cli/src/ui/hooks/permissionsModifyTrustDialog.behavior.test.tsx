@@ -141,6 +141,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     const { result } = renderHook(() => usePermissionsModifyTrust(config));
 
     expect(result.current.currentTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
+    expect(result.current.workingDirectory).toBe('/configured/workspace');
     act(() => {
       result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
     });

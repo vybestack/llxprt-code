@@ -82,7 +82,7 @@ describe('Config.setTrustedFolderLive', () => {
   });
 
   it('preserves IDE trust precedence: setter is a no-op when IDE says trusted', () => {
-    const ideSpy = vi.spyOn(ideContext, 'getIdeContext').mockReturnValue({
+    vi.spyOn(ideContext, 'getIdeContext').mockReturnValue({
       workspaceState: { isTrusted: true },
     });
 
@@ -92,8 +92,6 @@ describe('Config.setTrustedFolderLive', () => {
 
     expect(config.isTrustedFolder()).toBe(true);
     expect(emitSpy).not.toHaveBeenCalled();
-
-    ideSpy.mockRestore();
   });
 
   it('allows setApprovalMode(YOLO) after gaining trust live', () => {

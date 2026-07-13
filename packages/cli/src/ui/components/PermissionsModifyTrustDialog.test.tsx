@@ -12,7 +12,7 @@ import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js'
 import type React from 'react';
 import { SettingsContext } from '../contexts/SettingsContext.js';
 import type { LoadedSettings } from '../../config/settings.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { PermissionsTrustRuntime } from '../hooks/usePermissionsModifyTrust.js';
 import { ideContext } from '@vybestack/llxprt-code-core';
 import { TrustLevel } from '../../config/trustedFolders.js';
 import { MessageType } from '../types.js';
@@ -76,10 +76,7 @@ const Wrapper = ({ children }: { children: React.ReactNode }) => (
 );
 
 describe('PermissionsModifyTrustDialog', () => {
-  let mockConfig: Pick<
-    CliUiRuntime,
-    'getWorkingDir' | 'getFolderTrust' | 'getIdeClient' | 'isTrustedFolder'
-  > & {
+  let mockConfig: PermissionsTrustRuntime & {
     setTrustedFolderLive: ReturnType<typeof vi.fn>;
   };
 
@@ -110,7 +107,7 @@ describe('PermissionsModifyTrustDialog', () => {
         <PermissionsModifyTrustDialog
           onExit={onExit}
           addItem={addItem}
-          config={mockConfig as unknown as CliUiRuntime}
+          config={mockConfig}
         />
       </Wrapper>,
     );
@@ -127,7 +124,7 @@ describe('PermissionsModifyTrustDialog', () => {
         <PermissionsModifyTrustDialog
           onExit={onExit}
           addItem={addItem}
-          config={mockConfig as unknown as CliUiRuntime}
+          config={mockConfig}
         />
       </Wrapper>,
     );
@@ -143,7 +140,7 @@ describe('PermissionsModifyTrustDialog', () => {
         <PermissionsModifyTrustDialog
           onExit={vi.fn()}
           addItem={vi.fn()}
-          config={mockConfig as unknown as CliUiRuntime}
+          config={mockConfig}
         />
       </Wrapper>,
     );
@@ -163,7 +160,7 @@ describe('PermissionsModifyTrustDialog', () => {
         <PermissionsModifyTrustDialog
           onExit={onExit}
           addItem={addItem}
-          config={mockConfig as unknown as CliUiRuntime}
+          config={mockConfig}
         />
       </Wrapper>,
     );
@@ -181,7 +178,7 @@ describe('PermissionsModifyTrustDialog', () => {
         <PermissionsModifyTrustDialog
           onExit={onExit}
           addItem={addItem}
-          config={mockConfig as unknown as CliUiRuntime}
+          config={mockConfig}
         />
       </Wrapper>,
     );
@@ -200,7 +197,7 @@ describe('PermissionsModifyTrustDialog', () => {
         <PermissionsModifyTrustDialog
           onExit={vi.fn()}
           addItem={addItem}
-          config={mockConfig as unknown as CliUiRuntime}
+          config={mockConfig}
         />
       </Wrapper>,
     );
@@ -230,7 +227,7 @@ describe('PermissionsModifyTrustDialog', () => {
         <PermissionsModifyTrustDialog
           onExit={vi.fn()}
           addItem={addItem}
-          config={mockConfig as unknown as CliUiRuntime}
+          config={mockConfig}
         />
       </Wrapper>,
     );
@@ -271,7 +268,7 @@ describe('PermissionsModifyTrustDialog', () => {
         <PermissionsModifyTrustDialog
           onExit={vi.fn()}
           addItem={vi.fn()}
-          config={mockConfig as unknown as CliUiRuntime}
+          config={mockConfig}
         />
       </Wrapper>,
     );
@@ -293,7 +290,7 @@ describe('PermissionsModifyTrustDialog', () => {
         <PermissionsModifyTrustDialog
           onExit={vi.fn()}
           addItem={vi.fn()}
-          config={mockConfig as unknown as CliUiRuntime}
+          config={mockConfig}
         />
       </Wrapper>,
     );
@@ -308,7 +305,7 @@ describe('PermissionsModifyTrustDialog', () => {
         <PermissionsModifyTrustDialog
           onExit={onExit}
           addItem={vi.fn()}
-          config={mockConfig as unknown as CliUiRuntime}
+          config={mockConfig}
         />
       </Wrapper>,
     );
@@ -335,7 +332,7 @@ describe('PermissionsModifyTrustDialog', () => {
         <PermissionsModifyTrustDialog
           onExit={vi.fn()}
           addItem={vi.fn()}
-          config={mockConfig as unknown as CliUiRuntime}
+          config={mockConfig}
         />
       </Wrapper>,
     );
@@ -358,7 +355,7 @@ describe('PermissionsModifyTrustDialog', () => {
         <PermissionsModifyTrustDialog
           onExit={onExit}
           addItem={vi.fn()}
-          config={mockConfig as unknown as CliUiRuntime}
+          config={mockConfig}
         />
       </Wrapper>,
     );
@@ -377,7 +374,7 @@ describe('PermissionsModifyTrustDialog', () => {
         <PermissionsModifyTrustDialog
           onExit={vi.fn()}
           addItem={vi.fn()}
-          config={mockConfig as unknown as CliUiRuntime}
+          config={mockConfig}
         />
       </Wrapper>,
     );
@@ -404,7 +401,7 @@ describe('PermissionsModifyTrustDialog', () => {
         <PermissionsModifyTrustDialog
           onExit={vi.fn()}
           addItem={vi.fn()}
-          config={mockConfig as unknown as CliUiRuntime}
+          config={mockConfig}
         />
       </Wrapper>,
     );

@@ -124,9 +124,11 @@ describe('mcp-client', () => {
         request: vi.fn().mockImplementation((_request, _schema, options) => {
           resourceSignal = options?.signal;
           return new Promise((_resolve, reject) => {
-            options?.signal?.addEventListener('abort', () => {
-              reject(new Error('resource discovery aborted'));
-            });
+            options?.signal?.addEventListener(
+              'abort',
+              () => reject(new DOMException('Aborted', 'AbortError')),
+              { once: true },
+            );
           });
         }),
       };
@@ -159,7 +161,7 @@ describe('mcp-client', () => {
       await client.disconnect();
 
       expect(resourceSignal?.aborted).toBe(true);
-      await expect(discovery).rejects.toThrow('resource discovery aborted');
+      await expect(discovery).rejects.toMatchObject({ name: 'AbortError' });
     });
 
     it('should not skip tools even if a parameter is missing a type', async () => {

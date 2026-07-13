@@ -9,7 +9,6 @@ import path from 'path';
 import toml from '@iarna/toml';
 import { glob } from 'glob';
 import { z } from 'zod';
-import type { CliUiRuntime } from '../ui/cliUiRuntime.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { ICommandLoader } from './types.js';
@@ -34,6 +33,18 @@ import { firstNonEmptyString } from '../utils/coalesce.js';
 interface CommandDirectory {
   path: string;
   extensionName?: string;
+}
+
+export interface FileCommandRuntime {
+  readonly storage?: Storage;
+  getProjectRoot(): string;
+  getExtensions(): Array<{
+    name: string;
+    isActive: boolean;
+    path: string;
+  }>;
+  getFolderTrust(): boolean;
+  isTrustedFolder(): boolean;
 }
 
 export const FILE_COMMANDS_UNTRUSTED_MESSAGE =
@@ -64,7 +75,7 @@ const TomlCommandDefSchema = z.object({
 export class FileCommandLoader implements ICommandLoader {
   private readonly projectRoot: string;
 
-  constructor(private readonly config: CliUiRuntime | null) {
+  constructor(private readonly config: FileCommandRuntime | null) {
     this.projectRoot = config?.getProjectRoot() ?? process.cwd();
   }
 
