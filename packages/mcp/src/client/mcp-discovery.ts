@@ -110,15 +110,12 @@ export async function connectAndDiscover(
       mcpClient = undefined;
     };
 
-    const prompts = await discoverPrompts(
-      mcpServerName,
-      mcpClient,
-      promptRegistry,
-    );
+    const connectedClient = mcpClient;
+    const prompts = await discoverPrompts(mcpServerName, connectedClient);
     const tools = await discoverTools(
       mcpServerName,
       mcpServerConfig,
-      mcpClient,
+      connectedClient,
       cliConfig,
       undefined,
       { timeout: mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC },
@@ -130,6 +127,14 @@ export async function connectAndDiscover(
 
     updateMCPServerStatus(mcpServerName, MCPServerStatus.CONNECTED);
 
+    for (const prompt of prompts) {
+      promptRegistry.registerPrompt({
+        ...prompt,
+        serverName: mcpServerName,
+        invoke: (params: Record<string, unknown>) =>
+          invokeMcpPrompt(mcpServerName, connectedClient, prompt.name, params),
+      });
+    }
     for (const tool of tools) {
       toolRegistry.registerTool(tool);
     }
@@ -154,7 +159,11 @@ export async function discoverTools(
   mcpClient: Client,
   cliConfig: Config,
   messageBus?: MessageBus,
-  options?: { timeout?: number; signal?: AbortSignal },
+  options?: {
+    timeout?: number;
+    signal?: AbortSignal;
+    isAuthorized?: () => boolean;
+  },
 ): Promise<DiscoveredMCPTool[]> {
   const debug = new DebugLogger('llxprt:mcp:discovery');
 
@@ -174,6 +183,7 @@ export async function discoverTools(
         mcpClient,
         cliConfig,
         debug,
+        options?.isAuthorized,
       );
       if (tool) {
         discoveredTools.push(tool);
@@ -200,6 +210,7 @@ function processToolDefinition(
   mcpClient: Client,
   cliConfig: Config,
   debug: DebugLogger,
+  isAuthorized: () => boolean = () => true,
 ): DiscoveredMCPTool | undefined {
   try {
     debug.log(`Processing tool: ${toolDef.name}`);
@@ -213,6 +224,7 @@ function processToolDefinition(
       mcpClient,
       toolDef,
       mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
+      isAuthorized,
     );
     debug.log(`Created McpCallableTool for ${toolDef.name}`);
 
@@ -239,18 +251,20 @@ function processToolDefinition(
 export async function discoverResources(
   mcpServerName: string,
   mcpClient: Client,
+  options?: { timeout?: number; signal?: AbortSignal },
 ): Promise<Resource[]> {
   if (mcpClient.getServerCapabilities()?.resources == null) {
     return [];
   }
 
-  const resources = await listResources(mcpServerName, mcpClient);
+  const resources = await listResources(mcpServerName, mcpClient, options);
   return resources;
 }
 
 async function listResources(
   mcpServerName: string,
   mcpClient: Client,
+  options?: { timeout?: number; signal?: AbortSignal },
 ): Promise<Resource[]> {
   const resources: Resource[] = [];
   let cursor: string | undefined;
@@ -262,6 +276,7 @@ async function listResources(
           params: cursor ? { cursor } : {},
         },
         ListResourcesResultSchema,
+        options,
       );
       resources.push(...response.resources);
       cursor = response.nextCursor ?? undefined;
@@ -284,21 +299,12 @@ async function listResources(
 export async function discoverPrompts(
   mcpServerName: string,
   mcpClient: Client,
-  promptRegistry: PromptRegistry,
 ): Promise<Prompt[]> {
   try {
     if (mcpClient.getServerCapabilities()?.prompts == null) return [];
 
     const response = await mcpClient.listPrompts({});
 
-    for (const prompt of response.prompts) {
-      promptRegistry.registerPrompt({
-        ...prompt,
-        serverName: mcpServerName,
-        invoke: (params: Record<string, unknown>) =>
-          invokeMcpPrompt(mcpServerName, mcpClient, prompt.name, params),
-      });
-    }
     return response.prompts;
   } catch (error) {
     if (error instanceof Error && !error.message.includes('Method not found')) {
@@ -318,8 +324,12 @@ export async function invokeMcpPrompt(
   mcpClient: Client,
   promptName: string,
   promptParams: Record<string, unknown>,
+  isAuthorized: () => boolean = () => true,
 ): Promise<GetPromptResult> {
   try {
+    if (!isAuthorized()) {
+      throw new Error('MCP capability is no longer authorized');
+    }
     const sanitizedParams: Record<string, string> = {};
     for (const [key, value] of Object.entries(promptParams)) {
       if (value !== undefined && value !== null) {

@@ -23,8 +23,8 @@ export enum FolderTrustChoice {
 }
 
 interface FolderTrustDialogProps {
+  workingDirectory: string;
   onSelect: (choice: FolderTrustChoice) => void;
-  isRestarting?: boolean;
 }
 
 function buildTrustOptions(
@@ -81,8 +81,8 @@ const RestartingMessage: React.FC<RestartingMessageProps> = ({ exiting }) => {
 };
 
 export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
+  workingDirectory,
   onSelect,
-  isRestarting,
 }) => {
   const [exiting, setExiting] = useState(false);
 
@@ -95,20 +95,11 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
         }, 100);
       }
     },
-    { isActive: isRestarting !== true },
+    { isActive: true },
   );
 
-  useKeypress(
-    (key) => {
-      if (key.name === 'r') {
-        process.exit(ExitCodes.SUCCESS);
-      }
-    },
-    { isActive: isRestarting === true },
-  );
-
-  const currentFolder = path.basename(process.cwd());
-  const parentFolder = path.basename(path.dirname(process.cwd()));
+  const currentFolder = path.basename(workingDirectory);
+  const parentFolder = path.basename(path.dirname(workingDirectory));
   const options = buildTrustOptions(currentFolder, parentFolder);
 
   return (
@@ -126,17 +117,9 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
         <RadioButtonSelect
           items={options}
           onSelect={onSelect}
-          isFocused={isRestarting !== true}
+          isFocused={true}
         />
       </Box>
-      {isRestarting === true && (
-        <Box marginLeft={1} marginTop={1}>
-          <Text color={Colors.AccentYellow}>
-            To see changes, llxprt must be restarted. Press r to exit and apply
-            changes now.
-          </Text>
-        </Box>
-      )}
       <RestartingMessage exiting={exiting} />
     </Box>
   );

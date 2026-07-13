@@ -46,6 +46,10 @@ vi.mock('fs', async (importOriginal) => {
     existsSync: vi.fn(),
     readFileSync: vi.fn(),
     writeFileSync: vi.fn(),
+    renameSync: vi.fn(),
+    chmodSync: vi.fn(),
+    statSync: vi.fn(() => ({ mode: 0o100600 })),
+    unlinkSync: vi.fn(),
     mkdirSync: vi.fn(),
   };
 });
@@ -118,14 +122,32 @@ describe('Trusted Folders Loading', () => {
       );
       expect(folders.isPathTrusted('/trustedparent/trustme')).toBe(true);
 
-      // No explicit rule covers this file
-      expect(folders.isPathTrusted('/secret/bankaccounts.json')).toBe(
-        undefined,
-      );
-      expect(folders.isPathTrusted('/secret/mine/privatekey.pem')).toBe(
-        undefined,
-      );
+      expect(folders.isPathTrusted('/secret/bankaccounts.json')).toBe(false);
+      expect(folders.isPathTrusted('/secret/mine/privatekey.pem')).toBe(false);
       expect(folders.isPathTrusted('/user/someotherfolder')).toBe(undefined);
+    });
+
+    it('uses the most specific matching rule when trust rules compete', () => {
+      const { folders } = setup({
+        config: {
+          '/workspace': TrustLevel.TRUST_FOLDER,
+          '/workspace/private': TrustLevel.DO_NOT_TRUST,
+          '/workspace/private/public': TrustLevel.TRUST_FOLDER,
+        },
+      });
+
+      expect(folders.isPathTrusted('/workspace/private')).toBe(false);
+      expect(folders.isPathTrusted('/workspace/private/public/file')).toBe(
+        true,
+      );
+    });
+
+    it('does not treat a sibling string prefix as an ancestor', () => {
+      const { folders } = setup({
+        config: { '/workspace/app': TrustLevel.TRUST_FOLDER },
+      });
+
+      expect(folders.isPathTrusted('/workspace/application')).toBe(undefined);
     });
   });
 
@@ -188,6 +210,7 @@ describe('Trusted Folders Loading', () => {
   });
 
   it('setValue should update the user config and save it', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
     loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
 
@@ -195,10 +218,74 @@ describe('Trusted Folders Loading', () => {
       TrustLevel.TRUST_FOLDER,
     );
     expect(mockFsWriteFileSync).toHaveBeenCalledWith(
-      getTrustedFoldersPath(),
+      expect.stringContaining('.trustedFolders.json.'),
       JSON.stringify({ '/new/path': TrustLevel.TRUST_FOLDER }, null, 2),
-      { encoding: 'utf-8', mode: 0o600 },
+      { encoding: 'utf-8', mode: 0o600, flag: 'wx' },
     );
+    const temporaryPath = vi.mocked(fs.writeFileSync).mock.calls[0][0];
+    expect(fs.chmodSync).toHaveBeenCalledWith(temporaryPath, 0o600);
+    expect(fs.statSync).toHaveBeenCalledWith(temporaryPath);
+    expect(fs.renameSync).toHaveBeenCalledWith(
+      temporaryPath,
+      getTrustedFoldersPath(),
+    );
+    expect(vi.mocked(fs.chmodSync).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(fs.renameSync).mock.invocationCallOrder[0],
+    );
+    expect(vi.mocked(fs.statSync).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(fs.renameSync).mock.invocationCallOrder[0],
+    );
+  });
+
+  it('keeps the destination and in-memory rule unchanged when temp chmod fails', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const loadedFolders = loadTrustedFolders();
+    loadedFolders.user.config['/existing/path'] = TrustLevel.DO_NOT_TRUST;
+    vi.mocked(fs.chmodSync).mockImplementationOnce(() => {
+      throw new Error('chmod denied');
+    });
+
+    expect(() =>
+      loadedFolders.setValue('/existing/path', TrustLevel.TRUST_FOLDER),
+    ).toThrow('chmod denied');
+
+    expect(fs.renameSync).not.toHaveBeenCalled();
+    expect(loadedFolders.user.config['/existing/path']).toBe(
+      TrustLevel.DO_NOT_TRUST,
+    );
+  });
+
+  it('atomically saves on Windows without POSIX mode operations', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+    const loadedFolders = loadTrustedFolders();
+
+    loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
+
+    const temporaryPath = vi.mocked(fs.writeFileSync).mock.calls[0][0];
+    expect(fs.chmodSync).not.toHaveBeenCalled();
+    expect(fs.statSync).not.toHaveBeenCalled();
+    expect(fs.renameSync).toHaveBeenCalledWith(
+      temporaryPath,
+      getTrustedFoldersPath(),
+    );
+  });
+
+  it('performs no fallible cleanup after the atomic rename commit point', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const loadedFolders = loadTrustedFolders();
+
+    loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
+
+    expect(fs.renameSync).toHaveBeenCalledTimes(1);
+    expect(fs.unlinkSync).not.toHaveBeenCalled();
+    const renameOrder = vi.mocked(fs.renameSync).mock.invocationCallOrder[0];
+    expect(
+      Math.max(
+        ...vi.mocked(fs.writeFileSync).mock.invocationCallOrder,
+        ...vi.mocked(fs.chmodSync).mock.invocationCallOrder,
+        ...vi.mocked(fs.statSync).mock.invocationCallOrder,
+      ),
+    ).toBeLessThan(renameOrder);
   });
 });
 
@@ -282,10 +369,10 @@ describe('isWorkspaceTrusted', () => {
     expect(isWorkspaceTrusted(mockSettings)).toBe(false);
   });
 
-  it('should return undefined for a child of an untrusted folder', () => {
+  it('should return false for a child of an untrusted folder', () => {
     mockCwd = '/home/user/untrusted/src';
     mockRules['/home/user/untrusted'] = TrustLevel.DO_NOT_TRUST;
-    expect(isWorkspaceTrusted(mockSettings)).toBeUndefined();
+    expect(isWorkspaceTrusted(mockSettings)).toBe(false);
   });
 
   it('should return undefined when no rules match', () => {
@@ -295,11 +382,11 @@ describe('isWorkspaceTrusted', () => {
     expect(isWorkspaceTrusted(mockSettings)).toBeUndefined();
   });
 
-  it('should prioritize trust over distrust', () => {
+  it('should prioritize the more specific distrust rule', () => {
     mockCwd = '/home/user/projectA/untrusted';
     mockRules['/home/user/projectA'] = TrustLevel.TRUST_FOLDER;
-    mockRules['/home/user/projectA/untrusted'] = TrustLevel.DO_NOT_TRUST;
-    expect(isWorkspaceTrusted(mockSettings)).toBe(true);
+    mockRules[mockCwd] = TrustLevel.DO_NOT_TRUST;
+    expect(isWorkspaceTrusted(mockSettings)).toBe(false);
   });
 
   it('should handle path normalization', () => {

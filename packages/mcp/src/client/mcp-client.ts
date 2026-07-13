@@ -99,6 +99,10 @@ export class McpClient {
   private pendingToolRefresh: boolean = false;
   private isRefreshingResources: boolean = false;
   private pendingResourceRefresh: boolean = false;
+  private connectionGeneration = 0;
+  private connectionAbortController: AbortController | undefined;
+  private capabilityGeneration = 0;
+  private activeCapabilityGeneration: number | undefined;
 
   constructor(
     private readonly serverName: string,
@@ -120,15 +124,25 @@ export class McpClient {
       );
     }
     this.updateStatus(MCPServerStatus.CONNECTING);
+    const connectionGeneration = ++this.connectionGeneration;
+    const abortController = new AbortController();
+    this.connectionAbortController = abortController;
     try {
-      this.client = await connectToMcpServer(
+      const client = await connectToMcpServer(
         this.clientVersion,
         this.serverName,
         this.serverConfig,
         this.debugMode,
         this.workspaceContext,
+        abortController.signal,
       );
 
+      if (connectionGeneration !== this.connectionGeneration) {
+        await client.close().catch(() => {});
+        return;
+      }
+
+      this.client = client;
       this.registerNotificationHandlers();
       const originalOnError = this.client.onerror;
       this.client.onerror = (error) => {
@@ -141,31 +155,84 @@ export class McpClient {
         this.promptRegistry.removePromptsByServer(this.serverName);
         this.resourceRegistry.removeResourcesByServer(this.serverName);
         const client = this.client;
+        this.invalidateCapabilities();
         this.client = undefined;
         this.updateStatus(MCPServerStatus.DISCONNECTED);
         if (client) {
           client.close().catch(() => {});
         }
       };
+      this.activeCapabilityGeneration = ++this.capabilityGeneration;
       this.updateStatus(MCPServerStatus.CONNECTED);
     } catch (error) {
-      this.updateStatus(MCPServerStatus.DISCONNECTED);
+      if (connectionGeneration === this.connectionGeneration) {
+        this.updateStatus(MCPServerStatus.DISCONNECTED);
+      }
+      if (abortController.signal.aborted) {
+        return;
+      }
       throw error;
+    } finally {
+      if (this.connectionAbortController === abortController) {
+        this.connectionAbortController = undefined;
+      }
     }
   }
 
-  async discover(cliConfig: Config): Promise<void> {
+  invalidateCapabilities(): void {
+    this.capabilityGeneration++;
+    this.activeCapabilityGeneration = undefined;
+  }
+
+  private createCapabilityAuthorization(client: Client): () => boolean {
+    const generation = this.activeCapabilityGeneration;
+    return () => {
+      const capabilityIsCurrent =
+        generation !== undefined &&
+        this.activeCapabilityGeneration === generation &&
+        this.client === client;
+      return (
+        capabilityIsCurrent &&
+        this.status === MCPServerStatus.CONNECTED &&
+        this.cliConfig.isTrustedFolder()
+      );
+    };
+  }
+
+  async discover(
+    cliConfig: Config,
+    mayPublish: () => boolean = () => true,
+  ): Promise<void> {
     this.assertConnected();
 
     const prompts = await this.discoverPrompts();
     const tools = await this.discoverTools(cliConfig);
     const resources = await this.discoverResources();
-    this.updateResourceRegistry(resources);
 
     if (prompts.length === 0 && tools.length === 0 && resources.length === 0) {
       throw new Error('No prompts, tools, or resources found on the server.');
     }
+    if (!mayPublish()) {
+      return;
+    }
 
+    const connectedClient = this.client!;
+    const isAuthorized = this.createCapabilityAuthorization(connectedClient);
+    for (const prompt of prompts) {
+      this.promptRegistry.registerPrompt({
+        ...prompt,
+        serverName: this.serverName,
+        invoke: (params: Record<string, unknown>) =>
+          invokeMcpPrompt(
+            this.serverName,
+            connectedClient,
+            prompt.name,
+            params,
+            isAuthorized,
+          ),
+      });
+    }
+    this.updateResourceRegistry(resources);
     for (const tool of tools) {
       this.toolRegistry.registerTool(tool);
     }
@@ -173,13 +240,20 @@ export class McpClient {
   }
 
   async disconnect(): Promise<void> {
-    if (this.status !== MCPServerStatus.CONNECTED) {
+    this.invalidateCapabilities();
+    if (
+      this.status !== MCPServerStatus.CONNECTED &&
+      this.status !== MCPServerStatus.CONNECTING
+    ) {
       return;
     }
     this.toolRegistry.removeMcpToolsByServer(this.serverName);
     this.promptRegistry.removePromptsByServer(this.serverName);
     this.resourceRegistry.removeResourcesByServer(this.serverName);
+    this.connectionGeneration++;
     this.updateStatus(MCPServerStatus.DISCONNECTING);
+    this.connectionAbortController?.abort();
+    this.connectionAbortController = undefined;
     const client = this.client;
     this.client = undefined;
     if (this.transport) {
@@ -213,26 +287,38 @@ export class McpClient {
     options?: { timeout?: number; signal?: AbortSignal },
   ): Promise<DiscoveredMCPTool[]> {
     this.assertConnected();
+    const client = this.client;
+    if (!client) {
+      return [];
+    }
+    const isAuthorized = this.createCapabilityAuthorization(client);
     return discoverTools(
       this.serverName,
       this.serverConfig,
-      this.client!,
+      client,
       cliConfig,
       undefined,
-      options ?? {
-        timeout: this.serverConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
+      {
+        ...(options ?? {
+          timeout: this.serverConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
+        }),
+        isAuthorized,
       },
     );
   }
 
   private async discoverPrompts(): Promise<Prompt[]> {
     this.assertConnected();
-    return discoverPrompts(this.serverName, this.client!, this.promptRegistry);
+    return discoverPrompts(this.serverName, this.client!);
   }
 
-  private async discoverResources(): Promise<Resource[]> {
+  private async discoverResources(options?: {
+    timeout?: number;
+    signal?: AbortSignal;
+  }): Promise<Resource[]> {
     this.assertConnected();
-    return discoverResources(this.serverName, this.client!);
+    const client = this.client;
+    return client ? discoverResources(this.serverName, client, options) : [];
   }
 
   private updateResourceRegistry(resources: Resource[]): void {
@@ -241,7 +327,11 @@ export class McpClient {
 
   async readResource(uri: string): Promise<ReadResourceResult> {
     this.assertConnected();
-    return this.client!.request(
+    const client = this.client!;
+    if (!this.createCapabilityAuthorization(client)()) {
+      throw new Error('MCP capability is no longer authorized');
+    }
+    return client.request(
       {
         method: 'resources/read',
         params: { uri },
@@ -329,10 +419,32 @@ export class McpClient {
     }
   }
 
+  private isRefreshAuthorized(
+    client: Client,
+    connectionGeneration: number,
+    capabilityGeneration: number | undefined,
+  ): boolean {
+    const hasActiveConnection =
+      this.client === client &&
+      this.connectionGeneration === connectionGeneration &&
+      this.status === MCPServerStatus.CONNECTED;
+    const hasActiveCapability =
+      capabilityGeneration !== undefined &&
+      this.activeCapabilityGeneration === capabilityGeneration;
+    return (
+      hasActiveConnection &&
+      hasActiveCapability &&
+      this.cliConfig.isTrustedFolder()
+    );
+  }
+
   private async refreshToolsOnce(): Promise<boolean> {
-    if (this.status !== MCPServerStatus.CONNECTED || !this.client) {
+    const client = this.client;
+    if (this.status !== MCPServerStatus.CONNECTED || !client) {
       return false;
     }
+    const connectionGeneration = this.connectionGeneration;
+    const capabilityGeneration = this.activeCapabilityGeneration;
 
     const timeoutMs = this.serverConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC;
     const abortController = new AbortController();
@@ -351,6 +463,16 @@ export class McpClient {
       return false;
     }
 
+    if (
+      !this.isRefreshAuthorized(
+        client,
+        connectionGeneration,
+        capabilityGeneration,
+      )
+    ) {
+      clearTimeout(timeoutId);
+      return false;
+    }
     this.toolRegistry.removeMcpToolsByServer(this.serverName);
 
     for (const tool of newTools) {
@@ -360,6 +482,16 @@ export class McpClient {
 
     if (this.onToolsUpdated) {
       await this.onToolsUpdated(abortController.signal);
+      if (
+        !this.isRefreshAuthorized(
+          client,
+          connectionGeneration,
+          capabilityGeneration,
+        )
+      ) {
+        clearTimeout(timeoutId);
+        return false;
+      }
     }
 
     clearTimeout(timeoutId);
@@ -404,16 +536,23 @@ export class McpClient {
   }
 
   private async refreshResourcesOnce(): Promise<boolean> {
-    if (this.status !== MCPServerStatus.CONNECTED || !this.client) {
+    const client = this.client;
+    if (this.status !== MCPServerStatus.CONNECTED || !client) {
       return false;
     }
+    const connectionGeneration = this.connectionGeneration;
+    const capabilityGeneration = this.activeCapabilityGeneration;
 
     const timeoutMs = this.serverConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC;
-    const timeoutId = setTimeout(() => {}, timeoutMs);
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
 
     let newResources;
     try {
-      newResources = await this.discoverResources();
+      newResources = await this.discoverResources({
+        timeout: timeoutMs,
+        signal: abortController.signal,
+      });
     } catch (err) {
       debugLogger.error(
         `Resource discovery failed during refresh: ${getErrorMessage(err)}`,
@@ -422,6 +561,16 @@ export class McpClient {
       return false;
     }
 
+    if (
+      !this.isRefreshAuthorized(
+        client,
+        connectionGeneration,
+        capabilityGeneration,
+      )
+    ) {
+      clearTimeout(timeoutId);
+      return false;
+    }
     this.updateResourceRegistry(newResources);
 
     clearTimeout(timeoutId);

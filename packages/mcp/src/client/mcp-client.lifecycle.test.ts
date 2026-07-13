@@ -58,6 +58,44 @@ describe('mcp-client', () => {
   });
 
   describe('McpClient', () => {
+    it('promptly cancels a never-settling CONNECTING handshake', async () => {
+      const transport = { close: vi.fn().mockResolvedValue(undefined) };
+      const sdkClient = {
+        connect: vi.fn(() => new Promise<void>(() => {})),
+        close: vi.fn().mockResolvedValue(undefined),
+        registerCapabilities: vi.fn(),
+        setRequestHandler: vi.fn(),
+      };
+      vi.mocked(ClientLib.Client).mockReturnValue(
+        sdkClient as unknown as ClientLib.Client,
+      );
+      vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue(
+        transport as unknown as SdkClientStdioLib.StdioClientTransport,
+      );
+      const client = new McpClient(
+        'test-server',
+        { command: 'test-command' },
+        {
+          removeMcpToolsByServer: vi.fn(),
+        } as unknown as ToolRegistry,
+        { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
+        createMockResourceRegistry(),
+        workspaceContext,
+        {} as Config,
+        false,
+        '0.0.1',
+      );
+
+      const connectPromise = client.connect();
+      await vi.waitFor(() => expect(sdkClient.connect).toHaveBeenCalledOnce());
+
+      await client.disconnect();
+      await connectPromise;
+
+      expect(transport.close).toHaveBeenCalled();
+      expect(client.getStatus()).toBe('disconnected');
+    });
+
     it('should discover resources when a server only exposes resources', async () => {
       const mockedClient = {
         connect: vi.fn(),
@@ -192,7 +230,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         mockedResourceRegistry,
         workspaceContext,
-        {} as Config,
+        { isTrustedFolder: () => true } as Config,
         false,
         '0.0.1',
       );
@@ -266,7 +304,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        { isTrustedFolder: () => true } as Config,
         false,
         '0.0.1',
       );
@@ -314,6 +352,201 @@ describe('mcp-client', () => {
       await expect(
         client.readResource('file:///tmp/readme.txt'),
       ).rejects.toThrow('Client is not connected');
+    });
+
+    it('rejects delayed tool and resource refreshes across rapid revoke→gain', async () => {
+      let trusted = true;
+      let resolveTools:
+        | ((value: {
+            tools: Array<{ name: string; inputSchema: object }>;
+          }) => void)
+        | undefined;
+      let resolveResources:
+        | ((value: { resources: Array<{ uri: string }> }) => void)
+        | undefined;
+      const mockedClient = {
+        connect: vi.fn(),
+        close: vi.fn(),
+        registerCapabilities: vi.fn(),
+        setRequestHandler: vi.fn(),
+        setNotificationHandler: vi.fn(),
+        getServerCapabilities: vi.fn().mockReturnValue({
+          tools: {},
+          resources: {},
+        }),
+        listTools: vi.fn().mockReturnValue(
+          new Promise((resolve) => {
+            resolveTools = resolve;
+          }),
+        ),
+        request: vi.fn().mockImplementation(({ method }) => {
+          if (method === 'resources/list') {
+            return new Promise((resolve) => {
+              resolveResources = resolve;
+            });
+          }
+          return Promise.resolve({});
+        }),
+      };
+      vi.mocked(ClientLib.Client).mockReturnValue(
+        mockedClient as unknown as ClientLib.Client,
+      );
+      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+        {} as SdkClientStdioLib.StdioClientTransport,
+      );
+      const toolRegistry = {
+        registerTool: vi.fn(),
+        sortTools: vi.fn(),
+        removeMcpToolsByServer: vi.fn(),
+        getMessageBus: vi.fn().mockReturnValue(undefined),
+      } as unknown as ToolRegistry;
+      const resourceRegistry = createMockResourceRegistry();
+      const client = new McpClient(
+        'test-server',
+        { command: 'test-command' },
+        toolRegistry,
+        {} as PromptRegistry,
+        resourceRegistry,
+        workspaceContext,
+        { isTrustedFolder: () => trusted } as Config,
+        false,
+        '0.0.1',
+      );
+      await client.connect();
+
+      const refreshTools = (
+        client as unknown as { refreshTools(): Promise<void> }
+      ).refreshTools();
+      const refreshResources = (
+        client as unknown as { refreshResources(): Promise<void> }
+      ).refreshResources();
+      await vi.waitFor(() => {
+        expect(mockedClient.listTools).toHaveBeenCalledOnce();
+        expect(mockedClient.request).toHaveBeenCalledWith(
+          expect.objectContaining({ method: 'resources/list' }),
+          expect.anything(),
+          expect.anything(),
+        );
+      });
+
+      trusted = false;
+      client.invalidateCapabilities();
+      trusted = true;
+      resolveTools?.({
+        tools: [{ name: 'stale-tool', inputSchema: { type: 'object' } }],
+      });
+      resolveResources?.({ resources: [{ uri: 'file:///stale' }] });
+      await Promise.all([refreshTools, refreshResources]);
+
+      expect(toolRegistry.removeMcpToolsByServer).not.toHaveBeenCalled();
+      expect(toolRegistry.registerTool).not.toHaveBeenCalled();
+      expect(resourceRegistry.setResourcesForServer).not.toHaveBeenCalled();
+      expect(coreEvents.emitFeedback).not.toHaveBeenCalled();
+    });
+
+    it('keeps discovered capabilities stale after synchronous invalidation even if trust returns', async () => {
+      let trusted = true;
+      const registeredTools: Array<{
+        build(params: Record<string, unknown>): {
+          execute(signal: AbortSignal): Promise<unknown>;
+        };
+      }> = [];
+      const registeredPrompts: Array<{
+        invoke(params: Record<string, unknown>): Promise<unknown>;
+      }> = [];
+      const mockedClient = {
+        connect: vi.fn(),
+        close: vi.fn(),
+        registerCapabilities: vi.fn(),
+        setRequestHandler: vi.fn(),
+        setNotificationHandler: vi.fn(),
+        getServerCapabilities: vi.fn().mockReturnValue({
+          tools: {},
+          prompts: {},
+          resources: {},
+        }),
+        listTools: vi.fn().mockResolvedValue({
+          tools: [{ name: 'tool', inputSchema: { type: 'object' } }],
+        }),
+        listPrompts: vi.fn().mockResolvedValue({
+          prompts: [{ name: 'prompt' }],
+        }),
+        getPrompt: vi.fn().mockResolvedValue({ messages: [] }),
+        callTool: vi.fn().mockResolvedValue({ content: [] }),
+        request: vi.fn().mockImplementation(({ method }) => {
+          if (method === 'resources/list') {
+            return Promise.resolve({
+              resources: [{ uri: 'file:///resource' }],
+            });
+          }
+          if (method === 'resources/read') {
+            return Promise.resolve({ contents: [] });
+          }
+          return Promise.resolve({});
+        }),
+      };
+      vi.mocked(ClientLib.Client).mockReturnValue(
+        mockedClient as unknown as ClientLib.Client,
+      );
+      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+        {} as SdkClientStdioLib.StdioClientTransport,
+      );
+      const client = new McpClient(
+        'test-server',
+        { command: 'test-command' },
+        {
+          registerTool: (tool: (typeof registeredTools)[number]) => {
+            registeredTools.push(tool);
+          },
+          sortTools: vi.fn(),
+          getMessageBus: vi.fn().mockReturnValue(undefined),
+          removeMcpToolsByServer: vi.fn(),
+        } as unknown as ToolRegistry,
+        {
+          registerPrompt: (prompt: (typeof registeredPrompts)[number]) => {
+            registeredPrompts.push(prompt);
+          },
+          removePromptsByServer: vi.fn(),
+        } as unknown as PromptRegistry,
+        createMockResourceRegistry(),
+        workspaceContext,
+        { isTrustedFolder: () => trusted } as Config,
+        false,
+        '0.0.1',
+      );
+      await client.connect();
+      await client.discover({ isTrustedFolder: () => trusted } as Config);
+      expect(registeredTools).toHaveLength(1);
+      expect(registeredPrompts).toHaveLength(1);
+      const [staleTool] = registeredTools;
+      const [stalePrompt] = registeredPrompts;
+
+      trusted = false;
+      client.invalidateCapabilities();
+      trusted = true;
+
+      const toolResult = await staleTool
+        .build({})
+        .execute(new AbortController().signal);
+      await expect(stalePrompt.invoke({})).rejects.toThrow(
+        'MCP capability is no longer authorized',
+      );
+      await expect(client.readResource('file:///resource')).rejects.toThrow(
+        'MCP capability is no longer authorized',
+      );
+      expect(toolResult).toMatchObject({
+        error: {
+          message: expect.stringContaining(
+            'MCP capability is no longer authorized',
+          ),
+        },
+      });
+      expect(mockedClient.callTool).not.toHaveBeenCalled();
+      expect(mockedClient.getPrompt).not.toHaveBeenCalled();
+      expect(mockedClient.request).not.toHaveBeenCalledWith(
+        expect.objectContaining({ method: 'resources/read' }),
+        expect.anything(),
+      );
     });
 
     it('should remove tools, prompts, and resources on disconnect', async () => {
@@ -482,6 +715,48 @@ describe('mcp-client', () => {
       expect(
         mockedResourceRegistry.removeResourcesByServer,
       ).toHaveBeenCalledWith('test-server');
+      expect(client.getStatus()).toBe('disconnected');
+    });
+
+    it('does not resurrect a client when disconnected during connect', async () => {
+      let resolveConnect: (() => void) | undefined;
+      const mockedClient = {
+        connect: vi.fn(
+          () =>
+            new Promise<void>((resolve) => {
+              resolveConnect = resolve;
+            }),
+        ),
+        close: vi.fn().mockResolvedValue(undefined),
+        registerCapabilities: vi.fn(),
+        setRequestHandler: vi.fn(),
+        setNotificationHandler: vi.fn(),
+      };
+      vi.mocked(ClientLib.Client).mockReturnValue(
+        mockedClient as unknown as ClientLib.Client,
+      );
+      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+        {} as SdkClientStdioLib.StdioClientTransport,
+      );
+      const client = new McpClient(
+        'test-server',
+        { command: 'test-command' },
+        { removeMcpToolsByServer: vi.fn() } as unknown as ToolRegistry,
+        { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
+        createMockResourceRegistry(),
+        workspaceContext,
+        {} as Config,
+        false,
+        '0.0.1',
+      );
+
+      const connectPromise = client.connect();
+      await vi.waitFor(() => expect(mockedClient.connect).toHaveBeenCalled());
+      await client.disconnect();
+      resolveConnect?.();
+      await connectPromise;
+
+      expect(mockedClient.close).toHaveBeenCalledOnce();
       expect(client.getStatus()).toBe('disconnected');
     });
   });

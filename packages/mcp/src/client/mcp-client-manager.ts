@@ -63,6 +63,17 @@ export class McpClientManager {
    * @requirement:REQ-013
    */
   private readonly discoveryFailures: Map<string, string> = new Map();
+  /**
+   * Monotonically increasing generation counter incremented on every trust
+   * revocation. In-flight discoveries capture the generation before their
+   * first `await` and reject the result if the generation changed, preventing
+   * a client from being registered after trust was revoked.
+   */
+  private trustGeneration = 0;
+  private readonly discoveringServers = new Map<string, Promise<void>>();
+  private readonly connectingClients = new Map<string, McpClient>();
+  private readonly quarantinedClients = new Map<string, McpClient>();
+  private stopped = false;
 
   constructor(
     clientVersion: string,
@@ -177,11 +188,31 @@ export class McpClientManager {
       }
       return;
     }
-    if (!this.cliConfig.isTrustedFolder()) {
+    if (!this.cliConfig.isTrustedFolder() || this.stopped) {
       return;
     }
     if (config.extension && !config.extension.isActive) {
       return;
+    }
+    if (
+      config.extension &&
+      Object.prototype.hasOwnProperty.call(
+        this.cliConfig.getMcpServers() ?? {},
+        name,
+      )
+    ) {
+      logger.warn(
+        `Skipping MCP config for server with name "${name}" from extension "${config.extension.name}" because configured server names are reserved.`,
+      );
+      return;
+    }
+    const pendingDiscovery = this.discoveringServers.get(name);
+    if (pendingDiscovery) {
+      return pendingDiscovery.then(async () => {
+        if (this.cliConfig.isTrustedFolder() && !this.stopped) {
+          await this.maybeDiscoverMcpServer(name, config);
+        }
+      });
     }
     const existing = this.clients.get(name);
     if (existing && existing.getServerConfig().extension !== config.extension) {
@@ -198,7 +229,12 @@ export class McpClientManager {
       name,
       config,
       existing,
-    );
+    ).finally(() => {
+      if (this.discoveringServers.get(name) === currentDiscoveryPromise) {
+        this.discoveringServers.delete(name);
+      }
+    });
+    this.discoveringServers.set(name, currentDiscoveryPromise);
     this.enqueueDiscovery(currentDiscoveryPromise);
     return currentDiscoveryPromise;
   }
@@ -219,6 +255,38 @@ export class McpClientManager {
     });
   }
 
+  private removeServerArtifacts(name: string): void {
+    this.toolRegistry.removeMcpToolsByServer(name);
+    this.cliConfig.getPromptRegistry().removePromptsByServer(name);
+    this.cliConfig.getResourceRegistry().removeResourcesByServer(name);
+  }
+
+  private createClient(name: string, config: MCPServerConfig): McpClient {
+    return new McpClient(
+      name,
+      config,
+      this.toolRegistry,
+      this.cliConfig.getPromptRegistry(),
+      this.cliConfig.getResourceRegistry(),
+      this.cliConfig.getWorkspaceContext(),
+      this.cliConfig,
+      this.cliConfig.getDebugMode(),
+      this.clientVersion,
+      async () => {
+        debugLogger.log('Tools changed, updating Gemini context...');
+        await this.scheduleMcpContextRefresh();
+      },
+    );
+  }
+
+  private isDiscoveryInvalid(generation: number): boolean {
+    return (
+      !this.cliConfig.isTrustedFolder() ||
+      this.trustGeneration !== generation ||
+      this.stopped
+    );
+  }
+
   private async connectAndDiscover(
     name: string,
     config: MCPServerConfig,
@@ -229,40 +297,76 @@ export class McpClientManager {
       return;
     }
 
+    const generationBeforeConnect = this.trustGeneration;
+
     if (existing) {
       await existing.disconnect();
     }
 
-    const client =
-      existing ??
-      new McpClient(
-        name,
-        config,
-        this.toolRegistry,
-        this.cliConfig.getPromptRegistry(),
-        this.cliConfig.getResourceRegistry(),
-        this.cliConfig.getWorkspaceContext(),
-        this.cliConfig,
-        this.cliConfig.getDebugMode(),
-        this.clientVersion,
-        async () => {
-          debugLogger.log('Tools changed, updating Gemini context...');
-          await this.scheduleMcpContextRefresh();
-        },
-      );
-    if (!existing) {
-      this.clients.set(name, client);
-      this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-        clients: new Map(this.clients),
-      });
+    if (this.isDiscoveryInvalid(generationBeforeConnect)) {
+      return;
     }
+
+    const client = existing ?? this.createClient(name, config);
+    this.connectingClients.set(name, client);
     try {
       await client.connect();
-      await client.discover(this.cliConfig);
+      this.connectingClients.delete(name);
+
+      // Re-check trust after connect — trust may have been revoked during
+      // the (potentially slow) connect handshake. If so, disconnect and
+      // do NOT register the client.
+      if (this.isDiscoveryInvalid(generationBeforeConnect)) {
+        try {
+          await client.disconnect();
+        } catch {
+          // Best-effort cleanup
+        }
+        return;
+      }
+
+      if (!existing) {
+        this.clients.set(name, client);
+        this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+          clients: new Map(this.clients),
+        });
+      }
+      await client.discover(
+        this.cliConfig,
+        () => !this.isDiscoveryInvalid(generationBeforeConnect),
+      );
+
+      // Re-check trust after discover — trust may have been revoked during
+      // the (potentially slow) discovery handshake. If so, remove the
+      // client and disconnect it.
+      if (this.isDiscoveryInvalid(generationBeforeConnect)) {
+        this.clients.delete(name);
+        this.removeServerArtifacts(name);
+        this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+          clients: new Map(this.clients),
+        });
+        try {
+          await client.disconnect();
+        } catch {
+          // Best-effort cleanup
+        }
+        return;
+      }
+
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
         clients: new Map(this.clients),
       });
     } catch (error) {
+      this.connectingClients.delete(name);
+      if (this.clients.get(name) === client) {
+        this.clients.delete(name);
+      }
+      this.removeServerArtifacts(name);
+      try {
+        await client.disconnect();
+      } catch {
+        logger.warn(`Error cleaning up failed MCP client '${name}'.`);
+      }
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
         clients: new Map(this.clients),
       });
@@ -293,6 +397,8 @@ export class McpClientManager {
     config: MCPServerConfig,
     existing: McpClient | undefined,
   ): Promise<void> {
+    const generationBeforeConnect = this.trustGeneration;
+
     const client =
       existing ??
       new McpClient(
@@ -325,6 +431,22 @@ export class McpClientManager {
       this.toolRegistry,
       fixture,
     );
+
+    // Re-check trust after fake discovery — trust may have been revoked
+    // while the fixture was applied.
+    if (
+      !this.cliConfig.isTrustedFolder() ||
+      this.trustGeneration !== generationBeforeConnect ||
+      this.stopped
+    ) {
+      this.clients.delete(name);
+      this.removeServerArtifacts(name);
+      this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+        clients: new Map(this.clients),
+      });
+      return;
+    }
+
     if (outcome.failure !== undefined) {
       this.discoveryFailures.set(name, outcome.failure);
     }
@@ -409,6 +531,122 @@ export class McpClientManager {
   }
 
   /**
+   * Called when folder trust transitions to trusted during the active
+   * session. Discovers all configured MCP servers that were previously
+   * suppressed because the folder was untrusted.
+   */
+  async onFolderTrustGained(): Promise<void> {
+    const servers = populateMcpServerCommand(
+      this.cliConfig.getMcpServers() ?? {},
+      this.cliConfig.getMcpServerCommand(),
+    );
+    const discoverPromises: Array<Promise<void>> = [];
+    for (const [name, config] of Object.entries(servers)) {
+      discoverPromises.push(
+        (async () => {
+          try {
+            await this.maybeDiscoverMcpServer(name, config);
+          } catch (error) {
+            logger.warn(
+              `Error discovering server '${name}' on trust gain: ${getErrorMessage(error)}`,
+            );
+          }
+        })(),
+      );
+    }
+
+    await Promise.all(discoverPromises);
+    discoverPromises.length = 0;
+
+    // Configured servers have precedence. Extension servers retry only after
+    // configured discovery has either succeeded or released its reservation.
+    for (const extension of this.cliConfig.getExtensions()) {
+      if (!extension.isActive) {
+        continue;
+      }
+      for (const [name, config] of Object.entries(extension.mcpServers ?? {})) {
+        discoverPromises.push(
+          (async () => {
+            try {
+              await this.maybeDiscoverMcpServer(name, {
+                ...config,
+                extension,
+              });
+            } catch (error) {
+              logger.warn(
+                `Error discovering extension server '${name}' on trust gain: ${getErrorMessage(error)}`,
+              );
+            }
+          })(),
+        );
+      }
+    }
+
+    if (discoverPromises.length === 0) {
+      this.discoveryState = MCPDiscoveryState.COMPLETED;
+      this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+        clients: new Map(this.clients),
+      });
+      await this.cliConfig.refreshMcpContext();
+      return;
+    }
+
+    await Promise.all(discoverPromises);
+    await this.cliConfig.refreshMcpContext();
+  }
+
+  /**
+   * Called when folder trust transitions to untrusted during the active
+   * session. Securely disconnects all running MCP servers and removes their
+   * tools from the registry so no untrusted MCP server remains reachable.
+   */
+  quarantineForTrustRevocation(): void {
+    this.trustGeneration++;
+    const serverNames = new Set([
+      ...this.clients.keys(),
+      ...this.discoveringServers.keys(),
+      ...this.connectingClients.keys(),
+    ]);
+    const clientsToQuarantine = new Map([
+      ...this.clients.entries(),
+      ...this.connectingClients.entries(),
+    ]);
+    for (const [name, client] of clientsToQuarantine) {
+      client.invalidateCapabilities();
+      this.quarantinedClients.set(name, client);
+    }
+    this.clients.clear();
+    this.connectingClients.clear();
+    for (const name of serverNames) {
+      this.removeServerArtifacts(name);
+    }
+    this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+      clients: new Map(this.clients),
+    });
+  }
+
+  async onFolderTrustRevoked(): Promise<void> {
+    this.quarantineForTrustRevocation();
+    const entries = new Map(this.quarantinedClients);
+    this.quarantinedClients.clear();
+    await Promise.all(
+      Array.from(entries).map(async ([name, client]) => {
+        try {
+          await client.disconnect();
+        } catch (error) {
+          debugLogger.error(
+            `Error disconnecting client '${name}' on trust revocation: ${getErrorMessage(error)}`,
+          );
+        }
+      }),
+    );
+    for (const name of entries.keys()) {
+      this.removeServerArtifacts(name);
+    }
+    await this.cliConfig.refreshMcpContext();
+  }
+
+  /**
    * Restarts all active MCP Clients.
    */
   async restart(): Promise<void> {
@@ -443,7 +681,23 @@ export class McpClientManager {
    * This is the cleanup method to be called on application exit.
    */
   async stop(): Promise<void> {
-    const disconnectionPromises = Array.from(this.clients.entries()).map(
+    this.stopped = true;
+    this.trustGeneration++;
+    const clientsToDisconnect = new Map([
+      ...this.clients.entries(),
+      ...this.connectingClients.entries(),
+      ...this.quarantinedClients.entries(),
+    ]);
+    this.clients.clear();
+    this.connectingClients.clear();
+    this.quarantinedClients.clear();
+    for (const name of new Set([
+      ...clientsToDisconnect.keys(),
+      ...this.discoveringServers.keys(),
+    ])) {
+      this.removeServerArtifacts(name);
+    }
+    const disconnectionPromises = Array.from(clientsToDisconnect.entries()).map(
       async ([name, client]) => {
         try {
           await client.disconnect();
@@ -456,7 +710,7 @@ export class McpClientManager {
     );
 
     await Promise.all(disconnectionPromises);
-    this.clients.clear();
+    await this.whenDiscoverySettled();
   }
 
   getDiscoveryState(): MCPDiscoveryState {

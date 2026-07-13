@@ -403,6 +403,7 @@ export interface AppStateRuntime {
   getDebugMode(): boolean;
   isRestrictiveSandbox(): boolean;
   isTrustedFolder(): boolean;
+  setTrustedFolderLive(trusted: boolean): void;
   getFolderTrust(): boolean;
   getQuestion(): string | undefined;
   getConversationLogPath(): string;
@@ -712,6 +713,7 @@ export function buildUiRuntimeFromSource(
       getDebugMode: () => source.getDebugMode(),
       isRestrictiveSandbox: () => source.isRestrictiveSandbox(),
       isTrustedFolder: () => source.isTrustedFolder(),
+      setTrustedFolderLive: (trusted) => source.setTrustedFolderLive(trusted),
       getFolderTrust: () => source.getFolderTrust(),
       getQuestion: () => source.getQuestion(),
       getConversationLogPath: () => source.getConversationLogPath(),

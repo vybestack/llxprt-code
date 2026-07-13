@@ -218,6 +218,55 @@ describe('policy config', () => {
   });
 
   describe('createPolicyEngineConfig', () => {
+    it('uses explicit prefixes for generated MCP server rules', async () => {
+      const settings: PolicySettings = {
+        mcp: {
+          excluded: ['excluded-server'],
+          allowed: ['allowed-server'],
+        },
+        mcpServers: {
+          'trusted-server': { trust: true },
+        },
+      };
+
+      const engineConfig = await createPolicyEngineConfig(
+        settings,
+        ApprovalMode.DEFAULT,
+      );
+
+      expect(
+        engineConfig.rules.filter(
+          (rule) => rule.source?.startsWith('Settings (MCP') === true,
+        ),
+      ).toStrictEqual([
+        expect.objectContaining({
+          toolNamePrefix: 'excluded-server__',
+          source: 'Settings (MCP Excluded)',
+        }),
+        expect.objectContaining({
+          toolNamePrefix: 'trusted-server__',
+          source: 'Settings (MCP Trusted)',
+        }),
+        expect.objectContaining({
+          toolNamePrefix: 'allowed-server__',
+          source: 'Settings (MCP Allowed)',
+        }),
+      ]);
+    });
+
+    it('preserves an explicit trailing star in a user allowed tool name', async () => {
+      const engineConfig = await createPolicyEngineConfig(
+        { tools: { allowed: ['user-server__*'] } },
+        ApprovalMode.DEFAULT,
+      );
+
+      const rule = engineConfig.rules.find(
+        (candidate) => candidate.source === 'Settings (Tools Allowed)',
+      );
+      expect(rule?.toolName).toBe('user-server__*');
+      expect(rule).not.toHaveProperty('toolNamePrefix');
+    });
+
     it('loads default policies', async () => {
       const config = createMockConfig({});
       const engineConfig = await createPolicyEngineConfig(config);

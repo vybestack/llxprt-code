@@ -105,6 +105,10 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { coreEvents, CoreEvent } from '../utils/events.js';
 import { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import { getCoreVersion } from '../utils/version.js';
+import {
+  buildMcpTrustedRules,
+  MCP_TRUSTED_POLICY_SOURCE,
+} from '../policy/config.js';
 
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 import type { ToolSchedulerContract } from '../core/toolSchedulerContract.js';
@@ -164,6 +168,7 @@ export class Config extends ConfigBase {
       );
     }
     this.initialized = true;
+    this.cachedEffectiveTrust = this.isTrustedFolder();
     this.ideClient = await IdeClient.getInstance();
     // Initialize centralized FileDiscoveryService
     this.getFileService();
@@ -179,6 +184,7 @@ export class Config extends ConfigBase {
       this,
       this.eventEmitter,
     );
+    this.registerIdeTrustListener();
     // Issue #2325: Fire MCP discovery in the background — don't block startup.
     // Tools are gated before model turns via McpClientManager.whenDiscoverySettled().
     this.mcpDiscoveryPromise =
@@ -545,22 +551,57 @@ export class Config extends ConfigBase {
    * 'false' for untrusted.
    */
   isTrustedFolder(): boolean {
-    // isWorkspaceTrusted in cli/src/config/trustedFolder.js returns undefined
-    // when the file based trust value is unavailable, since it is mainly used
-    // in the initialization for trust dialogs, etc. Here we return true since
-    // config.isTrustedFolder() is used for the main business logic of blocking
-    // tool calls etc in the rest of the application.
-    //
-    // Default value is true since we load with trusted settings to avoid
-    // restarts in the more common path. If the user chooses to mark the folder
-    // as untrusted, the CLI will restart and we will have the trust value
-    // reloaded.
-    const context = ideContext.getIdeContext();
-    if (context?.workspaceState?.isTrusted !== undefined) {
-      return context.workspaceState.isTrusted;
-    }
+    return (
+      this.ideTrust ??
+      ideContext.getIdeContext()?.workspaceState?.isTrusted ??
+      this.trustedFolder ??
+      true
+    );
+  }
 
-    return this.trustedFolder ?? true;
+  getIdeTrust(): boolean | undefined {
+    return (
+      this.ideTrust ?? ideContext.getIdeContext()?.workspaceState?.isTrusted
+    );
+  }
+
+  setTrustedFolderLive(trusted: boolean): void {
+    const previousEffectiveTrust = this.isTrustedFolder();
+    this.trustedFolder = trusted;
+    const effectiveTrust = this.isTrustedFolder();
+    this.cachedEffectiveTrust = effectiveTrust;
+    if (previousEffectiveTrust !== effectiveTrust) {
+      this.applyTrustTransition(effectiveTrust, false);
+    }
+  }
+
+  /**
+   * Shared core for all trust-transition paths. Updates the effective trust
+   * state, synchronously downgrades approval mode if revoking, and fires the
+   * serialized side-effect chain.
+   */
+  private applyTrustTransition(
+    trusted: boolean,
+    updateLocalFallback = true,
+  ): void {
+    if (updateLocalFallback) {
+      this.trustedFolder = trusted;
+    }
+    this.policyEngine.removeRulesBySource(MCP_TRUSTED_POLICY_SOURCE);
+    if (!trusted) {
+      this.mcpClientManager?.quarantineForTrustRevocation();
+      if (this.approvalMode !== ApprovalMode.DEFAULT) {
+        this.approvalMode = ApprovalMode.DEFAULT;
+      }
+    } else {
+      for (const rule of buildMcpTrustedRules({
+        mcpServers: this.getMcpServers(),
+      })) {
+        this.policyEngine.addRule(rule);
+      }
+    }
+    this.enqueueTrustTransition(trusted);
+    coreEvents.emitFolderTrustChanged(trusted);
   }
 
   setPtyTerminalSize(
@@ -816,7 +857,108 @@ export class Config extends ConfigBase {
     return this.hookSystem;
   }
 
+  private trustTransitionChain: Promise<void> = Promise.resolve();
+  private disposing = false;
+  private ideTrust: boolean | undefined;
+  private cachedEffectiveTrust: boolean | undefined;
+
+  /**
+   * Serializes trust-transition side-effects (MCP connect/disconnect, hook
+   * re-initialization) per-Config instance while preserving every ordered
+   * security boundary, including transient revocations.
+   */
+  private enqueueTrustTransition(trusted: boolean): void {
+    if (this.disposing) {
+      return;
+    }
+    this.trustTransitionChain = this.trustTransitionChain
+      .then(async () => {
+        try {
+          if (trusted) {
+            await this.mcpClientManager?.onFolderTrustGained();
+          } else {
+            await this.mcpClientManager?.onFolderTrustRevoked();
+          }
+        } catch (error) {
+          Config.logger.error(
+            `Error during trust transition side-effects: ${getErrorMessage(error)}`,
+          );
+        }
+        if (this.disposing) {
+          return;
+        }
+        try {
+          const system = this.getHookSystem();
+          if (system) {
+            await system.initialize();
+          }
+        } catch (error) {
+          Config.logger.error(
+            `Error re-initializing hooks during trust transition: ${getErrorMessage(error)}`,
+          );
+        }
+      })
+      .catch((error) => {
+        Config.logger.error(
+          `Unexpected error in trust transition chain: ${getErrorMessage(error)}`,
+        );
+      });
+  }
+
+  /**
+   * Resolves once any pending trust-transition side-effects have settled.
+   */
+  async whenTrustTransitionSettled(): Promise<void> {
+    await this.trustTransitionChain;
+  }
+
+  private ideTrustChangeListener:
+    | ((isTrusted: boolean | undefined) => void)
+    | undefined;
+
+  /**
+   * Subscribes to live IDE trust changes so that MCP servers, hooks, and
+   * approval mode are updated immediately without requiring a restart.
+   */
+  private registerIdeTrustListener(): void {
+    const client = this.ideClient;
+    if (!client || typeof client.addTrustChangeListener !== 'function') {
+      return;
+    }
+    const previousEffectiveTrust = this.cachedEffectiveTrust;
+    this.ideTrust = ideContext.getIdeContext()?.workspaceState?.isTrusted;
+    const effectiveTrust = this.isTrustedFolder();
+    this.cachedEffectiveTrust = effectiveTrust;
+    if (
+      previousEffectiveTrust !== undefined &&
+      effectiveTrust !== previousEffectiveTrust
+    ) {
+      this.applyTrustTransition(effectiveTrust, false);
+    }
+    this.ideTrustChangeListener = (isTrusted: boolean | undefined) => {
+      const previousEffectiveTrust = this.cachedEffectiveTrust;
+      this.ideTrust = isTrusted;
+      const effectiveTrust = this.isTrustedFolder();
+      this.cachedEffectiveTrust = effectiveTrust;
+      if (effectiveTrust !== previousEffectiveTrust) {
+        this.applyTrustTransition(effectiveTrust, false);
+      }
+    };
+    client.addTrustChangeListener(this.ideTrustChangeListener);
+  }
+
   async dispose(): Promise<void> {
+    this.disposing = true;
+    const stopPromise = this.mcpClientManager?.stop();
+    if (
+      this.ideTrustChangeListener &&
+      this.ideClient &&
+      typeof this.ideClient.removeTrustChangeListener === 'function'
+    ) {
+      this.ideClient.removeTrustChangeListener(this.ideTrustChangeListener);
+      this.ideTrustChangeListener = undefined;
+    }
+    await this.whenTrustTransitionSettled();
     const client = this.agentClient as AgentClientContract | undefined;
     if (client !== undefined) {
       client.dispose();
@@ -830,12 +972,8 @@ export class Config extends ConfigBase {
         );
       }
     }
-    // Issue #2325: Extension server discoveries fired by startExtension are
-    // tracked by whenDiscoverySettled(). Await it to avoid tearing down
-    // clients mid-connection.
-    if (this.mcpClientManager !== undefined) {
-      await this.mcpClientManager.whenDiscoverySettled();
-      await this.mcpClientManager.stop();
+    if (stopPromise !== undefined) {
+      await stopPromise;
     }
   }
 }

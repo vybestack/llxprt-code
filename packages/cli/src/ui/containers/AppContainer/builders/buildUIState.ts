@@ -135,7 +135,6 @@ export interface UIStateParams {
   ctrlCPressedOnce: boolean;
   ctrlDPressedOnce: boolean;
   showEscapePrompt: boolean;
-  showIdeRestartPrompt: boolean;
   quittingMessages: HistoryItem[] | null;
 
   // Display options
@@ -195,7 +194,6 @@ export interface UIStateParams {
   currentIDE: IdeInfo | undefined;
 
   // Trust
-  isRestarting: boolean;
   isTrustedFolder: boolean;
 
   // Welcome onboarding
@@ -316,7 +314,6 @@ function buildConfirmationAndExit(p: UIStateParams) {
     ctrlCPressedOnce: p.ctrlCPressedOnce,
     ctrlDPressedOnce: p.ctrlDPressedOnce,
     showEscapePrompt: p.showEscapePrompt,
-    showIdeRestartPrompt: p.showIdeRestartPrompt,
     quittingMessages: p.quittingMessages,
   };
 }
@@ -365,7 +362,6 @@ function buildProcessingAndCommands(p: UIStateParams) {
     commandContext: p.commandContext,
     shouldShowIdePrompt: p.shouldShowIdePrompt,
     currentIDE: p.currentIDE,
-    isRestarting: p.isRestarting,
     isTrustedFolder: p.isTrustedFolder,
   };
 }

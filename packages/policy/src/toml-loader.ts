@@ -353,6 +353,21 @@ function normalizeToStringArray(
   return Array.isArray(value) ? value : [value];
 }
 
+function resolveToolMatcher(
+  mcpName: string | undefined,
+  toolName: string | undefined,
+): Pick<PolicyRule, 'toolName' | 'toolNamePrefix'> {
+  const hasMcpName = mcpName !== undefined && mcpName !== '';
+  const hasToolName = toolName !== undefined && toolName !== '';
+  if (hasMcpName && hasToolName) {
+    return { toolName: `${mcpName}__${toolName}` };
+  }
+  if (hasMcpName) {
+    return { toolNamePrefix: `${mcpName}__` };
+  }
+  return toolName === undefined ? {} : { toolName };
+}
+
 /** Expands a single validated rule into PolicyRule objects, handling toolName/mcpName arrays. */
 function expandRuleToPolicyRules(
   rule: PolicyRuleToml,
@@ -369,27 +384,14 @@ function expandRuleToPolicyRules(
       rule.toolName,
     );
 
-    return toolNames.map((toolName) => {
-      const hasMcpName = rule.mcpName !== undefined && rule.mcpName !== '';
-      const hasToolName = toolName !== undefined && toolName !== '';
-      let effectiveToolName: string | undefined;
-      if (hasMcpName && hasToolName) {
-        effectiveToolName = `${rule.mcpName}__${toolName}`;
-      } else if (hasMcpName) {
-        effectiveToolName = `${rule.mcpName}__*`;
-      } else {
-        effectiveToolName = toolName;
-      }
-
-      return {
-        toolName: effectiveToolName,
-        decision: rule.decision,
-        priority: transformPriority(rule.priority, tier),
-        argsPattern,
-        allowRedirection: rule.allowRedirection,
-        source: `${tierName.charAt(0).toUpperCase() + tierName.slice(1)}: ${file}`,
-      };
-    });
+    return toolNames.map((toolName) => ({
+      ...resolveToolMatcher(rule.mcpName, toolName),
+      decision: rule.decision,
+      priority: transformPriority(rule.priority, tier),
+      argsPattern,
+      allowRedirection: rule.allowRedirection,
+      source: `${tierName.charAt(0).toUpperCase() + tierName.slice(1)}: ${file}`,
+    }));
   });
 }
 
@@ -575,19 +577,8 @@ function expandTomlRule(
 
     // Create a policy rule for each tool name
     return toolNames.map((toolName) => {
-      const hasMcpName = rule.mcpName !== undefined && rule.mcpName !== '';
-      const hasToolName = toolName !== undefined && toolName !== '';
-      let effectiveToolName: string | undefined;
-      if (hasMcpName && hasToolName) {
-        effectiveToolName = `${rule.mcpName}__${toolName}`;
-      } else if (hasMcpName) {
-        effectiveToolName = `${rule.mcpName}__*`;
-      } else {
-        effectiveToolName = toolName;
-      }
-
       const policyRule: PolicyRule = {
-        toolName: effectiveToolName,
+        ...resolveToolMatcher(rule.mcpName, toolName),
         decision: rule.decision,
         priority: transformPriority(rule.priority, tier),
         source: `Policy: ${path.basename(filePath)}`,

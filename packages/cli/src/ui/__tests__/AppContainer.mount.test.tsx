@@ -55,7 +55,6 @@ vi.mock('../../hooks/useFolderTrust.js', () => ({
   useFolderTrust: vi.fn(() => ({
     isFolderTrustDialogOpen: false,
     handleFolderTrustSelect: vi.fn(),
-    isRestarting: false,
   })),
 }));
 

@@ -20,6 +20,7 @@ vi.mock('../../config/trustedFolders.js', async () => {
       user: { path: '/mock/path', config: {} },
       errors: [],
       isPathTrusted: vi.fn(() => undefined),
+      resolvePathTrust: vi.fn(() => undefined),
     })),
   };
 });

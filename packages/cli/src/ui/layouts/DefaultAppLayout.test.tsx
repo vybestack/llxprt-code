@@ -214,7 +214,6 @@ function createBaseUIState() {
     // dialog flags
     showWorkspaceMigrationDialog: false,
     shouldShowIdePrompt: false,
-    showIdeRestartPrompt: false,
     isFolderTrustDialogOpen: false,
     isWelcomeDialogOpen: false,
     isPermissionsDialogOpen: false,

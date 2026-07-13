@@ -60,12 +60,8 @@ const TomlCommandDefSchema = z.object({
  */
 export class FileCommandLoader implements ICommandLoader {
   private readonly projectRoot: string;
-  private readonly folderTrustEnabled: boolean;
-  private readonly isTrustedFolder: boolean;
 
   constructor(private readonly config: CliUiRuntime | null) {
-    this.folderTrustEnabled = config?.getFolderTrust() === true;
-    this.isTrustedFolder = config?.isTrustedFolder() === true;
     this.projectRoot = config?.getProjectRoot() ?? process.cwd();
   }
 
@@ -81,7 +77,7 @@ export class FileCommandLoader implements ICommandLoader {
    * @returns A promise that resolves to an array of all loaded SlashCommands.
    */
   async loadCommands(signal: AbortSignal): Promise<SlashCommand[]> {
-    if (this.folderTrustEnabled && !this.isTrustedFolder) {
+    if (!this.canUseFileCommands()) {
       return [];
     }
 
@@ -129,6 +125,13 @@ export class FileCommandLoader implements ICommandLoader {
     }
 
     return allCommands;
+  }
+
+  private canUseFileCommands(): boolean {
+    return (
+      this.config?.getFolderTrust() !== true ||
+      this.config.isTrustedFolder() === true
+    );
   }
 
   /**
@@ -299,6 +302,15 @@ export class FileCommandLoader implements ICommandLoader {
       context: CommandContext,
       _args: string,
     ): Promise<SlashCommandActionReturn> => {
+      if (!this.canUseFileCommands()) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content:
+            'File-based commands are disabled because this folder is not trusted.',
+        };
+      }
+
       if (!context.invocation) {
         debugLogger.error(
           `[FileCommandLoader] Critical error: Command '${baseCommandName}' was executed without invocation context.`,

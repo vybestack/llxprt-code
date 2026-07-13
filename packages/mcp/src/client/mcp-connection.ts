@@ -6,6 +6,7 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { ListRootsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type {
   Unsubscribe,
@@ -43,6 +44,54 @@ import { OAuthUtils } from '../auth/oauth-utils.js';
 import { MCPOAuthProvider } from '../auth/oauth-provider.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
+
+function abortError(): DOMException {
+  return new DOMException('MCP connection was cancelled', 'AbortError');
+}
+
+function closeTransport(transport?: Transport): Promise<void> {
+  return typeof transport?.close === 'function'
+    ? transport.close()
+    : Promise.resolve();
+}
+
+function abortable<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+  cleanup: (value?: T) => void | Promise<void>,
+): Promise<T> {
+  const runCleanup = (value?: T) => {
+    Promise.resolve(cleanup(value)).catch(() => {});
+  };
+  if (signal.aborted) {
+    runCleanup();
+    void promise.then(runCleanup, () => {});
+    return Promise.reject(abortError());
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      runCleanup();
+      reject(abortError());
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        if (signal.aborted) {
+          runCleanup(value);
+          reject(abortError());
+        } else {
+          resolve(value);
+        }
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
+}
 
 function initializeMcpClient(
   clientVersion: string,
@@ -368,37 +417,62 @@ export async function connectToMcpServer(
   mcpServerConfig: MCPServerConfig,
   debugMode: boolean,
   workspaceContext: WorkspaceContext,
+  signal?: AbortSignal,
 ): Promise<Client> {
   const mcpClient = initializeMcpClient(clientVersion, workspaceContext);
 
   let httpReturned404 = false;
 
   try {
-    const transport = await createTransport(
+    const transportPromise = createTransport(
       mcpServerName,
       mcpServerConfig,
       debugMode,
     );
+    const transport =
+      signal !== undefined
+        ? await abortable(transportPromise, signal, closeTransport)
+        : await transportPromise;
     try {
-      await mcpClient.connect(transport, {
-        timeout: mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
-      });
+      const connectPromise = Promise.resolve(
+        mcpClient.connect(transport, {
+          timeout: mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
+        }),
+      );
+      if (signal !== undefined) {
+        await abortable(connectPromise, signal, () =>
+          closeTransport(transport),
+        );
+      } else {
+        await connectPromise;
+      }
       updateMCPServerStatus(mcpServerName, MCPServerStatus.CONNECTED);
       return mcpClient;
     } catch (error) {
-      await transport.close();
+      if (signal?.aborted === true) {
+        void closeTransport(transport).catch(() => {});
+        throw error;
+      }
+      await closeTransport(transport);
       if (is404Error(error)) {
         httpReturned404 = true;
       }
       throw error;
     }
   } catch (error) {
-    return handleConnectionError(
+    if (signal?.aborted === true) {
+      void mcpClient.close().catch(() => {});
+      throw abortError();
+    }
+    const recoveryPromise = handleConnectionError(
       mcpClient,
       mcpServerName,
       mcpServerConfig,
       error,
       httpReturned404,
     );
+    return signal !== undefined
+      ? abortable(recoveryPromise, signal, () => mcpClient.close())
+      : recoveryPromise;
   }
 }

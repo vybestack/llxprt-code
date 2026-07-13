@@ -12,7 +12,7 @@ import { act } from 'react';
 import { useAutoAcceptIndicator } from './useAutoAcceptIndicator.js';
 
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { ApprovalMode } from '@vybestack/llxprt-code-core';
+import { ApprovalMode, coreEvents } from '@vybestack/llxprt-code-core';
 import type { Key } from './useKeypress.js';
 import { useKeypress } from './useKeypress.js';
 import { MessageType } from '../types.js';
@@ -237,6 +237,20 @@ describe('useAutoAcceptIndicator', () => {
     // of getApprovalMode reads is an implementation detail (React render/effect
     // timing) and is not asserted here.
     expect(result.current).toBe(ApprovalMode.AUTO_EDIT);
+  });
+
+  it('updates the indicator when folder trust revocation changes the agent mode', () => {
+    agentStub.getApprovalMode.mockReturnValue(ApprovalMode.YOLO);
+    const { result } = renderHook(() =>
+      useAutoAcceptIndicator({ agent: agentStub as unknown as Agent }),
+    );
+
+    agentStub.getApprovalMode.mockReturnValue(ApprovalMode.DEFAULT);
+    act(() => {
+      coreEvents.emitFolderTrustChanged(false);
+    });
+
+    expect(result.current).toBe(ApprovalMode.DEFAULT);
   });
 
   describe('when setApprovalMode throws (e.g. untrusted folder)', () => {

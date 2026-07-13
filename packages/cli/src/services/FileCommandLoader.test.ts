@@ -799,4 +799,69 @@ describe('FileCommandLoader', () => {
       expect(result.content).toBe('The user wants to: do something cool');
     });
   });
+
+  describe('live folder trust', () => {
+    it('gains and revokes file commands from the same loader without an external event', async () => {
+      const userCommandsDir = Storage.getUserCommandsDir();
+      mock({
+        [userCommandsDir]: {
+          'live.toml': 'prompt = "Live prompt"',
+        },
+      });
+      let trusted = false;
+      const config = {
+        getProjectRoot: () => process.cwd(),
+        getExtensions: () => [],
+        getFolderTrust: () => true,
+        isTrustedFolder: () => trusted,
+      } as unknown as Config;
+      const loader = new FileCommandLoader(config);
+
+      expect(await loader.loadCommands(signal)).toStrictEqual([]);
+
+      trusted = true;
+      expect(await loader.loadCommands(signal)).toHaveLength(1);
+
+      trusted = false;
+      expect(await loader.loadCommands(signal)).toStrictEqual([]);
+    });
+
+    it('blocks execution synchronously when trust is revoked after loading', async () => {
+      const userCommandsDir = Storage.getUserCommandsDir();
+      mock({
+        [userCommandsDir]: {
+          'secure.toml': 'prompt = "Sensitive prompt"',
+        },
+      });
+      let trusted = true;
+      const config = {
+        getProjectRoot: () => process.cwd(),
+        getExtensions: () => [],
+        getFolderTrust: () => true,
+        isTrustedFolder: () => trusted,
+      } as unknown as Config;
+      const [command] = await new FileCommandLoader(config).loadCommands(
+        signal,
+      );
+
+      trusted = false;
+      const result = await command.action?.(
+        createMockCommandContext({
+          invocation: {
+            raw: '/secure',
+            name: 'secure',
+            args: '',
+          },
+        }),
+        '',
+      );
+
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'error',
+        content:
+          'File-based commands are disabled because this folder is not trusted.',
+      });
+    });
+  });
 });

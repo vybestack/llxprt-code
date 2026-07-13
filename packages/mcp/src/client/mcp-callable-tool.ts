@@ -17,6 +17,7 @@ export class McpCallableTool implements CallableTool {
     private readonly client: Client,
     private readonly toolDef: McpTool,
     private readonly timeout: number,
+    private readonly isAuthorized: () => boolean = () => true,
   ) {}
 
   async tool(): Promise<Tool> {
@@ -39,6 +40,9 @@ export class McpCallableTool implements CallableTool {
     const call = functionCalls[0];
 
     try {
+      if (!this.isAuthorized()) {
+        throw new Error('MCP capability is no longer authorized');
+      }
       const result = await this.client.callTool(
         {
           name: call.name!,

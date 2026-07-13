@@ -7,7 +7,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { ExitCodes } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import type { LoadedSettings, Settings } from '../../config/settings.js';
+import type { LoadedSettings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import {
   loadTrustedFolders,
@@ -15,6 +15,7 @@ import {
   isWorkspaceTrusted,
 } from '../../config/trustedFolders.js';
 import { type HistoryItemWithoutId, MessageType } from '../types.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 import process from 'node:process';
 
 const debug = new DebugLogger('llxprt:ui:useFolderTrust');
@@ -60,13 +61,6 @@ function saveTrustLevel(
   }
 }
 
-function computeNewTrustedState(trustLevel: TrustLevel): boolean {
-  return (
-    trustLevel === TrustLevel.TRUST_FOLDER ||
-    trustLevel === TrustLevel.TRUST_PARENT
-  );
-}
-
 function showStartupMessage(
   trusted: boolean | undefined = undefined,
   addItem: AddItemFn | undefined,
@@ -92,29 +86,28 @@ function showStartupMessage(
 export const useFolderTrust = (
   settings: LoadedSettings,
   addItem?: AddItemFn,
+  config?: CliUiRuntime,
 ) => {
   // Folder trust feature flag removed - now using settings directly
   const { folderTrust } = settings.merged;
-  const initialTrust = isWorkspaceTrusted({ folderTrust } as Settings);
-  const [isTrusted, setIsTrusted] = useState<boolean | undefined>(initialTrust);
+  const workingDirectory = config?.getWorkingDir() ?? process.cwd();
+  const initialTrust = isWorkspaceTrusted(settings.merged, workingDirectory);
   const [isFolderTrustDialogOpen, setIsFolderTrustDialogOpen] = useState(
     initialTrust === undefined,
   );
-  const [isRestarting, setIsRestarting] = useState(false);
   const startupMessageSent = useRef(false);
   const previousFolderTrust = useRef(folderTrust);
 
   useEffect(() => {
     const folderTrustChanged = previousFolderTrust.current !== folderTrust;
     previousFolderTrust.current = folderTrust;
-    const trusted = isWorkspaceTrusted({ folderTrust } as Settings);
+    const trusted = isWorkspaceTrusted(settings.merged, workingDirectory);
     if (folderTrustChanged) {
-      setIsTrusted(trusted);
       setIsFolderTrustDialogOpen(trusted === undefined);
     }
 
     showStartupMessage(trusted, addItem, startupMessageSent);
-  }, [folderTrust, addItem]);
+  }, [folderTrust, addItem, settings.merged, workingDirectory]);
 
   const handleFolderTrustSelect = useCallback(
     (choice: FolderTrustChoice) => {
@@ -123,30 +116,21 @@ export const useFolderTrust = (
         return;
       }
 
-      const cwd = process.cwd();
-      const wasTrusted = isTrusted ?? false;
-
-      if (!saveTrustLevel(cwd, trustLevel, addItem)) {
+      if (!saveTrustLevel(workingDirectory, trustLevel, addItem)) {
         return;
       }
 
-      const newIsTrusted = computeNewTrustedState(trustLevel);
-      setIsTrusted(newIsTrusted);
+      const newIsTrusted =
+        loadTrustedFolders().isPathTrusted(workingDirectory) ?? false;
+      setIsFolderTrustDialogOpen(false);
 
-      const needsRestart = wasTrusted !== newIsTrusted;
-      if (needsRestart) {
-        setIsRestarting(true);
-        setIsFolderTrustDialogOpen(true);
-      } else {
-        setIsFolderTrustDialogOpen(false);
-      }
+      config?.setTrustedFolderLive(newIsTrusted);
     },
-    [isTrusted, addItem],
+    [addItem, config, workingDirectory],
   );
 
   return {
     isFolderTrustDialogOpen,
     handleFolderTrustSelect,
-    isRestarting,
   };
 };

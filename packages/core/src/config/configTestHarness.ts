@@ -181,6 +181,8 @@ export function buildIdeIntegrationMockBody(
         getConnectionStatus: vi.fn(),
         initialize: vi.fn(),
         shutdown: vi.fn(),
+        addTrustChangeListener: vi.fn(),
+        removeTrustChangeListener: vi.fn(),
       }),
     },
   };
@@ -206,12 +208,12 @@ export function buildEventsMockBody(
   actual: unknown,
   hoisted: HoistedConfigMocks,
 ) {
+  const eventsModule = actual as { coreEvents: object };
   return {
     ...(actual as object),
-    coreEvents: {
-      ...hoisted.coreEvents,
+    coreEvents: Object.assign(eventsModule.coreEvents, hoisted.coreEvents, {
       emit: vi.fn(),
-    },
+    }),
   };
 }
 

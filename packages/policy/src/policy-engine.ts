@@ -261,7 +261,13 @@ export class PolicyEngine {
 
     return this.rules.find((rule) => {
       // Check tool name match
-      const toolMatches = !rule.toolName || rule.toolName === toolName;
+      const matchesAllTools =
+        rule.toolName === undefined && rule.toolNamePrefix === undefined;
+      const toolMatches =
+        matchesAllTools ||
+        rule.toolName === toolName ||
+        (rule.toolNamePrefix !== undefined &&
+          toolName.startsWith(rule.toolNamePrefix));
       if (!toolMatches) {
         return false;
       }
@@ -339,5 +345,18 @@ export class PolicyEngine {
     this.rules.push(rule);
     // Re-sort rules by priority (highest first)
     this.rules.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+  }
+
+  /**
+   * Removes all rules whose `source` matches the given value. Used to revoke
+   * trust-derived rules when folder trust is revoked so previously
+   * auto-allowed MCP tools fall back to requiring confirmation.
+   */
+  removeRulesBySource(source: string): void {
+    for (let i = this.rules.length - 1; i >= 0; i--) {
+      if (this.rules[i]?.source === source) {
+        this.rules.splice(i, 1);
+      }
+    }
   }
 }

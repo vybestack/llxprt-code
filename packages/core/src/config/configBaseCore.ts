@@ -153,7 +153,7 @@ export abstract class ConfigBaseCore {
   protected readonly originalModel!: string;
   protected readonly extensionContextFilePaths!: string[];
   protected readonly noBrowser!: boolean;
-  protected readonly folderTrust!: boolean;
+  protected folderTrust!: boolean;
   protected ideMode!: boolean;
   protected ideClient: IdeClient | undefined;
   protected inFallbackMode = false;
@@ -182,7 +182,7 @@ export abstract class ConfigBaseCore {
   protected readonly loadMemoryFromIncludeDirectories: boolean = false;
   protected readonly chatCompression: ChatCompressionSettings | undefined;
   protected readonly interactive!: boolean;
-  protected readonly trustedFolder: boolean | undefined;
+  protected trustedFolder: boolean | undefined;
   protected readonly useRipgrep!: boolean;
   protected readonly shouldUseNodePtyShell!: boolean;
   protected readonly allowPtyThemeOverride!: boolean;

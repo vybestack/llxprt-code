@@ -43,6 +43,13 @@ export interface TrustRule {
   trustLevel: TrustLevel;
 }
 
+export interface ResolvedTrustRule {
+  readonly rule: TrustRule;
+  readonly effectivePath: string;
+  readonly trusted: boolean;
+  readonly provenance: 'direct' | 'inherited';
+}
+
 export interface TrustedFoldersError {
   message: string;
   path: string;
@@ -74,39 +81,41 @@ export class LoadedTrustedFolders {
    * @returns
    */
   isPathTrusted(location: string): boolean | undefined {
-    const trustedPaths: string[] = [];
-    const untrustedPaths: string[] = [];
+    return this.resolvePathTrust(location)?.trusted;
+  }
 
-    for (const rule of this.rules) {
-      switch (rule.trustLevel) {
-        case TrustLevel.TRUST_FOLDER:
-          trustedPaths.push(rule.path);
-          break;
-        case TrustLevel.TRUST_PARENT:
-          trustedPaths.push(path.dirname(rule.path));
-          break;
-        case TrustLevel.DO_NOT_TRUST:
-          untrustedPaths.push(rule.path);
-          break;
-        default:
-          // Do nothing for unknown trust levels.
-          break;
+  resolvePathTrust(location: string): ResolvedTrustRule | undefined {
+    const resolvedLocation = path.resolve(location);
+    const matches = this.rules.flatMap((rule) => {
+      const effectivePath = path.resolve(
+        rule.trustLevel === TrustLevel.TRUST_PARENT
+          ? path.dirname(rule.path)
+          : rule.path,
+      );
+      if (!isWithinRoot(resolvedLocation, effectivePath)) {
+        return [];
       }
-    }
+      return [
+        {
+          rule,
+          effectivePath,
+          trusted: rule.trustLevel !== TrustLevel.DO_NOT_TRUST,
+          provenance:
+            resolvedLocation === effectivePath
+              ? ('direct' as const)
+              : ('inherited' as const),
+        },
+      ];
+    });
 
-    for (const trustedPath of trustedPaths) {
-      if (isWithinRoot(location, trustedPath)) {
-        return true;
-      }
-    }
-
-    for (const untrustedPath of untrustedPaths) {
-      if (path.normalize(location) === path.normalize(untrustedPath)) {
-        return false;
-      }
-    }
-
-    return undefined;
+    matches.sort((left, right) => {
+      const specificity =
+        right.effectivePath.length - left.effectivePath.length;
+      return specificity !== 0
+        ? specificity
+        : Number(left.trusted) - Number(right.trusted);
+    });
+    return matches[0];
   }
 
   setValue(path: string, trustLevel: TrustLevel): void {
@@ -194,11 +203,36 @@ export function saveTrustedFolders(
     fs.mkdirSync(dirPath, { recursive: true });
   }
 
-  fs.writeFileSync(
-    trustedFoldersFile.path,
-    JSON.stringify(trustedFoldersFile.config, null, 2),
-    { encoding: 'utf-8', mode: 0o600 },
+  const temporaryPath = path.join(
+    dirPath,
+    `.${path.basename(trustedFoldersFile.path)}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`,
   );
+  try {
+    fs.writeFileSync(
+      temporaryPath,
+      JSON.stringify(trustedFoldersFile.config, null, 2),
+      { encoding: 'utf-8', mode: 0o600, flag: 'wx' },
+    );
+    if (process.platform !== 'win32') {
+      fs.chmodSync(temporaryPath, 0o600);
+      const temporaryMode = fs.statSync(temporaryPath).mode & 0o777;
+      if (temporaryMode !== 0o600) {
+        throw new Error(
+          `Trusted folders temporary file has mode ${temporaryMode.toString(8)} instead of 600.`,
+        );
+      }
+    }
+  } catch (error) {
+    try {
+      fs.unlinkSync(temporaryPath);
+    } catch {
+      // The temporary file may not have been created.
+    }
+    throw error;
+  }
+
+  // Atomic replacement is the commit point; nothing fallible may follow it.
+  fs.renameSync(temporaryPath, trustedFoldersFile.path);
 }
 
 /** Is folder trust feature enabled per the current applied settings */
@@ -208,33 +242,61 @@ export function isFolderTrustEnabled(settings: Settings): boolean {
   return folderTrustSetting;
 }
 
-function getWorkspaceTrustFromLocalConfig(): boolean | undefined {
-  const folders = loadTrustedFolders();
+export function resolveWorkspaceTrust(
+  settings: Settings,
+  trustedFolders: LoadedTrustedFolders,
+  workingDirectory: string,
+  ideTrust: boolean | undefined = getIdeTrust(),
+): boolean | undefined {
+  if (!isFolderTrustEnabled(settings)) {
+    return true;
+  }
+  if (ideTrust !== undefined) {
+    return ideTrust;
+  }
+  return trustedFolders.isPathTrusted(workingDirectory);
+}
 
-  if (folders.errors.length > 0) {
-    const errorMessages = folders.errors.map(
+export function resolveLocalWorkspaceTrust(
+  settings: Settings,
+  trustedFolders: LoadedTrustedFolders,
+  workingDirectory: string,
+): boolean | undefined {
+  if (!isFolderTrustEnabled(settings)) {
+    return true;
+  }
+  return trustedFolders.isPathTrusted(workingDirectory);
+}
+
+export function isWorkspaceTrusted(
+  settings: Settings,
+  workingDirectory: string = process.cwd(),
+  ideTrust: boolean | undefined = getIdeTrust(),
+): boolean | undefined {
+  if (!isFolderTrustEnabled(settings) || ideTrust !== undefined) {
+    return resolveWorkspaceTrust(
+      settings,
+      loadTrustedFolders(),
+      workingDirectory,
+      ideTrust,
+    );
+  }
+
+  const trustedFolders = loadTrustedFolders();
+  if (trustedFolders.errors.length > 0) {
+    const errorMessages = trustedFolders.errors.map(
       (error) => `Error in ${error.path}: ${error.message}`,
     );
     throw new FatalConfigError(
       `${errorMessages.join('\n')}\nPlease fix the configuration file and try again.`,
     );
   }
-
-  return folders.isPathTrusted(process.cwd());
-}
-
-export function isWorkspaceTrusted(settings: Settings): boolean | undefined {
-  if (!isFolderTrustEnabled(settings)) {
-    return true;
-  }
-
-  const ideTrust = getIdeTrust();
-  if (ideTrust !== undefined) {
-    return ideTrust;
-  }
-
-  // Fall back to the local user configuration
-  return getWorkspaceTrustFromLocalConfig();
+  return resolveWorkspaceTrust(
+    settings,
+    trustedFolders,
+    workingDirectory,
+    ideTrust,
+  );
 }
 
 /**

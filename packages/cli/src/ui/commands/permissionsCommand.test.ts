@@ -8,11 +8,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { permissionsCommand } from './permissionsCommand.js';
 import { CommandKind } from './types.js';
 import * as path from 'node:path';
+import * as trustedFolders from '../../config/trustedFolders.js';
 
-// Mock the trustedFolders module
 const mockSetValue = vi.fn();
 const mockIsPathTrusted = vi.fn();
-const mockRules: Array<{ path: string; trustLevel: string }> = [];
+const mockRules: Array<{
+  path: string;
+  trustLevel: trustedFolders.TrustLevel;
+}> = [];
+
+vi.mock('node:process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:process')>();
+  return {
+    ...actual,
+    cwd: vi.fn(() => '/home/user/projects/myapp'),
+  };
+});
 
 vi.mock('../../config/trustedFolders.js', async () => {
   const actual = await vi.importActual('../../config/trustedFolders.js');
@@ -28,17 +39,48 @@ vi.mock('../../config/trustedFolders.js', async () => {
   };
 });
 
+import * as mockedProcess from 'node:process';
+
+import { ideContext } from '@vybestack/llxprt-code-core';
 describe('permissionsCommand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    ideContext.clearIdeContext();
     mockRules.length = 0;
+    mockSetValue.mockImplementation(
+      (rulePath: string, trustLevel: trustedFolders.TrustLevel) => {
+        mockRules.push({ path: rulePath, trustLevel });
+      },
+    );
+    mockIsPathTrusted.mockImplementation((location: string) => {
+      const config = Object.fromEntries(
+        mockRules.map((rule) => [rule.path, rule.trustLevel]),
+      );
+      return new trustedFolders.LoadedTrustedFolders(
+        { path: '/mock/path', config },
+        [],
+      ).isPathTrusted(location);
+    });
+    vi.mocked(mockedProcess.cwd).mockReturnValue('/home/user/projects/myapp');
   });
 
-  const createMockContext = () => ({
+  const createMockContext = (configOverrides?: {
+    setTrustedFolderLive?: ReturnType<typeof vi.fn>;
+    getWorkingDir?: () => string;
+  }) => ({
     services: {
-      config: null,
+      config: configOverrides
+        ? ({
+            setTrustedFolderLive:
+              configOverrides.setTrustedFolderLive ?? vi.fn(),
+            getWorkingDir:
+              configOverrides.getWorkingDir ??
+              (() => '/home/user/projects/myapp'),
+            getFolderTrust: () => true,
+          } as never)
+        : null,
       agent: null,
-      settings: {} as never,
+      settings: { merged: { folderTrust: true } } as never,
       git: undefined,
       logger: {} as never,
     },
@@ -229,6 +271,139 @@ describe('permissionsCommand', () => {
         messageType: 'error',
         content: expect.stringContaining('Failed to save trust settings'),
       });
+    });
+
+    it('resolves a relative target against Config working directory', () => {
+      const setTrustedFolderLive = vi.fn();
+      const context = createMockContext({
+        setTrustedFolderLive,
+        getWorkingDir: () => '/config/workspace',
+      });
+      vi.mocked(mockedProcess.cwd).mockReturnValue('/process/workspace');
+
+      void permissionsCommand.action?.(context, 'TRUST_FOLDER child');
+
+      expect(mockSetValue).toHaveBeenCalledWith(
+        path.resolve('/config/workspace', 'child'),
+        trustedFolders.TrustLevel.TRUST_FOLDER,
+      );
+    });
+  });
+
+  describe('live Config update', () => {
+    it('should call setTrustedFolderLive(true) when trusting the current workspace', () => {
+      const setTrustedFolderLive = vi.fn();
+      const mockContext = createMockContext({ setTrustedFolderLive });
+      const args = `TRUST_FOLDER /home/user/projects/myapp`;
+
+      void permissionsCommand.action?.(mockContext, args);
+
+      expect(setTrustedFolderLive).toHaveBeenCalledWith(true);
+    });
+
+    it('should call setTrustedFolderLive(false) when untrusting the current workspace', () => {
+      const setTrustedFolderLive = vi.fn();
+      const mockContext = createMockContext({ setTrustedFolderLive });
+      const args = `DO_NOT_TRUST /home/user/projects/myapp`;
+
+      void permissionsCommand.action?.(mockContext, args);
+
+      expect(setTrustedFolderLive).toHaveBeenCalledWith(false);
+    });
+
+    it.each([
+      [trustedFolders.TrustLevel.TRUST_FOLDER, false, true],
+      [trustedFolders.TrustLevel.DO_NOT_TRUST, true, false],
+    ] as const)(
+      'caches local %s resolution instead of the opposite IDE override',
+      (trustLevel, ideTrust, expectedLocalTrust) => {
+        ideContext.setIdeContext({ workspaceState: { isTrusted: ideTrust } });
+        const setTrustedFolderLive = vi.fn();
+        const mockContext = createMockContext({ setTrustedFolderLive });
+
+        void permissionsCommand.action?.(
+          mockContext,
+          `${trustLevel} /home/user/projects/myapp`,
+        );
+
+        expect(setTrustedFolderLive).toHaveBeenCalledWith(expectedLocalTrust);
+      },
+    );
+
+    it('should call setTrustedFolderLive(true) when TRUST_PARENT covers the cwd', () => {
+      const setTrustedFolderLive = vi.fn();
+      const mockContext = createMockContext({ setTrustedFolderLive });
+      // TRUST_PARENT on /home/user/projects/myapp means parent is trusted
+      const args = `TRUST_PARENT /home/user/projects/myapp`;
+
+      void permissionsCommand.action?.(mockContext, args);
+
+      expect(setTrustedFolderLive).toHaveBeenCalledWith(true);
+    });
+
+    it('should call setTrustedFolderLive(true) when TRUST_FOLDER covers cwd as a descendant', () => {
+      const setTrustedFolderLive = vi.fn();
+      const mockContext = createMockContext({ setTrustedFolderLive });
+      const args = `TRUST_FOLDER /home/user/projects`;
+
+      void permissionsCommand.action?.(mockContext, args);
+
+      expect(setTrustedFolderLive).toHaveBeenCalledWith(true);
+    });
+
+    it('should call setTrustedFolderLive(true) when TRUST_PARENT on a sibling covers cwd via shared parent', () => {
+      const setTrustedFolderLive = vi.fn();
+      const mockContext = createMockContext({ setTrustedFolderLive });
+      // TRUST_PARENT on /home/user/projects/myapp-sub means /home/user/projects is trusted
+      // which covers cwd /home/user/projects/myapp
+      const args = `TRUST_PARENT /home/user/projects/myapp-sub`;
+
+      void permissionsCommand.action?.(mockContext, args);
+
+      expect(setTrustedFolderLive).toHaveBeenCalledWith(true);
+    });
+
+    it('should recompute live trust after changing an unrelated path', () => {
+      const setTrustedFolderLive = vi.fn();
+      const mockContext = createMockContext({ setTrustedFolderLive });
+      const args = `TRUST_FOLDER /some/unrelated/path`;
+
+      void permissionsCommand.action?.(mockContext, args);
+
+      expect(setTrustedFolderLive).toHaveBeenCalledWith(false);
+    });
+
+    it('should NOT call setTrustedFolderLive for sibling path with shared string prefix (boundary safety)', () => {
+      const setTrustedFolderLive = vi.fn();
+      const mockContext = createMockContext({ setTrustedFolderLive });
+      // /home/user/projects/myap is a string-prefix of cwd
+      // /home/user/projects/myapp but is NOT an ancestor directory.
+      // startsWith would incorrectly match.
+      const args = `TRUST_FOLDER /home/user/projects/myap`;
+
+      void permissionsCommand.action?.(mockContext, args);
+
+      expect(setTrustedFolderLive).toHaveBeenCalledWith(false);
+    });
+
+    it('should recompute false for TRUST_PARENT on an unrelated path', () => {
+      const setTrustedFolderLive = vi.fn();
+      const mockContext = createMockContext({ setTrustedFolderLive });
+      const args = `TRUST_PARENT /opt/llxprt-other`;
+
+      void permissionsCommand.action?.(mockContext, args);
+
+      expect(setTrustedFolderLive).toHaveBeenCalledWith(false);
+    });
+
+    it('should not call setTrustedFolderLive when config is null', () => {
+      const mockContext = createMockContext();
+      const args = `TRUST_FOLDER /home/user/projects/myapp`;
+
+      const result = permissionsCommand.action?.(mockContext, args);
+
+      expect(mockSetValue).toHaveBeenCalled();
+      expect(result).toMatchObject({ messageType: 'info' });
     });
   });
 });

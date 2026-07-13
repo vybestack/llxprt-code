@@ -5,13 +5,18 @@
  */
 
 import * as path from 'node:path';
+import * as process from 'node:process';
 import type {
   OpenDialogActionReturn,
   SlashCommand,
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { loadTrustedFolders, TrustLevel } from '../../config/trustedFolders.js';
+import {
+  loadTrustedFolders,
+  resolveLocalWorkspaceTrust,
+  TrustLevel,
+} from '../../config/trustedFolders.js';
 
 const VALID_TRUST_LEVELS = [
   TrustLevel.TRUST_FOLDER,
@@ -25,6 +30,7 @@ const VALID_TRUST_LEVELS = [
  */
 function parsePermissionsArgs(
   args: string,
+  workingDirectory: string,
 ): { trustLevel: TrustLevel; targetPath: string } | { error: string } {
   const trimmed = args.trim();
 
@@ -68,7 +74,7 @@ function parsePermissionsArgs(
   if (path.isAbsolute(targetPath)) {
     normalizedPath = path.normalize(targetPath);
   } else {
-    normalizedPath = path.resolve(process.cwd(), targetPath);
+    normalizedPath = path.resolve(workingDirectory, targetPath);
   }
 
   return { trustLevel, targetPath: normalizedPath };
@@ -78,8 +84,11 @@ export const permissionsCommand: SlashCommand = {
   name: 'permissions',
   description: 'manage folder trust settings',
   kind: CommandKind.BUILT_IN,
-  action: (_context, args): OpenDialogActionReturn | MessageActionReturn => {
-    const parsed = parsePermissionsArgs(args);
+  action: (context, args): OpenDialogActionReturn | MessageActionReturn => {
+    const parsed = parsePermissionsArgs(
+      args,
+      context.services.config?.getWorkingDir() ?? process.cwd(),
+    );
 
     // If error is empty string, open dialog (no args case)
     if ('error' in parsed) {
@@ -103,6 +112,18 @@ export const permissionsCommand: SlashCommand = {
     try {
       const trustedFolders = loadTrustedFolders();
       trustedFolders.setValue(targetPath, trustLevel);
+
+      const config = context.services.config;
+      if (config) {
+        const cwd = config.getWorkingDir();
+        config.setTrustedFolderLive(
+          resolveLocalWorkspaceTrust(
+            { folderTrust: config.getFolderTrust() },
+            trustedFolders,
+            cwd,
+          ) ?? false,
+        );
+      }
 
       return {
         type: 'message',

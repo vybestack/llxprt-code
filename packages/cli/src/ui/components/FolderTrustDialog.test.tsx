@@ -9,7 +9,7 @@
 import { ExitCodes } from '@vybestack/llxprt-code-core';
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 import { act } from 'react';
-import { vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 
 const mockedExit = vi.hoisted(() => vi.fn());
@@ -33,7 +33,10 @@ describe('FolderTrustDialog', () => {
 
   it('should render the dialog with title and description', () => {
     const { lastFrame } = renderWithProviders(
-      <FolderTrustDialog onSelect={vi.fn()} />,
+      <FolderTrustDialog
+        workingDirectory="/home/user/project"
+        onSelect={vi.fn()}
+      />,
     );
 
     expect(lastFrame()).toContain('Do you trust this folder?');
@@ -42,10 +45,28 @@ describe('FolderTrustDialog', () => {
     );
   });
 
+  it('displays the configured working directory when process.cwd() differs', () => {
+    mockedCwd.mockReturnValue('/process/unrelated');
+
+    const { lastFrame } = renderWithProviders(
+      <FolderTrustDialog
+        workingDirectory="/configured/workspace/project"
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(lastFrame()).toContain('Trust folder (project)');
+    expect(lastFrame()).toContain('Trust parent folder (workspace)');
+    expect(lastFrame()).not.toContain('unrelated');
+  });
+
   it('should display exit message and call process.exit and not call onSelect when escape is pressed', async () => {
     const onSelect = vi.fn();
     const { lastFrame, stdin } = renderWithProviders(
-      <FolderTrustDialog onSelect={onSelect} isRestarting={false} />,
+      <FolderTrustDialog
+        workingDirectory="/home/user/project"
+        onSelect={onSelect}
+      />,
     );
 
     act(() => {
@@ -63,45 +84,14 @@ describe('FolderTrustDialog', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it('should display restart message when isRestarting is true', () => {
-    const { lastFrame } = renderWithProviders(
-      <FolderTrustDialog onSelect={vi.fn()} isRestarting={true} />,
-    );
-
-    expect(lastFrame()).toContain('To see changes, llxprt must be restarted');
-  });
-
-  it('should call process.exit when "r" is pressed and isRestarting is true', async () => {
-    const { stdin } = renderWithProviders(
-      <FolderTrustDialog onSelect={vi.fn()} isRestarting={true} />,
-    );
-
-    stdin.write('r');
-
-    await waitFor(() => {
-      expect(mockedExit).toHaveBeenCalledWith(ExitCodes.SUCCESS);
-    });
-  });
-
-  it('should not call process.exit when "r" is pressed and isRestarting is false', async () => {
-    const { stdin } = renderWithProviders(
-      <FolderTrustDialog onSelect={vi.fn()} isRestarting={false} />,
-    );
-
-    act(() => {
-      stdin.write('r');
-    });
-
-    await waitFor(() => {
-      expect(mockedExit).not.toHaveBeenCalled();
-    });
-  });
-
   describe('parentFolder display', () => {
     it('should correctly display the parent folder name for a nested directory', () => {
       mockedCwd.mockReturnValue('/home/user/project');
       const { lastFrame } = renderWithProviders(
-        <FolderTrustDialog onSelect={vi.fn()} />,
+        <FolderTrustDialog
+          workingDirectory="/home/user/project"
+          onSelect={vi.fn()}
+        />,
       );
       expect(lastFrame()).toContain('Trust parent folder (user)');
     });
@@ -109,7 +99,7 @@ describe('FolderTrustDialog', () => {
     it('should correctly display an empty parent folder name for a directory directly under root', () => {
       mockedCwd.mockReturnValue('/project');
       const { lastFrame } = renderWithProviders(
-        <FolderTrustDialog onSelect={vi.fn()} />,
+        <FolderTrustDialog workingDirectory="/project" onSelect={vi.fn()} />,
       );
       expect(lastFrame()).toContain('Trust parent folder ()');
     });

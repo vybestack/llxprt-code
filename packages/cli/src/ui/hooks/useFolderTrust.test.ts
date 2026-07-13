@@ -15,6 +15,8 @@ import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import type { LoadedTrustedFolders } from '../../config/trustedFolders.js';
 import { TrustLevel } from '../../config/trustedFolders.js';
 import * as trustedFolders from '../../config/trustedFolders.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
+import { ideContext } from '@vybestack/llxprt-code-core';
 
 const mockedCwd = vi.hoisted(() => vi.fn());
 
@@ -34,19 +36,29 @@ describe('useFolderTrust', () => {
   let loadTrustedFoldersSpy: vi.SpyInstance;
   let isWorkspaceTrustedSpy: vi.SpyInstance;
   let addItem: vi.Mock;
+  let mockConfig: {
+    setTrustedFolderLive: vi.Mock;
+    getWorkingDir: () => string;
+  };
 
   beforeEach(() => {
     mockSettings = {
       merged: {
-        folderTrustFeature: true,
-        folderTrust: undefined,
+        folderTrust: true,
       },
       setValue: vi.fn(),
     } as unknown as LoadedSettings;
 
-    mockTrustedFolders = {
-      setValue: vi.fn(),
-    } as unknown as LoadedTrustedFolders;
+    mockTrustedFolders = new trustedFolders.LoadedTrustedFolders(
+      { path: '/test/trustedFolders.json', config: {} },
+      [],
+    );
+    vi.spyOn(mockTrustedFolders, 'setValue').mockImplementation(
+      (folderPath, trustLevel) => {
+        mockTrustedFolders.user.config[folderPath] = trustLevel;
+      },
+    );
+    ideContext.clearIdeContext();
 
     loadTrustedFoldersSpy = vi
       .spyOn(trustedFolders, 'loadTrustedFolders')
@@ -54,6 +66,10 @@ describe('useFolderTrust', () => {
     isWorkspaceTrustedSpy = vi.spyOn(trustedFolders, 'isWorkspaceTrusted');
     mockedCwd.mockReturnValue('/test/path');
     addItem = vi.fn();
+    mockConfig = {
+      setTrustedFolderLive: vi.fn(),
+      getWorkingDir: () => '/test/path',
+    };
   });
 
   afterEach(() => {
@@ -62,25 +78,49 @@ describe('useFolderTrust', () => {
 
   it('should not open dialog when folder is already trusted', () => {
     isWorkspaceTrustedSpy.mockReturnValue(true);
-    const { result } = renderHook(() => useFolderTrust(mockSettings, addItem));
+    const { result } = renderHook(() =>
+      useFolderTrust(
+        mockSettings,
+        addItem,
+        mockConfig as unknown as CliUiRuntime,
+      ),
+    );
     expect(result.current.isFolderTrustDialogOpen).toBe(false);
   });
 
   it('should not open dialog when folder is already untrusted', () => {
     isWorkspaceTrustedSpy.mockReturnValue(false);
-    const { result } = renderHook(() => useFolderTrust(mockSettings, addItem));
+    const { result } = renderHook(() =>
+      useFolderTrust(
+        mockSettings,
+        addItem,
+        mockConfig as unknown as CliUiRuntime,
+      ),
+    );
     expect(result.current.isFolderTrustDialogOpen).toBe(false);
   });
 
   it('should open dialog when folder trust is undefined', () => {
     isWorkspaceTrustedSpy.mockReturnValue(undefined);
-    const { result } = renderHook(() => useFolderTrust(mockSettings, addItem));
+    const { result } = renderHook(() =>
+      useFolderTrust(
+        mockSettings,
+        addItem,
+        mockConfig as unknown as CliUiRuntime,
+      ),
+    );
     expect(result.current.isFolderTrustDialogOpen).toBe(true);
   });
 
   it('should send a message if the folder is untrusted', () => {
     isWorkspaceTrustedSpy.mockReturnValue(false);
-    renderHook(() => useFolderTrust(mockSettings, addItem));
+    renderHook(() =>
+      useFolderTrust(
+        mockSettings,
+        addItem,
+        mockConfig as unknown as CliUiRuntime,
+      ),
+    );
     expect(addItem).toHaveBeenCalledWith(
       {
         text: 'This folder is not trusted. Some features may be disabled. Use the `/permissions` command to change the trust level.',
@@ -92,72 +132,93 @@ describe('useFolderTrust', () => {
 
   it('should not send a message if the folder is trusted', () => {
     isWorkspaceTrustedSpy.mockReturnValue(true);
-    renderHook(() => useFolderTrust(mockSettings, addItem));
+    renderHook(() =>
+      useFolderTrust(
+        mockSettings,
+        addItem,
+        mockConfig as unknown as CliUiRuntime,
+      ),
+    );
     expect(addItem).not.toHaveBeenCalled();
   });
 
-  it('should handle TRUST_FOLDER choice', () => {
-    isWorkspaceTrustedSpy
-      .mockReturnValueOnce(undefined)
-      .mockReturnValueOnce(true);
-    const { result } = renderHook(() => useFolderTrust(mockSettings, addItem));
+  it('should close dialog and call setTrustedFolderLive(true) for TRUST_FOLDER', () => {
+    isWorkspaceTrustedSpy.mockReturnValue(undefined);
+    const { result } = renderHook(() =>
+      useFolderTrust(
+        mockSettings,
+        addItem,
+        mockConfig as unknown as CliUiRuntime,
+      ),
+    );
 
-    isWorkspaceTrustedSpy.mockReturnValue(true);
     act(() => {
       result.current.handleFolderTrustSelect(FolderTrustChoice.TRUST_FOLDER);
     });
 
     expect(loadTrustedFoldersSpy).toHaveBeenCalled();
     expect(mockTrustedFolders.setValue).toHaveBeenCalledWith(
-      process.cwd(),
+      mockConfig.getWorkingDir(),
       TrustLevel.TRUST_FOLDER,
     );
-    // When trust changes from undefined (false) to true, restart is needed and dialog stays open
-    expect(result.current.isFolderTrustDialogOpen).toBe(true);
-    expect(result.current.isRestarting).toBe(true);
+    expect(result.current.isFolderTrustDialogOpen).toBe(false);
+    expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(true);
   });
 
-  it('should handle TRUST_PARENT choice', () => {
-    isWorkspaceTrustedSpy
-      .mockReturnValueOnce(undefined)
-      .mockReturnValueOnce(true);
-    const { result } = renderHook(() => useFolderTrust(mockSettings, addItem));
+  it('should close dialog and call setTrustedFolderLive(true) for TRUST_PARENT', () => {
+    isWorkspaceTrustedSpy.mockReturnValue(undefined);
+    const { result } = renderHook(() =>
+      useFolderTrust(
+        mockSettings,
+        addItem,
+        mockConfig as unknown as CliUiRuntime,
+      ),
+    );
 
     act(() => {
       result.current.handleFolderTrustSelect(FolderTrustChoice.TRUST_PARENT);
     });
 
     expect(mockTrustedFolders.setValue).toHaveBeenCalledWith(
-      process.cwd(),
+      mockConfig.getWorkingDir(),
       TrustLevel.TRUST_PARENT,
     );
-    // When trust changes from undefined (false) to true, restart is needed and dialog stays open
-    expect(result.current.isFolderTrustDialogOpen).toBe(true);
-    expect(result.current.isRestarting).toBe(true);
+    expect(result.current.isFolderTrustDialogOpen).toBe(false);
+    expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(true);
   });
 
-  it('should handle DO_NOT_TRUST choice without triggering restart when already untrusted', () => {
-    isWorkspaceTrustedSpy
-      .mockReturnValueOnce(undefined)
-      .mockReturnValueOnce(false);
-    const { result } = renderHook(() => useFolderTrust(mockSettings, addItem));
+  it('should close dialog and call setTrustedFolderLive(false) for DO_NOT_TRUST', () => {
+    isWorkspaceTrustedSpy.mockReturnValue(undefined);
+    const { result } = renderHook(() =>
+      useFolderTrust(
+        mockSettings,
+        addItem,
+        mockConfig as unknown as CliUiRuntime,
+      ),
+    );
 
     act(() => {
+      // After persisting DO_NOT_TRUST, the canonical resolver returns false.
       result.current.handleFolderTrustSelect(FolderTrustChoice.DO_NOT_TRUST);
     });
 
     expect(mockTrustedFolders.setValue).toHaveBeenCalledWith(
-      process.cwd(),
+      mockConfig.getWorkingDir(),
       TrustLevel.DO_NOT_TRUST,
     );
-    // When changing from undefined (false) to false, no restart needed
-    expect(result.current.isRestarting).toBe(false);
     expect(result.current.isFolderTrustDialogOpen).toBe(false);
+    expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(false);
   });
 
   it('should do nothing for default choice', () => {
     isWorkspaceTrustedSpy.mockReturnValue(undefined);
-    const { result } = renderHook(() => useFolderTrust(mockSettings, addItem));
+    const { result } = renderHook(() =>
+      useFolderTrust(
+        mockSettings,
+        addItem,
+        mockConfig as unknown as CliUiRuntime,
+      ),
+    );
 
     act(() => {
       result.current.handleFolderTrustSelect(
@@ -168,43 +229,81 @@ describe('useFolderTrust', () => {
     expect(mockTrustedFolders.setValue).not.toHaveBeenCalled();
     expect(mockSettings.setValue).not.toHaveBeenCalled();
     expect(result.current.isFolderTrustDialogOpen).toBe(true);
+    expect(mockConfig.setTrustedFolderLive).not.toHaveBeenCalled();
   });
 
-  it('should set isRestarting to true when trust status changes from false to true', () => {
-    isWorkspaceTrustedSpy.mockReturnValueOnce(false).mockReturnValueOnce(true); // Initially untrusted, then trusted
-    const { result } = renderHook(() => useFolderTrust(mockSettings, addItem));
+  it('should call setTrustedFolderLive(true) when gaining trust', () => {
+    isWorkspaceTrustedSpy.mockReturnValue(false);
+    const { result } = renderHook(() =>
+      useFolderTrust(
+        mockSettings,
+        addItem,
+        mockConfig as unknown as CliUiRuntime,
+      ),
+    );
 
     act(() => {
+      // After persisting TRUST_FOLDER, the canonical resolver returns true.
       result.current.handleFolderTrustSelect(FolderTrustChoice.TRUST_FOLDER);
     });
 
-    expect(result.current.isRestarting).toBe(true);
-    expect(result.current.isFolderTrustDialogOpen).toBe(true);
+    expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(true);
+    expect(result.current.isFolderTrustDialogOpen).toBe(false);
   });
 
-  it('should set isRestarting to true when trust status changes from true to false', () => {
-    isWorkspaceTrustedSpy.mockReturnValueOnce(true).mockReturnValueOnce(false); // Initially trusted, then untrusted
-    const { result } = renderHook(() => useFolderTrust(mockSettings, addItem));
+  it('should call setTrustedFolderLive(false) when revoking trust', () => {
+    isWorkspaceTrustedSpy.mockReturnValue(true);
+    const { result } = renderHook(() =>
+      useFolderTrust(
+        mockSettings,
+        addItem,
+        mockConfig as unknown as CliUiRuntime,
+      ),
+    );
 
     act(() => {
+      // After persisting DO_NOT_TRUST, the canonical resolver returns false.
       result.current.handleFolderTrustSelect(FolderTrustChoice.DO_NOT_TRUST);
     });
 
-    expect(result.current.isRestarting).toBe(true);
-    expect(result.current.isFolderTrustDialogOpen).toBe(true);
+    expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(false);
+    expect(result.current.isFolderTrustDialogOpen).toBe(false);
   });
 
-  it('should not set isRestarting when trust status remains the same', () => {
-    isWorkspaceTrustedSpy.mockReturnValue(true);
-    const { result } = renderHook(() => useFolderTrust(mockSettings));
-
-    // No need to reset mock since setIsTrustedFolder is no longer called
+  it('should not call setTrustedFolderLive when no config is provided', () => {
+    isWorkspaceTrustedSpy.mockReturnValue(undefined);
+    const { result } = renderHook(() => useFolderTrust(mockSettings, addItem));
 
     act(() => {
       result.current.handleFolderTrustSelect(FolderTrustChoice.TRUST_FOLDER);
     });
 
-    expect(result.current.isRestarting).toBe(false);
     expect(result.current.isFolderTrustDialogOpen).toBe(false);
+  });
+
+  it('uses the configured working directory when it differs from process cwd', () => {
+    const configuredWorkingDirectory = '/workspace/from-config';
+    mockedCwd.mockReturnValue('/unrelated/process-cwd');
+    mockConfig.getWorkingDir = () => configuredWorkingDirectory;
+    isWorkspaceTrustedSpy.mockImplementation((_settings, workingDirectory) =>
+      workingDirectory === configuredWorkingDirectory ? undefined : true,
+    );
+    const { result } = renderHook(() =>
+      useFolderTrust(
+        mockSettings,
+        addItem,
+        mockConfig as unknown as CliUiRuntime,
+      ),
+    );
+
+    expect(result.current.isFolderTrustDialogOpen).toBe(true);
+
+    act(() => {
+      result.current.handleFolderTrustSelect(FolderTrustChoice.TRUST_FOLDER);
+    });
+
+    expect(mockTrustedFolders.user.config[configuredWorkingDirectory]).toBe(
+      TrustLevel.TRUST_FOLDER,
+    );
   });
 });

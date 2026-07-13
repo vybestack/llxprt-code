@@ -6,10 +6,19 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import * as path from 'node:path';
-import type { LoadedTrustedFolders } from '../../config/trustedFolders.js';
-import { loadTrustedFolders, TrustLevel } from '../../config/trustedFolders.js';
-import { useSettings } from '../contexts/SettingsContext.js';
-import { getIdeTrust } from '@vybestack/llxprt-code-core';
+import {
+  loadTrustedFolders,
+  resolveLocalWorkspaceTrust,
+  type LoadedTrustedFolders,
+  TrustLevel,
+} from '../../config/trustedFolders.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
+import { useIdeTrustListener } from './useIdeTrustListener.js';
+import process from 'node:process';
+
+const emptyIdeState: Pick<CliUiRuntime, 'getIdeClient'> = {
+  getIdeClient: () => undefined,
+};
 
 export interface UsePermissionsModifyTrustReturn {
   /** Current trust level for the working directory */
@@ -19,13 +28,23 @@ export interface UsePermissionsModifyTrustReturn {
   /** Set a pending trust level change */
   setPendingTrustLevel: (level: TrustLevel) => void;
   /** Commit the pending trust level change */
-  commitTrustLevel: (level?: TrustLevel) => void;
+  commitTrustLevel: (
+    level?: TrustLevel,
+  ) =>
+    | { success: true }
+    | { success: false; phase: 'persistence' | 'live'; error: unknown };
+  /** Effective local trust level, including inherited rules */
+  effectiveLocalTrustLevel: TrustLevel | undefined;
   /** Whether the workspace is trusted through IDE */
-  isIdeTrusted: boolean;
-  /** Whether the workspace is trusted through parent folder */
+  isIdeTrusted: boolean | undefined;
+  /** Whether the winning local rule is inherited */
   isParentTrusted: boolean;
-  /** Whether a restart is required after committing */
-  requiresRestart: boolean;
+  /** Whether a trust change was committed */
+  trustChanged: boolean;
+  /** The local trust level saved during this dialog session */
+  committedTrustLevel: TrustLevel | undefined;
+  /** The live effective trust state after the change */
+  effectiveTrust: boolean | undefined;
   /** The current working directory */
   workingDirectory: string;
   /** The parent folder name */
@@ -37,96 +56,87 @@ export interface UsePermissionsModifyTrustReturn {
 /**
  * Hook that manages folder trust settings for the permissions dialog.
  * Handles current trust level state, pending changes, inherited trust detection,
- * and restart requirement detection.
+ * and live Config updates via setTrustedFolderLive.
  */
-export function usePermissionsModifyTrust(): UsePermissionsModifyTrustReturn {
-  const settings = useSettings();
-  const cwd = process.cwd();
+export function usePermissionsModifyTrust(
+  config?: CliUiRuntime,
+): UsePermissionsModifyTrustReturn {
+  const cwd = config?.getWorkingDir() ?? process.cwd();
   const parentFolderName = path.basename(path.dirname(cwd));
-
   const trustedFolders = useMemo(() => loadTrustedFolders(), []);
-
-  // Determine current trust level for the working directory
-  const currentTrustLevel = useMemo((): TrustLevel | undefined => {
-    // Find exact match for current directory
-    const rule = trustedFolders.rules.find(
-      (r) => path.normalize(r.path) === path.normalize(cwd),
-    );
-    return rule?.trustLevel;
-  }, [trustedFolders, cwd]);
-
-  // Check if trusted through IDE
-  const isIdeTrusted = useMemo(() => {
-    const ideTrust = getIdeTrust();
-    return ideTrust === true;
-  }, []);
-
-  // Check if trusted through parent folder
-  const isParentTrusted = useMemo(() => {
-    if (isIdeTrusted) return false;
-
-    // Check if any parent rule would trust this directory
-    for (const rule of trustedFolders.rules) {
-      if (rule.trustLevel === TrustLevel.TRUST_PARENT) {
-        const parentPath = path.dirname(rule.path);
-        if (path.normalize(cwd).startsWith(path.normalize(parentPath))) {
-          return true;
-        }
-      }
-      if (rule.trustLevel === TrustLevel.TRUST_FOLDER) {
-        const normalizedRulePath = path.normalize(rule.path);
-        const normalizedCwd = path.normalize(cwd);
-        if (
-          normalizedCwd.startsWith(normalizedRulePath) &&
-          normalizedCwd !== normalizedRulePath
-        ) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }, [trustedFolders, cwd, isIdeTrusted]);
+  const winningRule = useMemo(
+    () => trustedFolders.resolvePathTrust(cwd),
+    [trustedFolders, cwd],
+  );
+  const currentTrustLevel = trustedFolders.user.config[cwd];
+  const effectiveLocalTrustLevel = winningRule?.rule.trustLevel;
+  const { isIdeTrusted } = useIdeTrustListener(config ?? emptyIdeState);
+  const isParentTrusted = winningRule?.provenance === 'inherited';
 
   const [pendingTrustLevel, setPendingTrustLevel] = useState<
     TrustLevel | undefined
   >(currentTrustLevel);
 
-  const [hasCommitted, setHasCommitted] = useState(false);
+  const [committedLevel, setCommittedLevel] = useState<TrustLevel | undefined>(
+    undefined,
+  );
+  const [effectiveTrust, setEffectiveTrust] = useState<boolean | undefined>(
+    config?.isTrustedFolder() ?? winningRule?.trusted,
+  );
 
   const commitTrustLevel = useCallback(
-    (level?: TrustLevel) => {
+    (
+      level?: TrustLevel,
+    ):
+      | { success: true }
+      | { success: false; phase: 'persistence' | 'live'; error: unknown } => {
       const nextLevel = level ?? pendingTrustLevel;
       if (nextLevel === undefined) {
-        return;
+        return { success: true };
       }
 
       setPendingTrustLevel(nextLevel);
-      trustedFolders.setValue(cwd, nextLevel);
-      setHasCommitted(true);
+      try {
+        trustedFolders.setValue(cwd, nextLevel);
+      } catch (error) {
+        return { success: false, phase: 'persistence', error };
+      }
+      setCommittedLevel(nextLevel);
+
+      try {
+        if (config) {
+          config.setTrustedFolderLive(
+            resolveLocalWorkspaceTrust(
+              { folderTrust: config.getFolderTrust() },
+              trustedFolders,
+              cwd,
+            ) ?? false,
+          );
+          setEffectiveTrust(config.isTrustedFolder());
+        } else {
+          setEffectiveTrust(nextLevel !== TrustLevel.DO_NOT_TRUST);
+        }
+      } catch (error) {
+        return { success: false, phase: 'live', error };
+      }
+      return { success: true };
     },
-    [pendingTrustLevel, trustedFolders, cwd],
+    [pendingTrustLevel, trustedFolders, cwd, config],
   );
 
-  // Determine if restart is required after committing
-  const requiresRestart = useMemo(() => {
-    if (!hasCommitted) return false;
-
-    // Check if folder trust feature is enabled
-    const folderTrustEnabled = settings.merged.folderTrust ?? false;
-    if (!folderTrustEnabled) return false;
-
-    // A restart is required if we changed the trust level
-    return pendingTrustLevel !== currentTrustLevel;
-  }, [hasCommitted, pendingTrustLevel, currentTrustLevel, settings]);
+  const trustChanged = committedLevel !== undefined;
 
   return {
     currentTrustLevel,
     pendingTrustLevel,
     setPendingTrustLevel,
     commitTrustLevel,
+    effectiveLocalTrustLevel,
     isIdeTrusted,
     isParentTrusted,
-    requiresRestart,
+    trustChanged,
+    committedTrustLevel: committedLevel,
+    effectiveTrust,
     workingDirectory: cwd,
     parentFolderName,
     trustedFolders,

@@ -52,7 +52,6 @@ export function hasActiveDialog(uiState: UIState): boolean {
   const dialogFlags = [
     uiState.showWorkspaceMigrationDialog,
     uiState.shouldShowIdePrompt,
-    uiState.showIdeRestartPrompt,
     uiState.isFolderTrustDialogOpen,
     uiState.isWelcomeDialogOpen,
     uiState.isPermissionsDialogOpen,
