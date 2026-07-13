@@ -262,6 +262,10 @@ function handleIdeAndShellKeys(
 }
 
 export function useKeybindings(params: UseKeybindingsParams): void {
+  // Keep the latest deps in a ref so the keypress handler closure below never
+  // goes stale, while keeping the callback identity stable. useKeypress
+  // registers the handler once (empty deps) — if the callback changed on every
+  // render, registration would churn or miss keys during rapid dep updates.
   const latestParamsRef = useRef(params);
   latestParamsRef.current = params;
 

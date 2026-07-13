@@ -134,7 +134,7 @@ function isIContentArray(value: unknown): value is IContent[] {
 }
 
 function stableKey(message: QueuedSubmission, index: number): string {
-  if (message.promptId != null) {
+  if (message.promptId !== undefined && message.promptId !== '') {
     return `queued-${message.promptId}`;
   }
   const preview = extractPreviewText(message.query);
@@ -186,22 +186,6 @@ export function prepareQueuedMessagesPanelView({
   const panelHeight = calculatePanelHeight(rows);
   const boundedWidth = Math.max(1, Math.min(width, columns));
 
-  if (panelHeight < MIN_EXPANDED_PANEL_HEIGHT && !collapsed) {
-    return {
-      kind: 'compact',
-      width: boundedWidth,
-      summary: queuedMessageSummary(messages.length),
-    };
-  }
-
-  if (panelHeight === 1) {
-    return {
-      kind: 'compact',
-      width: boundedWidth,
-      summary: queuedMessageSummary(messages.length),
-    };
-  }
-
   if (collapsed) {
     return {
       kind: 'collapsed',
@@ -212,6 +196,14 @@ export function prepareQueuedMessagesPanelView({
         extractPreviewText(messages[0].query),
         Math.max(1, Math.floor(boundedWidth * COLLAPSED_PREVIEW_WIDTH_RATIO)),
       ),
+    };
+  }
+
+  if (panelHeight < MIN_EXPANDED_PANEL_HEIGHT) {
+    return {
+      kind: 'compact',
+      width: boundedWidth,
+      summary: queuedMessageSummary(messages.length),
     };
   }
 

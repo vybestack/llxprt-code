@@ -277,4 +277,90 @@ describe('QueuedMessagesPanel content preparation', () => {
       expect(view.kind === 'expanded' ? view.messages : []).toHaveLength(1);
     });
   });
+
+  describe('collapsed precedence over compact', () => {
+    it('stays collapsed even when panelHeight is 1', () => {
+      // rows=5 → panelHeight = floor(5 * 0.2) = 1
+      const view = prepareQueuedMessagesPanelView({
+        width: 80,
+        collapsed: true,
+        messages: [makeSubmission('one'), makeSubmission('two')],
+        columns: 80,
+        rows: 5,
+      });
+
+      expect(view).toStrictEqual({
+        kind: 'collapsed',
+        width: 80,
+        panelHeight: 1,
+        summary: '2 queued messages',
+        nextPreview: 'one',
+      });
+    });
+
+    it('stays collapsed when panelHeight is below the expanded minimum', () => {
+      // rows=10 → panelHeight = floor(10 * 0.2) = 2, below MIN_EXPANDED_PANEL_HEIGHT
+      const view = prepareQueuedMessagesPanelView({
+        width: 80,
+        collapsed: true,
+        messages: [makeSubmission('one')],
+        columns: 80,
+        rows: 10,
+      });
+
+      expect(view.kind).toBe('collapsed');
+    });
+  });
+
+  describe('stable key with promptId edge cases', () => {
+    it('falls back to index-based key when promptId is an empty string', () => {
+      const submission: QueuedSubmission = {
+        query: textQuery('hello'),
+        promptId: '',
+      };
+      const view = prepareQueuedMessagesPanelView({
+        width: 80,
+        messages: [submission],
+        columns: 80,
+        rows: 40,
+      });
+
+      expect(view.kind).toBe('expanded');
+      expect(view.kind === 'expanded' ? view.messages[0].key : '').toBe(
+        'queued-0-hello',
+      );
+    });
+
+    it('uses the promptId for the key when it is a non-empty string', () => {
+      const submission: QueuedSubmission = {
+        query: textQuery('hello'),
+        promptId: 'abc-123',
+      };
+      const view = prepareQueuedMessagesPanelView({
+        width: 80,
+        messages: [submission],
+        columns: 80,
+        rows: 40,
+      });
+
+      expect(view.kind).toBe('expanded');
+      expect(view.kind === 'expanded' ? view.messages[0].key : '').toBe(
+        'queued-abc-123',
+      );
+    });
+
+    it('falls back to index-based key when promptId is undefined', () => {
+      const view = prepareQueuedMessagesPanelView({
+        width: 80,
+        messages: [makeSubmission('hello')],
+        columns: 80,
+        rows: 40,
+      });
+
+      expect(view.kind).toBe('expanded');
+      expect(view.kind === 'expanded' ? view.messages[0].key : '').toBe(
+        'queued-0-hello',
+      );
+    });
+  });
 });
