@@ -18,17 +18,16 @@ function makeSubmission(text: string): QueuedSubmission {
 
 function firstText(sub: QueuedSubmission | undefined): string | undefined {
   const first = Array.isArray(sub?.query) ? sub.query[0] : undefined;
-  return isTextBlock(first) ? first.text : undefined;
+  return hasText(first) ? first.text : undefined;
 }
 
-function isTextBlock(part: unknown): part is { type: 'text'; text: string } {
-  if (typeof part !== 'object' || part === null) {
-    return false;
-  }
-  if (!('type' in part) || part.type !== 'text') {
-    return false;
-  }
-  return 'text' in part && typeof part.text === 'string';
+function hasText(part: unknown): part is { text: string } {
+  return (
+    typeof part === 'object' &&
+    part !== null &&
+    'text' in part &&
+    typeof part.text === 'string'
+  );
 }
 
 describe('useQueuedSubmissions', () => {
@@ -54,7 +53,31 @@ describe('useQueuedSubmissions', () => {
       });
 
       expect(result.current.queuedSubmissions).toHaveLength(1);
-      expect(result.current.queuedSubmissions[0]).toStrictEqual(sub);
+      expect(result.current.queuedSubmissions[0]).toMatchObject(sub);
+    });
+
+    it('assigns a unique stable identity to each queued occurrence', () => {
+      const { result } = renderHook(() => useQueuedSubmissions());
+      const repeatedSubmission = makeSubmission('same message');
+
+      act(() => {
+        result.current.enqueueSubmission(repeatedSubmission);
+        result.current.enqueueSubmission(repeatedSubmission);
+      });
+
+      const [first, second] = result.current.queuedSubmissions;
+      expect(first.queueId).toBeDefined();
+      expect(second.queueId).not.toBe(first.queueId);
+
+      let dequeued: QueuedSubmission | undefined;
+      act(() => {
+        dequeued = result.current.dequeueSubmission();
+        if (dequeued !== undefined) {
+          result.current.requeueSubmission(dequeued);
+        }
+      });
+
+      expect(result.current.queuedSubmissions[0].queueId).toBe(first.queueId);
     });
 
     it('appends in FIFO order when enqueuing multiple submissions', () => {

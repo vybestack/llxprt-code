@@ -47,6 +47,8 @@ export type SubmissionDisposition =
   | 'requeue'
   | 'requeue-await-event';
 
+const QUEUED_SUBMISSION_RETRY_DELAY_MS = 1000;
+
 export type SubmissionExecutor = (
   query: AgentRequestInput,
   options?: { isContinuation: boolean },
@@ -330,6 +332,7 @@ function useSubmitQueryEffects(
 
 function useDrainCleanup(
   drainTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
+  retryTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
   pendingSubmissionRef: React.MutableRefObject<QueuedSubmission | null>,
   mountedRef: React.MutableRefObject<boolean>,
   requeueSubmission: (submission: QueuedSubmission) => void,
@@ -343,6 +346,10 @@ function useDrainCleanup(
         clearTimeout(drainTimeoutRef.current);
         drainTimeoutRef.current = null;
       }
+      if (retryTimeoutRef.current !== null) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
       if (pendingSubmissionRef.current !== null) {
         requeueSubmission(pendingSubmissionRef.current);
         pendingSubmissionRef.current = null;
@@ -351,6 +358,7 @@ function useDrainCleanup(
     };
   }, [
     drainTimeoutRef,
+    retryTimeoutRef,
     mountedRef,
     pendingSubmissionRef,
     releaseDrain,
@@ -360,6 +368,7 @@ function useDrainCleanup(
 
 function useDrainSubmission(
   drainTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
+  retryTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
   pendingSubmissionRef: React.MutableRefObject<QueuedSubmission | null>,
   scheduleRef: React.MutableRefObject<() => void>,
   submitQueryRef: UseSubmitQueryDeps['submitQueryRef'],
@@ -393,7 +402,12 @@ function useDrainSubmission(
             requeueSubmission(next);
           }
           releaseDrain();
-          if (disposition !== 'requeue-await-event') {
+          if (disposition === 'requeue-await-event') {
+            retryTimeoutRef.current = setTimeout(() => {
+              retryTimeoutRef.current = null;
+              scheduleRef.current();
+            }, QUEUED_SUBMISSION_RETRY_DELAY_MS);
+          } else {
             scheduleRef.current();
           }
         }
@@ -401,6 +415,7 @@ function useDrainSubmission(
     },
     [
       drainTimeoutRef,
+      retryTimeoutRef,
       pendingSubmissionRef,
       scheduleRef,
       submitQueryRef,
@@ -423,13 +438,17 @@ function useScheduleNext(
     releaseDrain,
   } = deps;
   const drainTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSubmissionRef = useRef<QueuedSubmission | null>(null);
   const mountedRef = useRef(true);
+  // The mutable indirection breaks the schedule/drain callback cycle while
+  // allowing delayed retries to invoke the latest stable scheduler.
   const scheduleRef = useRef<() => void>(() => undefined);
   const streamingStateRef = useRef(deps.streamingState);
   streamingStateRef.current = deps.streamingState;
   useDrainCleanup(
     drainTimeoutRef,
+    retryTimeoutRef,
     pendingSubmissionRef,
     mountedRef,
     requeueSubmission,
@@ -438,6 +457,7 @@ function useScheduleNext(
 
   const drainSubmission = useDrainSubmission(
     drainTimeoutRef,
+    retryTimeoutRef,
     pendingSubmissionRef,
     scheduleRef,
     submitQueryRef,
@@ -454,6 +474,10 @@ function useScheduleNext(
     if (cannotDrain || !tryReserveDrain()) {
       return;
     }
+    if (retryTimeoutRef.current !== null) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
 
     const next = dequeueSubmission();
     if (!next) {
@@ -467,6 +491,7 @@ function useScheduleNext(
   }, [
     activeTurnRef,
     queuedSubmissionsRef,
+    retryTimeoutRef,
     dequeueSubmission,
     drainSubmission,
     tryReserveDrain,
@@ -495,6 +520,7 @@ interface SubmitQueryCallbackDeps extends UseSubmitQueryDeps {
 }
 
 function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
+  // Keep the callback identity stable while every invocation reads current deps.
   const latestCbdRef = useRef(cbd);
   latestCbdRef.current = cbd;
   return useCallback<SubmissionExecutor>(
@@ -532,6 +558,8 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
         return 'consumed';
       } finally {
         current.activeTurnRef.current = false;
+        // The active-turn owner schedules only after the turn settles. The
+        // scheduler's Idle check and reservation then prevent overlapping work.
         current.scheduleNextQueuedSubmission();
       }
     },
@@ -590,9 +618,6 @@ async function runSubmitQueryCore(
         /* non-fatal */
       }
     }
-    // The active-turn owner releases and schedules only after this promise
-    // settles; scheduleNextQueuedSubmission also requires an Idle render and a
-    // drain reservation, so cancellation cannot start overlapping work.
   }
 }
 

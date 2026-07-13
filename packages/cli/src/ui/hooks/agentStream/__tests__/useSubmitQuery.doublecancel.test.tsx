@@ -22,7 +22,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import React, { act, type Dispatch, type SetStateAction } from 'react';
 import { renderHook, waitFor } from '../../../../test-utils/render.js';
-import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
+import {
+  useSubmitQuery,
+  type SubmissionExecutor,
+  type UseSubmitQueryDeps,
+} from '../useSubmitQuery.js';
 import { useCancellation } from '../useAgentStreamLifecycle.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
 import type { QueuedSubmission } from '../types.js';
@@ -186,6 +190,7 @@ interface SubmitQueryOverrides {
   queueOperations?: ReturnType<typeof createQueueOperations>;
   tryReserveDrain?: () => boolean;
   releaseDrain?: () => void;
+  submitQueryRef?: React.MutableRefObject<SubmissionExecutor | null>;
   addItem?: UseSubmitQueryDeps['addItem'];
   turnCancelledRef?: React.MutableRefObject<boolean>;
   recordingIntegration?: UseSubmitQueryDeps['recordingIntegration'];
@@ -242,7 +247,7 @@ function createUseSubmitQueryDeps(
     lastModelIdentityRef: { current: null },
     abortControllerRef: deps.abortControllerRef,
     runStreamRef: deps.runStreamRef,
-    submitQueryRef: { current: null },
+    submitQueryRef: overrides.submitQueryRef ?? { current: null },
     isResponding: false,
   };
   return (streamingState) => ({ ...stableDeps, streamingState });
@@ -429,6 +434,53 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
 
     unmount();
     expect(unsubscribeMcp).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries an unavailable queued submitter after a delay without stalling', async () => {
+    vi.useFakeTimers();
+    const queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]> = {
+      current: [],
+    };
+    const queueOperations = createQueueOperations(queuedSubmissionsRef);
+    const submitQueryRef: React.MutableRefObject<SubmissionExecutor | null> = {
+      current: null,
+    };
+    const rendered = renderUseSubmitQuery(
+      createDeps(),
+      {
+        queuedSubmissionsRef,
+        queueOperations,
+        submitQueryRef,
+      },
+      { initialStreamingState: StreamingState.Idle },
+    );
+
+    try {
+      submitQueryRef.current = null;
+      queueOperations.enqueueSubmission({ query: 'retry me' });
+      act(() => {
+        rendered.result.current.scheduleNextQueuedSubmission();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(queuedSubmissionsRef.current).toHaveLength(1);
+
+      submitQueryRef.current = async () => 'consumed';
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(999);
+      });
+      expect(queuedSubmissionsRef.current).toHaveLength(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(queuedSubmissionsRef.current).toHaveLength(0);
+    } finally {
+      rendered.unmount();
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
   });
 
   it('processes a non-string submission immediately even when MCP discovery is in progress (issue #2516)', async () => {

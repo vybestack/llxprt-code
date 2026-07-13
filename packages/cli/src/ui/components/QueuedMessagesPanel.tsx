@@ -138,6 +138,9 @@ function stableKey(
   index: number,
   preview: string,
 ): string {
+  if (message.queueId !== undefined) {
+    return `queued-${message.queueId}`;
+  }
   if (message.promptId !== undefined && message.promptId !== '') {
     return `queued-${message.promptId}-${index}`;
   }
@@ -163,7 +166,7 @@ function calculateMaxVisibleItems(
     return messageCount;
   }
   if (availableRows <= 1) {
-    return availableRows;
+    return 0;
   }
   return availableRows - 1;
 }
@@ -220,7 +223,6 @@ export function prepareQueuedMessagesPanelView({
     boundedWidth - EXPANDED_CONTENT_WIDTH_OFFSET,
   );
   const moreCount = messages.length - visibleMessages.length;
-  const availableRows = calculateAvailableRows(panelHeight);
 
   return {
     kind: 'expanded',
@@ -236,7 +238,7 @@ export function prepareQueuedMessagesPanelView({
       };
     }),
     moreCount,
-    showMoreIndicator: moreCount > 0 && visibleMessages.length < availableRows,
+    showMoreIndicator: moreCount > 0,
   };
 }
 

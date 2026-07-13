@@ -224,7 +224,7 @@ describe('QueuedMessagesPanel content preparation', () => {
       });
     });
 
-    it('shows one message without overflowing when only one content row fits', () => {
+    it('shows only the overflow indicator when one content row cannot fit both', () => {
       expect(
         prepareQueuedMessagesPanelView({
           width: 80,
@@ -235,9 +235,9 @@ describe('QueuedMessagesPanel content preparation', () => {
       ).toMatchObject({
         kind: 'expanded',
         panelHeight: 3,
-        messages: [{ number: 1, preview: 'one' }],
-        moreCount: 1,
-        showMoreIndicator: false,
+        messages: [],
+        moreCount: 2,
+        showMoreIndicator: true,
       });
     });
 
@@ -313,6 +313,37 @@ describe('QueuedMessagesPanel content preparation', () => {
   });
 
   describe('stable key with promptId edge cases', () => {
+    it('keeps queue identity keys stable when repeated previews are reordered', () => {
+      const first: QueuedSubmission = {
+        query: textQuery('same preview'),
+        queueId: 41,
+      };
+      const second: QueuedSubmission = {
+        query: textQuery('same preview'),
+        queueId: 42,
+      };
+      const prepareKeys = (messages: readonly QueuedSubmission[]) => {
+        const view = prepareQueuedMessagesPanelView({
+          width: 80,
+          messages,
+          columns: 80,
+          rows: 40,
+        });
+        return view.kind === 'expanded'
+          ? view.messages.map((message) => message.key)
+          : [];
+      };
+
+      expect(prepareKeys([first, second])).toStrictEqual([
+        'queued-41',
+        'queued-42',
+      ]);
+      expect(prepareKeys([second, first])).toStrictEqual([
+        'queued-42',
+        'queued-41',
+      ]);
+    });
+
     it('falls back to index-based key when promptId is an empty string', () => {
       const submission: QueuedSubmission = {
         query: textQuery('hello'),

@@ -80,6 +80,14 @@ const CTRL_BRACKET_KEY: Key = {
   sequence: ']',
 };
 
+const CTRL_Q_KEY: Key = {
+  ctrl: true,
+  meta: false,
+  shift: false,
+  name: 'q',
+  sequence: 'q',
+};
+
 const createHarness = (): HookHarness => ({
   requestCtrlCExit: vi.fn(),
   requestCtrlDExit: vi.fn(),
@@ -507,7 +515,7 @@ describe('useKeybindings', () => {
       const handler = getRegisteredHandler();
 
       act(() => {
-        handler({ ctrl: true, name: 'q' } as Key);
+        handler(CTRL_Q_KEY);
       });
 
       expect(harness.setIsTodoPanelCollapsed).toHaveBeenCalledWith(true);

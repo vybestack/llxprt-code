@@ -39,10 +39,13 @@ export function useQueuedSubmissions() {
   // isResponding(true) yet. Prevents concurrent triggers from each dequeuing
   // a separate item.
   const drainInFlightRef = useRef(false);
+  const nextQueueIdRef = useRef(0);
 
   const enqueueSubmission = useCallback(
     (submission: QueuedSubmission): void => {
-      setQueuedSubmissions((prev) => [...prev, submission]);
+      const queueId = nextQueueIdRef.current;
+      nextQueueIdRef.current = queueId + 1;
+      setQueuedSubmissions((prev) => [...prev, { ...submission, queueId }]);
     },
     [setQueuedSubmissions],
   );

@@ -143,12 +143,13 @@ function StatusBarLeft(props: InlineContentProps) {
 }
 
 function StatusBarRight(props: InlineContentProps) {
-  const showAutoAcceptIndicator =
-    props.showAutoAcceptIndicator !== ApprovalMode.DEFAULT &&
-    !props.shellModeActive;
-  if (!showAutoAcceptIndicator && !props.shellModeActive) {
+  if (
+    props.showAutoAcceptIndicator === ApprovalMode.DEFAULT &&
+    !props.shellModeActive
+  ) {
     return null;
   }
+  const showAutoAcceptIndicator = !props.shellModeActive;
 
   return (
     <Box
