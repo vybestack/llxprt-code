@@ -195,20 +195,66 @@ describe('BrowserProfileAssociationStore', () => {
       );
     });
 
-    it('rejects entries with a malformed shape (missing profileDirectory)', () => {
-      const fs = createInMemoryFs({
-        '/fake/path/oauth-browser-profiles.json': JSON.stringify({
-          version: 1,
-          associations: {
-            'anthropic:default': { browser: 'chrome' },
+    it('filters malformed entries while retaining valid entries', () => {
+      const path = '/fake/path/oauth-browser-profiles.json';
+      const originalContent = JSON.stringify({
+        version: 1,
+        associations: {
+          'anthropic:default': { browser: 'chrome' },
+          'anthropic:work': {
+            browser: 'firefox',
+            profileDirectory: 'work-profile',
+            displayName: 'Work',
           },
-        }),
+          'anthropic:unsupported': {
+            browser: 'unsupported',
+            profileDirectory: 'Default',
+          },
+          'codex:default': {
+            browser: 'chrome',
+            profileDirectory: 'Default',
+          },
+        },
       });
+      const fs = createInMemoryFs({ [path]: originalContent });
       const store = createStore(fs);
 
-      // The malformed entry must not be surfaced to consumers.
+      expect(store.listAssociations('anthropic')).toStrictEqual([
+        {
+          bucket: 'work',
+          browser: 'firefox',
+          profileDirectory: 'work-profile',
+          displayName: 'Work',
+        },
+      ]);
       expect(store.getAssociation('anthropic', 'default')).toBeUndefined();
+      expect(store.getAssociation('codex')).toStrictEqual({
+        browser: 'chrome',
+        profileDirectory: 'Default',
+      });
+      expect(fs.files.get(path)).toBe(originalContent);
+    });
+
+    it('treats a malformed associations collection as empty without overwriting it', () => {
+      const path = '/fake/path/oauth-browser-profiles.json';
+      const originalContent = JSON.stringify({
+        version: 1,
+        associations: [],
+      });
+      const fs = createInMemoryFs({ [path]: originalContent });
+      const store = createStore(fs);
+
       expect(store.listAssociations('anthropic')).toStrictEqual([]);
+      expect(fs.files.get(path)).toBe(originalContent);
+
+      store.setAssociation('anthropic', 'default', {
+        browser: 'chrome',
+        profileDirectory: 'Default',
+      });
+      expect(store.getAssociation('anthropic')).toStrictEqual({
+        browser: 'chrome',
+        profileDirectory: 'Default',
+      });
     });
 
     it('rejects persisted data missing the required version field', () => {
@@ -231,6 +277,34 @@ describe('BrowserProfileAssociationStore', () => {
       expect(fs.files.get(path)).toBe(originalContent);
     });
 
+    it('preserves an unsupported-version file and blocks mutations', () => {
+      const path = '/fake/path/oauth-browser-profiles.json';
+      const originalContent = JSON.stringify({
+        version: 2,
+        associations: {
+          'anthropic:default': {
+            browser: 'chrome',
+            profileDirectory: 'Default',
+            futureField: 'preserve-me',
+          },
+        },
+      });
+      const fs = createInMemoryFs({ [path]: originalContent });
+      const store = createStore(fs);
+
+      expect(store.getAssociation('anthropic')).toBeUndefined();
+      expect(store.listAssociations('anthropic')).toStrictEqual([]);
+      expect(() =>
+        store.setAssociation('anthropic', 'work', {
+          browser: 'firefox',
+          profileDirectory: 'work',
+        }),
+      ).toThrow('unsupported file version');
+      expect(() => store.clearAssociation('anthropic')).toThrow(
+        'unsupported file version',
+      );
+      expect(fs.files.get(path)).toBe(originalContent);
+    });
     it('rejects persisted data with an unsupported browser kind', () => {
       const path = '/fake/path/oauth-browser-profiles.json';
       const originalContent = JSON.stringify({

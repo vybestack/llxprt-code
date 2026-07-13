@@ -262,9 +262,16 @@ function discoverFirefoxProfiles(
     // "Name=" key), not by its on-disk Path. When the two differ (which they
     // do whenever the user renamed a profile or Firefox relocated it),
     // passing the Path would fail to select the intended profile, so prefer
-    // Name and fall back to Path only as a last resort for entries that omit
-    // a Name entirely.
-    const directoryName = entry.name ?? entry.path;
+    // Name. Fall back to Path only for entries that omit a Name entirely;
+    // profiles.ini stores Path as a relative reference (e.g.
+    // "Profiles/abcd.default"), so resolve it against rootDir to produce a
+    // usable, unambiguous selector instead of a brittle relative fragment.
+    let directoryName = entry.name;
+    if (!directoryName && entry.path) {
+      directoryName = path.isAbsolute(entry.path)
+        ? entry.path
+        : path.resolve(rootDir, entry.path);
+    }
     if (directoryName) {
       profiles.push({
         directoryName,

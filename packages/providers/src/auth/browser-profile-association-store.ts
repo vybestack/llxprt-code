@@ -46,8 +46,10 @@ export interface AssociationStoreFs {
   mkdir?: (p: string, opts?: { recursive?: boolean }) => void;
 }
 
+const DEFAULT_FILE_VERSION = 1;
+
 interface AssociationFileData {
-  version: number;
+  version: typeof DEFAULT_FILE_VERSION;
   associations: Record<
     string,
     {
@@ -58,7 +60,14 @@ interface AssociationFileData {
   >;
 }
 
-const DEFAULT_FILE_VERSION = 1;
+interface AssociationFileReadResult {
+  data: AssociationFileData;
+  writable: boolean;
+}
+
+function emptyFileData(): AssociationFileData {
+  return { version: DEFAULT_FILE_VERSION, associations: {} };
+}
 
 function defaultFilePath(): string {
   return path.join(Storage.getGlobalDataDir(), 'oauth-browser-profiles.json');
@@ -86,43 +95,81 @@ function cloneAssociation(
 }
 
 /**
- * Runtime type guard for the persisted file shape. Ensures malformed or
- * partial JSON is rejected without relying on `any`.
- *
- * Validates not only that `associations` is an object, but that every entry
- * has the required `browser` and `profileDirectory` fields so malformed
- * entries cannot silently pass and cause runtime errors when consumed.
+ * Runtime type guard for the persisted file's top-level shape (a numeric
+ * version and an associations object). Does not validate individual entries —
+ * use {@link sanitizeAssociations} to filter those — so one malformed entry
+ * cannot cause the entire file (and all valid associations) to be discarded.
  */
-function isAssociationFileData(value: unknown): value is AssociationFileData {
-  if (typeof value !== 'object' || value === null) {
+function hasValidFileStructure(value: unknown): value is {
+  version: typeof DEFAULT_FILE_VERSION;
+  associations: Record<string, unknown>;
+} {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false;
   }
-  const record = value as Record<string, unknown>;
-  if (typeof record.version !== 'number') {
+  if (!('version' in value) || value.version !== DEFAULT_FILE_VERSION) {
     return false;
   }
-  const associations = record.associations;
-  if (typeof associations !== 'object' || associations === null) {
+  if (
+    !('associations' in value) ||
+    typeof value.associations !== 'object' ||
+    value.associations === null ||
+    Array.isArray(value.associations)
+  ) {
     return false;
-  }
-  const entries = associations as Record<string, unknown>;
-  for (const entry of Object.values(entries)) {
-    if (!isAssociationEntry(entry)) {
-      return false;
-    }
   }
   return true;
 }
 
-function isAssociationEntry(value: unknown): boolean {
-  if (typeof value !== 'object' || value === null) {
+function hasUnsupportedVersion(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false;
   }
-  const entry = value as Record<string, unknown>;
+  if (!('version' in value) || typeof value.version !== 'number') {
+    return false;
+  }
+  return value.version !== DEFAULT_FILE_VERSION;
+}
+
+/**
+ * Given a structurally-valid file, return an {@link AssociationFileData} with
+ * only the well-formed association entries retained. Malformed entries are
+ * silently dropped so a single bad write cannot hide the remaining valid
+ * associations from every provider/bucket.
+ */
+function sanitizeAssociations(data: {
+  version: typeof DEFAULT_FILE_VERSION;
+  associations: Record<string, unknown>;
+}): AssociationFileData {
+  const validEntries = Object.entries(data.associations).filter(
+    (entry): entry is [string, BrowserProfileAssociation] =>
+      isAssociationEntry(entry[1]),
+  );
+  const associations = Object.fromEntries(
+    validEntries.map(([key, entry]) => [key, cloneAssociation(entry)]),
+  );
+  return { version: data.version, associations };
+}
+
+function isAssociationEntry(
+  value: unknown,
+): value is BrowserProfileAssociation {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  if (!('browser' in value) || !isSupportedBrowserKind(value.browser)) {
+    return false;
+  }
+  if (
+    !('profileDirectory' in value) ||
+    typeof value.profileDirectory !== 'string'
+  ) {
+    return false;
+  }
   return (
-    isSupportedBrowserKind(entry.browser) &&
-    typeof entry.profileDirectory === 'string' &&
-    (entry.displayName === undefined || typeof entry.displayName === 'string')
+    !('displayName' in value) ||
+    value.displayName === undefined ||
+    typeof value.displayName === 'string'
   );
 }
 
@@ -163,11 +210,12 @@ export class BrowserProfileAssociationStore {
     bucket: string,
     association: BrowserProfileAssociation,
   ): void {
-    const data = this.readData();
+    const result = this.readData();
+    this.assertWritable(result);
     const key = associationKey(provider, bucket);
 
-    data.associations[key] = cloneAssociation(association);
-    this.writeData(data);
+    result.data.associations[key] = cloneAssociation(association);
+    this.writeData(result.data);
   }
 
   /**
@@ -179,7 +227,7 @@ export class BrowserProfileAssociationStore {
     provider: string,
     bucket: string = 'default',
   ): BrowserProfileAssociation | undefined {
-    const data = this.readData();
+    const data = this.readData().data;
     const key = associationKey(provider, bucket);
     if (!(key in data.associations)) {
       return undefined;
@@ -195,11 +243,12 @@ export class BrowserProfileAssociationStore {
    * Bucket defaults to 'default'.
    */
   clearAssociation(provider: string, bucket: string = 'default'): void {
-    const data = this.readData();
+    const result = this.readData();
+    this.assertWritable(result);
     const key = associationKey(provider, bucket);
-    if (key in data.associations) {
-      delete data.associations[key];
-      this.writeData(data);
+    if (key in result.data.associations) {
+      delete result.data.associations[key];
+      this.writeData(result.data);
     }
   }
 
@@ -209,7 +258,7 @@ export class BrowserProfileAssociationStore {
   listAssociations(
     provider: string,
   ): Array<{ bucket: string } & BrowserProfileAssociation> {
-    const data = this.readData();
+    const data = this.readData().data;
     const prefix = `${provider}:`;
     const results: Array<{ bucket: string } & BrowserProfileAssociation> = [];
 
@@ -227,26 +276,37 @@ export class BrowserProfileAssociationStore {
    * Read the file data. Resilient: missing or malformed file → empty data.
    * Does NOT overwrite on read failure.
    */
-  private readData(): AssociationFileData {
+  private readData(): AssociationFileReadResult {
     if (!this.existsFn(this.filePath)) {
-      return { version: DEFAULT_FILE_VERSION, associations: {} };
+      return { data: emptyFileData(), writable: true };
     }
 
     let raw: string;
     try {
       raw = this.readFileFn(this.filePath);
     } catch {
-      return { version: DEFAULT_FILE_VERSION, associations: {} };
+      return { data: emptyFileData(), writable: true };
     }
 
     try {
-      const parsed = JSON.parse(raw) as unknown;
-      if (!isAssociationFileData(parsed)) {
-        return { version: DEFAULT_FILE_VERSION, associations: {} };
+      const parsed: unknown = JSON.parse(raw);
+      if (!hasValidFileStructure(parsed)) {
+        return {
+          data: emptyFileData(),
+          writable: !hasUnsupportedVersion(parsed),
+        };
       }
-      return parsed;
+      return { data: sanitizeAssociations(parsed), writable: true };
     } catch {
-      return { version: DEFAULT_FILE_VERSION, associations: {} };
+      return { data: emptyFileData(), writable: true };
+    }
+  }
+
+  private assertWritable(result: AssociationFileReadResult): void {
+    if (!result.writable) {
+      throw new Error(
+        'Cannot modify browser profile associations from an unsupported file version.',
+      );
     }
   }
 

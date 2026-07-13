@@ -134,6 +134,8 @@ function isLinuxLike(platformName: NodeJS.Platform): boolean {
 
 /**
  * Options for launching a specific browser binary with an optional profile.
+ * Chrome accepts a profile directory name. Firefox accepts either a profile
+ * name or an absolute profile path; names use `-P` and paths use `-profile`.
  */
 export interface BrowserLaunchOptions {
   browser?: BrowserKind;
@@ -215,6 +217,42 @@ export function validateProfileDirectory(dir: string): void {
   }
 }
 
+const FIREFOX_PROFILE_PATH_FORBIDDEN = /\p{Cc}/u;
+
+function isFirefoxProfilePath(
+  browser: BrowserKind,
+  profileDirectory: string,
+): boolean {
+  return browser === 'firefox' && nodePath.isAbsolute(profileDirectory);
+}
+
+function validateBrowserProfileSelection(
+  browser: BrowserKind,
+  profileDirectory: string,
+): void {
+  if (isFirefoxProfilePath(browser, profileDirectory)) {
+    if (FIREFOX_PROFILE_PATH_FORBIDDEN.test(profileDirectory)) {
+      throw new Error(
+        `Invalid Firefox profile path: "${profileDirectory}". Control characters are not allowed.`,
+      );
+    }
+    return;
+  }
+  validateProfileDirectory(profileDirectory);
+}
+
+function firefoxProfileArguments(
+  profileDirectory: string | undefined,
+): string[] {
+  if (!profileDirectory) {
+    return [];
+  }
+  return [
+    nodePath.isAbsolute(profileDirectory) ? '-profile' : '-P',
+    profileDirectory,
+  ];
+}
+
 /**
  * Opens a URL in the default browser using platform-specific commands.
  * This implementation avoids shell injection vulnerabilities by:
@@ -239,7 +277,10 @@ export async function openBrowserSecurely(
 
   if (options?.browser) {
     if (options.profileDirectory) {
-      validateProfileDirectory(options.profileDirectory);
+      validateBrowserProfileSelection(
+        options.browser,
+        options.profileDirectory,
+      );
     }
     await openSpecificBrowser(url, options.browser, options.profileDirectory);
     return;
@@ -609,38 +650,24 @@ function buildFirefoxLaunchArgs(
   profileDirectory: string | undefined,
   url: string,
 ): [string, string[]] {
+  const profileArguments = firefoxProfileArguments(profileDirectory);
   switch (platformName) {
     case 'darwin': {
-      const args = ['-a', 'Firefox'];
-      if (profileDirectory) {
-        args.push('--args', '-P', profileDirectory);
-      }
+      const args =
+        profileArguments.length > 0
+          ? ['-n', '-a', 'Firefox', '--args', ...profileArguments]
+          : ['-a', 'Firefox'];
       args.push(url);
       return ['open', args];
     }
 
-    case 'win32': {
-      // Invoke the Firefox executable directly via execFileAsync — no shell,
-      // no PowerShell -Command string. Profile names with spaces are safe
-      // because each argument is a distinct argv element.
-      const args: string[] = [];
-      if (profileDirectory) {
-        args.push('-P', profileDirectory);
-      }
-      args.push(url);
-      return ['firefox.exe', args];
-    }
+    case 'win32':
+      return ['firefox.exe', [...profileArguments, url]];
 
     case 'linux':
     case 'freebsd':
-    case 'openbsd': {
-      const args: string[] = [];
-      if (profileDirectory) {
-        args.push('-P', profileDirectory);
-      }
-      args.push(url);
-      return ['firefox', args];
-    }
+    case 'openbsd':
+      return ['firefox', [...profileArguments, url]];
 
     default:
       throw new Error(`Unsupported platform for Firefox: ${platformName}`);

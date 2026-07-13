@@ -237,6 +237,48 @@ Path=yyyyyyyy.dev`;
       });
     });
 
+    it('resolves a relative Path against the Firefox profile root when Name is absent', () => {
+      const profilesIni = `[Profile0]
+IsRelative=1
+Path=Profiles/xxxxxxxx.default-release`;
+
+      const profiles = discoverBrowserProfiles('firefox', {
+        platform: 'darwin',
+        homeDir: '/Users/testuser',
+        fileExists: () => true,
+        readFile: () => profilesIni,
+      });
+
+      expect(profiles).toStrictEqual([
+        {
+          directoryName:
+            '/Users/testuser/Library/Application Support/Firefox/Profiles/xxxxxxxx.default-release',
+          displayName:
+            '/Users/testuser/Library/Application Support/Firefox/Profiles/xxxxxxxx.default-release',
+        },
+      ]);
+    });
+
+    it('preserves an absolute Path when Name is absent', () => {
+      const profilesIni = `[Profile0]
+IsRelative=0
+Path=/Volumes/Profiles/external.default-release`;
+
+      const profiles = discoverBrowserProfiles('firefox', {
+        platform: 'darwin',
+        homeDir: '/Users/testuser',
+        fileExists: () => true,
+        readFile: () => profilesIni,
+      });
+
+      expect(profiles).toStrictEqual([
+        {
+          directoryName: '/Volumes/Profiles/external.default-release',
+          displayName: '/Volumes/Profiles/external.default-release',
+        },
+      ]);
+    });
+
     it('returns empty array when profiles.ini is missing', () => {
       const profiles = discoverBrowserProfiles('firefox', {
         platform: 'darwin',

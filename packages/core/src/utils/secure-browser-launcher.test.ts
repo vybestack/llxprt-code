@@ -390,9 +390,53 @@ describe('secure-browser-launcher', () => {
 
       expect(mockExecFile).toHaveBeenCalledWith(
         'open',
-        ['-a', 'Firefox', '--args', '-P', 'myprofile', 'https://example.com'],
+        [
+          '-n',
+          '-a',
+          'Firefox',
+          '--args',
+          '-P',
+          'myprofile',
+          'https://example.com',
+        ],
         expect.any(Object),
       );
+    });
+
+    it('launches Firefox with an absolute profile path on macOS', async () => {
+      setPlatform('darwin');
+      const profilePath =
+        '/Users/testuser/Library/Application Support/Firefox/Profiles/xxxxxxxx.default-release';
+
+      await openBrowserSecurely('https://example.com', {
+        browser: 'firefox',
+        profileDirectory: profilePath,
+      });
+
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'open',
+        [
+          '-n',
+          '-a',
+          'Firefox',
+          '--args',
+          '-profile',
+          profilePath,
+          'https://example.com',
+        ],
+        expect.any(Object),
+      );
+    });
+
+    it('rejects an absolute Firefox profile path with control characters', async () => {
+      setPlatform('darwin');
+
+      await expect(
+        openBrowserSecurely('https://example.com', {
+          browser: 'firefox',
+          profileDirectory: '/Users/testuser/Profiles/work\nmalicious',
+        }),
+      ).rejects.toThrow('Invalid Firefox profile path');
     });
 
     it('launches Firefox with profile on Linux', async () => {
