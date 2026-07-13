@@ -35,7 +35,7 @@ import type {
   ContentBlock,
   IContent,
 } from '@vybestack/llxprt-code-core';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js';
 import {

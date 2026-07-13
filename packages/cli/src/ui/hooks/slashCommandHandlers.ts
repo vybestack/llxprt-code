@@ -8,16 +8,18 @@ import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type {
   RecordingIntegration,
   ToolCallConfirmationDetails,
-  DebugLogger,
   AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import {
   getProjectHash,
-  logSlashCommand,
-  SlashCommandEvent,
   ToolConfirmationOutcome,
 } from '@vybestack/llxprt-code-core';
+import {
+  logSlashCommand,
+  SlashCommandEvent,
+} from '@vybestack/llxprt-code-telemetry';
 import { join } from 'node:path';
 import { parseSlashCommand } from '../../utils/commands.js';
 import { secureInputHandler } from '../utils/secureInputHandler.js';

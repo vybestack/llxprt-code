@@ -9,9 +9,9 @@ import type { MutableRefObject, Dispatch, SetStateAction } from 'react';
 
 import {
   DEFAULT_GEMINI_FLASH_LITE_MODEL,
-  debugLogger,
   getResponseTextFromBlocks,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
   IContent,
   AgentClientGenerateConfig,

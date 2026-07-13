@@ -11,6 +11,7 @@ import type {
   ApprovalMode,
   MCPServerConfig,
 } from '@vybestack/llxprt-code-core/config/config.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type {
   HookEventName,
   HookInput,
@@ -657,11 +658,16 @@ export interface AgentProfileControl {
   getDefault(): ProfileSummary | undefined;
 }
 
+export interface AgentSessionStartResult {
+  readonly systemMessage?: string;
+  readonly additionalContext?: string;
+}
+
 export interface AgentHookControl {
   onHookExecution(
     cb: (req: HookExecutionRequest, resp: HookExecutionResponse) => void,
   ): Unsubscribe;
-  triggerSessionStart(): Promise<void>;
+  triggerSessionStart(): Promise<AgentSessionStartResult>;
   triggerSessionEnd(): Promise<void>;
   clear(): void;
   // @plan:PLAN-20260622-COREAPIGAP.P10 @requirement:REQ-004
@@ -871,6 +877,20 @@ export interface Agent {
    * @requirement:REQ-005
    */
   getRuntimeId(): string;
+  /**
+   * Returns the single session {@link MessageBus} agent construction owns —
+   * the SAME instance every internal surface (loop, scheduler, OAuth manager)
+   * shares. When a caller supplies a bus to `fromConfig`, this returns that
+   * exact instance; otherwise it returns the one bus agent construction built
+   * from the Config's policy engine. UI / non-interactive CLI consumers read
+   * the session bus from here instead of constructing or threading their own
+   * (#2378). Disposal depends on ownership: for an agent-owned bus callers
+   * MUST NOT dispose it (it lives for the agent lifetime); for a caller-
+   * supplied bus the caller retains disposal responsibility.
+   * @plan:PLAN-20270110-ISSUE2378.P01
+   * @requirement:REQ-2378-001
+   */
+  getMessageBus(): MessageBus;
   /** @plan:PLAN-20260621-COREAPIREMED.P10 @requirement:REQ-002 */
   getEphemeralSetting(key: string): unknown;
   /** @plan:PLAN-20260621-COREAPIREMED.P10 @requirement:REQ-002 */

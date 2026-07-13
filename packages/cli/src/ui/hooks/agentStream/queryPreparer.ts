@@ -13,10 +13,10 @@
 
 import {
   type ToolCallRequestInfo,
-  UserPromptEvent,
   MessageSenderType,
   type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
+import { UserPromptEvent } from '@vybestack/llxprt-code-telemetry';
 import { type SlashCommandProcessorResult } from '../../types.js';
 import { isAtCommand, isSlashCommand } from '../../utils/commandUtils.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';

@@ -6,13 +6,12 @@
 
 /**
  * useSubmitQuery — extracted submit query orchestration from useAgentStream.
- * Contains the submitQuery callback, the MCP discovery gate, queued-submission
- * scheduling, submitQueryRef update effect, idle-queue-drain effect, and
+ * Contains the submitQuery callback, queued-submission scheduling,
+ * submitQueryRef update effect, idle-queue-drain effect, and
  * async-task-auto-trigger effect.
  */
 
 import { useCallback, useEffect, useRef } from 'react';
-import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   type MessageSenderType,
@@ -495,9 +494,8 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
       fromQueue = false,
     ) => {
       // submitQuery handles NEW user prompts only; the Agent's event stream
-      // drives multi-turn continuation internally. Continuation queries bypass
-      // the MCP discovery gate because they are part of an already-started turn.
-      const isContinuation = options?.isContinuation === true;
+      // drives multi-turn continuation internally.
+      void options;
 
       if (cbd.activeTurnRef.current || isQueueable(cbd.streamingState)) {
         if (fromQueue) {
@@ -507,21 +505,6 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
           query,
           promptId: prompt_id,
         });
-        return 'consumed';
-      }
-
-      if (!isContinuation && isMcpDiscoveryBlocking(cbd.runtime, query)) {
-        if (fromQueue) {
-          return 'requeue-await-event';
-        }
-        cbd.addItem(
-          {
-            type: 'info' as const,
-            text: 'Waiting for MCP servers to initialize... Slash commands are still available.',
-          },
-          Date.now(),
-        );
-        cbd.enqueueSubmission({ query, promptId: prompt_id });
         return 'consumed';
       }
 
@@ -609,27 +592,6 @@ function isQueueable(streamingState: StreamingState): boolean {
 
 function shouldDisplayUserMessage(trimmedStr: string): boolean {
   return !!trimmedStr && !isSlashCommand(trimmedStr);
-}
-
-function isMcpDiscoveryBlocking(
-  runtime: StreamRuntime,
-  query: AgentRequestInput,
-): boolean {
-  if (typeof query === 'string') {
-    const trimmedQuery = query.trim();
-    if (!trimmedQuery || isSlashCommand(trimmedQuery)) return false;
-  }
-
-  const mcpManager = runtime.mcp.getMcpClientManager();
-  const discoveryState = mcpManager?.getDiscoveryState();
-  const configuredMcpServers =
-    mcpManager !== undefined
-      ? Object.keys(runtime.mcp.getMcpServers() ?? {}).length
-      : 0;
-
-  return (
-    configuredMcpServers > 0 && discoveryState !== MCPDiscoveryState.COMPLETED
-  );
 }
 
 interface TurnInit {

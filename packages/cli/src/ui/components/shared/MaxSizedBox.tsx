@@ -9,7 +9,7 @@ import { Box, Text } from 'ink';
 import { Colors } from '../../colors.js';
 import { getCachedStringWidth, toCodePoints } from '../../utils/textUtils.js';
 import { useOverflowActions } from '../../contexts/OverflowContext.js';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 let enableDebugLog = false;
 

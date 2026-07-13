@@ -17,7 +17,8 @@ import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import { SettingScope } from '../../config/settings.js';
 import type { EditorType } from '@vybestack/llxprt-code-core';
-import { isEditorAvailable, debugLogger } from '@vybestack/llxprt-code-core';
+import { isEditorAvailable } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { useKeypress } from '../hooks/useKeypress.js';
 
 interface EditorDialogProps {

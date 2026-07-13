@@ -10,10 +10,8 @@ import {
   todoEvents,
   DEFAULT_AGENT_ID,
   isWithinRoot,
-  debugLogger,
   createInkStdio,
   type ContentBlock,
-  DebugLogger,
   EmojiFilter,
   type FilterConfiguration,
   type TodoUpdateEvent,
@@ -21,6 +19,7 @@ import {
   type ApprovalMode,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger, DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import * as acp from '@agentclientprotocol/sdk';
 import {
   fromConfig,

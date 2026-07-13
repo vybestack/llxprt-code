@@ -22,10 +22,8 @@ import type {
   ModelInfo,
   CanonicalFinishReason,
 } from '@vybestack/llxprt-code-core';
-import {
-  uiTelemetryService,
-  isCanonicalFinishReason,
-} from '@vybestack/llxprt-code-core';
+import { isCanonicalFinishReason } from '@vybestack/llxprt-code-core';
+import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import type {
   AgentEvent,
   AgentStopInfo,

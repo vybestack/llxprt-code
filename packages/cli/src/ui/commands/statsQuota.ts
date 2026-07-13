@@ -5,7 +5,7 @@
  */
 
 import type { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   CodexUsageInfoSchema,
   detectApiKeyProvider,

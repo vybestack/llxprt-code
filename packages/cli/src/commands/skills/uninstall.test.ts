@@ -12,11 +12,11 @@ vi.mock('../../utils/skillUtils.js', () => ({
   uninstallSkill: mockUninstallSkill,
 }));
 
-vi.mock('@vybestack/llxprt-code-core', () => ({
+vi.mock('@vybestack/llxprt-code-telemetry', () => ({
   debugLogger: { log: vi.fn(), error: vi.fn() },
 }));
 
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { handleUninstall, uninstallCommand } from './uninstall.js';
 
 describe('skill uninstall command', () => {

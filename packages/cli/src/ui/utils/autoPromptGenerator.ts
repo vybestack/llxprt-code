@@ -9,10 +9,8 @@ import type {
   AgentClientMessageParams,
   AgentClientGenerateConfig,
 } from '@vybestack/llxprt-code-core';
-import {
-  DebugLogger,
-  getResponseTextFromBlocks,
-} from '@vybestack/llxprt-code-core';
+import { getResponseTextFromBlocks } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { getRuntimeBridge } from '../contexts/RuntimeContext.js';
 import {
   createDetachedAutoPromptClient,

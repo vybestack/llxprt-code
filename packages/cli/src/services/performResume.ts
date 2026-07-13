@@ -33,9 +33,9 @@ import {
   type SessionRecordingService,
   type LockHandle,
   type SessionMetadata,
-  type DebugLogger,
   type SessionSummary,
 } from '@vybestack/llxprt-code-core';
+import { type DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 /**
  * Callbacks for swapping recording infrastructure during resume.

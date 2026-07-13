@@ -7,7 +7,7 @@
 import type React from 'react';
 import { useState, useCallback, useEffect } from 'react';
 import { Box, Text } from 'ink';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { Colors } from '../colors.js';
 
 const logger = new DebugLogger('llxprt:ui:secure-key-input');

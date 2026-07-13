@@ -10,8 +10,8 @@ import { exitCli } from '../utils.js';
 import {
   type HookEventName,
   type HookDefinition,
-  debugLogger,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 

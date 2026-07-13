@@ -6,11 +6,11 @@
 
 import {
   ApprovalMode,
-  DebugLogger,
   STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
   STREAM_IDLE_TIMEOUT_SETTING_KEY,
   type Config,
 } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -18,7 +18,9 @@ import {
   setCliRuntimeContext,
   applyCliSetArguments,
 } from '@vybestack/llxprt-code-providers/runtime.js';
-import { executeProviderActivation } from '@vybestack/llxprt-code-agents';
+import type { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { preflightAgentActivation } from '@vybestack/llxprt-code-agents';
+import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
 import {
   READ_ONLY_TOOL_NAMES,
   EDIT_TOOL_NAME,
@@ -221,21 +223,29 @@ async function setupRuntimeContext(
     profileManager,
   });
 
-  // Re-register provider infrastructure AFTER runtime context (step 11)
-  const { registerCliProviderInfrastructure } = await import(
+  // The early profile runtime has no Config, so its bus cannot carry the
+  // resolved policy. Recompose once Config exists and adopt that final runtime.
+  const { assembleCliProviderRuntime } = await import(
     '@vybestack/llxprt-code-providers/runtime.js'
   );
-  if (runtimeState.oauthManager) {
-    registerCliProviderInfrastructure(
-      runtimeState.providerManager,
-      runtimeState.oauthManager,
-      {
-        messageBus: runtimeState.runtimeMessageBus,
-        runtimeId: bootstrapRuntimeId,
-        metadata: baseBootstrapMetadata,
-      },
-    );
-  }
+  const finalRuntime = assembleCliProviderRuntime({
+    settingsService,
+    config,
+    runtimeId: bootstrapRuntimeId,
+    metadata: baseBootstrapMetadata,
+    oauthSettings: createOAuthSettingsAdapter(),
+  });
+  runtimeState.providerManager =
+    finalRuntime.providerManager as ProviderManager;
+  runtimeState.oauthManager = finalRuntime.oauthManager;
+  runtimeState.runtimeMessageBus = finalRuntime.runtimeMessageBus;
+  config.setProviderManager(finalRuntime.providerManager);
+  config.setRuntimeMessageBus(finalRuntime.runtimeMessageBus);
+  // Associate the exact assembled OAuthManager with the Config's runtime bundle
+  // (#2378 Finding 3). fromConfig adopts THIS manager by reference, so the
+  // OAuthManager the Agent sees is the exact one assembled on the same bus — no
+  // second OAuthManager is constructed or looked up.
+  config.setRuntimeOAuthManager(finalRuntime.oauthManager);
 
   logger.debug(
     () => `[bootstrap] Runtime context set, runtimeId=${bootstrapRuntimeId}`,
@@ -294,12 +304,15 @@ async function activateProviderAndProfile(
 
   if (!profileApplicationResult.appliedFromLoadedProfile) {
     try {
-      // The executor's authMode 'none' path swallows the provider-switch error
+      // The preflight's authMode 'none' path swallows the provider-switch error
       // internally (safeActivateProvider does not throw) and surfaces it via
       // result.switchError. The surrounding try/catch remains necessary because
-      // executeNoAuth also calls applyRuntimeProviderOverrides (file I/O for
+      // the 'none' path also calls applyRuntimeProviderOverrides (file I/O for
       // auth-keyfile resolution) and applyModelAndParams, which can still throw.
-      const activationResult = await executeProviderActivation(input.config, {
+      // The CLI routes this declarative provider switch through the public
+      // agent-bootstrap preflight (#2378) rather than the runtime activation
+      // primitive directly.
+      const activationResult = await preflightAgentActivation(input.config, {
         provider: finalProvider,
         authMode: 'none',
       });
@@ -566,7 +579,7 @@ function finalizeMetadata(input: PostConfigInput): void {
  * Step 10: setCliRuntimeContext()
  * Step 11: registerCliProviderInfrastructure() — re-registration, conditional, dynamic import
  * Step 12: applyProfileToRuntime() — snapshot application
- * Step 13: executeProviderActivation() — declarative provider switch (authMode 'none'; auth happens later)
+ * Step 13: preflightAgentActivation() — declarative provider switch (authMode 'none'; auth happens later)
  * Step 14: reapplyCliOverrides() — CLI args win after provider switch clears ephemerals
  * Step 15: applyToolGovernance() — tool policy (ephemeral settings for allowed/excluded tools)
  * Step 16: applyEphemeralSettings() — emojifilter, profile ephemerals, CLI /set args, disabled hooks

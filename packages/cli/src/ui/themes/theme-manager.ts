@@ -27,7 +27,7 @@ import { NoColorTheme } from './no-color.js';
 import type { SemanticColors } from './semantic-tokens.js';
 import { resolveSemanticColors } from './semantic-resolver.js';
 import process from 'node:process';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 export interface ThemeDisplay {
   name: string;

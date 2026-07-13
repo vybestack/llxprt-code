@@ -40,6 +40,11 @@ export {
   executeProviderActivation,
   type ProviderActivationResult,
 } from './providerActivationExecutor.js';
+export {
+  preflightAgentActivation,
+  type AgentActivationPreflightResult,
+} from './preflightAgentActivation.js';
+export type { ActivationPreflightToken } from './activationPreflightState.js';
 export * from './event-types.js';
 export * from './agent.js';
 export * from './event-schema.js';

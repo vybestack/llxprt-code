@@ -113,6 +113,12 @@ export {
   setCliRuntimeContext,
 } from './runtimeLifecycle.js';
 
+export { assembleCliProviderRuntime } from './assembleCliProviderRuntime.js';
+export type {
+  AssembleCliProviderRuntimeInput,
+  AssembledCliProviderRuntime,
+} from './assembleCliProviderRuntime.js';
+
 export {
   switchActiveProvider,
   DEFAULT_PRESERVE_EPHEMERALS,

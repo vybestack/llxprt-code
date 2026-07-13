@@ -8,7 +8,6 @@ import type { FileWorkspaceState } from '../cliUiRuntime.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import {
-  debugLogger,
   getErrorMessage,
   isNodeError,
   validatePathWithinWorkspace,
@@ -16,6 +15,7 @@ import {
   type ContentBlock,
   type DiscoveredMCPResource,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
   AgentToolHandle,
   AgentToolInvocation,

@@ -8,10 +8,10 @@ import { parseSlashCommand } from './utils/commands.js';
 import {
   FatalInputError,
   Logger,
-  uiTelemetryService,
   type Config,
   type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
+import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { CommandService } from './services/CommandService.js';
 import { FileCommandLoader } from './services/FileCommandLoader.js';

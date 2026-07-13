@@ -7,7 +7,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { repairProfiles } from './profileRepair.js';
 import { copyEntry, pathEntryExists } from './legacyCopyEngine.js';
 import { copyProfilesDirNormalized } from './legacyProfileNormalization.js';

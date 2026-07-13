@@ -8,10 +8,10 @@ import {
   getErrorMessage,
   isNodeError,
   isWithinRoot,
-  debugLogger,
   type Config,
   type ContentBlock,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
   FileSystemService,
   FilterFilesOptions,

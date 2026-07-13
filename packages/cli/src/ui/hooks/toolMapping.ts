@@ -7,8 +7,8 @@
 import {
   type Status as CoreStatus,
   DEFAULT_AGENT_ID,
-  DebugLogger,
 } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   ToolCallStatus,
   type HistoryItemToolGroup,

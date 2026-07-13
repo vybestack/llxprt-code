@@ -36,7 +36,6 @@ import {
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
-  AgentError,
   AgentHistoryItem,
   AgentInput,
   AgentMessage,
@@ -104,6 +103,10 @@ import { computeAuthWinner } from './control/authState.js';
 import type { AuthWinner } from './control/authState.js';
 import type { AgentSchedulerHandle } from './config-types.js';
 import { toRuntimeSwitchOptions } from './providerSwitchOptionsAdapter.js';
+import {
+  projectSessionStats,
+  readCompressionTokenCount,
+} from './agentStatsProjector.js';
 import {
   disposeOAuthManager,
   collectActiveExtensions,
@@ -528,29 +531,27 @@ export class AgentImpl implements Agent {
 
   /**
    * Awaits MCP discovery readiness before a model turn (the discovery gate).
-   * Returns a structured AgentError when discovery FAILED, or undefined when it
-   * is ready/absent. `mcpDiscovery:'skip'` opts out (returns undefined without
-   * awaiting). Non-blocking methods (mcp.status/discoveryState, listTools)
-   * remain callable throughout.
+   * The wait is bounded by the manager so a never-settling server cannot hang
+   * the turn. Per-server discovery failures are NON-FATAL: the turn proceeds
+   * with whatever tools are available and each failed server is surfaced as a
+   * warning notice (issue #2516). `mcpDiscovery:'skip'` opts out (returns no
+   * failures without awaiting). Non-blocking methods (mcp.status/discoveryState,
+   * listTools) remain callable throughout.
    * @plan:PLAN-20260617-COREAPI.P22
    * @requirement:REQ-013
    */
   private async awaitMcpDiscoveryGate(
     opts?: TurnOptions,
-  ): Promise<AgentError | undefined> {
-    if (opts?.mcpDiscovery === 'skip') return undefined;
+  ): Promise<ReadonlyMap<string, string>> {
+    if (opts?.mcpDiscovery === 'skip') {
+      return new Map();
+    }
     const manager = this.deps.config.getMcpClientManager();
-    if (manager === undefined) return undefined;
+    if (manager === undefined) {
+      return new Map();
+    }
     await manager.whenDiscoverySettled();
-    const failures = manager.getDiscoveryFailures();
-    if (failures.size === 0) return undefined;
-    const detail = Array.from(failures.entries())
-      .map(([server, message]) => `${server}: ${message}`)
-      .join('; ');
-    return {
-      code: 'mcp_discovery_failed',
-      message: `MCP discovery failed (${detail})`,
-    };
+    return manager.getDiscoveryFailures();
   }
 
   /**
@@ -564,18 +565,24 @@ export class AgentImpl implements Agent {
     opts?: TurnOptions,
   ): AsyncIterable<AgentEvent> {
     // @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-013
-    // MCP discovery gate: by default await readiness before the model turn. On
-    // discovery FAILURE the stream yields a structured `error` event (carrying
-    // the failure message so consumers can surface useful diagnostics) followed
-    // by exactly ONE done{reason:'error'} and stops — no model turn runs.
-    const gateError = await this.awaitMcpDiscoveryGate(opts);
-    if (gateError !== undefined) {
+    // MCP discovery gate: by default await readiness before the model turn.
+    // Per-server discovery failures are NON-FATAL — each failed server is
+    // surfaced as a warning notice, then the turn proceeds with whatever tools
+    // are available (issue #2516). The await is bounded by the manager so a
+    // never-settling server cannot hang the turn.
+    //
+    // Failures are emitted as `notice` (NOT `error`): an `error` event would
+    // set AgentResult.error and make consumers treat the turn as failed — the
+    // exact fatal behavior #2516 removes. Stream consumers see the per-server
+    // warning inline; chat()/non-streaming consumers query the dedicated MCP
+    // control surface (agent.mcp.status()/discoveryState()) which projects the
+    // per-server failures as 'partial'/'failed' + per-server error status.
+    const discoveryFailures = await this.awaitMcpDiscoveryGate(opts);
+    for (const [server, message] of discoveryFailures.entries()) {
       yield {
-        type: 'error',
-        error: { message: `[${gateError.code}] ${gateError.message}` },
+        type: 'notice',
+        message: `MCP server '${server}' discovery failed: ${message}`,
       };
-      yield { type: 'done', reason: 'error' };
-      return;
     }
     const init = resolveLoopOrError(
       this.deps.loopHolder,
@@ -624,22 +631,10 @@ export class AgentImpl implements Agent {
    */
   async chat(input: AgentInput, opts?: TurnOptions): Promise<AgentResult> {
     // @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-013
-    // Run the MCP discovery gate once here so the buffered result surfaces the
-    // typed AgentError{code:'mcp_discovery_failed'} (the stream error event
-    // payload carries no code). On success the turn proceeds with the gate
-    // already satisfied (skip re-awaiting inside stream()).
-    const gateError = await this.awaitMcpDiscoveryGate(opts);
-    if (gateError !== undefined) {
-      return {
-        text: '',
-        toolCalls: [],
-        finishReason: 'error',
-        error: gateError,
-      };
-    }
-    const drained = await drainToResult(
-      this.stream(input, { ...opts, mcpDiscovery: 'skip' }),
-    );
+    // The MCP discovery gate runs inside stream(): it awaits (bounded) and
+    // surfaces per-server failures as warning notices without aborting the
+    // turn (issue #2516). chat() simply drains stream() into an AgentResult.
+    const drained = await drainToResult(this.stream(input, opts));
     return buildAgentResult(drained);
   }
 
@@ -761,6 +756,19 @@ export class AgentImpl implements Agent {
    */
   getRuntimeId(): string {
     return this.deps.runtimeId;
+  }
+
+  /**
+   * Returns the single session MessageBus the facade owns — the SAME instance
+   * threaded through the loop, scheduler, and OAuth manager (no second bus).
+   * When fromConfig adopted a caller-supplied bus, this returns that exact
+   * instance so UI / non-interactive CLI consumers use the agent-owned bus
+   * instead of constructing their own (#2378).
+   * @plan:PLAN-20270110-ISSUE2378.P01
+   * @requirement:REQ-2378-001
+   */
+  getMessageBus(): MessageBus {
+    return this.deps.messageBus;
   }
 
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 20-22 */
@@ -933,10 +941,10 @@ export class AgentImpl implements Agent {
     // before the first turn (startChat is otherwise lazy on first turn).
     await this.restoreChatVisibility();
     const chat = this.deps.resolveClient().getChat();
-    const originalTokenCount = this.readCompressionTokenCount();
+    const originalTokenCount = readCompressionTokenCount(this.historyService);
     const raw = await chat.performCompression(promptId);
     if (raw === PerformCompressionResult.COMPRESSED) {
-      const newTokenCount = this.readCompressionTokenCount();
+      const newTokenCount = readCompressionTokenCount(this.historyService);
       return {
         status: 'compressed',
         originalTokenCount: Math.max(originalTokenCount, newTokenCount),
@@ -957,7 +965,7 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-010
    */
   getStats(): SessionStats {
-    return this.projectStats();
+    return projectSessionStats(this.historyService);
   }
 
   /**
@@ -971,9 +979,9 @@ export class AgentImpl implements Agent {
    */
   onStats(cb: (stats: SessionStats) => void): Unsubscribe {
     const handler = (): void => {
-      cb(this.projectStats());
+      cb(projectSessionStats(this.historyService));
     };
-    cb(this.projectStats());
+    cb(projectSessionStats(this.historyService));
     uiTelemetryService.on('update', handler);
     return () => {
       uiTelemetryService.off('update', handler);
@@ -1065,85 +1073,6 @@ export class AgentImpl implements Agent {
       this.deps.initialHistoryService ??
       null
     );
-  }
-
-  // ─── P20 stats/compression projection helpers ────────────────────────────
-
-  /**
-   * Projects the in-process uiTelemetryService singleton metrics + HistoryService
-   * into the public SessionStats shape. Token fields are summed across per-model
-   * metrics, falling back to tokenTracking.sessionTokenUsage when the per-model
-   * sums are zero; contextWindowUsed reads uiTelemetryService.getLastPromptTokenCount();
-   * turnCount is derived from the HistoryService message count when reachable.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
-  private projectStats(): SessionStats {
-    const metrics = uiTelemetryService.getMetrics();
-    let promptTokens = 0;
-    let candidateTokens = 0;
-    let totalTokens = 0;
-    let cachedTokens = 0;
-    for (const modelName of Object.keys(metrics.models)) {
-      const t = metrics.models[modelName].tokens;
-      promptTokens += t.prompt;
-      candidateTokens += t.candidates;
-      totalTokens += t.total;
-      cachedTokens += t.cached;
-    }
-    const sessionUsage = metrics.tokenTracking.sessionTokenUsage;
-    const promptTokensFinal =
-      promptTokens > 0 ? promptTokens : sessionUsage.input;
-    const candidateTokensFinal =
-      candidateTokens > 0 ? candidateTokens : sessionUsage.output;
-    const totalTokensFinal = totalTokens > 0 ? totalTokens : sessionUsage.total;
-    const cachedTokensFinal =
-      cachedTokens > 0 ? cachedTokens : sessionUsage.cache;
-    return {
-      promptTokens: promptTokensFinal,
-      candidateTokens: candidateTokensFinal,
-      totalTokens: totalTokensFinal,
-      cachedTokens: cachedTokensFinal,
-      contextWindowSize: 0,
-      contextWindowUsed: uiTelemetryService.getLastPromptTokenCount(),
-      turnCount: this.readTurnCount(),
-    };
-  }
-
-  /**
-   * Reads a defensive token count from the HistoryService for compression
-   * before/after snapshots. Returns 0 when the HistoryService is unavailable.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-011
-   */
-  private readCompressionTokenCount(): number {
-    const service = this.historyService;
-    if (service === null) {
-      return 0;
-    }
-    try {
-      return service.getTotalTokens();
-    } catch {
-      return 0;
-    }
-  }
-
-  /**
-   * Reads the conversation turn/message count from the HistoryService. Returns 0
-   * when the HistoryService is unavailable.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
-  private readTurnCount(): number {
-    const service = this.historyService;
-    if (service === null) {
-      return 0;
-    }
-    try {
-      return service.getStatistics().totalMessages;
-    } catch {
-      return 0;
-    }
   }
 
   // ─── P16 switch/context-preservation helpers ─────────────────────────────

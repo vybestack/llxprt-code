@@ -4,15 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  type Config,
-  type MessageBus,
-  PLACEHOLDER_MODEL,
-} from '@vybestack/llxprt-code-core';
+import { type Config, PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-core';
 import {
   fromConfig,
   type Agent,
   type ProviderActivationIntent,
+  type ActivationPreflightToken,
 } from '@vybestack/llxprt-code-agents';
 
 import { registerCleanup } from './utils/cleanup.js';
@@ -23,18 +20,22 @@ import {
 
 export interface ForegroundAgentOptions {
   config: Config;
-  sessionMessageBus: MessageBus;
+  activationPreflightToken?: ActivationPreflightToken;
+  activationPreflightIntent?: ProviderActivationIntent;
 }
 
 /**
  * Single creation point for the interactive CLI Agent.
  *
- * Adopts the already-built {@link Config} and the bootstrap session
- * {@link MessageBus} through the public {@link fromConfig} entrypoint, so no
- * second ProviderManager/MessageBus is constructed. `fromConfig` keeps
- * `configOwnership` caller-owned (its default), which means the returned
- * Agent's `dispose()` deliberately SKIPS `config.dispose()` — recording/Config
- * teardown remains owned by the existing bootstrap.
+ * Adopts the already-built {@link Config} through the public {@link fromConfig}
+ * entrypoint. Per #2378 Phase A the Agent now OWNS the single session
+ * {@link MessageBus} and {@link Config.initialize}: `createForegroundAgent`
+ * does NOT construct or thread a session bus — `fromConfig` builds exactly one
+ * bus from the Config's policy engine and exposes it via
+ * `agent.getMessageBus()`. No second ProviderManager/MessageBus is constructed.
+ * `fromConfig` keeps `configOwnership` caller-owned (its default), which means
+ * the returned Agent's `dispose()` deliberately SKIPS `config.dispose()` —
+ * recording/Config teardown remains owned by the existing bootstrap.
  *
  * #2374: Provider activation + auth is now declarative — the activation
  * intent is passed to fromConfig instead of imperatively calling the provider
@@ -46,7 +47,8 @@ export interface ForegroundAgentOptions {
  */
 export async function createForegroundAgent({
   config,
-  sessionMessageBus,
+  activationPreflightToken,
+  activationPreflightIntent,
 }: ForegroundAgentOptions): Promise<Agent> {
   const provider = config.getProvider();
   const model = config.getModel();
@@ -68,8 +70,8 @@ export async function createForegroundAgent({
 
   const agent = await fromConfig({
     config,
-    messageBus: sessionMessageBus,
-    activation,
+    activation: activationPreflightIntent ?? activation,
+    activationPreflightToken,
   });
 
   registerCleanup(async () => {

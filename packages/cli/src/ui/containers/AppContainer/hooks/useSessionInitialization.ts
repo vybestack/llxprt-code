@@ -6,10 +6,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { IContent } from '@vybestack/llxprt-code-core';
-import {
-  triggerSessionStartHook,
-  SessionStartSource,
-} from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { HistoryItem } from '../../../types.js';
 import { iContentToHistoryItems } from '../../../utils/iContentToHistoryItems.js';
 import type { UiRuntime } from '../../../cliUiRuntime.js';
@@ -39,6 +36,7 @@ import type { UiRuntime } from '../../../cliUiRuntime.js';
 
 export interface UseSessionInitializationParams {
   uiRuntime: UiRuntime;
+  agent: Agent;
   addItem: (item: Omit<HistoryItem, 'id'>, baseTimestamp: number) => number;
   loadHistory: (newHistory: HistoryItem[]) => void;
   resumedHistory?: IContent[];
@@ -57,46 +55,43 @@ function isAbortSignalAborted(signal: AbortSignal): boolean {
 
 async function runSessionStartHook(
   uiRuntime: UiRuntime,
+  agent: Agent,
   addItem: UseSessionInitializationParams['addItem'],
   signal: AbortSignal,
 ): Promise<void> {
-  const sessionStartOutput = await triggerSessionStartHook(
-    uiRuntime.hooks,
-    SessionStartSource.Startup,
-  );
+  const sessionStartOutput = await agent.hooks.triggerSessionStart();
 
   if (signal.aborted) {
     return;
   }
 
-  if (sessionStartOutput) {
-    if (sessionStartOutput.systemMessage) {
-      addItem(
-        {
-          type: 'info',
-          text: sessionStartOutput.systemMessage,
-        },
-        Date.now(),
-      );
-    }
+  if (sessionStartOutput.systemMessage) {
+    addItem(
+      {
+        type: 'info',
+        text: sessionStartOutput.systemMessage,
+      },
+      Date.now(),
+    );
+  }
 
-    const additionalContext = sessionStartOutput.getAdditionalContext();
-    if (additionalContext && !isAbortSignalAborted(signal)) {
-      const agentClient = uiRuntime.agentClientSource.getAgentClient();
-      try {
-        await agentClient.addHistory({
-          speaker: 'human',
-          blocks: [{ type: 'text', text: additionalContext }],
-        });
-      } catch {
-        // Failures adding hook-provided context to history are non-fatal.
-      }
+  const additionalContext = sessionStartOutput.additionalContext;
+  if (additionalContext && !isAbortSignalAborted(signal)) {
+    const agentClient = uiRuntime.agentClientSource.getAgentClient();
+    try {
+      await agentClient.addHistory({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: additionalContext }],
+      });
+    } catch {
+      // Failures adding hook-provided context to history are non-fatal.
     }
   }
 }
 
 export function useSessionInitialization({
   uiRuntime,
+  agent,
   addItem,
   loadHistory,
   resumedHistory,
@@ -138,7 +133,7 @@ export function useSessionInitialization({
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
 
-    void runSessionStartHook(uiRuntime, addItem, signal).catch(() => {
+    void runSessionStartHook(uiRuntime, agent, addItem, signal).catch(() => {
       // Hook failures should not block session initialization.
     });
 
@@ -147,7 +142,7 @@ export function useSessionInitialization({
         abortControllerRef.current.abort();
       }
     };
-  }, [uiRuntime, addItem]);
+  }, [uiRuntime, agent, addItem]);
 
   // Effect: Initialize memory file counts from uiRuntime.memory
   useEffect(() => {

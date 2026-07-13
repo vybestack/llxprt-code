@@ -17,6 +17,7 @@ import type {
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { OutputFormat } from '@vybestack/llxprt-code-core/utils/output-format.js';
 import { ProviderActivationIntentSchema } from './config-schema.js';
+import type { ActivationPreflightToken } from './activationPreflightState.js';
 
 export interface ProviderAuth {
   readonly apiKey?: string;
@@ -360,6 +361,8 @@ export interface FromConfigOptions {
    * refreshAuth path.
    */
   readonly activation?: ProviderActivationIntent;
+  /** Single-use token returned by a successful activation preflight. */
+  readonly activationPreflightToken?: ActivationPreflightToken;
 }
 
 export const FromConfigValidatableSchema = z.object({

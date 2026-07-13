@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Type } from '@google/genai';
+import { Type } from '../types/schema-type.js';
 import { BaseTool, type ToolResult, Kind } from './tools.js';
 import type { ITodoService } from '../interfaces/ITodoService.js';
 import type { IToolHost } from '../interfaces/IToolHost.js';

@@ -49,11 +49,8 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
 
 import { parseArguments } from './config/cliArgParser.js';
 import { loadSettings } from './config/settings.js';
-import {
-  patchStdio,
-  ExitCodes,
-  debugLogger,
-} from '@vybestack/llxprt-code-core';
+import { patchStdio, ExitCodes } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import {
   runStartupMigration,
@@ -69,22 +66,26 @@ import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
 import { existsSync, mkdirSync } from 'fs';
 import { firstNonEmptyString } from './utils/coalesce.js';
 import {
-  activateConfiguredProvider,
   configureEarlyDebugLogging,
-  configureProvidersAndServices,
-  connectIdeClientIfEnabled,
   createMemoizedStdinReader,
-  ensureAcpProviderActivated,
   ensureStdinOrPromptProvided,
   handleVersionAndHelpFlags,
-  initializeConfigWithSpinner,
-  maybeHopIntoSandbox,
   maybeRelaunchForMemory,
-  prepareTerminalSession,
   redirectConsoleForAcp,
   rejectPromptInteractiveWithPipedStdin,
   throwIfSettingsErrors,
 } from './cliBootstrap.js';
+import {
+  activateConfiguredProvider,
+  configureProvidersAndServices,
+  connectIdeClientIfEnabled,
+  ensureAcpProviderActivated,
+} from './cliProviderInit.js';
+import {
+  constructAgentWithSpinner,
+  prepareTerminalSession,
+} from './cliTerminalSession.js';
+import { maybeHopIntoSandbox } from './cliSandbox.js';
 import {
   bootstrapRuntimeAndConfig,
   setupSessionRecording,
@@ -145,6 +146,40 @@ function setupProcessLifecycle(): () => void {
   return cleanupStdio;
 }
 
+/**
+ * CLI entry point — four-step flow (#2378). The CLI is a THIN CLIENT: it
+ * parses/resolves declarative data and drives the public agent-bootstrap
+ * surface. It does NOT own runtime assembly (MessageBus construction,
+ * Config.initialize, or the provider-activation primitive) — those live behind
+ * the core/providers/agents public APIs.
+ * 1. Parse/resolve: argv, settings, profiles, extensions → resolved Config
+ *    data (`bootstrapRuntimeAndConfig`). No MessageBus and no Config.initialize
+ *    happen here — both are owned by agent construction. The pre-Config
+ *    provider-runtime assembly (identity, session bus, provider/OAuth managers)
+ *    is owned by the providers package (`assembleCliProviderRuntime`).
+ * 2. Declarative preflight (pre-agent): the CLI assembles a declarative
+ *    activation intent and calls the public `preflightAgentActivation`
+ *    agent-bootstrap entrypoint (via `activateConfiguredProvider`), which OWNS
+ *    the provider-activation primitive and returns the typed auth outcome the
+ *    CLI needs for the sandbox-hop + FATAL_AUTHENTICATION_ERROR decisions. The
+ *    sandbox hop runs here too. Config.initialize() does NOT run here, and the
+ *    CLI never executes the activation primitive itself.
+ * 3. Agent construction (fromConfig): `constructAgentWithSpinner(config)` builds
+ *    the SINGLE foreground Agent via `createForegroundAgent` → `fromConfig`,
+ *    which OWNS Config.initialize() and the one session MessageBus (built from
+ *    the Config's policy engine, exposed via `agent.getMessageBus()`) and
+ *    ADOPTS the preflight activation state without re-running a second
+ *    activation sequence. Runtime state/context seeding, provider wiring, policy
+ *    engine, and scheduler singletons all live behind that public API, not in
+ *    CLI code. IDE connect and session recording run just after (they depend on
+ *    initialize()).
+ * 4. Render/Run: the ONE Agent is threaded into the interactive UI or reused by
+ *    the non-interactive stream; consumers read the session bus from
+ *    `agent.getMessageBus()` instead of a separately-threaded bus.
+ *
+ * Zed/ACP is the exception: it runs its own runtime and constructs per-session
+ * Agents via `fromConfig` internally, so no foreground Agent is built for it.
+ */
 export async function main() {
   configureEarlyDebugLogging();
 
@@ -163,22 +198,22 @@ export async function main() {
   const hasPipedInput = !process.stdin.isTTY && argv.experimentalAcp !== true;
   const readStdinOnce = createMemoizedStdinReader();
 
-  const questionFromArgs =
-    firstNonEmptyString(argv.promptInteractive, argv.prompt) ??
-    (argv.promptWords ?? []).join(' ');
-
   await cleanupCheckpoints();
 
   await ensureStdinOrPromptProvided(
     hasPipedInput,
     readStdinOnce,
-    questionFromArgs,
+    firstNonEmptyString(argv.promptInteractive, argv.prompt) ??
+      (argv.promptWords ?? []).join(' '),
   );
   throwIfSettingsErrors(settings);
   redirectConsoleForAcp(argv);
 
-  const { config, sessionMessageBus, runtimeSettingsService } =
-    await bootstrapRuntimeAndConfig(settings, argv, workspaceRoot);
+  const { config, runtimeSettingsService } = await bootstrapRuntimeAndConfig(
+    settings,
+    argv,
+    workspaceRoot,
+  );
 
   await rejectPromptInteractiveWithPipedStdin(argv);
 
@@ -195,15 +230,22 @@ export async function main() {
     process.exit(0);
   }
 
-  await initializeConfigWithSpinner(config, sessionMessageBus);
-  await connectIdeClientIfEnabled(config);
-
-  // If a provider is specified, activate it after initialization
-  const initialAuthFailed = await activateConfiguredProvider(
+  // Declarative provider-activation PREFLIGHT runs PRE-AGENT (#2374/#2378): the
+  // sandbox-hop decision and the FATAL_AUTHENTICATION_ERROR exit both need the
+  // auth outcome BEFORE the Agent is constructed. activateConfiguredProvider
+  // assembles a declarative intent and delegates to the public
+  // `preflightAgentActivation` agent-bootstrap entrypoint (the CLI does not
+  // execute the activation primitive itself). This establishes the active
+  // provider/auth on the Config; the Agent's own (idempotent) fromConfig
+  // activation then ADOPTS it without a second activation sequence. The
+  // preflight does not require Config.initialize() — the agentClient factory is
+  // bound at construction and the client is created lazily.
+  const providerActivation = await activateConfiguredProvider(
     config,
     providerManager,
     argv,
   );
+  const initialAuthFailed = providerActivation.authFailed;
 
   // hop into sandbox if we are outside and sandboxing is enabled
   await maybeHopIntoSandbox({
@@ -222,11 +264,11 @@ export async function main() {
     process.exit(ExitCodes.FATAL_AUTHENTICATION_ERROR);
   }
 
-  // Cleanup sessions after config initialization
+  // Cleanup sessions before agent construction.
   await cleanupExpiredSessions(config, settings.merged);
 
-  const recording = await setupSessionRecording(config, argv);
-
+  // Zed/ACP runs its own runtime; it constructs per-session Agents via
+  // fromConfig internally, so the foreground Agent is NOT built here.
   if (config.getExperimentalZedIntegration()) {
     // Restore real stdout/stderr — ACP uses stdout as its protocol pipe
     cleanupStdio();
@@ -235,11 +277,25 @@ export async function main() {
     return;
   }
 
+  // Construct the SINGLE foreground Agent (#2378). The spinner wraps agent
+  // construction, which (via fromConfig) owns Config.initialize() and the one
+  // session MessageBus. IDE connection and session recording run AFTER because
+  // they depend on the initialize() the Agent performs (ideClient, agentClient
+  // for history restore).
+  const agent = await constructAgentWithSpinner(
+    config,
+    providerActivation.token,
+    providerActivation.intent,
+  );
+  await connectIdeClientIfEnabled(config);
+
+  const recording = await setupSessionRecording(config, argv);
+
   await dispatchInteractiveOrNonInteractive({
     config,
+    agent,
     settings,
     workspaceRoot,
-    sessionMessageBus,
     recording,
     hasPipedInput,
     readStdinData: readStdinOnce,

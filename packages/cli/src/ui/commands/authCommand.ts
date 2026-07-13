@@ -17,7 +17,7 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   type CommandArgumentSchema,

@@ -245,3 +245,42 @@ export function requireAgentClientFactory(
   }
   return factory;
 }
+
+function createDetachedRuntimeId(baseRuntimeId: string | undefined): string {
+  const timestamp = Date.now().toString(36);
+  const suffix = Math.random().toString(36).slice(2, 8);
+  return `${baseRuntimeId ?? 'llxprt-session'}#subagent-auto#${timestamp}-${suffix}`;
+}
+
+/**
+ * Creates a detached agent client with a fresh runtime state isolated from
+ * the session's primary agent client. The returned client has its tool set
+ * cleared. Used for one-shot operations such as subagent auto-prompt
+ * generation that need a clean, isolated runtime scope.
+ */
+export function createDetachedAgentClient(
+  config: Config,
+  runtimeId?: string,
+): AgentClientContract {
+  const factory = requireAgentClientFactory(
+    config.getAgentClientFactory(),
+    'createDetachedAgentClient',
+  );
+  const baseRuntimeId = config.getSessionId();
+  const detachedId = runtimeId ?? createDetachedRuntimeId(baseRuntimeId);
+  const detachedRuntimeState = createAgentRuntimeStateFromConfig(config, {
+    runtimeId: detachedId,
+  });
+  const client = factory(config, detachedRuntimeState);
+  try {
+    client.clearTools();
+  } catch (error) {
+    try {
+      client.dispose();
+    } catch {
+      // Disposal failure is secondary; preserve the clearTools error.
+    }
+    throw error;
+  }
+  return client;
+}

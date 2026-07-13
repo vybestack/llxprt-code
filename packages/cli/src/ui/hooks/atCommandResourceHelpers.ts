@@ -6,11 +6,11 @@
 
 import {
   DEFAULT_AGENT_ID,
-  debugLogger,
   getErrorMessage,
   type ContentBlock,
   type DiscoveredMCPResource,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
   HistoryItemToolGroup,
   IndividualToolCallDisplay,

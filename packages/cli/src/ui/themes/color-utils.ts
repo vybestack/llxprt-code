@@ -5,7 +5,7 @@
  */
 
 import tinygradient from 'tinygradient';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 // Matches a 3- or 6-digit hex color (with leading '#'). Built via RegExp so the
 // pattern is not a static literal flagged by sonarjs/regular-expr.

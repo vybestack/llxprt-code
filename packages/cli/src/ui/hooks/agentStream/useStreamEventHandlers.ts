@@ -23,10 +23,12 @@ import {
   type ThinkingBlock,
   type ThoughtSummary,
   type ServerContentEvent,
-  logUserPrompt,
-  type UserPromptEvent,
   type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
+import {
+  logUserPrompt,
+  type UserPromptEvent,
+} from '@vybestack/llxprt-code-telemetry';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {

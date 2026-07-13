@@ -14,7 +14,7 @@ import { mcpCommand } from '../commands/mcp.js';
 import { skillsCommand } from '../commands/skills.js';
 import { hooksCommand } from '../commands/hooks.js';
 import { extensionsCommand } from '../commands/extensions.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { getEnableHooksUI } from './settingsSchema.js';
 import { getCliVersion } from '../utils/version.js';
 import type { Settings } from './settings.js';

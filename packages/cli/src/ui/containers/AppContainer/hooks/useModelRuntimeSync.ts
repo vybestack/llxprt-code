@@ -8,9 +8,9 @@ import { useEffect, useRef } from 'react';
 import {
   coreEvents,
   CoreEvent,
-  debugLogger,
   type ModelProfileInfoPayload,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
   EphemeralSettingsRuntime,
   ModelState,

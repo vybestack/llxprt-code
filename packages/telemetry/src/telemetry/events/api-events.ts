@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { GenerateContentResponseUsageMetadata } from '@google/genai';
+import type { UsageMetadata } from '../types/usage-metadata.js';
 
 export class ApiRequestEvent {
   'event.name': 'api_request';
@@ -72,7 +72,7 @@ export class ApiResponseEvent {
     model: string,
     duration_ms: number,
     prompt_id: string,
-    usage_data?: GenerateContentResponseUsageMetadata,
+    usage_data?: UsageMetadata,
     response_text?: string,
     error?: string,
     finish_reasons?: string[],

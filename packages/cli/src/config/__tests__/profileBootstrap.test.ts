@@ -11,11 +11,15 @@ import {
   prepareRuntimeForProfile,
   createBootstrapResult,
 } from '../profileBootstrap.js';
-import {
-  registerCliProviderInfrastructure,
-  setCliRuntimeContext,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime.js';
 
+// The pre-Config provider-runtime assembly (identity binding → session
+// MessageBus construction → provider/OAuth manager → CLI infra registration,
+// with the issue-#2300 ordering) is OWNED by the providers package
+// (#2378). It is behaviorally tested at that boundary in
+// packages/providers/src/runtime/assembleCliProviderRuntime.test.ts. Here it
+// is the external boundary: stub it so prepareRuntimeForProfile is exercised
+// as a thin client that supplies declarative context and adopts the result.
 vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerAgentRuntimeFactories: vi.fn(),
   resetAgentRuntimeFactories: vi.fn(),
@@ -25,9 +29,24 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
     value: rawValue,
   })),
   applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
-  registerCliProviderInfrastructure: vi.fn(),
-  setCliRuntimeContext: vi.fn(),
-  disposeCliRuntime: vi.fn(),
+  assembleCliProviderRuntime: vi.fn(
+    (input: {
+      settingsService: unknown;
+      config: unknown;
+      runtimeId: string;
+      metadata?: Record<string, unknown>;
+    }) => ({
+      runtime: {
+        settingsService: input.settingsService,
+        config: input.config,
+        runtimeId: input.runtimeId,
+        metadata: input.metadata,
+      },
+      runtimeMessageBus: { kind: 'session-bus' },
+      providerManager: { id: 'provider-manager' },
+      oauthManager: { id: 'oauth-manager' },
+    }),
+  ),
 }));
 
 type BootstrapProfileArgs = {
@@ -69,6 +88,7 @@ type ParsedBootstrapArgs = {
 
 type BootstrapRuntimeState = {
   runtime: RuntimeMetadata & { settingsService: unknown };
+  runtimeMessageBus: unknown;
   providerManager: unknown;
   oauthManager?: unknown;
 };
@@ -212,16 +232,14 @@ describe('profileBootstrap helpers', () => {
   });
 });
 
-describe('prepareRuntimeForProfile binds identity before infrastructure (issue #2300)', () => {
-  const mockedSetContext = vi.mocked(setCliRuntimeContext);
-  const mockedRegister = vi.mocked(registerCliProviderInfrastructure);
+describe('prepareRuntimeForProfile delegates assembly to the providers boundary (#2378, issue #2300)', () => {
+  const mockedAssemble = vi.mocked(assembleCliProviderRuntime);
 
   beforeEach(() => {
-    mockedSetContext.mockClear();
-    mockedRegister.mockClear();
+    mockedAssemble.mockClear();
   });
 
-  it('calls setCliRuntimeContext before registerCliProviderInfrastructure and propagates the same runtimeId', async () => {
+  it('supplies the resolved runtimeId + declarative context to the owned assembly and adopts its result', async () => {
     const explicitRuntimeId = 'cli.runtime.bootstrap.ordering-test';
     const parsed: ParsedBootstrapArgs = {
       bootstrapArgs: {
@@ -244,25 +262,23 @@ describe('prepareRuntimeForProfile binds identity before infrastructure (issue #
 
     const result = await prepareRuntime(parsed);
 
+    // The identity-binding-before-registration ordering (issue #2300) now lives
+    // inside assembleCliProviderRuntime; prepareRuntimeForProfile's contract is
+    // that it forwards the resolved runtimeId + declarative context ONCE and
+    // adopts the returned runtime state (no CLI-side bus construction).
+    expect(mockedAssemble).toHaveBeenCalledTimes(1);
+    const assembleArg = mockedAssemble.mock.calls[0][0];
+    expect(assembleArg.runtimeId).toBe(explicitRuntimeId);
+    expect(assembleArg.metadata).toMatchObject({ source: 'ordering-test' });
+    expect(assembleArg.settingsService).toBeDefined();
+
     expect(result.runtime.runtimeId).toBe(explicitRuntimeId);
-    expect(mockedSetContext).toHaveBeenCalledTimes(1);
-    expect(mockedRegister).toHaveBeenCalledTimes(1);
-
-    // setCliRuntimeContext must be invoked BEFORE registerCliProviderInfrastructure
-    // so identity is bound before any infrastructure reads ambient state.
-    const setCallOrder = mockedSetContext.mock.invocationCallOrder[0];
-    const registerCallOrder = mockedRegister.mock.invocationCallOrder[0];
-    expect(setCallOrder).toBeLessThan(registerCallOrder);
-
-    // Both must receive the same computed runtimeId (issue #2300 propagation).
-    const setContextOptions = mockedSetContext.mock.calls[0][2];
-    const registerOptions = mockedRegister.mock.calls[0][2];
-    expect(setContextOptions.runtimeId).toBe(explicitRuntimeId);
-    expect(registerOptions.runtimeId).toBe(explicitRuntimeId);
-    expect(registerOptions.runtimeId).toBe(setContextOptions.runtimeId);
+    // The adopted runtime state comes straight from the owned assembly result.
+    expect(result.runtimeMessageBus).toMatchObject({ kind: 'session-bus' });
+    expect(result.providerManager).toMatchObject({ id: 'provider-manager' });
   });
 
-  it('propagates a deterministic default runtimeId when metadata omits one', async () => {
+  it('supplies a deterministic default runtimeId to the assembly when metadata omits one', async () => {
     const parsed: ParsedBootstrapArgs = {
       bootstrapArgs: {
         profileName: null,
@@ -284,14 +300,8 @@ describe('prepareRuntimeForProfile binds identity before infrastructure (issue #
 
     await prepareRuntime(parsed);
 
-    expect(mockedSetContext).toHaveBeenCalledTimes(1);
-    expect(mockedRegister).toHaveBeenCalledTimes(1);
-
-    const setContextOptions = mockedSetContext.mock.calls[0][2];
-    const registerOptions = mockedRegister.mock.calls[0][2];
-
-    expect(setContextOptions.runtimeId).toBe(DEFAULT_RUNTIME_ID);
-    expect(registerOptions.runtimeId).toBe(setContextOptions.runtimeId);
+    expect(mockedAssemble).toHaveBeenCalledTimes(1);
+    expect(mockedAssemble.mock.calls[0][0].runtimeId).toBe(DEFAULT_RUNTIME_ID);
   });
 });
 

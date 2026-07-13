@@ -10,9 +10,7 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 import type { MessageActionReturn } from './types.js';
 import {
   MCPServerStatus,
-  MCPDiscoveryState,
   getMCPServerStatus,
-  getMCPDiscoveryState,
 } from '@vybestack/llxprt-code-mcp';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
@@ -27,7 +25,6 @@ vi.mock('@vybestack/llxprt-code-mcp', async (importOriginal) => {
   return {
     ...actual,
     getMCPServerStatus: vi.fn(),
-    getMCPDiscoveryState: vi.fn(),
     mcpServerRequiresOAuth: new Map<string, boolean>(),
     MCPOAuthProvider: {
       authenticate: vi.fn(),
@@ -91,9 +88,6 @@ describe('mcpCommand', () => {
     vi.clearAllMocks();
     delete process.env.SANDBOX;
     vi.mocked(getMCPServerStatus).mockReturnValue(MCPServerStatus.CONNECTED);
-    vi.mocked(getMCPDiscoveryState).mockReturnValue(
-      MCPDiscoveryState.COMPLETED,
-    );
     mockConfig = {
       getMcpServers: vi.fn().mockReturnValue({}),
       getBlockedMcpServers: vi.fn().mockReturnValue([]),
