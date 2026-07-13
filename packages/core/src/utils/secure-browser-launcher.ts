@@ -56,6 +56,16 @@ const LINUX_CHROME_BINARIES = [
 const LINUX_FIREFOX_BINARIES = ['firefox', 'firefox-esr'];
 
 /**
+ * Resolve a Windows environment variable, falling back to `fallback` when the
+ * variable is unset OR set to an empty string. A truthiness check (rather
+ * than `??`) is used so an explicitly-empty value does not bypass the
+ * fallback and produce a malformed partial path.
+ */
+function envOr(value: string | undefined, fallback: string): string {
+  return value?.trim() ? value : fallback;
+}
+
+/**
  * Typical Windows install locations for Chrome (relative to the system drive
  * root, Program Files, and LOCALAPPDATA). Probed when a bare `chrome.exe` is
  * not on PATH.
@@ -63,7 +73,7 @@ const LINUX_FIREFOX_BINARIES = ['firefox', 'firefox-esr'];
 const WINDOWS_CHROME_PATHS = [
   () =>
     nodePath.join(
-      env.PROGRAMFILES ?? String.raw`C:\Program Files`,
+      envOr(env.PROGRAMFILES, 'C:\\Program Files'),
       'Google',
       'Chrome',
       'Application',
@@ -71,7 +81,7 @@ const WINDOWS_CHROME_PATHS = [
     ),
   () =>
     nodePath.join(
-      env['PROGRAMFILES(X86)'] ?? String.raw`C:\Program Files (x86)`,
+      envOr(env['PROGRAMFILES(X86)'] ?? undefined, 'C:\\Program Files (x86)'),
       'Google',
       'Chrome',
       'Application',
@@ -79,7 +89,14 @@ const WINDOWS_CHROME_PATHS = [
     ),
   () =>
     nodePath.join(
-      env.LOCALAPPDATA ?? String.raw`C:\Users\Public`,
+      envOr(
+        env.LOCALAPPDATA,
+        nodePath.join(
+          envOr(env.USERPROFILE, 'C:\\Users\\Public'),
+          'AppData',
+          'Local',
+        ),
+      ),
       'Google',
       'Chrome',
       'Application',
@@ -94,13 +111,13 @@ const WINDOWS_CHROME_PATHS = [
 const WINDOWS_FIREFOX_PATHS = [
   () =>
     nodePath.join(
-      env.PROGRAMFILES ?? String.raw`C:\Program Files`,
+      envOr(env.PROGRAMFILES, 'C:\\Program Files'),
       'Mozilla Firefox',
       'firefox.exe',
     ),
   () =>
     nodePath.join(
-      env['PROGRAMFILES(X86)'] ?? String.raw`C:\Program Files (x86)`,
+      envOr(env['PROGRAMFILES(X86)'] ?? undefined, 'C:\\Program Files (x86)'),
       'Mozilla Firefox',
       'firefox.exe',
     ),
@@ -166,28 +183,43 @@ function validateUrl(url: string): void {
 }
 
 /**
- * Strict allowlist for profile directory names.
- * Matches Chrome's "Profile 1", "Default", Firefox profile names, etc.
- * Rejects path traversal (..), separators (/ \), control chars, and shell
- * metacharacters to prevent command injection.
+ * Characters that must never appear in a profile directory name because they
+ * enable path traversal, act as path separators, or are shell/argument
+ * metacharacters. Everything else (including Unicode display names with
+ * parentheses, ampersands, or CJK characters) is permitted, because the
+ * launcher passes the value as a distinct argv element to execFile (no
+ * shell), so only traversal/separator characters are a real injection
+ * vector.
  */
-const PROFILE_DIRECTORY_PATTERN = /^[A-Za-z0-9 _.-]+$/;
+const PROFILE_DIRECTORY_FORBIDDEN =
+  // \p{Cc} matches Unicode control characters (incl. NUL, newline, tab);
+  // backslash and forward slash are path separators; a bare or dotted ".."
+  // enables traversal. Using \p{Cc} (rather than a literal \x00-\x1f range)
+  // keeps the pattern free of embedded control characters.
+  /[\\/]|(?:^|[/\\])\.\.(?:[/\\]|$)|\p{Cc}/u;
 
 /**
- * Validates a profile directory name against a strict allowlist.
+ * Validates a profile directory name against a denylist of dangerous
+ * characters.
  *
- * Security: This guard prevents command injection by rejecting any character
- * that could be interpreted as a path separator, shell metacharacter, or
- * control character. Only alphanumeric, space, underscore, dot, and hyphen
- * are permitted.
+ * Security: This guard prevents path traversal and command injection by
+ * rejecting path separators (/, \), NUL/control characters, and traversal
+ * sequences (..). Because the launcher uses execFile (no shell) and passes
+ * the profile name as a discrete argv element, shell metacharacters are not
+ * an injection vector, so legitimate display names containing parentheses,
+ * ampersands, or Unicode characters are accepted.
  *
  * @param dir The profile directory name to validate
  * @throws Error if the name contains disallowed characters
  */
 export function validateProfileDirectory(dir: string): void {
-  if (!dir || typeof dir !== 'string' || !PROFILE_DIRECTORY_PATTERN.test(dir)) {
+  if (
+    !dir ||
+    typeof dir !== 'string' ||
+    PROFILE_DIRECTORY_FORBIDDEN.test(dir)
+  ) {
     throw new Error(
-      `Invalid profile directory: "${dir}". Only alphanumeric, space, underscore, dot, and hyphen are allowed.`,
+      `Invalid profile directory: "${dir}". Path separators, control characters, and traversal sequences (..) are not allowed.`,
     );
   }
 }

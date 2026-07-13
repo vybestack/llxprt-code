@@ -605,7 +605,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         '  /auth anthropic profile mybucket <number-or-directory>',
         'Then authenticate with:',
         '  /auth anthropic login mybucket',
-      ].join(String.fromCharCode(10));
+      ].join('\n');
 
       expect(result).toStrictEqual({
         type: 'message',

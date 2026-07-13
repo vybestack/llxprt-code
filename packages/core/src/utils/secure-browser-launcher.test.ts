@@ -26,17 +26,25 @@ vi.mock('node:fs', () => ({
 
 describe('secure-browser-launcher', () => {
   let originalPlatform: PropertyDescriptor | undefined;
+  let originalProgramFiles: string | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockExecFile.mockResolvedValue({ stdout: '', stderr: '' });
     mockExistsSync.mockReturnValue(false);
     originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    originalProgramFiles = process.env.PROGRAMFILES;
   });
 
   afterEach(() => {
     if (originalPlatform) {
       Object.defineProperty(process, 'platform', originalPlatform);
+    }
+    // Restore PROGRAMFILES so a test that sets it cannot leak into siblings.
+    if (originalProgramFiles === undefined) {
+      delete process.env.PROGRAMFILES;
+    } else {
+      process.env.PROGRAMFILES = originalProgramFiles;
     }
   });
 
@@ -443,7 +451,6 @@ describe('secure-browser-launcher', () => {
         ['--profile-directory=Default', 'https://example.com'],
         expect.any(Object),
       );
-      delete process.env.PROGRAMFILES;
     });
 
     it('throws when no Windows Chrome install location is found', async () => {
@@ -531,6 +538,47 @@ describe('secure-browser-launcher', () => {
         });
         expect(mockExecFile).toHaveBeenCalled();
       }
+    });
+
+    it('accepts profile display names with parens, ampersands, and Unicode', async () => {
+      // These are legitimate browser profile display names. Because the
+      // launcher uses execFile (no shell), they are safe to pass as argv
+      // and must not be rejected by the denylist validator.
+      setPlatform('darwin');
+      const validNames = [
+        'Work (Google)',
+        'Tom & Jerry',
+        '仕事用',
+        'Perfil-café',
+      ];
+      for (const name of validNames) {
+        mockExecFile.mockClear();
+        await openBrowserSecurely('https://example.com', {
+          browser: 'chrome',
+          profileDirectory: name,
+        });
+        expect(mockExecFile).toHaveBeenCalled();
+      }
+    });
+
+    it('rejects a bare traversal profile directory', async () => {
+      setPlatform('darwin');
+      await expect(
+        openBrowserSecurely('https://example.com', {
+          browser: 'chrome',
+          profileDirectory: '..',
+        }),
+      ).rejects.toThrow('Invalid profile directory');
+    });
+
+    it('rejects a backslash separator in a profile directory', async () => {
+      setPlatform('darwin');
+      await expect(
+        openBrowserSecurely('https://example.com', {
+          browser: 'chrome',
+          profileDirectory: String.raw`Profile\1`,
+        }),
+      ).rejects.toThrow('Invalid profile directory');
     });
 
     it('launches Chrome without profile directory when browser is set but no profile', async () => {

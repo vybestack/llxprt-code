@@ -36,6 +36,16 @@ interface ChromeLocalState {
 }
 
 /**
+ * Resolve a Windows environment variable, falling back to `fallback` when the
+ * variable is unset OR set to an empty string. A truthiness check (rather
+ * than `??`) is used so an explicitly-empty value does not bypass the
+ * fallback and produce a malformed partial path.
+ */
+function envOr(value: string | undefined, fallback: string): string {
+  return value?.trim() ? value : fallback;
+}
+
+/**
  * Resolve the Chrome user data directory for the given platform.
  */
 function chromeUserDataDir(
@@ -53,7 +63,7 @@ function chromeUserDataDir(
       );
     case 'win32':
       return path.join(
-        process.env.LOCALAPPDATA ?? path.join(homeDir, 'AppData', 'Local'),
+        envOr(process.env.LOCALAPPDATA, path.join(homeDir, 'AppData', 'Local')),
         'Google',
         'Chrome',
         'User Data',
@@ -63,7 +73,7 @@ function chromeUserDataDir(
     case 'openbsd':
       return path.join(homeDir, '.config', 'google-chrome');
     default:
-      return path.join(homeDir, '.config', 'google-chrome');
+      throw new Error(`Unsupported platform for Chrome: ${platformName}`);
   }
 }
 
@@ -79,7 +89,7 @@ function firefoxProfileRoot(
       return path.join(homeDir, 'Library', 'Application Support', 'Firefox');
     case 'win32':
       return path.join(
-        process.env.APPDATA ?? path.join(homeDir, 'AppData', 'Roaming'),
+        envOr(process.env.APPDATA, path.join(homeDir, 'AppData', 'Roaming')),
         'Mozilla',
         'Firefox',
       );
@@ -88,7 +98,7 @@ function firefoxProfileRoot(
     case 'openbsd':
       return path.join(homeDir, '.mozilla', 'firefox');
     default:
-      return path.join(homeDir, '.mozilla', 'firefox');
+      throw new Error(`Unsupported platform for Firefox: ${platformName}`);
   }
 }
 
