@@ -39,7 +39,7 @@ describe('cleanup', () => {
       },
     );
 
-    expect(reportedError).toEqual(new Error('cleanup failure'));
+    expect(reportedError).toStrictEqual(new Error('cleanup failure'));
   });
 
   it('should execute registered synchronous cleanup function', async () => {
