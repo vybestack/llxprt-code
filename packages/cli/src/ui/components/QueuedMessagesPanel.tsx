@@ -13,6 +13,7 @@ import type React from 'react';
 import { useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { SemanticColors } from '../colors.js';
+import { Command, getDefaultKeyBindingHint } from '../../config/keyBindings.js';
 import { truncateEnd } from '../utils/responsive.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import type { QueuedSubmission } from '../hooks/agentStream/types.js';
@@ -22,6 +23,15 @@ interface QueuedMessagesPanelProps {
   collapsed?: boolean;
   messages: readonly QueuedSubmission[];
 }
+
+const PANEL_HEIGHT_RATIO = 0.2;
+const COLLAPSED_PREVIEW_WIDTH_RATIO = 0.55;
+const EXPANDED_CONTENT_WIDTH_OFFSET = 4;
+const FALLBACK_KEY_PREVIEW_LENGTH = 20;
+const MIN_EXPANDED_PANEL_HEIGHT = 3;
+const QUEUED_MESSAGES_KEY_HINT = getDefaultKeyBindingHint(
+  Command.TOGGLE_QUEUED_MESSAGES,
+);
 
 export type QueuedMessagesPanelView =
   | { readonly kind: 'empty' }
@@ -48,6 +58,7 @@ export type QueuedMessagesPanelView =
         readonly preview: string;
       }>;
       readonly moreCount: number;
+      readonly showMoreIndicator: boolean;
     };
 
 /**
@@ -90,7 +101,7 @@ function extractTextFromTurns(turns: IContent[]): string {
 function extractTextFromBlocks(blocks: ContentBlock[]): string {
   const parts: string[] = [];
   for (const block of blocks) {
-    if (isTextBlock(block)) {
+    if (isTextBlock(block) && block.text.length > 0) {
       parts.push(block.text);
     }
   }
@@ -123,15 +134,15 @@ function isIContentArray(value: unknown): value is IContent[] {
 }
 
 function stableKey(message: QueuedSubmission, index: number): string {
-  if (message.promptId) {
+  if (message.promptId != null) {
     return `queued-${message.promptId}`;
   }
   const preview = extractPreviewText(message.query);
-  return `queued-${index}-${preview.slice(0, 20)}`;
+  return `queued-${index}-${preview.slice(0, FALLBACK_KEY_PREVIEW_LENGTH)}`;
 }
 
 function calculatePanelHeight(rows: number): number {
-  return Math.max(1, Math.floor(rows * 0.2));
+  return Math.max(1, Math.floor(rows * PANEL_HEIGHT_RATIO));
 }
 
 function calculateMaxVisibleItems(
@@ -141,9 +152,17 @@ function calculateMaxVisibleItems(
   const borderRows = panelHeight > 1 ? 1 : 0;
   const headerRows = 1;
   const availableRows = Math.max(0, panelHeight - borderRows - headerRows);
-  return messageCount <= availableRows
-    ? availableRows
-    : Math.max(0, availableRows - 1);
+  if (messageCount <= availableRows) {
+    return messageCount;
+  }
+  if (availableRows <= 1) {
+    return availableRows;
+  }
+  return availableRows - 1;
+}
+
+function queuedMessageSummary(messageCount: number): string {
+  return `${messageCount} queued ${messageCount === 1 ? 'message' : 'messages'}`;
 }
 
 export function prepareQueuedMessagesPanelView({
@@ -163,12 +182,19 @@ export function prepareQueuedMessagesPanelView({
   const panelHeight = calculatePanelHeight(rows);
   const boundedWidth = Math.max(1, Math.min(width, columns));
 
-  if (panelHeight === 1) {
-    const messageLabel = messages.length === 1 ? 'message' : 'messages';
+  if (panelHeight < MIN_EXPANDED_PANEL_HEIGHT && !collapsed) {
     return {
       kind: 'compact',
       width: boundedWidth,
-      summary: `${messages.length} queued ${messageLabel}`,
+      summary: queuedMessageSummary(messages.length),
+    };
+  }
+
+  if (panelHeight === 1) {
+    return {
+      kind: 'compact',
+      width: boundedWidth,
+      summary: queuedMessageSummary(messages.length),
     };
   }
 
@@ -177,14 +203,11 @@ export function prepareQueuedMessagesPanelView({
       kind: 'collapsed',
       width: boundedWidth,
       panelHeight,
-      summary: `${messages.length} queued`,
-      nextPreview:
-        messages.length > 1
-          ? truncateEnd(
-              extractPreviewText(messages[0].query),
-              Math.max(1, Math.floor(boundedWidth * 0.55)),
-            )
-          : undefined,
+      summary: queuedMessageSummary(messages.length),
+      nextPreview: truncateEnd(
+        extractPreviewText(messages[0].query),
+        Math.max(1, Math.floor(boundedWidth * COLLAPSED_PREVIEW_WIDTH_RATIO)),
+      ),
     };
   }
 
@@ -193,7 +216,13 @@ export function prepareQueuedMessagesPanelView({
     messages.length,
   );
   const visibleMessages = messages.slice(0, maxVisibleItems);
-  const contentWidth = Math.max(1, boundedWidth - 4);
+  const contentWidth = Math.max(
+    1,
+    boundedWidth - EXPANDED_CONTENT_WIDTH_OFFSET,
+  );
+  const moreCount = messages.length - visibleMessages.length;
+  const borderRows = panelHeight > 1 ? 1 : 0;
+  const availableRows = Math.max(0, panelHeight - borderRows - 1);
 
   return {
     kind: 'expanded',
@@ -205,7 +234,8 @@ export function prepareQueuedMessagesPanelView({
       number: index + 1,
       preview: truncateEnd(extractPreviewText(message.query), contentWidth),
     })),
-    moreCount: messages.length - visibleMessages.length,
+    moreCount,
+    showMoreIndicator: moreCount > 0 && visibleMessages.length < availableRows,
   };
 }
 
@@ -223,25 +253,41 @@ function CompactQueuedMessagesPanel({
   );
 }
 
+function QueuedMessagesPanelShell({
+  width,
+  panelHeight,
+  children,
+}: {
+  width: number;
+  panelHeight: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <Box
+      flexDirection="column"
+      width={width}
+      height={panelHeight}
+      overflow="hidden"
+      borderStyle="single"
+      borderColor={SemanticColors.text.accent}
+      borderTop={panelHeight > 1}
+      borderBottom={false}
+      borderLeft={false}
+      borderRight={false}
+      paddingX={width > 2 ? 1 : 0}
+    >
+      {children}
+    </Box>
+  );
+}
+
 function CollapsedQueuedMessagesPanel({
   view,
 }: {
   view: Extract<QueuedMessagesPanelView, { kind: 'collapsed' }>;
 }) {
   return (
-    <Box
-      flexDirection="column"
-      width={view.width}
-      height={view.panelHeight}
-      overflow="hidden"
-      borderStyle="single"
-      borderColor={SemanticColors.text.accent}
-      borderTop={view.panelHeight > 1}
-      borderBottom={false}
-      borderLeft={false}
-      borderRight={false}
-      paddingX={view.width > 2 ? 1 : 0}
-    >
+    <QueuedMessagesPanelShell width={view.width} panelHeight={view.panelHeight}>
       <Box flexDirection="row" minHeight={1} overflow="hidden">
         <Text color={SemanticColors.text.primary} bold wrap="truncate-end">
           {view.summary}
@@ -252,9 +298,12 @@ function CollapsedQueuedMessagesPanel({
             • next: {view.nextPreview}
           </Text>
         )}
-        <Text color={SemanticColors.text.secondary}> • Ctrl+] to expand</Text>
+        <Text color={SemanticColors.text.secondary}>
+          {' '}
+          • {QUEUED_MESSAGES_KEY_HINT} to expand
+        </Text>
       </Box>
-    </Box>
+    </QueuedMessagesPanelShell>
   );
 }
 
@@ -264,24 +313,15 @@ function ExpandedQueuedMessagesPanel({
   view: Extract<QueuedMessagesPanelView, { kind: 'expanded' }>;
 }) {
   return (
-    <Box
-      flexDirection="column"
-      width={view.width}
-      height={view.panelHeight}
-      overflow="hidden"
-      borderStyle="single"
-      borderColor={SemanticColors.text.accent}
-      borderTop={view.panelHeight > 1}
-      borderBottom={false}
-      borderLeft={false}
-      borderRight={false}
-      paddingX={view.width > 2 ? 1 : 0}
-    >
-      <Box key="header" minHeight={1} marginBottom={0}>
+    <QueuedMessagesPanelShell width={view.width} panelHeight={view.panelHeight}>
+      <Box minHeight={1} marginBottom={0}>
         <Text color={SemanticColors.text.accent} bold>
           {view.heading}
         </Text>
-        <Text color={SemanticColors.text.secondary}> • Ctrl+] to minimize</Text>
+        <Text color={SemanticColors.text.secondary}>
+          {' '}
+          • {QUEUED_MESSAGES_KEY_HINT} to minimize
+        </Text>
       </Box>
       {view.messages.map((message) => (
         <Box key={message.key} flexDirection="row" minHeight={1}>
@@ -295,14 +335,14 @@ function ExpandedQueuedMessagesPanel({
           </Box>
         </Box>
       ))}
-      {view.moreCount > 0 && (
-        <Box key="more-indicator" flexDirection="row" minHeight={1}>
+      {view.showMoreIndicator && (
+        <Box flexDirection="row" minHeight={1}>
           <Text color={SemanticColors.text.secondary}>
             ▼ +{view.moreCount} more
           </Text>
         </Box>
       )}
-    </Box>
+    </QueuedMessagesPanelShell>
   );
 }
 

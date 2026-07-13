@@ -4,16 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApprovalMode, Config } from '@vybestack/llxprt-code-core';
+import { render } from '../../test-utils/render.js';
 import { LoadedSettings } from '../../config/settings.js';
 import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
 import { StreamingState } from '../types.js';
-import { StatusBarLeft, type InlineContentProps } from './InlineContent.js';
+import { StreamingContext } from '../contexts/StreamingContext.js';
+import { InlineContent, type InlineContentProps } from './InlineContent.js';
 
 vi.mock('../components/ContextSummaryDisplay.js', () => ({
   ContextSummaryDisplay: () => null,
 }));
+
+function renderInlineContent(props: InlineContentProps) {
+  return render(
+    <StreamingContext.Provider value={props.streamingState}>
+      <InlineContent {...props} />
+    </StreamingContext.Provider>,
+  );
+}
 
 function createProps(): InlineContentProps {
   return {
@@ -60,49 +70,53 @@ function createProps(): InlineContentProps {
   };
 }
 
-describe('StatusBarLeft', () => {
-  it('does not create an empty wrapper when no left status is visible', () => {
-    const previousSystemMd = process.env.GEMINI_SYSTEM_MD;
-    delete process.env.GEMINI_SYSTEM_MD;
-
-    try {
-      expect(StatusBarLeft(createProps())).toBeNull();
-    } finally {
-      if (previousSystemMd === undefined) {
-        delete process.env.GEMINI_SYSTEM_MD;
-      } else {
-        process.env.GEMINI_SYSTEM_MD = previousSystemMd;
-      }
-    }
+describe('InlineContent', () => {
+  beforeEach(() => {
+    vi.stubEnv('GEMINI_SYSTEM_MD', '');
   });
 
-  it('renders a wrapper when the escape prompt is active', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('does not render transient status text when no left status is visible', () => {
+    const { lastFrame } = renderInlineContent(createProps());
+
+    expect(lastFrame()).not.toMatch(/Press|⌐■_■/);
+  });
+
+  it('renders the escape prompt', () => {
     const props = { ...createProps(), showEscapePrompt: true };
-    expect(StatusBarLeft(props)).not.toBeNull();
+    const { lastFrame } = renderInlineContent(props);
+
+    expect(lastFrame()).toContain('Press Esc again to clear.');
   });
 
-  it('renders a wrapper when ctrl-C has been pressed once', () => {
+  it('renders the Ctrl+C exit prompt', () => {
     const props = { ...createProps(), ctrlCPressedOnce: true };
-    expect(StatusBarLeft(props)).not.toBeNull();
+    const { lastFrame } = renderInlineContent(props);
+
+    expect(lastFrame()).toContain('Press Ctrl+C again to exit.');
   });
 
-  it('renders a wrapper when the context summary is visible', () => {
+  it('renders the Ctrl+D exit prompt', () => {
+    const props = { ...createProps(), ctrlDPressedOnce: true };
+    const { lastFrame } = renderInlineContent(props);
+
+    expect(lastFrame()).toContain('Press Ctrl+D again to exit.');
+  });
+
+  it('renders when the context summary is visible', () => {
     const props = { ...createProps(), hideContextSummary: false };
-    expect(StatusBarLeft(props)).not.toBeNull();
+    const { lastFrame } = renderInlineContent(props);
+
+    expect(lastFrame()).toBeDefined();
   });
 
-  it('renders a wrapper when GEMINI_SYSTEM_MD is set', () => {
-    const previousSystemMd = process.env.GEMINI_SYSTEM_MD;
-    process.env.GEMINI_SYSTEM_MD = 'true';
+  it('renders the system-md indicator when GEMINI_SYSTEM_MD is set', () => {
+    vi.stubEnv('GEMINI_SYSTEM_MD', '1');
+    const { lastFrame } = renderInlineContent(createProps());
 
-    try {
-      expect(StatusBarLeft(createProps())).not.toBeNull();
-    } finally {
-      if (previousSystemMd === undefined) {
-        delete process.env.GEMINI_SYSTEM_MD;
-      } else {
-        process.env.GEMINI_SYSTEM_MD = previousSystemMd;
-      }
-    }
+    expect(lastFrame()).toContain('⌐■_■');
   });
 });

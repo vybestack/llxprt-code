@@ -55,17 +55,13 @@ export function useQueuedSubmissions() {
   );
 
   const dequeueSubmission = useCallback((): QueuedSubmission | undefined => {
-    let dequeued: QueuedSubmission | undefined;
-    setQueuedSubmissions((current) => {
-      if (current.length === 0) {
-        return current;
-      }
-      const [first, ...rest] = current;
-      dequeued = first;
-      return rest;
-    });
-    return dequeued;
-  }, [setQueuedSubmissions]);
+    if (queuedSubmissionsRef.current.length === 0) {
+      return undefined;
+    }
+    const [first, ...rest] = queuedSubmissionsRef.current;
+    setQueuedSubmissions(rest);
+    return first;
+  }, [queuedSubmissionsRef, setQueuedSubmissions]);
 
   const clearSubmissions = useCallback((): void => {
     setQueuedSubmissions([]);

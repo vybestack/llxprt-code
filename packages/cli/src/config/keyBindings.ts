@@ -275,6 +275,17 @@ export const defaultKeyBindings: KeyBindingConfig = {
   ],
 };
 
+export function getDefaultKeyBindingHint(command: Command): string {
+  const binding = defaultKeyBindings[command][0];
+  const modifiers = [
+    binding.ctrl === true ? 'Ctrl' : undefined,
+    binding.command === true ? 'Cmd' : undefined,
+    binding.shift === true ? 'Shift' : undefined,
+  ].filter((modifier): modifier is string => modifier !== undefined);
+  const key = binding.key ?? binding.sequence ?? '';
+  return [...modifiers, key].join('+');
+}
+
 interface CommandCategory {
   readonly title: string;
   readonly commands: readonly Command[];

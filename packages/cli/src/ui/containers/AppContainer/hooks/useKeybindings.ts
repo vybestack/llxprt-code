@@ -262,48 +262,48 @@ function handleIdeAndShellKeys(
 }
 
 export function useKeybindings(params: UseKeybindingsParams): void {
-  const { exit, display, shell, copyMode, ideContext, mcp } = params;
+  const latestParamsRef = useRef(params);
+  latestParamsRef.current = params;
 
   // Instance-local mouse state tracking for copy mode save/restore.
   const mouseStateBeforeCopyModeRef = useRef<boolean | null>(null);
 
-  const handleGlobalKeypress = useCallback(
-    (key: Key) => {
-      // Priority 1: Copy mode (highest priority - immediate exit from copy mode)
-      if (handleCopyModeKey(key, copyMode, mouseStateBeforeCopyModeRef)) {
-        return;
-      }
+  const handleGlobalKeypress = useCallback((key: Key) => {
+    const { exit, display, shell, copyMode, ideContext, mcp } =
+      latestParamsRef.current;
+    // Priority 1: Copy mode (highest priority - immediate exit from copy mode)
+    if (handleCopyModeKey(key, copyMode, mouseStateBeforeCopyModeRef)) {
+      return;
+    }
 
-      // Priority 2: Exit keys (Ctrl+C/D)
-      if (handleExitKeys(key, exit)) {
-        return;
-      }
+    // Priority 2: Exit keys (Ctrl+C/D)
+    if (handleExitKeys(key, exit)) {
+      return;
+    }
 
-      // Calculate constrain height mode transition
-      let enteringConstrainHeightMode = false;
-      if (!display.constrainHeight) {
-        enteringConstrainHeightMode = true;
-        display.setConstrainHeight(true);
-      }
+    // Calculate constrain height mode transition
+    let enteringConstrainHeightMode = false;
+    if (!display.constrainHeight) {
+      enteringConstrainHeightMode = true;
+      display.setConstrainHeight(true);
+    }
 
-      // Priority 3: Display toggles
-      handleDisplayKeys(key, display, mcp, enteringConstrainHeightMode);
+    // Priority 3: Display toggles
+    handleDisplayKeys(key, display, mcp, enteringConstrainHeightMode);
 
-      // Priority 4: IDE and shell keys
-      handleIdeAndShellKeys(key, ideContext, shell);
+    // Priority 4: IDE and shell keys
+    handleIdeAndShellKeys(key, ideContext, shell);
 
-      // Handle IDE status command separately (needs handleSlashCommand)
-      if (
-        keyMatchers[Command.SHOW_IDE_CONTEXT_DETAIL](key) &&
-        ideContext.getIdeMode() &&
-        ideContext.ideContextState !== undefined &&
-        ideContext.ideContextState !== null
-      ) {
-        void display.handleSlashCommand('/ide status');
-      }
-    },
-    [exit, display, shell, copyMode, ideContext, mcp],
-  );
+    // Handle IDE status command separately (needs handleSlashCommand)
+    if (
+      keyMatchers[Command.SHOW_IDE_CONTEXT_DETAIL](key) &&
+      ideContext.getIdeMode() &&
+      ideContext.ideContextState !== undefined &&
+      ideContext.ideContextState !== null
+    ) {
+      void display.handleSlashCommand('/ide status');
+    }
+  }, []);
 
   useKeypress(handleGlobalKeypress, {
     isActive: true,

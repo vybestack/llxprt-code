@@ -356,7 +356,7 @@ describe('useAgentStream', () => {
 
       // Start a query — fire-and-forget because the mock stream never ends
       await act(async () => {
-        void result.current.submitQuery('test query').catch(() => undefined);
+        void result.current.submitQuery('test query');
       });
 
       // Wait for the first part of the response

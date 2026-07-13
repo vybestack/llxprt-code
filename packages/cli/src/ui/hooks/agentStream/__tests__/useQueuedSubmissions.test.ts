@@ -183,6 +183,9 @@ describe('useQueuedSubmissions', () => {
         'first',
         'second',
       ]);
+      expect(
+        result.current.queuedSubmissionsRef.current.map(firstText),
+      ).toStrictEqual(['first', 'second']);
     });
   });
 

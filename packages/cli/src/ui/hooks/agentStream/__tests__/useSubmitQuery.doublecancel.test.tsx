@@ -27,6 +27,10 @@ import { useCancellation } from '../useAgentStreamLifecycle.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
 import type { QueuedSubmission } from '../types.js';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
+import {
+  RecordingIntegration,
+  SessionRecordingService,
+} from '@vybestack/llxprt-code-core';
 import type {
   StreamRuntime,
   UiMcpClientManager,
@@ -144,6 +148,10 @@ function createLoadedSettings(): LoadedSettings {
   );
 }
 
+function KeypressTestWrapper({ children }: React.PropsWithChildren) {
+  return <KeypressProvider>{children}</KeypressProvider>;
+}
+
 interface DoubleCancelDeps {
   setIsRespondingCalls: boolean[];
   setIsResponding: Dispatch<SetStateAction<boolean>>;
@@ -180,6 +188,7 @@ interface SubmitQueryOverrides {
   releaseDrain?: () => void;
   addItem?: UseSubmitQueryDeps['addItem'];
   turnCancelledRef?: React.MutableRefObject<boolean>;
+  recordingIntegration?: UseSubmitQueryDeps['recordingIntegration'];
 }
 
 interface RenderSubmitQueryOptions {
@@ -206,6 +215,7 @@ function createUseSubmitQueryDeps(
     onDebugMessage: vi.fn(),
     onCancelSubmit: vi.fn(),
     onAuthError: vi.fn(),
+    recordingIntegration: overrides.recordingIntegration,
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: deps.flushPendingHistoryItem,
     pendingHistoryItemRef: deps.pendingHistoryItemRef,
@@ -296,64 +306,125 @@ function renderUseSubmitQueryWithCancellation(
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
-  it('keeps direct turn ownership while cancelled work settles and serializes the next direct submission', async () => {
-    const turn1Deferred = createDeferred<void>();
-    const turn2Deferred = createDeferred<void>();
-    const runStreamFn = vi
-      .fn()
-      .mockReturnValueOnce(turn1Deferred.promise)
-      .mockReturnValueOnce(turn2Deferred.promise);
+  it('suppresses stale cleanup after the cancellation path supersedes a turn', async () => {
+    const turnDeferred = createDeferred<void>();
     const deps = createDeps({
-      runStreamRef: { current: runStreamFn },
+      runStreamRef: { current: vi.fn(() => turnDeferred.promise) },
     });
-    const queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]> = {
-      current: [],
-    };
-    const queueOperations = createQueueOperations(queuedSubmissionsRef);
+    const recordingIntegration = new RecordingIntegration(
+      new SessionRecordingService({
+        sessionId: 'stale-turn-test',
+        projectHash: 'test-project',
+        workspaceDirs: ['/tmp'],
+        provider: 'test-provider',
+        model: 'test-model',
+        chatsDir: '/tmp/llxprt-stale-turn-test',
+      }),
+    );
+    const flushAtTurnBoundary = vi
+      .spyOn(recordingIntegration, 'flushAtTurnBoundary')
+      .mockResolvedValue(undefined);
     const turnCancelledRef = { current: false };
-    let drainReserved = false;
-
-    const { result, rerender } = renderUseSubmitQuery(deps, {
-      queuedSubmissionsRef,
-      queueOperations,
-      turnCancelledRef,
-      tryReserveDrain: () => {
-        if (drainReserved) return false;
-        drainReserved = true;
-        return true;
+    const { result, rerender } = renderUseSubmitQueryWithCancellation(
+      deps,
+      {
+        turnCancelledRef,
+        recordingIntegration,
       },
-      releaseDrain: () => {
-        drainReserved = false;
+      { wrapper: KeypressTestWrapper },
+    );
+
+    let turnPromise!: Promise<void>;
+    await act(async () => {
+      turnPromise = result.current.submitQuery('turn-1');
+    });
+    await waitFor(() =>
+      expect(deps.setIsRespondingCalls).toStrictEqual([true]),
+    );
+
+    rerender({ streamingState: StreamingState.Responding });
+    await act(async () => {
+      result.current.cancelOngoingRequest();
+    });
+    expect(turnCancelledRef.current).toBe(true);
+    expect(deps.setIsRespondingCalls).toStrictEqual([true, false]);
+
+    deps.flushPendingHistoryItem.mockClear();
+    deps.setPendingHistoryItem.mockClear();
+    deps.pendingHistoryItemRef.current = { type: 'gemini', text: 'stale' };
+    deps.loopDetectedRef.current = true;
+    deps.abortControllerRef.current = new AbortController();
+
+    await act(async () => {
+      turnDeferred.resolve();
+      await turnPromise;
+    });
+
+    expect(deps.setIsRespondingCalls).toStrictEqual([true, false]);
+    expect(deps.flushPendingHistoryItem).not.toHaveBeenCalled();
+    expect(deps.setPendingHistoryItem).not.toHaveBeenCalled();
+    expect(deps.loopDetectedRef.current).toBe(false);
+    expect(deps.handleLoopDetectedEvent).not.toHaveBeenCalled();
+    expect(flushAtTurnBoundary).not.toHaveBeenCalled();
+  });
+
+  it('suppresses stale submission errors after cancellation supersedes a turn', async () => {
+    const turnDeferred = createDeferred<void>();
+    const deps = createDeps({
+      runStreamRef: { current: vi.fn(() => turnDeferred.promise) },
+    });
+    const { result, rerender } = renderUseSubmitQueryWithCancellation(
+      deps,
+      { turnCancelledRef: { current: false } },
+      { wrapper: KeypressTestWrapper },
+    );
+
+    let turnPromise!: Promise<void>;
+    await act(async () => {
+      turnPromise = result.current.submitQuery('turn-1');
+    });
+    rerender({ streamingState: StreamingState.Responding });
+    await act(async () => {
+      result.current.cancelOngoingRequest();
+    });
+    deps.abortControllerRef.current = new AbortController();
+    handleSubmissionErrorMock.mockClear();
+
+    await act(async () => {
+      turnDeferred.reject(new Error('stale failure'));
+      await turnPromise;
+    });
+
+    expect(handleSubmissionErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps submission callbacks and event subscriptions stable across rerenders', () => {
+    const unsubscribeMcp = vi.fn();
+    const onMcpClientUpdate = vi.fn(() => unsubscribeMcp);
+    const setupAsyncTaskAutoTrigger = vi.fn(() => vi.fn());
+    const runtime = createStreamRuntimeForTest(
+      {},
+      {
+        events: { onMcpClientUpdate },
+        asyncTasks: { setupAsyncTaskAutoTrigger },
       },
+    );
+    const deps = createDeps();
+    const { result, rerender, unmount } = renderUseSubmitQuery(deps, {
+      runtime,
     });
+    const initialSubmitQuery = result.current.submitQuery;
+    const initialSchedule = result.current.scheduleNextQueuedSubmission;
 
-    let turn1Promise!: Promise<void>;
-    await act(async () => {
-      turn1Promise = result.current.submitQuery('turn-1');
-    });
-    await waitFor(() => expect(runStreamFn).toHaveBeenCalledTimes(1));
-
-    await act(async () => {
-      await result.current.submitQuery('turn-2');
-    });
-    expect(
-      queuedSubmissionsRef.current.map((item) => item.query),
-    ).toStrictEqual(['turn-2']);
-
-    deps.abortControllerRef.current?.abort();
     rerender({ streamingState: StreamingState.Idle });
-    expect(runStreamFn).toHaveBeenCalledTimes(1);
-    expect(queuedSubmissionsRef.current).toHaveLength(1);
 
-    await act(async () => {
-      turn1Deferred.resolve();
-      await turn1Promise;
-    });
-    expect(queuedSubmissionsRef.current).toHaveLength(0);
+    expect(result.current.submitQuery).toBe(initialSubmitQuery);
+    expect(result.current.scheduleNextQueuedSubmission).toBe(initialSchedule);
+    expect(onMcpClientUpdate).toHaveBeenCalledTimes(1);
+    expect(setupAsyncTaskAutoTrigger).toHaveBeenCalledTimes(1);
 
-    await act(async () => {
-      turn2Deferred.resolve();
-    });
+    unmount();
+    expect(unsubscribeMcp).toHaveBeenCalledTimes(1);
   });
 
   it('processes a non-string submission immediately even when MCP discovery is in progress (issue #2516)', async () => {
@@ -474,9 +545,6 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const tryReserveDrain = vi.fn().mockReturnValue(true);
     const releaseDrain = vi.fn();
     const turnCancelledRef = { current: false };
-    const wrapper = ({ children }: React.PropsWithChildren) => (
-      <KeypressProvider>{children}</KeypressProvider>
-    );
 
     const { result, rerender } = renderUseSubmitQueryWithCancellation(
       deps,
@@ -487,7 +555,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
         releaseDrain,
         turnCancelledRef,
       },
-      { wrapper },
+      { wrapper: KeypressTestWrapper },
     );
 
     // ── Turn 1 starts (streamingState transitions to Responding) ───────────
@@ -528,6 +596,9 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     await waitFor(() => {
       expect(queuedSubmissionsRef.current).toHaveLength(0);
     });
+    await waitFor(() =>
+      expect(deps.runStreamRef.current).toHaveBeenCalledTimes(2),
+    );
 
     // Turn 2's controller is different from Turn 1's (initTurn replaces it).
     await waitFor(() => {
@@ -606,9 +677,6 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const tryReserveDrain = vi.fn().mockReturnValue(true);
     const releaseDrain = vi.fn();
     const turnCancelledRef = { current: false };
-    const wrapper = ({ children }: React.PropsWithChildren) => (
-      <KeypressProvider>{children}</KeypressProvider>
-    );
 
     const { result, rerender } = renderUseSubmitQueryWithCancellation(
       deps,
@@ -619,7 +687,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
         releaseDrain,
         turnCancelledRef,
       },
-      { wrapper },
+      { wrapper: KeypressTestWrapper },
     );
 
     // ── Turn 1 starts ──────────────────────────────────────────────────────

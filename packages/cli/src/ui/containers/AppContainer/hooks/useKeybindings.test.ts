@@ -72,6 +72,14 @@ interface HookHarness {
   setCopyModeEnabled: ReturnType<typeof vi.fn>;
 }
 
+const CTRL_BRACKET_KEY: Key = {
+  ctrl: true,
+  meta: false,
+  shift: false,
+  name: ']',
+  sequence: ']',
+};
+
 const createHarness = (): HookHarness => ({
   requestCtrlCExit: vi.fn(),
   requestCtrlDExit: vi.fn(),
@@ -92,7 +100,7 @@ const createHarness = (): HookHarness => ({
 const renderUseKeybindings = (
   harness: HookHarness,
   overrides: Partial<Parameters<typeof useKeybindings>[0]> = {},
-) => {
+) =>
   renderHook(() =>
     useKeybindings({
       exit: {
@@ -140,7 +148,6 @@ const renderUseKeybindings = (
       ...overrides,
     }),
   );
-};
 
 const getRegisteredHandler = (): ((key: Key) => void) => {
   const handler = useKeypressMock.mock.calls.at(-1)?.[0] as
@@ -156,6 +163,16 @@ describe('useKeybindings', () => {
     isMouseEventsActiveMock.mockReturnValue(false);
     getLastActivePtyIdMock.mockReturnValue(null);
     isActivePtyMock.mockReturnValue(false);
+  });
+
+  it('keeps the registered keypress callback stable across rerenders', () => {
+    const harness = createHarness();
+    const rendered = renderUseKeybindings(harness);
+    const firstHandler = getRegisteredHandler();
+
+    rendered.rerender();
+
+    expect(getRegisteredHandler()).toBe(firstHandler);
   });
 
   it('copy mode consumes keypress before exit handling', () => {
@@ -474,14 +491,7 @@ describe('useKeybindings', () => {
       const handler = getRegisteredHandler();
 
       act(() => {
-        handler({
-          ctrl: true,
-          meta: false,
-          shift: false,
-          paste: false,
-          name: ']',
-          sequence: ']',
-        } as Key);
+        handler(CTRL_BRACKET_KEY);
       });
 
       // false → !false = true: collapse the panel
@@ -518,14 +528,7 @@ describe('useKeybindings', () => {
       const handler = getRegisteredHandler();
 
       act(() => {
-        handler({
-          ctrl: true,
-          meta: false,
-          shift: false,
-          paste: false,
-          name: ']',
-          sequence: ']',
-        } as Key);
+        handler(CTRL_BRACKET_KEY);
       });
 
       // true → !true = false: expand the panel

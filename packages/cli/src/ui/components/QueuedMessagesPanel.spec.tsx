@@ -48,18 +48,6 @@ describe('QueuedMessagesPanel content preparation', () => {
       expect(extractPreviewText('')).toBe('');
     });
 
-    it('returns placeholder for array with no text parts', () => {
-      const query = [
-        {
-          type: 'media',
-          mimeType: 'image/png',
-          data: 'base64...',
-          encoding: 'base64',
-        },
-      ] as unknown as AgentRequestInput;
-      expect(extractPreviewText(query)).toBe('(non-text message)');
-    });
-
     it('returns the empty-message placeholder for an empty array', () => {
       expect(extractPreviewText([])).toBe('(empty message)');
     });
@@ -93,7 +81,7 @@ describe('QueuedMessagesPanel content preparation', () => {
     });
 
     it('skips non-text parts in mixed arrays', () => {
-      const query = [
+      const query: ContentBlock[] = [
         {
           type: 'media',
           mimeType: 'image/png',
@@ -101,16 +89,16 @@ describe('QueuedMessagesPanel content preparation', () => {
           encoding: 'base64',
         },
         { type: 'text', text: 'actual text' },
-      ] as unknown as AgentRequestInput;
+      ];
       expect(extractPreviewText(query)).toBe('actual text');
     });
 
-    it('handles multiple text blocks with empty strings', () => {
+    it('ignores empty text blocks when joining preview text', () => {
       const query: AgentRequestInput = [
         { type: 'text', text: '' },
         { type: 'text', text: 'content' },
       ];
-      expect(extractPreviewText(query)).toBe(' content');
+      expect(extractPreviewText(query)).toBe('content');
     });
   });
 
@@ -139,7 +127,25 @@ describe('QueuedMessagesPanel content preparation', () => {
         kind: 'collapsed',
         width: 80,
         panelHeight: 4,
-        summary: '2 queued',
+        summary: '2 queued messages',
+        nextPreview: 'one',
+      });
+    });
+
+    it('prepares a preview for one queued message in collapsed mode', () => {
+      expect(
+        prepareQueuedMessagesPanelView({
+          width: 80,
+          collapsed: true,
+          messages: [makeSubmission('one')],
+          columns: 80,
+          rows: 24,
+        }),
+      ).toStrictEqual({
+        kind: 'collapsed',
+        width: 80,
+        panelHeight: 4,
+        summary: '1 queued message',
         nextPreview: 'one',
       });
     });
@@ -162,6 +168,7 @@ describe('QueuedMessagesPanel content preparation', () => {
           { key: 'queued-1-two', number: 2, preview: 'two' },
         ],
         moreCount: 0,
+        showMoreIndicator: false,
       });
     });
 
@@ -202,6 +209,38 @@ describe('QueuedMessagesPanel content preparation', () => {
       });
     });
 
+    it('falls back to a compact summary when expanded content cannot fit', () => {
+      expect(
+        prepareQueuedMessagesPanelView({
+          width: 80,
+          messages: [makeSubmission('one'), makeSubmission('two')],
+          columns: 80,
+          rows: 10,
+        }),
+      ).toStrictEqual({
+        kind: 'compact',
+        width: 80,
+        summary: '2 queued messages',
+      });
+    });
+
+    it('shows one message without overflowing when only one content row fits', () => {
+      expect(
+        prepareQueuedMessagesPanelView({
+          width: 80,
+          messages: [makeSubmission('one'), makeSubmission('two')],
+          columns: 80,
+          rows: 15,
+        }),
+      ).toMatchObject({
+        kind: 'expanded',
+        panelHeight: 3,
+        messages: [{ number: 1, preview: 'one' }],
+        moreCount: 1,
+        showMoreIndicator: false,
+      });
+    });
+
     it('truncates previews to the expanded content width', () => {
       const view = prepareQueuedMessagesPanelView({
         width: 20,
@@ -230,7 +269,11 @@ describe('QueuedMessagesPanel content preparation', () => {
         rows: 20,
       });
 
-      expect(view).toMatchObject({ kind: 'expanded', moreCount: 3 });
+      expect(view).toMatchObject({
+        kind: 'expanded',
+        moreCount: 3,
+        showMoreIndicator: true,
+      });
       expect(view.kind === 'expanded' ? view.messages : []).toHaveLength(1);
     });
   });

@@ -21,6 +21,15 @@ import { ContextSummaryDisplay } from '../components/ContextSummaryDisplay.js';
 import { DetailedMessagesDisplay } from '../components/DetailedMessagesDisplay.js';
 import { Composer } from '../components/Composer.js';
 
+const CTRL_C_EXIT_PROMPT = 'Press Ctrl+C again to exit.';
+const CTRL_D_EXIT_PROMPT = 'Press Ctrl+D again to exit.';
+const ESCAPE_CLEAR_PROMPT = 'Press Esc again to clear.';
+const SYSTEM_MD_ENVIRONMENT_VARIABLE = 'GEMINI_SYSTEM_MD';
+
+function isSystemMdEnabled(): boolean {
+  return Boolean(process.env[SYSTEM_MD_ENVIRONMENT_VARIABLE]);
+}
+
 export interface InlineContentProps {
   streamingState: StreamingState;
   disableLoadingPhrases: boolean;
@@ -88,15 +97,14 @@ function StatusBar(props: InlineContentProps) {
 
 function StatusBarLeftPrompt(props: InlineContentProps) {
   // Exit confirmations take precedence over clearing feedback and context status.
-  const transientPrompt = [
-    { active: props.ctrlCPressedOnce, text: 'Press Ctrl+C again to exit.' },
-    { active: props.ctrlDPressedOnce, text: 'Press Ctrl+D again to exit.' },
-  ].find((entry) => entry.active);
-  if (transientPrompt) {
-    return <Text color={Colors.AccentYellow}>{transientPrompt.text}</Text>;
+  if (props.ctrlCPressedOnce) {
+    return <Text color={Colors.AccentYellow}>{CTRL_C_EXIT_PROMPT}</Text>;
+  }
+  if (props.ctrlDPressedOnce) {
+    return <Text color={Colors.AccentYellow}>{CTRL_D_EXIT_PROMPT}</Text>;
   }
   if (props.showEscapePrompt) {
-    return <Text color={Colors.Gray}>Press Esc again to clear.</Text>;
+    return <Text color={Colors.Gray}>{ESCAPE_CLEAR_PROMPT}</Text>;
   }
   if (!props.hideContextSummary) {
     return (
@@ -114,8 +122,8 @@ function StatusBarLeftPrompt(props: InlineContentProps) {
   return null;
 }
 
-export function StatusBarLeft(props: InlineContentProps) {
-  const showSystemMdIndicator = Boolean(process.env.GEMINI_SYSTEM_MD);
+function StatusBarLeft(props: InlineContentProps) {
+  const showSystemMdIndicator = isSystemMdEnabled();
   const showPrompt =
     props.ctrlCPressedOnce ||
     props.ctrlDPressedOnce ||

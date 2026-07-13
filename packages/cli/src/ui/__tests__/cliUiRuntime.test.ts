@@ -97,7 +97,9 @@ describe('buildSlashCommandRuntime', () => {
 
     expect(adapter.getAgentClientFactory?.()).toBeUndefined();
   });
+});
 
+describe('buildUiRuntimeFromSource', () => {
   it('uses the application event singleton when the source has no emitter', () => {
     const source = createProxySource({
       getExtensionEvents: () => undefined,
