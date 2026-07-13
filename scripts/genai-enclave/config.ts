@@ -82,10 +82,18 @@ export interface DependencyManifestAllowlistEntry {
 /**
  * The authoritative dependency-manifest allowlist. Only these workspace
  * directories may declare `@google/genai`, and only at the exact version
- * shown. The root package.json is intentionally NOT in this list.
+ * shown. The root declaration is a packaging bridge for the root artifact;
+ * source imports remain confined to the implementation enclaves.
  */
 export const GENAI_DEPENDENCY_MANIFESTS: readonly DependencyManifestAllowlistEntry[] =
   [
+    {
+      workspaceDir: '.',
+      version: '1.30.0',
+      justification:
+        'The published root artifact ships core/provider source, so npm must ' +
+        'install the SDK even though root source may not import it.',
+    },
     {
       workspaceDir: 'packages/core',
       version: '1.30.0',

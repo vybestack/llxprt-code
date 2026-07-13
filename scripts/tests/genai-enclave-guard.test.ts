@@ -649,8 +649,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
     // reaches the manifest check and fails specifically on the manifest
     // violation (not on "no scannable files found").
     describe('manifest violations', () => {
-      it('FAILS when root package.json declares @google/genai', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('allows the root packaging bridge at the sanctioned version', () => {
+        const { code } = withFixture(({ root, write }) => {
           write(
             'package.json',
             JSON.stringify({
@@ -659,11 +659,9 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
             }) + '\n',
           );
           write('packages/cli/src/index.ts', 'export const x = 1;\n');
-          return runScript(root, 1);
+          return runScript(root, 0);
         });
-        expect(code).toBe(1);
-        expect(stdout).toContain('@google/genai');
-        expect(stdout).toContain('not in the sanctioned workspace allowlist');
+        expect(code).toBe(0);
       });
 
       it('FAILS when packages/cli declares @google/genai', () => {
@@ -815,14 +813,14 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         }
       });
 
-      it('GENAI_DEPENDENCY_MANIFESTS has exactly core and providers at 1.30.0', async () => {
+      it('GENAI_DEPENDENCY_MANIFESTS includes the packaging bridge and implementation workspaces', async () => {
         const { GENAI_DEPENDENCY_MANIFESTS } = await import(
           '../genai-enclave/config.ts'
         );
         const dirs = GENAI_DEPENDENCY_MANIFESTS.map(
           (e) => e.workspaceDir,
         ).sort();
-        expect(dirs).toEqual(['packages/core', 'packages/providers']);
+        expect(dirs).toEqual(['.', 'packages/core', 'packages/providers']);
         for (const entry of GENAI_DEPENDENCY_MANIFESTS) {
           expect(entry.version).toBe('1.30.0');
           expect(entry.justification.length).toBeGreaterThan(0);

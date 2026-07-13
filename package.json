@@ -254,6 +254,7 @@
     "@ast-grep/lang-swift": "^0.0.7",
     "@ast-grep/napi": "^0.40.5",
     "@dqbd/tiktoken": "^1.0.21",
+    "@google/genai": "1.30.0",
     "@hono/node-server": "^1.19.13",
     "@iarna/toml": "^2.2.5",
     "@lvce-editor/ripgrep": "^1.6.0",
