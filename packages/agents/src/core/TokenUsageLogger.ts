@@ -86,6 +86,8 @@ export class TokenUsageLogger {
     if (!this.enabled) return;
     const pending = this.pending.get(promptId);
     if (pending === undefined) return;
+    // Consume before awaiting so concurrent completions cannot write duplicates.
+    // Fail-open I/O intentionally does not requeue a failed measurement.
     this.pending.delete(promptId);
 
     const effectiveActualTokens = Math.max(

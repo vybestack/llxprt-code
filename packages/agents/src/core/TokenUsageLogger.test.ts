@@ -193,7 +193,7 @@ describe('TokenUsageLogger', () => {
   });
 
   it('file I/O errors do not crash (fail-open)', async () => {
-    const badPath = path.join('/dev/null', 'sub', 'usage.jsonl');
+    const badPath = path.join(os.tmpdir(), 'invalid\0dir', 'usage.jsonl');
     const logger = new TokenUsageLogger(true, badPath);
     logger.recordEstimate('prompt-fail', {
       provider: 'openai',

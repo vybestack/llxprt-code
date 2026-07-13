@@ -23,10 +23,10 @@ export async function recordActualTokenUsage(
   promptId: string,
   usage: UsageMetadataWithCache | undefined,
 ): Promise<void> {
-  if (usageLogger?.isEnabled() !== true) return;
-  if (usage?.promptTokenCount === undefined) return;
-
   try {
+    if (usageLogger?.isEnabled() !== true) return;
+    if (usage?.promptTokenCount === undefined) return;
+
     await usageLogger.recordActual(promptId, {
       actualPromptTokens: usage.promptTokenCount,
       cachedTokens:

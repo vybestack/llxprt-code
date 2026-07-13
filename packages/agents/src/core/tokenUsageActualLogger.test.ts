@@ -23,4 +23,48 @@ describe('recordActualTokenUsage', () => {
       cachedTokens: 25,
     });
   });
+
+  it('records successful actual usage once', async () => {
+    const recordActual = vi.fn().mockResolvedValue(undefined);
+
+    await recordActualTokenUsage(
+      { isEnabled: () => true, recordActual },
+      'prompt-2',
+      { promptTokenCount: 50, cache_read_input_tokens: 10 },
+    );
+
+    expect(recordActual).toHaveBeenCalledExactlyOnceWith('prompt-2', {
+      actualPromptTokens: 50,
+      cachedTokens: 10,
+    });
+  });
+
+  it('skips disabled, missing, and throwing logger guards', async () => {
+    const recordActual = vi.fn();
+
+    await recordActualTokenUsage(
+      { isEnabled: () => false, recordActual },
+      'prompt-disabled',
+      { promptTokenCount: 10 },
+    );
+    await recordActualTokenUsage(
+      { isEnabled: () => true, recordActual },
+      'prompt-missing',
+      {},
+    );
+    await expect(
+      recordActualTokenUsage(
+        {
+          isEnabled: () => {
+            throw new Error('guard failed');
+          },
+          recordActual,
+        },
+        'prompt-throwing',
+        { promptTokenCount: 10 },
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(recordActual).not.toHaveBeenCalled();
+  });
 });

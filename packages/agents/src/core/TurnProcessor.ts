@@ -900,10 +900,18 @@ export class TurnProcessor {
       await this.historyService.waitForTokenUpdates();
     }
 
+    const usageForLogging =
+      usageMetadata?.promptTokenCount !== undefined
+        ? usageMetadata
+        : this.lastPromptTokenCount !== null &&
+            this.lastPromptTokenCount > 0 &&
+            !Number.isNaN(this.lastPromptTokenCount)
+          ? { promptTokenCount: this.lastPromptTokenCount }
+          : undefined;
     await recordActualTokenUsage(
       this.compressionHandler.tokenUsageLogger,
       promptId,
-      usageMetadata,
+      usageForLogging,
     );
   }
 }
