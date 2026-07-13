@@ -166,6 +166,9 @@ function buildLayoutParams(
     setRenderMarkdown: dialogs.setRenderMarkdown,
     isTodoPanelCollapsed: dialogs.isTodoPanelCollapsed,
     setIsTodoPanelCollapsed: dialogs.setIsTodoPanelCollapsed,
+    isQueuedMessagesPanelCollapsed: dialogs.isQueuedMessagesPanelCollapsed,
+    setIsQueuedMessagesPanelCollapsed:
+      dialogs.setIsQueuedMessagesPanelCollapsed,
     setFooterHeight: dialogs.setFooterHeight,
     footerHeight: dialogs.footerHeight,
     copyModeEnabled: dialogs.copyModeEnabled,
@@ -284,6 +287,8 @@ function buildUIStateParamsExtra(r: HookResults) {
     showErrorDetails: d.showErrorDetails,
     showToolDescriptions: d.showToolDescriptions,
     isTodoPanelCollapsed: d.isTodoPanelCollapsed,
+    isQueuedMessagesPanelCollapsed: d.isQueuedMessagesPanelCollapsed,
+    queuedSubmissions: i.queuedSubmissions,
     isNarrow: b.isNarrow,
     vimModeEnabled: i.vimModeEnabled,
     vimMode: i.vimMode,

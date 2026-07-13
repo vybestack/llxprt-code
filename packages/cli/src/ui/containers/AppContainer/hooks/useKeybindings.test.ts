@@ -63,6 +63,7 @@ interface HookHarness {
   setShowToolDescriptions: ReturnType<typeof vi.fn>;
   setRenderMarkdown: ReturnType<typeof vi.fn>;
   setIsTodoPanelCollapsed: ReturnType<typeof vi.fn>;
+  setIsQueuedMessagesPanelCollapsed: ReturnType<typeof vi.fn>;
   setConstrainHeight: ReturnType<typeof vi.fn>;
   refreshStatic: ReturnType<typeof vi.fn>;
   addItem: ReturnType<typeof vi.fn>;
@@ -79,6 +80,7 @@ const createHarness = (): HookHarness => ({
   setShowToolDescriptions: vi.fn(),
   setRenderMarkdown: vi.fn(),
   setIsTodoPanelCollapsed: vi.fn(),
+  setIsQueuedMessagesPanelCollapsed: vi.fn(),
   setConstrainHeight: vi.fn(),
   refreshStatic: vi.fn(),
   addItem: vi.fn().mockReturnValue(1),
@@ -109,6 +111,9 @@ const renderUseKeybindings = (
         setRenderMarkdown: harness.setRenderMarkdown,
         isTodoPanelCollapsed: false,
         setIsTodoPanelCollapsed: harness.setIsTodoPanelCollapsed,
+        isQueuedMessagesPanelCollapsed: false,
+        setIsQueuedMessagesPanelCollapsed:
+          harness.setIsQueuedMessagesPanelCollapsed,
         constrainHeight: true,
         setConstrainHeight: harness.setConstrainHeight,
         refreshStatic: harness.refreshStatic,
@@ -296,6 +301,9 @@ describe('useKeybindings', () => {
         setRenderMarkdown: harness.setRenderMarkdown,
         isTodoPanelCollapsed: false,
         setIsTodoPanelCollapsed: harness.setIsTodoPanelCollapsed,
+        isQueuedMessagesPanelCollapsed: false,
+        setIsQueuedMessagesPanelCollapsed:
+          harness.setIsQueuedMessagesPanelCollapsed,
         constrainHeight: false,
         setConstrainHeight: harness.setConstrainHeight,
         refreshStatic: harness.refreshStatic,
@@ -436,5 +444,110 @@ describe('useKeybindings', () => {
     });
 
     expect(harness.handleSlashCommand).toHaveBeenCalledWith('/ide status');
+  });
+
+  describe('toggle keybindings regression (issue #2296)', () => {
+    it('Ctrl+] collapses queued messages panel when currently expanded (collapsed=false)', () => {
+      const harness = createHarness();
+
+      renderUseKeybindings(harness, {
+        display: {
+          showErrorDetails: false,
+          setShowErrorDetails: harness.setShowErrorDetails,
+          showToolDescriptions: false,
+          setShowToolDescriptions: harness.setShowToolDescriptions,
+          renderMarkdown: true,
+          setRenderMarkdown: harness.setRenderMarkdown,
+          isTodoPanelCollapsed: false,
+          setIsTodoPanelCollapsed: harness.setIsTodoPanelCollapsed,
+          isQueuedMessagesPanelCollapsed: false,
+          setIsQueuedMessagesPanelCollapsed:
+            harness.setIsQueuedMessagesPanelCollapsed,
+          constrainHeight: true,
+          setConstrainHeight: harness.setConstrainHeight,
+          refreshStatic: harness.refreshStatic,
+          addItem: harness.addItem,
+          handleSlashCommand: harness.handleSlashCommand,
+        },
+      });
+
+      const handler = getRegisteredHandler();
+
+      act(() => {
+        handler({
+          ctrl: true,
+          meta: false,
+          shift: false,
+          paste: false,
+          name: ']',
+          sequence: ']',
+        } as Key);
+      });
+
+      // false → !false = true: collapse the panel
+      expect(harness.setIsQueuedMessagesPanelCollapsed).toHaveBeenCalledWith(
+        true,
+      );
+      expect(harness.setIsTodoPanelCollapsed).not.toHaveBeenCalled();
+    });
+
+    it('Ctrl+] expands queued messages panel when currently collapsed (collapsed=true)', () => {
+      const harness = createHarness();
+
+      renderUseKeybindings(harness, {
+        display: {
+          showErrorDetails: false,
+          setShowErrorDetails: harness.setShowErrorDetails,
+          showToolDescriptions: false,
+          setShowToolDescriptions: harness.setShowToolDescriptions,
+          renderMarkdown: true,
+          setRenderMarkdown: harness.setRenderMarkdown,
+          isTodoPanelCollapsed: false,
+          setIsTodoPanelCollapsed: harness.setIsTodoPanelCollapsed,
+          isQueuedMessagesPanelCollapsed: true,
+          setIsQueuedMessagesPanelCollapsed:
+            harness.setIsQueuedMessagesPanelCollapsed,
+          constrainHeight: true,
+          setConstrainHeight: harness.setConstrainHeight,
+          refreshStatic: harness.refreshStatic,
+          addItem: harness.addItem,
+          handleSlashCommand: harness.handleSlashCommand,
+        },
+      });
+
+      const handler = getRegisteredHandler();
+
+      act(() => {
+        handler({
+          ctrl: true,
+          meta: false,
+          shift: false,
+          paste: false,
+          name: ']',
+          sequence: ']',
+        } as Key);
+      });
+
+      // true → !true = false: expand the panel
+      expect(harness.setIsQueuedMessagesPanelCollapsed).toHaveBeenCalledWith(
+        false,
+      );
+      expect(harness.setIsTodoPanelCollapsed).not.toHaveBeenCalled();
+    });
+
+    it('Ctrl+] does not interfere with Ctrl+q (toggle todo panel)', () => {
+      const harness = createHarness();
+
+      renderUseKeybindings(harness);
+
+      const handler = getRegisteredHandler();
+
+      act(() => {
+        handler({ ctrl: true, name: 'q' } as Key);
+      });
+
+      expect(harness.setIsTodoPanelCollapsed).toHaveBeenCalledWith(true);
+      expect(harness.setIsQueuedMessagesPanelCollapsed).not.toHaveBeenCalled();
+    });
   });
 });

@@ -50,6 +50,8 @@ export interface DisplayKeybindingDeps {
   setRenderMarkdown: (v: boolean) => void;
   isTodoPanelCollapsed: boolean;
   setIsTodoPanelCollapsed: (v: boolean) => void;
+  isQueuedMessagesPanelCollapsed: boolean;
+  setIsQueuedMessagesPanelCollapsed: (v: boolean) => void;
   constrainHeight: boolean;
   setConstrainHeight: (v: boolean) => void;
   refreshStatic: () => void;
@@ -194,6 +196,13 @@ function handleDisplayKeys(
 
   if (keyMatchers[Command.TOGGLE_TODO_DIALOG](key)) {
     display.setIsTodoPanelCollapsed(!display.isTodoPanelCollapsed);
+    return;
+  }
+
+  if (keyMatchers[Command.TOGGLE_QUEUED_MESSAGES](key)) {
+    display.setIsQueuedMessagesPanelCollapsed(
+      !display.isQueuedMessagesPanelCollapsed,
+    );
     return;
   }
 

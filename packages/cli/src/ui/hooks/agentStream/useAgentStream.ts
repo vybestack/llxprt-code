@@ -121,6 +121,7 @@ function useAgentStreamReturn(
     cancelOngoingRequest: orchestration.cancelOngoingRequest,
     activeShellPtyId: orchestration.activeShellPtyId,
     lastOutputTime: getLastOutputTime(orchestration),
+    queuedSubmissions: orchestration.queuedSubmissions,
   };
 }
 

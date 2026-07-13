@@ -419,6 +419,7 @@ function useInputStreamWiring(
   const {
     activeShellPtyId: _ptyIdFromGemini,
     pendingHistoryItems: _pendingFromGemini,
+    queuedSubmissions,
     ...geminiRest
   } = geminiResult;
   return {
@@ -428,6 +429,7 @@ function useInputStreamWiring(
     activeShellPtyId,
     messageQueue,
     isMcpReady,
+    queuedSubmissions,
     ...geminiRest,
   };
 }

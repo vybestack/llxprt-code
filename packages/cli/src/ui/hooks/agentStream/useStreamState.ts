@@ -26,7 +26,9 @@ import { type HistoryItemWithoutId, MessageType } from '../../types.js';
 import { useStateAndRef } from '../useStateAndRef.js';
 import { useLogger } from '../useLogger.js';
 import { type QueuedSubmission } from './types.js';
+import { useQueuedSubmissions } from './useQueuedSubmissions.js';
 import type { StreamRuntime } from '../../cliUiRuntime.js';
+import type { SubmissionExecutor } from './useSubmitQuery.js';
 
 export interface UseStreamStateReturn {
   initError: string | null;
@@ -49,14 +51,14 @@ export interface UseStreamStateReturn {
   lastAgentActivityTime: number;
   setLastAgentActivityTime: React.Dispatch<React.SetStateAction<number>>;
   queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]>;
-  submitQueryRef: React.MutableRefObject<
-    | ((
-        query: unknown,
-        options?: { isContinuation: boolean },
-        prompt_id?: string,
-      ) => Promise<void>)
-    | null
-  >;
+  queuedSubmissions: readonly QueuedSubmission[];
+  enqueueSubmission: (submission: QueuedSubmission) => void;
+  requeueSubmission: (submission: QueuedSubmission) => void;
+  dequeueSubmission: () => QueuedSubmission | undefined;
+  clearSubmissions: () => void;
+  tryReserveDrain: () => boolean;
+  releaseDrain: () => void;
+  submitQueryRef: React.MutableRefObject<SubmissionExecutor | null>;
   sanitizeContent: (text: string) => {
     text: string;
     blocked: boolean;
@@ -187,10 +189,7 @@ function useFlushPendingHistoryItem(
   );
 }
 
-export function useStreamState(
-  addItem: (item: HistoryItemWithoutId, timestamp: number) => number,
-  runtime: StreamRuntime,
-): UseStreamStateReturn {
+function useBasicStreamState() {
   const [initError, setInitError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const abortActiveStream = useCallback((reason?: unknown) => {
@@ -205,35 +204,18 @@ export function useStreamState(
   const [pendingHistoryItem, pendingHistoryItemRef, setPendingHistoryItem] =
     useStateAndRef<HistoryItemWithoutId | null>(null);
   const [lastAgentActivityTime, setLastAgentActivityTime] = useState<number>(0);
-  const queuedSubmissionsRef = useRef<QueuedSubmission[]>([]);
-  const submitQueryRef = useRef<
-    | ((
-        query: unknown,
-        options?: { isContinuation: boolean },
-        prompt_id?: string,
-      ) => Promise<void>)
-    | null
-  >(null);
-  const storage = runtime.storage;
+  const {
+    queuedSubmissions,
+    queuedSubmissionsRef,
+    enqueueSubmission,
+    requeueSubmission,
+    dequeueSubmission,
+    clearSubmissions,
+    tryReserveDrain,
+    releaseDrain,
+  } = useQueuedSubmissions();
+  const submitQueryRef = useRef<SubmissionExecutor | null>(null);
   const thinkingBlocksRef = useRef<ThinkingBlock[]>([]);
-
-  const emojiFilter = useEmojiFilter(runtime);
-  const sanitizeContent = useSanitizeContent(emojiFilter);
-  const flushPendingHistoryItem = useFlushPendingHistoryItem(
-    addItem,
-    pendingHistoryItemRef,
-    sanitizeContent,
-    setPendingHistoryItem,
-    thinkingBlocksRef,
-  );
-  const logger = useLogger(storage);
-  const gitService = useMemo(() => {
-    const projectRoot = runtime.session.getProjectRoot();
-    if (projectRoot.length === 0) {
-      return undefined;
-    }
-    return new GitService(projectRoot, storage);
-  }, [runtime, storage]);
 
   return {
     initError,
@@ -253,12 +235,49 @@ export function useStreamState(
     setPendingHistoryItem,
     lastAgentActivityTime,
     setLastAgentActivityTime,
+    queuedSubmissions,
     queuedSubmissionsRef,
+    enqueueSubmission,
+    requeueSubmission,
+    dequeueSubmission,
+    clearSubmissions,
+    tryReserveDrain,
+    releaseDrain,
     submitQueryRef,
+    thinkingBlocksRef,
+  };
+}
+
+export function useStreamState(
+  addItem: (item: HistoryItemWithoutId, timestamp: number) => number,
+  runtime: StreamRuntime,
+): UseStreamStateReturn {
+  const basic = useBasicStreamState();
+  const storage = runtime.storage;
+
+  const emojiFilter = useEmojiFilter(runtime);
+  const sanitizeContent = useSanitizeContent(emojiFilter);
+  const flushPendingHistoryItem = useFlushPendingHistoryItem(
+    addItem,
+    basic.pendingHistoryItemRef,
+    sanitizeContent,
+    basic.setPendingHistoryItem,
+    basic.thinkingBlocksRef,
+  );
+  const logger = useLogger(storage);
+  const gitService = useMemo(() => {
+    const projectRoot = runtime.session.getProjectRoot();
+    if (projectRoot.length === 0) {
+      return undefined;
+    }
+    return new GitService(projectRoot, storage);
+  }, [runtime, storage]);
+
+  return {
+    ...basic,
     sanitizeContent,
     flushPendingHistoryItem,
     logger,
     gitService,
-    thinkingBlocksRef,
   };
 }

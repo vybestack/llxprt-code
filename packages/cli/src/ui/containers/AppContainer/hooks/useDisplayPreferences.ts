@@ -43,6 +43,10 @@ export interface UseDisplayPreferencesResult {
   isTodoPanelCollapsed: boolean;
   setIsTodoPanelCollapsed: (collapsed: boolean) => void;
 
+  // Queued messages panel collapse state
+  isQueuedMessagesPanelCollapsed: boolean;
+  setIsQueuedMessagesPanelCollapsed: (collapsed: boolean) => void;
+
   // Settings nonce for forcing re-renders when settings change
   settingsNonce: number;
 }
@@ -55,6 +59,8 @@ export function useDisplayPreferences(): UseDisplayPreferencesResult {
   const [copyModeEnabled, setCopyModeEnabled] = useState(false);
   const [renderMarkdown, setRenderMarkdown] = useState<boolean>(true);
   const [isTodoPanelCollapsed, setIsTodoPanelCollapsed] = useState(false);
+  const [isQueuedMessagesPanelCollapsed, setIsQueuedMessagesPanelCollapsed] =
+    useState(false);
   const [settingsNonce, setSettingsNonce] = useState(0);
 
   const toggleDebugProfiler = useCallback(() => {
@@ -97,6 +103,10 @@ export function useDisplayPreferences(): UseDisplayPreferencesResult {
     // Task-list panel collapse state
     isTodoPanelCollapsed,
     setIsTodoPanelCollapsed,
+
+    // Queued messages panel collapse state
+    isQueuedMessagesPanelCollapsed,
+    setIsQueuedMessagesPanelCollapsed,
 
     // Settings nonce
     settingsNonce,

@@ -20,14 +20,24 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { act, type Dispatch, type SetStateAction } from 'react';
+import React, { act, type Dispatch, type SetStateAction } from 'react';
 import { renderHook, waitFor } from '../../../../test-utils/render.js';
-import { useSubmitQuery } from '../useSubmitQuery.js';
+import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
+import { useCancellation } from '../useAgentStreamLifecycle.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
+import type { QueuedSubmission } from '../types.js';
 import {
+  Config,
   type AgentClientContract,
   type RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
+import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
+import {
+  buildUiRuntimeFromSource,
+  type StreamRuntime,
+} from '../../../cliUiRuntime.js';
+import { AppEvent, appEvents } from '../../../../utils/events.js';
+import { KeypressProvider } from '../../../contexts/KeypressContext.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
@@ -77,6 +87,25 @@ function createDeferred<T = void>(): {
     reject = rej;
   });
   return { promise, resolve, reject };
+}
+
+function createQueueOperations(ref: { current: QueuedSubmission[] }) {
+  return {
+    enqueueSubmission: (submission: QueuedSubmission) => {
+      ref.current = [...ref.current, submission];
+    },
+    requeueSubmission: (submission: QueuedSubmission) => {
+      ref.current = [submission, ...ref.current];
+    },
+    dequeueSubmission: (): QueuedSubmission | undefined => {
+      const [first, ...rest] = ref.current;
+      ref.current = rest;
+      return first;
+    },
+    clearSubmissions: () => {
+      ref.current = [];
+    },
+  };
 }
 
 function createMockOverrides() {
@@ -171,13 +200,22 @@ function renderUseSubmitQuery(
   overrides?: {
     streamingState?: StreamingState;
     recordingIntegration?: RecordingIntegration;
+    runtime?: StreamRuntime;
+    queuedSubmissionsRef?: React.MutableRefObject<QueuedSubmission[]>;
+    queueOperations?: ReturnType<typeof createQueueOperations>;
+    tryReserveDrain?: () => boolean;
+    releaseDrain?: () => void;
+    addItem?: UseSubmitQueryDeps['addItem'];
   },
 ) {
+  const addItem = overrides?.addItem ?? vi.fn().mockReturnValue(1);
   return renderHook(() =>
     useSubmitQuery({
-      runtime: createStreamRuntimeForTest({}, createMockOverrides()),
+      runtime:
+        overrides?.runtime ??
+        createStreamRuntimeForTest({}, createMockOverrides()),
       agent: createMockAgentClient() as unknown as Agent,
-      addItem: vi.fn().mockReturnValue(1),
+      addItem,
       settings: {} as never,
       onDebugMessage: vi.fn(),
       onCancelSubmit: vi.fn(),
@@ -187,7 +225,17 @@ function renderUseSubmitQuery(
       pendingHistoryItemRef: deps.pendingHistoryItemRef,
       thinkingBlocksRef: { current: [] },
       turnCancelledRef: { current: false },
-      queuedSubmissionsRef: { current: [] },
+      queuedSubmissionsRef: overrides?.queuedSubmissionsRef ?? { current: [] },
+      enqueueSubmission:
+        overrides?.queueOperations?.enqueueSubmission ?? vi.fn(),
+      requeueSubmission:
+        overrides?.queueOperations?.requeueSubmission ?? vi.fn(),
+      dequeueSubmission:
+        overrides?.queueOperations?.dequeueSubmission ?? vi.fn(),
+      clearSubmissions: overrides?.queueOperations?.clearSubmissions ?? vi.fn(),
+      tryReserveDrain:
+        overrides?.tryReserveDrain ?? vi.fn().mockReturnValue(true),
+      releaseDrain: overrides?.releaseDrain ?? vi.fn(),
       setPendingHistoryItem: deps.setPendingHistoryItem,
       setIsResponding: deps.setIsResponding,
       setInitError: vi.fn(),
@@ -220,339 +268,198 @@ function renderUseSubmitQuery(
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
-  it("does not call setIsResponding(false) from a superseded turn's finally", async () => {
+  it('keeps direct turn ownership while cancelled work settles and serializes the next direct submission', async () => {
     const turn1Deferred = createDeferred<void>();
     const turn2Deferred = createDeferred<void>();
-
+    const runStreamFn = vi
+      .fn()
+      .mockReturnValueOnce(turn1Deferred.promise)
+      .mockReturnValueOnce(turn2Deferred.promise);
     const deps = createDeps({
-      runStreamRef: {
-        current: vi
-          .fn()
-          .mockReturnValueOnce(turn1Deferred.promise)
-          .mockReturnValueOnce(turn2Deferred.promise),
-      } as never,
+      runStreamRef: { current: runStreamFn } as never,
     });
+    const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
+    const queue = createQueueOperations(queuedSubmissionsRef);
+    const turnCancelledRef = { current: false };
+    let drainReserved = false;
 
-    const { result } = renderUseSubmitQuery(deps);
+    const { result, rerender } = renderHook(
+      ({ streamingState }: { streamingState: StreamingState }) =>
+        useSubmitQuery({
+          runtime: createStreamRuntimeForTest({}, createMockOverrides()),
+          agent: createMockAgentClient() as unknown as Agent,
+          addItem: vi.fn().mockReturnValue(1),
+          settings: {} as never,
+          onDebugMessage: vi.fn(),
+          onCancelSubmit: vi.fn(),
+          onAuthError: vi.fn(),
+          sanitizeContent: (text: string) => ({ text, blocked: false }),
+          flushPendingHistoryItem: deps.flushPendingHistoryItem,
+          pendingHistoryItemRef: deps.pendingHistoryItemRef,
+          thinkingBlocksRef: { current: [] },
+          turnCancelledRef,
+          queuedSubmissionsRef,
+          ...queue,
+          tryReserveDrain: () => {
+            if (drainReserved) return false;
+            drainReserved = true;
+            return true;
+          },
+          releaseDrain: () => {
+            drainReserved = false;
+          },
+          setPendingHistoryItem: deps.setPendingHistoryItem,
+          setIsResponding: deps.setIsResponding,
+          setInitError: vi.fn(),
+          setThought: vi.fn(),
+          setLastAgentActivityTime: vi.fn(),
+          scheduleToolCalls: vi.fn(),
+          abortActiveStream: vi.fn(),
+          handleShellCommand: vi.fn().mockReturnValue(false),
+          handleSlashCommand: vi.fn().mockResolvedValue(false),
+          logger: null,
+          shellModeActive: false,
+          loopDetectedRef: deps.loopDetectedRef,
+          lastProfileNameRef: { current: undefined },
+          lastModelInfoRef: { current: null },
+          lastModelIdentityRef: { current: null },
+          abortControllerRef: deps.abortControllerRef,
+          runStreamRef: deps.runStreamRef,
+          submitQueryRef: { current: null },
+          isResponding: false,
+          streamingState,
+        }),
+      { initialProps: { streamingState: StreamingState.Idle } },
+    );
 
     let turn1Promise!: Promise<void>;
     await act(async () => {
       turn1Promise = result.current.submitQuery('turn-1');
     });
-    await waitFor(() =>
-      expect(deps.setIsRespondingCalls).toStrictEqual([true]),
-    );
-
-    let turn2Promise!: Promise<void>;
-    await act(async () => {
-      turn2Promise = result.current.submitQuery('turn-2');
-    });
-    await waitFor(() =>
-      expect(deps.setIsRespondingCalls).toStrictEqual([true, true]),
-    );
-
-    // Turn 1 settles — finally must NOT clobber Turn 2.
-    await act(async () => {
-      turn1Deferred.resolve();
-    });
-    await waitFor(() =>
-      expect(deps.setIsRespondingCalls).toStrictEqual([true, true]),
-    );
-
-    // Turn 2 settles — finally correctly resets.
-    await act(async () => {
-      turn2Deferred.resolve();
-    });
-    await waitFor(() =>
-      expect(deps.setIsRespondingCalls).toStrictEqual([true, true, false]),
-    );
+    await waitFor(() => expect(runStreamFn).toHaveBeenCalledTimes(1));
 
     await act(async () => {
-      await turn1Promise.catch(() => {});
-      await turn2Promise.catch(() => {});
+      await result.current.submitQuery('turn-2');
     });
-  });
+    expect(
+      queuedSubmissionsRef.current.map((item) => item.query),
+    ).toStrictEqual(['turn-2']);
 
-  it('does not call flushPendingHistoryItem or setPendingHistoryItem from a superseded turn', async () => {
-    const turn1Deferred = createDeferred<void>();
-    const turn2Deferred = createDeferred<void>();
-
-    const deps = createDeps({
-      runStreamRef: {
-        current: vi
-          .fn()
-          .mockReturnValueOnce(turn1Deferred.promise)
-          .mockReturnValueOnce(turn2Deferred.promise),
-      } as never,
-    });
-    // Make Turn 1 appear to have a pending history item so the post-runLoop
-    // flush path is reached if the guard is missing.
-    deps.pendingHistoryItemRef.current = { type: 'info', text: 'pending' };
-
-    const { result } = renderUseSubmitQuery(deps);
-
-    let turn1Promise!: Promise<void>;
-    await act(async () => {
-      turn1Promise = result.current.submitQuery('turn-1');
-    });
-
-    let turn2Promise!: Promise<void>;
-    await act(async () => {
-      turn2Promise = result.current.submitQuery('turn-2');
-    });
-
-    await act(async () => {
-      turn1Deferred.resolve();
-    });
-    await waitFor(() =>
-      expect(deps.setIsRespondingCalls).toStrictEqual([true, true]),
-    );
-
-    // Turn 1 was superseded: flushPendingHistoryItem must NOT have been called
-    // for its timestamp. Turn 2 hasn't settled yet so no flush for it either.
-    expect(deps.flushPendingHistoryItem).not.toHaveBeenCalled();
-    expect(deps.setPendingHistoryItem).not.toHaveBeenCalledWith(null);
-
-    await act(async () => {
-      turn2Deferred.resolve();
-    });
-    await act(async () => {
-      await turn1Promise.catch(() => {});
-      await turn2Promise.catch(() => {});
-    });
-  });
-
-  it('clears stale loopDetectedRef on supersession without firing handleLoopDetectedEvent', async () => {
-    const turn1Deferred = createDeferred<void>();
-    const turn2Deferred = createDeferred<void>();
-
-    const deps = createDeps({
-      runStreamRef: {
-        current: vi
-          .fn()
-          .mockReturnValueOnce(turn1Deferred.promise)
-          .mockReturnValueOnce(turn2Deferred.promise),
-      } as never,
-    });
-
-    const { result } = renderUseSubmitQuery(deps);
-
-    let turn1Promise!: Promise<void>;
-    await act(async () => {
-      turn1Promise = result.current.submitQuery('turn-1');
-    });
-
-    // Simulate the loop-detected flag being set during Turn 1's run.
-    deps.loopDetectedRef.current = true;
-
-    let turn2Promise!: Promise<void>;
-    await act(async () => {
-      turn2Promise = result.current.submitQuery('turn-2');
-    });
+    deps.abortControllerRef.current?.abort();
+    rerender({ streamingState: StreamingState.Idle });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(runStreamFn).toHaveBeenCalledTimes(1);
+    expect(queuedSubmissionsRef.current).toHaveLength(1);
 
     await act(async () => {
       turn1Deferred.resolve();
+      await turn1Promise;
     });
-
-    // The stale flag must be cleared silently so it does not leak into Turn 2,
-    // but handleLoopDetectedEvent must NOT fire for the superseded turn.
-    await waitFor(() => {
-      expect(deps.loopDetectedRef.current).toBe(false);
-    });
-    expect(deps.handleLoopDetectedEvent).not.toHaveBeenCalled();
+    expect(queuedSubmissionsRef.current).toHaveLength(0);
 
     await act(async () => {
       turn2Deferred.resolve();
     });
-    await act(async () => {
-      await turn1Promise.catch(() => {});
-      await turn2Promise.catch(() => {});
-    });
   });
 
-  it('does not call handleSubmissionError from a superseded turn', async () => {
-    const turn1Deferred = createDeferred<void>();
-    const turn2Deferred = createDeferred<void>();
-
-    const deps = createDeps({
-      runStreamRef: {
-        current: vi
-          .fn()
-          .mockReturnValueOnce(turn1Deferred.promise)
-          .mockReturnValueOnce(turn2Deferred.promise),
-      } as never,
+  it('retries a non-string MCP-blocked submission from the Config app emitter', async () => {
+    let discoveryState = MCPDiscoveryState.IN_PROGRESS;
+    const config = new Config({
+      sessionId: 'mcp-event-test',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
+      model: 'test-model',
+      mcpServers: { server: { command: 'unused' } },
+      eventEmitter: appEvents,
+    });
+    vi.spyOn(config, 'getMcpClientManager').mockReturnValue({
+      getDiscoveryState: () => discoveryState,
+      getMcpServerCount: () => 1,
+      restartServer: vi.fn(),
+    } as never);
+    const runtime = buildUiRuntimeFromSource(config);
+    const runStream = vi.fn().mockResolvedValue(undefined);
+    const deps = createDeps({ runStreamRef: { current: runStream } as never });
+    const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
+    const queueOperations = createQueueOperations(queuedSubmissionsRef);
+    const addItem = vi.fn().mockReturnValue(1);
+    let drainReserved = false;
+    const { result, unmount } = renderUseSubmitQuery(deps, {
+      runtime,
+      queuedSubmissionsRef,
+      queueOperations,
+      addItem,
+      tryReserveDrain: () => {
+        if (drainReserved) return false;
+        drainReserved = true;
+        return true;
+      },
+      releaseDrain: () => {
+        drainReserved = false;
+      },
     });
 
-    const { result } = renderUseSubmitQuery(deps);
-
-    let turn1Promise!: Promise<void>;
+    const nonStringQuery = [{ type: 'text' as const, text: 'wait for mcp' }];
     await act(async () => {
-      turn1Promise = result.current.submitQuery('turn-1');
+      await result.current.submitQuery(nonStringQuery);
+    });
+    expect(queuedSubmissionsRef.current).toHaveLength(1);
+    expect(queuedSubmissionsRef.current[0].query).toStrictEqual(nonStringQuery);
+    expect(runStream).not.toHaveBeenCalled();
+    expect(addItem).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      appEvents.emit(AppEvent.McpClientUpdate, new Map());
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(queuedSubmissionsRef.current).toHaveLength(1);
+    expect(runStream).not.toHaveBeenCalled();
+    expect(addItem).toHaveBeenCalledTimes(1);
+
+    discoveryState = MCPDiscoveryState.COMPLETED;
+    act(() => {
+      appEvents.emit(AppEvent.McpClientUpdate, new Map());
     });
 
-    let turn2Promise!: Promise<void>;
-    await act(async () => {
-      turn2Promise = result.current.submitQuery('turn-2');
-    });
-
-    // Reject Turn 1's runLoop — this simulates an error (e.g. AbortError)
-    // from a cancelled turn. The catch guard must suppress it.
-    handleSubmissionErrorMock.mockClear();
-    const turn1Error = new Error('Turn 1 aborted');
-    await act(async () => {
-      turn1Deferred.reject(turn1Error);
-    });
-
-    // Turn 1 was superseded: the catch guard must prevent
-    // handleSubmissionError from being called, so the error does not surface
-    // as a user-facing message.
-    expect(handleSubmissionErrorMock).not.toHaveBeenCalled();
-    expect(deps.setIsRespondingCalls).toStrictEqual([true, true]);
-
-    await act(async () => {
-      turn2Deferred.resolve();
-    });
-    await act(async () => {
-      await turn1Promise.catch(() => {});
-      await turn2Promise.catch(() => {});
-    });
+    await waitFor(() => expect(runStream).toHaveBeenCalledTimes(1));
+    unmount();
   });
 
-  it('does not call recordingIntegration.flushAtTurnBoundary from a superseded turn', async () => {
-    const turn1Deferred = createDeferred<void>();
-    const turn2Deferred = createDeferred<void>();
-
-    const deps = createDeps({
-      runStreamRef: {
-        current: vi
-          .fn()
-          .mockReturnValueOnce(turn1Deferred.promise)
-          .mockReturnValueOnce(turn2Deferred.promise),
-      } as never,
+  it('requeues an in-flight drained submission exactly once when unmounted', async () => {
+    const runDeferred = createDeferred<void>();
+    const runStream = vi.fn(() => runDeferred.promise);
+    const deps = createDeps({ runStreamRef: { current: runStream } as never });
+    const queuedSubmission: QueuedSubmission = { query: 'survive unmount' };
+    const queuedSubmissionsRef = { current: [queuedSubmission] };
+    const queueOperations = createQueueOperations(queuedSubmissionsRef);
+    let drainReserved = false;
+    let releases = 0;
+    const { unmount } = renderUseSubmitQuery(deps, {
+      queuedSubmissionsRef,
+      queueOperations,
+      tryReserveDrain: () => {
+        if (drainReserved) return false;
+        drainReserved = true;
+        return true;
+      },
+      releaseDrain: () => {
+        releases += 1;
+        drainReserved = false;
+      },
     });
 
-    const { result } = renderUseSubmitQuery(deps);
+    await waitFor(() => expect(runStream).toHaveBeenCalledTimes(1));
+    unmount();
+    expect(queuedSubmissionsRef.current).toStrictEqual([queuedSubmission]);
+    expect(releases).toBe(1);
 
-    let turn1Promise!: Promise<void>;
-    await act(async () => {
-      turn1Promise = result.current.submitQuery('turn-1');
-    });
-
-    let turn2Promise!: Promise<void>;
-    await act(async () => {
-      turn2Promise = result.current.submitQuery('turn-2');
-    });
-
-    await act(async () => {
-      turn1Deferred.resolve();
-    });
-
-    // Turn 1 was superseded: its finally must not flush the recording boundary.
-    expect(deps.flushAtTurnBoundarySpy).not.toHaveBeenCalled();
-
-    await act(async () => {
-      turn2Deferred.resolve();
-    });
-
-    // Turn 2 IS current: its finally should flush.
-    await waitFor(() =>
-      expect(deps.flushAtTurnBoundarySpy).toHaveBeenCalledTimes(1),
-    );
-
-    await act(async () => {
-      await turn1Promise.catch(() => {});
-      await turn2Promise.catch(() => {});
-    });
+    runDeferred.resolve();
+    await runDeferred.promise;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(queuedSubmissionsRef.current).toStrictEqual([queuedSubmission]);
+    expect(releases).toBe(1);
   });
-
-  it('simulates ESC cancel then new prompt: superseded turn does not clobber the new turn', async () => {
-    // This test mirrors the real user flow from issue #2259:
-    // 1. Start Turn 1 (runLoop blocks)
-    // 2. User hits ESC → cancelOngoingRequest aborts Turn 1's controller
-    //    and calls setIsResponding(false)
-    // 3. User submits Turn 2 → initTurn creates a fresh controller
-    // 4. Turn 1's runLoop settles (async cleanup finishes)
-    // 5. Turn 1's finally must NOT call setIsResponding(false)
-    const turn1Deferred = createDeferred<void>();
-    const turn2Deferred = createDeferred<void>();
-
-    const deps = createDeps({
-      runStreamRef: {
-        current: vi
-          .fn()
-          .mockReturnValueOnce(turn1Deferred.promise)
-          .mockReturnValueOnce(turn2Deferred.promise),
-      } as never,
-    });
-
-    const { result } = renderUseSubmitQuery(deps);
-
-    // ── Step 1: Turn 1 starts ──────────────────────────────────────────────
-    let turn1Promise!: Promise<void>;
-    await act(async () => {
-      turn1Promise = result.current.submitQuery('turn-1');
-    });
-    await waitFor(() =>
-      expect(deps.setIsRespondingCalls).toStrictEqual([true]),
-    );
-
-    const turn1Controller = deps.abortControllerRef.current;
-    expect(turn1Controller).not.toBeNull();
-
-    // ── Step 2: User hits ESC ──────────────────────────────────────────────
-    // cancelOngoingRequest (in useAgentStreamLifecycle) would:
-    //   - abort the controller
-    //   - setIsResponding(false)
-    //   - set turnCancelledRef.current = true
-    await act(async () => {
-      turn1Controller!.abort();
-      deps.setIsResponding(false);
-    });
-    expect(deps.setIsRespondingCalls).toStrictEqual([true, false]);
-
-    // ── Step 3: User submits Turn 2 ────────────────────────────────────────
-    // initTurn creates a NEW AbortController and resets turnCancelledRef.
-    let turn2Promise!: Promise<void>;
-    await act(async () => {
-      turn2Promise = result.current.submitQuery('turn-2');
-    });
-    await waitFor(() =>
-      expect(deps.setIsRespondingCalls).toStrictEqual([true, false, true]),
-    );
-
-    // The current AbortController is now Turn 2's, not Turn 1's.
-    expect(deps.abortControllerRef.current).not.toBe(turn1Controller);
-
-    // ── Step 4: Turn 1's async cleanup settles ─────────────────────────────
-    await act(async () => {
-      turn1Deferred.resolve();
-    });
-
-    // Turn 1's finally must NOT call setIsResponding(false) — that would
-    // cancel the new turn (issue #2259).
-    await waitFor(() =>
-      expect(deps.setIsRespondingCalls).toStrictEqual([true, false, true]),
-    );
-
-    // ── Step 5: Turn 2 finishes ────────────────────────────────────────────
-    await act(async () => {
-      turn2Deferred.resolve();
-    });
-    await waitFor(() =>
-      expect(deps.setIsRespondingCalls).toStrictEqual([
-        true,
-        false,
-        true,
-        false,
-      ]),
-    );
-
-    await act(async () => {
-      await turn1Promise.catch(() => {});
-      await turn2Promise.catch(() => {});
-    });
-  });
-
   it('queues the second prompt when streamingState is Responding, then drains after cancel', async () => {
     // This test exercises the production isQueueable gate:
     // When streamingState is Responding, submitQuery pushes the query to
@@ -572,16 +479,27 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     });
 
     const queuedSubmissionsRef = {
-      current: [] as Array<{
-        query: string;
-        options?: { isContinuation: boolean };
-        promptId?: string;
-      }>,
+      current: [] as QueuedSubmission[],
     };
 
+    // Provide real enqueue/dequeue/clear implementations backed by the ref
+    // so the test can observe queue state through the new immutable API.
+    const {
+      enqueueSubmission,
+      requeueSubmission,
+      dequeueSubmission,
+      clearSubmissions,
+    } = createQueueOperations(queuedSubmissionsRef);
+    const tryReserveDrain = vi.fn().mockReturnValue(true);
+    const releaseDrain = vi.fn();
+    const turnCancelledRef = { current: false };
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <KeypressProvider>{children}</KeypressProvider>
+    );
+
     const { result, rerender } = renderHook(
-      ({ streamingState }: { streamingState: StreamingState }) =>
-        useSubmitQuery({
+      ({ streamingState }: { streamingState: StreamingState }) => {
+        const submission = useSubmitQuery({
           runtime: createStreamRuntimeForTest({}, createMockOverrides()),
           agent: createMockAgentClient() as unknown as Agent,
           addItem: vi.fn().mockReturnValue(1),
@@ -593,8 +511,14 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
           flushPendingHistoryItem: deps.flushPendingHistoryItem,
           pendingHistoryItemRef: deps.pendingHistoryItemRef,
           thinkingBlocksRef: { current: [] },
-          turnCancelledRef: { current: false },
+          turnCancelledRef,
           queuedSubmissionsRef,
+          enqueueSubmission,
+          requeueSubmission,
+          dequeueSubmission,
+          clearSubmissions,
+          tryReserveDrain,
+          releaseDrain,
           setPendingHistoryItem: deps.setPendingHistoryItem,
           setIsResponding: deps.setIsResponding,
           setInitError: vi.fn(),
@@ -618,8 +542,26 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
           recordingIntegration: {
             flushAtTurnBoundary: deps.flushAtTurnBoundarySpy,
           } as unknown as RecordingIntegration,
-        }),
-      { initialProps: { streamingState: StreamingState.Idle } },
+        });
+        const cancellation = useCancellation(
+          streamingState,
+          turnCancelledRef,
+          deps.abortControllerRef,
+          vi.fn(),
+          deps.pendingHistoryItemRef,
+          deps.flushPendingHistoryItem,
+          vi.fn().mockReturnValue(1),
+          deps.setPendingHistoryItem,
+          vi.fn(),
+          deps.setIsResponding,
+          vi.fn(),
+        );
+        return { ...submission, ...cancellation };
+      },
+      {
+        initialProps: { streamingState: StreamingState.Idle },
+        wrapper,
+      },
     );
 
     // ── Turn 1 starts (streamingState transitions to Responding) ───────────
@@ -645,8 +587,9 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     // ── Turn 1 is cancelled and settles ────────────────────────────────────
     const turn1Controller = deps.abortControllerRef.current;
     await act(async () => {
-      turn1Controller!.abort();
+      result.current.cancelOngoingRequest();
     });
+    expect(turn1Controller?.signal.aborted).toBe(true);
     await act(async () => {
       turn1Deferred.resolve();
     });
@@ -703,6 +646,332 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
 
     await act(async () => {
       await turnPromise.catch(() => {});
+    });
+  });
+  it('preserves queued submissions across Ctrl+C cancel then drains them (issue #2296 integration)', async () => {
+    // Integration regression for issue #2296: queued messages must survive
+    // Ctrl+C cancel. The old code cleared queuedSubmissionsRef inside
+    // cancelOngoingRequest; the fix removed that so queued messages persist
+    // and drain after the cancelled turn settles.
+    //
+    // This test uses THREE deferred streams (one per turn) and verifies:
+    // 1. FIFO order is exact (turn-2 before turn-3)
+    // 2. Non-overlap: turns never run concurrently (only one active at a time)
+    // 3. Queue survives cancel and drains completely
+    // 4. Exactly-once: each submission is processed exactly once
+    const turn1Deferred = createDeferred<void>();
+    const turn2Deferred = createDeferred<void>();
+    const turn3Deferred = createDeferred<void>();
+
+    const runStreamFn = vi
+      .fn()
+      .mockReturnValueOnce(turn1Deferred.promise)
+      .mockReturnValueOnce(turn2Deferred.promise)
+      .mockReturnValueOnce(turn3Deferred.promise);
+
+    const deps = createDeps({
+      runStreamRef: { current: runStreamFn } as never,
+    });
+
+    const queuedSubmissionsRef = {
+      current: [] as QueuedSubmission[],
+    };
+
+    const {
+      enqueueSubmission,
+      requeueSubmission,
+      dequeueSubmission,
+      clearSubmissions,
+    } = createQueueOperations(queuedSubmissionsRef);
+    const tryReserveDrain = vi.fn().mockReturnValue(true);
+    const releaseDrain = vi.fn();
+    const turnCancelledRef = { current: false };
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <KeypressProvider>{children}</KeypressProvider>
+    );
+
+    const { result, rerender } = renderHook(
+      ({ streamingState }: { streamingState: StreamingState }) => {
+        const submission = useSubmitQuery({
+          runtime: createStreamRuntimeForTest({}, createMockOverrides()),
+          agent: createMockAgentClient() as unknown as Agent,
+          addItem: vi.fn().mockReturnValue(1),
+          settings: {} as never,
+          onDebugMessage: vi.fn(),
+          onCancelSubmit: vi.fn(),
+          onAuthError: vi.fn(),
+          sanitizeContent: (text: string) => ({ text, blocked: false }),
+          flushPendingHistoryItem: deps.flushPendingHistoryItem,
+          pendingHistoryItemRef: deps.pendingHistoryItemRef,
+          thinkingBlocksRef: { current: [] },
+          turnCancelledRef,
+          queuedSubmissionsRef,
+          enqueueSubmission,
+          requeueSubmission,
+          dequeueSubmission,
+          clearSubmissions,
+          tryReserveDrain,
+          releaseDrain,
+          setPendingHistoryItem: deps.setPendingHistoryItem,
+          setIsResponding: deps.setIsResponding,
+          setInitError: vi.fn(),
+          setThought: vi.fn(),
+          setLastAgentActivityTime: vi.fn(),
+          scheduleToolCalls: vi.fn(),
+          abortActiveStream: vi.fn(),
+          handleShellCommand: vi.fn().mockReturnValue(false),
+          handleSlashCommand: vi.fn().mockResolvedValue(false),
+          logger: null,
+          shellModeActive: false,
+          loopDetectedRef: deps.loopDetectedRef,
+          lastProfileNameRef: { current: undefined },
+          lastModelInfoRef: { current: null },
+          lastModelIdentityRef: { current: null },
+          abortControllerRef: deps.abortControllerRef,
+          runStreamRef: deps.runStreamRef,
+          submitQueryRef: { current: null },
+          isResponding: false,
+          streamingState,
+          recordingIntegration: {
+            flushAtTurnBoundary: deps.flushAtTurnBoundarySpy,
+          } as unknown as RecordingIntegration,
+        });
+        const cancellation = useCancellation(
+          streamingState,
+          turnCancelledRef,
+          deps.abortControllerRef,
+          vi.fn(),
+          deps.pendingHistoryItemRef,
+          deps.flushPendingHistoryItem,
+          vi.fn().mockReturnValue(1),
+          deps.setPendingHistoryItem,
+          vi.fn(),
+          deps.setIsResponding,
+          vi.fn(),
+        );
+        return { ...submission, ...cancellation };
+      },
+      {
+        initialProps: { streamingState: StreamingState.Idle },
+        wrapper,
+      },
+    );
+
+    // ── Turn 1 starts ──────────────────────────────────────────────────────
+    let turn1Promise!: Promise<void>;
+    await act(async () => {
+      turn1Promise = result.current.submitQuery('turn-1');
+    });
+    await waitFor(() =>
+      expect(deps.setIsRespondingCalls).toStrictEqual([true]),
+    );
+    expect(runStreamFn).toHaveBeenCalledTimes(1);
+    rerender({ streamingState: StreamingState.Responding });
+
+    // ── Turn 2 and Turn 3 are queued while Turn 1 is Responding ────────────
+    await act(async () => {
+      await result.current.submitQuery('turn-2');
+      await result.current.submitQuery('turn-3');
+    });
+    expect(queuedSubmissionsRef.current).toHaveLength(2);
+    // FIFO: turn-2 is first in queue, turn-3 is second
+    expect(queuedSubmissionsRef.current[0].query).toBe('turn-2');
+    expect(queuedSubmissionsRef.current[1].query).toBe('turn-3');
+    // No additional runStream calls — turns are queued, not started
+    expect(runStreamFn).toHaveBeenCalledTimes(1);
+
+    // ── Ctrl+C cancels Turn 1 ──────────────────────────────────────────────
+    // cancelOngoingRequest aborts the controller and setIsResponding(false).
+    // Crucially, the queue is NOT cleared — both queued submissions survive.
+    const turn1Controller = deps.abortControllerRef.current;
+    await act(async () => {
+      result.current.cancelOngoingRequest();
+    });
+    expect(turn1Controller?.signal.aborted).toBe(true);
+    await act(async () => {
+      turn1Deferred.resolve();
+    });
+
+    // Queue must still have both submissions — cancel did not clear them.
+    expect(queuedSubmissionsRef.current).toHaveLength(2);
+
+    // ── streamingState returns to Idle → drain begins ──────────────────────
+    rerender({ streamingState: StreamingState.Idle });
+
+    // The first queued submission (turn-2) drains and starts immediately.
+    await waitFor(() => {
+      expect(queuedSubmissionsRef.current).toHaveLength(1);
+    });
+    // turn-2 is now running (runStream called a second time)
+    await waitFor(() => expect(runStreamFn).toHaveBeenCalledTimes(2));
+    // Simulate the turn starting: streamingState → Responding
+    rerender({ streamingState: StreamingState.Responding });
+
+    // ── Turn 2 settles → streamingState returns to Idle → turn-3 drains ───
+    await act(async () => {
+      turn2Deferred.resolve();
+    });
+    rerender({ streamingState: StreamingState.Idle });
+
+    // turn-3 drains after turn-2 settles
+    await waitFor(() => {
+      expect(queuedSubmissionsRef.current).toHaveLength(0);
+    });
+    // turn-3 is now running (runStream called a third time)
+    await waitFor(() => expect(runStreamFn).toHaveBeenCalledTimes(3));
+
+    // ── Turn 3 settles ─────────────────────────────────────────────────────
+    await act(async () => {
+      turn3Deferred.resolve();
+    });
+
+    // FIFO proven: queue drained [turn-2, turn-3] — turn-2 dequeued first
+    // (length 2→1 after Idle), then turn-3 dequeued second (length 1→0 after
+    // the second Idle transition). runStreamFn was called exactly 3 times
+    // (once per turn), proving exactly-once processing.
+    expect(runStreamFn).toHaveBeenCalledTimes(3);
+    // Non-overlap proven: runStream was called sequentially — each call only
+    // happened after the previous turn's deferred resolved and streamingState
+    // returned to Idle. At no point did two runStream calls execute
+    // concurrently (each was gated by a separate deferred).
+
+    await act(async () => {
+      await turn1Promise.catch(() => {});
+    });
+  });
+
+  it('prevents double-drain when idle-effect and finally fire concurrently (issue #2296 race)', async () => {
+    // This test proves the serialized drain owner prevents the double-drain
+    // race: when a turn settles, BOTH the finally block (via setIsResponding)
+    // and the idle-effect trigger scheduleNextQueuedSubmission. Without the
+    // drain reservation, both would dequeue a separate item, starting two
+    // concurrent turns. The tryReserveDrain/releaseDrain mechanism ensures
+    // only one succeeds.
+    const turn1Deferred = createDeferred<void>();
+    const turn2Deferred = createDeferred<void>();
+
+    const runStreamFn = vi
+      .fn()
+      .mockReturnValueOnce(turn1Deferred.promise)
+      .mockReturnValueOnce(turn2Deferred.promise);
+
+    const deps = createDeps({
+      runStreamRef: { current: runStreamFn } as never,
+    });
+
+    const queuedSubmissionsRef = {
+      current: [] as QueuedSubmission[],
+    };
+
+    // Real drain reservation implementation (mirrors useQueuedSubmissions)
+    let drainReserved = false;
+    const tryReserveDrain = vi.fn(() => {
+      if (drainReserved) return false;
+      drainReserved = true;
+      return true;
+    });
+    const releaseDrain = vi.fn(() => {
+      drainReserved = false;
+    });
+
+    const {
+      enqueueSubmission,
+      requeueSubmission,
+      dequeueSubmission,
+      clearSubmissions,
+    } = createQueueOperations(queuedSubmissionsRef);
+
+    const { result, rerender } = renderHook(
+      ({ streamingState }: { streamingState: StreamingState }) =>
+        useSubmitQuery({
+          runtime: createStreamRuntimeForTest({}, createMockOverrides()),
+          agent: createMockAgentClient() as unknown as Agent,
+          addItem: vi.fn().mockReturnValue(1),
+          settings: {} as never,
+          onDebugMessage: vi.fn(),
+          onCancelSubmit: vi.fn(),
+          onAuthError: vi.fn(),
+          sanitizeContent: (text: string) => ({ text, blocked: false }),
+          flushPendingHistoryItem: deps.flushPendingHistoryItem,
+          pendingHistoryItemRef: deps.pendingHistoryItemRef,
+          thinkingBlocksRef: { current: [] },
+          turnCancelledRef: { current: false },
+          queuedSubmissionsRef,
+          enqueueSubmission,
+          requeueSubmission,
+          dequeueSubmission,
+          clearSubmissions,
+          tryReserveDrain,
+          releaseDrain,
+          setPendingHistoryItem: deps.setPendingHistoryItem,
+          setIsResponding: deps.setIsResponding,
+          setInitError: vi.fn(),
+          setThought: vi.fn(),
+          setLastAgentActivityTime: vi.fn(),
+          scheduleToolCalls: vi.fn(),
+          abortActiveStream: vi.fn(),
+          handleShellCommand: vi.fn().mockReturnValue(false),
+          handleSlashCommand: vi.fn().mockResolvedValue(false),
+          logger: null,
+          shellModeActive: false,
+          loopDetectedRef: deps.loopDetectedRef,
+          lastProfileNameRef: { current: undefined },
+          lastModelInfoRef: { current: null },
+          lastModelIdentityRef: { current: null },
+          abortControllerRef: deps.abortControllerRef,
+          runStreamRef: deps.runStreamRef,
+          submitQueryRef: { current: null },
+          isResponding: false,
+          streamingState,
+          recordingIntegration: {
+            flushAtTurnBoundary: deps.flushAtTurnBoundarySpy,
+          } as unknown as RecordingIntegration,
+        }),
+      { initialProps: { streamingState: StreamingState.Idle } },
+    );
+
+    // ── Turn 1 starts ──────────────────────────────────────────────────────
+    let turn1Promise!: Promise<void>;
+    await act(async () => {
+      turn1Promise = result.current.submitQuery('turn-1');
+    });
+    await waitFor(() =>
+      expect(deps.setIsRespondingCalls).toStrictEqual([true]),
+    );
+    rerender({ streamingState: StreamingState.Responding });
+
+    // ── Turn 2 queued while Turn 1 is Responding ───────────────────────────
+    await act(async () => {
+      await result.current.submitQuery('turn-2');
+    });
+    expect(queuedSubmissionsRef.current).toHaveLength(1);
+
+    // ── Turn 1 settles ─────────────────────────────────────────────────────
+    // The finally block calls setIsResponding(false). In production this
+    // transitions streamingState to Idle, firing the idle-effect. The finally
+    // no longer calls scheduleNextQueuedSubmission directly (removed to fix
+    // the race), so the idle-effect is the sole drain owner.
+    await act(async () => {
+      turn1Deferred.resolve();
+    });
+    rerender({ streamingState: StreamingState.Idle });
+
+    // Only one drain attempt should succeed — exactly one item dequeued
+    await waitFor(() => {
+      expect(queuedSubmissionsRef.current).toHaveLength(0);
+    });
+
+    // Exactly one additional runStream call (turn-2 started, not two)
+    await waitFor(() => expect(runStreamFn).toHaveBeenCalledTimes(2));
+    expect(releaseDrain).not.toHaveBeenCalled();
+
+    await act(async () => {
+      turn2Deferred.resolve();
+    });
+    await waitFor(() => expect(releaseDrain).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      await turn1Promise.catch(() => {});
     });
   });
 });

@@ -14,10 +14,11 @@ import {
   createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act } from 'react';
+import React, { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { useAgentStream } from './agentStream/index.js';
+import { createStreamRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 import { useKeypress } from './useKeypress.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import type {
@@ -68,19 +69,28 @@ vi.mock('../utils/markdownUtilities.js', () => ({
 }));
 
 vi.mock('./useStateAndRef.js', () => ({
-  useStateAndRef: vi.fn((initial) => {
-    let val = initial;
-    const ref = { current: val };
-    const setVal = vi.fn((updater) => {
-      if (typeof updater === 'function') {
-        val = updater(val);
-      } else {
-        val = updater;
-      }
-      ref.current = val;
-    });
-    return [val, ref, setVal];
-  }),
+  useStateAndRef: <T,>(
+    initial: T,
+  ): [
+    T,
+    React.MutableRefObject<T>,
+    React.Dispatch<React.SetStateAction<T>>,
+  ] => {
+    const [state, setState] = React.useState(initial);
+    const ref = React.useRef(initial);
+    const setStateInternal = React.useCallback(
+      (valueOrUpdater: React.SetStateAction<T>) => {
+        const nextValue =
+          typeof valueOrUpdater === 'function'
+            ? valueOrUpdater(ref.current)
+            : valueOrUpdater;
+        ref.current = nextValue;
+        setState(nextValue);
+      },
+      [],
+    );
+    return [state, ref, setStateInternal];
+  },
 }));
 
 vi.mock('./useLogger.js', () => ({
@@ -225,7 +235,7 @@ describe('useAgentStream', () => {
       client,
       history: [],
       addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-      config: mockConfig,
+      runtime: createStreamRuntimeForTest(mockConfig),
       onDebugMessage: mockOnDebugMessage,
       handleSlashCommand: mockHandleSlashCommand as unknown as (
         cmd: ContractPartListUnion,
@@ -281,7 +291,7 @@ describe('useAgentStream', () => {
           props.client,
           props.history,
           props.addItem,
-          props.config,
+          props.runtime,
           props.loadedSettings,
           props.onDebugMessage,
           props.handleSlashCommand,
@@ -289,7 +299,6 @@ describe('useAgentStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           () => {},
           () => {},
@@ -345,9 +354,9 @@ describe('useAgentStream', () => {
 
       const { result } = renderTestHook();
 
-      // Start a query
+      // Start a query — fire-and-forget because the mock stream never ends
       await act(async () => {
-        await result.current.submitQuery('test query');
+        void result.current.submitQuery('test query');
       });
 
       // Wait for the first part of the response
@@ -387,7 +396,7 @@ describe('useAgentStream', () => {
           createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
           [],
           mockAddItem,
-          mockConfig,
+          createStreamRuntimeForTest(mockConfig),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -395,7 +404,6 @@ describe('useAgentStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           cancelSubmitSpy,
           () => {},
@@ -404,9 +412,14 @@ describe('useAgentStream', () => {
         ),
       );
 
-      // Start a query
+      // Start a query — fire-and-forget because the mock stream never ends
       await act(async () => {
-        await result.current.submitQuery('test query');
+        void result.current.submitQuery('test query');
+      });
+
+      // Wait for streaming to start
+      await waitFor(() => {
+        expect(result.current.streamingState).toBe(StreamingState.Responding);
       });
 
       simulateEscapeKeyPress();
@@ -429,7 +442,7 @@ describe('useAgentStream', () => {
           createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
           [],
           mockAddItem,
-          mockConfig,
+          createStreamRuntimeForTest(mockConfig),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -437,7 +450,6 @@ describe('useAgentStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           vi.fn(),
           setShellInputFocusedSpy, // Pass the spy here
@@ -446,9 +458,14 @@ describe('useAgentStream', () => {
         ),
       );
 
-      // Start a query
+      // Start a query — fire-and-forget because the mock stream never ends
       await act(async () => {
-        await result.current.submitQuery('test query');
+        void result.current.submitQuery('test query');
+      });
+
+      // Wait for streaming to start
+      await waitFor(() => {
+        expect(result.current.streamingState).toBe(StreamingState.Responding);
       });
 
       simulateEscapeKeyPress();
@@ -489,7 +506,7 @@ describe('useAgentStream', () => {
       const { result } = renderTestHook();
 
       await act(async () => {
-        await result.current.submitQuery('long running query');
+        void result.current.submitQuery('long running query');
       });
 
       await waitFor(() => {
