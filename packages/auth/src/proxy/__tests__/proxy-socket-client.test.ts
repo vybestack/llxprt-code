@@ -135,9 +135,11 @@ function createHandshakeCapturingServer(
     });
   });
   return new Promise((resolve, reject) => {
-    srv.once('error', reject);
+    const rejectStartup = (error: Error): void => reject(error);
+    srv.once('error', rejectStartup);
     srv.listen(socketPath, () => {
-      srv.removeListener('error', reject);
+      srv.removeListener('error', rejectStartup);
+      srv.on('error', rejectHandshake);
       resolve({ server: srv, handshake });
     });
   });

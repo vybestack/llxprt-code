@@ -227,6 +227,7 @@ export class CredentialProxyServer {
         this.auditLog('WARN', state.id, 'partial_frame_timeout');
         socket.destroy();
       },
+      maxFramesPerFeed: MAX_FRAMES_PER_CHUNK,
     });
     const handshakeState = { completed: false, rejected: false };
 
