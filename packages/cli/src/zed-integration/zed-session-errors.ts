@@ -175,9 +175,6 @@ async function probeMatchingSessionFile(
   let entries: readonly string[];
   try {
     entries = await probe();
-    if (!Array.isArray(entries)) {
-      throw new TypeError('session-file probe returned a non-array result');
-    }
   } catch (error) {
     const message = errorMessage(error);
     if (isEnoent(error)) {
@@ -200,6 +197,12 @@ async function probeMatchingSessionFile(
         `reporting indeterminate existence: ${message}`,
     );
     return { kind: 'probe-error', message };
+  }
+  if (!Array.isArray(entries)) {
+    return {
+      kind: 'probe-error',
+      message: 'session-file probe returned a non-array result',
+    };
   }
   const file = findMatchingSessionFile(sessionId, entries);
   return file === null ? { kind: 'no-match' } : { kind: 'match', file };

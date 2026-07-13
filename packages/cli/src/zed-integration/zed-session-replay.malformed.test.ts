@@ -220,16 +220,18 @@ describe('mapHistoryToSessionUpdates — malformed persisted history (issue #160
       toolCallId: 'call-noname',
       title: 'call-noname',
       status: 'in_progress',
+      kind: 'other',
       content: [],
       locations: [],
       rawInput: { foo: 'bar' },
     });
-    expect('kind' in start).toBe(false);
+    expect(start).toHaveProperty('kind', 'other');
     // Still pending at end-of-history → the usual synthetic failed terminal.
     expect(synthetic).toStrictEqual({
       sessionUpdate: 'tool_call_update',
       toolCallId: 'call-noname',
       status: 'failed',
+      kind: 'other',
       content: [],
     });
   });

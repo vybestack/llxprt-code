@@ -12,7 +12,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { inferToolKind, TOOL_KIND_BY_NAME } from './zed-tool-handler.js';
+import { Kind } from '@vybestack/llxprt-code-tools';
+import {
+  inferToolKind,
+  TOOL_KIND_BY_NAME,
+  toAcpToolKind,
+} from './zed-tool-handler.js';
 
 const ACP_TOOL_KINDS = [
   'read',
@@ -42,5 +47,19 @@ describe('inferToolKind (issue #1605: ToolKind mapping)', () => {
   it('returns undefined for an unknown tool name (kind omitted on the wire, never an invalid value)', () => {
     expect(inferToolKind('some_mcp_server_tool')).toBeUndefined();
     expect(inferToolKind('')).toBeUndefined();
+  });
+});
+
+describe('toAcpToolKind (issue #1605: registered Kind mapping)', () => {
+  it.each(Object.values(Kind))(
+    'passes through the registered %s kind',
+    (kind) => {
+      expect(toAcpToolKind(kind)).toBe(kind);
+    },
+  );
+
+  it('maps absent and future non-ACP kinds to other', () => {
+    expect(toAcpToolKind(undefined)).toBe('other');
+    expect(toAcpToolKind('communicate')).toBe('other');
   });
 });

@@ -212,6 +212,43 @@ describe('Zed Session.prompt (Agent API) - tool-call status progression', () => 
     expect((updates[2] as { status: string }).status).toBe('completed');
   });
 
+  it('uses the registered tool kind on every live tool notification', async () => {
+    const toolCallId = 'registry-kind';
+    const { agent } = buildFakeAgent(
+      [
+        {
+          type: 'tool-call',
+          call: { id: toolCallId, name: 'custom_lookup', args: {} },
+        },
+        {
+          type: 'tool-status',
+          update: {
+            id: toolCallId,
+            name: 'custom_lookup',
+            status: 'executing',
+          },
+        },
+        {
+          type: 'tool-result',
+          result: { id: toolCallId, name: 'custom_lookup', output: 'found' },
+        },
+        { type: 'done', reason: 'stop' },
+      ],
+      { custom_lookup: 'search' },
+    );
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    await runPrompt(session);
+
+    expect(
+      connection
+        .onlySessionUpdates()
+        .map((update) => (update as { kind?: acp.ToolKind }).kind),
+    ).toStrictEqual(['search', 'search', 'search']);
+  });
+
   it('surfaces multiple path locations and known tool kinds', async () => {
     const { agent } = buildFakeAgent([
       {

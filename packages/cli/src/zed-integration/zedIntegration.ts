@@ -50,9 +50,7 @@ import {
 import { ZedPathResolver } from './zed-path-resolver.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
-  emitToolCallStart,
-  emitToolStatus,
-  emitToolResult,
+  emitAgentToolEvent,
   requestToolConfirmation,
   type PermissionRoundTripResult,
 } from './zed-tool-handler.js';
@@ -88,9 +86,6 @@ export async function runZedIntegration(
 
   logger.debug(() => 'Streams created');
 
-  // Deliberate foreground hand-off: the Zed integration replaces the CLI
-  // bootstrap runtime as the process default. allowDefaultHandoff opts past the
-  // write-once guard for this one intentional transition (issue #2300).
   setCliRuntimeContext(config.getSettingsService(), config, {
     runtimeId: 'cli.runtime.zed',
     metadata: { source: 'zed-integration', stage: 'bootstrap' },
@@ -135,14 +130,6 @@ export class ZedAgent {
   private clientCapabilities: acp.ClientCapabilities | undefined;
   private logger: DebugLogger;
 
-  /**
-   * Directory lister used by the loadSession re-attach probe (#1604) to decide
-   * whether an on-disk recording already exists for a session id. Defaults to
-   * the real `node:fs/promises` readdir wrapper; injectable via the constructor
-   * as an HONEST readdir-like seam (returns directory entry names) so tests can
-   * exercise the real chats-dir derivation + filename matching without stubbing
-   * our own decision logic.
-   */
   private readonly sessionFileLister: ChatSessionFileLister;
 
   constructor(
@@ -203,10 +190,6 @@ export class ZedAgent {
         sessionId,
         cwd,
       );
-      // Enable continuous session recording so the conversation is persisted to
-      // a JSONL session file (under <projectTempDir>/chats) and can later be
-      // resumed via loadSession. Recording must never break session creation, so
-      // a startup failure is logged and swallowed.
       await this.enableRecording(agent, sessionId);
 
       const session = await this.buildSessionForAgent(
@@ -226,13 +209,6 @@ export class ZedAgent {
     }
   }
 
-  /**
-   * Constructs the Session wrapper for a freshly built agent, disposing the
-   * agent (releasing its recording lock) if the Session constructor throws
-   * (FINDING F12), so a ctor failure never leaks the agent — mirroring the
-   * loadSession-side guard in buildAndResumeSession. A dispose failure during
-   * cleanup is logged and swallowed so the ORIGINAL ctor error is rethrown.
-   */
   private async buildSessionForAgent(
     sessionId: string,
     agent: Agent,
@@ -253,58 +229,10 @@ export class ZedAgent {
     }
   }
 
-  /**
-   * Loads (resumes) a previously recorded session so its conversation can be
-   * continued (issue #1604). The history is replayed to the client as ordered
-   * session/update notifications BEFORE this resolves, so the Zed transcript is
-   * reconstructed.
-   *
-   * Two paths, chosen by whether a recording exists on disk (see
-   * {@link performLoadSession}):
-   *
-   * 1. RE-ATTACH (live session, no on-disk recording): a session that was created
-   *    via session/new but never prompted has NO recording file — SessionRecordingService
-   *    materializes the JSONL only on the FIRST content event — so a disk resume
-   *    would fail with "No sessions found for this project" AND the destroy-first
-   *    step would have thrown away a perfectly healthy live session. Instead we
-   *    KEEP the live session, replay its IN-MEMORY history (empty for a fresh
-   *    unprompted session → zero updates), and return its modes. This keeps ACP
-   *    loadSession conformant (an agent that advertises loadSession must not error
-   *    on a just-created session) and lets a Zed reconnect to an unprompted session
-   *    succeed. Because the live session is healthy, a replay failure here does NOT
-   *    dispose it — the wrapped internalError is simply propagated.
-   *
-   * 2. DISK RESUME (recording present, or no live session): a fresh Agent (bound
-   *    to a session-scoped Config + AcpFileSystemService, identical to newSession)
-   *    is created and `agent.session.resume` restores the recorded history AND
-   *    re-subscribes continuous recording so subsequent turns keep appending to the
-   *    SAME file. Replace-order + lock semantics: an already-loaded same-id Session
-   *    holds the on-disk session lock (SessionLockManager), so the fresh agent's
-   *    resume CANNOT acquire the lock until the prior Session is disposed; disposing
-   *    first is therefore unavoidable. To keep the destructive step safe we (a)
-   *    dispose the prior Session AND remove it from this.sessions up front so no
-   *    half-dead entry survives a subsequent failure, then (b) build + resume the
-   *    replacement; if that fails, the fresh agent is disposed and a precise
-   *    RequestError (carrying the lower-layer reason, see mapResumeError) is thrown,
-   *    leaving this.sessions with NO entry for the id so a later retry can cleanly
-   *    load again. On success the replacement is installed and the restored
-   *    transcript is streamed.
-   *
-   * Concurrency: same-id loads are SERIALIZED (FINDING F5) via loadSessionQueues
-   * so two concurrent session/load calls for one id cannot both build agents and
-   * race to install (which would orphan the earlier load's recording lock);
-   * distinct ids remain fully parallel. The re-attach probe + replay run INSIDE
-   * this serialization too.
-   */
   async loadSession(
     params: acp.LoadSessionRequest,
   ): Promise<acp.LoadSessionResponse> {
     const { sessionId } = params;
-    // Chain this load after any in-flight load for the SAME id so the
-    // dispose-prior -> build -> resume -> install sequence runs to completion
-    // before the next same-id load begins (FINDING F5). We chain off the prior
-    // load's settlement (ignoring its outcome) rather than awaiting it directly
-    // so a rejected prior load does not reject this one.
     const prior = this.loadSessionQueues.get(sessionId);
     const run = (prior ?? Promise.resolve()).then(
       () => this.performLoadSession(params),
@@ -521,11 +449,6 @@ export class ZedAgent {
     return { agent, config: sessionConfig };
   }
 
-  /**
-   * Enables continuous session recording for a freshly created session. Failures
-   * are logged and swallowed so recording startup can never break session
-   * creation (the session remains fully usable, just unrecorded).
-   */
   private async enableRecording(
     agent: Agent,
     sessionId: string,
@@ -627,11 +550,6 @@ export class Session {
     return {};
   }
 
-  /**
-   * Returns the session's current approval mode, delegating to the underlying
-   * Agent. Used by loadSession to advertise the resumed session's currentModeId
-   * without reaching through to the private agent from the ZedAgent orchestrator.
-   */
   getApprovalMode(): ApprovalMode {
     return this.agent.getApprovalMode();
   }
@@ -822,16 +740,14 @@ export class Session {
         return null;
       }
       case 'tool-call':
-        await batcher.flush();
-        await emitToolCallStart(event.call, (u) => this.sendUpdate(u));
-        return null;
       case 'tool-status':
-        await batcher.flush();
-        await emitToolStatus(event.update, (u) => this.sendUpdate(u));
-        return null;
       case 'tool-result':
         await batcher.flush();
-        await emitToolResult(event.result, (u) => this.sendUpdate(u));
+        await emitAgentToolEvent(
+          event,
+          (update) => this.sendUpdate(update),
+          this.agent.tools,
+        );
         return null;
       case 'tool-confirmation':
         await batcher.flush();
@@ -857,13 +773,9 @@ export class Session {
           event.info.systemMessage ?? 'Agent stopped by a hook blocker.',
         );
       case 'loop-detected':
-        // The agent detects a tool-call loop. Map to end_turn so the client
-        // sees a clean turn end rather than an indefinite hang.
         await batcher.flush();
         return 'end_turn';
       case 'notice':
-        // Informational notices have no direct ACP SessionUpdate; surface as
-        // an agent message so the user sees them.
         await batcher.flush();
         await this.sendUpdate({
           sessionUpdate: 'agent_message_chunk',
@@ -880,14 +792,8 @@ export class Session {
       case 'model-info':
       case 'retry':
       case 'citation':
-        // These variants have no faithful ACP translation: usage is mapped
-        // separately, compression/model-info/citation are metadata, retry is
-        // an internal agent detail, and context-warning is advisory. They are
-        // intentionally consumed without surfacing to ACP.
         return null;
       default: {
-        // Exhaustiveness guard: any future AgentEvent variant added to the
-        // union without an explicit case above will fail to type-check here.
         const exhaustive: never = event;
         throw new Error(`Unhandled agent event: ${String(exhaustive)}`);
       }
@@ -897,10 +803,6 @@ export class Session {
   private async sendUsageUpdate(
     usage: Extract<AgentEvent, { type: 'usage' }>['usage'],
   ): Promise<void> {
-    // size = the configured context window (user override -> provider limit ->
-    // model lookup, the shared #2251 resolver), used = tokens now in context —
-    // so the client renders consumption against the real window (issue #1607)
-    // instead of the previous used===size placeholder.
     const update = buildUsageUpdate(
       usage,
       getTokenLimitForConfiguredContext(this.config.getModel(), this.config),
@@ -949,6 +851,7 @@ export class Session {
           event.confirmation.name,
           event.confirmation.details,
           this.connection,
+          this.agent.tools.get(event.confirmation.name)?.kind,
         ),
         cancelled,
       ] as const);
@@ -984,25 +887,12 @@ export class Session {
     }
   }
 
-  /**
-   * STRICT delivery of a single session/update: rethrows any transport failure.
-   * Used ONLY by streamHistory (ACP session/load replay) so a dead/failing
-   * client connection fails the load rather than silently losing the transcript
-   * while loadSession still resolves successfully (FINDING A). The best-effort
-   * live path (sendUpdate) must NOT use this.
-   */
   private async sendUpdateStrict(update: acp.SessionUpdate): Promise<void> {
     this.logger.debug(() => describeSessionUpdateForLog(update));
     await this.connection.sessionUpdate({ sessionId: this.id, update });
     this.logger.debug(() => 'sendUpdate: delivered');
   }
 
-  /**
-   * BEST-EFFORT delivery for the LIVE prompt path: a transient client error
-   * must not abort an in-flight turn, so delivery failures are logged and
-   * swallowed. Replay uses sendUpdateStrict instead so lost history surfaces as
-   * a failed load.
-   */
   private async sendUpdate(update: acp.SessionUpdate): Promise<void> {
     try {
       await this.sendUpdateStrict(update);
@@ -1029,25 +919,10 @@ export class Session {
     await this.sendUpdate({ sessionUpdate: 'plan', entries });
   }
 
-  /**
-   * Replays a resumed conversation (ordered IContent[]) to the client as
-   * session/update notifications, in order, for ACP session/load (issue #1604).
-   * The neutral history is mapped to ACP updates by the pure
-   * mapHistoryToSessionUpdates helper (human text -> user_message_chunk, ai text
-   * -> agent_message_chunk, ai thinking -> agent_thought_chunk, ai tool_call ->
-   * tool_call, tool tool_response -> tool_call_update). Replay text is sent
-   * verbatim (NOT routed through the EmojiFilter): the recorded transcript was
-   * already filtered when first streamed, so re-filtering on replay would be
-   * redundant and could double-alter historical content.
-   */
+  /** Replays resumed history as ordered, strictly delivered ACP updates. */
   async streamHistory(items: readonly IContent[]): Promise<void> {
     const updates = mapHistoryToSessionUpdates(items);
     for (const update of updates) {
-      // STRICT: a failed delivery here (dead/failing transport) must reject so
-      // loadSession can clean up and report the failure instead of resolving as
-      // a success with a lost transcript (FINDING A). wrapReplayFailure maps the
-      // rejection to a precise internalError (passing an existing RequestError
-      // through unchanged) for loadSession's catch path.
       try {
         await this.sendUpdateStrict(update);
       } catch (error) {
@@ -1056,15 +931,7 @@ export class Session {
     }
   }
 
-  /**
-   * Re-attach replay for ACP session/load (#1604): replays this live session's
-   * IN-MEMORY conversation, used when a load targets a still-live session with
-   * no on-disk recording yet (unprompted; JSONL not materialized). History is
-   * read + wrapped by readAgentHistoryForReplay and maps through the SAME
-   * strict {@link streamHistory} path a disk resume uses (empty history → zero
-   * updates). Any failure rejects as a well-formed replay RequestError; the
-   * caller deliberately does NOT dispose the session — it remains healthy.
-   */
+  /** Replays a live session whose recording has not materialized yet. */
   async replayLiveHistory(): Promise<void> {
     await this.streamHistory(
       await readAgentHistoryForReplay(this.agent, this.id),
