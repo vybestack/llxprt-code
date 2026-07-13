@@ -10,15 +10,14 @@ if (process.env['NO_COLOR'] !== undefined) {
 }
 
 import { mkdir, readdir, rm, mkdtemp } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as os from 'node:os';
-import * as path from 'node:path';
 
 // Handle the case where import.meta.url might be undefined in CI
 const __dirname = import.meta?.url
   ? dirname(fileURLToPath(import.meta.url))
-  : path.resolve(process.cwd(), 'integration-tests');
+  : resolve(process.cwd(), 'integration-tests');
 
 const rootDir = join(__dirname, '..');
 const integrationTestsDir = join(rootDir, '.integration-tests');

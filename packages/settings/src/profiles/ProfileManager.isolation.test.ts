@@ -27,7 +27,11 @@ describe('ProfileManager storage isolation', () => {
     // The storage isolation bootstrap (test-setup-storage-isolation.ts)
     // must have redirected config/data/cache/log roots to a temp dir.
     expect(configDir.startsWith(os.tmpdir())).toBe(true);
-    expect(configDir.startsWith(os.homedir())).toBe(false);
+    // On Windows, os.tmpdir() is under os.homedir() (C:\Users\<user>\AppData\Local\Temp),
+    // so asserting it's NOT under homedir would fail. Only check on POSIX.
+    if (process.platform !== 'win32') {
+      expect(configDir.startsWith(os.homedir())).toBe(false);
+    }
 
     const manager = new ProfileManager();
     const profile: Profile = {
