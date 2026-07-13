@@ -356,9 +356,8 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     });
   });
 
-  it('retries a non-string MCP-blocked submission from the runtime event', async () => {
+  it('processes a non-string submission immediately even when MCP discovery is in progress (issue #2516)', async () => {
     let discoveryState = MCPDiscoveryState.IN_PROGRESS;
-    let notifyMcpClientUpdate: (() => void) | undefined;
     const mcpManager: UiMcpClientManager = {
       getDiscoveryState: () => discoveryState,
       getMcpServerCount: () => 1,
@@ -370,16 +369,6 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
         mcp: {
           getMcpClientManager: () => mcpManager,
           getMcpServers: () => ({ server: { command: 'unused' } }),
-        },
-        events: {
-          onMcpClientUpdate: (listener) => {
-            notifyMcpClientUpdate = listener;
-            return () => {
-              if (notifyMcpClientUpdate === listener) {
-                notifyMcpClientUpdate = undefined;
-              }
-            };
-          },
         },
       },
     );
@@ -412,26 +401,16 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     await act(async () => {
       await result.current.submitQuery(nonStringQuery);
     });
-    expect(queuedSubmissionsRef.current).toHaveLength(1);
-    expect(queuedSubmissionsRef.current[0].query).toStrictEqual(nonStringQuery);
-    expect(runStream).not.toHaveBeenCalled();
-    expect(addItem).toHaveBeenCalledTimes(1);
+    // With the MCP discovery gate removed, the query proceeds immediately
+    // to runStream — it is NOT queued or dropped.
+    expect(queuedSubmissionsRef.current).toHaveLength(0);
+    expect(runStream).toHaveBeenCalledTimes(1);
+    // No "Waiting for MCP servers" info message is added.
+    for (const call of addItem.mock.calls) {
+      const item = call[0] as { type?: string; text?: string };
+      expect(item.text).not.toMatch(/Waiting for MCP servers/i);
+    }
 
-    act(() => {
-      notifyMcpClientUpdate?.();
-    });
-    await waitFor(() => {
-      expect(queuedSubmissionsRef.current).toHaveLength(1);
-      expect(runStream).not.toHaveBeenCalled();
-      expect(addItem).toHaveBeenCalledTimes(1);
-    });
-
-    discoveryState = MCPDiscoveryState.COMPLETED;
-    act(() => {
-      notifyMcpClientUpdate?.();
-    });
-
-    await waitFor(() => expect(runStream).toHaveBeenCalledTimes(1));
     unmount();
   });
 
