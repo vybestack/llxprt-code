@@ -160,7 +160,9 @@ function renderUseSubmitQuery(
     requeueSubmission: vi.fn((sub: QueuedSubmission) =>
       hookDeps.queuedSubmissionsRef.current.unshift(sub),
     ),
-    dequeueSubmission: vi.fn(() => hookDeps.queuedSubmissionsRef.current.shift()),
+    dequeueSubmission: vi.fn(() =>
+      hookDeps.queuedSubmissionsRef.current.shift(),
+    ),
     clearSubmissions: vi.fn(() => {
       hookDeps.queuedSubmissionsRef.current = [];
     }),
