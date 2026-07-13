@@ -347,28 +347,17 @@ describe('MessageBus', () => {
         expect(result).toBe(true);
       });
 
-      it('times out after 5 minutes and returns false', async () => {
-        vi.useFakeTimers();
-
+      it('returns false when confirmation times out', async () => {
         const config: PolicyEngineConfig = {
           defaultDecision: PolicyDecision.ASK_USER,
         };
         policyEngine = new PolicyEngine(config);
-        messageBus = new MessageBus(policyEngine);
+        messageBus = new MessageBus(policyEngine, false, undefined, 10);
 
         const toolCall: PolicyFunctionCall = { name: 'edit', args: {} };
-        const confirmationPromise = messageBus.requestConfirmation(
-          toolCall,
-          {},
-        );
+        const result = await messageBus.requestConfirmation(toolCall, {});
 
-        // Fast-forward 5 minutes
-        vi.advanceTimersByTime(300000);
-
-        const result = await confirmationPromise;
         expect(result).toBe(false);
-
-        vi.useRealTimers();
       });
     });
 

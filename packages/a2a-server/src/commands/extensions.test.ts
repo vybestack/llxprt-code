@@ -4,13 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ExtensionsCommand, ListExtensionsCommand } from './extensions.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 
 const mockListExtensions = vi.fn();
 
 describe('ExtensionsCommand', () => {
+  beforeEach(() => {
+    mockListExtensions.mockReset();
+  });
+
   it('should have the correct name', () => {
     const command = new ExtensionsCommand(mockListExtensions);
     expect(command.name).toStrictEqual('extensions');
@@ -48,6 +52,10 @@ describe('ExtensionsCommand', () => {
 });
 
 describe('ListExtensionsCommand', () => {
+  beforeEach(() => {
+    mockListExtensions.mockReset();
+  });
+
   it('should have the correct name', () => {
     const command = new ListExtensionsCommand(mockListExtensions);
     expect(command.name).toStrictEqual('extensions list');

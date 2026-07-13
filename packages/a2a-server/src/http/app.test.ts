@@ -72,7 +72,7 @@ function streamToSSEEventsForCommand(
     .map((line) => JSON.parse(line.substring(6)));
 }
 let config: Config;
-const getToolRegistrySpy = vi.fn().mockReturnValue(ApprovalMode.DEFAULT);
+const getToolRegistrySpy = vi.fn().mockReturnValue(undefined);
 const getApprovalModeSpy = vi.fn();
 const getExtensionsSpy = vi.fn();
 const sendMessageStreamSpy = vi.fn();
@@ -120,6 +120,7 @@ describe('E2E Tests', () => {
     mockAgentClientInstance.getUserTier.mockReturnValue('free');
     mockAgentClientInstance.initialize.mockReset();
     getToolRegistrySpy.mockReset();
+    getToolRegistrySpy.mockReturnValue(undefined);
     getApprovalModeSpy.mockReset();
     getApprovalModeSpy.mockReturnValue(ApprovalMode.DEFAULT);
     getExtensionsSpy.mockReset();
@@ -127,9 +128,13 @@ describe('E2E Tests', () => {
 
   afterAll(
     () =>
-      new Promise<void>((resolve) => {
-        server.close(() => {
-          resolve();
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
         });
       }),
   );

@@ -161,7 +161,7 @@ describe('GCSTaskStore', () => {
         new Error('Create failed'),
       );
       const store = createStore();
-      expect(store['ensureBucketInitialized']()).rejects.toThrow(
+      await expect(store['ensureBucketInitialized']()).rejects.toThrow(
         'Failed to create GCS bucket test-bucket: Error: Create failed',
       );
     });
@@ -191,7 +191,7 @@ describe('GCSTaskStore', () => {
           !path.includes('task-task1-workspace-test-uuid.tar.gz'),
       );
       const store = createStore();
-      expect(store.save(mockTask)).rejects.toThrow(
+      await expect(store.save(mockTask)).rejects.toThrow(
         'tar.c command failed to create',
       );
     });
@@ -220,7 +220,7 @@ describe('GCSTaskStore', () => {
         history: [],
         artifacts: [],
       };
-      expect(store.save(maliciousTask)).rejects.toThrow(
+      await expect(store.save(maliciousTask)).rejects.toThrow(
         'Invalid taskId: ../../../malicious-task',
       );
     });
@@ -321,7 +321,7 @@ describe('GCSTaskStore', () => {
   it('should throw an error if taskId contains path traversal sequences', async () => {
     const store = createStore();
     const maliciousTaskId = '../../../malicious-task';
-    expect(store.load(maliciousTaskId)).rejects.toThrow(
+    await expect(store.load(maliciousTaskId)).rejects.toThrow(
       `Invalid taskId: ${maliciousTaskId}`,
     );
   });

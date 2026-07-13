@@ -40,6 +40,10 @@ export class InitCommand implements Command {
 
   constructor(private readonly dependencies: InitCommandDependencies = {}) {}
 
+  private createId(): string {
+    return (this.dependencies.createId ?? uuidv4)();
+  }
+
   private performInitLogic(llxprtMdExists: boolean): CommandActionReturn {
     if (llxprtMdExists) {
       return {
@@ -113,7 +117,7 @@ Write the complete content to the \`LLXPRT.md\` file. The output must be well-fo
           kind: 'message',
           role: 'agent',
           parts: [{ kind: 'text', text: result.content }],
-          messageId: uuidv4(),
+          messageId: this.createId(),
           taskId,
           contextId,
         },
@@ -176,7 +180,7 @@ Write the complete content to the \`LLXPRT.md\` file. The output must be well-fo
         kind: 'message',
         role: 'user',
         parts: [{ kind: 'text', text: promptText }],
-        messageId: uuidv4(),
+        messageId: this.createId(),
         taskId,
         contextId,
         metadata: {
@@ -213,9 +217,8 @@ Write the complete content to the \`LLXPRT.md\` file. The output must be well-fo
       (this.dependencies.existsSync ?? fs.existsSync)(llxprtMdPath),
     );
 
-    const createId = this.dependencies.createId ?? uuidv4;
-    const taskId = createId();
-    const contextId = createId();
+    const taskId = this.createId();
+    const contextId = this.createId();
 
     switch (result.type) {
       case 'message':

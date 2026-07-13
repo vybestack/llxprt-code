@@ -136,7 +136,51 @@ describe('waitFor', () => {
     ).rejects.toThrow('nope');
 
     const elapsed = Date.now() - start;
-    expect(elapsed).toBeGreaterThanOrEqual(40);
+    expect(elapsed).toBeGreaterThanOrEqual(50);
+    expect(elapsed).toBeLessThan(150);
+  });
+
+  it('caps the polling delay at the remaining timeout', async () => {
+    const start = Date.now();
+    await expect(
+      waitFor(
+        () => {
+          throw new Error('still waiting');
+        },
+        { interval: 100, timeout: 30 },
+      ),
+    ).rejects.toThrow('still waiting');
+
+    expect(Date.now() - start).toBeLessThan(90);
+  });
+
+  it('times out when an async callback never settles', async () => {
+    await expect(
+      waitFor(() => new Promise<never>(() => {}), {
+        interval: 10,
+        timeout: 30,
+      }),
+    ).rejects.toThrow('waitFor timed out');
+  });
+
+  it('rejects with the most recent callback error at the deadline', async () => {
+    let attempt = 0;
+    let thrown: unknown;
+    try {
+      await waitFor(
+        () => {
+          attempt++;
+          throw new Error(`attempt ${attempt}`);
+        },
+        { interval: 10, timeout: 30 },
+      );
+    } catch (error: unknown) {
+      thrown = error;
+    }
+
+    expect(attempt).toBeGreaterThan(1);
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toBe(`attempt ${attempt}`);
   });
 
   it('supports async callbacks that reject and retries them', async () => {

@@ -97,15 +97,43 @@ async function waitForImpl<T>(
   let lastError: unknown;
 
   for (;;) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      throw lastError ?? new Error('waitFor timed out');
+    }
+
     try {
-      return await callback();
+      return await invokeBeforeDeadline(callback, remaining);
     } catch (error: unknown) {
       lastError = error;
+      if (Date.now() >= deadline) {
+        throw lastError;
+      }
     }
-    if (Date.now() >= deadline) {
-      throw lastError;
+    const delay = Math.min(interval, deadline - Date.now());
+    await new Promise<void>((resolve) => setTimeout(resolve, delay));
+  }
+}
+
+async function invokeBeforeDeadline<T>(
+  callback: () => T | Promise<T>,
+  remaining: number,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(callback),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('waitFor timed out')),
+          remaining,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
     }
-    await new Promise<void>((resolve) => setTimeout(resolve, interval));
   }
 }
 

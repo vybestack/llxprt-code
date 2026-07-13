@@ -209,8 +209,11 @@ augmentedIt.runIf = (condition: boolean): typeof bunIt =>
   condition ? bunIt : bunIt.skip;
 
 afterEach(() => {
-  envRegistry.restoreAll();
-  globalRegistry.restoreAll();
+  try {
+    envRegistry.restoreAll();
+  } finally {
+    globalRegistry.restoreAll();
+  }
 });
 
 const vitestShim = {

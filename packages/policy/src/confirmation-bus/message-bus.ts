@@ -31,16 +31,19 @@ export class MessageBus {
   private readonly policyEngine: PolicyEngine;
   private readonly debugMode: boolean;
   private readonly logger?: PolicyLogger;
+  private readonly confirmationTimeoutMs: number;
 
   constructor(
     policyEngine?: PolicyEngine,
     debugMode = false,
     logger?: PolicyLogger,
+    confirmationTimeoutMs = 300000,
   ) {
     this.emitter = new EventEmitter();
     this.policyEngine = policyEngine ?? new PolicyEngine();
     this.debugMode = debugMode;
     this.logger = logger;
+    this.confirmationTimeoutMs = confirmationTimeoutMs;
 
     this.emitter.setMaxListeners(50);
   }
@@ -113,7 +116,7 @@ export class MessageBus {
       const timeout = setTimeout(() => {
         unsubscribe();
         resolve(false);
-      }, 300000);
+      }, this.confirmationTimeoutMs);
 
       const unsubscribe = this.subscribe<ToolConfirmationResponse>(
         MessageBusType.TOOL_CONFIRMATION_RESPONSE,
@@ -180,7 +183,7 @@ export class MessageBus {
       const timeout = setTimeout(() => {
         unsubscribe();
         resolve(false);
-      }, 300000);
+      }, this.confirmationTimeoutMs);
 
       const unsubscribe = this.subscribe<BucketAuthConfirmationResponse>(
         MessageBusType.BUCKET_AUTH_CONFIRMATION_RESPONSE,
