@@ -251,6 +251,53 @@ describe('iContentToHistoryItems', () => {
     );
   });
 
+  it('does not add blank lines after text fragments ending in newlines (#2549)', () => {
+    const input: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'text',
+            text: ['First line', ''].join(String.fromCharCode(10)),
+          },
+          {
+            type: 'text',
+            text: ['Second line', ''].join(String.fromCharCode(10)),
+          },
+        ],
+      },
+    ];
+
+    const output = iContentToHistoryItems(input);
+    expect(output).toHaveLength(1);
+    assertHasType(output[0], 'gemini');
+    expect(output[0].text).toBe(
+      ['First line', 'Second line', ''].join(String.fromCharCode(10)),
+    );
+  });
+
+  it('does not add a blank line before code when text supplies the newline (#2549)', () => {
+    const input: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'text',
+            text: ['Here is code:', ''].join(String.fromCharCode(10)),
+          },
+          { type: 'code', code: 'x=1', language: 'ts' },
+        ],
+      },
+    ];
+
+    const output = iContentToHistoryItems(input);
+    expect(output).toHaveLength(1);
+    assertHasType(output[0], 'gemini');
+    expect(output[0].text).toBe(
+      ['Here is code:', '```ts', 'x=1', '```'].join(String.fromCharCode(10)),
+    );
+  });
+
   it('silently drops tool response with no matching tool call', () => {
     const input: IContent[] = [
       {

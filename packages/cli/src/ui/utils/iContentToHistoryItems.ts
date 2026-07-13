@@ -53,31 +53,29 @@ function buildResponseMap(
   return map;
 }
 
-/**
- * Appends a text fragment to the running list of markdown segments. Adjacent
- * text fragments are concatenated onto the trailing segment so they render as
- * flowing prose (matching the live streaming path) instead of one line each.
- */
-function appendTextSegment(segments: string[], text: string): void {
+interface MarkdownSegment {
+  kind: 'text' | 'code';
+  value: string;
+}
+
+function appendTextSegment(segments: MarkdownSegment[], text: string): void {
   if (text === '') return;
-  const lastIndex = segments.length - 1;
-  if (
-    segments.length > 0 &&
-    !isCodeSegment(segments[lastIndex]) &&
-    !segments[lastIndex].endsWith(NEWLINE)
-  ) {
-    segments[lastIndex] += text;
+  const lastSegment = segments.at(-1);
+  if (lastSegment?.kind === 'text') {
+    lastSegment.value += text;
   } else {
-    segments.push(text);
+    segments.push({ kind: 'text', value: text });
   }
 }
 
-/**
- * A code block is emitted as a fenced markdown segment; detecting it lets us
- * keep text flowing without merging into a fence.
- */
-function isCodeSegment(segment: string): boolean {
-  return segment.startsWith('```');
+function combineMarkdownSegments(segments: MarkdownSegment[]): string {
+  return segments.reduce((combined, segment) => {
+    const needsSeparator =
+      combined !== '' &&
+      !combined.endsWith(NEWLINE) &&
+      !segment.value.startsWith(NEWLINE);
+    return combined + (needsSeparator ? NEWLINE : '') + segment.value;
+  }, '');
 }
 
 function processAiContent(
@@ -86,21 +84,20 @@ function processAiContent(
   items: HistoryItem[],
   idCounter: { value: number },
 ): void {
-  const segments: string[] = [];
+  const segments: MarkdownSegment[] = [];
   const thinkingBlocks: ThinkingBlock[] = [];
   const toolCallBlocks: ToolCallBlock[] = [];
 
   for (const block of content.blocks) {
     switch (block.type) {
       case 'text':
-        // Consecutive text blocks are fragments of the same flowing prose
-        // (e.g. per-streamed-token), so they are concatenated directly to
-        // match the live streaming path. Joining them with newlines caused a
-        // resumed conversation to render one token per line (#2549).
         appendTextSegment(segments, block.text);
         break;
       case 'code':
-        segments.push(`\`\`\`${block.language ?? ''}\n${block.code}\n\`\`\``);
+        segments.push({
+          kind: 'code',
+          value: `\`\`\`${block.language ?? ''}\n${block.code}\n\`\`\``,
+        });
         break;
       case 'thinking':
         thinkingBlocks.push(block);
@@ -112,7 +109,7 @@ function processAiContent(
         break;
     }
   }
-  const combinedText = segments.join(NEWLINE);
+  const combinedText = combineMarkdownSegments(segments);
 
   if (combinedText) {
     items.push({
