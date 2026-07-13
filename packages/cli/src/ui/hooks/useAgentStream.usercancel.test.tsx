@@ -356,7 +356,7 @@ describe('useAgentStream', () => {
 
       // Start a query — fire-and-forget because the mock stream never ends
       await act(async () => {
-        void result.current.submitQuery('test query');
+        void result.current.submitQuery('test query').catch(() => undefined);
       });
 
       // Wait for the first part of the response
@@ -414,7 +414,7 @@ describe('useAgentStream', () => {
 
       // Start a query — fire-and-forget because the mock stream never ends
       await act(async () => {
-        void result.current.submitQuery('test query');
+        void result.current.submitQuery('test query').catch(() => undefined);
       });
 
       // Wait for streaming to start
@@ -460,7 +460,7 @@ describe('useAgentStream', () => {
 
       // Start a query — fire-and-forget because the mock stream never ends
       await act(async () => {
-        void result.current.submitQuery('test query');
+        void result.current.submitQuery('test query').catch(() => undefined);
       });
 
       // Wait for streaming to start
@@ -506,7 +506,9 @@ describe('useAgentStream', () => {
       const { result } = renderTestHook();
 
       await act(async () => {
-        void result.current.submitQuery('long running query');
+        void result.current
+          .submitQuery('long running query')
+          .catch(() => undefined);
       });
 
       await waitFor(() => {

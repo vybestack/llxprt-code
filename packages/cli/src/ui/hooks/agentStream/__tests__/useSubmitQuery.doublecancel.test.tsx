@@ -26,19 +26,14 @@ import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
 import { useCancellation } from '../useAgentStreamLifecycle.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
 import type { QueuedSubmission } from '../types.js';
-import {
-  Config,
-  type AgentClientContract,
-  type RecordingIntegration,
-} from '@vybestack/llxprt-code-core';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
-import {
-  buildUiRuntimeFromSource,
-  type StreamRuntime,
+import type {
+  StreamRuntime,
+  UiMcpClientManager,
 } from '../../../cliUiRuntime.js';
-import { AppEvent, appEvents } from '../../../../utils/events.js';
 import { KeypressProvider } from '../../../contexts/KeypressContext.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import { LoadedSettings } from '../../../../config/settings.js';
+import { createFakeAgentFromMockClient } from '../../useAgentStream-test-helpers.js';
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
@@ -125,143 +120,176 @@ function createMockOverrides() {
   };
 }
 
-function createMockAgentClient(): AgentClientContract {
-  return {
+function createMockAgent() {
+  return createFakeAgentFromMockClient({
     getCurrentSequenceModel: () => 'test-model',
-    getChat: () =>
-      ({
-        recordCompletedToolCalls: vi.fn(),
-      }) as never,
-  } as unknown as AgentClientContract;
+  });
 }
 
 function createMockSetState(
   calls: boolean[],
 ): Dispatch<SetStateAction<boolean>> {
-  return vi.fn((value: SetStateAction<boolean>) => {
+  return (value) => {
     if (typeof value === 'boolean') calls.push(value);
-  }) as unknown as Dispatch<SetStateAction<boolean>>;
+  };
+}
+
+function createLoadedSettings(): LoadedSettings {
+  return new LoadedSettings(
+    { path: '/system/settings.json', settings: {} },
+    { path: '/system/defaults.json', settings: {} },
+    { path: '/user/settings.json', settings: {} },
+    { path: '/workspace/settings.json', settings: {} },
+    true,
+  );
 }
 
 interface DoubleCancelDeps {
   setIsRespondingCalls: boolean[];
   setIsResponding: Dispatch<SetStateAction<boolean>>;
   abortControllerRef: React.MutableRefObject<AbortController | null>;
-  runStreamRef: React.MutableRefObject<
-    | ((
-        message: unknown,
-        signal: AbortSignal,
-        promptId: string,
-      ) => Promise<void>)
-    | null
-  >;
+  runStreamRef: UseSubmitQueryDeps['runStreamRef'];
   loopDetectedRef: React.MutableRefObject<boolean>;
   handleLoopDetectedEvent: ReturnType<typeof vi.fn>;
-  flushAtTurnBoundarySpy: ReturnType<typeof vi.fn>;
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
   flushPendingHistoryItem: ReturnType<typeof vi.fn>;
   setPendingHistoryItem: ReturnType<typeof vi.fn>;
 }
 
-function createDeps(
-  options?: Partial<
-    DoubleCancelDeps & { recordingIntegration: RecordingIntegration }
-  >,
-): DoubleCancelDeps {
+function createDeps(options: Partial<DoubleCancelDeps> = {}): DoubleCancelDeps {
   const setIsRespondingCalls: boolean[] = [];
-  const deps: DoubleCancelDeps = {
+  return {
     setIsRespondingCalls,
     setIsResponding:
-      options?.setIsResponding ?? createMockSetState(setIsRespondingCalls),
-    abortControllerRef:
-      options?.abortControllerRef ??
-      ({ current: null as AbortController | null } as never),
-    runStreamRef: options?.runStreamRef ?? ({ current: null } as never),
-    loopDetectedRef: options?.loopDetectedRef ?? ({ current: false } as never),
-    handleLoopDetectedEvent: options?.handleLoopDetectedEvent ?? vi.fn(),
-    flushAtTurnBoundarySpy: vi.fn(),
-    pendingHistoryItemRef:
-      options?.pendingHistoryItemRef ??
-      ({
-        current: null,
-      } as React.MutableRefObject<HistoryItemWithoutId | null>),
-    flushPendingHistoryItem: options?.flushPendingHistoryItem ?? vi.fn(),
-    setPendingHistoryItem: options?.setPendingHistoryItem ?? vi.fn(),
+      options.setIsResponding ?? createMockSetState(setIsRespondingCalls),
+    abortControllerRef: options.abortControllerRef ?? { current: null },
+    runStreamRef: options.runStreamRef ?? { current: null },
+    loopDetectedRef: options.loopDetectedRef ?? { current: false },
+    handleLoopDetectedEvent: options.handleLoopDetectedEvent ?? vi.fn(),
+    pendingHistoryItemRef: options.pendingHistoryItemRef ?? { current: null },
+    flushPendingHistoryItem: options.flushPendingHistoryItem ?? vi.fn(),
+    setPendingHistoryItem: options.setPendingHistoryItem ?? vi.fn(),
   };
-  return deps;
 }
 
-/**
- * Renders `useSubmitQuery` with stubbed deps. All shared mutable state (refs,
- * setIsResponding spy) is returned so individual tests can drive the lifecycle.
- */
+interface SubmitQueryOverrides {
+  runtime?: StreamRuntime;
+  queuedSubmissionsRef?: React.MutableRefObject<QueuedSubmission[]>;
+  queueOperations?: ReturnType<typeof createQueueOperations>;
+  tryReserveDrain?: () => boolean;
+  releaseDrain?: () => void;
+  addItem?: UseSubmitQueryDeps['addItem'];
+  turnCancelledRef?: React.MutableRefObject<boolean>;
+}
+
+interface RenderSubmitQueryOptions {
+  initialStreamingState?: StreamingState;
+  wrapper?: React.ComponentType<{ children: React.ReactNode }>;
+}
+
+function createUseSubmitQueryDeps(
+  deps: DoubleCancelDeps,
+  overrides: SubmitQueryOverrides = {},
+): (streamingState: StreamingState) => UseSubmitQueryDeps {
+  const queuedSubmissionsRef = overrides.queuedSubmissionsRef ?? {
+    current: [],
+  };
+  const queueOperations =
+    overrides.queueOperations ?? createQueueOperations(queuedSubmissionsRef);
+  const stableDeps = {
+    runtime:
+      overrides.runtime ??
+      createStreamRuntimeForTest({}, createMockOverrides()),
+    agent: createMockAgent(),
+    addItem: overrides.addItem ?? vi.fn().mockReturnValue(1),
+    settings: createLoadedSettings(),
+    onDebugMessage: vi.fn(),
+    onCancelSubmit: vi.fn(),
+    onAuthError: vi.fn(),
+    sanitizeContent: (text: string) => ({ text, blocked: false }),
+    flushPendingHistoryItem: deps.flushPendingHistoryItem,
+    pendingHistoryItemRef: deps.pendingHistoryItemRef,
+    thinkingBlocksRef: { current: [] },
+    turnCancelledRef: overrides.turnCancelledRef ?? { current: false },
+    queuedSubmissionsRef,
+    ...queueOperations,
+    tryReserveDrain: overrides.tryReserveDrain ?? vi.fn().mockReturnValue(true),
+    releaseDrain: overrides.releaseDrain ?? vi.fn(),
+    setPendingHistoryItem: deps.setPendingHistoryItem,
+    setIsResponding: deps.setIsResponding,
+    setInitError: vi.fn(),
+    setThought: vi.fn(),
+    setLastAgentActivityTime: vi.fn(),
+    scheduleToolCalls: vi.fn(),
+    abortActiveStream: vi.fn(),
+    handleShellCommand: vi.fn().mockReturnValue(false),
+    handleSlashCommand: vi.fn().mockResolvedValue(false),
+    logger: null,
+    shellModeActive: false,
+    loopDetectedRef: deps.loopDetectedRef,
+    lastProfileNameRef: { current: undefined },
+    lastModelInfoRef: { current: null },
+    lastModelIdentityRef: { current: null },
+    abortControllerRef: deps.abortControllerRef,
+    runStreamRef: deps.runStreamRef,
+    submitQueryRef: { current: null },
+    isResponding: false,
+  };
+  return (streamingState) => ({ ...stableDeps, streamingState });
+}
+
 function renderUseSubmitQuery(
   deps: DoubleCancelDeps,
-  overrides?: {
-    streamingState?: StreamingState;
-    recordingIntegration?: RecordingIntegration;
-    runtime?: StreamRuntime;
-    queuedSubmissionsRef?: React.MutableRefObject<QueuedSubmission[]>;
-    queueOperations?: ReturnType<typeof createQueueOperations>;
-    tryReserveDrain?: () => boolean;
-    releaseDrain?: () => void;
-    addItem?: UseSubmitQueryDeps['addItem'];
-  },
+  overrides: SubmitQueryOverrides = {},
+  options: RenderSubmitQueryOptions = {},
 ) {
-  const addItem = overrides?.addItem ?? vi.fn().mockReturnValue(1);
-  return renderHook(() =>
-    useSubmitQuery({
-      runtime:
-        overrides?.runtime ??
-        createStreamRuntimeForTest({}, createMockOverrides()),
-      agent: createMockAgentClient() as unknown as Agent,
-      addItem,
-      settings: {} as never,
-      onDebugMessage: vi.fn(),
-      onCancelSubmit: vi.fn(),
-      onAuthError: vi.fn(),
-      sanitizeContent: (text: string) => ({ text, blocked: false }),
-      flushPendingHistoryItem: deps.flushPendingHistoryItem,
-      pendingHistoryItemRef: deps.pendingHistoryItemRef,
-      thinkingBlocksRef: { current: [] },
-      turnCancelledRef: { current: false },
-      queuedSubmissionsRef: overrides?.queuedSubmissionsRef ?? { current: [] },
-      enqueueSubmission:
-        overrides?.queueOperations?.enqueueSubmission ?? vi.fn(),
-      requeueSubmission:
-        overrides?.queueOperations?.requeueSubmission ?? vi.fn(),
-      dequeueSubmission:
-        overrides?.queueOperations?.dequeueSubmission ?? vi.fn(),
-      clearSubmissions: overrides?.queueOperations?.clearSubmissions ?? vi.fn(),
-      tryReserveDrain:
-        overrides?.tryReserveDrain ?? vi.fn().mockReturnValue(true),
-      releaseDrain: overrides?.releaseDrain ?? vi.fn(),
-      setPendingHistoryItem: deps.setPendingHistoryItem,
-      setIsResponding: deps.setIsResponding,
-      setInitError: vi.fn(),
-      setThought: vi.fn(),
-      setLastAgentActivityTime: vi.fn(),
-      scheduleToolCalls: vi.fn(),
-      abortActiveStream: vi.fn(),
-      handleShellCommand: vi.fn().mockReturnValue(false),
-      handleSlashCommand: vi.fn().mockResolvedValue(false),
-      logger: null,
-      shellModeActive: false,
-      loopDetectedRef: deps.loopDetectedRef,
-      lastProfileNameRef: { current: undefined },
-      lastModelInfoRef: { current: null },
-      lastModelIdentityRef: { current: null },
-      abortControllerRef: deps.abortControllerRef,
-      runStreamRef: deps.runStreamRef,
-      submitQueryRef: { current: null },
-      isResponding: false,
-      streamingState: overrides?.streamingState ?? StreamingState.Idle,
-      recordingIntegration:
-        overrides?.recordingIntegration ??
-        ({
-          flushAtTurnBoundary: deps.flushAtTurnBoundarySpy,
-        } as unknown as RecordingIntegration),
-    }),
+  const getDeps = createUseSubmitQueryDeps(deps, overrides);
+  return renderHook(
+    ({ streamingState }: { streamingState: StreamingState }) =>
+      useSubmitQuery(getDeps(streamingState)),
+    {
+      initialProps: {
+        streamingState: options.initialStreamingState ?? StreamingState.Idle,
+      },
+      wrapper: options.wrapper,
+    },
+  );
+}
+
+function renderUseSubmitQueryWithCancellation(
+  deps: DoubleCancelDeps,
+  overrides: SubmitQueryOverrides,
+  options: RenderSubmitQueryOptions,
+) {
+  const turnCancelledRef = overrides.turnCancelledRef ?? { current: false };
+  const getDeps = createUseSubmitQueryDeps(deps, {
+    ...overrides,
+    turnCancelledRef,
+  });
+  return renderHook(
+    ({ streamingState }: { streamingState: StreamingState }) => {
+      const submission = useSubmitQuery(getDeps(streamingState));
+      const cancellation = useCancellation(
+        streamingState,
+        turnCancelledRef,
+        deps.abortControllerRef,
+        vi.fn(),
+        deps.pendingHistoryItemRef,
+        deps.flushPendingHistoryItem,
+        vi.fn().mockReturnValue(1),
+        deps.setPendingHistoryItem,
+        vi.fn(),
+        deps.setIsResponding,
+        vi.fn(),
+      );
+      return { ...submission, ...cancellation };
+    },
+    {
+      initialProps: {
+        streamingState: options.initialStreamingState ?? StreamingState.Idle,
+      },
+      wrapper: options.wrapper,
+    },
   );
 }
 
@@ -276,61 +304,28 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       .mockReturnValueOnce(turn1Deferred.promise)
       .mockReturnValueOnce(turn2Deferred.promise);
     const deps = createDeps({
-      runStreamRef: { current: runStreamFn } as never,
+      runStreamRef: { current: runStreamFn },
     });
-    const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
-    const queue = createQueueOperations(queuedSubmissionsRef);
+    const queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]> = {
+      current: [],
+    };
+    const queueOperations = createQueueOperations(queuedSubmissionsRef);
     const turnCancelledRef = { current: false };
     let drainReserved = false;
 
-    const { result, rerender } = renderHook(
-      ({ streamingState }: { streamingState: StreamingState }) =>
-        useSubmitQuery({
-          runtime: createStreamRuntimeForTest({}, createMockOverrides()),
-          agent: createMockAgentClient() as unknown as Agent,
-          addItem: vi.fn().mockReturnValue(1),
-          settings: {} as never,
-          onDebugMessage: vi.fn(),
-          onCancelSubmit: vi.fn(),
-          onAuthError: vi.fn(),
-          sanitizeContent: (text: string) => ({ text, blocked: false }),
-          flushPendingHistoryItem: deps.flushPendingHistoryItem,
-          pendingHistoryItemRef: deps.pendingHistoryItemRef,
-          thinkingBlocksRef: { current: [] },
-          turnCancelledRef,
-          queuedSubmissionsRef,
-          ...queue,
-          tryReserveDrain: () => {
-            if (drainReserved) return false;
-            drainReserved = true;
-            return true;
-          },
-          releaseDrain: () => {
-            drainReserved = false;
-          },
-          setPendingHistoryItem: deps.setPendingHistoryItem,
-          setIsResponding: deps.setIsResponding,
-          setInitError: vi.fn(),
-          setThought: vi.fn(),
-          setLastAgentActivityTime: vi.fn(),
-          scheduleToolCalls: vi.fn(),
-          abortActiveStream: vi.fn(),
-          handleShellCommand: vi.fn().mockReturnValue(false),
-          handleSlashCommand: vi.fn().mockResolvedValue(false),
-          logger: null,
-          shellModeActive: false,
-          loopDetectedRef: deps.loopDetectedRef,
-          lastProfileNameRef: { current: undefined },
-          lastModelInfoRef: { current: null },
-          lastModelIdentityRef: { current: null },
-          abortControllerRef: deps.abortControllerRef,
-          runStreamRef: deps.runStreamRef,
-          submitQueryRef: { current: null },
-          isResponding: false,
-          streamingState,
-        }),
-      { initialProps: { streamingState: StreamingState.Idle } },
-    );
+    const { result, rerender } = renderUseSubmitQuery(deps, {
+      queuedSubmissionsRef,
+      queueOperations,
+      turnCancelledRef,
+      tryReserveDrain: () => {
+        if (drainReserved) return false;
+        drainReserved = true;
+        return true;
+      },
+      releaseDrain: () => {
+        drainReserved = false;
+      },
+    });
 
     let turn1Promise!: Promise<void>;
     await act(async () => {
@@ -347,7 +342,6 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
 
     deps.abortControllerRef.current?.abort();
     rerender({ streamingState: StreamingState.Idle });
-    await new Promise((resolve) => setTimeout(resolve, 10));
     expect(runStreamFn).toHaveBeenCalledTimes(1);
     expect(queuedSubmissionsRef.current).toHaveLength(1);
 
@@ -362,26 +356,38 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     });
   });
 
-  it('retries a non-string MCP-blocked submission from the Config app emitter', async () => {
+  it('retries a non-string MCP-blocked submission from the runtime event', async () => {
     let discoveryState = MCPDiscoveryState.IN_PROGRESS;
-    const config = new Config({
-      sessionId: 'mcp-event-test',
-      targetDir: process.cwd(),
-      cwd: process.cwd(),
-      debugMode: false,
-      model: 'test-model',
-      mcpServers: { server: { command: 'unused' } },
-      eventEmitter: appEvents,
-    });
-    vi.spyOn(config, 'getMcpClientManager').mockReturnValue({
+    let notifyMcpClientUpdate: (() => void) | undefined;
+    const mcpManager: UiMcpClientManager = {
       getDiscoveryState: () => discoveryState,
       getMcpServerCount: () => 1,
-      restartServer: vi.fn(),
-    } as never);
-    const runtime = buildUiRuntimeFromSource(config);
+      restartServer: vi.fn().mockResolvedValue(undefined),
+    };
+    const runtime = createStreamRuntimeForTest(
+      {},
+      {
+        mcp: {
+          getMcpClientManager: () => mcpManager,
+          getMcpServers: () => ({ server: { command: 'unused' } }),
+        },
+        events: {
+          onMcpClientUpdate: (listener) => {
+            notifyMcpClientUpdate = listener;
+            return () => {
+              if (notifyMcpClientUpdate === listener) {
+                notifyMcpClientUpdate = undefined;
+              }
+            };
+          },
+        },
+      },
+    );
     const runStream = vi.fn().mockResolvedValue(undefined);
-    const deps = createDeps({ runStreamRef: { current: runStream } as never });
-    const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
+    const deps = createDeps({ runStreamRef: { current: runStream } });
+    const queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]> = {
+      current: [],
+    };
     const queueOperations = createQueueOperations(queuedSubmissionsRef);
     const addItem = vi.fn().mockReturnValue(1);
     let drainReserved = false;
@@ -400,7 +406,9 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       },
     });
 
-    const nonStringQuery = [{ type: 'text' as const, text: 'wait for mcp' }];
+    const nonStringQuery: QueuedSubmission['query'] = [
+      { type: 'text', text: 'wait for mcp' },
+    ];
     await act(async () => {
       await result.current.submitQuery(nonStringQuery);
     });
@@ -410,16 +418,17 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     expect(addItem).toHaveBeenCalledTimes(1);
 
     act(() => {
-      appEvents.emit(AppEvent.McpClientUpdate, new Map());
+      notifyMcpClientUpdate?.();
     });
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(queuedSubmissionsRef.current).toHaveLength(1);
-    expect(runStream).not.toHaveBeenCalled();
-    expect(addItem).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(queuedSubmissionsRef.current).toHaveLength(1);
+      expect(runStream).not.toHaveBeenCalled();
+      expect(addItem).toHaveBeenCalledTimes(1);
+    });
 
     discoveryState = MCPDiscoveryState.COMPLETED;
     act(() => {
-      appEvents.emit(AppEvent.McpClientUpdate, new Map());
+      notifyMcpClientUpdate?.();
     });
 
     await waitFor(() => expect(runStream).toHaveBeenCalledTimes(1));
@@ -429,7 +438,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
   it('requeues an in-flight drained submission exactly once when unmounted', async () => {
     const runDeferred = createDeferred<void>();
     const runStream = vi.fn(() => runDeferred.promise);
-    const deps = createDeps({ runStreamRef: { current: runStream } as never });
+    const deps = createDeps({ runStreamRef: { current: runStream } });
     const queuedSubmission: QueuedSubmission = { query: 'survive unmount' };
     const queuedSubmissionsRef = { current: [queuedSubmission] };
     const queueOperations = createQueueOperations(queuedSubmissionsRef);
@@ -456,9 +465,10 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
 
     runDeferred.resolve();
     await runDeferred.promise;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(queuedSubmissionsRef.current).toStrictEqual([queuedSubmission]);
-    expect(releases).toBe(1);
+    await waitFor(() => {
+      expect(queuedSubmissionsRef.current).toStrictEqual([queuedSubmission]);
+      expect(releases).toBe(1);
+    });
   });
   it('queues the second prompt when streamingState is Responding, then drains after cancel', async () => {
     // This test exercises the production isQueueable gate:
@@ -475,93 +485,30 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
           .fn()
           .mockReturnValueOnce(turn1Deferred.promise)
           .mockReturnValueOnce(turn2Deferred.promise),
-      } as never,
+      },
     });
 
-    const queuedSubmissionsRef = {
-      current: [] as QueuedSubmission[],
+    const queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]> = {
+      current: [],
     };
-
-    // Provide real enqueue/dequeue/clear implementations backed by the ref
-    // so the test can observe queue state through the new immutable API.
-    const {
-      enqueueSubmission,
-      requeueSubmission,
-      dequeueSubmission,
-      clearSubmissions,
-    } = createQueueOperations(queuedSubmissionsRef);
+    const queueOperations = createQueueOperations(queuedSubmissionsRef);
     const tryReserveDrain = vi.fn().mockReturnValue(true);
     const releaseDrain = vi.fn();
     const turnCancelledRef = { current: false };
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
+    const wrapper = ({ children }: React.PropsWithChildren) => (
       <KeypressProvider>{children}</KeypressProvider>
     );
 
-    const { result, rerender } = renderHook(
-      ({ streamingState }: { streamingState: StreamingState }) => {
-        const submission = useSubmitQuery({
-          runtime: createStreamRuntimeForTest({}, createMockOverrides()),
-          agent: createMockAgentClient() as unknown as Agent,
-          addItem: vi.fn().mockReturnValue(1),
-          settings: {} as never,
-          onDebugMessage: vi.fn(),
-          onCancelSubmit: vi.fn(),
-          onAuthError: vi.fn(),
-          sanitizeContent: (text: string) => ({ text, blocked: false }),
-          flushPendingHistoryItem: deps.flushPendingHistoryItem,
-          pendingHistoryItemRef: deps.pendingHistoryItemRef,
-          thinkingBlocksRef: { current: [] },
-          turnCancelledRef,
-          queuedSubmissionsRef,
-          enqueueSubmission,
-          requeueSubmission,
-          dequeueSubmission,
-          clearSubmissions,
-          tryReserveDrain,
-          releaseDrain,
-          setPendingHistoryItem: deps.setPendingHistoryItem,
-          setIsResponding: deps.setIsResponding,
-          setInitError: vi.fn(),
-          setThought: vi.fn(),
-          setLastAgentActivityTime: vi.fn(),
-          scheduleToolCalls: vi.fn(),
-          abortActiveStream: vi.fn(),
-          handleShellCommand: vi.fn().mockReturnValue(false),
-          handleSlashCommand: vi.fn().mockResolvedValue(false),
-          logger: null,
-          shellModeActive: false,
-          loopDetectedRef: deps.loopDetectedRef,
-          lastProfileNameRef: { current: undefined },
-          lastModelInfoRef: { current: null },
-          lastModelIdentityRef: { current: null },
-          abortControllerRef: deps.abortControllerRef,
-          runStreamRef: deps.runStreamRef,
-          submitQueryRef: { current: null },
-          isResponding: false,
-          streamingState,
-          recordingIntegration: {
-            flushAtTurnBoundary: deps.flushAtTurnBoundarySpy,
-          } as unknown as RecordingIntegration,
-        });
-        const cancellation = useCancellation(
-          streamingState,
-          turnCancelledRef,
-          deps.abortControllerRef,
-          vi.fn(),
-          deps.pendingHistoryItemRef,
-          deps.flushPendingHistoryItem,
-          vi.fn().mockReturnValue(1),
-          deps.setPendingHistoryItem,
-          vi.fn(),
-          deps.setIsResponding,
-          vi.fn(),
-        );
-        return { ...submission, ...cancellation };
-      },
+    const { result, rerender } = renderUseSubmitQueryWithCancellation(
+      deps,
       {
-        initialProps: { streamingState: StreamingState.Idle },
-        wrapper,
+        queuedSubmissionsRef,
+        queueOperations,
+        tryReserveDrain,
+        releaseDrain,
+        turnCancelledRef,
       },
+      { wrapper },
     );
 
     // ── Turn 1 starts (streamingState transitions to Responding) ───────────
@@ -624,7 +571,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const deps = createDeps({
       runStreamRef: {
         current: vi.fn().mockReturnValueOnce(runDeferred.promise),
-      } as never,
+      },
     });
 
     const { result } = renderUseSubmitQuery(deps);
@@ -670,91 +617,30 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       .mockReturnValueOnce(turn3Deferred.promise);
 
     const deps = createDeps({
-      runStreamRef: { current: runStreamFn } as never,
+      runStreamRef: { current: runStreamFn },
     });
 
-    const queuedSubmissionsRef = {
-      current: [] as QueuedSubmission[],
+    const queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]> = {
+      current: [],
     };
-
-    const {
-      enqueueSubmission,
-      requeueSubmission,
-      dequeueSubmission,
-      clearSubmissions,
-    } = createQueueOperations(queuedSubmissionsRef);
+    const queueOperations = createQueueOperations(queuedSubmissionsRef);
     const tryReserveDrain = vi.fn().mockReturnValue(true);
     const releaseDrain = vi.fn();
     const turnCancelledRef = { current: false };
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
+    const wrapper = ({ children }: React.PropsWithChildren) => (
       <KeypressProvider>{children}</KeypressProvider>
     );
 
-    const { result, rerender } = renderHook(
-      ({ streamingState }: { streamingState: StreamingState }) => {
-        const submission = useSubmitQuery({
-          runtime: createStreamRuntimeForTest({}, createMockOverrides()),
-          agent: createMockAgentClient() as unknown as Agent,
-          addItem: vi.fn().mockReturnValue(1),
-          settings: {} as never,
-          onDebugMessage: vi.fn(),
-          onCancelSubmit: vi.fn(),
-          onAuthError: vi.fn(),
-          sanitizeContent: (text: string) => ({ text, blocked: false }),
-          flushPendingHistoryItem: deps.flushPendingHistoryItem,
-          pendingHistoryItemRef: deps.pendingHistoryItemRef,
-          thinkingBlocksRef: { current: [] },
-          turnCancelledRef,
-          queuedSubmissionsRef,
-          enqueueSubmission,
-          requeueSubmission,
-          dequeueSubmission,
-          clearSubmissions,
-          tryReserveDrain,
-          releaseDrain,
-          setPendingHistoryItem: deps.setPendingHistoryItem,
-          setIsResponding: deps.setIsResponding,
-          setInitError: vi.fn(),
-          setThought: vi.fn(),
-          setLastAgentActivityTime: vi.fn(),
-          scheduleToolCalls: vi.fn(),
-          abortActiveStream: vi.fn(),
-          handleShellCommand: vi.fn().mockReturnValue(false),
-          handleSlashCommand: vi.fn().mockResolvedValue(false),
-          logger: null,
-          shellModeActive: false,
-          loopDetectedRef: deps.loopDetectedRef,
-          lastProfileNameRef: { current: undefined },
-          lastModelInfoRef: { current: null },
-          lastModelIdentityRef: { current: null },
-          abortControllerRef: deps.abortControllerRef,
-          runStreamRef: deps.runStreamRef,
-          submitQueryRef: { current: null },
-          isResponding: false,
-          streamingState,
-          recordingIntegration: {
-            flushAtTurnBoundary: deps.flushAtTurnBoundarySpy,
-          } as unknown as RecordingIntegration,
-        });
-        const cancellation = useCancellation(
-          streamingState,
-          turnCancelledRef,
-          deps.abortControllerRef,
-          vi.fn(),
-          deps.pendingHistoryItemRef,
-          deps.flushPendingHistoryItem,
-          vi.fn().mockReturnValue(1),
-          deps.setPendingHistoryItem,
-          vi.fn(),
-          deps.setIsResponding,
-          vi.fn(),
-        );
-        return { ...submission, ...cancellation };
-      },
+    const { result, rerender } = renderUseSubmitQueryWithCancellation(
+      deps,
       {
-        initialProps: { streamingState: StreamingState.Idle },
-        wrapper,
+        queuedSubmissionsRef,
+        queueOperations,
+        tryReserveDrain,
+        releaseDrain,
+        turnCancelledRef,
       },
+      { wrapper },
     );
 
     // ── Turn 1 starts ──────────────────────────────────────────────────────
@@ -856,11 +742,11 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       .mockReturnValueOnce(turn2Deferred.promise);
 
     const deps = createDeps({
-      runStreamRef: { current: runStreamFn } as never,
+      runStreamRef: { current: runStreamFn },
     });
 
-    const queuedSubmissionsRef = {
-      current: [] as QueuedSubmission[],
+    const queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]> = {
+      current: [],
     };
 
     // Real drain reservation implementation (mirrors useQueuedSubmissions)
@@ -873,62 +759,14 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const releaseDrain = vi.fn(() => {
       drainReserved = false;
     });
+    const queueOperations = createQueueOperations(queuedSubmissionsRef);
 
-    const {
-      enqueueSubmission,
-      requeueSubmission,
-      dequeueSubmission,
-      clearSubmissions,
-    } = createQueueOperations(queuedSubmissionsRef);
-
-    const { result, rerender } = renderHook(
-      ({ streamingState }: { streamingState: StreamingState }) =>
-        useSubmitQuery({
-          runtime: createStreamRuntimeForTest({}, createMockOverrides()),
-          agent: createMockAgentClient() as unknown as Agent,
-          addItem: vi.fn().mockReturnValue(1),
-          settings: {} as never,
-          onDebugMessage: vi.fn(),
-          onCancelSubmit: vi.fn(),
-          onAuthError: vi.fn(),
-          sanitizeContent: (text: string) => ({ text, blocked: false }),
-          flushPendingHistoryItem: deps.flushPendingHistoryItem,
-          pendingHistoryItemRef: deps.pendingHistoryItemRef,
-          thinkingBlocksRef: { current: [] },
-          turnCancelledRef: { current: false },
-          queuedSubmissionsRef,
-          enqueueSubmission,
-          requeueSubmission,
-          dequeueSubmission,
-          clearSubmissions,
-          tryReserveDrain,
-          releaseDrain,
-          setPendingHistoryItem: deps.setPendingHistoryItem,
-          setIsResponding: deps.setIsResponding,
-          setInitError: vi.fn(),
-          setThought: vi.fn(),
-          setLastAgentActivityTime: vi.fn(),
-          scheduleToolCalls: vi.fn(),
-          abortActiveStream: vi.fn(),
-          handleShellCommand: vi.fn().mockReturnValue(false),
-          handleSlashCommand: vi.fn().mockResolvedValue(false),
-          logger: null,
-          shellModeActive: false,
-          loopDetectedRef: deps.loopDetectedRef,
-          lastProfileNameRef: { current: undefined },
-          lastModelInfoRef: { current: null },
-          lastModelIdentityRef: { current: null },
-          abortControllerRef: deps.abortControllerRef,
-          runStreamRef: deps.runStreamRef,
-          submitQueryRef: { current: null },
-          isResponding: false,
-          streamingState,
-          recordingIntegration: {
-            flushAtTurnBoundary: deps.flushAtTurnBoundarySpy,
-          } as unknown as RecordingIntegration,
-        }),
-      { initialProps: { streamingState: StreamingState.Idle } },
-    );
+    const { result, rerender } = renderUseSubmitQuery(deps, {
+      queuedSubmissionsRef,
+      queueOperations,
+      tryReserveDrain,
+      releaseDrain,
+    });
 
     // ── Turn 1 starts ──────────────────────────────────────────────────────
     let turn1Promise!: Promise<void>;

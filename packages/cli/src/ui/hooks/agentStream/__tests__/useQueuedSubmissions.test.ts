@@ -13,23 +13,12 @@ import { useQueuedSubmissions } from '../useQueuedSubmissions.js';
 import type { QueuedSubmission } from '../types.js';
 
 function makeSubmission(text: string): QueuedSubmission {
-  return { query: [{ type: 'text' as const, text }] };
+  return { query: [{ type: 'text', text }] };
 }
 
-/**
- * Extract text from the first ContentBlock of a QueuedSubmission's query.
- * The query is AgentRequestInput (string | ContentBlock[] | IContent | IContent[]);
- * this narrows to ContentBlock[] and reads the text from the first text block.
- */
-function firstText(sub: QueuedSubmission): string {
-  if (!Array.isArray(sub.query)) {
-    throw new Error('expected a text ContentBlock[] query');
-  }
-  const first = sub.query[0];
-  if (!isTextBlock(first)) {
-    throw new Error('expected a text ContentBlock[] query');
-  }
-  return first.text;
+function firstText(sub: QueuedSubmission | undefined): string | undefined {
+  const first = Array.isArray(sub?.query) ? sub.query[0] : undefined;
+  return isTextBlock(first) ? first.text : undefined;
 }
 
 function isTextBlock(part: unknown): part is { type: 'text'; text: string } {
@@ -133,7 +122,7 @@ describe('useQueuedSubmissions', () => {
         first = result.current.dequeueSubmission();
       });
 
-      expect(firstText(first!)).toBe('first');
+      expect(firstText(first)).toBe('first');
       expect(result.current.queuedSubmissions).toHaveLength(1);
       expect(firstText(result.current.queuedSubmissions[0])).toBe('second');
     });
@@ -165,7 +154,10 @@ describe('useQueuedSubmissions', () => {
       act(() => {
         let item = result.current.dequeueSubmission();
         while (item) {
-          order.push(firstText(item));
+          const text = firstText(item);
+          if (text !== undefined) {
+            order.push(text);
+          }
           item = result.current.dequeueSubmission();
         }
       });

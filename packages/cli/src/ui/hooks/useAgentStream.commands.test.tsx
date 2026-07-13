@@ -498,12 +498,11 @@ describe('useAgentStream', () => {
 
   describe('Error Handling', () => {
     it('should call parseAndFormatApiError with the correct model on stream initialization failure', async () => {
-      const mockError = new Error('Rate limit exceeded');
       mockParseAndFormatApiError.mockClear();
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield { type: 'content', value: '' };
-          throw mockError;
+          throw new Error('Rate limit exceeded');
         })(),
       );
 

@@ -87,6 +87,7 @@ function StatusBar(props: InlineContentProps) {
 }
 
 function StatusBarLeftPrompt(props: InlineContentProps) {
+  // Exit confirmations take precedence over clearing feedback and context status.
   const transientPrompt = [
     { active: props.ctrlCPressedOnce, text: 'Press Ctrl+C again to exit.' },
     { active: props.ctrlDPressedOnce, text: 'Press Ctrl+D again to exit.' },
@@ -113,10 +114,20 @@ function StatusBarLeftPrompt(props: InlineContentProps) {
   return null;
 }
 
-function StatusBarLeft(props: InlineContentProps) {
+export function StatusBarLeft(props: InlineContentProps) {
+  const showSystemMdIndicator = Boolean(process.env.GEMINI_SYSTEM_MD);
+  const showPrompt =
+    props.ctrlCPressedOnce ||
+    props.ctrlDPressedOnce ||
+    props.showEscapePrompt ||
+    !props.hideContextSummary;
+  if (!showSystemMdIndicator && !showPrompt) {
+    return null;
+  }
+
   return (
     <Box>
-      {process.env.GEMINI_SYSTEM_MD && (
+      {showSystemMdIndicator && (
         <Text color={Colors.AccentRed}>|&#x2310;&#x25A0;_&#x25A0;| </Text>
       )}
       <StatusBarLeftPrompt {...props} />
