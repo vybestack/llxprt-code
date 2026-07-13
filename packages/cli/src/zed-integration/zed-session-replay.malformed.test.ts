@@ -229,10 +229,18 @@ describe('mapHistoryToSessionUpdates — malformed persisted history (issue #160
       },
     ] as readonly IContent[];
 
-    expect(mapHistoryToSessionUpdates(history).at(-1)).toStrictEqual({
+    const updates = mapHistoryToSessionUpdates(history);
+    // The tool_call start is still emitted; only the malformed tool_response
+    // result is skipped (graceful degradation), and later content survives.
+    expect(updates.at(-1)).toStrictEqual({
       sessionUpdate: 'user_message_chunk',
       content: { type: 'text', text: 'later content survives' },
     });
+    // The malformed tool_response produced a tool_call_update (completed/empty
+    // content), proving the response was processed, not silently dropped.
+    expect(updates.some((u) => u.sessionUpdate === 'tool_call_update')).toBe(
+      true,
+    );
   });
 
   it("falls back the tool_call's title to the id when name is missing but keeps the (valid) id (FINDING D4)", () => {
