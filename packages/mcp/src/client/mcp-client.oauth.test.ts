@@ -140,7 +140,7 @@ describe('connectToMcpServer with OAuth', () => {
       controller.signal,
     );
     await vi.waitFor(() => expect(mockedClient.connect).toHaveBeenCalledOnce());
-    void connectFailure.catch(() => controller.abort());
+    controller.abort();
     rejectConnect?.(new Error('connect failed'));
 
     await expect(connection).rejects.toMatchObject({ name: 'AbortError' });

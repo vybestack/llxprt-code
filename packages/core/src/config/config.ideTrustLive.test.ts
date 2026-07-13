@@ -14,6 +14,7 @@ const ideClient = vi.hoisted(() => ({
   shutdown: vi.fn(),
 }));
 const getIdeClient = vi.hoisted(() => vi.fn());
+let trustChangeListener: ((trusted: boolean | undefined) => void) | undefined;
 const mcpManager = vi.hoisted(() => ({
   startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
   onFolderTrustGained: vi.fn().mockResolvedValue(undefined),
@@ -56,6 +57,10 @@ describe('Config live IDE trust', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ideContext.clearIdeContext();
+    trustChangeListener = undefined;
+    ideClient.addTrustChangeListener.mockImplementation((listener) => {
+      trustChangeListener = listener;
+    });
     getIdeClient.mockResolvedValue(ideClient);
     mcpManager.startConfiguredMcpServers.mockResolvedValue(undefined);
     mcpManager.onFolderTrustGained.mockResolvedValue(undefined);
@@ -87,11 +92,10 @@ describe('Config live IDE trust', () => {
   it('applies IDE trust changes live', async () => {
     const config = new Config({ ...baseParams, trustedFolder: true });
     await initializeTestConfig(config);
-    const listener = ideClient.addTrustChangeListener.mock.lastCall?.[0] as (
-      trusted: boolean | undefined,
-    ) => void;
+    const listener = trustChangeListener;
+    expect(listener).toBeDefined();
 
-    listener(false);
+    listener?.(false);
     await config.whenTrustTransitionSettled();
 
     expect(config.isTrustedFolder()).toBe(false);
@@ -101,12 +105,11 @@ describe('Config live IDE trust', () => {
   it('deduplicates IDE notifications that do not change effective trust', async () => {
     const config = new Config({ ...baseParams, trustedFolder: true });
     await initializeTestConfig(config);
-    const listener = ideClient.addTrustChangeListener.mock.lastCall?.[0] as (
-      trusted: boolean | undefined,
-    ) => void;
+    const listener = trustChangeListener;
+    expect(listener).toBeDefined();
 
-    listener(true);
-    listener(true);
+    listener?.(true);
+    listener?.(true);
     await config.whenTrustTransitionSettled();
 
     expect(mcpManager.onFolderTrustGained).not.toHaveBeenCalled();
@@ -129,12 +132,11 @@ describe('Config live IDE trust', () => {
     async ({ localTrust, ideTrust, expectedTransition }) => {
       const config = new Config({ ...baseParams, trustedFolder: localTrust });
       await initializeTestConfig(config);
-      const listener = ideClient.addTrustChangeListener.mock.lastCall?.[0] as (
-        trusted: boolean | undefined,
-      ) => void;
+      const listener = trustChangeListener;
+      expect(listener).toBeDefined();
 
       ideContext.setIdeContext({ workspaceState: { isTrusted: ideTrust } });
-      listener(ideTrust);
+      listener?.(ideTrust);
       await config.whenTrustTransitionSettled();
 
       expect(config.isTrustedFolder()).toBe(ideTrust);
@@ -148,15 +150,14 @@ describe('Config live IDE trust', () => {
       ideContext.setIdeContext({ workspaceState: { isTrusted: !localTrust } });
       const config = new Config({ ...baseParams, trustedFolder: !localTrust });
       await initializeTestConfig(config);
-      const listener = ideClient.addTrustChangeListener.mock.lastCall?.[0] as (
-        trusted: boolean | undefined,
-      ) => void;
+      const listener = trustChangeListener;
+      expect(listener).toBeDefined();
 
       config.setTrustedFolderLive(localTrust);
       expect(config.isTrustedFolder()).toBe(!localTrust);
 
       ideContext.clearIdeContext();
-      listener(undefined);
+      listener?.(undefined);
       await config.whenTrustTransitionSettled();
 
       expect(config.isTrustedFolder()).toBe(localTrust);
@@ -166,7 +167,8 @@ describe('Config live IDE trust', () => {
   it('removes the IDE listener during disposal', async () => {
     const config = new Config({ ...baseParams, trustedFolder: true });
     await initializeTestConfig(config);
-    const listener = ideClient.addTrustChangeListener.mock.lastCall?.[0];
+    const listener = trustChangeListener;
+    expect(listener).toBeDefined();
 
     await config.dispose();
 

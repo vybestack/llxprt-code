@@ -73,6 +73,11 @@ export class McpClientManager {
   private readonly discoveringServers = new Map<string, Promise<void>>();
   private readonly connectingClients = new Map<string, McpClient>();
   private readonly quarantinedClients = new Map<string, McpClient>();
+  private readonly retiredClients = new WeakSet<McpClient>();
+  private readonly retiredClientDisconnections = new WeakMap<
+    McpClient,
+    Promise<void>
+  >();
   private stopped = false;
 
   constructor(
@@ -287,6 +292,19 @@ export class McpClientManager {
     );
   }
 
+  private disconnectMcpClient(client: McpClient): Promise<void> {
+    if (!this.retiredClients.has(client)) {
+      return client.disconnect();
+    }
+    const pending = this.retiredClientDisconnections.get(client);
+    if (pending !== undefined) {
+      return pending;
+    }
+    const disconnection = Promise.resolve(client.disconnect());
+    this.retiredClientDisconnections.set(client, disconnection);
+    return disconnection;
+  }
+
   private async removeAndDisconnectClient(
     name: string,
     client: McpClient,
@@ -299,7 +317,7 @@ export class McpClientManager {
       clients: new Map(this.clients),
     });
     try {
-      await client.disconnect();
+      await this.disconnectMcpClient(client);
     } catch {
       // Best-effort cleanup
     }
@@ -368,7 +386,7 @@ export class McpClientManager {
       }
       this.removeServerArtifacts(name);
       try {
-        await client.disconnect();
+        await this.disconnectMcpClient(client);
       } catch {
         logger.warn(`Error cleaning up failed MCP client '${name}'.`);
       }
@@ -603,6 +621,7 @@ export class McpClientManager {
     ]);
     for (const [name, client] of clientsToQuarantine) {
       client.invalidateCapabilities();
+      this.retiredClients.add(client);
       this.quarantinedClients.set(name, client);
     }
     this.clients.clear();
@@ -622,7 +641,7 @@ export class McpClientManager {
     await Promise.all(
       Array.from(entries).map(async ([name, client]) => {
         try {
-          await client.disconnect();
+          await this.disconnectMcpClient(client);
         } catch (error) {
           debugLogger.error(
             `Error disconnecting client '${name}' on trust revocation: ${getErrorMessage(error)}`,
@@ -690,7 +709,7 @@ export class McpClientManager {
     const disconnectionPromises = Array.from(clientsToDisconnect.entries()).map(
       async ([name, client]) => {
         try {
-          await client.disconnect();
+          await this.disconnectMcpClient(client);
         } catch (error) {
           debugLogger.error(
             `Error stopping client '${name}': ${getErrorMessage(error)}`,

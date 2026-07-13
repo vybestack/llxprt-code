@@ -5,7 +5,7 @@
  */
 
 import { act } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '../../test-utils/render.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { TrustLevel } from '../../config/trustedFolders.js';
@@ -16,6 +16,9 @@ import {
   getWarningMessage,
 } from '../components/PermissionsModifyTrustDialog.js';
 const mockedSetValue = vi.hoisted(() => vi.fn());
+const mockedUserConfig = vi.hoisted<{
+  value: Record<string, TrustLevel>;
+}>(() => ({ value: {} }));
 
 vi.mock('../../config/trustedFolders.js', async () => {
   const actual = await vi.importActual<
@@ -24,7 +27,10 @@ vi.mock('../../config/trustedFolders.js', async () => {
   return {
     ...actual,
     loadTrustedFolders: vi.fn(() => ({
-      user: { path: '/mock/trustedFolders.json', config: {} },
+      user: {
+        path: '/mock/trustedFolders.json',
+        config: mockedUserConfig.value,
+      },
       errors: [],
       rules: [],
       setValue: mockedSetValue,
@@ -41,6 +47,11 @@ vi.mock('./useIdeTrustListener.js', () => ({
 import { usePermissionsModifyTrust } from './usePermissionsModifyTrust.js';
 
 describe('PermissionsModifyTrustDialog trust provenance', () => {
+  beforeEach(() => {
+    mockedSetValue.mockClear();
+    mockedUserConfig.value = {};
+  });
+
   it('represents an IDE false override', () => {
     expect(getTrustLevelDisplay(TrustLevel.TRUST_FOLDER, false, false)).toBe(
       'Not trusted (via IDE)',
@@ -94,6 +105,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     });
 
     expect(firstResult).toMatchObject({ success: false, phase: 'live' });
+    expect(result.current.effectiveTrust).toBe(true);
     expect(mockedSetValue).toHaveBeenCalledWith(
       '/configured/workspace',
       TrustLevel.TRUST_FOLDER,
@@ -112,5 +124,29 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     });
     expect(mockedSetValue).toHaveBeenCalledTimes(2);
     expect(setTrustedFolderLive).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads and persists the direct rule by normalized working directory', () => {
+    mockedUserConfig.value = {
+      '/configured/workspace': TrustLevel.DO_NOT_TRUST,
+    };
+    const config = {
+      getWorkingDir: () => '/configured/child/../workspace',
+      getFolderTrust: () => true,
+      getIdeClient: () => undefined,
+      isTrustedFolder: () => false,
+      setTrustedFolderLive: vi.fn(),
+    } as unknown as CliUiRuntime;
+
+    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+
+    expect(result.current.currentTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
+    act(() => {
+      result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
+    });
+    expect(mockedSetValue).toHaveBeenCalledWith(
+      '/configured/workspace',
+      TrustLevel.TRUST_FOLDER,
+    );
   });
 });

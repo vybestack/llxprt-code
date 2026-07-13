@@ -591,39 +591,39 @@ export class McpClient {
     const abortController = new AbortController();
     const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
 
-    let newResources;
     try {
-      newResources = await this.discoverResources({
-        timeout: timeoutMs,
-        signal: abortController.signal,
-      });
-    } catch (err) {
-      debugLogger.error(
-        `Resource discovery failed during refresh: ${getErrorMessage(err)}`,
+      let newResources;
+      try {
+        newResources = await this.discoverResources({
+          timeout: timeoutMs,
+          signal: abortController.signal,
+        });
+      } catch (err) {
+        debugLogger.error(
+          `Resource discovery failed during refresh: ${getErrorMessage(err)}`,
+        );
+        return false;
+      }
+
+      if (
+        !this.isRefreshAuthorized(
+          client,
+          connectionGeneration,
+          capabilityGeneration,
+        )
+      ) {
+        return false;
+      }
+      this.updateResourceRegistry(newResources);
+
+      coreEvents.emitFeedback(
+        'info',
+        `Resources updated for server: ${this.serverName}`,
       );
+      return true;
+    } finally {
       clearTimeout(timeoutId);
-      return false;
     }
-
-    if (
-      !this.isRefreshAuthorized(
-        client,
-        connectionGeneration,
-        capabilityGeneration,
-      )
-    ) {
-      clearTimeout(timeoutId);
-      return false;
-    }
-    this.updateResourceRegistry(newResources);
-
-    clearTimeout(timeoutId);
-
-    coreEvents.emitFeedback(
-      'info',
-      `Resources updated for server: ${this.serverName}`,
-    );
-    return true;
   }
 
   private consumePendingResourceRefresh(): boolean {

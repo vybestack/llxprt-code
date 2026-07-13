@@ -111,6 +111,7 @@ export async function connectAndDiscover(
     };
 
     const connectedClient = mcpClient;
+    const isAuthorized = () => cliConfig.isTrustedFolder();
     const prompts = await discoverPrompts(mcpServerName, connectedClient);
     const tools = await discoverTools(
       mcpServerName,
@@ -118,7 +119,10 @@ export async function connectAndDiscover(
       connectedClient,
       cliConfig,
       undefined,
-      { timeout: mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC },
+      {
+        timeout: mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
+        isAuthorized,
+      },
     );
 
     if (prompts.length === 0 && tools.length === 0) {
@@ -132,7 +136,13 @@ export async function connectAndDiscover(
         ...prompt,
         serverName: mcpServerName,
         invoke: (params: Record<string, unknown>) =>
-          invokeMcpPrompt(mcpServerName, connectedClient, prompt.name, params),
+          invokeMcpPrompt(
+            mcpServerName,
+            connectedClient,
+            prompt.name,
+            params,
+            isAuthorized,
+          ),
       });
     }
     for (const tool of tools) {

@@ -62,13 +62,14 @@ export function usePermissionsModifyTrust(
   config?: CliUiRuntime,
 ): UsePermissionsModifyTrustReturn {
   const cwd = config?.getWorkingDir() ?? process.cwd();
-  const parentFolderName = path.basename(path.dirname(cwd));
+  const normalizedCwd = path.resolve(cwd);
+  const parentFolderName = path.basename(path.dirname(normalizedCwd));
   const trustedFolders = useMemo(() => loadTrustedFolders(), []);
   const winningRule = useMemo(
-    () => trustedFolders.resolvePathTrust(cwd),
-    [trustedFolders, cwd],
+    () => trustedFolders.resolvePathTrust(normalizedCwd),
+    [trustedFolders, normalizedCwd],
   );
-  const currentTrustLevel = trustedFolders.user.config[cwd];
+  const currentTrustLevel = trustedFolders.user.config[normalizedCwd];
   const effectiveLocalTrustLevel = winningRule?.rule.trustLevel;
   const { isIdeTrusted } = useIdeTrustListener(config ?? emptyIdeState);
   const isParentTrusted = winningRule?.provenance === 'inherited';
@@ -97,7 +98,7 @@ export function usePermissionsModifyTrust(
 
       setPendingTrustLevel(nextLevel);
       try {
-        trustedFolders.setValue(cwd, nextLevel);
+        trustedFolders.setValue(normalizedCwd, nextLevel);
       } catch (error) {
         return { success: false, phase: 'persistence', error };
       }
@@ -109,7 +110,7 @@ export function usePermissionsModifyTrust(
             resolveLocalWorkspaceTrust(
               { folderTrust: config.getFolderTrust() },
               trustedFolders,
-              cwd,
+              normalizedCwd,
             ) ?? false,
           );
           setEffectiveTrust(config.isTrustedFolder());
@@ -121,7 +122,7 @@ export function usePermissionsModifyTrust(
       }
       return { success: true };
     },
-    [pendingTrustLevel, trustedFolders, cwd, config],
+    [pendingTrustLevel, trustedFolders, normalizedCwd, config],
   );
 
   const trustChanged = committedLevel !== undefined;

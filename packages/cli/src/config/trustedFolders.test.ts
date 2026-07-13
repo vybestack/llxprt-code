@@ -229,6 +229,12 @@ describe('Trusted Folders Loading', () => {
       temporaryPath,
       getTrustedFoldersPath(),
     );
+    expect(
+      vi.mocked(fs.writeFileSync).mock.invocationCallOrder[0],
+    ).toBeLessThan(vi.mocked(fs.chmodSync).mock.invocationCallOrder[0]);
+    expect(
+      vi.mocked(fs.writeFileSync).mock.invocationCallOrder[0],
+    ).toBeLessThan(vi.mocked(fs.statSync).mock.invocationCallOrder[0]);
     expect(vi.mocked(fs.chmodSync).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(fs.renameSync).mock.invocationCallOrder[0],
     );

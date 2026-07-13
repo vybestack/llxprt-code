@@ -18,6 +18,7 @@ import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 import {
   ReadResourceResultSchema,
   ResourceListChangedNotificationSchema,
+  ToolListChangedNotificationSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { McpClient } from './mcp-client.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
@@ -42,10 +43,10 @@ const createMockResourceRegistry = (): ResourceRegistry =>
     removeResourcesByServer: vi.fn(),
   }) as unknown as ResourceRegistry;
 
-const createTrustedConfig = (): Config =>
-  ({
-    isTrustedFolder: () => true,
-  }) as Config;
+const createConfig = (isTrustedFolder: () => boolean): Config =>
+  ({ isTrustedFolder }) as Config;
+
+const createTrustedConfig = (): Config => createConfig(() => true);
 
 describe('mcp-client', () => {
   let workspaceContext: WorkspaceContext;
@@ -243,7 +244,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         mockedResourceRegistry,
         workspaceContext,
-        { isTrustedFolder: () => true } as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
@@ -317,7 +318,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        { isTrustedFolder: () => true } as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
@@ -377,15 +378,28 @@ describe('mcp-client', () => {
       let resolveResources:
         | ((value: { resources: Array<{ uri: string }> }) => void)
         | undefined;
+      let toolListHandler:
+        | ((notification: unknown) => Promise<void> | void)
+        | undefined;
+      let resourceListHandler:
+        | ((notification: unknown) => Promise<void> | void)
+        | undefined;
       const mockedClient = {
         connect: vi.fn(),
         close: vi.fn(),
         registerCapabilities: vi.fn(),
         setRequestHandler: vi.fn(),
-        setNotificationHandler: vi.fn(),
+        setNotificationHandler: vi.fn((schema, handler) => {
+          if (schema === ToolListChangedNotificationSchema) {
+            toolListHandler = handler;
+          }
+          if (schema === ResourceListChangedNotificationSchema) {
+            resourceListHandler = handler;
+          }
+        }),
         getServerCapabilities: vi.fn().mockReturnValue({
-          tools: {},
-          resources: {},
+          tools: { listChanged: true },
+          resources: { listChanged: true },
         }),
         listTools: vi.fn().mockReturnValue(
           new Promise((resolve) => {
@@ -421,18 +435,18 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         resourceRegistry,
         workspaceContext,
-        { isTrustedFolder: () => trusted } as Config,
+        createConfig(() => trusted),
         false,
         '0.0.1',
       );
       await client.connect();
 
-      const refreshTools = (
-        client as unknown as { refreshTools(): Promise<void> }
-      ).refreshTools();
-      const refreshResources = (
-        client as unknown as { refreshResources(): Promise<void> }
-      ).refreshResources();
+      const refreshTools = toolListHandler?.({
+        method: 'notifications/tools/list_changed',
+      });
+      const refreshResources = resourceListHandler?.({
+        method: 'notifications/resources/list_changed',
+      });
       await vi.waitFor(() => {
         expect(mockedClient.listTools).toHaveBeenCalledOnce();
         expect(mockedClient.request).toHaveBeenCalledWith(
@@ -523,12 +537,12 @@ describe('mcp-client', () => {
         } as unknown as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        { isTrustedFolder: () => trusted } as Config,
+        createConfig(() => trusted),
         false,
         '0.0.1',
       );
       await client.connect();
-      await client.discover({ isTrustedFolder: () => trusted } as Config);
+      await client.discover(createConfig(() => trusted));
       expect(registeredTools).toHaveLength(1);
       expect(registeredPrompts).toHaveLength(1);
       const [staleTool] = registeredTools;

@@ -275,6 +275,7 @@ describe('McpClientManager trust transitions', () => {
 
       expect(manager.getMcpServerCount()).toBe(0);
       expect(client.discover).not.toHaveBeenCalled();
+      expect(client.disconnect).toHaveBeenCalledOnce();
     });
 
     it('rechecks trust before registering a client in connectAndDiscover', async () => {
@@ -358,6 +359,7 @@ describe('McpClientManager trust transitions', () => {
       expect(removePrompts).toHaveBeenCalledWith('server-a');
       expect(removeResources).toHaveBeenCalledWith('server-a');
       expect(client.discover).toHaveBeenCalledTimes(1);
+      expect(client.disconnect).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -442,6 +444,7 @@ describe('McpClientManager trust transitions', () => {
       await manager.whenDiscoverySettled();
 
       expect(manager.getMcpServerCount()).toBe(0);
+      expect(client.disconnect).toHaveBeenCalledOnce();
     });
   });
 });

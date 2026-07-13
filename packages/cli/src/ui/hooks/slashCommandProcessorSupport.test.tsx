@@ -107,4 +107,44 @@ describe('useCommandReload', () => {
       ]);
     });
   });
+
+  it('removes file commands when folder trust is revoked', async () => {
+    loaderState.fileCommands = [
+      {
+        name: 'trusted-file-command',
+        description: 'Available only in a trusted folder',
+        kind: CommandKind.FILE,
+      },
+    ];
+    const config = {} as CliUiRuntime;
+    const { result } = renderHook(() => useCommandRegistry(config));
+    await waitFor(() => expect(result.current).toHaveLength(1));
+
+    loaderState.fileCommands = [];
+    act(() => {
+      coreEvents.emitFolderTrustChanged(false);
+    });
+
+    await waitFor(() => expect(result.current).toStrictEqual([]));
+  });
+
+  it('stops reloading commands after unmount', async () => {
+    const config = {} as CliUiRuntime;
+    const { result, unmount } = renderHook(() => useCommandRegistry(config));
+    await waitFor(() => expect(result.current).toStrictEqual([]));
+    unmount();
+
+    loaderState.fileCommands = [
+      {
+        name: 'late-file-command',
+        description: 'Must not load after unmount',
+        kind: CommandKind.FILE,
+      },
+    ];
+    act(() => {
+      coreEvents.emitFolderTrustChanged(true);
+    });
+
+    expect(result.current).toStrictEqual([]);
+  });
 });
