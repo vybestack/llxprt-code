@@ -39,35 +39,14 @@ export async function handleZedAgentEvent(
     case 'text':
       batcher.append(event.text, false);
       return null;
-    case 'thinking': {
-      const thoughtText = extractThoughtText(event.thought);
-      if (thoughtText.length > 0) batcher.append(thoughtText, true);
-      return null;
-    }
+    case 'thinking':
+      return handleThinking(event, batcher);
     case 'tool-call':
-      await batcher.flush();
-      await emitToolCallStart(
-        event.call,
-        handlers.sendUpdate,
-        handlers.resolveToolKind(event.call.name),
-      );
-      return null;
+      return handleToolEvent(event, batcher, handlers);
     case 'tool-status':
-      await batcher.flush();
-      await emitToolStatus(
-        event.update,
-        handlers.sendUpdate,
-        handlers.resolveToolKind(event.update.name),
-      );
-      return null;
+      return handleToolUpdate(event, batcher, handlers);
     case 'tool-result':
-      await batcher.flush();
-      await emitToolResult(
-        event.result,
-        handlers.sendUpdate,
-        handlers.resolveToolKind(event.result.name),
-      );
-      return null;
+      return handleToolResultEvent(event, batcher, handlers);
     case 'tool-confirmation':
       await batcher.flush();
       await handlers.handleConfirmation(event);
@@ -95,12 +74,7 @@ export async function handleZedAgentEvent(
       await batcher.flush();
       return 'end_turn';
     case 'notice':
-      await batcher.flush();
-      await handlers.sendUpdate({
-        sessionUpdate: 'agent_message_chunk',
-        content: { type: 'text', text: event.message },
-      });
-      return null;
+      return handleNotice(event, batcher, handlers);
     case 'usage':
       await batcher.flush();
       await handlers.sendUsage(event.usage);
@@ -111,9 +85,79 @@ export async function handleZedAgentEvent(
     case 'retry':
     case 'citation':
       return null;
-    default: {
-      const exhaustive: never = event;
-      throw new Error(`Unhandled agent event: ${String(exhaustive)}`);
-    }
+    default:
+      return assertNever(event);
   }
+}
+
+function handleThinking(
+  event: Extract<AgentEvent, { type: 'thinking' }>,
+  batcher: StreamBatcher,
+): null {
+  const thoughtText = extractThoughtText(event.thought);
+  if (thoughtText.length > 0) batcher.append(thoughtText, true);
+  return null;
+}
+
+async function handleToolEvent(
+  event: Extract<AgentEvent, { type: 'tool-call' }>,
+  batcher: StreamBatcher,
+  handlers: AgentEventHandlers,
+): Promise<null> {
+  await batcher.flush();
+  await emitToolCallStart(
+    event.call,
+    handlers.sendUpdate,
+    handlers.resolveToolKind(event.call.name),
+  );
+  return null;
+}
+
+async function handleToolUpdate(
+  event: Extract<AgentEvent, { type: 'tool-status' }>,
+  batcher: StreamBatcher,
+  handlers: AgentEventHandlers,
+): Promise<null> {
+  await batcher.flush();
+  await emitToolStatus(
+    event.update,
+    handlers.sendUpdate,
+    handlers.resolveToolKind(event.update.name),
+  );
+  return null;
+}
+
+async function handleToolResultEvent(
+  event: Extract<AgentEvent, { type: 'tool-result' }>,
+  batcher: StreamBatcher,
+  handlers: AgentEventHandlers,
+): Promise<null> {
+  await batcher.flush();
+  await emitToolResult(
+    event.result,
+    handlers.sendUpdate,
+    handlers.resolveToolKind(event.result.name),
+  );
+  return null;
+}
+
+async function handleNotice(
+  event: Extract<AgentEvent, { type: 'notice' }>,
+  batcher: StreamBatcher,
+  handlers: AgentEventHandlers,
+): Promise<null> {
+  await batcher.flush();
+  await handlers.sendUpdate({
+    sessionUpdate: 'agent_message_chunk',
+    content: { type: 'text', text: event.message },
+  });
+  return null;
+}
+
+function assertNever(event: never): never {
+  const detail =
+    typeof event === 'object' && 'type' in event
+      ? String((event as { type: unknown }).type)
+      : JSON.stringify(event);
+  throw new Error(`Unhandled agent event: ${detail}`);
 }
