@@ -133,11 +133,14 @@ function isIContentArray(value: unknown): value is IContent[] {
   return Array.isArray(value) && value.every((item) => isIContent(item));
 }
 
-function stableKey(message: QueuedSubmission, index: number): string {
+function stableKey(
+  message: QueuedSubmission,
+  index: number,
+  preview: string,
+): string {
   if (message.promptId !== undefined && message.promptId !== '') {
     return `queued-${message.promptId}`;
   }
-  const preview = extractPreviewText(message.query);
   return `queued-${index}-${preview.slice(0, FALLBACK_KEY_PREVIEW_LENGTH)}`;
 }
 
@@ -224,11 +227,14 @@ export function prepareQueuedMessagesPanelView({
     width: boundedWidth,
     panelHeight,
     heading: `Queued Messages (${messages.length})`,
-    messages: visibleMessages.map((message, index) => ({
-      key: stableKey(message, index),
-      number: index + 1,
-      preview: truncateEnd(extractPreviewText(message.query), contentWidth),
-    })),
+    messages: visibleMessages.map((message, index) => {
+      const preview = extractPreviewText(message.query);
+      return {
+        key: stableKey(message, index, preview),
+        number: index + 1,
+        preview: truncateEnd(preview, contentWidth),
+      };
+    }),
     moreCount,
     showMoreIndicator: moreCount > 0 && visibleMessages.length < availableRows,
   };
