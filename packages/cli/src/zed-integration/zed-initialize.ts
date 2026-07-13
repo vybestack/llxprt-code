@@ -25,8 +25,6 @@ export async function initializeZedAgent(
       sessionCapabilities: {
         list: {},
         resume: {},
-        delete: {},
-        close: {},
       },
       promptCapabilities: {
         image: true,

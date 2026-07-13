@@ -342,7 +342,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
 
     await expect(
       zedAgent.closeSession({ sessionId: created.sessionId }),
-    ).resolves.toEqual({});
+    ).resolves.toStrictEqual({});
     await expect(
       zedAgent.prompt({ sessionId: created.sessionId, prompt: [] }),
     ).rejects.toThrow(/Session not found/);
@@ -363,8 +363,6 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     expect(response.agentCapabilities?.sessionCapabilities).toStrictEqual({
       list: {},
       resume: {},
-      delete: {},
-      close: {},
     });
   });
 

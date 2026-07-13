@@ -103,7 +103,7 @@ describe('Zed config options', () => {
       ),
     ).resolves.toStrictEqual({});
     const supported = await zedConfigOptionsForClient(
-      { session: { configOptions: {} } },
+      { session: { configOptions: true } },
       {
         getModel: () => 'alpha',
         getProviderStatus: () => ({

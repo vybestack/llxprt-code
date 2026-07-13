@@ -149,6 +149,7 @@ describe('ZedAgent.newSession', () => {
       getProfileManager: () => undefined,
       getEphemeralSetting: () => undefined,
       getTargetDir: () => '/project',
+      getSessionRecordingService: () => undefined,
     } as unknown as Config;
     const connection = {
       readTextFile: vi.fn(async (_params: { sessionId: string }) => ({
