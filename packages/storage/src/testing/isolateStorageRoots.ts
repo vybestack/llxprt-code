@@ -23,6 +23,13 @@ const ISOLATION_MARKER = 'LLXPRT_TEST_STORAGE_ISOLATED';
  * subprocesses spawned by integration tests inherit process.env, so setting
  * them here covers both in-process and subprocess writes.
  *
+ * Cleanup: The temp directory is intentionally not cleaned up by this
+ * function because vitest workers are short-lived processes. The OS
+ * reclaims `os.tmpdir()` contents on reboot, and CI runners are
+ * ephemeral. Tests that need deterministic cleanup should call
+ * `fs.rmSync(testStorageRoot, { recursive: true, force: true })`
+ * using the returned path.
+ *
  * @returns The temp root path (mainly for assertions in behavioral tests).
  */
 export function isolateStorageRoots(): string {

@@ -30,7 +30,7 @@ export async function setup() {
   // Isolate ALL storage roots so spawned CLI subprocesses (which inherit
   // process.env) never write into the real user config/data/cache/log dirs.
   integrationStorageRoot = await mkdtemp(
-    path.join(os.tmpdir(), 'llxprt-integration-storage-'),
+    join(os.tmpdir(), 'llxprt-integration-storage-'),
   );
   const storageSubdirs = ['config', 'data', 'cache', 'log'];
   for (const sub of storageSubdirs) {

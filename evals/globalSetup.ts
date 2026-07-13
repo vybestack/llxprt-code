@@ -10,10 +10,10 @@ if (process.env['NO_COLOR'] !== undefined) {
 }
 
 import { mkdir, readdir, rm, mkdtemp } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const { join, dirname } = path;
 
 // Handle the case where import.meta.url might be undefined in CI
 const __dirname = import.meta?.url
@@ -29,9 +29,7 @@ let savedStorageEnv: Record<string, string | undefined> = {};
 export async function setup() {
   // Isolate ALL storage roots so spawned CLI subprocesses (which inherit
   // process.env) never write into the real user config/data/cache/log dirs.
-  evalsStorageRoot = await mkdtemp(
-    path.join(os.tmpdir(), 'llxprt-evals-storage-'),
-  );
+  evalsStorageRoot = await mkdtemp(join(os.tmpdir(), 'llxprt-evals-storage-'));
   const storageSubdirs = ['config', 'data', 'cache', 'log'];
   for (const sub of storageSubdirs) {
     await mkdir(join(evalsStorageRoot, sub), { recursive: true });
