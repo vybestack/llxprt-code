@@ -120,9 +120,26 @@ type ToolMessageWithName = OpenAI.Chat.ChatCompletionToolMessageParam & {
   name?: string;
 };
 
-function convertBlockToPart(
-  block: ContentBlock,
-): OpenAI.Chat.ChatCompletionContentPart | null {
+type KimiVideoContentPart = {
+  type: 'video_url';
+  video_url: { url: string };
+};
+
+type ExtendedContentPart =
+  | OpenAI.Chat.ChatCompletionContentPart
+  | KimiVideoContentPart;
+
+const MOONSHOT_STORAGE_URL_PREFIX = 'ms://';
+
+function isForwardableKimiVideo(block: MediaBlock): boolean {
+  return (
+    classifyMediaBlock(block) === 'video' &&
+    block.encoding === 'url' &&
+    block.data.startsWith(MOONSHOT_STORAGE_URL_PREFIX)
+  );
+}
+
+function convertBlockToPart(block: ContentBlock): ExtendedContentPart | null {
   if (block.type === 'text' && block.text) {
     return { type: 'text', text: block.text };
   }
@@ -134,6 +151,12 @@ function convertBlockToPart(
     return {
       type: 'image_url',
       image_url: { url: normalizeMediaToDataUri(block) },
+    };
+  }
+  if (isForwardableKimiVideo(block)) {
+    return {
+      type: 'video_url',
+      video_url: { url: block.data },
     };
   }
   if (category === 'pdf') {
@@ -167,7 +190,7 @@ function processUserMessage(
   const hasMedia = content.blocks.some((b) => b.type === 'media');
 
   if (hasMedia) {
-    const parts: OpenAI.Chat.ChatCompletionContentPart[] = [];
+    const parts: ExtendedContentPart[] = [];
 
     for (const block of content.blocks) {
       const part = convertBlockToPart(block);
@@ -179,7 +202,7 @@ function processUserMessage(
     if (parts.length > 0) {
       return {
         role: 'user',
-        content: parts,
+        content: parts as OpenAI.Chat.ChatCompletionContentPart[],
       };
     }
   } else {
@@ -281,18 +304,20 @@ function processToolResponses(
     (b): b is MediaBlock => b.type === 'media',
   );
 
-  const imageBlocks = mediaBlocks.filter(
-    (mb) => classifyMediaBlock(mb) === 'image',
-  );
-  const nonImageMediaBlocks = mediaBlocks.filter(
-    (mb) => classifyMediaBlock(mb) !== 'image',
+  const forwardableMediaBlocks = mediaBlocks.filter((mediaBlock) => {
+    const category = classifyMediaBlock(mediaBlock);
+    return category === 'image' || isForwardableKimiVideo(mediaBlock);
+  });
+  const forwardableMediaSet = new Set(forwardableMediaBlocks);
+  const fallbackMediaBlocks = mediaBlocks.filter(
+    (mediaBlock) => !forwardableMediaSet.has(mediaBlock),
   );
 
-  if (imageBlocks.length > 0) {
-    pendingToolImages.push(...imageBlocks);
+  if (forwardableMediaBlocks.length > 0) {
+    pendingToolImages.push(...forwardableMediaBlocks);
   }
 
-  const mediaFallback = nonImageMediaBlocks
+  const mediaFallback = fallbackMediaBlocks
     .map((mb) =>
       buildUnsupportedMediaPlaceholder(mb, 'OpenAI Chat Completions'),
     )
@@ -326,16 +351,26 @@ function flushPendingToolImages(
 ): void {
   if (pendingToolImages.length === 0) return;
 
-  const imageParts: OpenAI.Chat.ChatCompletionContentPart[] = [
-    { type: 'text', text: '[Images from tool response]' },
-    ...pendingToolImages.map((mb) => ({
-      type: 'image_url' as const,
-      image_url: { url: normalizeMediaToDataUri(mb) },
-    })),
+  const containsVideo = pendingToolImages.some(
+    (mediaBlock) => classifyMediaBlock(mediaBlock) === 'video',
+  );
+  const mediaParts = pendingToolImages
+    .map((mediaBlock) => convertBlockToPart(mediaBlock))
+    .filter(
+      (part): part is OpenAI.Chat.ChatCompletionContentPart => part !== null,
+    );
+  const mediaContentParts: ExtendedContentPart[] = [
+    {
+      type: 'text',
+      text: containsVideo
+        ? '[Media from tool response]'
+        : '[Images from tool response]',
+    },
+    ...mediaParts,
   ];
   messages.push({
     role: 'user',
-    content: imageParts,
+    content: mediaContentParts as OpenAI.Chat.ChatCompletionContentPart[],
   });
   pendingToolImages.length = 0;
 }

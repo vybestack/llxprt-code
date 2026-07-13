@@ -10,7 +10,10 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { getErrorStatus } from '@vybestack/llxprt-code-core/utils/retry.js';
+import {
+  getErrorStatus,
+  isRetryableError,
+} from '@vybestack/llxprt-code-core/utils/retry.js';
 
 /**
  * Error thrown when authentication is required but not available
@@ -188,6 +191,21 @@ export class LoadBalancerFailoverError extends Error {
     readonly profile: string;
     readonly error: Error;
   }>;
+  /**
+   * Whether the aggregate failure is retryable by the upstream backoff layer.
+   * True only when EVERY recorded failure is transient/retryable (429, 5xx,
+   * network-transient, or overload). Mixed or client-error failures → false.
+   * (issue #2450)
+   *
+   * Note: the aggregate deliberately does NOT expose an HTTP `status`. An
+   * aggregate-of-failures is not itself an HTTP 429 response, and exposing a
+   * status would cause `retryWithBackoff` to mis-route the aggregate into the
+   * bucket-failover / `onPersistent429` path (which either throws it fatally
+   * before this marker is consulted, or binds its retry count to bucket
+   * state). Recovery is driven SOLELY by this `isRetryable` marker via normal
+   * bounded retry.
+   */
+  readonly isRetryable: boolean;
 
   constructor(
     profileName: string,
@@ -201,7 +219,43 @@ export class LoadBalancerFailoverError extends Error {
     this.name = 'LoadBalancerFailoverError';
     this.profileName = profileName;
     this.failures = failures;
+    this.isRetryable = computeAggregateRetryable(failures);
   }
+}
+
+/**
+ * Determine whether a single backend failure is transient/retryable for the
+ * purpose of LB-level aggregate classification. (issue #2450)
+ *
+ * Delegates to core's `isRetryableError` for all transient categories
+ * (network-transient, RetryableQuotaError, overload, 429, 5xx), then
+ * explicitly overrides 401/403 to NON-retryable because they indicate
+ * auth/config problems, not transient load. This avoids hand-syncing a
+ * duplicate precedence list — any new transient category added to
+ * `isRetryableError` is automatically honored here.
+ *
+ * Safe against recursion: this is called only on individual backend errors
+ * (`failures[].error`), never on a `LoadBalancerFailoverError` aggregate.
+ */
+function isTransientBackendFailure(error: Error): boolean {
+  if (!isRetryableError(error)) {
+    return false;
+  }
+  // Override: 401/403 are auth/config problems, not transient load.
+  const status = getErrorStatus(error);
+  if (status === 401 || status === 403) {
+    return false;
+  }
+  return true;
+}
+
+function computeAggregateRetryable(
+  failures: ReadonlyArray<{ readonly error: Error }>,
+): boolean {
+  if (failures.length === 0) {
+    return false;
+  }
+  return failures.every((f) => isTransientBackendFailure(f.error));
 }
 
 /**

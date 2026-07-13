@@ -29,6 +29,7 @@ import {
   _internal as runtimeAccessorsInternal,
 } from './runtimeAccessors.js';
 import { applyProfileWithGuards } from './profileApplication.js';
+import type { LoadBalancingProviderConfig } from '../loadBalancing/loadBalancerTypes.js';
 import {
   getProfileEphemeralSettings,
   getProfileModel,
@@ -194,6 +195,65 @@ function isSkippableProfileKey(
   return false;
 }
 
+/**
+ * Serializes the ACTIVE LoadBalancingProvider back into a genuine
+ * type:'loadbalancer' profile. Saving while a load balancer is active used to
+ * snapshot the virtual provider name ('load-balancer') into a STANDARD
+ * profile — a corrupt file that could never be re-applied because
+ * 'load-balancer' is not a registered provider at load time (issue #2479).
+ */
+function buildLoadBalancerProfileSnapshot(
+  snapshotProviderManager: RuntimeSnapshotProviderManager,
+): LoadBalancerProfile {
+  const provider = snapshotProviderManager.getProviderByName?.(
+    'load-balancer',
+  ) as
+    | { getLoadBalancerConfig?: () => Readonly<LoadBalancingProviderConfig> }
+    | null
+    | undefined;
+  const lbConfig =
+    typeof provider?.getLoadBalancerConfig === 'function'
+      ? provider.getLoadBalancerConfig()
+      : null;
+
+  const memberNames = lbConfig?.subProfiles.map((sub) => sub.name) ?? [];
+
+  if (!lbConfig || memberNames.length === 0) {
+    throw new Error(
+      'Cannot save profile: a load balancer is active but its configuration ' +
+        'could not be read. Saving would produce a corrupt profile.',
+    );
+  }
+
+  // Exhaustive over LoadBalancingProviderConfig['strategy']: adding a new
+  // strategy without a profile-policy mapping fails compilation here rather
+  // than silently saving as roundrobin.
+  const policyByStrategy: Record<
+    LoadBalancingProviderConfig['strategy'],
+    LoadBalancerProfile['policy']
+  > = {
+    failover: 'failover',
+    'round-robin': 'roundrobin',
+  };
+  const policy = policyByStrategy[lbConfig.strategy];
+
+  return {
+    version: 1,
+    type: 'loadbalancer',
+    policy,
+    profiles: memberNames,
+    ...(typeof lbConfig.contextLimit === 'number' && lbConfig.contextLimit > 0
+      ? { contextLimit: lbConfig.contextLimit }
+      : {}),
+    provider: '',
+    model: '',
+    modelParams: (lbConfig.lbProfileModelParams ??
+      {}) as LoadBalancerProfile['modelParams'],
+    ephemeralSettings: (lbConfig.lbProfileEphemeralSettings ??
+      {}) as LoadBalancerProfile['ephemeralSettings'],
+  };
+}
+
 export function buildRuntimeProfileSnapshot(): Profile {
   const { config, settingsService, providerManager } = getCliRuntimeServices();
   const snapshotConfig = config as RuntimeSnapshotConfig;
@@ -204,6 +264,10 @@ export function buildRuntimeProfileSnapshot(): Profile {
     snapshotProviderManager.getActiveProviderName?.() ??
     snapshotConfig.getProvider?.() ??
     'openai';
+
+  if (providerName === 'load-balancer') {
+    return buildLoadBalancerProfileSnapshot(snapshotProviderManager);
+  }
   const providerSettings = getProviderSettingsSnapshot(
     settingsService,
     providerName,
@@ -593,6 +657,21 @@ export async function saveProfileSnapshot(
   let finalProfile: Profile = snapshot;
   if (additionalConfig) {
     finalProfile = { ...snapshot, ...additionalConfig } as Profile;
+  }
+
+  // Defense in depth for issue #2479: never persist the virtual
+  // 'load-balancer' provider name as a standard profile. Such a file can
+  // never be re-applied ('load-balancer' is not a registered provider at
+  // load time) and previously produced dead sessions via silent fallback.
+  if (
+    !isLoadBalancerProfile(finalProfile) &&
+    finalProfile.provider === 'load-balancer'
+  ) {
+    throw new Error(
+      `Cannot save profile '${profileName}': the active provider is a ` +
+        'load balancer but the snapshot is not a valid loadbalancer profile. ' +
+        'Saving would produce a corrupt profile.',
+    );
   }
 
   await manager.saveProfile(profileName, finalProfile);

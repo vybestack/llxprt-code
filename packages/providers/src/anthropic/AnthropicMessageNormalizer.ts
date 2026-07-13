@@ -32,6 +32,7 @@ import {
   validateToolResults,
   enforceToolResultAdjacency,
   ensureValidMessageSequence,
+  stripEmptyTextBlocks,
 } from './AnthropicMessageValidator.js';
 
 // Type definitions moved from AnthropicProvider.ts
@@ -910,6 +911,7 @@ export function convertToAnthropicMessages(
     options.reasoningEnabled,
     options.logger,
   );
+  messages = stripEmptyTextBlocks(messages, options.logger);
 
   return messages;
 }

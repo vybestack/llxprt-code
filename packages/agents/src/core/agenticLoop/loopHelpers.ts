@@ -13,11 +13,16 @@
  * → 'user' role, to maintain well-formed Gemini turn history).
  */
 
-import type { Part } from '@google/genai';
+import type { Content, Part } from '@google/genai';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { convertBlocksToParts } from '../MessageConverter.js';
+import {
+  DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+  enforceImageBudget,
+  buildOmissionFeedback,
+} from '../imagePayloadBudget.js';
 
 function isFunctionCallPart(part: Part): boolean {
   return 'functionCall' in part;
@@ -79,25 +84,88 @@ export function classifyCompletedTools(tools: CompletedToolCall[]): {
 /**
  * Builds the flat list of functionResponse parts to feed back to the model.
  * Filters out functionCall parts (already present in the assistant turn).
+ *
+ * Enforces a cumulative image-payload budget to prevent HTTP 413 errors when
+ * parallel tool calls each return large image data. Images that would exceed
+ * the budget are omitted and replaced with a feedback message instructing the
+ * model to re-read them individually.
  */
-export function buildToolResponses(geminiTools: CompletedToolCall[]): Part[] {
-  return geminiTools.flatMap((toolCall) =>
+export function buildToolResponses(
+  geminiTools: CompletedToolCall[],
+  budgetBytes: number = DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+): Part[] {
+  const parts = geminiTools.flatMap((toolCall) =>
     convertBlocksToParts(toolCall.response.responseParts).filter(
       (part) => !isFunctionCallPart(part),
     ),
   );
+
+  if (budgetBytes <= 0) {
+    return parts;
+  }
+
+  const { parts: budgeted, omitted } = enforceImageBudget(parts, budgetBytes);
+  if (omitted.length > 0) {
+    budgeted.push({ text: buildOmissionFeedback(omitted) });
+  }
+  return budgeted;
+}
+
+export interface FilteredEagerToolResponses {
+  readonly content: Content | null;
+  readonly matchedCallIds: readonly string[];
+}
+
+export function filterEagerlyRecordedToolResponses(
+  content: Content,
+  eagerlyRecordedToolResponseCallIds: ReadonlySet<string>,
+): FilteredEagerToolResponses {
+  if (eagerlyRecordedToolResponseCallIds.size === 0) {
+    return { content, matchedCallIds: [] };
+  }
+
+  const remainingParts: Part[] = [];
+  const matchedCallIds: string[] = [];
+
+  for (const part of content.parts ?? []) {
+    const callId = part.functionResponse?.id;
+    if (
+      typeof callId === 'string' &&
+      eagerlyRecordedToolResponseCallIds.has(callId)
+    ) {
+      matchedCallIds.push(callId);
+      continue;
+    }
+    remainingParts.push(part);
+  }
+
+  if (matchedCallIds.length === 0) {
+    return { content, matchedCallIds };
+  }
+  if (remainingParts.length === 0) {
+    return { content: null, matchedCallIds };
+  }
+
+  return {
+    content: {
+      ...content,
+      parts: remainingParts,
+    },
+    matchedCallIds,
+  };
 }
 
 /**
- * Records cancelled tool history via `agentClient.addHistory`, splitting parts
+ * Records completed tool history via `agentClient.addHistory`, splitting parts
  * by role so functionCalls land under 'model' and functionResponses under
- * 'user'. Used when a turn is cancelled so the model sees a well-formed
- * functionResponse for every functionCall it emitted.
+ * 'user'. This eagerly persists tool outcomes before the next provider stream
+ * starts, so a later stream failure/retry cannot orphan the prior tool_call and
+ * trigger a synthetic null "interrupted or cancelled" placeholder.
  *
- * Awaits both writes so callers that exit the loop immediately afterwards can
- * guarantee the cancelled-tool history is persisted before the turn ends.
+ * Awaits both writes so callers that continue or exit the loop immediately
+ * afterwards can guarantee the tool history is durable before the next turn.
  */
-export async function recordCancelledToolHistory(
+async function recordCompletedToolHistory(
   tools: CompletedToolCall[],
   agentClient: AgentClientContract,
 ): Promise<void> {
@@ -116,4 +184,16 @@ export async function recordCancelledToolHistory(
       parts: [...functionResponses, ...otherParts],
     });
   }
+}
+
+/**
+ * Records cancelled tool history eagerly using the same role-splitting logic as
+ * successful completed tools. Kept as a dedicated helper to preserve the
+ * existing call site semantics and readability at the cancelled-tools boundary.
+ */
+export async function recordCancelledToolHistory(
+  tools: CompletedToolCall[],
+  agentClient: AgentClientContract,
+): Promise<void> {
+  await recordCompletedToolHistory(tools, agentClient);
 }

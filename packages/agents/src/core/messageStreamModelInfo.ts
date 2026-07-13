@@ -13,12 +13,29 @@ export interface ModelInfoDeps {
   getEffectiveModel: () => string;
 }
 
+interface ModelProvider {
+  getCurrentModel?: () => unknown;
+  getDefaultModel?: () => unknown;
+}
+
+function isModelProvider(value: unknown): value is ModelProvider {
+  if (typeof value !== 'object' || value === null) return false;
+  const currentModel =
+    'getCurrentModel' in value ? value.getCurrentModel : undefined;
+  const defaultModel =
+    'getDefaultModel' in value ? value.getDefaultModel : undefined;
+  return (
+    (currentModel === undefined || typeof currentModel === 'function') &&
+    (defaultModel === undefined || typeof defaultModel === 'function')
+  );
+}
+
 export function resolveModelForInfo(deps: ModelInfoDeps): string {
   const providerManager =
     deps.config.getContentGeneratorConfig()?.providerManager;
-  const activeProvider = providerManager?.getActiveProvider();
-  if (activeProvider !== undefined) {
-    const activeModel: unknown = activeProvider.getCurrentModel?.();
+  const activeProvider: unknown = providerManager?.getActiveProvider();
+  if (isModelProvider(activeProvider)) {
+    const activeModel = activeProvider.getCurrentModel?.();
     if (typeof activeModel === 'string' && activeModel.trim() !== '')
       return activeModel;
     const defaultModel: unknown = activeProvider.getDefaultModel?.();
@@ -51,22 +68,12 @@ export function modelIdentityKey(info: ModelInfo): string {
 
 export function getProfileName(config: Config): string | null {
   try {
-    const settingsService = (
-      config as unknown as {
-        getSettingsService?: () => {
-          getCurrentProfileName?: () => string | null;
-          get?: (key: string) => unknown;
-        };
-      }
-    ).getSettingsService?.();
-    if (settingsService?.getCurrentProfileName)
-      return settingsService.getCurrentProfileName();
-    if (settingsService?.get) {
-      const profile = settingsService.get('currentProfile');
-      return typeof profile === 'string' ? profile : null;
-    }
+    const settingsService = config.getSettingsService();
+    const profileName = settingsService.getCurrentProfileName();
+    if (profileName !== null) return profileName;
+    const profile = settingsService.get('currentProfile');
+    return typeof profile === 'string' ? profile : null;
   } catch {
     return null;
   }
-  return null;
 }

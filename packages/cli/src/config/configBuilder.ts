@@ -17,6 +17,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { createAgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-agents';
 import { registerAgentRuntimeFactories } from '@vybestack/llxprt-code-providers/runtime.js';
+import { ActivateSkillTool } from '@vybestack/llxprt-code-tools/tools/activate-skill.js';
 import { getEnableHooks, getEnableHooksUI } from './settingsSchema.js';
 import { loadSettings } from './settings.js';
 import { appEvents } from '../utils/events.js';
@@ -71,6 +72,7 @@ export interface ConfigBuildInput {
   readonly extensionsEnabled: boolean;
   readonly adminSkillsEnabled: boolean;
   readonly outputFormat: OutputFormat;
+  readonly quiet: boolean;
   readonly allowedTools: readonly string[];
 }
 
@@ -193,6 +195,7 @@ function buildSessionBaseArgs(
     filePaths,
     screenReader,
     outputFormat,
+    quiet,
     question,
     extensionsEnabled,
     adminSkillsEnabled,
@@ -208,6 +211,7 @@ function buildSessionBaseArgs(
       context.resolvedLoadMemoryFromIncludeDirectories,
     debugMode: context.debugMode,
     outputFormat,
+    quiet,
     question,
     ...toolConfig,
     extensionsEnabled,
@@ -348,6 +352,16 @@ export function buildConfig(input: ConfigBuildInput): Config {
     agentClientFactory: agentRuntimeFactoryBindings.agentClientFactory,
     toolSchedulerFactory: agentRuntimeFactoryBindings.toolSchedulerFactory,
     taskToolRegistration: agentRuntimeFactoryBindings.taskToolRegistration(),
+    postSkillDiscoveryToolRegistrar: (
+      toolRegistry,
+      skillService,
+      messageBus,
+    ) => {
+      toolRegistry.unregisterTool(ActivateSkillTool.Name);
+      toolRegistry.registerTool(
+        new ActivateSkillTool(skillService, messageBus),
+      );
+    },
   });
 }
 

@@ -108,6 +108,7 @@ export default defineConfig({
     },
     globals: true,
     reporters: ['default'],
+    setupFiles: ['./test-setup-storage-isolation.ts'],
     testTimeout: 30000, // Longer timeout for integration tests
     poolOptions: {
       threads: {

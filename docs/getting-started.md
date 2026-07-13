@@ -87,7 +87,7 @@ llxprt
 llxprt
 /auth codex enable
 /provider codex
-/model gpt-5.5
+/model gpt-5.6-sol
 ```
 
 Each `/auth <provider> enable` command enables lazy OAuth — a browser opens automatically when you make your first request to that provider. Use `/auth <provider> login` to open the browser immediately.

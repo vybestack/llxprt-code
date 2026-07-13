@@ -36,6 +36,7 @@ import {
   normalizeToolInteractionInput,
   convertIContentToResponse,
 } from './MessageConverter.js';
+import { filterEagerlyRecordedToolResponses } from './agenticLoop/loopHelpers.js';
 import {
   StreamEventType,
   type StreamEvent,
@@ -62,6 +63,7 @@ import {
 } from './chatSession.js';
 import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
 import { responseToModelStreamChunk } from './streamChunkWrapper.js';
+import { hasVisibleOrThinkingContent } from './streamChunkVisibility.js';
 import { enrichSchemaDepthError } from './schemaDepthErrorEnrichment.js';
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{ name: string }>;
@@ -104,6 +106,7 @@ export class TurnProcessor {
   private logger = new DebugLogger('llxprt:turn-processor');
   private sendPromise: Promise<void> = Promise.resolve();
   private lastPromptTokenCount: number | null = null;
+  private eagerlyRecordedToolResponseCallIds = new Set<string>();
 
   constructor(
     private readonly runtimeContext: AgentRuntimeContext,
@@ -249,6 +252,7 @@ export class TurnProcessor {
       yield { type: StreamEventType.RETRY };
     }
 
+    let hasYieldedChunk = false;
     try {
       const currentParams = this._applyRetryTemperature(params, attempt);
       const stream = await this.streamProcessor.makeApiCallAndProcessStream(
@@ -257,6 +261,7 @@ export class TurnProcessor {
         userContent,
       );
       for await (const chunk of stream) {
+        hasYieldedChunk ||= hasVisibleOrThinkingContent(chunk);
         yield wrapChunk(chunk);
       }
       return { error: null, action: 'stop' };
@@ -283,7 +288,10 @@ export class TurnProcessor {
         }
         return { error: null, action: 'stop' };
       }
-      if (shouldRetryStreamAttempt(error, params, attempt)) {
+      if (
+        !hasYieldedChunk &&
+        shouldRetryStreamAttempt(error, params, attempt)
+      ) {
         return { error, action: 'retry' };
       }
       return { error, action: 'stop' };
@@ -332,6 +340,15 @@ export class TurnProcessor {
     } catch {
       // If a previous send failed, sendPromise can reject; callers that just need
       // a "best effort" flush should not fail provider switching.
+    }
+  }
+
+  /** Tracks tool responses already recorded during eager client streaming. */
+  markToolResponsesRecorded(callIds: readonly string[]): void {
+    for (const callId of callIds) {
+      if (typeof callId === 'string' && callId.length > 0) {
+        this.eagerlyRecordedToolResponseCallIds.add(callId);
+      }
     }
   }
 
@@ -722,25 +739,29 @@ export class TurnProcessor {
     _params: SendMessageParameters,
     prompt_id: string,
   ): Promise<void> {
-    const currentModel = this.runtimeContext.state.model;
-    const afcHistory = response.automaticFunctionCallingHistory;
+    try {
+      const currentModel = this.runtimeContext.state.model;
+      const afcHistory = response.automaticFunctionCallingHistory;
 
-    const allowedTools = getHookRestrictedAllowedTools(response);
-    const filteredAfcHistory =
-      afcHistory && afcHistory.length > 0
-        ? filterHookRestrictedContents(afcHistory, allowedTools).filter(
-            (content) => (content.parts?.length ?? 0) > 0,
-          )
-        : undefined;
-    if (filteredAfcHistory && filteredAfcHistory.length > 0) {
-      this._recordAfcHistory(filteredAfcHistory, currentModel);
-    } else {
-      this._recordUserContent(userContent, currentModel);
+      const allowedTools = getHookRestrictedAllowedTools(response);
+      const filteredAfcHistory =
+        afcHistory && afcHistory.length > 0
+          ? filterHookRestrictedContents(afcHistory, allowedTools).filter(
+              (content) => (content.parts?.length ?? 0) > 0,
+            )
+          : undefined;
+      if (filteredAfcHistory && filteredAfcHistory.length > 0) {
+        this._recordAfcHistory(filteredAfcHistory, currentModel);
+      } else {
+        this._recordUserContent(userContent, currentModel);
+      }
+
+      this._recordOutputContent(response, currentModel, filteredAfcHistory);
+
+      await this._syncTokenCounts(response, prompt_id);
+    } finally {
+      this.eagerlyRecordedToolResponseCallIds.clear();
     }
-
-    this._recordOutputContent(response, currentModel, filteredAfcHistory);
-
-    await this._syncTokenCounts(response, prompt_id);
   }
 
   private _recordAfcHistory(
@@ -773,12 +794,26 @@ export class TurnProcessor {
     const contents = Array.isArray(userContent) ? userContent : [userContent];
     const matcher = this.makePositionMatcher();
     for (const content of contents) {
-      const turnKey = this.historyService.generateTurnKey();
-      const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-      this.historyService.add(
-        ContentConverters.toIContent(content, idGen, matcher, turnKey),
-        currentModel,
+      const filtered = filterEagerlyRecordedToolResponses(
+        content,
+        this.eagerlyRecordedToolResponseCallIds,
       );
+      if (filtered.content !== null) {
+        const turnKey = this.historyService.generateTurnKey();
+        const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+        this.historyService.add(
+          ContentConverters.toIContent(
+            filtered.content,
+            idGen,
+            matcher,
+            turnKey,
+          ),
+          currentModel,
+        );
+      }
+      for (const callId of filtered.matchedCallIds) {
+        this.eagerlyRecordedToolResponseCallIds.delete(callId);
+      }
     }
   }
 
@@ -869,7 +904,7 @@ export class TurnProcessor {
       logger?.isEnabled() === true &&
       usageMetadata?.promptTokenCount !== undefined
     ) {
-      logger.recordActual(promptId, {
+      await logger.recordActual(promptId, {
         actualPromptTokens: usageMetadata.promptTokenCount,
         cachedTokens:
           usageMetadata.cachedContentTokenCount ??

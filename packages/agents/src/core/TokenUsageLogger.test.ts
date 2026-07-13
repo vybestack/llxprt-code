@@ -41,7 +41,7 @@ describe('TokenUsageLogger', () => {
     }
   });
 
-  it('writes one JSONL record after recordEstimate + recordActual', () => {
+  it('writes one JSONL record after recordEstimate + recordActual', async () => {
     const logger = new TokenUsageLogger(true, logFile);
     logger.recordEstimate('prompt-1', {
       provider: 'openai',
@@ -50,7 +50,7 @@ describe('TokenUsageLogger', () => {
       estimator: 'openai-tiktoken',
       tiktokenTokens: 95,
     });
-    logger.recordActual('prompt-1', {
+    await logger.recordActual('prompt-1', {
       actualPromptTokens: 120,
       cachedTokens: 0,
     });
@@ -59,7 +59,7 @@ describe('TokenUsageLogger', () => {
     expect(records).toHaveLength(1);
   });
 
-  it('record contains all required fields with snake_case keys', () => {
+  it('record contains all required fields with snake_case keys', async () => {
     const logger = new TokenUsageLogger(true, logFile);
     logger.recordEstimate('prompt-2', {
       provider: 'anthropic',
@@ -68,7 +68,7 @@ describe('TokenUsageLogger', () => {
       estimator: 'anthropic-char',
       tiktokenTokens: 180,
     });
-    logger.recordActual('prompt-2', {
+    await logger.recordActual('prompt-2', {
       actualPromptTokens: 250,
       cachedTokens: 50,
     });
@@ -88,7 +88,7 @@ describe('TokenUsageLogger', () => {
     expect(record).toHaveProperty('effective_actual_tokens');
   });
 
-  it('computes effective_actual_tokens = actual - cached', () => {
+  it('computes effective_actual_tokens = actual - cached', async () => {
     const logger = new TokenUsageLogger(true, logFile);
     logger.recordEstimate('prompt-3', {
       provider: 'openai',
@@ -97,7 +97,7 @@ describe('TokenUsageLogger', () => {
       estimator: 'openai-tiktoken',
       tiktokenTokens: 90,
     });
-    logger.recordActual('prompt-3', {
+    await logger.recordActual('prompt-3', {
       actualPromptTokens: 500,
       cachedTokens: 200,
     });
@@ -106,7 +106,7 @@ describe('TokenUsageLogger', () => {
     expect(records[0].effective_actual_tokens).toBe(300);
   });
 
-  it('does not allow effective_actual_tokens to go negative', () => {
+  it('does not allow effective_actual_tokens to go negative', async () => {
     const logger = new TokenUsageLogger(true, logFile);
     logger.recordEstimate('prompt-neg', {
       provider: 'openai',
@@ -115,7 +115,7 @@ describe('TokenUsageLogger', () => {
       estimator: 'openai-tiktoken',
       tiktokenTokens: 90,
     });
-    logger.recordActual('prompt-neg', {
+    await logger.recordActual('prompt-neg', {
       actualPromptTokens: 100,
       cachedTokens: 300,
     });
@@ -124,7 +124,7 @@ describe('TokenUsageLogger', () => {
     expect(records[0].effective_actual_tokens).toBe(0);
   });
 
-  it('disabled logger writes nothing', () => {
+  it('disabled logger writes nothing', async () => {
     const logger = new TokenUsageLogger(false, logFile);
     logger.recordEstimate('prompt-4', {
       provider: 'openai',
@@ -133,7 +133,7 @@ describe('TokenUsageLogger', () => {
       estimator: 'openai-tiktoken',
       tiktokenTokens: 90,
     });
-    logger.recordActual('prompt-4', {
+    await logger.recordActual('prompt-4', {
       actualPromptTokens: 120,
       cachedTokens: 0,
     });
@@ -141,9 +141,9 @@ describe('TokenUsageLogger', () => {
     expect(fs.existsSync(logFile)).toBe(false);
   });
 
-  it('recordActual with no pending estimate writes nothing', () => {
+  it('recordActual with no pending estimate writes nothing', async () => {
     const logger = new TokenUsageLogger(true, logFile);
-    logger.recordActual('never-estimated', {
+    await logger.recordActual('never-estimated', {
       actualPromptTokens: 120,
       cachedTokens: 0,
     });
@@ -151,7 +151,7 @@ describe('TokenUsageLogger', () => {
     expect(fs.existsSync(logFile)).toBe(false);
   });
 
-  it('does not persist any prompt text (privacy)', () => {
+  it('does not persist any prompt text (privacy)', async () => {
     const logger = new TokenUsageLogger(true, logFile);
     logger.recordEstimate('prompt-priv', {
       provider: 'openai',
@@ -160,7 +160,7 @@ describe('TokenUsageLogger', () => {
       estimator: 'openai-tiktoken',
       tiktokenTokens: 90,
     });
-    logger.recordActual('prompt-priv', {
+    await logger.recordActual('prompt-priv', {
       actualPromptTokens: 120,
       cachedTokens: 0,
     });
@@ -191,26 +191,27 @@ describe('TokenUsageLogger', () => {
     expect(stringKeys.every((key) => allowedStringFields.has(key))).toBe(true);
   });
 
-  it('file I/O errors do not crash (fail-open)', () => {
-    const badPath = path.join('/nonexistent-dir-xyz', 'sub', 'usage.jsonl');
+  it('file I/O errors do not crash (fail-open)', async () => {
+    const badPath = path.join('/dev/null', 'sub', 'usage.jsonl');
     const logger = new TokenUsageLogger(true, badPath);
-    expect(() => {
-      logger.recordEstimate('prompt-fail', {
-        provider: 'openai',
-        model: 'gpt-4',
-        estimatedTokens: 100,
-        estimator: 'openai-tiktoken',
-        tiktokenTokens: 90,
-      });
+    logger.recordEstimate('prompt-fail', {
+      provider: 'openai',
+      model: 'gpt-4',
+      estimatedTokens: 100,
+      estimator: 'openai-tiktoken',
+      tiktokenTokens: 90,
+    });
+
+    await expect(
       logger.recordActual('prompt-fail', {
         actualPromptTokens: 120,
         cachedTokens: 0,
-      });
-    }).not.toThrow();
+      }),
+    ).resolves.toBeUndefined();
     expect(fs.existsSync(badPath)).toBe(false);
   });
 
-  it('clears pending entry after recordActual completes', () => {
+  it('clears pending entry after recordActual completes', async () => {
     const logger = new TokenUsageLogger(true, logFile);
     logger.recordEstimate('prompt-clear', {
       provider: 'openai',
@@ -219,12 +220,12 @@ describe('TokenUsageLogger', () => {
       estimator: 'openai-tiktoken',
       tiktokenTokens: 90,
     });
-    logger.recordActual('prompt-clear', {
+    await logger.recordActual('prompt-clear', {
       actualPromptTokens: 120,
       cachedTokens: 0,
     });
 
-    logger.recordActual('prompt-clear', {
+    await logger.recordActual('prompt-clear', {
       actualPromptTokens: 999,
       cachedTokens: 0,
     });
@@ -233,7 +234,7 @@ describe('TokenUsageLogger', () => {
     expect(records).toHaveLength(1);
   });
 
-  it('evicts oldest pending entry when exceeding PENDING_CAP', () => {
+  it('evicts oldest pending entry when exceeding PENDING_CAP', async () => {
     const logger = new TokenUsageLogger(true, logFile);
     for (let i = 0; i < PENDING_CAP; i++) {
       logger.recordEstimate(`prompt-${i}`, {
@@ -253,14 +254,14 @@ describe('TokenUsageLogger', () => {
       tiktokenTokens: 999,
     });
 
-    logger.recordActual('prompt-0', {
+    await logger.recordActual('prompt-0', {
       actualPromptTokens: 10,
       cachedTokens: 0,
     });
 
     expect(fs.existsSync(logFile)).toBe(false);
 
-    logger.recordActual('prompt-overflow', {
+    await logger.recordActual('prompt-overflow', {
       actualPromptTokens: 999,
       cachedTokens: 0,
     });
@@ -272,14 +273,14 @@ describe('TokenUsageLogger', () => {
     expect(overflowRecords[0].prompt_id).toBe('prompt-overflow');
   });
 
-  it('isEnabled returns the enabled state', () => {
+  it('isEnabled returns the enabled state', async () => {
     const enabled = new TokenUsageLogger(true, logFile);
     const disabled = new TokenUsageLogger(false, logFile);
     expect(enabled.isEnabled()).toBe(true);
     expect(disabled.isEnabled()).toBe(false);
   });
 
-  it('creates parent directory if it does not exist', () => {
+  it('creates parent directory if it does not exist', async () => {
     const nestedPath = path.join(
       path.dirname(logFile),
       'nested',
@@ -294,7 +295,7 @@ describe('TokenUsageLogger', () => {
       estimator: 'openai-tiktoken',
       tiktokenTokens: 90,
     });
-    logger.recordActual('prompt-nested', {
+    await logger.recordActual('prompt-nested', {
       actualPromptTokens: 120,
       cachedTokens: 0,
     });
@@ -302,7 +303,7 @@ describe('TokenUsageLogger', () => {
     expect(fs.existsSync(nestedPath)).toBe(true);
   });
 
-  it('ts field is a valid ISO date string', () => {
+  it('ts field is a valid ISO date string', async () => {
     const logger = new TokenUsageLogger(true, logFile);
     logger.recordEstimate('prompt-ts', {
       provider: 'openai',
@@ -311,7 +312,7 @@ describe('TokenUsageLogger', () => {
       estimator: 'openai-tiktoken',
       tiktokenTokens: 90,
     });
-    logger.recordActual('prompt-ts', {
+    await logger.recordActual('prompt-ts', {
       actualPromptTokens: 120,
       cachedTokens: 0,
     });
@@ -321,7 +322,7 @@ describe('TokenUsageLogger', () => {
     expect(() => new Date(ts).toISOString()).not.toThrow();
     expect(new Date(ts).toString()).not.toBe('Invalid Date');
   });
-  it('overwrites pending estimate when recordEstimate is called twice for same promptId', () => {
+  it('overwrites pending estimate when recordEstimate is called twice for same promptId', async () => {
     const logger = new TokenUsageLogger(true, logFile);
     logger.recordEstimate('prompt-overwrite', {
       provider: 'openai',
@@ -337,7 +338,7 @@ describe('TokenUsageLogger', () => {
       estimator: 'anthropic-char',
       tiktokenTokens: 180,
     });
-    logger.recordActual('prompt-overwrite', {
+    await logger.recordActual('prompt-overwrite', {
       actualPromptTokens: 250,
       cachedTokens: 0,
     });
@@ -348,20 +349,21 @@ describe('TokenUsageLogger', () => {
     expect(records[0].model).toBe('claude-3');
   });
 
-  it('enabled logger with undefined logFilePath writes nothing and does not crash', () => {
+  it('enabled logger with undefined logFilePath writes nothing and does not crash', async () => {
     const logger = new TokenUsageLogger(true, undefined);
-    expect(() => {
-      logger.recordEstimate('prompt-no-path', {
-        provider: 'openai',
-        model: 'gpt-4',
-        estimatedTokens: 100,
-        estimator: 'openai-tiktoken',
-        tiktokenTokens: 90,
-      });
+    logger.recordEstimate('prompt-no-path', {
+      provider: 'openai',
+      model: 'gpt-4',
+      estimatedTokens: 100,
+      estimator: 'openai-tiktoken',
+      tiktokenTokens: 90,
+    });
+
+    await expect(
       logger.recordActual('prompt-no-path', {
         actualPromptTokens: 120,
         cachedTokens: 0,
-      });
-    }).not.toThrow();
+      }),
+    ).resolves.toBeUndefined();
   });
 });

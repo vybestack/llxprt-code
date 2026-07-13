@@ -9,7 +9,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { ChatSession } from './chatSession.js';
-import { TokenUsageLogger } from './TokenUsageLogger.js';
+import {
+  TokenUsageLogger,
+  type SerializedTokenUsageRecord,
+} from './TokenUsageLogger.js';
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
@@ -29,10 +32,46 @@ function makeTempLogPath(): string {
   );
 }
 
-function readJsonl(filePath: string): unknown[] {
+function isSerializedTokenUsageRecord(
+  value: unknown,
+): value is SerializedTokenUsageRecord {
+  if (typeof value !== 'object' || value === null) return false;
+  if (!('ts' in value) || typeof value.ts !== 'string') return false;
+  if (!('prompt_id' in value) || typeof value.prompt_id !== 'string')
+    return false;
+  if (!('provider' in value) || typeof value.provider !== 'string')
+    return false;
+  if (!('model' in value) || typeof value.model !== 'string') return false;
+  if (
+    !('estimated_tokens' in value) ||
+    typeof value.estimated_tokens !== 'number'
+  )
+    return false;
+  if (!('estimator' in value) || typeof value.estimator !== 'string')
+    return false;
+  if (
+    !('actual_prompt_tokens' in value) ||
+    typeof value.actual_prompt_tokens !== 'number'
+  )
+    return false;
+  if (!('cached_tokens' in value) || typeof value.cached_tokens !== 'number')
+    return false;
+  return (
+    'effective_actual_tokens' in value &&
+    typeof value.effective_actual_tokens === 'number'
+  );
+}
+
+function readJsonl(filePath: string): SerializedTokenUsageRecord[] {
   const raw = fs.readFileSync(filePath, 'utf-8').trim();
   if (raw.length === 0) return [];
-  return raw.split('\n').map((line) => JSON.parse(line));
+  return raw.split('\n').map((line) => {
+    const parsed: unknown = JSON.parse(line);
+    if (!isSerializedTokenUsageRecord(parsed)) {
+      throw new Error('Invalid token usage JSONL record');
+    }
+    return parsed;
+  });
 }
 
 describe('TokenUsageLogger integration — ChatSession streaming', () => {
@@ -148,7 +187,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
     await historyService.waitForTokenUpdates();
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records).toHaveLength(1);
     const record = records[0];
     expect(record.prompt_id).toBe(promptId);
@@ -255,7 +294,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
     await historyService.waitForTokenUpdates();
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records).toHaveLength(1);
     const record = records[0];
     expect(record.prompt_id).toBe(promptId);

@@ -324,5 +324,6 @@ function buildArgv(prompt?: string) {
     nobrowser: undefined,
     listSessions: undefined,
     deleteSession: undefined,
+    quiet: undefined,
   };
 }

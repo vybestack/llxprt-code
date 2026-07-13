@@ -207,6 +207,13 @@ export const innerCommandOptions: Record<string, Options> = {
     description:
       'Output format for non-interactive mode (text, json, or stream-json).',
   },
+  quiet: {
+    alias: 'q',
+    type: 'boolean',
+    description:
+      'Suppress tool calls, tool results, and intermediate text. Only the final response is written to stdout (non-interactive mode).',
+    default: false,
+  },
   sandbox: {
     alias: 's',
     type: 'boolean',

@@ -99,8 +99,10 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     );
 
     expect(tool.executeFn).toHaveBeenCalledTimes(1);
-    expect(recordedToolCalls).toHaveLength(1);
-    expect(recordedToolCalls[0][0]?.request.callId).toBe('call-1');
+    // The parent AgenticLoop re-sends completed tool responses as the next
+    // user message and relies on normal turn finalization to persist them;
+    // eager durability is scoped to subagent interactive loops.
+    expect(recordedToolCalls).toHaveLength(0);
 
     const eventKinds = events.map((e) => e.kind);
     const firstToolsCompleteIdx = eventKinds.indexOf('tools_complete');

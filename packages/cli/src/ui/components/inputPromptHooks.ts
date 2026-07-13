@@ -190,6 +190,7 @@ type InputPromptState = Pick<
   InputPromptProps,
   | 'buffer'
   | 'onSubmit'
+  | 'onSteer'
   | 'userMessages'
   | 'onClearScreen'
   | 'config'
@@ -390,6 +391,7 @@ const buildInputHandlerDeps = (
   inputHistory,
   handleSubmitAndClear: submitState.handleSubmitAndClear,
   handleSubmit: submitState.handleSubmit,
+  handleSteer: state.onSteer,
   shellHistory: completionState.shellHistory,
   reverseSearchCompletion: completionState.reverseSearchCompletion,
   shellPathCompletion: completionState.shellPathCompletion,

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import * as fs from 'node:fs';
+import { appendFile, mkdir } from 'node:fs/promises';
 import * as path from 'node:path';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
@@ -20,7 +20,8 @@ export interface PendingTokenEstimate {
   readonly model: string;
   readonly estimatedTokens: number;
   readonly estimator: TokenEstimatorType;
-  readonly tiktokenTokens: number;
+  readonly tiktokenTokens: number | null;
+  readonly tiktokenEstimationFailed?: boolean;
 }
 
 export interface TokenUsageRecord extends PendingTokenEstimate {
@@ -29,12 +30,27 @@ export interface TokenUsageRecord extends PendingTokenEstimate {
   readonly effectiveActualTokens: number;
 }
 
+export interface SerializedTokenUsageRecord {
+  readonly ts: string;
+  readonly prompt_id: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly estimated_tokens: number;
+  readonly estimator: TokenEstimatorType;
+  readonly tiktoken_tokens: number | null;
+  readonly tiktoken_estimation_failed: boolean;
+  readonly actual_prompt_tokens: number;
+  readonly cached_tokens: number;
+  readonly effective_actual_tokens: number;
+}
+
 export const PENDING_CAP = 100;
 
 export class TokenUsageLogger {
   private readonly pending = new Map<string, PendingTokenEstimate>();
   private readonly errorLogger = new DebugLogger('llxprt:token-usage-logger');
   private dirEnsured = false;
+  private writeChain: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly enabled: boolean,
@@ -51,6 +67,7 @@ export class TokenUsageLogger {
   ): void {
     if (!this.enabled) return;
     if (this.pending.size >= PENDING_CAP) {
+      // Maps preserve insertion order, so this evicts only the oldest estimate.
       const oldestKey = this.pending.keys().next().value;
       if (oldestKey !== undefined) this.pending.delete(oldestKey);
     }
@@ -62,10 +79,10 @@ export class TokenUsageLogger {
     this.pending.set(promptId, entry);
   }
 
-  recordActual(
+  async recordActual(
     promptId: string,
     actual: { actualPromptTokens: number; cachedTokens: number },
-  ): void {
+  ): Promise<void> {
     if (!this.enabled) return;
     const pending = this.pending.get(promptId);
     if (pending === undefined) return;
@@ -81,27 +98,30 @@ export class TokenUsageLogger {
       cachedTokens: actual.cachedTokens,
       effectiveActualTokens,
     };
-    this._writeRecord(record);
+    await this._writeRecord(record);
   }
 
-  private _writeRecord(record: TokenUsageRecord): void {
-    if (this.logFilePath === undefined) return;
-    try {
+  private async _writeRecord(record: TokenUsageRecord): Promise<void> {
+    const logFilePath = this.logFilePath;
+    if (logFilePath === undefined) return;
+
+    const write = this.writeChain.then(async () => {
       if (!this.dirEnsured) {
-        const dir = path.dirname(this.logFilePath);
-        fs.mkdirSync(dir, { recursive: true });
+        await mkdir(path.dirname(logFilePath), { recursive: true });
         this.dirEnsured = true;
       }
       const line = JSON.stringify(this._toSerializedRecord(record)) + '\n';
-      fs.appendFileSync(this.logFilePath, line);
-    } catch (error) {
+      await appendFile(logFilePath, line);
+    });
+    this.writeChain = write.catch((error: unknown) => {
       this.errorLogger.error('Failed to write token usage record', error);
-    }
+    });
+    await this.writeChain;
   }
 
   private _toSerializedRecord(
     record: TokenUsageRecord,
-  ): Record<string, unknown> {
+  ): SerializedTokenUsageRecord {
     return {
       ts: record.ts,
       prompt_id: record.promptId,
@@ -110,6 +130,7 @@ export class TokenUsageLogger {
       estimated_tokens: record.estimatedTokens,
       estimator: record.estimator,
       tiktoken_tokens: record.tiktokenTokens,
+      tiktoken_estimation_failed: record.tiktokenEstimationFailed ?? false,
       actual_prompt_tokens: record.actualPromptTokens,
       cached_tokens: record.cachedTokens,
       effective_actual_tokens: record.effectiveActualTokens,

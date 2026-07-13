@@ -11,10 +11,8 @@
  * 2. Using TOCTOU pattern to handle race conditions with other processes
  */
 
-import {
-  type OnAuthErrorHandler,
-  DebugLogger,
-} from '@vybestack/llxprt-code-core';
+import type { OnAuthErrorHandler } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { createHash } from 'node:crypto';
 import type { BucketFailoverOAuthManagerLike } from './types.js';
 

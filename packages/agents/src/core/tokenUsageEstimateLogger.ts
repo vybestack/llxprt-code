@@ -49,12 +49,14 @@ export function recordTokenEstimate(
   const usageLogger = holder?.getTokenUsageLogger?.();
   if (usageLogger === undefined) return;
   if (!usageLogger.isEnabled()) return;
+  const structuredEstimate = safeEstimateStructuredTokens(request);
   usageLogger.recordEstimate(promptId, {
     provider: providerName,
     model,
     estimatedTokens,
     estimator: resolveEstimatorType(providerName),
-    tiktokenTokens: safeEstimateStructuredTokens(request),
+    tiktokenTokens: structuredEstimate.tokens,
+    tiktokenEstimationFailed: structuredEstimate.failed,
   });
 }
 
@@ -77,11 +79,14 @@ export async function estimateRequestTokens(
   }
 }
 
-function safeEstimateStructuredTokens(request: PartListUnion): number {
+function safeEstimateStructuredTokens(request: PartListUnion): {
+  tokens: number | null;
+  failed: boolean;
+} {
   try {
-    return estimateRequestTokensStructured(request);
+    return { tokens: estimateRequestTokensStructured(request), failed: false };
   } catch (error) {
     logger.debug('Structured token estimate failed', error);
-    return 0;
+    return { tokens: null, failed: true };
   }
 }

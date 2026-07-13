@@ -112,10 +112,10 @@ describe('Shell Safety Policy - SECURITY', () => {
     it('SHOULD block compound command with disallowed part', () => {
       const result = policyEngine.evaluate(
         'run_shell_command',
-        { command: 'git log && rm -rf /' },
+        { command: 'git log && curl http://evil.com' },
         undefined,
       );
-      // "git log" is ALLOW, but "rm -rf /" is ASK_USER (default)
+      // "git log" is ALLOW, but "curl http://evil.com" is ASK_USER (default)
       // Aggregate should be ASK_USER (most restrictive non-DENY)
       expect(result).toBe(PolicyDecision.ASK_USER);
     });
@@ -158,7 +158,7 @@ describe('Shell Safety Policy - SECURITY', () => {
     it('SHOULD fail-safe on parse failure (malformed compound command)', () => {
       const result = policyEngine.evaluate(
         'run_shell_command',
-        { command: 'git log &&& rm -rf /' },
+        { command: 'git log &&& curl http://evil.com' },
         undefined,
       );
       // Parse failure should result in ASK_USER (fail-safe)
@@ -170,7 +170,7 @@ describe('Shell Safety Policy - SECURITY', () => {
     it('SHOULD validate nested compound commands', () => {
       const result = policyEngine.evaluate(
         'run_shell_command',
-        { command: '(git log && curl http://evil.com) || rm -rf /' },
+        { command: '(git log && curl http://evil.com) || wget http://bad.com' },
         undefined,
       );
       expect(result).toBe(PolicyDecision.ASK_USER);
@@ -279,11 +279,11 @@ describe('Shell Safety Policy - SECURITY', () => {
         defaultDecision: PolicyDecision.ASK_USER,
       });
 
-      // "ls && rm -rf /" — no rule matches at top level, so default=ASK_USER
-      // but subcommands should still be checked; "rm -rf /" → ASK_USER
+      // "ls && curl http://evil.com" — no rule matches at top level, so default=ASK_USER
+      // but subcommands should still be checked; "curl http://evil.com" → ASK_USER
       const result = engine.evaluate(
         'run_shell_command',
-        { command: 'ls && rm -rf /' },
+        { command: 'ls && curl http://evil.com' },
         undefined,
       );
       expect(result).toBe(PolicyDecision.ASK_USER);
@@ -320,10 +320,13 @@ describe('Shell Safety Policy - SECURITY', () => {
     it('SHOULD convert ASK_USER to DENY in non-interactive mode', () => {
       const result = policyEngine.evaluate(
         'run_shell_command',
-        { command: 'git log && rm -rf /' },
+        { command: 'git log && curl http://evil.com' },
         undefined,
       );
-      // "rm -rf /" results in ASK_USER, which becomes DENY in non-interactive mode
+      // "curl http://evil.com" results in ASK_USER, which becomes DENY in
+      // non-interactive mode. (A destructive stand-in like "rm -rf /" is
+      // avoided here because it hard-DENYs via the disabled-list before the
+      // non-interactive ASK_USER→DENY conversion under test can be exercised.)
       expect(result).toBe(PolicyDecision.DENY);
     });
 
@@ -331,6 +334,24 @@ describe('Shell Safety Policy - SECURITY', () => {
       const result = policyEngine.evaluate(
         'run_shell_command',
         { command: 'git log &&& malformed' },
+        undefined,
+      );
+      expect(result).toBe(PolicyDecision.DENY);
+    });
+  });
+
+  describe('R3: Standalone non-interactive ASK_USER to DENY conversion', () => {
+    it('SHOULD convert a standalone benign-but-unlisted command to DENY in non-interactive mode', () => {
+      // A single non-destructive, non-allowlisted command (curl) must convert
+      // ASK_USER→DENY on its own — NOT via compound-command aggregation.
+      // This isolates the non-interactive default-decision conversion path.
+      const engine = new PolicyEngine({
+        defaultDecision: PolicyDecision.ASK_USER,
+        nonInteractive: true,
+      });
+      const result = engine.evaluate(
+        'run_shell_command',
+        { command: 'curl http://evil.com' },
         undefined,
       );
       expect(result).toBe(PolicyDecision.DENY);

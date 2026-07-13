@@ -15,6 +15,10 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { convertBlocksToParts } from './MessageConverter.js';
+import {
+  enforceImageBudget,
+  buildOmissionFeedback,
+} from './imagePayloadBudget.js';
 import { type ToolCallRequestInfo, type ToolCallResponseInfo } from './turn.js';
 import {
   executeToolCall,
@@ -79,8 +83,7 @@ export function extractToolDetail(
   ) {
     return (resultDisplay as { message: string }).message;
   }
-  const missingResultDisplay: string | undefined = void 0;
-  return missingResultDisplay;
+  return undefined;
 }
 
 export function buildToolUnavailableMessage(
@@ -181,6 +184,33 @@ export function resolveToolName(
 // Output finalization
 // ---------------------------------------------------------------------------
 
+/**
+ * Codex/GPT-5.5 sometimes returns literal placeholder strings as
+ * final_message. Treat programming nullish literals as empty everywhere, and
+ * treat "None" as empty only when it cannot be the user's entire successful
+ * answer: non-goal termination, or a variable-emitting result that already
+ * carries the real payload separately (Issue #2410, Mode 2).
+ */
+const NULLISH_FINAL_MESSAGE_TOKENS: ReadonlySet<string> = new Set([
+  'null',
+  'undefined',
+]);
+
+function isNullishFinalMessageText(
+  value: string,
+  terminateReason: SubagentTerminateMode,
+  hasEmittedValues: boolean,
+): boolean {
+  const normalizedValue = value.trim().toLowerCase();
+  if (NULLISH_FINAL_MESSAGE_TOKENS.has(normalizedValue)) {
+    return true;
+  }
+  return (
+    normalizedValue === 'none' &&
+    (terminateReason !== SubagentTerminateMode.GOAL || hasEmittedValues)
+  );
+}
+
 export function finalizeOutput(output: OutputObject): void {
   const emittedVars = asUnknownRecord(output.emitted_vars);
   const emittedEntries = Object.entries(emittedVars)
@@ -198,7 +228,15 @@ export function finalizeOutput(output: OutputObject): void {
       : '';
 
   const existing = output.final_message;
-  if (typeof existing === 'string' && existing.trim().length > 0) {
+  if (
+    typeof existing === 'string' &&
+    existing.trim().length > 0 &&
+    !isNullishFinalMessageText(
+      existing,
+      output.terminate_reason,
+      emittedEntries.length > 0,
+    )
+  ) {
     // Preserve model-emitted text, but still surface emitted variables so
     // callers can introspect what the subagent produced.
     output.final_message = `${existing.trim()}${varsSuffix}`.trim();
@@ -481,7 +519,29 @@ export async function processFunctionCalls(
     });
   }
 
-  return [{ role: 'user', parts: toolResponseParts }];
+  return [{ role: 'user', parts: applyImageBudget(toolResponseParts, ctx) }];
+}
+
+function applyImageBudget(
+  toolResponseParts: Part[],
+  ctx: ProcessFunctionCallsContext,
+): Part[] {
+  const budgetBytes = ctx.config.getImagePayloadBudgetBytes();
+  if (budgetBytes <= 0) {
+    return toolResponseParts;
+  }
+  const { parts: budgeted, omitted } = enforceImageBudget(
+    toolResponseParts,
+    budgetBytes,
+  );
+  if (omitted.length > 0) {
+    budgeted.push({ text: buildOmissionFeedback(omitted) });
+    ctx.logger.warn(
+      () =>
+        `Subagent ${ctx.subagentId}: omitted ${omitted.length} image(s) due to cumulative image payload budget (${budgetBytes} bytes)`,
+    );
+  }
+  return budgeted;
 }
 
 function pushNonFunctionCallResponseParts(

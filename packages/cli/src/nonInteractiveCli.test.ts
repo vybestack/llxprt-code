@@ -94,6 +94,7 @@ describe('processAgentStream', () => {
     streamFormatter?: StreamJsonFormatter | null;
     emojiFilter?: EmojiFilter | undefined;
     config?: Config;
+    quiet?: boolean;
   }) {
     const streamFormatter =
       overrides?.streamFormatter === undefined
@@ -106,6 +107,7 @@ describe('processAgentStream', () => {
       // together; derive streamJsonOutput from the formatter unless a test
       // explicitly overrides it, so the test context matches production.
       streamJsonOutput: overrides?.streamJsonOutput ?? streamFormatter !== null,
+      quiet: overrides?.quiet ?? false,
       streamFormatter,
       emojiFilter: overrides?.emojiFilter,
       createProfileNameWriter: () => () => {},
@@ -207,6 +209,129 @@ describe('processAgentStream', () => {
 
     const output = processStdoutSpy.mock.calls.map(([value]) => value).join('');
     expect(output).toContain('<think>First Second</think>');
+  });
+
+  it('replaces same-stream thinking updates before flushing to stdout', async () => {
+    const events: AgentEvent[] = [
+      {
+        type: 'thinking',
+        thought: {
+          subject: 'First',
+          description: '',
+          streamId: 'reasoning-1',
+          streamStatus: 'delta',
+        },
+      },
+      {
+        type: 'thinking',
+        thought: {
+          subject: 'First second',
+          description: '',
+          streamId: 'reasoning-1',
+          streamStatus: 'delta',
+        },
+      },
+      {
+        type: 'thinking',
+        thought: {
+          subject: 'First second thought',
+          description: '',
+          streamId: 'reasoning-1',
+          streamStatus: 'complete',
+        },
+      },
+      { type: 'text', text: 'Content' },
+      { type: 'done', reason: 'stop' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({ config: createMockConfig({ includeInResponse: true }) }),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    const output = processStdoutSpy.mock.calls.map(([value]) => value).join('');
+    expect(output).toContain('<think>First second thought</think>');
+    expect(output).not.toContain('First First second');
+  });
+
+  it('concatenates different thinking streams when flushing to stdout', async () => {
+    const events: AgentEvent[] = [
+      {
+        type: 'thinking',
+        thought: {
+          subject: 'Stream A',
+          description: '',
+          streamId: 'reasoning-1',
+          streamStatus: 'delta',
+        },
+      },
+      {
+        type: 'thinking',
+        thought: {
+          subject: 'Stream B',
+          description: '',
+          streamId: 'reasoning-2',
+          streamStatus: 'delta',
+        },
+      },
+      { type: 'text', text: 'Content' },
+      { type: 'done', reason: 'stop' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({ config: createMockConfig({ includeInResponse: true }) }),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    const output = processStdoutSpy.mock.calls.map(([value]) => value).join('');
+    expect(output).toContain('<think>Stream A Stream B</think>');
+  });
+
+  it('preserves same-stream thinking when a filtered update becomes empty', async () => {
+    const events: AgentEvent[] = [
+      {
+        type: 'thinking',
+        thought: {
+          subject: 'Keep this',
+          description: '',
+          streamId: 'reasoning-1',
+          streamStatus: 'delta',
+        },
+      },
+      {
+        type: 'thinking',
+        thought: {
+          subject: 'filtered',
+          description: '',
+          streamId: 'reasoning-1',
+          streamStatus: 'complete',
+        },
+      },
+      { type: 'done', reason: 'stop' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({
+        config: createMockConfig({ includeInResponse: true }),
+        emojiFilter: {
+          filterText: (text: string) => ({
+            filtered: text === 'filtered' ? '' : text,
+            blocked: false,
+          }),
+          flushBuffer: () => '',
+        },
+      }),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    const output = processStdoutSpy.mock.calls.map(([value]) => value).join('');
+    expect(output).toContain('<think>Keep this</think>');
   });
 
   it('emits a tool-use record and prints successful tool display output', async () => {

@@ -131,7 +131,7 @@ describe('TaskTool', () => {
       1,
       '<subagent name="helper" id="agent-42">\n',
     );
-    expect(updateOutput).toHaveBeenNthCalledWith(2, 'progress update\n');
+    expect(updateOutput).toHaveBeenNthCalledWith(2, 'progress update');
     expect(updateOutput).toHaveBeenNthCalledWith(
       3,
       '</subagent name="helper" id="agent-42">\n',

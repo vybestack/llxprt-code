@@ -118,6 +118,7 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
       });
 
       chat = new ChatSession(view, mockContentGenerator, {}, []);
+      const recordActual = vi.spyOn(chat.getTokenUsageLogger(), 'recordActual');
 
       await chat.sendMessage(
         { message: [{ text: 'What is quantum computing?' }] },
@@ -128,6 +129,10 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
 
       const actualCount = historyService.getTotalTokens();
       expect(actualCount).toBe(5000);
+      expect(recordActual).toHaveBeenCalledExactlyOnceWith('test-prompt-id', {
+        actualPromptTokens: 5000,
+        cachedTokens: 0,
+      });
     });
   });
 
