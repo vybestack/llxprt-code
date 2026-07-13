@@ -341,6 +341,12 @@ describe('scanGeminiExports — re-export forms', () => {
       'GeminiHelper',
     );
   });
+
+  it('detects a Gemini-named namespace re-export', () => {
+    expect(scanExportsFor("export * as GeminiSDK from './local';")).toContain(
+      'GeminiSDK',
+    );
+  });
 });
 
 describe('scanGeminiExports — destructuring binding patterns', () => {

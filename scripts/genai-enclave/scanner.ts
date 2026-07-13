@@ -73,17 +73,6 @@ function literalText(node: ts.Node | undefined): string | null {
 }
 
 /**
- * Recursively unwrap parenthesized expressions to find the core expression.
- */
-function unwrapParentheses(expr: ts.Expression): ts.Expression {
-  let current = expr;
-  while (ts.isParenthesizedExpression(current)) {
-    current = current.expression;
-  }
-  return current;
-}
-
-/**
  * Classify the import/export form of a TS node for diagnostic output.
  */
 function classifyForm(node: ts.Node): string {
@@ -214,23 +203,15 @@ function findGenaiImportViolation(
     return createImportViolation(sourceFile, relPath, node, specifier);
   }
 
-  const unwrapped = ts.isParenthesizedExpression(node)
-    ? unwrapParentheses(node)
-    : node;
-  if (!ts.isCallExpression(unwrapped) || !isImportOrRequireCall(unwrapped)) {
+  if (!ts.isCallExpression(node) || !isImportOrRequireCall(node)) {
     return null;
   }
-  const result = classifyCallSpecifier(unwrapped);
+  const result = classifyCallSpecifier(node);
   if (result.type === 'genai') {
-    return createImportViolation(
-      sourceFile,
-      relPath,
-      unwrapped,
-      result.specifier,
-    );
+    return createImportViolation(sourceFile, relPath, node, result.specifier);
   }
   return result.type === 'computed'
-    ? createComputedViolation(sourceFile, relPath, unwrapped)
+    ? createComputedViolation(sourceFile, relPath, node)
     : null;
 }
 
@@ -391,7 +372,20 @@ function checkNamedExports(
   violations: GeminiExportViolation[],
 ): void {
   const clause = node.exportClause;
-  if (clause === undefined || !ts.isNamedExports(clause)) return;
+  if (clause === undefined) return;
+  if (ts.isNamespaceExport(clause)) {
+    if (containsGemini(clause.name.text)) {
+      addExportViolation(
+        sourceFile,
+        relPath,
+        node,
+        clause.name.text,
+        'export * as name',
+        violations,
+      );
+    }
+    return;
+  }
   for (const element of clause.elements) {
     if (containsGemini(element.name.text)) {
       addExportViolation(
@@ -426,6 +420,21 @@ function checkExportAssignment(
       relPath,
       node,
       expr.text,
+      'export default',
+      violations,
+    );
+    return;
+  }
+  if (
+    (ts.isClassExpression(expr) || ts.isFunctionExpression(expr)) &&
+    expr.name !== undefined &&
+    containsGemini(expr.name.text)
+  ) {
+    addExportViolation(
+      sourceFile,
+      relPath,
+      node,
+      expr.name.text,
       'export default',
       violations,
     );

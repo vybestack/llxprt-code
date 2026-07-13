@@ -93,6 +93,7 @@
     "lint:eslint-guard": "bun scripts/check-eslint-guard.ts",
     "lint:cli-boundary": "bun scripts/check-cli-import-boundary.ts",
     "lint:genai-enclave": "bun scripts/check-genai-enclave.ts",
+    "lint:genai-inventory": "bun scripts/genai-import-inventory.ts --check",
     "lint:agents-api-surface": "node scripts/check-agents-api-surface.mjs",
     "lint:all": "./scripts/lint-all.sh",
     "format": "prettier --experimental-cli --write . --ignore-path .gitignore --ignore-path .prettierignore",

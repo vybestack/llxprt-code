@@ -14,7 +14,8 @@
  *
  * 2. **Dependency-manifest allowlist** — the exact workspace directories and
  *    version specifiers that may declare `@google/genai` as a dependency.
- *    Every other workspace (including the root) is forbidden.
+ *    The root packaging bridge and the core/providers enclaves are required;
+ *    every other workspace is forbidden.
  *
  * 3. **Gemini-name export allowlist** — exported identifiers containing
  *    "Gemini" sanctioned outside the name enclaves, each scoped to an exact
@@ -146,12 +147,6 @@ export const GEMINI_NAME_EXPLICIT_ALLOWLIST: readonly GeminiNameAllowlistEntry[]
       name: 'GeminiProvider',
       justification:
         'Public Gemini provider class exported from the providers package index.',
-    },
-    {
-      path: 'packages/providers/src/index.ts',
-      name: 'GeminiMessageConverter',
-      justification:
-        'Public provider-converter class exported from the providers package index.',
     },
     {
       path: 'packages/providers/src/index.ts',
@@ -582,6 +577,10 @@ const TEST_FILE_PATTERNS = [
   /\.test\.tsx$/,
   /\.spec\.[cm]?ts$/,
   /\.spec\.tsx$/,
+  /\.test\.[cm]?js$/,
+  /\.test\.jsx$/,
+  /\.spec\.[cm]?js$/,
+  /\.spec\.jsx$/,
 ];
 
 /**
