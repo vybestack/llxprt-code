@@ -16,11 +16,6 @@
       "bun": "./index.ts",
       "import": "./dist/index.js"
     },
-    "./index.js": {
-      "types": "./dist/index.d.ts",
-      "bun": "./index.ts",
-      "import": "./dist/index.js"
-    },
     "./auth-factories.js": {
       "types": "./dist/src/auth-factories.d.ts",
       "bun": "./src/auth-factories.ts",
@@ -232,25 +227,9 @@
       "bun": "./src/test-utils/providerCallOptions.ts",
       "import": "./dist/src/test-utils/providerCallOptions.js"
     },
-    "./test-utils/config.js": {
-      "bun": "./src/test-utils/config.ts",
-      "import": "./dist/src/test-utils/config.js"
-    },
     "./test-utils/mock-tool.js": {
       "bun": "./src/test-utils/mock-tool.ts",
       "import": "./dist/src/test-utils/mock-tool.js"
-    },
-    "./test-utils/tools.js": {
-      "bun": "./src/test-utils/tools.ts",
-      "import": "./dist/src/test-utils/tools.js"
-    },
-    "./test-utils/mockWorkspaceContext.js": {
-      "bun": "./src/test-utils/mockWorkspaceContext.ts",
-      "import": "./dist/src/test-utils/mockWorkspaceContext.js"
-    },
-    "./test-utils/index.js": {
-      "bun": "./src/test-utils/index.ts",
-      "import": "./dist/src/test-utils/index.js"
     },
     "./test-utils/runtime.js": {
       "bun": "./src/test-utils/runtime.ts",
@@ -396,10 +375,6 @@
       "bun": "./src/hooks/types.ts",
       "import": "./dist/src/hooks/types.js"
     },
-    "./hooks/hookSystem.js": {
-      "bun": "./src/hooks/hookSystem.ts",
-      "import": "./dist/src/hooks/hookSystem.js"
-    },
     "./policy/policy-engine.js": {
       "bun": "./src/policy/policy-engine.ts",
       "import": "./dist/src/policy/policy-engine.js"
@@ -503,14 +478,6 @@
     "./utils/tool-utils.js": {
       "bun": "./src/utils/tool-utils.ts",
       "import": "./dist/src/utils/tool-utils.js"
-    },
-    "./utils/getFolderStructure.js": {
-      "bun": "./src/utils/getFolderStructure.ts",
-      "import": "./dist/src/utils/getFolderStructure.js"
-    },
-    "./utils/testUtils.js": {
-      "bun": "./src/utils/testUtils.ts",
-      "import": "./dist/src/utils/testUtils.js"
     }
   },
   "scripts": {
