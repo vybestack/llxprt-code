@@ -163,6 +163,10 @@ function buildBaseConfig(): Config {
     getTargetDir: () => '/project',
     getProjectRoot: () => '/project',
     getMaxSessionTurns: () => 50,
+    // No recording service in loadSession tests — the session lifecycle under
+    // test does not depend on session recording (only the re-attach/resume
+    // probes and session-info hydration paths are exercised here).
+    getSessionRecordingService: () => undefined,
     // The re-attach + corrupt-vs-missing probes derive the chats dir from
     // storage.getProjectChatsDir(); point it at a dir that never exists so the
     // disk-resume probe's REAL readdir hits ENOENT (falling back to the plain
@@ -326,7 +330,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     ).rejects.toThrow(/Session not found/);
   });
 
-  it('closeSession keeps a session tracked when agent disposal fails', async () => {
+  it('closeSession succeeds and removes the session even when agent disposal fails', async () => {
     const stub = buildStubAgent({});
     stub.dispose.mockRejectedValueOnce(new Error('dispose failed'));
     mockFromConfig.mockResolvedValue(stub.agent);
@@ -341,14 +345,10 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
 
     await expect(
       zedAgent.closeSession({ sessionId: created.sessionId }),
-    ).rejects.toThrow('dispose failed');
+    ).resolves.toStrictEqual({});
     await expect(
-      zedAgent.resumeSession({
-        sessionId: created.sessionId,
-        cwd: '/project',
-        mcpServers: [],
-      }),
-    ).resolves.toMatchObject({ modes: expect.any(Object) });
+      zedAgent.prompt({ sessionId: created.sessionId, prompt: [] }),
+    ).rejects.toThrow(/Session not found/);
   });
 
   it('initialize() advertises loadSession: true', async () => {
@@ -366,8 +366,6 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     expect(response.agentCapabilities?.sessionCapabilities).toStrictEqual({
       list: {},
       resume: {},
-      delete: {},
-      close: {},
     });
   });
 
@@ -739,14 +737,14 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     mockFromConfig.mockResolvedValue(stub.agent);
 
     const connection = new RecordingConnection();
-    // Dead transport: the first (and only) replay update rejects.
-    connection.failSessionUpdateAfter(0, new Error('transport is dead'));
     const zedAgent = await makeZedAgent(connection, emptyChatsLister);
 
     const created = await zedAgent.newSession({
       cwd: '/project',
       mcpServers: [],
     } as acp.NewSessionRequest);
+    connection.clearSessionUpdateFailure();
+    connection.failSessionUpdateAfter(0, new Error('transport is dead'));
 
     let caught: unknown;
     try {

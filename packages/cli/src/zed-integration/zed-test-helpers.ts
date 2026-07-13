@@ -68,6 +68,63 @@ export function buildScriptedAgent(
   return { agent, confirmations };
 }
 
+/**
+ * Like {@link buildScriptedAgent} but the stream blocks after yielding all
+ * events until the abort signal fires.  Used to test cancel/dispose while a
+ * prompt turn is still in-flight.
+ */
+export function buildBlockingScriptedAgent(
+  nextEvents: () => readonly AgentEvent[],
+  toolKinds: Readonly<Record<string, string>> = {},
+): {
+  agent: Agent;
+  confirmations: ConfirmationCapture[];
+} {
+  const confirmations: ConfirmationCapture[] = [];
+  const agent = {
+    async *stream(_input: unknown, opts?: unknown): AsyncIterable<AgentEvent> {
+      for (const e of nextEvents()) {
+        yield e;
+      }
+      const signal = (opts as { signal?: AbortSignal } | undefined)?.signal;
+      if (signal !== undefined && !signal.aborted) {
+        await new Promise<void>((resolve) => {
+          signal.addEventListener('abort', () => resolve(), { once: true });
+        });
+      }
+    },
+    getApprovalMode: (): ApprovalMode => 'default' as ApprovalMode,
+    setApprovalMode: vi.fn(),
+    dispose: vi.fn().mockResolvedValue(undefined),
+    tools: {
+      get: (name: string) =>
+        Object.hasOwn(toolKinds, name) ? { kind: toolKinds[name] } : undefined,
+      respondToConfirmation: (
+        confirmationId: string,
+        decision: ToolConfirmationOutcome,
+        payload?: ToolConfirmationPayload,
+        requiresUserConfirmation?: boolean,
+      ) => {
+        confirmations.push({
+          confirmationId,
+          decision,
+          ...(payload === undefined ? {} : { payload }),
+          ...(requiresUserConfirmation === undefined
+            ? {}
+            : { requiresUserConfirmation }),
+        });
+      },
+      onConfirmationRequest: () => () => {},
+      onToolUpdate: () => () => {},
+      setEditorCallbacks: () => {},
+      setEnabled: vi.fn().mockResolvedValue(undefined),
+      list: () => [],
+      keys: {},
+    },
+  } as unknown as Agent;
+  return { agent, confirmations };
+}
+
 export function buildFakeAgent(
   events: readonly AgentEvent[],
   toolKinds: Readonly<Record<string, string>> = {},
@@ -77,6 +134,21 @@ export function buildFakeAgent(
 } {
   return buildScriptedAgent(() => events, toolKinds);
 }
+
+export function buildBlockingFakeAgent(
+  events: readonly AgentEvent[],
+  toolKinds: Readonly<Record<string, string>> = {},
+): {
+  agent: Agent;
+  confirmations: ConfirmationCapture[];
+} {
+  return buildBlockingScriptedAgent(() => events, toolKinds);
+}
+
+export type FakeTerminalHandle = Pick<
+  acp.TerminalHandle,
+  'id' | 'currentOutput' | 'waitForExit' | 'kill' | 'release'
+>;
 
 export class RecordingConnection {
   readonly messages: Array<
@@ -95,6 +167,72 @@ export class RecordingConnection {
   private sessionUpdateFailAfter: number | null = null;
   private sessionUpdateError: Error | null = null;
   private sessionUpdateCalls = 0;
+
+  // --- Terminal test-double state ---
+
+  readonly createTerminalCalls: Array<{
+    command: string;
+    cwd?: string | null;
+    sessionId: string;
+    args?: string[];
+    env?: Array<{ name: string; value: string }>;
+    outputByteLimit?: number | null;
+  }> = [];
+
+  killCalls = 0;
+  releaseCalls = 0;
+
+  private terminalOutput = '';
+  private terminalExitDelayed = false;
+  private terminalExitResolve: ((value: void) => void) | null = null;
+
+  setTerminalOutput(output: string): void {
+    this.terminalOutput = output;
+  }
+
+  delayTerminalExit(): void {
+    this.terminalExitDelayed = true;
+  }
+
+  resolveDelayedTerminalExit(): void {
+    if (this.terminalExitResolve !== null) {
+      const fn = this.terminalExitResolve;
+      this.terminalExitResolve = null;
+      this.terminalExitDelayed = false;
+      fn();
+    }
+  }
+
+  /**
+   * Resolves once at least one terminal content update (tool_call_update with
+   * a `terminal` content block) has been recorded — i.e., the Session has
+   * created and registered a terminal.
+   */
+  waitForTerminalCreated(timeoutMs = 5000): Promise<void> {
+    if (this.hasTerminalContentUpdate()) return Promise.resolve();
+    const deadline = Date.now() + timeoutMs;
+    return new Promise<void>((resolve, reject) => {
+      const check = (): void => {
+        if (this.hasTerminalContentUpdate()) {
+          resolve();
+        } else if (Date.now() >= deadline) {
+          reject(new Error('waitForTerminalCreated timed out'));
+        } else {
+          setTimeout(check, 5);
+        }
+      };
+      setTimeout(check, 5);
+    });
+  }
+
+  private hasTerminalContentUpdate(): boolean {
+    return this.messages.some(
+      (m) =>
+        m.kind === 'sessionUpdate' &&
+        m.update.sessionUpdate === 'tool_call_update' &&
+        (m.update.content ?? []).some((c) => c.type === 'terminal'),
+    );
+  }
 
   /**
    * Arms sessionUpdate to REJECT starting with the (0-based) `afterCount`-th
@@ -120,6 +258,16 @@ export class RecordingConnection {
     this.sessionUpdateError = null;
     this.sessionUpdateCalls = 0;
   }
+
+  clearSessionInfoUpdates(): void {
+    const retained = this.messages.filter(
+      (message) =>
+        message.kind !== 'sessionUpdate' ||
+        message.update.sessionUpdate !== 'session_info_update',
+    );
+    this.messages.splice(0, this.messages.length, ...retained);
+  }
+
   private gatedDeferred: {
     resolve: (o: acp.RequestPermissionOutcome) => void;
     promise: Promise<acp.RequestPermissionOutcome>;
@@ -208,10 +356,98 @@ export class RecordingConnection {
     },
   );
 
+  createTerminal: Mock = vi.fn(
+    async (params: acp.CreateTerminalRequest): Promise<FakeTerminalHandle> => {
+      const call = {
+        command: params.command,
+        cwd: params.cwd,
+        sessionId: params.sessionId,
+        ...(params.args !== undefined ? { args: params.args } : {}),
+        ...(params.env !== undefined ? { env: params.env } : {}),
+        ...(params.outputByteLimit !== undefined
+          ? { outputByteLimit: params.outputByteLimit }
+          : {}),
+      };
+      this.createTerminalCalls.push(call);
+      const terminalId = `terminal-${this.createTerminalCalls.length}`;
+      return this.buildFakeTerminalHandle(terminalId);
+    },
+  );
+
+  private buildFakeTerminalHandle(terminalId: string): FakeTerminalHandle {
+    const handle = {
+      id: terminalId,
+      currentOutput: vi.fn(async () => ({
+        output: this.terminalOutput,
+        exitStatus: null,
+        truncated: false,
+      })),
+      waitForExit: vi.fn(async () => {
+        if (this.terminalExitDelayed) {
+          await new Promise<void>((resolve) => {
+            this.terminalExitResolve = resolve;
+          });
+        }
+        return { exitCode: 0, signal: null };
+      }),
+      kill: vi.fn(async () => {
+        this.killCalls += 1;
+        this.resolveDelayedTerminalExit();
+        return {};
+      }),
+      release: vi.fn(async () => {
+        this.releaseCalls += 1;
+        this.resolveDelayedTerminalExit();
+        return {};
+      }),
+    };
+    return handle;
+  }
+
+  /**
+   * Returns content-focused session updates, excluding infrastructure
+   * notifications (`available_commands_update` and `session_info_update`).
+   * Use {@link sessionInfoUpdates} for title/updatedAt assertions and
+   * {@link availableCommandUpdates} for command-registry assertions.
+   */
   onlySessionUpdates(): acp.SessionUpdate[] {
     return this.messages
       .filter((m) => m.kind === 'sessionUpdate')
-      .map((m) => (m as { update: acp.SessionUpdate }).update);
+      .map((m) => (m as { update: acp.SessionUpdate }).update)
+      .filter(
+        (update) =>
+          update.sessionUpdate !== 'available_commands_update' &&
+          update.sessionUpdate !== 'session_info_update',
+      );
+  }
+
+  sessionInfoUpdates(): Array<
+    Extract<acp.SessionUpdate, { sessionUpdate: 'session_info_update' }>
+  > {
+    return this.messages
+      .filter((m) => m.kind === 'sessionUpdate')
+      .map((m) => (m as { update: acp.SessionUpdate }).update)
+      .filter(
+        (
+          update,
+        ): update is Extract<
+          acp.SessionUpdate,
+          { sessionUpdate: 'session_info_update' }
+        > => update.sessionUpdate === 'session_info_update',
+      );
+  }
+
+  availableCommandUpdates(): acp.AvailableCommandsUpdate[] {
+    return this.messages
+      .filter((m) => m.kind === 'sessionUpdate')
+      .map((m) => (m as { update: acp.SessionUpdate }).update)
+      .filter(
+        (
+          update,
+        ): update is acp.AvailableCommandsUpdate & {
+          sessionUpdate: 'available_commands_update';
+        } => update.sessionUpdate === 'available_commands_update',
+      );
   }
 
   sessionUpdateKinds(): string[] {
@@ -226,6 +462,7 @@ export function buildMinimalConfig(): Config {
     getApprovalMode: () => 'default' as ApprovalMode,
     setApprovalMode: () => {},
     getTargetDir: () => '/project',
+    getProjectRoot: () => '/project',
     getFileService: () => ({ shouldIgnoreFile: () => false }),
     getFileFilteringOptions: () => ({
       respectGitIgnore: true,
@@ -238,6 +475,7 @@ export function buildMinimalConfig(): Config {
     // window via getTokenLimitForConfiguredContext(model, config).
     getModel: () => 'test-model',
     getContentGeneratorConfig: () => undefined,
+    getSessionRecordingService: () => undefined,
   } as unknown as Config;
 }
 

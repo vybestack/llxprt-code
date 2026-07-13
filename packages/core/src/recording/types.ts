@@ -30,7 +30,7 @@ import { type IContent } from '../services/history/IContent.js';
 // ---------------------------------------------------------------------------
 
 /**
- * The seven event types that can appear in a session JSONL file.
+ * The event types that can appear in a session JSONL file.
  */
 export type SessionEventType =
   | 'session_start'
@@ -39,6 +39,7 @@ export type SessionEventType =
   | 'rewind'
   | 'provider_switch'
   | 'session_event'
+  | 'session_metadata'
   | 'directories_changed';
 
 // ---------------------------------------------------------------------------
@@ -125,6 +126,19 @@ export interface SessionEventPayload {
 }
 
 /**
+ * Payload for the `session_metadata` event — session-level metadata updates
+ * (currently only the human-readable title). The title is tri-state:
+ * - `undefined` (field absent): legacy event, no title assertion.
+ * - `null`: explicit untitled (the caller asserts there is no meaningful title).
+ * - `string`: a concrete title.
+ *
+ * This is a typed first-class recording event, NOT a `session_event` sentinel.
+ */
+export interface SessionMetadataPayload {
+  readonly title?: string | null;
+}
+
+/**
  * Payload for the `directories_changed` event.
  */
 export interface DirectoriesChangedPayload {
@@ -155,7 +169,14 @@ export interface SessionRecordingServiceConfig {
 
 /**
  * Metadata extracted from a session's `session_start` event and updated
- * by subsequent `provider_switch` / `directories_changed` events.
+ * by subsequent `provider_switch` / `directories_changed` / `session_metadata`
+ * events.
+ *
+ * The title is tri-state:
+ * - `undefined`: no `session_metadata` event seen (legacy file). Callers fall
+ *   back to first-human-text heuristics.
+ * - `null`: explicit untitled (`session_metadata` asserted no title).
+ * - `string`: a concrete title.
  */
 export interface SessionMetadata {
   sessionId: string;
@@ -165,6 +186,7 @@ export interface SessionMetadata {
   workspaceDirs: string[];
   cwd?: string;
   startTime: string;
+  title?: string | null;
 }
 
 /**
@@ -205,4 +227,16 @@ export interface SessionSummary {
   provider: string;
   model: string;
   cwd?: string;
+  /**
+   * Tri-state title from a persisted `session_metadata` event:
+   * - `undefined`: no `session_metadata` event seen (legacy fallback).
+   * - `null`: explicit untitled.
+   * - `string`: a concrete title.
+   */
+  title?: string | null;
+  /**
+   * Immutable creation timestamp extracted from `session_start.startTime`.
+   * Used for stable ordering independent of file `lastModified` mutations.
+   */
+  createdAt?: string;
 }
