@@ -90,7 +90,6 @@ export function buildBlockingScriptedAgent(
       if (signal !== undefined && !signal.aborted) {
         await new Promise<void>((resolve) => {
           signal.addEventListener('abort', () => resolve(), { once: true });
-          if (signal.aborted) resolve();
         });
       }
     },
@@ -478,15 +477,12 @@ export function createSession(
   agent: Agent,
   connection: RecordingConnection,
   config: Config = buildMinimalConfig(),
-  terminalEnabled = false,
 ): Session {
   return new Session(
     'test-session-id',
     agent,
     config,
     connection as unknown as acp.AgentSideConnection,
-    false,
-    terminalEnabled,
   );
 }
 

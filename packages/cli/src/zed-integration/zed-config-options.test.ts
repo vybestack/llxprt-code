@@ -14,9 +14,11 @@ import {
 import {
   applyZedConfigOption,
   buildZedConfigOptions,
+  dispatchZedConfigOption,
   observeZedConfigOptions,
   setZedConfigOption,
   zedConfigOptionsForClient,
+  zedSessionConfigOptions,
 } from './zed-config-options.js';
 
 function configFixture(values: Record<string, unknown> = {}): Config {
@@ -119,6 +121,45 @@ describe('Zed config options', () => {
       'reasoning.effort',
       'emojifilter',
     ]);
+    await expect(
+      zedConfigOptionsForClient(
+        { session: { configOptions: false } },
+        {
+          getModel: () => 'alpha',
+          getProviderStatus: () => ({
+            provider: 'test',
+            model: 'alpha',
+            authStatus: 'authenticated' as const,
+          }),
+        },
+        config,
+      ),
+    ).resolves.toStrictEqual({});
+  });
+
+  it('gates loaded snapshots and mutations on explicit client support', async () => {
+    const getConfigOptions = vi.fn(async () => []);
+    await expect(
+      zedSessionConfigOptions(
+        { session: { configOptions: false } },
+        { getConfigOptions },
+      ),
+    ).resolves.toStrictEqual({});
+    expect(getConfigOptions).not.toHaveBeenCalled();
+
+    const setConfigOption = vi.fn(async () => ({ configOptions: [] }));
+    expect(() =>
+      dispatchZedConfigOption(
+        { session: { configOptions: false } },
+        new Map([['session-1', { setConfigOption }]]),
+        {
+          sessionId: 'session-1',
+          configId: 'emojifilter',
+          value: 'warn',
+        },
+      ),
+    ).toThrow('Resource not found');
+    expect(setConfigOption).not.toHaveBeenCalled();
   });
 
   it('switches models and strictly publishes the updated full snapshot', async () => {
@@ -165,7 +206,7 @@ describe('Zed config options', () => {
     await vi.waitFor(() => expect(sendUpdate).toHaveBeenCalledOnce());
     stop();
     coreEvents.emitSettingsChanged();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(sendUpdate).toHaveBeenCalledOnce();
   });
 });

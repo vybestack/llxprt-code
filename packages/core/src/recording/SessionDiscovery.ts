@@ -421,16 +421,20 @@ function extractSessionMetadataTitle(line: string): string | null | undefined {
   if (!line.trim()) {
     return undefined;
   }
-  let event: Record<string, unknown>;
+  let event: unknown;
   try {
-    event = JSON.parse(line) as Record<string, unknown>;
+    event = JSON.parse(line);
   } catch {
     return undefined;
   }
-  if (event.type !== 'session_metadata') {
+  if (event === null || typeof event !== 'object') {
     return undefined;
   }
-  const payload = event.payload as Record<string, unknown> | undefined;
+  const record = event as Record<string, unknown>;
+  if (record.type !== 'session_metadata') {
+    return undefined;
+  }
+  const payload = record.payload as Record<string, unknown> | undefined;
   if (!payload || typeof payload !== 'object') {
     return undefined;
   }

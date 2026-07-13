@@ -13,6 +13,7 @@ export function buildZedPlanUpdate(todos: readonly Todo[]): acp.SessionUpdate {
     entries: todos.map((todo) => ({
       content: todo.content,
       status: todo.status,
+      // ACP plan entries only support a fixed 'medium' priority.
       priority: 'medium',
     })),
   };

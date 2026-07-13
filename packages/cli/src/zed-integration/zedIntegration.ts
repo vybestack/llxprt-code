@@ -40,7 +40,8 @@ import {
   requestToolConfirmation,
   type PermissionRoundTripResult,
 } from './zed-tool-handler.js';
-import { TerminalManager } from './zed-terminal-manager.js';
+import type { TerminalManager } from './zed-terminal-manager.js';
+import { buildZedTerminalSetup } from './zed-terminal-setup.js';
 import { mapHistoryToSessionUpdates } from './zed-session-replay.js';
 import { wrapReplayFailure } from './zed-session-errors.js';
 import {
@@ -163,14 +164,20 @@ export class ZedAgent {
   }: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
     try {
       const sessionId = randomUUID();
-      const { agent, config: sessionConfig } = await this.buildSessionAgent(
-        sessionId,
-        cwd,
-      );
+      const {
+        agent,
+        config: sessionConfig,
+        terminals,
+      } = await this.buildSessionAgent(sessionId, cwd);
       await enableZedSessionRecording(agent, (error) =>
         this.logger.debug(() => `Recording failed for ${sessionId}: ${error}`),
       );
-      const session = await this.createSession(sessionId, agent, sessionConfig);
+      const session = await this.createSession(
+        sessionId,
+        agent,
+        sessionConfig,
+        terminals,
+      );
       await session.sendAvailableCommands();
       this.sessions.set(sessionId, session);
       return {
@@ -190,10 +197,18 @@ export class ZedAgent {
   resumeSession(params: acp.ResumeSessionRequest) {
     return this.lifecycle.resume(params);
   }
-  private supportsConfigOptions = () =>
-    this.clientCapabilities?.session?.configOptions != null;
-  private supportsTerminal = () => this.clientCapabilities?.terminal === true;
-  private createSession(id: string, agent: Agent, config: Config) {
+  private supportsConfigOptions(): boolean {
+    return this.clientCapabilities?.session?.configOptions === true;
+  }
+  private supportsTerminal(): boolean {
+    return this.clientCapabilities?.terminal === true;
+  }
+  private createSession(
+    id: string,
+    agent: Agent,
+    config: Config,
+    terminals: TerminalManager | null,
+  ) {
     return buildZedSession(
       agent,
       () =>
@@ -203,7 +218,7 @@ export class ZedAgent {
           config,
           this.connection,
           this.supportsConfigOptions(),
-          this.supportsTerminal(),
+          terminals,
         ),
       (error) => this.logger.debug(() => `Session cleanup failed: ${error}`),
     );
@@ -294,10 +309,11 @@ export class ZedAgent {
     sessionId: string,
     cwd: string | undefined,
   ): Promise<{ session: Session; history: readonly IContent[] }> {
-    const { agent, config: sessionConfig } = await this.buildSessionAgent(
-      sessionId,
-      cwd,
-    );
+    const {
+      agent,
+      config: sessionConfig,
+      terminals,
+    } = await this.buildSessionAgent(sessionId, cwd);
     try {
       const history = await resumeAgentHistory(
         agent,
@@ -311,7 +327,7 @@ export class ZedAgent {
         sessionConfig,
         this.connection,
         this.supportsConfigOptions(),
-        this.supportsTerminal(),
+        terminals,
       );
       return { session, history };
     } catch (error) {
@@ -323,7 +339,11 @@ export class ZedAgent {
   private async buildSessionAgent(
     sessionId: string,
     cwd: string | undefined,
-  ): Promise<{ agent: Agent; config: Config }> {
+  ): Promise<{
+    agent: Agent;
+    config: Config;
+    terminals: TerminalManager | null;
+  }> {
     const baseFileSystemService = this.config.getFileSystemService();
     const sessionFileSystemService = this.clientCapabilities?.fs
       ? new AcpFileSystemService(
@@ -333,17 +353,35 @@ export class ZedAgent {
           baseFileSystemService,
         )
       : baseFileSystemService;
+    let terminalSetup: ReturnType<typeof buildZedTerminalSetup> | undefined;
     const sessionConfig = createSessionScopedConfig(
       this.config,
       sessionFileSystemService,
       resolveSessionTargetDir(this.config, cwd),
+      () => terminalSetup?.registry,
     );
+    if (this.supportsTerminal()) {
+      terminalSetup = buildZedTerminalSetup(
+        sessionId,
+        sessionConfig,
+        this.config.getToolRegistry(),
+        this.connection,
+        this.logger,
+      );
+    }
     this.logger.debug(() => `buildSessionAgent - session ${sessionId}`);
     const agent = await fromConfig({
       config: sessionConfig,
       sessionId,
+      ...(terminalSetup === undefined
+        ? {}
+        : { messageBus: terminalSetup.messageBus }),
     });
-    return { agent, config: sessionConfig };
+    return {
+      agent,
+      config: sessionConfig,
+      terminals: terminalSetup?.terminals ?? null,
+    };
   }
   deleteSession(params: DeleteSessionRequest) {
     return this.lifecycle.delete(params);
@@ -399,11 +437,6 @@ export class Session {
   private readonly todoListener: (event: TodoUpdateEvent) => void;
   private readonly stopConfigUpdates: () => void;
   private readonly sessionInfo = new SessionTitleTracker();
-  /**
-   * Stable timestamp captured once at construction so getLifecycleInfo returns
-   * a consistent updatedAt before the first turn completes (issue #1611
-   * finding 4) rather than generating a new value per getter call.
-   */
   private readonly createdAt = new Date().toISOString();
   private readonly terminals: TerminalManager | null;
 
@@ -413,17 +446,9 @@ export class Session {
     private readonly config: Config,
     private readonly connection: acp.AgentSideConnection,
     configOptionsEnabled = false,
-    terminalEnabled = false,
+    terminals: TerminalManager | null = null,
   ) {
-    this.terminals = terminalEnabled
-      ? new TerminalManager(
-          id,
-          connection,
-          config.getTargetDir(),
-          (update) => this.sendUpdate(update),
-          this.logger,
-        )
-      : null;
+    this.terminals = terminals;
     this.pathResolver = new ZedPathResolver(this.config, (msg) =>
       this.debug(msg),
     );
@@ -523,12 +548,7 @@ export class Session {
   }
   async prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {
     await this.cancelPendingPrompt();
-    // Finding 1: consume title eligibility SYNCHRONOUSLY at acceptance time,
-    // before any async work, so overlapping prompts cannot both claim the title.
     const eligibility = this.sessionInfo.consumeTitleEligibility(params.prompt);
-    // Issue #1611: record session_metadata immediately at acceptance so the
-    // title persists even for slash/failure sessions that never emit a content
-    // event. session_metadata materializes the recording file.
     this.recordMetadataTitle(eligibility.title);
     try {
       const commandResult = await tryHandleZedCommand(
@@ -602,6 +622,7 @@ export class Session {
         ),
       isPromptStale: (gen, send) => this.isPromptStale(gen, send),
       maxTurns: this.config.getMaxSessionTurns(),
+      logger: this.logger,
     };
   }
 
@@ -628,12 +649,6 @@ export class Session {
     }
   }
 
-  /**
-   * Sends a title-bearing session_info_update, retrying on transport failure
-   * (issue #1611). Uses sendUpdateStrict (not the swallowing sendUpdate) so a
-   * transport error is detected; the title is then marked pending so the next
-   * turn's metadata emission re-sends it.
-   */
   private async sendTitleUpdate(
     update: acp.SessionInfoUpdate & { sessionUpdate: 'session_info_update' },
     title: string,
@@ -649,11 +664,6 @@ export class Session {
     }
   }
 
-  /**
-   * Records the session_metadata title to the durable recording service.
-   * Called at prompt-acceptance time (issue #1611) so the title persists
-   * immediately, materializing the recording for slash/failure sessions.
-   */
   private recordMetadataTitle(title: string | undefined): void {
     const recording = this.config.getSessionRecordingService();
     if (recording?.isActive() !== true) {
@@ -773,8 +783,6 @@ export class Session {
         throw wrapReplayFailure(this.id, error);
       }
     }
-    // Finding 2: hydrate title from restored history so later prompts never
-    // retitle a restored session. Idempotent — a no-op if already titled.
     this.sessionInfo.hydrateFromHistory(items);
   }
   async replayLiveHistory() {

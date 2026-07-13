@@ -140,9 +140,9 @@ export async function zedConfigOptionsForClient(
   agent: Pick<Agent, 'getModel' | 'getProviderStatus'>,
   config: Config,
 ): Promise<Pick<acp.NewSessionResponse, 'configOptions'>> {
-  return capabilities?.session?.configOptions == null
-    ? {}
-    : { configOptions: await buildZedConfigOptions(agent, config) };
+  return capabilities?.session?.configOptions === true
+    ? { configOptions: await buildZedConfigOptions(agent, config) }
+    : {};
 }
 
 export async function setZedConfigOption(
@@ -175,7 +175,7 @@ export function dispatchZedConfigOption(
   params: acp.SetSessionConfigOptionRequest,
 ): Promise<acp.SetSessionConfigOptionResponse> {
   const session = sessions.get(params.sessionId);
-  if (session === undefined || capabilities?.session?.configOptions == null) {
+  if (session === undefined || capabilities?.session?.configOptions !== true) {
     throw acp.RequestError.resourceNotFound(params.sessionId);
   }
   return session.setConfigOption(params.configId, params.value);
@@ -216,8 +216,16 @@ export function observeZedConfigOptions(
   coreEvents.on(CoreEvent.SettingsChanged, refresh);
   return () => {
     stopped = true;
-    coreEvents.off(CoreEvent.ModelChanged, refresh);
-    coreEvents.off(CoreEvent.SettingsChanged, refresh);
+    try {
+      coreEvents.off(CoreEvent.ModelChanged, refresh);
+    } catch {
+      // Listener removal is best-effort during teardown.
+    }
+    try {
+      coreEvents.off(CoreEvent.SettingsChanged, refresh);
+    } catch {
+      // Listener removal is best-effort during teardown.
+    }
   };
 }
 
@@ -225,7 +233,7 @@ export function zedSessionConfigOptions(
   capabilities: ClientCapabilitiesWithSession | undefined,
   session: { getConfigOptions(): Promise<acp.SessionConfigOption[]> },
 ): Promise<Pick<acp.LoadSessionResponse, 'configOptions'>> {
-  return capabilities?.session?.configOptions == null
-    ? Promise.resolve({})
-    : session.getConfigOptions().then((configOptions) => ({ configOptions }));
+  return capabilities?.session?.configOptions === true
+    ? session.getConfigOptions().then((configOptions) => ({ configOptions }))
+    : Promise.resolve({});
 }

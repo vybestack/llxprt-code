@@ -6,64 +6,34 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import type * as acp from '@agentclientprotocol/sdk';
-import type { Config } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 
 import { Session } from './zedIntegration.js';
+import { TerminalManager } from './zed-terminal-manager.js';
 import {
   buildFakeAgent,
-  buildBlockingFakeAgent,
   RecordingConnection,
   buildMinimalConfig,
 } from './zed-test-helpers.js';
 
 const createdSessions: Session[] = [];
+// Mirrors the output of buildCommandToExecute('echo hello', false, '/tmp/shell.tmp')
+// from packages/tools/src/tools/shell-helpers.ts. Update together if the wrapping format changes.
+const preparedEcho =
+  '{ echo hello; }; __code=$?; pgrep -g 0 >/tmp/shell.tmp 2>&1; exit $__code;';
 
-async function disposeCreatedSessions(): Promise<void> {
-  await Promise.allSettled(
-    createdSessions.splice(0).map(async (session) => {
-      try {
-        await session.dispose();
-      } catch {
-        // Continue disposing remaining sessions even if one fails
-      }
-    }),
-  );
-}
-
-function createTerminalSession(
-  events: readonly AgentEvent[],
+function terminalManager(
   connection: RecordingConnection,
-  config: Config = buildMinimalConfig(),
-  terminalEnabled = true,
-): Session {
-  const { agent } = buildFakeAgent(events, { run_shell_command: 'execute' });
-  return new Session(
+  sendUpdate: (update: acp.SessionUpdate) => Promise<void> = (update) =>
+    connection.sessionUpdate({ sessionId: 'test-session-id', update }),
+): TerminalManager {
+  return new TerminalManager(
     'test-session-id',
-    agent,
-    config,
     connection as unknown as acp.AgentSideConnection,
-    false,
-    terminalEnabled,
-  );
-}
-
-function createBlockingTerminalSession(
-  events: readonly AgentEvent[],
-  connection: RecordingConnection,
-  config: Config = buildMinimalConfig(),
-  terminalEnabled = true,
-): Session {
-  const { agent } = buildBlockingFakeAgent(events, {
-    run_shell_command: 'execute',
-  });
-  return new Session(
-    'test-session-id',
-    agent,
-    config,
-    connection as unknown as acp.AgentSideConnection,
-    false,
-    terminalEnabled,
+    '/project',
+    sendUpdate,
+    new DebugLogger('llxprt:zed-terminal-test'),
   );
 }
 
@@ -74,17 +44,6 @@ function shellToolCallEvent(toolCallId: string, command: string): AgentEvent {
       id: toolCallId,
       name: 'run_shell_command',
       args: { command },
-    },
-  };
-}
-
-function shellToolStatusEvent(toolCallId: string): AgentEvent {
-  return {
-    type: 'tool-status',
-    update: {
-      id: toolCallId,
-      name: 'run_shell_command',
-      status: 'executing',
     },
   };
 }
@@ -102,191 +61,179 @@ function shellToolResultEvent(toolCallId: string, output: string): AgentEvent {
 
 const doneEvent: AgentEvent = { type: 'done', reason: 'stop' };
 
-describe('Zed Session — terminal capability integration', () => {
-  afterEach(disposeCreatedSessions);
-
-  describe('terminal-enabled sessions', () => {
-    it('emits terminal content on shell tool calls when terminal capability is present', async () => {
-      const toolCallId = 'shell-1';
-      const connection = new RecordingConnection();
-      connection.setTerminalOutput('hello');
-      const session = createTerminalSession(
-        [
-          shellToolCallEvent(toolCallId, 'echo hello'),
-          shellToolStatusEvent(toolCallId),
-          shellToolResultEvent(toolCallId, 'hello'),
-          doneEvent,
-        ],
-        connection,
-      );
-      createdSessions.push(session);
-
-      await session.prompt({
-        sessionId: 'test-session-id',
-        prompt: [{ type: 'text', text: 'run echo' }],
-      });
-
-      const toolCallUpdates = connection
-        .onlySessionUpdates()
-        .filter(
-          (
-            u,
-          ): u is Extract<acp.SessionUpdate, { sessionUpdate: 'tool_call' }> =>
-            u.sessionUpdate === 'tool_call',
-        );
-      expect(toolCallUpdates).toHaveLength(1);
-      expect(toolCallUpdates[0].kind).toBe('execute');
-
-      const hasTerminalContent = connection.onlySessionUpdates().some((u) => {
-        if (u.sessionUpdate !== 'tool_call_update') return false;
-        const content = u.content ?? [];
-        return content.some(
-          (c): c is Extract<typeof c, { type: 'terminal' }> =>
-            c.type === 'terminal',
-        );
-      });
-      expect(hasTerminalContent).toBe(true);
-    });
-
-    it('creates a terminal via connection.createTerminal for shell commands', async () => {
-      const toolCallId = 'shell-create';
-      const connection = new RecordingConnection();
-      connection.setTerminalOutput('file1\nfile2');
-      const session = createTerminalSession(
-        [
-          shellToolCallEvent(toolCallId, 'ls'),
-          shellToolResultEvent(toolCallId, 'file1\nfile2'),
-          doneEvent,
-        ],
-        connection,
-      );
-      createdSessions.push(session);
-
-      await session.prompt({
-        sessionId: 'test-session-id',
-        prompt: [{ type: 'text', text: 'list files' }],
-      });
-
-      expect(connection.createTerminalCalls).toHaveLength(1);
-      const call = connection.createTerminalCalls[0];
-      expect(call.command).toBe('ls');
-      expect(call.sessionId).toBe('test-session-id');
-    });
-
-    it('releases terminals on normal completion', async () => {
-      const toolCallId = 'shell-release';
-      const connection = new RecordingConnection();
-      connection.setTerminalOutput('done');
-      const session = createTerminalSession(
-        [
-          shellToolCallEvent(toolCallId, 'echo done'),
-          shellToolResultEvent(toolCallId, 'done'),
-          doneEvent,
-        ],
-        connection,
-      );
-      createdSessions.push(session);
-
-      await session.prompt({
-        sessionId: 'test-session-id',
-        prompt: [{ type: 'text', text: 'echo' }],
-      });
-
-      expect(connection.releaseCalls).toBe(1);
-    });
-
-    it('kills and releases terminals on cancel', async () => {
-      const toolCallId = 'shell-cancel';
-      const connection = new RecordingConnection();
-      connection.setTerminalOutput('');
-      connection.delayTerminalExit();
-      const session = createBlockingTerminalSession(
-        [
-          shellToolCallEvent(toolCallId, 'sleep 999'),
-          shellToolStatusEvent(toolCallId),
-        ],
-        connection,
-      );
-      createdSessions.push(session);
-
-      const promptPromise = session.prompt({
-        sessionId: 'test-session-id',
-        prompt: [{ type: 'text', text: 'sleep' }],
-      });
-
-      await connection.waitForTerminalCreated();
-      await session.cancelPendingPrompt();
-      await promptPromise;
-
-      expect(connection.killCalls).toBe(1);
-    });
-
-    it('kills and releases terminals on dispose', async () => {
-      const toolCallId = 'shell-dispose';
-      const connection = new RecordingConnection();
-      connection.setTerminalOutput('');
-      connection.delayTerminalExit();
-      const session = createBlockingTerminalSession(
-        [
-          shellToolCallEvent(toolCallId, 'sleep 999'),
-          shellToolStatusEvent(toolCallId),
-        ],
-        connection,
-      );
-      createdSessions.push(session);
-
-      const promptPromise = session.prompt({
-        sessionId: 'test-session-id',
-        prompt: [{ type: 'text', text: 'sleep' }],
-      });
-
-      await connection.waitForTerminalCreated();
-      await session.dispose();
-      await promptPromise.catch(() => undefined);
-
-      expect(connection.killCalls).toBe(1);
-    });
+describe('Zed terminal execution', () => {
+  afterEach(async () => {
+    await Promise.allSettled(
+      createdSessions.splice(0).map((session) => session.dispose()),
+    );
   });
 
-  describe('terminal-disabled sessions (fallback)', () => {
-    it('does not create terminals and emits text content when terminal capability is absent', async () => {
-      const toolCallId = 'shell-fallback';
-      const connection = new RecordingConnection();
-      const session = createTerminalSession(
-        [
-          shellToolCallEvent(toolCallId, 'echo text-output'),
-          shellToolResultEvent(toolCallId, 'text-output'),
-          doneEvent,
-        ],
-        connection,
-        undefined,
-        false,
-      );
-      createdSessions.push(session);
-
-      await session.prompt({
-        sessionId: 'test-session-id',
-        prompt: [{ type: 'text', text: 'echo' }],
-      });
-
-      expect(connection.createTerminalCalls).toHaveLength(0);
-
-      const hasTerminalContent = connection.onlySessionUpdates().some((u) => {
-        if (u.sessionUpdate !== 'tool_call_update') return false;
-        const content = u.content ?? [];
-        return content.some((c) => c.type === 'terminal');
-      });
-      expect(hasTerminalContent).toBe(false);
-
-      const hasTextContent = connection.onlySessionUpdates().some((u) => {
-        if (u.sessionUpdate !== 'tool_call_update') return false;
-        const content = u.content ?? [];
-        return content.some(
-          (c): c is Extract<typeof c, { type: 'content' }> =>
-            c.type === 'content',
-        );
-      });
-      expect(hasTextContent).toBe(true);
+  it('delegates shell execution to the ACP terminal exactly once', async () => {
+    const connection = new RecordingConnection();
+    connection.setTerminalOutput('hello\n');
+    const terminals = terminalManager(connection);
+    await terminals.observeToolCall({
+      id: 'shell-1',
+      name: 'run_shell_command',
+      args: { command: 'echo hello' },
     });
+    const chunks: string[] = [];
+
+    const result = await terminals.executeShellCommand(
+      preparedEcho,
+      '/project',
+      (event) => {
+        if (event.type === 'data' && event.chunk !== undefined) {
+          chunks.push(event.chunk);
+        }
+      },
+      new AbortController().signal,
+    );
+
+    expect(connection.createTerminalCalls).toStrictEqual([
+      {
+        command: 'bash',
+        args: ['-c', preparedEcho],
+        cwd: '/project',
+        sessionId: 'test-session-id',
+      },
+    ]);
+    expect(result).toMatchObject({ output: 'hello\n', exitCode: 0 });
+    expect(chunks.join('')).toBe('hello\n');
+    expect(connection.onlySessionUpdates()).toContainEqual(
+      expect.objectContaining({
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'shell-1',
+        content: [{ type: 'terminal', terminalId: 'terminal-1' }],
+      }),
+    );
+    expect(connection.releaseCalls).toBe(1);
+  });
+
+  it('does not create a terminal for an already-cancelled execution', async () => {
+    const connection = new RecordingConnection();
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      terminalManager(connection).executeShellCommand(
+        preparedEcho,
+        '/project',
+        () => undefined,
+        controller.signal,
+      ),
+    ).resolves.toMatchObject({ aborted: true });
+    expect(connection.createTerminalCalls).toHaveLength(0);
+  });
+
+  it('does not mirror a shell command merely by observing its agent event', async () => {
+    const connection = new RecordingConnection();
+    const terminals = terminalManager(connection);
+    const { agent } = buildFakeAgent(
+      [
+        shellToolCallEvent('shell-observed', 'touch side-effect'),
+        shellToolResultEvent('shell-observed', 'locally executed'),
+        doneEvent,
+      ],
+      { run_shell_command: 'execute' },
+    );
+    const session = new Session(
+      'test-session-id',
+      agent,
+      buildMinimalConfig(),
+      connection as unknown as acp.AgentSideConnection,
+      false,
+      terminals,
+    );
+    createdSessions.push(session);
+
+    await session.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'text', text: 'run it once' }],
+    });
+
+    expect(connection.createTerminalCalls).toHaveLength(0);
+  });
+
+  it('kills and releases delegated execution on cancellation', async () => {
+    const connection = new RecordingConnection();
+    connection.delayTerminalExit();
+    const terminals = terminalManager(connection);
+    await terminals.observeToolCall({
+      id: 'shell-cancel',
+      name: 'run_shell_command',
+      args: { command: 'echo hello' },
+    });
+    const controller = new AbortController();
+    const execution = terminals.executeShellCommand(
+      preparedEcho,
+      '/project',
+      () => undefined,
+      controller.signal,
+    );
+
+    await connection.waitForTerminalCreated();
+    controller.abort();
+    await execution;
+
+    expect(connection.killCalls).toBe(1);
+    expect(connection.releaseCalls).toBe(1);
+  });
+
+  it('cleans up the client process when terminal update delivery fails', async () => {
+    const connection = new RecordingConnection();
+    const terminals = terminalManager(connection, async () => {
+      throw new Error('transport closed');
+    });
+    await terminals.observeToolCall({
+      id: 'shell-failure',
+      name: 'run_shell_command',
+      args: { command: 'echo hello' },
+    });
+
+    await expect(
+      terminals.executeShellCommand(
+        preparedEcho,
+        '/project',
+        () => undefined,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow('transport closed');
+    expect(connection.killCalls).toBe(1);
+    expect(connection.releaseCalls).toBe(1);
+  });
+
+  it('retains text-only behavior when terminal capability is absent', async () => {
+    const connection = new RecordingConnection();
+    const { agent } = buildFakeAgent(
+      [
+        shellToolCallEvent('shell-fallback', 'echo text-output'),
+        shellToolResultEvent('shell-fallback', 'text-output'),
+        doneEvent,
+      ],
+      { run_shell_command: 'execute' },
+    );
+    const session = new Session(
+      'test-session-id',
+      agent,
+      buildMinimalConfig(),
+      connection as unknown as acp.AgentSideConnection,
+    );
+    createdSessions.push(session);
+
+    await session.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'text', text: 'echo' }],
+    });
+
+    expect(connection.createTerminalCalls).toHaveLength(0);
+    expect(connection.onlySessionUpdates()).toContainEqual(
+      expect.objectContaining({
+        sessionUpdate: 'tool_call_update',
+        content: [
+          { type: 'content', content: { type: 'text', text: 'text-output' } },
+        ],
+      }),
+    );
   });
 });

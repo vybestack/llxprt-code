@@ -158,6 +158,6 @@ function assertNever(event: never): never {
   const detail =
     typeof event === 'object' && 'type' in event
       ? String((event as { type: unknown }).type)
-      : JSON.stringify(event);
+      : String(event);
   throw new Error(`Unhandled agent event: ${detail}`);
 }

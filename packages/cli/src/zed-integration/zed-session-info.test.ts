@@ -73,6 +73,11 @@ describe('deriveSessionTitle (issue #1611: first-prompt title)', () => {
     expect(deriveSessionTitle([])).toBeNull();
   });
 
+  it('preserves whitespace-only text without trimming to null', () => {
+    const title = deriveSessionTitle([{ type: 'text', text: '   ' }]);
+    expect(title).toBe('   ');
+  });
+
   // Finding #5: live normalization must match durable SessionDiscovery behavior
   // (extractUserMessageText: join with '', NO trim, NO newline collapse).
   it('does NOT trim leading/trailing whitespace, matching durable behavior (finding 5)', () => {
@@ -146,6 +151,14 @@ describe('deriveTitleFromHistory (issue #1611: restored-session title hydration)
       humanContent('Second human has text'),
     ];
     expect(deriveTitleFromHistory(history)).toBe('Second human has text');
+  });
+
+  it('skips human entries with an empty blocks array', () => {
+    const history: IContent[] = [
+      { speaker: 'human', blocks: [] },
+      humanContent('Next human has text'),
+    ];
+    expect(deriveTitleFromHistory(history)).toBe('Next human has text');
   });
 
   it('returns null for empty history', () => {
@@ -306,6 +319,7 @@ describe('SessionTitleTracker.hydrateFromHistory (issue #1611 finding 2: restore
       { type: 'text', text: 'First live prompt' },
     ]);
     expect(result.wonTitle).toBe(false);
+    expect(result.title).toBeUndefined();
   });
 });
 

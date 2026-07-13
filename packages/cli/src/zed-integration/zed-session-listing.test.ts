@@ -209,6 +209,51 @@ describe('recorded ACP session listing', () => {
       // updatedAt should be the live (newer) value.
       expect(result.sessions[0].updatedAt).toBe('2099-01-01T00:00:00.000Z');
     });
+
+    it('preserves the durable updatedAt when it is newer than the live value', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'zed-session-list-'));
+      roots.push(root);
+      const chatsDir = join(root, 'chats');
+      await mkdir(chatsDir);
+      const service = new SessionRecordingService({
+        sessionId: 'durable-newer-session',
+        projectHash: 'project-hash',
+        chatsDir,
+        workspaceDirs: ['/workspace'],
+        cwd: '/workspace',
+        provider: 'openai',
+        model: 'test-model',
+      });
+      service.recordContent({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Some title' }],
+      });
+      await service.flush();
+      await service.dispose();
+
+      const liveSession = {
+        sessionId: 'durable-newer-session',
+        cwd: '/workspace',
+        // Live updatedAt is older than the durable file mtime.
+        updatedAt: '2000-01-01T00:00:00.000Z',
+        title: 'Live title',
+      };
+
+      const result = await listRecordedSessions(
+        chatsDir,
+        'project-hash',
+        '/fallback',
+        {},
+        [liveSession],
+      );
+
+      expect(result.sessions).toHaveLength(1);
+      // Durable mtime is newer than the live value, so it should be preserved.
+      expect(result.sessions[0].updatedAt).not.toBe('2000-01-01T00:00:00.000Z');
+      expect(new Date(result.sessions[0].updatedAt!).getTime()).toBeGreaterThan(
+        new Date('2000-01-01T00:00:00.000Z').getTime(),
+      );
+    });
   });
   describe('durable + live title normalization consistency (issue #1611 finding 5)', () => {
     // The durable path (SessionDiscovery.readFirstUserMessage →
@@ -220,6 +265,7 @@ describe('recorded ACP session listing', () => {
       { name: 'leading/trailing whitespace', text: '  padded title  ' },
       { name: 'tabs', text: 'col1\tcol2' },
       { name: 'multiple text blocks', text: 'part1part2' },
+      { name: 'truncation (>120 chars)', text: 'z'.repeat(200) },
     ];
 
     for (const { name, text } of cases) {

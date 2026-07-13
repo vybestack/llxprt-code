@@ -9,6 +9,7 @@ import { type Agent, type AgentEvent } from '@vybestack/llxprt-code-agents';
 import {
   EmojiFilter,
   type ContractPart,
+  type DebugLogger,
   type FilterConfiguration,
   getErrorStatus,
 } from '@vybestack/llxprt-code-core';
@@ -36,6 +37,7 @@ export interface SessionStreamDeps {
     pendingSend: AbortController,
   ) => boolean;
   readonly maxTurns: number;
+  readonly logger: Pick<DebugLogger, 'debug'>;
 }
 
 /**
@@ -73,8 +75,8 @@ export async function consumeAgentStream(
     if (deps.terminals !== null) {
       try {
         await deps.terminals.settleAll();
-      } catch {
-        // Swallow cleanup errors so they don't mask the original error
+      } catch (error) {
+        deps.logger.debug(() => `Terminal cleanup failed: ${String(error)}`);
       }
     }
   }
@@ -90,6 +92,12 @@ async function processStreamEvent(
   if (deps.isPromptStale(promptGeneration, pendingSend)) {
     return event.type === 'done' ? 'cancelled' : null;
   }
+  const stopReason = await handleZedAgentEvent(event, batcher, {
+    sendUpdate: deps.sendUpdate,
+    sendUsage: deps.sendUsage,
+    handleConfirmation: deps.handleConfirmation,
+    resolveToolKind: (toolName) => deps.agent.tools.get(toolName)?.kind,
+  });
   if (
     event.type === 'tool-call' &&
     deps.terminals !== null &&
@@ -98,16 +106,9 @@ async function processStreamEvent(
       deps.agent.tools.get(event.call.name)?.kind,
     )
   ) {
-    await deps.terminals.handleToolCall(event.call);
-  }
-  const stopReason = await handleZedAgentEvent(event, batcher, {
-    sendUpdate: deps.sendUpdate,
-    sendUsage: deps.sendUsage,
-    handleConfirmation: deps.handleConfirmation,
-    resolveToolKind: (toolName) => deps.agent.tools.get(toolName)?.kind,
-  });
-  if (event.type === 'tool-result' && deps.terminals !== null) {
-    await deps.terminals.releaseTerminal(event.result.id);
+    await deps.terminals.observeToolCall(event.call);
+  } else if (event.type === 'tool-result' && deps.terminals !== null) {
+    deps.terminals.completeToolCall(event.result.id);
   }
   return stopReason;
 }
@@ -158,7 +159,7 @@ export async function runPromptTurn(
   } catch (error) {
     thrownError = error;
   }
-  await safeFlush(batcher);
+  await safeFlush(batcher, deps.streamDeps.logger);
   batcher.dispose();
   if (thrownError !== null) {
     if (getErrorStatus(thrownError) === 429) {
@@ -181,11 +182,13 @@ export async function runPromptTurn(
   return { stopReason: 'end_turn' };
 }
 
-async function safeFlush(batcher: StreamBatcher): Promise<void> {
+async function safeFlush(
+  batcher: StreamBatcher,
+  logger: Pick<DebugLogger, 'debug'>,
+): Promise<void> {
   try {
     await batcher.flush();
-  } catch {
-    // Swallow flush errors so the original error from consumeAgentStream
-    // is not masked by a secondary flush failure.
+  } catch (error) {
+    logger.debug(() => `Stream flush failed: ${String(error)}`);
   }
 }
