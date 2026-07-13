@@ -181,9 +181,10 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
 
   afterEach(async () => {
     await Promise.all(lockHandles.map((handle) => handle.release()));
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {
-      // Retry once — the hook's async session refresh may still be
-      // writing a lock file, causing an ENOTEMPTY race.
+    await fs.rm(tempDir, { recursive: true, force: true }).catch((err) => {
+      // Retry once on ENOTEMPTY — the hook's async session refresh may
+      // still be writing a lock file, causing a directory-not-empty race.
+      if ((err as NodeJS.ErrnoException).code !== 'ENOTEMPTY') throw err;
       return new Promise<void>((resolve) => {
         setTimeout(() => {
           fs.rm(tempDir, { recursive: true, force: true }).finally(resolve);
