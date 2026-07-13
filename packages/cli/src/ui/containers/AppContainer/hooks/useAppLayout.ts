@@ -86,6 +86,7 @@ export interface AppLayoutParams {
   handleSlashCommand: AppInputResult['handleSlashCommand'];
   inputHistoryStore: AppInputResult['inputHistoryStore'];
   handleUserInputSubmit: AppInputResult['handleUserInputSubmit'];
+  handleSteer: AppInputResult['handleSteer'];
   interactiveRuntimeReady: AppInputResult['interactiveRuntimeReady'];
   vimModeEnabled: AppInputResult['vimModeEnabled'];
   terminalHeight: AppInputResult['terminalHeight'];
@@ -298,6 +299,7 @@ function useLayoutContext(p: AppLayoutParams) {
     terminalHeight,
     terminalWidth,
     handleUserInputSubmit,
+    handleSteer,
     interactiveRuntimeReady,
     vimModeEnabled,
     startupGuardsInitialized,
@@ -347,6 +349,7 @@ function useLayoutContext(p: AppLayoutParams) {
     mainAreaWidth,
     placeholder,
     activeHooks,
+    handleSteer,
   };
 }
 

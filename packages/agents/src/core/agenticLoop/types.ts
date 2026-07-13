@@ -110,6 +110,7 @@ export interface DisplayCallbacks {
 export interface AgenticLoopRuntime {
   getSessionId(): string;
   getModel(): string;
+  getImagePayloadBudgetBytes(): number;
   disposeScheduler(sessionId: string): void;
   getOrCreateScheduler(
     sessionId: string,

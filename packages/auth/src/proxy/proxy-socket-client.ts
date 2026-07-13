@@ -28,6 +28,28 @@ export type ProxyResponse = {
   retryAfter?: number;
 };
 
+/** Validates that a decoded frame has the shape of a ProxyResponse, guarding
+ *  against adversarial or malformed server responses with unexpected types
+ *  for `ok`, `code`, or `error`. */
+function isProxyResponseFrame(
+  frame: Record<string, unknown>,
+): frame is ProxyResponse {
+  if (typeof frame.ok !== 'boolean') return false;
+  if (frame.code !== undefined && typeof frame.code !== 'string') return false;
+  if (frame.error !== undefined && typeof frame.error !== 'string')
+    return false;
+  if (frame.retryAfter !== undefined && typeof frame.retryAfter !== 'number')
+    return false;
+  if (
+    frame.data !== undefined &&
+    (typeof frame.data !== 'object' ||
+      frame.data === null ||
+      Array.isArray(frame.data))
+  )
+    return false;
+  return true;
+}
+
 interface PendingRequest {
   resolve: (value: ProxyResponse) => void;
   reject: (reason: Error) => void;
@@ -36,6 +58,7 @@ interface PendingRequest {
 
 export class ProxySocketClient {
   private readonly socketPath: string;
+  private readonly capabilityToken: string | undefined;
   private socket: net.Socket | null = null;
   private decoder: FrameDecoder = new FrameDecoder({
     onPartialFrameTimeout: () => this.handlePartialFrameTimeout(),
@@ -45,12 +68,13 @@ export class ProxySocketClient {
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private connectingPromise: Promise<void> | null = null;
   private handshakeResolver: {
-    resolve: (value: Record<string, unknown>) => void;
+    resolve: (value: ProxyResponse) => void;
     reject: (reason: Error) => void;
   } | null = null;
 
-  constructor(socketPath: string) {
+  constructor(socketPath: string, capabilityToken?: string) {
     this.socketPath = socketPath;
+    this.capabilityToken = capabilityToken;
   }
 
   async ensureConnected(): Promise<void> {
@@ -134,8 +158,17 @@ export class ProxySocketClient {
   }
 
   private async connectAndHandshake(): Promise<void> {
-    await this.connect();
-    await this.handshake();
+    try {
+      await this.connect();
+      await this.handshake();
+    } catch (err) {
+      try {
+        this.destroy(err instanceof Error ? err.message : 'Handshake failed');
+      } catch {
+        // Swallow cleanup errors so the original failure is not masked
+      }
+      throw err;
+    }
   }
 
   private async connect(): Promise<void> {
@@ -154,39 +187,49 @@ export class ProxySocketClient {
   }
 
   private async handshake(): Promise<void> {
+    const payload: Record<string, unknown> = { minVersion: 1, maxVersion: 1 };
+    if (this.capabilityToken) {
+      payload.capabilityToken = this.capabilityToken;
+    }
     const request = {
       v: PROTOCOL_VERSION,
       op: 'handshake',
-      payload: { minVersion: 1, maxVersion: 1 },
+      payload,
     };
     this.socket!.write(encodeFrame(request));
 
-    const response = await new Promise<Record<string, unknown>>(
-      (resolve, reject) => {
-        this.handshakeResolver = { resolve, reject };
-        const timer = setTimeout(() => {
-          this.handshakeResolver = null;
-          reject(
-            new Error(`Handshake timed out after ${REQUEST_TIMEOUT_MS}ms`),
-          );
-        }, REQUEST_TIMEOUT_MS);
+    const response = await new Promise<ProxyResponse>((resolve, reject) => {
+      this.handshakeResolver = { resolve, reject };
+      const timer = setTimeout(() => {
+        this.handshakeResolver = null;
+        reject(new Error(`Handshake timed out after ${REQUEST_TIMEOUT_MS}ms`));
+      }, REQUEST_TIMEOUT_MS);
 
-        const originalResolve = this.handshakeResolver.resolve;
-        this.handshakeResolver.resolve = (value) => {
-          clearTimeout(timer);
-          originalResolve(value);
-        };
-        const originalReject = this.handshakeResolver.reject;
-        this.handshakeResolver.reject = (reason) => {
-          clearTimeout(timer);
-          originalReject(reason);
-        };
-      },
-    );
+      const originalResolve = this.handshakeResolver.resolve;
+      this.handshakeResolver.resolve = (value) => {
+        clearTimeout(timer);
+        originalResolve(value);
+      };
+      const originalReject = this.handshakeResolver.reject;
+      this.handshakeResolver.reject = (reason) => {
+        clearTimeout(timer);
+        originalReject(reason);
+      };
+    });
 
     if (response.ok !== true) {
+      if (response.code === 'UNAUTHORIZED') {
+        throw new Error(
+          'Credential proxy authentication failed: ' +
+            (response.error ?? 'invalid or missing capability token'),
+        );
+      }
+      const codeInfo = response.code ? ` [${response.code}]` : '';
       throw new Error(
-        'Version mismatch: ' + (response.error ?? 'unknown error'),
+        'Handshake failed' +
+          codeInfo +
+          ': ' +
+          (response.error ?? 'unknown error'),
       );
     }
     this.handshakeComplete = true;
@@ -197,17 +240,39 @@ export class ProxySocketClient {
     try {
       const frames = this.decoder.feed(chunk);
       for (const frame of frames) {
-        if (this.handshakeResolver) {
-          const resolver = this.handshakeResolver;
-          this.handshakeResolver = null;
-          resolver.resolve(frame);
-          continue;
-        }
-
-        this.resolvePendingRequest(frame);
+        if (this.processFrame(frame)) return;
       }
     } catch {
       this.destroy('Frame decode error');
+    }
+  }
+
+  /**
+   * Processes a single decoded frame. Returns true if the socket was
+   * destroyed and the caller should stop iterating.
+   */
+  private processFrame(frame: Record<string, unknown>): boolean {
+    if (this.handshakeResolver) {
+      this.resolveHandshake(frame);
+      return this.socket === null;
+    }
+    this.resolvePendingRequest(frame);
+    return this.socket === null;
+  }
+
+  private resolveHandshake(frame: Record<string, unknown>): void {
+    const resolver = this.handshakeResolver;
+    if (resolver === null) {
+      return;
+    }
+    this.handshakeResolver = null;
+    if (isProxyResponseFrame(frame)) {
+      resolver.resolve(frame);
+    } else {
+      // Reject first, then clean up. destroy() will not double-reject
+      // because handshakeResolver was already nulled above.
+      resolver.reject(new Error('Malformed handshake response from proxy'));
+      this.destroy('Malformed handshake response from proxy');
     }
   }
 
@@ -220,7 +285,13 @@ export class ProxySocketClient {
     if (pending) {
       clearTimeout(pending.timer);
       this.pendingRequests.delete(id);
-      pending.resolve(frame as unknown as ProxyResponse);
+      if (isProxyResponseFrame(frame)) {
+        pending.resolve(frame);
+      } else {
+        pending.reject(new Error(`Malformed response for request ${id}`));
+        this.destroy('Malformed response from proxy — connection reset');
+        return;
+      }
     }
   }
 

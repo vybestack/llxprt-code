@@ -19,6 +19,11 @@ import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/ty
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ToolCallBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+  enforceImageBudget,
+  buildOmissionFeedback,
+} from '../imagePayloadBudget.js';
 
 /**
  * Partitions a flat `ContentBlock[]` into tool-call, tool-response, and other
@@ -76,15 +81,31 @@ export function classifyCompletedTools(tools: CompletedToolCall[]): {
 /**
  * Builds the flat list of tool-response blocks to feed back to the model.
  * Filters out tool-call blocks (already present in the assistant turn).
+ *
+ * Enforces a cumulative image-payload budget to prevent HTTP 413 errors when
+ * parallel tool calls each return large image data. Images that would exceed
+ * the budget are omitted and replaced with a feedback message instructing the
+ * model to re-read them individually.
  */
 export function buildToolResponses(
   geminiTools: CompletedToolCall[],
+  budgetBytes: number = DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
 ): ContentBlock[] {
-  return geminiTools.flatMap((toolCall) =>
+  const blocks = geminiTools.flatMap((toolCall) =>
     toolCall.response.responseParts.filter(
       (block) => block.type !== 'tool_call',
     ),
   );
+
+  if (budgetBytes <= 0) {
+    return blocks;
+  }
+
+  const { blocks: budgeted, omitted } = enforceImageBudget(blocks, budgetBytes);
+  if (omitted.length > 0) {
+    budgeted.push({ type: 'text', text: buildOmissionFeedback(omitted) });
+  }
+  return budgeted;
 }
 
 /**

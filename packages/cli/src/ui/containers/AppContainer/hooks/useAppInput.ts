@@ -28,6 +28,7 @@ import { useSlashCommandActions } from './useSlashCommandActions.js';
 import { useExitHandling } from './useExitHandling.js';
 import { useInputHandling } from './useInputHandling.js';
 import { useShellFocusAutoReset } from './useShellFocusAutoReset.js';
+import { useSteer } from './useSteer.js';
 import * as fs from 'fs';
 import type { AppBootstrapResult } from './useAppBootstrap.js';
 import type { AppDialogsResult } from './useAppDialogs.js';
@@ -369,6 +370,7 @@ function useInputStreamWiring(
   } = p;
   const { buffer, inputHistoryStore, lastSubmittedPromptRef, geminiResult } =
     setup;
+  const { submitQuery } = geminiResult;
   const pendingHistoryItems = useMemo(
     () => [
       ...(core.pendingHistoryItems as HistoryItem[]),
@@ -386,7 +388,7 @@ function useInputStreamWiring(
   const { handleFinalSubmit } = useInputHandling({
     buffer,
     inputHistoryStore,
-    submitQuery: geminiResult.submitQuery,
+    submitQuery,
     pendingHistoryItems,
     lastSubmittedPromptRef,
     hadToolCallsRef,
@@ -400,6 +402,19 @@ function useInputStreamWiring(
     handleFinalSubmit,
     todos,
   });
+  const enqueueSteer = useCallback(
+    (message: string) => {
+      void submitQuery(message);
+    },
+    [submitQuery],
+  );
+  const handleSteer = useSteer(
+    p.agent,
+    geminiResult.streamingState,
+    geminiResult.sanitizeContent,
+    pendingHistoryItems,
+    enqueueSteer,
+  );
   const {
     activeShellPtyId: _ptyIdFromGemini,
     pendingHistoryItems: _pendingFromGemini,
@@ -409,6 +424,7 @@ function useInputStreamWiring(
   return {
     handleFinalSubmit,
     handleUserInputSubmit,
+    handleSteer,
     pendingHistoryItems,
     activeShellPtyId,
     queuedSubmissions,

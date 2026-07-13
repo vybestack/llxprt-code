@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 const {
   mockFetchAnthropicUsage,
   mockFetchCodexUsage,
+  mockFetchCodexRateLimitResetCredits,
   mockGetSettingsService,
   mockSettingsServiceRef,
 } = vi.hoisted(() => {
@@ -19,6 +20,7 @@ const {
   return {
     mockFetchAnthropicUsage: vi.fn(),
     mockFetchCodexUsage: vi.fn(),
+    mockFetchCodexRateLimitResetCredits: vi.fn(),
     mockGetSettingsService: vi.fn(() => settingsServiceRef.current),
     mockSettingsServiceRef: settingsServiceRef,
   };
@@ -32,6 +34,7 @@ vi.mock('@vybestack/llxprt-code-providers', async () => {
     ...actual,
     fetchAnthropicUsage: mockFetchAnthropicUsage,
     fetchCodexUsage: mockFetchCodexUsage,
+    fetchCodexRateLimitResetCredits: mockFetchCodexRateLimitResetCredits,
   };
 });
 
@@ -49,6 +52,7 @@ import {
   getAnthropicUsageInfo,
   getAllAnthropicUsageInfo,
   getAllCodexUsageInfo,
+  getAllCodexRateLimitResetCredits,
   getHigherPriorityAuth,
 } from '../provider-usage-info.js';
 import type { TokenStore, OAuthToken } from '@vybestack/llxprt-code-core';
@@ -431,7 +435,7 @@ describe('getAllCodexUsageInfo', () => {
     );
   });
 
-  it('passes undefined base-url when config returns empty string', async () => {
+  it('passes undefined base-url when config returns a blank/whitespace string', async () => {
     const token = {
       access_token: 'codex-token',
       token_type: 'Bearer',
@@ -490,6 +494,217 @@ describe('getAllCodexUsageInfo', () => {
     const result = await getAllCodexUsageInfo(store);
     expect(result.size).toBe(1);
     expect(result.get('bucket-b')).toStrictEqual({ quota: 999 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getAllCodexRateLimitResetCredits
+// ---------------------------------------------------------------------------
+
+describe('getAllCodexRateLimitResetCredits', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns an empty map when no tokens exist', async () => {
+    const store = makeTokenStore({
+      listBuckets: vi.fn().mockResolvedValue(['default']),
+      getToken: vi.fn().mockResolvedValue(null),
+    });
+
+    const result = await getAllCodexRateLimitResetCredits(store);
+    expect(result.size).toBe(0);
+  });
+
+  it('falls back to ["default"] when listBuckets returns empty', async () => {
+    const store = makeTokenStore({
+      listBuckets: vi.fn().mockResolvedValue([]),
+      getToken: vi.fn().mockResolvedValue(null),
+    });
+
+    await getAllCodexRateLimitResetCredits(store);
+
+    expect(store.getToken).toHaveBeenCalledWith('codex', 'default');
+  });
+
+  it('skips expired tokens', async () => {
+    const expiredToken = {
+      access_token: 'codex-token',
+      token_type: 'Bearer',
+      expiry: pastExpiry(),
+      account_id: 'acct-123',
+    };
+    const store = makeTokenStore({
+      listBuckets: vi.fn().mockResolvedValue(['default']),
+      getToken: vi.fn().mockResolvedValue(expiredToken),
+    });
+
+    const result = await getAllCodexRateLimitResetCredits(store);
+    expect(result.size).toBe(0);
+    expect(mockFetchCodexRateLimitResetCredits).not.toHaveBeenCalled();
+  });
+
+  it('skips tokens without account_id', async () => {
+    const tokenWithoutAccountId: OAuthToken = {
+      access_token: 'codex-token',
+      token_type: 'Bearer',
+      expiry: futureExpiry(),
+    };
+    const store = makeTokenStore({
+      listBuckets: vi.fn().mockResolvedValue(['default']),
+      getToken: vi.fn().mockResolvedValue(tokenWithoutAccountId),
+    });
+
+    const result = await getAllCodexRateLimitResetCredits(store);
+    expect(result.size).toBe(0);
+    expect(mockFetchCodexRateLimitResetCredits).not.toHaveBeenCalled();
+  });
+
+  it('omits the bucket when fetch resolves to null', async () => {
+    const token = {
+      access_token: 'codex-access-token',
+      token_type: 'Bearer',
+      expiry: futureExpiry(),
+      account_id: 'acct-abc123',
+    };
+    const store = makeTokenStore({
+      listBuckets: vi.fn().mockResolvedValue(['default']),
+      getToken: vi.fn().mockResolvedValue(token),
+    });
+    mockFetchCodexRateLimitResetCredits.mockResolvedValue(null);
+
+    const result = await getAllCodexRateLimitResetCredits(store);
+    expect(result.size).toBe(0);
+  });
+
+  it('calls fetchCodexRateLimitResetCredits with access_token and account_id', async () => {
+    const token = {
+      access_token: 'codex-access-token',
+      token_type: 'Bearer',
+      expiry: futureExpiry(),
+      account_id: 'acct-abc123',
+    };
+    const store = makeTokenStore({
+      listBuckets: vi.fn().mockResolvedValue(['default']),
+      getToken: vi.fn().mockResolvedValue(token),
+    });
+    mockFetchCodexRateLimitResetCredits.mockResolvedValue({
+      rate_limit_reset_credits: { available_count: 1, credits: [] },
+    });
+
+    const result = await getAllCodexRateLimitResetCredits(store);
+
+    expect(mockFetchCodexRateLimitResetCredits).toHaveBeenCalledWith(
+      'codex-access-token',
+      'acct-abc123',
+      undefined,
+    );
+    expect(result.size).toBe(1);
+    expect(result.get('default')).toStrictEqual({
+      rate_limit_reset_credits: { available_count: 1, credits: [] },
+    });
+  });
+
+  it('passes base-url from config when available', async () => {
+    const token = {
+      access_token: 'codex-access-token',
+      token_type: 'Bearer',
+      expiry: futureExpiry(),
+      account_id: 'acct-xyz',
+    };
+    const store = makeTokenStore({
+      listBuckets: vi.fn().mockResolvedValue(['default']),
+      getToken: vi.fn().mockResolvedValue(token),
+    });
+    mockFetchCodexRateLimitResetCredits.mockResolvedValue({
+      rate_limit_reset_credits: { available_count: 0, credits: [] },
+    });
+
+    const mockConfig = {
+      getEphemeralSetting: vi.fn().mockReturnValue('https://custom.codex.io'),
+    };
+
+    await getAllCodexRateLimitResetCredits(
+      store,
+      mockConfig as unknown as import('@vybestack/llxprt-code-core').Config,
+    );
+
+    expect(mockFetchCodexRateLimitResetCredits).toHaveBeenCalledWith(
+      'codex-access-token',
+      'acct-xyz',
+      'https://custom.codex.io',
+    );
+  });
+
+  it('passes undefined base-url when config returns a blank/whitespace string', async () => {
+    const token = {
+      access_token: 'codex-token',
+      token_type: 'Bearer',
+      expiry: futureExpiry(),
+      account_id: 'acct-empty',
+    };
+    const store = makeTokenStore({
+      listBuckets: vi.fn().mockResolvedValue(['default']),
+      getToken: vi.fn().mockResolvedValue(token),
+    });
+    mockFetchCodexRateLimitResetCredits.mockResolvedValue({
+      rate_limit_reset_credits: { available_count: 0, credits: [] },
+    });
+
+    const mockConfig = {
+      getEphemeralSetting: vi.fn().mockReturnValue('   '),
+    };
+
+    await getAllCodexRateLimitResetCredits(
+      store,
+      mockConfig as unknown as import('@vybestack/llxprt-code-core').Config,
+    );
+
+    expect(mockFetchCodexRateLimitResetCredits).toHaveBeenCalledWith(
+      'codex-token',
+      'acct-empty',
+      undefined,
+    );
+  });
+
+  it('continues processing remaining buckets when one fetch fails', async () => {
+    // NOTE: the mockRejectedValueOnce/mockResolvedValueOnce below are ordered
+    // assuming getAllCodexRateLimitResetCredits iterates buckets sequentially
+    // (for...of with await). If that ever changes to parallel iteration, key
+    // the mock by access_token instead of relying on call order.
+    const tokenA = {
+      access_token: 'codex-token-a',
+      token_type: 'Bearer',
+      expiry: futureExpiry(),
+      account_id: 'acct-a',
+    };
+    const tokenB = {
+      access_token: 'codex-token-b',
+      token_type: 'Bearer',
+      expiry: futureExpiry(),
+      account_id: 'acct-b',
+    };
+    const store = makeTokenStore({
+      listBuckets: vi.fn().mockResolvedValue(['bucket-a', 'bucket-b']),
+      getToken: vi
+        .fn()
+        .mockImplementation((_provider: string, bucket: string) => {
+          if (bucket === 'bucket-a') return Promise.resolve(tokenA);
+          if (bucket === 'bucket-b') return Promise.resolve(tokenB);
+          return Promise.resolve(null);
+        }),
+    });
+    mockFetchCodexRateLimitResetCredits
+      .mockRejectedValueOnce(new Error('fetch failed'))
+      .mockResolvedValueOnce({
+        rate_limit_reset_credits: { available_count: 1, credits: [] },
+      });
+
+    const result = await getAllCodexRateLimitResetCredits(store);
+    expect(result.size).toBe(1);
+    expect(result.get('bucket-b')).toStrictEqual({
+      rate_limit_reset_credits: { available_count: 1, credits: [] },
+    });
   });
 });
 

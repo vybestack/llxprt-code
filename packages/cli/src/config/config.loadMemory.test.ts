@@ -404,6 +404,7 @@ describe('loadCliConfig memory discovery', () => {
       nobrowser: undefined,
       listSessions: undefined,
       deleteSession: undefined,
+      quiet: undefined,
     };
 
     const { ExtensionEnablementManager, ExtensionStorage } = await import(

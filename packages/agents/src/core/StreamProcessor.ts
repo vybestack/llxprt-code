@@ -47,6 +47,7 @@ import {
   AgentExecutionBlockedError,
 } from './chatSession.js';
 import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
+import { recordActualTokenUsage } from './tokenUsageActualLogger.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import {
   buildRequestContentsResult,
@@ -69,6 +70,7 @@ import { enforceBeforeModelHookDecision } from './beforeModelHookDecision.js';
 import {
   trackPromptTokens,
   isMissingFinishReason,
+  consolidateTextBlocks,
   prepareHistoryUserInput,
   clearMatchedEagerToolResponseCallIds,
 } from './streamResponseHelpers.js';
@@ -639,7 +641,7 @@ export class StreamProcessor {
       yield yieldedChunk;
     }
 
-    this._logTelemetry(telemetryContext, lastIContent);
+    await this._logTelemetry(telemetryContext, lastIContent);
   }
 
   private _trackPromptTokens(iContent: IContent): void {
@@ -750,10 +752,10 @@ export class StreamProcessor {
     };
   }
 
-  private _logTelemetry(
+  private async _logTelemetry(
     telemetryContext: { promptId: string; startTime: number } | undefined,
     lastIContent: IContent | undefined,
-  ): void {
+  ): Promise<void> {
     if (telemetryContext && lastIContent) {
       const durationMs = Date.now() - telemetryContext.startTime;
       const usage = lastIContent.metadata?.usage;
@@ -765,6 +767,20 @@ export class StreamProcessor {
         durationMs,
         usage ? { ...usage } : undefined,
         JSON.stringify(lastIContent),
+      );
+
+      await recordActualTokenUsage(
+        this.compressionHandler.tokenUsageLogger,
+        telemetryContext.promptId,
+        usage
+          ? {
+              promptTokenCount: usage.promptTokens,
+              candidatesTokenCount: usage.completionTokens,
+              totalTokenCount: usage.totalTokens,
+              cache_read_input_tokens: usage.cache_read_input_tokens,
+              cache_creation_input_tokens: usage.cache_creation_input_tokens,
+            }
+          : undefined,
       );
     }
   }
@@ -811,6 +827,10 @@ export class StreamProcessor {
     userInput: IContent | IContent[],
     includeThoughts: boolean,
   ): Promise<void> {
+    acc.content = {
+      ...acc.content,
+      blocks: consolidateTextBlocks(acc.content.blocks),
+    };
     const finishReason = acc.finishReason;
     const responseText = extractResponseTextFromBlocks(acc.content.blocks);
     const outcome = analyzeBlocksOutcome(acc.content.blocks, includeThoughts);
@@ -853,6 +873,12 @@ export class StreamProcessor {
       );
     }
 
+    const historyOptions = {
+      ...preparedHistoryUserInput.userInputFlags,
+      responseId: acc.responseId ?? acc.content.metadata?.id ?? null,
+      responsesStored: acc.content.metadata?.responsesStored ?? null,
+    };
+
     try {
       await recordHistoryWithUsage(
         this.logger,
@@ -862,7 +888,7 @@ export class StreamProcessor {
         this.runtimeContext,
         preparedHistoryUserInput.historyUserInput,
         acc,
-        preparedHistoryUserInput.userInputFlags,
+        historyOptions,
       );
     } finally {
       clearMatchedEagerToolResponseCallIds(

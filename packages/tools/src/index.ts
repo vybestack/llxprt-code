@@ -423,6 +423,15 @@ export { ASTQueryExtractor } from './tools/ast-edit/ast-query-extractor.js';
 export { RepositoryContextProvider } from './tools/ast-edit/repository-context-provider.js';
 export { validateASTSyntax } from './tools/ast-edit/edit-calculator.js';
 export {
+  summarizeAstValidation,
+  computeLineDelta,
+  findEditStartLine,
+  extractErrorLineNumber,
+  formatValidationLineLabel,
+  type AstValidationResult,
+  type AstValidationSummary,
+} from './tools/ast-edit/validation-categorizer.js';
+export {
   detectLanguage,
   extractImports,
 } from './tools/ast-edit/language-analysis.js';

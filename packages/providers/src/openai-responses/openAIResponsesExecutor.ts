@@ -57,6 +57,10 @@ import type {
   OpenAIResponsesRequest,
   ResponsesInputItem,
 } from './OpenAIResponsesTypes.js';
+import {
+  applyStatefulConversation,
+  computeStatefulConversation,
+} from './openAIResponsesStateful.js';
 
 /**
  * Provider-specific capabilities that the executor needs to do its work.
@@ -96,6 +100,7 @@ interface RequestContext {
   baseURL: string;
   isCodex: boolean;
   includeThinkingInResponse: boolean;
+  responsesStored: boolean;
   request: OpenAIResponsesRequest;
 }
 
@@ -158,8 +163,25 @@ async function buildRequestContext(
     () => options.invocation.userMemory,
   );
   const systemPrompt = await buildSystemPrompt(options, userMemory, deps);
-  const input = buildInput(options, patchedContent, invocationEphemerals, deps);
   const requestOverrides = buildRequestOverrides(options, deps);
+  const explicitUserStore =
+    typeof requestOverrides['store'] === 'boolean'
+      ? requestOverrides['store']
+      : undefined;
+  const stateful = computeStatefulConversation(
+    options,
+    patchedContent,
+    invocationEphemerals,
+    explicitUserStore,
+    deps.logger,
+  );
+  const input = buildInput(
+    options,
+    stateful.content,
+    invocationEphemerals,
+    deps,
+    stateful.parentId !== undefined,
+  );
   const requestInput = buildRequestInput(
     input,
     isCodex,
@@ -178,12 +200,14 @@ async function buildRequestContext(
   applyTextVerbosity(request, options, invocationEphemerals, deps);
   applyCodexRequestSettings(request, isCodex, deps);
   applyPromptCaching(request, options, invocationEphemerals, isCodex, deps);
+  applyStatefulConversation(request, stateful, explicitUserStore, deps.logger);
   return {
     apiKey,
     baseURL,
     isCodex,
     request,
     includeThinkingInResponse: reasoning.includeThinkingInResponse,
+    responsesStored: request.store === true,
   };
 }
 
@@ -276,6 +300,7 @@ function buildInput(
   patchedContent: IContent[],
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
+  serverSideParentActive: boolean = false,
 ): ResponsesInputItem[] {
   const includeReasoningInContextSetting =
     (invocationEphemerals['reasoning.includeInContext'] as
@@ -298,6 +323,7 @@ function buildInput(
     includeReasoningInContext: includeReasoningInContextSetting !== false,
     outputLimiterConfig,
     debug: (messageFactory) => deps.logger.debug(messageFactory),
+    serverSideParentActive,
   });
 }
 
@@ -668,6 +694,7 @@ interface StreamResponsesParams {
   isCodex: boolean;
   request: OpenAIResponsesRequest;
   includeThinkingInResponse: boolean;
+  responsesStored: boolean;
   abortSignal?: AbortSignal;
   maxStreamingAttempts: number;
   streamRetryInitialDelayMs: number;
@@ -711,6 +738,7 @@ interface FetchStreamParams {
   bodyBlob: Blob;
   abortSignal?: AbortSignal;
   includeThinkingInResponse: boolean;
+  responsesStored: boolean;
   maxStreamingAttempts: number;
   streamRetryInitialDelayMs: number;
 }
@@ -764,6 +792,7 @@ async function* parseSuccessfulResponse(
     bodyBlob: Blob;
     abortSignal?: AbortSignal;
     includeThinkingInResponse: boolean;
+    responsesStored: boolean;
   },
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
@@ -775,6 +804,7 @@ async function* parseSuccessfulResponse(
 
   const streamOptions: ParseResponsesStreamOptions = {
     includeThinkingInResponse: params.includeThinkingInResponse,
+    responsesStored: params.responsesStored,
   };
   for await (const message of parseResponsesStream(
     response.body,

@@ -226,6 +226,7 @@ function createBaseAgent(
       return { text: '', toolCalls: [], finishReason: 'stop' };
     },
     stream: streamFn,
+    injectSteer: () => {},
     getProvider: () => 'test',
     async setProvider() {},
     getProviderStatus: () => ({

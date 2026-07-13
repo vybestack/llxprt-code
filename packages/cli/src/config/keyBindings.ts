@@ -65,6 +65,7 @@ export enum Command {
 
   // Text Input
   SUBMIT = 'submit',
+  STEER = 'steer', // LLXPRT-SPECIFIC: mid-turn steering (Ctrl+Enter while streaming)
   NEWLINE = 'newline',
   OPEN_EXTERNAL_EDITOR = 'openExternalEditor',
   PASTE_CLIPBOARD = 'pasteClipboard',
@@ -224,7 +225,7 @@ export const defaultKeyBindings: KeyBindingConfig = {
   [Command.COLLAPSE_SUGGESTION]: [{ key: 'left' }],
 
   // Text Input
-  // Must also exclude shift to allow shift+enter for newline
+  // Must also exclude shift to allow shift+enter for multi-line input
   [Command.SUBMIT]: [
     {
       key: 'return',
@@ -233,8 +234,11 @@ export const defaultKeyBindings: KeyBindingConfig = {
       shift: false,
     },
   ],
-  // Split into multiple data-driven bindings
-  // Now also includes shift+enter for multi-line input
+  // Mid-turn steering: Ctrl+Enter while the agent is streaming injects the
+  // typed text at the next tool-call boundary. When not streaming, Ctrl+Enter
+  // falls through to NEWLINE (both match the same key; the handler checks
+  // STEER first and only consumes it when streaming).
+  [Command.STEER]: [{ key: 'return', ctrl: true }],
   [Command.NEWLINE]: [
     { key: 'return', ctrl: true },
     { key: 'return', command: true },
@@ -370,6 +374,7 @@ export const commandCategories: readonly CommandCategory[] = [
     title: 'Text Input',
     commands: [
       Command.SUBMIT,
+      Command.STEER,
       Command.NEWLINE,
       Command.OPEN_EXTERNAL_EDITOR,
       Command.PASTE_CLIPBOARD,
@@ -469,6 +474,8 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
 
   // Text Input
   [Command.SUBMIT]: 'Submit the current prompt.',
+  [Command.STEER]:
+    'Steer the active agent mid-turn by injecting input at the next tool-call boundary (only during streaming).',
   [Command.NEWLINE]: 'Insert a newline without submitting.',
   [Command.OPEN_EXTERNAL_EDITOR]:
     'Open the current prompt in an external editor.',

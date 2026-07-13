@@ -28,6 +28,7 @@ type StreamConsumerContext = {
   config: Config;
   jsonOutput: boolean;
   streamJsonOutput: boolean;
+  quiet: boolean;
   streamFormatter: StreamJsonFormatter | null;
   emojiFilter: EmojiFilter | undefined;
   createProfileNameWriter: () => () => void;
@@ -56,24 +57,35 @@ function emitStreamError(
   });
 }
 
+type ThoughtBufferEntry = {
+  streamId?: string;
+  text: string;
+};
+
+type ThoughtBuffer = ThoughtBufferEntry[];
+
 function flushThoughtBuffer(
-  thoughtBuffer: string,
+  thoughtBuffer: ThoughtBuffer,
   includeThinking: boolean,
-): string {
-  if (!includeThinking || !thoughtBuffer.trim()) {
-    return '';
+): ThoughtBuffer {
+  const thoughtText = thoughtBuffer
+    .map((entry) => entry.text.trim())
+    .filter(Boolean)
+    .join(' ');
+  if (!includeThinking || !thoughtText) {
+    return [];
   }
-  process.stdout.write(`<think>${thoughtBuffer.trim()}</think>\n`);
-  return '';
+  process.stdout.write(`<think>${thoughtText}</think>\n`);
+  return [];
 }
 
 function flushEmojiBuffer(
   context: StreamConsumerContext,
-  jsonResponseText: string,
+  responseText: string,
 ): string {
   const remainingBuffered = context.emojiFilter?.flushBuffer();
   if (!remainingBuffered) {
-    return jsonResponseText;
+    return responseText;
   }
   if (context.streamFormatter) {
     context.streamFormatter.emitEvent({
@@ -83,22 +95,26 @@ function flushEmojiBuffer(
       content: remainingBuffered,
       delta: true,
     });
-    return jsonResponseText;
+    return responseText;
   }
   if (context.jsonOutput) {
-    return jsonResponseText + remainingBuffered;
+    return responseText + remainingBuffered;
   }
   process.stdout.write(remainingBuffered);
-  return jsonResponseText;
+  return responseText;
 }
 
 function handleThinking(
-  thought: { subject?: string; description?: string },
+  thought: {
+    subject?: string;
+    description?: string;
+    streamId?: string;
+  },
   context: StreamConsumerContext,
   writeProfileName: () => void,
-  thoughtBuffer: string,
+  thoughtBuffer: ThoughtBuffer,
   includeThinking: boolean,
-): string {
+): ThoughtBuffer {
   if (!includeThinking) {
     return thoughtBuffer;
   }
@@ -116,14 +132,31 @@ function handleThinking(
       thoughtText = filterResult.filtered;
     }
   }
-  return thoughtBuffer ? `${thoughtBuffer} ${thoughtText}` : thoughtText;
+  if (!thoughtText.trim()) {
+    return thoughtBuffer;
+  }
+  if (thought.streamId === undefined) {
+    return [...thoughtBuffer, { text: thoughtText }];
+  }
+  const existingIndex = thoughtBuffer.findIndex(
+    (entry) => entry.streamId === thought.streamId,
+  );
+  if (existingIndex < 0) {
+    return [
+      ...thoughtBuffer,
+      { streamId: thought.streamId, text: thoughtText },
+    ];
+  }
+  return thoughtBuffer.map((entry, index) =>
+    index === existingIndex ? { ...entry, text: thoughtText } : entry,
+  );
 }
 
 function handleText(
   text: string,
   context: StreamConsumerContext,
   writeProfileName: () => void,
-  jsonResponseText: string,
+  responseText: string,
 ): string {
   writeProfileName();
   let outputValue = text;
@@ -135,7 +168,7 @@ function handleText(
           '[Error: Response blocked due to emoji detection]\n',
         );
       }
-      return jsonResponseText;
+      return responseText;
     }
     outputValue =
       typeof filterResult.filtered === 'string' ? filterResult.filtered : '';
@@ -153,13 +186,17 @@ function handleText(
         delta: true,
       });
     }
-    return jsonResponseText;
+    return responseText;
   }
   if (context.jsonOutput) {
-    return jsonResponseText + outputValue;
+    return responseText + outputValue;
   }
   process.stdout.write(outputValue);
-  return jsonResponseText;
+  return responseText;
+}
+
+function handleQuietText(text: string, state: StreamState): void {
+  state.quietTextBuffer += text;
 }
 
 function emitToolUse(
@@ -236,12 +273,20 @@ function displayToolResult(
 
 function emitFinalResult(
   context: StreamConsumerContext,
-  jsonResponseText: string,
+  responseText: string,
   startTime: number,
   metrics: SessionMetrics,
   finishReason?: 'refusal',
 ): void {
   if (context.streamFormatter) {
+    if (context.quiet) {
+      context.streamFormatter.emitEvent({
+        type: JsonStreamEventType.MESSAGE,
+        timestamp: new Date().toISOString(),
+        role: 'assistant',
+        content: responseText,
+      });
+    }
     context.streamFormatter.emitEvent({
       type: JsonStreamEventType.RESULT,
       timestamp: new Date().toISOString(),
@@ -254,7 +299,7 @@ function emitFinalResult(
   } else if (context.jsonOutput) {
     const payload: JsonOutput = {
       session_id: context.config.getSessionId(),
-      response: jsonResponseText.trimEnd(),
+      response: responseText.trimEnd(),
       stats: metrics,
     };
     if (finishReason !== undefined) {
@@ -262,7 +307,7 @@ function emitFinalResult(
     }
     process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
   } else {
-    process.stdout.write('\n');
+    process.stdout.write(`${responseText}\n`);
   }
 }
 
@@ -283,7 +328,7 @@ function reconstructError(structured: StructuredError): Error {
 function handleDone(
   event: Extract<AgentEvent, { type: 'done' }>,
   context: StreamConsumerContext,
-  jsonResponseText: string,
+  responseText: string,
   startTime: number,
   getMetrics: () => SessionMetrics,
 ): void {
@@ -291,7 +336,7 @@ function handleDone(
     case 'stop':
     case 'loop-detected':
     case 'context-overflow':
-      emitFinalResult(context, jsonResponseText, startTime, getMetrics());
+      emitFinalResult(context, responseText, startTime, getMetrics());
       return;
     case 'refusal': {
       // @issue:2329 — surface the safety-classifier refusal as a user-visible
@@ -304,17 +349,25 @@ function handleDone(
       // (no streamFormatter and no jsonOutput). In stream-json mode the
       // structured warning event carries the signal; in plain-JSON mode the
       // finish_reason field carries it.
-      if (!context.jsonOutput && context.streamFormatter === null) {
+      //
+      // In quiet mode all warning emissions are suppressed (issue #728).
+      if (
+        !context.quiet &&
+        !context.jsonOutput &&
+        context.streamFormatter === null
+      ) {
         process.stderr.write(`WARNING: ${REFUSAL_NOTICE_MESSAGE}\n`);
       }
-      emitStreamError(
-        context.streamFormatter,
-        'warning',
-        REFUSAL_NOTICE_MESSAGE,
-      );
+      if (!context.quiet) {
+        emitStreamError(
+          context.streamFormatter,
+          'warning',
+          REFUSAL_NOTICE_MESSAGE,
+        );
+      }
       emitFinalResult(
         context,
-        jsonResponseText,
+        responseText,
         startTime,
         getMetrics(),
         'refusal',
@@ -322,15 +375,19 @@ function handleDone(
       return;
     }
     case 'hook-stopped': {
-      const stop = event.stop;
-      const stopMessage = `Agent execution stopped: ${
-        stop?.systemMessage?.trim() ?? stop?.reason ?? ''
-      }`;
-      process.stderr.write(`${stopMessage}\n`);
+      if (!context.quiet) {
+        const stop = event.stop;
+        const stopMessage = `Agent execution stopped: ${
+          stop?.systemMessage?.trim() ?? stop?.reason ?? ''
+        }`;
+        process.stderr.write(`${stopMessage}\n`);
+      }
       return;
     }
     case 'aborted':
-      debugLogger.error('Operation cancelled.');
+      if (!context.quiet) {
+        debugLogger.error('Operation cancelled.');
+      }
       return;
     case 'max-turns':
       throw new FatalTurnLimitedError(MAX_TURNS_MESSAGE);
@@ -347,8 +404,9 @@ function handleDone(
 }
 
 function finalizeStream(
-  thoughtBuffer: string,
-  jsonResponseText: string,
+  thoughtBuffer: ThoughtBuffer,
+  responseText: string,
+  quietTextBuffer: string,
   pendingDone: Extract<AgentEvent, { type: 'done' }> | null,
   context: StreamConsumerContext,
   includeThinking: boolean,
@@ -356,7 +414,9 @@ function finalizeStream(
   getMetrics: () => SessionMetrics,
 ): void {
   flushThoughtBuffer(thoughtBuffer, includeThinking);
-  const finalText = flushEmojiBuffer(context, jsonResponseText);
+  const finalText = context.quiet
+    ? filterQuietText(quietTextBuffer, context)
+    : flushEmojiBuffer(context, responseText);
   if (pendingDone !== null) {
     handleDone(pendingDone, context, finalText, startTime, getMetrics);
   } else {
@@ -364,10 +424,54 @@ function finalizeStream(
   }
 }
 
+/**
+ * Applies the emoji filter to the fully accumulated quiet-mode text buffer.
+ * Uses filterText (not filterStreamChunk) because the buffer is complete text,
+ * not a partial streaming chunk — filterText handles full-string matching which
+ * is correct for finalized content.
+ */
+function filterQuietText(text: string, context: StreamConsumerContext): string {
+  if (!context.emojiFilter) {
+    return text;
+  }
+  const result = context.emojiFilter.filterText(text);
+  if (result.blocked) {
+    return '';
+  }
+  return typeof result.filtered === 'string' ? result.filtered : '';
+}
+
 interface StreamState {
-  thoughtBuffer: string;
-  jsonResponseText: string;
+  thoughtBuffer: ThoughtBuffer;
+  responseText: string;
+  quietTextBuffer: string;
   pendingDone: Extract<AgentEvent, { type: 'done' }> | null;
+}
+
+function handleQuietEvent(event: AgentEvent, state: StreamState): boolean {
+  switch (event.type) {
+    case 'text':
+      // Buffer text instead of writing immediately; only the final turn's
+      // text (after the last tool call) is emitted at stream completion.
+      handleQuietText(event.text, state);
+      return true;
+    case 'tool-call':
+      // Discard intermediate talk before tool calls so only the final
+      // response remains in the buffer (issue #728).
+      state.quietTextBuffer = '';
+      return true;
+    case 'tool-result':
+      // Suppress all tool result display in quiet mode.
+      return true;
+    case 'loop-detected':
+      // Suppress non-essential stream warnings/errors in quiet mode.
+      return true;
+    case 'hook-blocked':
+      // Suppress hook-blocked stderr messages in quiet mode.
+      return true;
+    default:
+      return false;
+  }
 }
 
 function dispatchAgentEvent(
@@ -377,6 +481,9 @@ function dispatchAgentEvent(
   writeProfileName: () => void,
   includeThinking: boolean,
 ): void {
+  if (context.quiet && handleQuietEvent(event, state)) {
+    return;
+  }
   switch (event.type) {
     case 'thinking':
       state.thoughtBuffer = handleThinking(
@@ -392,11 +499,11 @@ function dispatchAgentEvent(
         state.thoughtBuffer,
         includeThinking,
       );
-      state.jsonResponseText = handleText(
+      state.responseText = handleText(
         event.text,
         context,
         writeProfileName,
-        state.jsonResponseText,
+        state.responseText,
       );
       return;
     case 'tool-call':
@@ -430,11 +537,13 @@ function dispatchAgentEvent(
       return;
     }
     case 'idle-timeout':
-      emitStreamError(
-        context.streamFormatter,
-        'error',
-        'Stream idle timeout: no response received within the allowed time.',
-      );
+      if (!context.quiet) {
+        emitStreamError(
+          context.streamFormatter,
+          'error',
+          'Stream idle timeout: no response received within the allowed time.',
+        );
+      }
       throw reconstructError(event.error);
     case 'error':
       throw reconstructError(event.error);
@@ -463,14 +572,18 @@ export async function processAgentStream(
   startTime: number,
   getMetrics: () => SessionMetrics,
 ): Promise<void> {
-  const writeProfileName = context.createProfileNameWriter();
+  const writeProfileName = context.quiet
+    ? (): void => {}
+    : context.createProfileNameWriter();
   const includeThinking =
+    !context.quiet &&
     !context.jsonOutput &&
     !context.streamJsonOutput &&
     context.config.getEphemeralSetting('reasoning.includeInResponse') !== false;
   const state: StreamState = {
-    thoughtBuffer: '',
-    jsonResponseText: '',
+    thoughtBuffer: [],
+    responseText: '',
+    quietTextBuffer: '',
     pendingDone: null,
   };
   for await (const event of events) {
@@ -484,7 +597,8 @@ export async function processAgentStream(
   }
   finalizeStream(
     state.thoughtBuffer,
-    state.jsonResponseText,
+    state.responseText,
+    state.quietTextBuffer,
     state.pendingDone,
     context,
     includeThinking,

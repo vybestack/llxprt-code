@@ -34,6 +34,7 @@ import {
   buildGovernedToolWhitelist,
   filterExcludedFromWhitelist,
   normalizeTaskParams,
+  validateOutputParams,
   type TaskToolInvocationParams,
 } from './taskToolGovernance.js';
 import {
@@ -79,6 +80,8 @@ export interface TaskToolParams {
   toolWhitelist?: string[];
   output_spec?: Record<string, string>;
   outputSpec?: Record<string, string>;
+  expected_outputs?: Record<string, string>;
+  expectedOutputs?: Record<string, string>;
   context?: Record<string, unknown>;
   context_vars?: Record<string, unknown>;
   contextVars?: Record<string, unknown>;
@@ -717,6 +720,78 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
 }
 
+// Model-facing schema: only snake_case properties are exposed to the LLM.
+// camelCase aliases (subagentName, expectedOutputs, etc.) exist in
+// TaskToolParams for programmatic callers but are intentionally excluded
+// from the schema — additionalProperties: false enforces this.
+const taskToolSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['subagent_name', 'goal_prompt'],
+  properties: {
+    subagent_name: {
+      type: 'string',
+      description:
+        'Name of the registered subagent to launch (as defined in ~/.llxprt/subagents).',
+    },
+    goal_prompt: {
+      type: 'string',
+      description:
+        'Primary goal or prompt to pass to the subagent. Included as the first behavioural prompt.',
+    },
+    behaviour_prompts: {
+      type: 'array',
+      description:
+        'Additional behavioural prompts to append after the goal prompt.',
+      items: { type: 'string' },
+    },
+    tool_whitelist: {
+      type: 'array',
+      items: { type: 'string' },
+      description:
+        'Restrict the subagent to this explicit list of tools. Tool names must match the registry.',
+    },
+    expected_outputs: {
+      type: 'object',
+      description:
+        'Map each output variable name to a plain string description. Values must be strings, not JSON Schema objects.',
+      additionalProperties: { type: 'string' },
+    },
+    output_spec: {
+      type: 'object',
+      description:
+        'Deprecated alias for expected_outputs. Map each output variable name to a plain string description. Values must be strings, not JSON Schema objects.',
+      additionalProperties: { type: 'string' },
+    },
+    timeout_seconds: {
+      type: 'number',
+      description:
+        'Optional timeout in seconds for the task execution (-1 for unlimited).',
+    },
+    grace_period_seconds: {
+      type: 'number',
+      description:
+        'Optional grace period in seconds for recovery after a termination condition (TIMEOUT, MAX_TURNS, or protocol violation). Falls back to 60s if not specified or invalid.',
+    },
+    max_turns: {
+      type: 'number',
+      description:
+        'Optional maximum number of turns for the subagent. Overrides the subagent profile and parent agent defaults when set.',
+    },
+    async: {
+      type: 'boolean',
+      description:
+        'If true, launch subagent in background and return immediately. Default: false.',
+    },
+    context: {
+      type: 'object',
+      description:
+        'Optional key/value pairs exposed to the subagent via the execution context.',
+      additionalProperties: true,
+    },
+  },
+} as const;
+
 /**
  * Task tool that launches subagents via SubagentOrchestrator.
  *
@@ -735,67 +810,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       'Task',
       `Launches a named subagent, streams its progress, and returns the emitted variables upon completion. The subagent runs in an isolated runtime and is disposed after it finishes.`,
       Kind.Think,
-      {
-        type: 'object',
-        additionalProperties: false,
-        required: ['subagent_name', 'goal_prompt'],
-        properties: {
-          subagent_name: {
-            type: 'string',
-            description:
-              'Name of the registered subagent to launch (as defined in ~/.llxprt/subagents).',
-          },
-          goal_prompt: {
-            type: 'string',
-            description:
-              'Primary goal or prompt to pass to the subagent. Included as the first behavioural prompt.',
-          },
-          behaviour_prompts: {
-            type: 'array',
-            description:
-              'Additional behavioural prompts to append after the goal prompt.',
-            items: { type: 'string' },
-          },
-          tool_whitelist: {
-            type: 'array',
-            items: { type: 'string' },
-            description:
-              'Restrict the subagent to this explicit list of tools. Tool names must match the registry.',
-          },
-          output_spec: {
-            type: 'object',
-            description:
-              'Expected output variables the subagent must emit before completing.',
-            additionalProperties: { type: 'string' },
-          },
-          timeout_seconds: {
-            type: 'number',
-            description:
-              'Optional timeout in seconds for the task execution (-1 for unlimited).',
-          },
-          grace_period_seconds: {
-            type: 'number',
-            description:
-              'Optional grace period in seconds for recovery after a termination condition (TIMEOUT, MAX_TURNS, or protocol violation). Falls back to 60s if not specified or invalid.',
-          },
-          max_turns: {
-            type: 'number',
-            description:
-              'Optional maximum number of turns for the subagent. Overrides the subagent profile and parent agent defaults when set.',
-          },
-          async: {
-            type: 'boolean',
-            description:
-              'If true, launch subagent in background and return immediately. Default: false.',
-          },
-          context: {
-            type: 'object',
-            description:
-              'Optional key/value pairs exposed to the subagent via the execution context.',
-            additionalProperties: true,
-          },
-        },
-      },
+      taskToolSchema,
       true,
       true,
       dependencies.messageBus,
@@ -826,6 +841,11 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       ) {
         return 'Task tool max_turns must be a positive integer or -1 for unlimited.';
       }
+    }
+
+    const outputError = validateOutputParams(params);
+    if (outputError !== null) {
+      return outputError;
     }
 
     return null;

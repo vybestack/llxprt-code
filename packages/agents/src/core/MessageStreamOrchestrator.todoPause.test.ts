@@ -68,6 +68,7 @@ import {
   MessageStreamOrchestrator,
   type MessageStreamDeps,
 } from './MessageStreamOrchestrator.js';
+import { TodoContinuationService } from './TodoContinuationService.js';
 
 function makePauseRequest(): ToolCallRequestInfo {
   return {
@@ -325,6 +326,56 @@ describe('MessageStreamOrchestrator — todo_pause loop break (issue #2287)', ()
       (_model: string, userContextLimit?: number) =>
         userContextLimit ?? 1_000_000,
     );
+  });
+
+  it('streams ordinary content before the turn source completes', async () => {
+    let releaseSecondChunk = (): void => {};
+    const secondChunkReady = new Promise<void>((resolve) => {
+      releaseSecondChunk = resolve;
+    });
+    const turnStream = (async function* () {
+      yield { type: AgentEventType.Content, value: 'Hello' };
+      await secondChunkReady;
+      yield { type: AgentEventType.Content, value: ' world' };
+      yield {
+        type: AgentEventType.Finished,
+        value: { outcome: { hadVisibleOutput: true } },
+      };
+    })();
+    const { orchestrator, deps } = buildOrchestrator({
+      turnStream,
+      activeTodos: [],
+    });
+    deps.todoContinuationService.shouldDeferStreamEvent =
+      TodoContinuationService.prototype.shouldDeferStreamEvent.bind(
+        deps.todoContinuationService,
+      );
+
+    const iterator = orchestrator.execute(
+      [{ text: 'test' }] as PartListUnion,
+      new AbortController().signal,
+      'prompt-1',
+      1,
+      false,
+    );
+
+    const modelInfoResult = await iterator.next();
+    expect(modelInfoResult.value.type).toBe(AgentEventType.ModelInfo);
+    await expect(iterator.next()).resolves.toMatchObject({
+      done: false,
+      value: { type: AgentEventType.Content, value: 'Hello' },
+    });
+
+    releaseSecondChunk();
+    const remaining: ServerAgentStreamEvent[] = [];
+    for await (const event of iterator) remaining.push(event);
+    expect(remaining).toStrictEqual([
+      { type: AgentEventType.Content, value: ' world' },
+      {
+        type: AgentEventType.Finished,
+        value: { outcome: { hadVisibleOutput: true } },
+      },
+    ]);
   });
 
   describe('successful pause breaks the loop via the explicit pause branch', () => {

@@ -41,7 +41,10 @@ import {
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { getCodeAssistServer } from '@vybestack/llxprt-code-core/code_assist/codeAssist.js';
 import { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
-import { parseThought } from '@vybestack/llxprt-code-core/utils/thoughtUtils.js';
+import {
+  parseThought,
+  type ThoughtSummary,
+} from '@vybestack/llxprt-code-core/utils/thoughtUtils.js';
 import {
   nextStreamEventWithIdleTimeout,
   resolveStreamIdleTimeoutMs,
@@ -340,61 +343,89 @@ export class Turn {
     traceId: string | undefined,
     cumulativeOutcome: ResponseOutcome,
   ): Generator<ServerAgentStreamEvent> {
-    const allBlocks = chunk.content.blocks;
-    const allowedToolNames = chunk.hookRestrictions?.allowedToolNames;
-
     const allowedBlocks = filterBlocksByAllowedTools(
-      allBlocks,
-      allowedToolNames,
+      chunk.content.blocks,
+      chunk.hookRestrictions?.allowedToolNames,
     );
     this.pushFilteredDebugChunk(chunk, allowedBlocks);
 
-    for (const block of allowedBlocks) {
-      if (block.type === 'thinking') {
-        const thought = parseThought(block.thought);
-        yield {
-          type: AgentEventType.Thought,
-          value: thought,
-          traceId,
-        };
-      }
-    }
-
-    const finishReason = chunk.finishReason;
-    const providerStopReason = chunk.rawStopReason;
+    yield* this.emitThoughtContent(allowedBlocks, traceId);
     const text = yield* this.emitTextContent(allowedBlocks, traceId);
-
-    const toolCallBlocks: ToolCallBlock[] = allowedBlocks.filter(
+    const functionCalls = allowedBlocks.filter(
       (block): block is ToolCallBlock => block.type === 'tool_call',
     );
+    yield* this.emitFunctionCallRequests(functionCalls);
+    yield* this.emitChunkCompletion(
+      chunk,
+      allowedBlocks,
+      functionCalls,
+      text,
+      traceId,
+      cumulativeOutcome,
+    );
+  }
 
-    for (const [functionCallIndex, fnCall] of toolCallBlocks.entries()) {
-      const event = this.handlePendingFunctionCall(fnCall, functionCallIndex);
+  private *emitThoughtContent(
+    blocks: ContentBlock[],
+    traceId: string | undefined,
+  ): Generator<ServerAgentStreamEvent> {
+    for (const block of blocks) {
+      if (block.type === 'thinking' && block.isHidden !== true) {
+        const thought: ThoughtSummary = {
+          ...parseThought(block.thought),
+          ...(block.streamId !== undefined ? { streamId: block.streamId } : {}),
+          ...(block.streamStatus !== undefined
+            ? { streamStatus: block.streamStatus }
+            : {}),
+        };
+        yield { type: AgentEventType.Thought, value: thought, traceId };
+      }
+    }
+  }
+
+  private *emitFunctionCallRequests(
+    functionCalls: ToolCallBlock[],
+  ): Generator<ServerAgentStreamEvent> {
+    for (const [functionCallIndex, functionCall] of functionCalls.entries()) {
+      const event = this.handlePendingFunctionCall(
+        functionCall,
+        functionCallIndex,
+      );
       if (event) {
         yield event;
       }
     }
+  }
 
-    if (finishReason !== undefined) {
+  private *emitChunkCompletion(
+    chunk: ModelStreamChunk,
+    allowedBlocks: ContentBlock[],
+    functionCalls: ToolCallBlock[],
+    text: string | undefined,
+    traceId: string | undefined,
+    cumulativeOutcome: ResponseOutcome,
+  ): Generator<ServerAgentStreamEvent> {
+    if (chunk.finishReason !== undefined) {
       yield* this.emitFinishReason({
-        finishReason,
+        finishReason: chunk.finishReason,
         allParts: allowedBlocks,
-        functionCalls: toolCallBlocks,
+        functionCalls,
         text,
         usageMetadata: chunk.usage,
         traceId,
         cumulativeOutcome,
-        stopReason: providerStopReason,
+        stopReason: chunk.rawStopReason,
       });
-    } else {
-      this.logNoFinishReason(
-        allowedBlocks,
-        toolCallBlocks,
-        text,
-        chunk.usage,
-        traceId,
-      );
+      return;
     }
+
+    this.logNoFinishReason(
+      allowedBlocks,
+      functionCalls,
+      text,
+      chunk.usage,
+      traceId,
+    );
   }
 
   private *emitTextContent(
