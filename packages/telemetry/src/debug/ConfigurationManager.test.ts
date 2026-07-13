@@ -2,7 +2,7 @@
  * @plan:PLAN-20250120-DEBUGLOGGING.P08
  * @requirement REQ-003,REQ-007
  */
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -10,57 +10,79 @@ import { ConfigurationManager } from './ConfigurationManager.js';
 import type { DebugSettings } from './types.js';
 
 describe('ConfigurationManager', () => {
+  let originalHome: string | undefined;
+  let originalDebugSection: string | undefined;
+
   beforeEach(() => {
-    // Reset singleton instance before each test
     ConfigurationManager.resetForTesting();
 
-    // Clean up environment variables
+    originalHome = process.env.HOME;
+    const tempHome = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'llxprt-config-test-'),
+    );
+    process.env.HOME = tempHome;
+
     delete process.env.DEBUG;
     delete process.env.LLXPRT_DEBUG;
     delete process.env.DEBUG_ENABLED;
     delete process.env.DEBUG_LEVEL;
     delete process.env.DEBUG_OUTPUT;
 
-    // Clean up test config files that might have been created
-    const userConfigPath = path.join(os.homedir(), '.llxprt', 'settings.json');
+    // os.homedir() is cached in vitest worker threads and does NOT reflect
+    // changes to process.env.HOME. We must clean the debug section from the
+    // real settings.json (resolved by os.homedir()) to prevent cross-test
+    // contamination. We save the original debug section for restoration.
+    const realSettingsPath = path.join(
+      os.homedir(),
+      '.llxprt',
+      'settings.json',
+    );
+    if (fs.existsSync(realSettingsPath)) {
+      try {
+        const content = JSON.parse(fs.readFileSync(realSettingsPath, 'utf8'));
+        if (content.debug !== undefined) {
+          originalDebugSection = JSON.stringify(content.debug);
+          delete content.debug;
+          fs.writeFileSync(realSettingsPath, JSON.stringify(content, null, 2));
+        }
+      } catch {
+        // Non-JSON or unreadable; nothing to clean.
+      }
+    }
+
     const projectConfigPath = path.join(
       process.cwd(),
       '.llxprt',
       'config.json',
     );
-
-    // Backup and temporarily remove user config if it exists
-    if (fs.existsSync(userConfigPath)) {
-      const backupPath = userConfigPath + '.test-backup';
-      if (!fs.existsSync(backupPath)) {
-        fs.copyFileSync(userConfigPath, backupPath);
-      }
-      try {
-        // Remove debug section from config for test isolation
-        const content = JSON.parse(fs.readFileSync(userConfigPath, 'utf8'));
-        delete content.debug;
-        fs.writeFileSync(userConfigPath, JSON.stringify(content, null, 2));
-      } catch {
-        // If parsing fails, just remove the file temporarily
-        fs.unlinkSync(userConfigPath);
-      }
-    }
-
-    // Remove project config if it exists
     if (fs.existsSync(projectConfigPath)) {
       fs.unlinkSync(projectConfigPath);
     }
   });
 
-  afterAll(() => {
-    // Restore user config backup if it exists
-    const userConfigPath = path.join(os.homedir(), '.llxprt', 'settings.json');
-    const backupPath = userConfigPath + '.test-backup';
-
-    if (fs.existsSync(backupPath)) {
-      fs.copyFileSync(backupPath, userConfigPath);
-      fs.unlinkSync(backupPath);
+  afterEach(() => {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
     }
+
+    // Restore the original debug section in the real settings.json.
+    const realSettingsPath = path.join(
+      os.homedir(),
+      '.llxprt',
+      'settings.json',
+    );
+    if (originalDebugSection !== undefined && fs.existsSync(realSettingsPath)) {
+      try {
+        const content = JSON.parse(fs.readFileSync(realSettingsPath, 'utf8'));
+        content.debug = JSON.parse(originalDebugSection);
+        fs.writeFileSync(realSettingsPath, JSON.stringify(content, null, 2));
+      } catch {
+        // Best-effort restore.
+      }
+    }
+    originalDebugSection = undefined;
   });
 
   describe('Singleton Pattern', () => {

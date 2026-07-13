@@ -10,6 +10,20 @@ const isWindows = process.platform === 'win32';
 const isMacCi = process.platform === 'darwin' && process.env.CI === 'true';
 const shouldUseForkPool = isWindows || isMacCi;
 
+const coverageReporter = isWindows
+  ? [
+      ['text', { file: 'full-text-summary.txt' }],
+      ['json-summary', { outputFile: 'coverage-summary.json' }],
+    ]
+  : [
+      ['text', { file: 'full-text-summary.txt' }],
+      'html',
+      'json',
+      'lcov',
+      'cobertura',
+      ['json-summary', { outputFile: 'coverage-summary.json' }],
+    ];
+
 export default defineConfig({
   test: {
     passWithNoTests: true,
@@ -18,9 +32,6 @@ export default defineConfig({
     teardownTimeout: 120000,
     silent: true,
     setupFiles: ['./test-setup-storage-isolation.ts'],
-    outputFile: {
-      junit: 'junit.xml',
-    },
     pool: shouldUseForkPool ? 'forks' : undefined,
     poolOptions: shouldUseForkPool
       ? {
@@ -30,18 +41,15 @@ export default defineConfig({
           },
         }
       : undefined,
+    outputFile: {
+      junit: 'junit.xml',
+    },
     coverage: {
       enabled: true,
       provider: 'v8',
       reportsDirectory: './coverage',
       include: ['src/**/*'],
-      reporter: [
-        ['text', { file: 'full-text-summary.txt' }],
-        'json',
-        'lcov',
-        'cobertura',
-        ['json-summary', { outputFile: 'coverage-summary.json' }],
-      ],
+      reporter: coverageReporter,
     },
   },
 });

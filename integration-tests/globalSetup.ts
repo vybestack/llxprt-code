@@ -9,23 +9,11 @@ if (process.env['NO_COLOR'] !== undefined) {
   delete process.env['NO_COLOR'];
 }
 
-import {
-  mkdir,
-  readdir,
-  rm,
-  readFile,
-  writeFile,
-  unlink,
-} from 'node:fs/promises';
+import { mkdir, readdir, rm, mkdtemp } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as os from 'node:os';
 import * as path from 'node:path';
-
-import {
-  LLXPRT_CONFIG_DIR,
-  DEFAULT_CONTEXT_FILENAME,
-} from '@vybestack/llxprt-code-tools';
 
 // Handle the case where import.meta.url might be undefined in CI
 const __dirname = import.meta?.url
@@ -36,22 +24,16 @@ const rootDir = join(__dirname, '..');
 const integrationTestsDir = join(rootDir, '.integration-tests');
 let runDir = ''; // Make runDir accessible in teardown
 
-const memoryFilePath = join(
-  os.homedir(),
-  LLXPRT_CONFIG_DIR,
-  DEFAULT_CONTEXT_FILENAME,
-);
-let originalMemoryContent: string | null = null;
-
 export async function setup() {
-  try {
-    originalMemoryContent = await readFile(memoryFilePath, 'utf-8');
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
-      throw e;
-    }
-    // File doesn't exist, which is fine.
-  }
+  // Isolate ALL storage roots so spawned CLI subprocesses (which inherit
+  // process.env) never write into the real user config/data/cache/log dirs.
+  const testStorageRoot = await mkdtemp(
+    path.join(os.tmpdir(), 'llxprt-integration-storage-'),
+  );
+  process.env.LLXPRT_CONFIG_HOME = join(testStorageRoot, 'config');
+  process.env.LLXPRT_DATA_HOME = join(testStorageRoot, 'data');
+  process.env.LLXPRT_CACHE_HOME = join(testStorageRoot, 'cache');
+  process.env.LLXPRT_LOG_HOME = join(testStorageRoot, 'log');
 
   runDir = join(integrationTestsDir, `${Date.now()}`);
   await mkdir(runDir, { recursive: true });
@@ -95,17 +77,6 @@ export async function teardown() {
       await rm(runDir, { recursive: true, force: true });
     } catch (e) {
       console.warn('Failed to clean up test run directory:', e);
-    }
-  }
-
-  if (originalMemoryContent !== null) {
-    await mkdir(dirname(memoryFilePath), { recursive: true });
-    await writeFile(memoryFilePath, originalMemoryContent, 'utf-8');
-  } else {
-    try {
-      await unlink(memoryFilePath);
-    } catch {
-      // File might not exist if the test failed before creating it.
     }
   }
 }
