@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { Content, Part } from '@google/genai';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type {
   ModelGenerationRequest,
@@ -13,6 +14,7 @@ import type {
   IContent,
   ContentBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 
@@ -47,7 +49,7 @@ export interface GenerateEmbeddingOptions {
  */
 export interface CountTokensOptions {
   text?: string;
-  contents?: IContent[];
+  contents?: Content[];
   model: string;
 }
 
@@ -56,14 +58,14 @@ export interface CountTokensOptions {
  */
 export interface GenerateContentOptions {
   /** The input prompt or history. */
-  contents: IContent[];
+  contents: Content[];
   /** The model to use. */
   model: string;
   /**
    * Task-specific system instructions.
    * If omitted, no system instruction is sent.
    */
-  systemInstruction?: string;
+  systemInstruction?: string | Part | Part[] | Content;
   /** Signal for cancellation. */
   abortSignal: AbortSignal;
   /**
@@ -116,11 +118,10 @@ function getTextFromModelOutput(output: ModelOutput): string {
 }
 
 /**
- * Convert IContent[] to IContent[] — identity pass-through now that the
- * Content type is neutral IContent everywhere.
+ * Convert legacy Google Content[] to IContent[] using the sanctioned bridge.
  */
-function contentsToIContents(contents: IContent[]): IContent[] {
-  return contents;
+function contentsToIContents(contents: Content[]): IContent[] {
+  return ContentConverters.toIContents(contents);
 }
 
 /**
@@ -154,10 +155,10 @@ export class BaseLLMClient {
       promptId = 'baseLlmClient-generateJson',
     } = options;
 
-    const contents: IContent[] = [
+    const contents: Content[] = [
       {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: prompt }],
+        role: 'user',
+        parts: [{ text: prompt }],
       },
     ];
 
@@ -276,15 +277,15 @@ export class BaseLLMClient {
     const { text, contents } = options;
 
     try {
-      let requestContents: IContent[];
+      let requestContents: Content[];
 
       if (contents) {
         requestContents = contents;
       } else if (text) {
         requestContents = [
           {
-            speaker: 'human',
-            blocks: [{ type: 'text', text }],
+            role: 'user',
+            parts: [{ text }],
           },
         ];
       } else {
@@ -325,7 +326,21 @@ export class BaseLLMClient {
     };
 
     if (systemInstruction !== undefined && systemInstruction !== '') {
-      settings.systemInstruction = systemInstruction;
+      if (typeof systemInstruction === 'string') {
+        settings.systemInstruction = systemInstruction;
+      } else {
+        // Non-string systemInstruction (Part/Part[]/Content) — extract text
+        const siContent: Content =
+          'parts' in (systemInstruction as Content)
+            ? (systemInstruction as Content)
+            : { role: 'user', parts: [systemInstruction as Part] };
+        const converted = ContentConverters.toIContent(siContent);
+        const textBlocks = converted.blocks.filter(
+          (b): b is Extract<ContentBlock, { type: 'text' }> =>
+            b.type === 'text',
+        );
+        settings.systemInstruction = textBlocks.map((b) => b.text).join('\n');
+      }
     }
 
     const shouldRetryOnContent = (output: ModelOutput) => {

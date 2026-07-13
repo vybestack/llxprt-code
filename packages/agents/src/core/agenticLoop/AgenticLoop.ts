@@ -33,7 +33,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { Part, PartListUnion } from '@google/genai';
 import {
   AgentEventType,
   type ToolCallRequestInfo,
@@ -201,6 +201,12 @@ export class AgenticLoop {
   private promptCount = 0;
   private isRunning = false;
   /**
+   * Pending steer messages injected via {@link injectSteer}. Drained at the
+   * loop boundary (between turns) so the user text is appended only after all
+   * tool results are closed — shape-safe across all provider formats.
+   */
+  private pendingSteer: string[] = [];
+  /**
    * A scheduler-singleton key dedicated to this loop instance. The CLI main
    * scheduler is keyed by `config.getSessionId()`; reusing that key would make
    * the loop's `getOrCreateScheduler` call REPLACE the CLI's scheduler
@@ -227,6 +233,62 @@ export class AgenticLoop {
   private generateContinuationPromptId(initialPromptId: string): string {
     this.promptCount += 1;
     return `${initialPromptId}#continuation#${this.promptCount}`;
+  }
+
+  /**
+   * Injects a user steer message into the active loop. The message is stashed
+   * and drained at the next loop boundary (between turns), after all tool
+   * results for the current turn have settled. This is shape-safe: the user
+   * text is appended after closed tool_result blocks, which is valid in all
+   * three provider formats (Gemini, Anthropic, OpenAI).
+   *
+   * If the loop is not running, the message is silently dropped — the caller
+   * should queue it for the next turn instead.
+   */
+  injectSteer(text: string): void {
+    if (!this.isRunning) {
+      return;
+    }
+    this.pendingSteer.push(text);
+  }
+
+  /**
+   * Drains all pending steer messages, joining them with newlines. Returns
+   * null when there are none. Called only at the loop boundary by {@link run}.
+   */
+  private drainSteer(): string | null {
+    if (this.pendingSteer.length === 0) {
+      return null;
+    }
+    const text = this.pendingSteer.join('\n');
+    this.pendingSteer = [];
+    return text;
+  }
+
+  /**
+   * Normalizes a {@link PartListUnion} into a `Part[]` so steer text can be
+   * appended via spread. When `continueLoop` is true, `nextMessage` always
+   * comes from {@link buildNextMessage} which returns `Part[]`, but the type
+   * is the wider `PartListUnion`.
+   */
+  private toParts(message: PartListUnion): Part[] {
+    if (typeof message === 'string') {
+      return [{ text: message }];
+    }
+    if (Array.isArray(message)) {
+      return message as Part[];
+    }
+    return [message];
+  }
+
+  /**
+   * Builds the message for a steer continuation: when the model finished
+   * without tool calls but the user steered during the final-answer stream,
+   * the steer text alone becomes the next turn's message. Returns null when
+   * there is no steer to act on (normal loop exit).
+   */
+  private steerWhenFinished(steerText: string | null): PartListUnion | null {
+    return steerText ? [{ text: steerText }] : null;
   }
 
   /**
@@ -299,7 +361,7 @@ export class AgenticLoop {
    * with CLI top-level prompt ids that use the session counter namespace.
    */
   async *run(
-    message: AgentMessageInput,
+    message: PartListUnion,
     signal: AbortSignal,
     promptId?: string,
   ): AsyncGenerator<AgenticLoopEvent> {
@@ -318,10 +380,24 @@ export class AgenticLoop {
           signal,
           currentPromptId,
         );
+        const steerText = this.drainSteer();
+        const steerContinuation = !result.continueLoop
+          ? this.steerWhenFinished(steerText)
+          : null;
+        if (!result.continueLoop && steerContinuation !== null) {
+          currentMessage = steerContinuation;
+          currentPromptId = this.generateContinuationPromptId(initialPromptId);
+          continue;
+        }
         if (!result.continueLoop) {
           return;
         }
-        currentMessage = result.nextMessage;
+        // Tools completed -> append steer text alongside the functionResponse
+        // parts. Shape-safe: result.nextMessage contains closed tool results,
+        // and the steer text comes after them.
+        currentMessage = steerText
+          ? [...this.toParts(result.nextMessage), { text: steerText }]
+          : result.nextMessage;
         currentPromptId = this.generateContinuationPromptId(initialPromptId);
       }
     } catch (error) {
@@ -333,6 +409,7 @@ export class AgenticLoop {
     } finally {
       unsubscribe();
       this.isRunning = false;
+      this.pendingSteer = [];
     }
   }
 
@@ -342,12 +419,12 @@ export class AgenticLoop {
    * next message to send (functionResponse parts) if so.
    */
   private async *runTurn(
-    message: AgentMessageInput,
+    message: PartListUnion,
     signal: AbortSignal,
     promptId: string,
   ): AsyncGenerator<
     AgenticLoopEvent,
-    { continueLoop: boolean; nextMessage: AgentMessageInput }
+    { continueLoop: boolean; nextMessage: PartListUnion }
   > {
     const toolCallRequests: ToolCallRequestInfo[] = [];
     const streamResult = yield* this.streamAndCollect(
@@ -428,7 +505,7 @@ export class AgenticLoop {
 
   /** Streams one model turn, yielding stream events and collecting tool requests. */
   private async *streamAndCollect(
-    message: AgentMessageInput,
+    message: PartListUnion,
     signal: AbortSignal,
     promptId: string,
     toolCallRequests: ToolCallRequestInfo[],
@@ -625,7 +702,7 @@ export class AgenticLoop {
   /** Builds the next message (functionResponse parts) from completed tools. */
   private async buildNextMessage(completed: CompletedToolCall[]): Promise<{
     continueLoop: boolean;
-    nextMessage: AgentMessageInput;
+    nextMessage: PartListUnion;
   }> {
     const { primaryTools } = classifyCompletedTools(completed);
     const geminiTools = primaryTools.filter(
@@ -639,7 +716,10 @@ export class AgenticLoop {
       await recordCancelledToolHistory(geminiTools, this.agentClient);
       return { continueLoop: false, nextMessage: [] };
     }
-    const responseParts = buildToolResponses(geminiTools);
+    const responseParts = buildToolResponses(
+      geminiTools,
+      this.config.getImagePayloadBudgetBytes(),
+    );
     if (responseParts.length === 0) {
       return { continueLoop: false, nextMessage: [] };
     }

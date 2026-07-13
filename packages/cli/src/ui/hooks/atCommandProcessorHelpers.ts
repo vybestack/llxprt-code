@@ -12,8 +12,8 @@ import {
   getErrorMessage,
   isNodeError,
   validatePathWithinWorkspace,
-  type AgentRequestInput,
-  type ContentBlock,
+  type ContractPartListUnion,
+  type ContractPart,
   type DiscoveredMCPResource,
 } from '@vybestack/llxprt-code-core';
 import type {
@@ -32,7 +32,7 @@ export interface AtCommandPart {
 }
 
 export interface AtCommandProcessResult {
-  processedQuery: AgentRequestInput | null;
+  processedQuery: ContractPartListUnion | null;
   error?: string;
 }
 
@@ -94,7 +94,7 @@ interface FileReadParams {
   pathSpecsToRead: string[];
   contentLabelsForDisplay: string[];
   absoluteToRelativePathMap: Map<string, string>;
-  processedQueryParts: ContentBlock[];
+  processedQueryParts: Array<ContractPart | string>;
   resourceReadDisplays: IndividualToolCallDisplay[];
   readManyFilesTool: NonNullable<MaybeToolHandle>;
   respectFileIgnore: ReturnType<
@@ -616,7 +616,7 @@ function buildReadErrorDisplay(
 
 function appendReadManyFilesContent(
   llmContent: unknown,
-  processedQueryParts: ContentBlock[],
+  processedQueryParts: Array<ContractPart | string>,
   absoluteToRelativePathMap: Map<string, string>,
   config: AtCommandHelperRuntime,
   onDebugMessage: (message: string) => void,
@@ -627,10 +627,7 @@ function appendReadManyFilesContent(
     );
     return;
   }
-  processedQueryParts.push({
-    type: 'text',
-    text: '\n--- Content from referenced files ---',
-  });
+  processedQueryParts.push({ text: '\n--- Content from referenced files ---' });
   for (const part of llmContent)
     processReadManyFilesPart(
       part,
@@ -642,30 +639,23 @@ function appendReadManyFilesContent(
 
 function processReadManyFilesPart(
   part: unknown,
-  processedQueryParts: ContentBlock[],
+  processedQueryParts: Array<ContractPart | string>,
   absoluteToRelativePathMap: Map<string, string>,
   config: AtCommandHelperRuntime,
 ): void {
   if (typeof part !== 'string') {
-    processedQueryParts.push({
-      type: 'text',
-      text:
-        typeof part === 'object' && part !== null && 'text' in part
-          ? String((part as { text: unknown }).text)
-          : String(part),
-    });
+    processedQueryParts.push(part as ContractPart | string);
     return;
   }
   const parsed = parseFileContentPart(part, absoluteToRelativePathMap, config);
   if (parsed === undefined) {
-    processedQueryParts.push({ type: 'text', text: part });
+    processedQueryParts.push({ text: part });
     return;
   }
   processedQueryParts.push({
-    type: 'text',
     text: `\nContent from @${parsed.displayPath}:\n`,
   });
-  processedQueryParts.push({ type: 'text', text: parsed.content });
+  processedQueryParts.push({ text: parsed.content });
 }
 
 function parseFileContentPart(

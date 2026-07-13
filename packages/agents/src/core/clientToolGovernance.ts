@@ -4,48 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import {
-  isJsonSchema,
-  type JsonSchema,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { FunctionDeclaration } from '@google/genai';
 import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
 
 export { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
-
-/**
- * Convert a Gemini-era FunctionDeclaration (name/description/parameters/
- * parametersJsonSchema) into a neutral ToolDeclaration. Schema resolution
- * order: parametersJsonSchema → parameters → {} (empty object).
- */
-function toToolDeclaration(decl: {
-  name?: string;
-  description?: string;
-  parametersJsonSchema?: unknown;
-  parameters?: unknown;
-}): ToolDeclaration | null {
-  const name = typeof decl.name === 'string' ? decl.name : '';
-  if (name.length === 0) {
-    return null;
-  }
-  let schema: JsonSchema = {};
-  if (isJsonSchema(decl.parametersJsonSchema)) {
-    schema = decl.parametersJsonSchema;
-  } else if (isJsonSchema(decl.parameters)) {
-    schema = decl.parameters;
-  }
-  const result: ToolDeclaration = {
-    name,
-    parametersJsonSchema: schema,
-  };
-  if (typeof decl.description === 'string') {
-    result.description = decl.description;
-  }
-  return result;
-}
 
 /**
  * Reads the tool governance ephemeral settings (allowed/disabled tool lists).
@@ -100,7 +65,7 @@ export function readToolList(value: unknown): string[] {
 export function buildToolDeclarationsFromView(
   toolRegistry: ToolRegistry | undefined,
   view: ToolRegistryView,
-): ToolDeclaration[] {
+): FunctionDeclaration[] {
   if (!toolRegistry) {
     return [];
   }
@@ -110,18 +75,18 @@ export function buildToolDeclarationsFromView(
     return [];
   }
 
-  const declarations: ToolDeclaration[] = [];
+  const declarations: FunctionDeclaration[] = [];
   if (typeof toolRegistry.getFunctionDeclarations === 'function') {
     const declarationsByName = new Map(
       toolRegistry
         .getFunctionDeclarations()
-        .map((decl) => [decl.name ?? '', decl] as const),
+        .map((decl) => [decl.name, decl] as const),
     );
     for (const name of allowedNames) {
       const declaration = declarationsByName.get(name);
-      if (!declaration) continue;
-      const converted = toToolDeclaration(declaration);
-      if (converted) declarations.push(converted);
+      if (declaration) {
+        declarations.push(declaration);
+      }
     }
     return declarations;
   }
@@ -135,7 +100,7 @@ export function buildToolDeclarationsFromView(
       if (!tool) {
         continue;
       }
-      const schema = (tool as { schema?: ToolDeclaration }).schema;
+      const schema = (tool as { schema?: FunctionDeclaration }).schema;
       if (schema) {
         declarations.push(schema);
       }

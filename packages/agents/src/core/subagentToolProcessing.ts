@@ -13,17 +13,18 @@
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type {
-  ContentBlock,
-  IContent,
-  ToolCallBlock,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { convertBlocksToParts } from './MessageConverter.js';
+import {
+  enforceImageBudget,
+  buildOmissionFeedback,
+} from './imagePayloadBudget.js';
 import { type ToolCallRequestInfo, type ToolCallResponseInfo } from './turn.js';
 import {
   executeToolCall,
   type ToolExecutionConfig,
 } from './nonInteractiveToolExecutor.js';
+import { type Part, type FunctionCall, type Content } from '@google/genai';
 import type {
   AgentRuntimeContext,
   ToolRegistryView,
@@ -39,7 +40,10 @@ import {
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { createSchedulerConfig } from './subagentRuntimeSetup.js';
-import { isToolNameRestricted } from './hookToolRestrictions.js';
+import {
+  getHookRestrictedAllowedToolsForFunctionCall,
+  isHookRestrictedToolCall,
+} from './hookToolRestrictions.js';
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -117,7 +121,7 @@ function asUnknownRecord(value: unknown): Record<string, unknown> {
  */
 function readResponse(call: CompletedToolCall):
   | {
-      responseParts?: ContentBlock[];
+      responseParts?: Part[];
       resultDisplay?: ToolResultDisplay;
       error?: { message?: string };
     }
@@ -125,7 +129,7 @@ function readResponse(call: CompletedToolCall):
   const response = (call as { response?: unknown }).response;
   if (typeof response === 'object' && response !== null) {
     return response as {
-      responseParts?: ContentBlock[];
+      responseParts?: Part[];
       resultDisplay?: ToolResultDisplay;
       error?: { message?: string };
     };
@@ -295,7 +299,7 @@ function resolveEmitArg(
 export function handleEmitValueCall(
   request: ToolCallRequestInfo,
   ctx: EmitValueContext,
-): ContentBlock[] {
+): Part[] {
   const args = asUnknownRecord(request.args);
   const variableName = resolveEmitArg(
     args,
@@ -316,13 +320,14 @@ export function handleEmitValueCall(
     }
     return [
       {
-        type: 'tool_response',
-        callId: request.callId,
-        toolName: request.name,
-        result: {
-          emit_variable_name: variableName,
-          emit_variable_value: variableValue,
-          message,
+        functionResponse: {
+          id: request.callId,
+          name: request.name,
+          response: {
+            emit_variable_name: variableName,
+            emit_variable_value: variableValue,
+            message,
+          },
         },
       },
     ];
@@ -335,10 +340,11 @@ export function handleEmitValueCall(
   );
   return [
     {
-      type: 'tool_response',
-      callId: request.callId,
-      toolName: request.name,
-      result: { error: errorMessage },
+      functionResponse: {
+        id: request.callId,
+        name: request.name,
+        response: { error: errorMessage },
+      },
     },
   ];
 }
@@ -354,15 +360,15 @@ export interface BuildPartsContext {
 }
 
 /**
- * Appends all non-tool-call blocks from responseParts to aggregate.
+ * Appends all non-functionCall parts from responseParts to aggregate.
  */
-function appendNonToolCallBlocks(
-  aggregate: ContentBlock[],
-  responseParts: ContentBlock[],
+function appendNonFunctionCallParts(
+  aggregate: Part[],
+  responseParts: Part[],
 ): void {
-  for (const block of responseParts) {
-    if (block.type !== 'tool_call') {
-      aggregate.push(block);
+  for (const part of responseParts) {
+    if (!('functionCall' in part)) {
+      aggregate.push(part);
     }
   }
 }
@@ -370,20 +376,21 @@ function appendNonToolCallBlocks(
 export function buildPartsFromCompletedCalls(
   completedCalls: CompletedToolCall[],
   ctx: BuildPartsContext,
-): ContentBlock[] {
-  const aggregate: ContentBlock[] = [];
+): Part[] {
+  const aggregate: Part[] = [];
   for (const call of completedCalls) {
     const response = readResponse(call);
     const responseParts = response?.responseParts;
     if (responseParts !== undefined && responseParts.length > 0) {
-      appendNonToolCallBlocks(aggregate, responseParts);
+      appendNonFunctionCallParts(aggregate, responseParts);
     } else {
       aggregate.push({
-        type: 'tool_response',
-        callId: call.request.callId,
-        toolName: call.request.name,
-        result: {
-          output: `Tool ${call.request.name} completed without response.`,
+        functionResponse: {
+          id: call.request.callId,
+          name: call.request.name,
+          response: {
+            output: `Tool ${call.request.name} completed without response.`,
+          },
         },
       });
     }
@@ -435,34 +442,35 @@ export interface ProcessFunctionCallsContext {
 }
 
 export async function processFunctionCalls(
-  functionCalls: ToolCallBlock[],
+  functionCalls: FunctionCall[],
   abortController: AbortController,
   promptId: string,
   ctx: ProcessFunctionCallsContext,
-  allowedToolNames?: readonly string[],
-): Promise<IContent[]> {
-  const toolResponseBlocks: ContentBlock[] = [];
+): Promise<Content[]> {
+  const toolResponseParts: Part[] = [];
 
   let executedFunctionCallCount = 0;
   for (const functionCall of functionCalls) {
-    if (isToolNameRestricted(functionCall.name, allowedToolNames)) {
+    const allowedTools =
+      getHookRestrictedAllowedToolsForFunctionCall(functionCall);
+    if (isHookRestrictedToolCall(functionCall, allowedTools)) {
       ctx.logger.debug(
         () =>
           `Subagent ${ctx.subagentId} skipped hook-restricted tool '${functionCall.name}'`,
       );
     } else {
       executedFunctionCallCount += 1;
-      const callId =
-        functionCall.id !== ''
-          ? functionCall.id
-          : `${functionCall.name}-${Date.now()}`;
+      const callId = functionCall.id ?? `${functionCall.name}-${Date.now()}`;
       const requestInfo: ToolCallRequestInfo = {
         callId,
-        name: functionCall.name,
-        args: functionCall.parameters as Record<string, unknown>,
+        name: functionCall.name as string,
+        args: functionCall.args ?? {},
         isClientInitiated: true,
         prompt_id: promptId,
         agentId: ctx.subagentId,
+        ...(allowedTools !== undefined
+          ? { hookRestrictedAllowedTools: allowedTools }
+          : {}),
       };
 
       ctx.logger.debug(
@@ -482,7 +490,7 @@ export async function processFunctionCalls(
 
       if (isFatalToolError(toolResponse.errorType)) {
         const fatalMessage = buildToolUnavailableMessage(
-          functionCall.name,
+          functionCall.name as string,
           toolResponse.resultDisplay,
           toolResponse.error,
         );
@@ -490,12 +498,12 @@ export async function processFunctionCalls(
           () =>
             `Subagent ${ctx.subagentId} cannot use tool '${functionCall.name}': ${fatalMessage}`,
         );
-        toolResponseBlocks.push({ type: 'text', text: fatalMessage });
+        toolResponseParts.push({ text: fatalMessage });
         ctx.output.final_message = fatalMessage;
       } else {
-        pushNonToolCallResponseBlocks(
+        pushNonFunctionCallResponseParts(
           toolResponse.responseParts,
-          toolResponseBlocks,
+          toolResponseParts,
         );
       }
     }
@@ -505,29 +513,51 @@ export async function processFunctionCalls(
     return [];
   }
 
-  if (toolResponseBlocks.length === 0) {
-    toolResponseBlocks.push({
-      type: 'text',
+  if (toolResponseParts.length === 0) {
+    toolResponseParts.push({
       text: 'All tool calls failed. Please analyze the errors and try an alternative approach.',
     });
   }
 
-  return [iContentFromBlocks(toolResponseBlocks, 'tool')];
+  return [{ role: 'user', parts: applyImageBudget(toolResponseParts, ctx) }];
 }
 
-function pushNonToolCallResponseBlocks(
+function applyImageBudget(
+  toolResponseParts: Part[],
+  ctx: ProcessFunctionCallsContext,
+): Part[] {
+  const budgetBytes = ctx.config.getImagePayloadBudgetBytes();
+  if (budgetBytes <= 0) {
+    return toolResponseParts;
+  }
+  const { parts: budgeted, omitted } = enforceImageBudget(
+    toolResponseParts,
+    budgetBytes,
+  );
+  if (omitted.length > 0) {
+    budgeted.push({ text: buildOmissionFeedback(omitted) });
+    ctx.logger.warn(
+      () =>
+        `Subagent ${ctx.subagentId}: omitted ${omitted.length} image(s) due to cumulative image payload budget (${budgetBytes} bytes)`,
+    );
+  }
+  return budgeted;
+}
+
+function pushNonFunctionCallResponseParts(
   responseParts: ContentBlock[],
-  toolResponseBlocks: ContentBlock[],
+  toolResponseParts: Part[],
 ): void {
-  for (const block of responseParts) {
-    if (block.type !== 'tool_call') {
-      toolResponseBlocks.push(block);
+  const parts = convertBlocksToParts(responseParts);
+  for (const part of parts) {
+    if (!('functionCall' in part)) {
+      toolResponseParts.push(part);
     }
   }
 }
 
 async function executeNonInteractiveTool(
-  functionCall: ToolCallBlock,
+  functionCall: FunctionCall,
   requestInfo: ToolCallRequestInfo,
   callId: string,
   abortController: AbortController,
@@ -575,7 +605,7 @@ async function executeNonInteractiveTool(
 }
 
 function logToolResult(
-  functionCall: ToolCallBlock,
+  functionCall: FunctionCall,
   toolResponse: ToolCallResponseInfo,
   ctx: ProcessFunctionCallsContext,
 ): void {

@@ -10,7 +10,7 @@
  * Engine-owned multi-turn agentic loop types.
  */
 
-import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { PartListUnion } from '@google/genai';
 import type { ServerAgentStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
 import type {
   ToolCall,
@@ -110,6 +110,7 @@ export interface DisplayCallbacks {
 export interface AgenticLoopRuntime {
   getSessionId(): string;
   getModel(): string;
+  getImagePayloadBudgetBytes(): number;
   disposeScheduler(sessionId: string): void;
   getOrCreateScheduler(
     sessionId: string,
@@ -161,4 +162,4 @@ export interface AgenticLoopOptions {
 }
 
 /** Initial message type accepted by {@link AgenticLoop.run}. */
-export type AgenticLoopMessage = AgentMessageInput;
+export type AgenticLoopMessage = PartListUnion;

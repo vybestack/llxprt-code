@@ -10,19 +10,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type {
-  AgentMessageInput,
-  IContent,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { Part, PartListUnion } from '@google/genai';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType } from './turn.js';
-import {
-  fromAsync,
-  setupGeminiClient,
-  type MockResponseShape,
-} from './client-test-helpers.js';
+import { fromAsync, setupGeminiClient } from './client-test-helpers.js';
 
 // Mock prompts module before imports
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -84,6 +77,7 @@ const {
   };
 });
 
+vi.mock('@google/genai');
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -139,7 +133,7 @@ vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
-    getResponseText: (result: MockResponseShape) =>
+    getResponseText: (result: GenerateContentResponse) =>
       result.candidates?.[0]?.content?.parts
         ?.map((part) => part.text)
         .join('') ?? undefined,
@@ -179,7 +173,7 @@ vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   },
 }));
 
-describe('AgentClient (client.ts)', () => {
+describe('Gemini Client (client.ts)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
@@ -215,11 +209,11 @@ describe('AgentClient (client.ts)', () => {
     });
 
     it('should auto-continue when model generates thinking-only output', async () => {
-      const forwardedRequests: IContent[][] = [];
+      const forwardedRequests: Part[][] = [];
       let callCount = 0;
       mockTurnRunFn.mockReset();
-      mockTurnRunFn.mockImplementation((req: AgentMessageInput) => {
-        forwardedRequests.push(req as IContent[]);
+      mockTurnRunFn.mockImplementation((req: PartListUnion) => {
+        forwardedRequests.push(req as Part[]);
         callCount++;
         if (callCount === 1) {
           return (async function* () {
@@ -265,7 +259,7 @@ describe('AgentClient (client.ts)', () => {
       todoStoreReadMock.mockResolvedValue([]);
 
       const stream = client.sendMessageStream(
-        [{ type: 'text', text: 'Do something' }],
+        [{ text: 'Do something' }],
         new AbortController().signal,
         'prompt-thinking-only',
       );
@@ -275,16 +269,13 @@ describe('AgentClient (client.ts)', () => {
       expect(forwardedRequests.length).toBe(2);
 
       const secondRequest = forwardedRequests[1];
-      const continuationPart = secondRequest
-        .flatMap((content) => ('blocks' in content ? content.blocks : []))
-        .find((block) => {
-          if (block.type !== 'text') {
-            return false;
-          }
-          return block.text.includes(
-            'Continue and take the next concrete action now',
-          );
-        });
+      const continuationPart = secondRequest.find(
+        (part) =>
+          typeof part === 'object' &&
+          'text' in part &&
+          typeof part.text === 'string' &&
+          part.text.includes('Continue and take the next concrete action now'),
+      );
       expect(continuationPart).toBeDefined();
 
       expect(events.some((e) => e.type === AgentEventType.Thought)).toBe(true);
@@ -333,7 +324,7 @@ describe('AgentClient (client.ts)', () => {
       todoStoreReadMock.mockResolvedValue([]);
 
       const stream = client.sendMessageStream(
-        [{ type: 'text', text: 'Do something' }],
+        [{ text: 'Do something' }],
         new AbortController().signal,
         'prompt-thinking-content',
       );
@@ -381,7 +372,7 @@ describe('AgentClient (client.ts)', () => {
       todoStoreReadMock.mockResolvedValue([]);
 
       const stream = client.sendMessageStream(
-        [{ type: 'text', text: 'Do something' }],
+        [{ text: 'Do something' }],
         new AbortController().signal,
         'prompt-thinking-tools',
       );
@@ -422,7 +413,7 @@ describe('AgentClient (client.ts)', () => {
       todoStoreReadMock.mockResolvedValue([]);
 
       const stream = client.sendMessageStream(
-        [{ type: 'text', text: 'Do something' }],
+        [{ text: 'Do something' }],
         new AbortController().signal,
         'prompt-thinking-max-retries',
       );

@@ -31,9 +31,12 @@ import {
 import type {
   IContent,
   ThinkingBlock,
-  ContentBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createConfigParams } from './chatSession-thinking-helpers.js';
+import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
+import {
+  createConfigParams,
+  isThoughtPart,
+} from './chatSession-thinking-helpers.js';
 
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
@@ -70,7 +73,7 @@ describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persisten
     config.setProviderManager(manager);
   });
 
-  it('ISSUE #1150 REPRO: thinking blocks must survive history curation with signature and ordering before tool calls', async () => {
+  it('ISSUE #1150 REPRO: thinking blocks must have thought=true when converted to Gemini format', async () => {
     const historyService = new HistoryService();
 
     // Simulate what recordHistory does: add an AI message with thinking + tool calls
@@ -109,34 +112,37 @@ describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persisten
       ],
     });
 
-    // Get curated history (what would be sent to provider on the next turn)
+    // Get curated history (what would be sent to provider)
     const curated = historyService.getCuratedForProvider();
 
-    // Find the AI message with tool calls
-    const modelMessage = curated.find(
-      (content) =>
-        content.speaker === 'ai' &&
-        content.blocks.some((block) => block.type === 'tool_call'),
+    // Convert to Gemini format (what AnthropicProvider receives as options.contents)
+    const geminiContents = ContentConverters.toGeminiContents(curated);
+
+    // Find the model message with tool calls
+    const modelMessage = geminiContents.find(
+      (c) =>
+        c.role === 'model' &&
+        (c.parts?.some((p) => 'functionCall' in p) ?? false),
     );
 
     expect(modelMessage).toBeDefined();
 
-    // THE KEY CHECK: The thinking block must survive curation with its signature
-    const thinkingBlock = modelMessage?.blocks.find(
-      (block) => block.type === 'thinking',
+    // THE KEY CHECK: The thinking block must have thought=true
+    const thinkingPart = modelMessage?.parts?.find(
+      (p) => 'thought' in p && p.thought === true,
     );
 
-    expect(thinkingBlock).toBeDefined();
-    expect((thinkingBlock as { signature?: string }).signature).toBe(
-      'sig-test-123',
-    );
+    expect(thinkingPart).toBeDefined();
+    expect(
+      (thinkingPart as { thoughtSignature?: string }).thoughtSignature,
+    ).toBe('sig-test-123');
 
     // Also verify order: thinking must come BEFORE tool calls
-    const thinkingIndex = modelMessage?.blocks.findIndex(
-      (block) => block.type === 'thinking',
+    const thinkingIndex = modelMessage?.parts?.findIndex(
+      (p) => 'thought' in p && p.thought === true,
     );
-    const toolCallIndex = modelMessage?.blocks.findIndex(
-      (block) => block.type === 'tool_call',
+    const toolCallIndex = modelMessage?.parts?.findIndex(
+      (p) => 'functionCall' in p,
     );
 
     expect(thinkingIndex).toBeLessThan(toolCallIndex!);
@@ -286,31 +292,45 @@ describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persisten
   });
 
   it('ISSUE #1150 REAL BUG: thinking block NOT in error dump - the Turn.run contextForReport shows Gemini format not IContent', async () => {
-    // Verify recordHistory extracts thinking correctly from neutral
-    // ContentBlocks by exercising the neutral block extraction path against
-    // consolidated model output that mixes thinking, text, and tool-call blocks.
+    // Verify recordHistory extracts thinking correctly from Parts with thought=true
+    // by exercising the shared isThoughtPart predicate against consolidated model
+    // output that mixes thinking, text, and tool-call parts.
 
-    const consolidatedBlocks: ContentBlock[] = [
+    const consolidatedParts = [
       {
-        type: 'thinking',
-        thought: 'Let me analyze this request...',
-        sourceField: 'thinking' as ThinkingBlock['sourceField'],
-        signature: 'sig-anthropic-abc',
+        thought: true,
+        text: 'Let me analyze this request...',
+        thoughtSignature: 'sig-anthropic-abc',
+        llxprtSourceField: 'thinking',
       },
       {
-        type: 'text',
         text: "I'll help you with that.",
       },
       {
-        type: 'tool_call',
-        id: 'hist_tool_verify_001',
-        name: 'list_directory',
-        parameters: { path: '/tmp' },
+        functionCall: {
+          id: 'hist_tool_verify_001',
+          name: 'list_directory',
+          args: { path: '/tmp' },
+        },
       },
     ];
 
-    const thoughtBlocks = consolidatedBlocks.filter(
-      (b): b is ThinkingBlock => b.type === 'thinking',
+    const thoughtParts = consolidatedParts.filter(isThoughtPart);
+
+    expect(thoughtParts.length).toBe(1);
+    expect(thoughtParts[0].text).toBe('Let me analyze this request...');
+    expect(thoughtParts[0].thoughtSignature).toBe('sig-anthropic-abc');
+    expect(thoughtParts[0].llxprtSourceField).toBe('thinking');
+
+    // Now verify it creates ThinkingBlocks correctly
+    const thoughtBlocks = thoughtParts.map(
+      (part): ThinkingBlock => ({
+        type: 'thinking',
+        thought: (part.text ?? '').trim(),
+        sourceField: (part.llxprtSourceField ??
+          'thought') as ThinkingBlock['sourceField'],
+        signature: part.thoughtSignature,
+      }),
     );
 
     expect(thoughtBlocks.length).toBe(1);
@@ -318,9 +338,9 @@ describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persisten
     expect(thoughtBlocks[0].signature).toBe('sig-anthropic-abc');
     expect(thoughtBlocks[0].sourceField).toBe('thinking');
 
-    // So recordHistory SHOULD work correctly IF it receives consolidatedBlocks
-    // with thinking blocks. The bug must be that the thinking block
-    // is NOT making it into consolidatedBlocks in the first place!
+    // So recordHistory SHOULD work correctly IF it receives consolidatedParts
+    // with thought=true parts. The bug must be that the thinking part
+    // is NOT making it into consolidatedParts in the first place!
   });
 
   it('ISSUE #1150 THE ACTUAL BUG: processStreamResponse loses thinking when text check fails', async () => {
@@ -439,39 +459,38 @@ describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persisten
     expect(thinkingBlock?.signature).toBe('sig-must-survive');
   });
 
-  it('ISSUE #1150 ROOT CAUSE: thinking blocks must survive history curation with signature and sourceField intact', async () => {
+  it('ISSUE #1150 ROOT CAUSE: thinking blocks are lost during Gemini format round-trip', async () => {
     const historyService = new HistoryService();
 
-    // Simulate the neutral ContentBlock[] that recordHistory would receive:
-    const simulatedBlocks: ContentBlock[] = [
+    // Simulate the Part[] that processStreamResponse would accumulate:
+    const simulatedParts = [
       {
-        type: 'thinking',
-        thought: 'Let me think about this...',
-        sourceField: 'thinking' as ThinkingBlock['sourceField'],
-        signature: 'sig-abc-123',
+        thought: true,
+        text: 'Let me think about this...',
+        thoughtSignature: 'sig-abc-123',
+        llxprtSourceField: 'thinking',
       },
       {
-        type: 'text',
         text: "I'll help you.",
       },
       {
-        type: 'tool_call',
-        id: 'hist_tool_test_001',
-        name: 'list_directory',
-        parameters: { path: '/tmp' },
+        functionCall: {
+          id: 'hist_tool_test_001',
+          name: 'list_directory',
+          args: { path: '/tmp' },
+        },
       },
     ];
 
-    const thoughtBlocks = simulatedBlocks.filter(
-      (b): b is ThinkingBlock => b.type === 'thinking',
-    );
+    const thoughtParts = simulatedParts.filter(isThoughtPart);
 
-    // recordHistory uses thinking blocks directly:
-    const _thinkingBlocksForHistory = thoughtBlocks.map((block) => ({
+    // recordHistory creates ThinkingBlocks from thought parts:
+    const thoughtBlocks = thoughtParts.map((part) => ({
       type: 'thinking' as const,
-      thought: block.thought.trim(),
-      sourceField: block.sourceField,
-      signature: block.signature,
+      thought: ((part as { text?: string }).text ?? '').trim(),
+      sourceField:
+        (part as { llxprtSourceField?: string }).llxprtSourceField ?? 'thought',
+      signature: (part as { thoughtSignature?: string }).thoughtSignature,
     }));
 
     const iContent: IContent = {
@@ -519,5 +538,44 @@ describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persisten
     expect(thinkingBlock).toBeDefined();
     expect(thinkingBlock?.sourceField).toBe('thinking');
     expect(thinkingBlock?.signature).toBe('sig-abc-123');
+
+    // Now convert to Gemini format and back to IContent
+    const geminiContents = ContentConverters.toGeminiContents(curated);
+
+    const modelMessage = geminiContents.find(
+      (c) =>
+        c.role === 'model' &&
+        (c.parts?.some((p) => 'functionCall' in p) ?? false),
+    );
+
+    expect(modelMessage).toBeDefined();
+
+    const thoughtPart = modelMessage?.parts?.find(
+      (p) => 'thought' in p && (p as { thought: unknown }).thought === true,
+    );
+
+    expect(thoughtPart).toBeDefined();
+    expect(
+      (thoughtPart as { thoughtSignature?: string }).thoughtSignature,
+    ).toBe('sig-abc-123');
+
+    // Now convert back to IContent (what happens when we call toIContents)
+    const roundTrippedContents = ContentConverters.toIContents(geminiContents);
+
+    const roundTrippedAi = roundTrippedContents.find(
+      (c) => c.speaker === 'ai' && c.blocks.some((b) => b.type === 'tool_call'),
+    );
+
+    expect(roundTrippedAi).toBeDefined();
+
+    // THE CRITICAL CHECK: After round-trip, thinking block must still have signature
+    const roundTrippedThinking = roundTrippedAi?.blocks.find(
+      (b) => b.type === 'thinking',
+    );
+
+    // THIS WILL FAIL if the round-trip loses the signature
+    expect(roundTrippedThinking).toBeDefined();
+    expect(roundTrippedThinking?.signature).toBe('sig-abc-123');
+    expect(roundTrippedThinking?.sourceField).toBe('thinking');
   });
 });

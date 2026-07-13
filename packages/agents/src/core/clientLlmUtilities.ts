@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { GenerateContentConfig, Content } from '@google/genai';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import {
   getEnabledToolNamesForPrompt,
@@ -13,13 +14,10 @@ import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type {
-  ModelGenerationSettings,
-  ModelOutput,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { BaseLLMClient } from './baseLlmClient.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 async function buildLightweightSystemPrompt(
@@ -43,19 +41,16 @@ async function buildLightweightSystemPrompt(
 
 /**
  * Generates structured JSON using the BaseLLMClient utility path.
- *
- * @plan:PLAN-20260707-AGENTNEUTRAL.P15
- * @requirement:REQ-005.2
  */
 export async function generateJson(
   config: Config,
   _contentGenerator: ContentGenerator,
   baseLlmClient: BaseLLMClient,
-  contents: IContent[],
+  contents: Content[],
   schema: Record<string, unknown>,
   abortSignal: AbortSignal,
   model: string,
-  generationConfig: ModelGenerationSettings = {},
+  generationConfig: GenerateContentConfig = {},
   lastPromptId: string,
 ): Promise<Record<string, unknown>> {
   const logger = new DebugLogger('llxprt:core:clientLlmUtilities');
@@ -63,16 +58,13 @@ export async function generateJson(
   try {
     const systemInstruction = await buildLightweightSystemPrompt(config, model);
 
-    // Already neutral IContent[] — read TextBlock.text directly (no Google Part access).
-    const iContents = contents;
-
-    const prompt = iContents
-      .map((ic) =>
-        ic.blocks
-          .filter((b) => b.type === 'text')
-          .map((b) => (b as { text: string }).text)
-          .filter((s) => s.length > 0)
-          .join('\n'),
+    const prompt = contents
+      .map(
+        (c) =>
+          c.parts
+            ?.map((p) => ('text' in p ? (p.text ?? '') : ''))
+            .filter((s) => s.length > 0)
+            .join('\n') ?? '',
       )
       .filter((s) => s.length > 0)
       .join('\n\n');
@@ -92,12 +84,11 @@ export async function generateJson(
     if (
       typeof result === 'string' &&
       (result === 'user' || result === 'model') &&
-      iContents.some((ic) =>
-        ic.blocks.some(
-          (b) =>
-            b.type === 'text' &&
-            (b as { text: string }).text.includes('next_speaker'),
-        ),
+      contents.some(
+        (c) =>
+          c.parts?.some(
+            (p) => 'text' in p && (p.text?.includes('next_speaker') ?? false),
+          ) ?? false,
       )
     ) {
       logger.warn(
@@ -134,14 +125,14 @@ export async function generateJson(
 export async function generateContent(
   config: Config,
   contentGenerator: ContentGenerator,
-  contents: IContent[],
-  generationConfig: ModelGenerationSettings,
+  contents: Content[],
+  generationConfig: GenerateContentConfig,
   abortSignal: AbortSignal,
   model: string,
   lastPromptId: string,
-  baseGenerateContentConfig: ModelGenerationSettings,
+  baseGenerateContentConfig: GenerateContentConfig,
 ): Promise<ModelOutput> {
-  const configToUse: ModelGenerationSettings = {
+  const configToUse: GenerateContentConfig = {
     ...baseGenerateContentConfig,
     ...generationConfig,
   };
@@ -149,7 +140,7 @@ export async function generateContent(
   try {
     const systemInstruction = await buildLightweightSystemPrompt(config, model);
 
-    const icontents = contents;
+    const icontents = ContentConverters.toIContents(contents);
 
     const settings = {
       temperature: configToUse.temperature,

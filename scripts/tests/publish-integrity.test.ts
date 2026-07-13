@@ -104,13 +104,7 @@ function getPackedPaths(): Set<string> {
   if (packedPathsCache !== undefined) {
     return packedPathsCache;
   }
-  const npmArgs = ['pack', '--dry-run', '--json'];
-  const executable = process.platform === 'win32' ? process.env.ComSpec : 'npm';
-  const args =
-    process.platform === 'win32'
-      ? ['/d', '/s', '/c', 'npm', ...npmArgs]
-      : npmArgs;
-  const stdout = execFileSync(executable!, args, {
+  const stdout = execFileSync('npm', ['pack', '--dry-run', '--json'], {
     cwd: repoRoot,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
@@ -508,7 +502,7 @@ describe('published package no-compile runtime contract (S6)', () => {
     );
 
     expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
-  }, 30000);
+  }, 15000);
 });
 
 describe('release build self-contained generate contract (issue #2392)', () => {

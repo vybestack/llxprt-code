@@ -10,7 +10,7 @@ import {
   Logger,
   uiTelemetryService,
   type Config,
-  type AgentRequestInput,
+  type ContractPartListUnion,
 } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { CommandService } from './services/CommandService.js';
@@ -24,7 +24,7 @@ import { firstNonEmptyString } from './utils/coalesce.js';
 /**
  * Processes a slash command in a non-interactive environment.
  *
- * @returns A Promise that resolves to `AgentRequestInput` if a valid command is
+ * @returns A Promise that resolves to `ContractPartListUnion` if a valid command is
  *   found and results in a prompt, or `undefined` otherwise.
  * @throws {FatalInputError} if the command result is not supported in
  *   non-interactive mode.
@@ -34,7 +34,7 @@ export const handleSlashCommand = async (
   abortController: AbortController,
   config: Config | null,
   settings: LoadedSettings,
-): Promise<AgentRequestInput | undefined> => {
+): Promise<ContractPartListUnion | undefined> => {
   const trimmed = rawQuery.trim();
   if (!trimmed.startsWith('/')) {
     return undefined;
@@ -88,7 +88,7 @@ export const handleSlashCommand = async (
     if (result) {
       switch (result.type) {
         case 'submit_prompt':
-          return result.content as AgentRequestInput;
+          return result.content as ContractPartListUnion;
         case 'confirm_shell_commands':
           // This result indicates a command attempted to confirm shell commands.
           // However note that currently, ShellTool is excluded in non-interactive

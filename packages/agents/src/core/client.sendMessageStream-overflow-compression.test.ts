@@ -12,18 +12,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { Part } from '@google/genai';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType, PerformCompressionResult } from './turn.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
-import {
-  fromAsync,
-  setupGeminiClient,
-  type MockResponseShape,
-} from './client-test-helpers.js';
+import { fromAsync, setupGeminiClient } from './client-test-helpers.js';
 
 // Mock prompts module before imports
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -85,6 +81,7 @@ const {
   };
 });
 
+vi.mock('@google/genai');
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -140,7 +137,7 @@ vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
-    getResponseText: (result: MockResponseShape) =>
+    getResponseText: (result: GenerateContentResponse) =>
       result.candidates?.[0]?.content?.parts
         ?.map((part) => part.text)
         .join('') ?? undefined,
@@ -198,7 +195,7 @@ interface OverflowScenario {
 
 interface OverflowScenarioHandle {
   mockChat: Partial<ChatSession>;
-  request: ContentBlock[];
+  request: Part[];
   estimatedRequestTokenCount: number;
   remainingTokenCount: number;
 }
@@ -243,13 +240,13 @@ function buildOverflowScenario(
   const longText = 'a'.repeat(OVERFLOW_REQUEST_CHARS);
   return {
     mockChat,
-    request: [{ type: 'text' as const, text: longText }],
+    request: [{ text: longText }],
     estimatedRequestTokenCount: Math.floor(longText.length / 4),
     remainingTokenCount: MOCKED_TOKEN_LIMIT - PREFLIGHT_BASELINE,
   };
 }
 
-describe('AgentClient — preflight compression recovery (issue 2402)', () => {
+describe('Gemini Client — preflight compression recovery (issue 2402)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
@@ -426,9 +423,7 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
         compressionResult: PerformCompressionResult.COMPRESSED,
         proceeds: true,
       });
-      const request: ContentBlock[] = [
-        { type: 'text', text: 'a'.repeat(OVERFLOW_REQUEST_CHARS) },
-      ];
+      const request: Part[] = [{ text: 'a'.repeat(OVERFLOW_REQUEST_CHARS) }];
 
       const events = await fromAsync(
         client.sendMessageStream(

@@ -6,7 +6,7 @@
 
 import path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { GenerateContentConfig } from '@google/genai';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
@@ -28,6 +28,7 @@ import {
   parseCompressionStrategyName,
 } from './compressionStrategyFactory.js';
 import { PendingContextWindowEnforcer } from './pendingContextWindowEnforcement.js';
+import type { TokenUsageLogger } from '../core/TokenUsageLogger.js';
 /**
  * @plan:PLAN-20260603-ISSUE1584.P05
  * @requirement:REQ-DEP-001
@@ -85,13 +86,14 @@ export class CompressionHandler {
   private _suppressDensityDirtyDepth: number = 0;
   private activeTodosProvider?: () => Promise<string | undefined>;
   lastPromptTokenCount: number | null = null;
+  tokenUsageLogger: TokenUsageLogger | null = null;
 
   private logger = new DebugLogger('llxprt:gemini:compression');
 
   constructor(
     private readonly runtimeContext: AgentRuntimeContext,
     private readonly historyService: HistoryService,
-    private readonly generationConfig: ModelGenerationSettings,
+    private readonly generationConfig: GenerateContentConfig,
     private readonly providerResolver: (
       compressionProfileName: string | undefined,
     ) => CompressionProviderResult | Promise<CompressionProviderResult>,

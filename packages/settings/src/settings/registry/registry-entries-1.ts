@@ -264,6 +264,14 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     persistToProfile: true,
   },
   {
+    key: 'responses-stateful',
+    category: 'model-behavior',
+    description:
+      'Enable Responses API stateful conversations using previous_response_id (true/false)',
+    type: 'boolean',
+    persistToProfile: true,
+  },
+  {
     key: 'rate-limit-throttle',
     category: 'model-behavior',
     description: 'Enable proactive rate limit throttling (on/off)',

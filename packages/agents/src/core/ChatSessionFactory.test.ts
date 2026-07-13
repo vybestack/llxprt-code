@@ -67,7 +67,7 @@ vi.mock(
   '@vybestack/llxprt-code-core/services/history/ContentConverters.js',
   () => ({
     ContentConverters: {
-      toIContent: vi.fn().mockReturnValue({ speaker: 'human', blocks: [] }),
+      toIContent: vi.fn().mockReturnValue({ role: 'user', parts: [] }),
     },
   }),
 );
@@ -381,15 +381,31 @@ describe('createChatSession', () => {
     const storedHistoryService = new RealHistoryService();
     expect(storedHistoryService.isEmpty()).toBe(true);
 
+    // The file-level ContentConverters mock returns an invalid shape; point it
+    // at a real conversion so the Gemini Content becomes a valid IContent
+    // (speaker + non-empty blocks) the real HistoryService will actually store.
+    const { ContentConverters: RealContentConverters } = await vi.importActual<
+      typeof import('@vybestack/llxprt-code-core/services/history/ContentConverters.js')
+    >('@vybestack/llxprt-code-core/services/history/ContentConverters.js');
+    const { ContentConverters: MockedContentConverters } = await import(
+      '@vybestack/llxprt-code-core/services/history/ContentConverters.js'
+    );
+    vi.mocked(MockedContentConverters.toIContent).mockImplementationOnce(
+      (content) =>
+        RealContentConverters.toIContent(
+          content,
+          undefined,
+          undefined,
+          'turn-2500',
+        ),
+    );
+
     const config = makeConfig();
     const runtimeState = makeRuntimeState();
     const todoContinuationService = makeTodoContinuationService();
 
     const extraHistory = [
-      {
-        speaker: 'human' as const,
-        blocks: [{ type: 'text' as const, text: 'Soft circuits awaken' }],
-      },
+      { role: 'user' as const, parts: [{ text: 'Soft circuits awaken' }] },
     ];
 
     await createChatSession({
@@ -434,16 +450,32 @@ describe('createChatSession', () => {
     );
     expect(storedHistoryService.isEmpty()).toBe(false);
 
+    // Point the file-level ContentConverters mock at the real converter so any
+    // (erroneous) loadExtraHistory call would actually store valid content,
+    // making this test a real guard against dropping the isEmpty() check.
+    const { ContentConverters: RealContentConverters } = await vi.importActual<
+      typeof import('@vybestack/llxprt-code-core/services/history/ContentConverters.js')
+    >('@vybestack/llxprt-code-core/services/history/ContentConverters.js');
+    const { ContentConverters: MockedContentConverters } = await import(
+      '@vybestack/llxprt-code-core/services/history/ContentConverters.js'
+    );
+    vi.mocked(MockedContentConverters.toIContent).mockImplementationOnce(
+      (content) =>
+        RealContentConverters.toIContent(
+          content,
+          undefined,
+          undefined,
+          'turn-nodup',
+        ),
+    );
+
     const config = makeConfig();
     const runtimeState = makeRuntimeState();
     const todoContinuationService = makeTodoContinuationService();
     const clearStoredHistoryService = vi.fn();
 
     const extraHistory = [
-      {
-        speaker: 'human' as const,
-        blocks: [{ type: 'text' as const, text: 'stale carried history' }],
-      },
+      { role: 'user' as const, parts: [{ text: 'stale carried history' }] },
     ];
 
     await createChatSession({
@@ -545,7 +577,7 @@ describe('createChatSession', () => {
     );
 
     const extraHistory = [
-      { speaker: 'human' as const, blocks: [{ type: 'text', text: 'hello' }] },
+      { role: 'user' as const, parts: [{ text: 'hello' }] },
     ];
 
     await createChatSession({
@@ -583,9 +615,9 @@ describe('createChatSession', () => {
       expect.anything(),
       expect.anything(),
       expect.objectContaining({
-        reasoning: { includeInOutput: true },
+        thinkingConfig: { thinkingBudget: -1, includeThoughts: true },
       }),
-      [],
+      expect.anything(),
     );
   });
 
@@ -608,8 +640,8 @@ describe('createChatSession', () => {
     expect(ChatSession).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.not.objectContaining({ reasoning: expect.anything() }),
-      [],
+      expect.not.objectContaining({ thinkingConfig: expect.anything() }),
+      expect.anything(),
     );
   });
 

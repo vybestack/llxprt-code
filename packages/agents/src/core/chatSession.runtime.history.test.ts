@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { Part } from '@google/genai';
 import { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -112,31 +112,23 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       [],
     );
 
-    const inputToolCall: IContent = {
-      speaker: 'ai',
-      blocks: [
-        {
-          type: 'tool_call',
-          id: 'toolu_123',
-          name: 'run_shell_command',
-          parameters: { command: 'ls -lt dev-docs' },
-        },
-      ],
+    const toolCallPart = {
+      functionCall: {
+        id: 'toolu_123',
+        name: 'run_shell_command',
+        args: { command: 'ls -lt dev-docs' },
+      },
     };
-    const inputToolResponse: IContent = {
-      speaker: 'tool',
-      blocks: [
-        {
-          type: 'tool_response',
-          callId: 'toolu_123',
-          toolName: 'run_shell_command',
-          result: { stdout: 'ok', stderr: '', exitCode: 0 },
-        },
-      ],
+    const toolResponsePart = {
+      functionResponse: {
+        id: 'toolu_123',
+        name: 'run_shell_command',
+        response: { stdout: 'ok', stderr: '', exitCode: 0 },
+      },
     };
 
     const stream = await chat.sendMessageStream(
-      { message: [inputToolCall, inputToolResponse] },
+      { message: [toolCallPart, toolResponsePart] as unknown as Part[] },
       'prompt-123',
     );
     for await (const _event of stream) {
@@ -145,15 +137,11 @@ describe('ChatSession runtime history and tool-call behavior', () => {
 
     const curated = historyService.getCuratedForProvider();
     const toolCallIndex = curated.findIndex(
-      (content) =>
-        content.blocks.some((b) => b.type === 'tool_call') &&
-        content.blocks.length > 0,
+      (content) => content.speaker === 'ai' && content.blocks.length > 0,
     );
     expect(toolCallIndex).toBeGreaterThanOrEqual(0);
     const toolResponseIndex = curated.findIndex(
-      (content) =>
-        content.blocks.some((b) => b.type === 'tool_response') &&
-        content.blocks.length > 0,
+      (content) => content.speaker === 'tool' && content.blocks.length > 0,
     );
     expect(toolResponseIndex).toBeGreaterThanOrEqual(0);
     expect(toolResponseIndex).toBe(toolCallIndex + 1);
@@ -272,7 +260,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       toolName: 'read_file',
       result: { output: '{"name":"@vybestack/llxprt-code"}' },
     });
-    expect(toolResponseBlock.callId).toBe('toolu_456');
+    expect(toolResponseBlock.callId).toMatch(/^hist_tool_/);
   });
 
   it('does not duplicate eagerly recorded tool responses when the next stream succeeds', async () => {
@@ -370,19 +358,17 @@ describe('ChatSession runtime history and tool-call behavior', () => {
 
     const stream = await chat.sendMessageStream(
       {
-        message: {
-          speaker: 'tool',
-          blocks: [
-            {
-              type: 'tool_response',
-              callId: 'toolu_continue_1',
-              toolName: 'read_file',
-              result: { output: 'package-json' },
+        message: [
+          {
+            functionResponse: {
+              id: 'toolu_continue_1',
+              name: 'read_file',
+              response: { output: 'package-json' },
             },
-            { type: 'text', text: 'Tool completed.' },
-            { type: 'text', text: 'Continue with the analysis.' },
-          ],
-        },
+          },
+          { text: 'Tool completed.' },
+          { text: 'Continue with the analysis.' },
+        ] as unknown as Part[],
       },
       'prompt-continue-1',
     );
@@ -775,7 +761,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
 
       const events = [] as Array<{ type: string; value?: unknown }>;
       for await (const event of turn.run(
-        [{ text: 'Hello there!' }] as unknown[],
+        [{ text: 'Hello there!' }] as Part[],
         new AbortController().signal,
       )) {
         events.push({

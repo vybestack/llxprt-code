@@ -7,19 +7,31 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ServerAgentStreamEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
+import type { Part } from '@google/genai';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   type MockedChatInstance,
   findFinishedEvent,
-  mockChunk,
+  mockResponseToChunk,
 } from './turn-test-helpers.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
   mockGetHistory: vi.fn(),
 }));
+
+vi.mock('@google/genai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@google/genai')>();
+  const MockChat = vi.fn().mockImplementation(() => ({
+    sendMessageStream: mockSendMessageStream,
+    getHistory: mockGetHistory,
+  }));
+  return {
+    ...actual,
+    Chat: MockChat,
+  };
+});
 
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
@@ -36,6 +48,21 @@ vi.mock(
       // analyzeResponseOutcome now operates on ContentBlock[]; delegate to the
       // real implementation so thinking/tool_call/text detection is correct.
       analyzeResponseOutcome: actual.analyzeResponseOutcome,
+      // Legacy Part/GenerateContentResponse helpers retained for any callers
+      // still on the old shapes.
+      getResponseText: (resp: GenerateContentResponse) =>
+        resp.candidates?.[0]?.content?.parts
+          ?.filter((part) => (part as { thought?: boolean }).thought !== true)
+          .map((part) => part.text)
+          .join('') ?? undefined,
+      getFunctionCalls: (resp: GenerateContentResponse) =>
+        resp.functionCalls ?? [],
+      getFunctionCallsFromParts: (parts: Part[]) => {
+        const functionCalls = parts
+          .filter((part) => part.functionCall !== undefined)
+          .map((part) => part.functionCall!);
+        return functionCalls.length > 0 ? functionCalls : undefined;
+      },
     };
   },
 );
@@ -67,16 +94,24 @@ describe('Turn - debug responses and finished event outcome', () => {
 
   describe('getDebugResponses', () => {
     it('should return collected debug responses', async () => {
-      const chunk1 = mockChunk({ text: 'Debug 1' });
-      const chunk2 = mockChunk({
-        toolCalls: [{ name: 'debugTool' }],
+      const chunk1 = mockResponseToChunk({
+        candidates: [{ content: { parts: [{ text: 'Debug 1' }] } }],
+      });
+      const chunk2 = mockResponseToChunk({
+        candidates: [
+          {
+            content: {
+              parts: [{ functionCall: { name: 'debugTool' } }],
+            },
+          },
+        ],
       });
       const mockResponseStream = (async function* () {
         yield { type: StreamEventType.CHUNK, value: chunk1 };
         yield { type: StreamEventType.CHUNK, value: chunk2 };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
-      const reqParts: ContentBlock[] = [{ type: 'text', text: 'Hi' }];
+      const reqParts: Part[] = [{ text: 'Hi' }];
       for await (const _ of turn.run(reqParts, new AbortController().signal)) {
         // consume stream
       }
@@ -102,9 +137,13 @@ describe('Turn - debug responses and finished event outcome', () => {
         const mockResponseStream = (async function* () {
           yield {
             type: StreamEventType.CHUNK,
-            value: mockChunk({
-              text: 'Hello world',
-              finishReason: 'STOP',
+            value: mockResponseToChunk({
+              candidates: [
+                {
+                  content: { parts: [{ text: 'Hello world' }] },
+                  finishReason: 'STOP',
+                },
+              ],
             }),
           };
         })();
@@ -131,9 +170,15 @@ describe('Turn - debug responses and finished event outcome', () => {
         const mockResponseStream = (async function* () {
           yield {
             type: StreamEventType.CHUNK,
-            value: mockChunk({
-              thought: 'internal reasoning',
-              finishReason: 'STOP',
+            value: mockResponseToChunk({
+              candidates: [
+                {
+                  content: {
+                    parts: [{ text: 'internal reasoning', thought: true }],
+                  },
+                  finishReason: 'STOP',
+                },
+              ],
             }),
           };
         })();
@@ -160,9 +205,22 @@ describe('Turn - debug responses and finished event outcome', () => {
         const mockResponseStream = (async function* () {
           yield {
             type: StreamEventType.CHUNK,
-            value: mockChunk({
-              toolCalls: [{ name: 'read_file', args: { path: '/tmp/x' } }],
-              finishReason: 'STOP',
+            value: mockResponseToChunk({
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      {
+                        functionCall: {
+                          name: 'read_file',
+                          args: { path: '/tmp/x' },
+                        },
+                      },
+                    ],
+                  },
+                  finishReason: 'STOP',
+                },
+              ],
             }),
           };
         })();
@@ -189,11 +247,15 @@ describe('Turn - debug responses and finished event outcome', () => {
         const mockResponseStream = (async function* () {
           yield {
             type: StreamEventType.CHUNK,
-            value: mockChunk({ text: 'Hello world' }),
+            value: mockResponseToChunk({
+              candidates: [{ content: { parts: [{ text: 'Hello world' }] } }],
+            }),
           };
           yield {
             type: StreamEventType.CHUNK,
-            value: mockChunk({ finishReason: 'STOP' }),
+            value: mockResponseToChunk({
+              candidates: [{ content: { parts: [] }, finishReason: 'STOP' }],
+            }),
           };
         })();
         mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -219,11 +281,21 @@ describe('Turn - debug responses and finished event outcome', () => {
         const mockResponseStream = (async function* () {
           yield {
             type: StreamEventType.CHUNK,
-            value: mockChunk({ thought: 'internal reasoning' }),
+            value: mockResponseToChunk({
+              candidates: [
+                {
+                  content: {
+                    parts: [{ text: 'internal reasoning', thought: true }],
+                  },
+                },
+              ],
+            }),
           };
           yield {
             type: StreamEventType.CHUNK,
-            value: mockChunk({ finishReason: 'STOP' }),
+            value: mockResponseToChunk({
+              candidates: [{ content: { parts: [] }, finishReason: 'STOP' }],
+            }),
           };
         })();
         mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -249,13 +321,28 @@ describe('Turn - debug responses and finished event outcome', () => {
         const mockResponseStream = (async function* () {
           yield {
             type: StreamEventType.CHUNK,
-            value: mockChunk({
-              toolCalls: [{ name: 'read_file', args: { path: '/tmp/x' } }],
+            value: mockResponseToChunk({
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      {
+                        functionCall: {
+                          name: 'read_file',
+                          args: { path: '/tmp/x' },
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
             }),
           };
           yield {
             type: StreamEventType.CHUNK,
-            value: mockChunk({ finishReason: 'STOP' }),
+            value: mockResponseToChunk({
+              candidates: [{ content: { parts: [] }, finishReason: 'STOP' }],
+            }),
           };
         })();
         mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -281,16 +368,30 @@ describe('Turn - debug responses and finished event outcome', () => {
         const mockResponseStream = (async function* () {
           yield {
             type: StreamEventType.CHUNK,
-            value: mockChunk({ text: 'discarded text' }),
+            value: mockResponseToChunk({
+              candidates: [
+                { content: { parts: [{ text: 'discarded text' }] } },
+              ],
+            }),
           };
           yield { type: StreamEventType.RETRY };
           yield {
             type: StreamEventType.CHUNK,
-            value: mockChunk({ thought: 'internal reasoning' }),
+            value: mockResponseToChunk({
+              candidates: [
+                {
+                  content: {
+                    parts: [{ text: 'internal reasoning', thought: true }],
+                  },
+                },
+              ],
+            }),
           };
           yield {
             type: StreamEventType.CHUNK,
-            value: mockChunk({ finishReason: 'STOP' }),
+            value: mockResponseToChunk({
+              candidates: [{ content: { parts: [] }, finishReason: 'STOP' }],
+            }),
           };
         })();
         mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -316,9 +417,13 @@ describe('Turn - debug responses and finished event outcome', () => {
         const mockResponseStream = (async function* () {
           yield {
             type: StreamEventType.CHUNK,
-            value: mockChunk({
-              text: '   ',
-              finishReason: 'STOP',
+            value: mockResponseToChunk({
+              candidates: [
+                {
+                  content: { parts: [{ text: '   ' }] },
+                  finishReason: 'STOP',
+                },
+              ],
             }),
           };
         })();

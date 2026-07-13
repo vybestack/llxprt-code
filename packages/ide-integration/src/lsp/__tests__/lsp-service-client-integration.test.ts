@@ -21,7 +21,7 @@ const {
   sendRequestMock: vi.fn(),
 }));
 
-const createLocatorProcess = () => {
+const createWhichProcess = () => {
   const proc = new EventEmitter() as EventEmitter & { stdout: PassThrough };
   proc.stdout = new PassThrough();
   setImmediate(() => {
@@ -115,8 +115,8 @@ describe('LspServiceClient integration contract', () => {
     sendRequestMock.mockReset();
 
     spawnMock.mockImplementation((command: string) => {
-      if (command === 'which' || command === 'where') {
-        return createLocatorProcess();
+      if (command === 'which') {
+        return createWhichProcess();
       }
       return createLspProcess();
     });
@@ -196,14 +196,13 @@ describe('LspServiceClient integration contract', () => {
     expect(client.getMcpTransportStreams()).toBeNull();
   });
 
-  it('live start locates bun and spawns lsp plus jsonrpc connection', async () => {
+  it('live start uses which bun and lsp spawn plus jsonrpc connection', async () => {
     const client = createClient('typescript-language-server');
 
     await client.start();
 
-    const locator = process.platform === 'win32' ? 'where' : 'which';
     expect(spawnMock).toHaveBeenCalledTimes(2);
-    expect(spawnMock.mock.calls.some((call) => call[0] === locator)).toBe(true);
+    expect(spawnMock.mock.calls.some((call) => call[0] === 'which')).toBe(true);
     expect(createMessageConnectionMock).toHaveBeenCalledTimes(1);
     expect(client.isAlive()).toBe(true);
   });

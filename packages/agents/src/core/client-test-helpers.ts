@@ -16,11 +16,14 @@
  */
 
 import { vi } from 'vitest';
+import type { Chat, GenerateContentResponse } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentClient } from './client.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { FileDiscoveryService } from '@vybestack/llxprt-code-core/services/fileDiscoveryService.js';
 import { setSimulate429 } from '@vybestack/llxprt-code-core/utils/testUtils.js';
@@ -47,17 +50,6 @@ export async function fromAsync<T>(
 export interface ClientTestContext {
   client: AgentClient;
   mockConfig: Config;
-}
-
-/**
- * Neutral structural type for the vi.mock of generateContentResponseUtilities.
- * Used by all client test files to type the mocked `getResponseText` parameter
- * without importing any Google provider type.
- */
-export interface MockResponseShape {
-  candidates?: Array<{
-    content?: { parts?: Array<{ text?: string }> };
-  }>;
 }
 
 export interface ClientMockFns {
@@ -103,13 +95,33 @@ function resetAndApplyServiceMocks(): void {
   setSimulate429(false);
 }
 
-/**
- * Previously wired the GoogleGenAI constructor mock to the provided mock fns.
- * The production code no longer uses GoogleGenAI (it uses createContentGenerator),
- * so this is now a no-op retained for API compatibility with callers.
- */
-function setupGoogleGenAIMock(_mockFns: ClientMockFns): void {
-  // No-op — embedding/generation mocks are wired via vi.mock in individual test files.
+/** Wire the GoogleGenAI constructor mock to the provided mock fns. */
+function setupGoogleGenAIMock(mockFns: ClientMockFns): void {
+  const { mockChatCreateFn, mockGenerateContentFn, mockEmbedContentFn } =
+    mockFns;
+
+  const MockedGoogleGenAI = vi.mocked(GoogleGenAI);
+  MockedGoogleGenAI.mockImplementation((..._args: unknown[]): GoogleGenAI => {
+    const mockInstance = {
+      chats: { create: mockChatCreateFn },
+      models: {
+        generateContent: mockGenerateContentFn,
+        embedContent: mockEmbedContentFn,
+      },
+    };
+    return mockInstance as unknown as GoogleGenAI;
+  });
+
+  mockChatCreateFn.mockResolvedValue({} as Chat);
+  mockGenerateContentFn.mockResolvedValue({
+    candidates: [
+      {
+        content: {
+          parts: [{ text: '{"key": "value"}' }],
+        },
+      },
+    ],
+  } as unknown as GenerateContentResponse);
 }
 
 /** Build and register the mock Config implementation. */
@@ -163,6 +175,9 @@ function setupConfigMock(): ContentGeneratorConfig {
       suggestionCooldownMs: 300000,
     }),
     getContinueOnFailedApiCall: vi.fn().mockReturnValue(true),
+    getImagePayloadBudgetBytes: vi
+      .fn()
+      .mockReturnValue(DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES),
     getChatCompression: vi.fn().mockReturnValue(undefined),
     getEphemeralSettings: vi.fn().mockReturnValue({}),
     getEphemeralSetting: vi.fn().mockReturnValue(undefined),

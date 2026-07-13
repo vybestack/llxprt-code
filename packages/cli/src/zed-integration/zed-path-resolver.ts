@@ -10,7 +10,7 @@ import {
   isWithinRoot,
   debugLogger,
   type Config,
-  type ContentBlock,
+  type ContractPart,
 } from '@vybestack/llxprt-code-core';
 import type {
   FileSystemService,
@@ -26,60 +26,6 @@ interface DebugFn {
   (msg: string): void;
 }
 
-/**
- * Internal resolver part shape. The Zed path resolver works with three kinds
- * of parts during resolution: plain text, inline binary media, and file-URI
- * references (fileData). These are converted to proper ContentBlock variants
- * at the resolvePrompt return boundary.
- */
-type ResolverTextPart = { type: 'text'; text: string };
-type ResolverMediaPart = {
-  type: 'media';
-  mimeType: string;
-  data: string;
-};
-type ResolverFilePart = {
-  type: 'file';
-  fileData: { mimeData: string | null; name: string; fileUri: string };
-};
-type ResolverPart = ResolverTextPart | ResolverMediaPart | ResolverFilePart;
-
-function isResolverFilePart(part: ResolverPart): part is ResolverFilePart {
-  return part.type === 'file';
-}
-
-function isResolverMediaPart(part: ResolverPart): part is ResolverMediaPart {
-  return part.type === 'media';
-}
-
-function resolverPartToText(part: ResolverPart): string | undefined {
-  return part.type === 'text' ? part.text : undefined;
-}
-
-function resolverPartToFileUri(part: ResolverPart): string | undefined {
-  return part.type === 'file' ? part.fileData.fileUri : undefined;
-}
-/**
- * Converts internal ResolverPart[] to ContentBlock[] for the public API.
- * File-reference parts become text blocks with @path markers.
- */
-function resolverPartsToContentBlocks(parts: ResolverPart[]): ContentBlock[] {
-  return parts.map((part) => {
-    if (part.type === 'text') {
-      return { type: 'text', text: part.text };
-    }
-    if (part.type === 'media') {
-      return {
-        type: 'media',
-        mimeType: part.mimeType,
-        data: part.data,
-        encoding: 'base64',
-      };
-    }
-    return { type: 'text', text: `@${part.fileData.fileUri}` };
-  });
-}
-
 export class ZedPathResolver {
   constructor(
     private readonly config: Config,
@@ -89,7 +35,7 @@ export class ZedPathResolver {
   async resolvePrompt(
     message: acp.ContentBlock[],
     abortSignal: AbortSignal,
-  ): Promise<ContentBlock[]> {
+  ): Promise<ContractPart[]> {
     const FILE_URI_SCHEME = 'file://';
 
     const { parts, embeddedContext } = this.convertContentBlocks(
@@ -97,10 +43,10 @@ export class ZedPathResolver {
       FILE_URI_SCHEME,
     );
 
-    const atPathCommandParts = parts.filter(isResolverFilePart);
+    const atPathCommandParts = parts.filter((part) => 'fileData' in part);
 
     if (atPathCommandParts.length === 0 && embeddedContext.length === 0) {
-      return resolverPartsToContentBlocks(parts);
+      return parts;
     }
 
     const atPathToResolvedSpecMap = new Map<string, string>();
@@ -135,20 +81,18 @@ export class ZedPathResolver {
       );
     }
 
-    const processedQueryParts: ResolverPart[] = [
-      { type: 'text', text: initialQueryText },
-    ];
+    const processedQueryParts: ContractPart[] = [{ text: initialQueryText }];
 
-    // Preserve existing media parts (images/audio) from the original prompt.
+    // Preserve existing inlineData parts (images/audio) from the original prompt.
     for (const part of parts) {
-      if (isResolverMediaPart(part)) {
+      if ('inlineData' in part) {
         processedQueryParts.push(part);
       }
     }
 
     if (pathSpecsToRead.length === 0 && embeddedContext.length === 0) {
       debugLogger.warn('No valid file paths found in @ commands to read.');
-      return resolverPartsToContentBlocks(processedQueryParts);
+      return processedQueryParts;
     }
 
     if (pathSpecsToRead.length > 0) {
@@ -164,45 +108,45 @@ export class ZedPathResolver {
       this.appendEmbeddedContext(processedQueryParts, embeddedContext);
     }
 
-    return resolverPartsToContentBlocks(processedQueryParts);
+    return processedQueryParts;
   }
 
   private convertContentBlocks(
     message: acp.ContentBlock[],
     fileUriScheme: string,
   ): {
-    parts: ResolverPart[];
+    parts: ContractPart[];
     embeddedContext: acp.EmbeddedResourceResource[];
   } {
     const embeddedContext: acp.EmbeddedResourceResource[] = [];
 
-    const parts = message.map((part): ResolverPart => {
+    const parts = message.map((part) => {
       switch (part.type) {
         case 'text':
-          return { type: 'text', text: part.text };
+          return { text: part.text };
         case 'image':
         case 'audio':
           return {
-            type: 'media',
-            mimeType: part.mimeType,
-            data: part.data,
+            inlineData: {
+              mimeType: part.mimeType,
+              data: part.data,
+            },
           };
         case 'resource_link': {
           if (part.uri.startsWith(fileUriScheme)) {
             return {
-              type: 'file',
               fileData: {
-                mimeData: part.mimeType ?? null,
+                mimeData: part.mimeType,
                 name: part.name,
                 fileUri: part.uri.slice(fileUriScheme.length),
               },
             };
           }
-          return { type: 'text', text: `@${part.uri}` };
+          return { text: `@${part.uri}` };
         }
         case 'resource': {
           embeddedContext.push(part.resource);
-          return { type: 'text', text: `@${part.resource.uri}` };
+          return { text: `@${part.resource.uri}` };
         }
         default: {
           const unreachable: never = part;
@@ -215,7 +159,7 @@ export class ZedPathResolver {
   }
 
   private async resolvePathSpecs(
-    atPathCommandParts: ResolverFilePart[],
+    atPathCommandParts: ContractPart[],
     abortSignal: AbortSignal,
     fileDiscovery: ReturnType<Config['getFileService']>,
     fileFilteringOptions: FilterFilesOptions,
@@ -225,7 +169,8 @@ export class ZedPathResolver {
     atPathToResolvedSpecMap: Map<string, string>,
   ): Promise<void> {
     for (const atPathPart of atPathCommandParts) {
-      const pathName = atPathPart.fileData.fileUri;
+      const pathName = (atPathPart as { fileData: { fileUri: string } })
+        .fileData.fileUri;
       const { currentPathSpec, resolvedSuccessfully } =
         await this.resolveSinglePath(pathName, abortSignal);
       if (resolvedSuccessfully) {
@@ -400,15 +345,14 @@ export class ZedPathResolver {
   }
 
   private buildQueryText(
-    parts: ResolverPart[],
+    parts: ContractPart[],
     atPathToResolvedSpecMap: Map<string, string>,
   ): string {
     let queryText = '';
     for (let i = 0; i < parts.length; i++) {
       const chunk = parts[i];
-      const text = resolverPartToText(chunk);
-      if (text !== undefined) {
-        queryText += text;
+      if ('text' in chunk) {
+        queryText += chunk.text;
       } else {
         queryText = this.appendPathToQueryText(
           chunk,
@@ -423,23 +367,26 @@ export class ZedPathResolver {
   }
 
   private appendPathToQueryText(
-    chunk: ResolverPart,
-    parts: ResolverPart[],
+    chunk: ContractPart,
+    parts: ContractPart[],
     i: number,
     queryText: string,
     atPathToResolvedSpecMap: Map<string, string>,
   ): string {
-    const fileUri = resolverPartToFileUri(chunk);
-    const resolvedSpec = fileUri
-      ? atPathToResolvedSpecMap.get(fileUri)
-      : undefined;
+    const resolvedSpec =
+      chunk.fileData &&
+      atPathToResolvedSpecMap.get(
+        (chunk as { fileData: { fileUri: string } }).fileData.fileUri,
+      );
 
     if (this.shouldPrependSpace(i, queryText, resolvedSpec)) {
       const prevPart = parts[i - 1];
-      const prevFileUri = resolverPartToFileUri(prevPart);
       if (
-        resolverPartToText(prevPart) !== undefined ||
-        (prevFileUri && atPathToResolvedSpecMap.has(prevFileUri))
+        'text' in prevPart ||
+        ('fileData' in prevPart &&
+          atPathToResolvedSpecMap.has(
+            (prevPart as { fileData: { fileUri: string } }).fileData.fileUri,
+          ))
       ) {
         queryText += ' ';
       }
@@ -449,6 +396,8 @@ export class ZedPathResolver {
       return queryText + `@${resolvedSpec}`;
     }
 
+    const fileUri = (chunk as { fileData?: { fileUri: string } }).fileData
+      ?.fileUri;
     if (
       i > 0 &&
       queryText.length > 0 &&
@@ -478,12 +427,11 @@ export class ZedPathResolver {
     pathSpecsToRead: string[],
     contentLabelsForDisplay: string[],
     abortSignal: AbortSignal,
-    processedQueryParts: ResolverPart[],
+    processedQueryParts: ContractPart[],
   ): Promise<void> {
     const targetDir = this.config.getTargetDir();
     const fileSystemService = this.config.getFileSystemService();
     processedQueryParts.push({
-      type: 'text',
       text: '\n--- Content from referenced files ---',
     });
 
@@ -510,7 +458,7 @@ export class ZedPathResolver {
     targetDir: string,
     fileSystemService: FileSystemService,
     abortSignal: AbortSignal,
-    processedQueryParts: ResolverPart[],
+    processedQueryParts: ContractPart[],
   ): Promise<void> {
     if (this.isGlobPath(spec)) {
       await this.appendGlobSpec(
@@ -539,7 +487,7 @@ export class ZedPathResolver {
     targetDir: string,
     fileSystemService: FileSystemService,
     abortSignal: AbortSignal,
-    processedQueryParts: ResolverPart[],
+    processedQueryParts: ContractPart[],
   ): Promise<void> {
     try {
       const matches = await glob(spec, {
@@ -575,7 +523,6 @@ export class ZedPathResolver {
         return;
       }
       processedQueryParts.push({
-        type: 'text',
         text: `\nError reading files (${label}): ${getErrorMessage(error)}`,
       });
     }
@@ -586,17 +533,14 @@ export class ZedPathResolver {
     absolute: string,
     fileSystemService: FileSystemService,
     abortSignal: AbortSignal,
-    processedQueryParts: ResolverPart[],
+    processedQueryParts: ContractPart[],
   ): Promise<boolean> {
     const content = await fileSystemService.readTextFile(absolute);
     if (abortSignal.aborted) {
       return false;
     }
-    processedQueryParts.push({
-      type: 'text',
-      text: `\nContent from @${match}:\n`,
-    });
-    processedQueryParts.push({ type: 'text', text: content });
+    processedQueryParts.push({ text: `\nContent from @${match}:\n` });
+    processedQueryParts.push({ text: content });
     return true;
   }
 
@@ -612,7 +556,7 @@ export class ZedPathResolver {
     targetDir: string,
     fileSystemService: FileSystemService,
     abortSignal: AbortSignal,
-    processedQueryParts: ResolverPart[],
+    processedQueryParts: ContractPart[],
   ): Promise<void> {
     try {
       const absolute = path.isAbsolute(spec)
@@ -620,7 +564,6 @@ export class ZedPathResolver {
         : path.resolve(targetDir, spec);
       if (!isWithinRoot(absolute, targetDir)) {
         processedQueryParts.push({
-          type: 'text',
           text: `\nSkipped file outside project root (${label}).`,
         });
         return;
@@ -629,51 +572,43 @@ export class ZedPathResolver {
       if (abortSignal.aborted) {
         return;
       }
-      processedQueryParts.push({
-        type: 'text',
-        text: `\nContent from @${label}:\n`,
-      });
-      const contentParts = normalizeToParts(content);
-      for (const part of contentParts) {
-        processedQueryParts.push(
-          part.type === 'text' ? part : { type: 'text', text: '' },
-        );
+      processedQueryParts.push({ text: `\nContent from @${label}:\n` });
+      const parts = normalizeToParts(content);
+      for (const part of parts) {
+        processedQueryParts.push(part);
       }
     } catch (error) {
       if (abortSignal.aborted) {
         return;
       }
       processedQueryParts.push({
-        type: 'text',
         text: `\nError reading file (${label}): ${getErrorMessage(error)}`,
       });
     }
   }
 
   private appendEmbeddedContext(
-    processedQueryParts: ResolverPart[],
+    processedQueryParts: ContractPart[],
     embeddedContext: acp.EmbeddedResourceResource[],
   ): void {
     processedQueryParts.push({
-      type: 'text',
       text: '\n--- Content from referenced context ---',
     });
 
     for (const contextPart of embeddedContext) {
       processedQueryParts.push({
-        type: 'text',
         text: `\nContent from @${contextPart.uri}:\n`,
       });
       if ('text' in contextPart) {
         processedQueryParts.push({
-          type: 'text',
           text: contextPart.text,
         });
       } else {
         processedQueryParts.push({
-          type: 'media',
-          mimeType: contextPart.mimeType ?? 'application/octet-stream',
-          data: contextPart.blob,
+          inlineData: {
+            mimeType: contextPart.mimeType ?? 'application/octet-stream',
+            data: contextPart.blob,
+          },
         });
       }
     }

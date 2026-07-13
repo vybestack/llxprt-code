@@ -4,19 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { GenerateContentResponse } from '@google/genai';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 
 const logger = new DebugLogger('llxprt:stream-cleanup');
 
-type StreamResult<TYield = ModelStreamChunk> = IteratorResult<TYield, void>;
-type StreamNext<TNext, TYield> = (
-  ...args: [] | [TNext]
-) => Promise<StreamResult<TYield>>;
-type StreamReturn<TYield> = (value?: void) => Promise<StreamResult<TYield>>;
-type StreamThrow<TYield> = (error?: unknown) => Promise<StreamResult<TYield>>;
+type StreamResult = IteratorResult<GenerateContentResponse, void>;
+type StreamNext<TNext> = (...args: [] | [TNext]) => Promise<StreamResult>;
+type StreamReturn = (value?: void) => Promise<StreamResult>;
+type StreamThrow = (error?: unknown) => Promise<StreamResult>;
 type StreamAsyncDispose = () => Promise<void>;
 
 function bindOptionalMethod<T>(
@@ -61,10 +59,10 @@ function createCleanup(
   return cleanup;
 }
 
-function cleanupWhenDone<TYield>(
-  result: StreamResult<TYield>,
+function cleanupWhenDone(
+  result: StreamResult,
   cleanup: () => void,
-): StreamResult<TYield> {
+): StreamResult {
   if (result.done === true) cleanup();
   return result;
 }
@@ -81,11 +79,11 @@ function attachCauseToStreamError(streamError: unknown, cause: unknown): void {
   }
 }
 
-async function returnWithCleanup<TYield>(
-  streamReturn: StreamReturn<TYield> | undefined,
+async function returnWithCleanup(
+  streamReturn: StreamReturn | undefined,
   cleanup: () => void,
   value?: void,
-): Promise<StreamResult<TYield>> {
+): Promise<StreamResult> {
   // If streamReturn is unavailable, cleanup clears the compression callback
   // but cannot close the underlying stream.
   try {
@@ -99,12 +97,12 @@ async function returnWithCleanup<TYield>(
   }
 }
 
-async function throwWithCleanup<TYield>(
-  streamThrow: StreamThrow<TYield> | undefined,
-  streamReturn: StreamReturn<TYield> | undefined,
+async function throwWithCleanup(
+  streamThrow: StreamThrow | undefined,
+  streamReturn: StreamReturn | undefined,
   cleanup: () => void,
   error?: unknown,
-): Promise<StreamResult<TYield>> {
+): Promise<StreamResult> {
   if (streamThrow) {
     try {
       return cleanupWhenDone(await streamThrow(error), cleanup);
@@ -129,9 +127,9 @@ async function throwWithCleanup<TYield>(
   throw error ?? new Error('Stream cancelled via throw()');
 }
 
-async function disposeWithCleanup<TYield>(
+async function disposeWithCleanup(
   streamAsyncDispose: StreamAsyncDispose | undefined,
-  streamReturn: StreamReturn<TYield> | undefined,
+  streamReturn: StreamReturn | undefined,
   cleanup: () => void,
 ): Promise<void> {
   if (streamAsyncDispose) {
@@ -163,32 +161,23 @@ async function disposeWithCleanup<TYield>(
  * completed, closed, fails, or the request aborts. Callers must consume or close
  * the returned generator so cleanup can run for non-aborted requests.
  */
-export function withCompressionCallbackCleanup<
-  TYield = ModelStreamChunk,
-  TNext = unknown,
->(
-  stream: AsyncGenerator<TYield, void, TNext>,
+export function withCompressionCallbackCleanup<TNext = unknown>(
+  stream: AsyncGenerator<GenerateContentResponse, void, TNext>,
   provider: IProvider,
   compressionHandler: CompressionHandler,
   abortSignal?: AbortSignal,
-): AsyncGenerator<TYield, void, TNext> {
+): AsyncGenerator<GenerateContentResponse, void, TNext> {
   const cleanup = createCleanup(provider, compressionHandler, abortSignal);
-  const streamNext = bindOptionalMethod<StreamNext<TNext, TYield>>(
-    stream,
-    'next',
-  );
-  const streamReturn = bindOptionalMethod<StreamReturn<TYield>>(
-    stream,
-    'return',
-  );
-  const streamThrow = bindOptionalMethod<StreamThrow<TYield>>(stream, 'throw');
+  const streamNext = bindOptionalMethod<StreamNext<TNext>>(stream, 'next');
+  const streamReturn = bindOptionalMethod<StreamReturn>(stream, 'return');
+  const streamThrow = bindOptionalMethod<StreamThrow>(stream, 'throw');
   const streamAsyncDispose = bindOptionalMethod<StreamAsyncDispose>(
     stream,
     Symbol.asyncDispose,
   );
 
   const wrapper = {
-    async next(...args: [] | [TNext]): Promise<StreamResult<TYield>> {
+    async next(...args: [] | [TNext]): Promise<StreamResult> {
       if (!streamNext) {
         try {
           await streamReturn?.();
@@ -209,23 +198,18 @@ export function withCompressionCallbackCleanup<
         throw error;
       }
     },
-    async return(value?: void): Promise<StreamResult<TYield>> {
-      return returnWithCleanup<TYield>(streamReturn, cleanup, value);
+    async return(value?: void): Promise<StreamResult> {
+      return returnWithCleanup(streamReturn, cleanup, value);
     },
-    async throw(error?: unknown): Promise<StreamResult<TYield>> {
-      return throwWithCleanup<TYield>(
-        streamThrow,
-        streamReturn,
-        cleanup,
-        error,
-      );
+    async throw(error?: unknown): Promise<StreamResult> {
+      return throwWithCleanup(streamThrow, streamReturn, cleanup, error);
     },
     [Symbol.asyncIterator]() {
-      return wrapper as AsyncGenerator<TYield, void, TNext>;
+      return wrapper as AsyncGenerator<GenerateContentResponse, void, TNext>;
     },
     [Symbol.asyncDispose]: () =>
-      disposeWithCleanup<TYield>(streamAsyncDispose, streamReturn, cleanup),
+      disposeWithCleanup(streamAsyncDispose, streamReturn, cleanup),
   };
 
-  return wrapper as AsyncGenerator<TYield, void, TNext>;
+  return wrapper as AsyncGenerator<GenerateContentResponse, void, TNext>;
 }

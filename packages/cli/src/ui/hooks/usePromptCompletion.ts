@@ -9,13 +9,13 @@ import type { MutableRefObject, Dispatch, SetStateAction } from 'react';
 
 import {
   DEFAULT_GEMINI_FLASH_LITE_MODEL,
+  getResponseText,
   debugLogger,
-  getResponseTextFromBlocks,
 } from '@vybestack/llxprt-code-core';
 import type {
-  IContent,
-  AgentClientGenerateConfig,
-  ModelOutput,
+  ContractContent,
+  ContractGenerateContentConfig,
+  ContractGenerateContentResponse,
 } from '@vybestack/llxprt-code-core';
 import type { TextBuffer } from '../components/shared/text-buffer.js';
 import { isSlashCommand } from '../utils/commandUtils.js';
@@ -80,18 +80,17 @@ function shouldSkipPromptCompletion(
 }
 
 function buildPromptCompletionRequest(trimmedText: string): {
-  contents: IContent[];
-  generationConfig: AgentClientGenerateConfig & {
+  contents: ContractContent[];
+  generationConfig: ContractGenerateContentConfig & {
     thinkingConfig?: { thinkingBudget?: number };
   };
 } {
   return {
     contents: [
       {
-        speaker: 'human',
-        blocks: [
+        role: 'user',
+        parts: [
           {
-            type: 'text',
             text: `You are a professional prompt engineering assistant. Complete the user's partial prompt with expert precision and clarity. User's input: "${trimmedText}" Continue this prompt by adding specific, actionable details that align with the user's intent. Focus on: clear, precise language; structured requirements; professional terminology; measurable outcomes. Length Guidelines: Keep suggestions concise (ideally 10-20 characters); prioritize brevity while maintaining clarity; use essential keywords only; avoid redundant phrases. Start your response with the exact user text ("${trimmedText}") followed by your completion. Provide practical, implementation-focused suggestions rather than creative interpretations. Format: Plain text only. Single completion. Match the user's language. Emphasize conciseness over elaboration.`,
           },
         ],
@@ -108,10 +107,10 @@ function buildPromptCompletionRequest(trimmedText: string): {
 }
 
 function deriveSuggestionText(
-  response: ModelOutput,
+  response: ContractGenerateContentResponse,
   trimmedText: string,
 ): string {
-  const responseText = getResponseTextFromBlocks(response.content.blocks);
+  const responseText = getResponseText(response);
   if (!responseText) return '';
 
   const suggestionText = responseText.trim();

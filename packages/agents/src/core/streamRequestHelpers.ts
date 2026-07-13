@@ -12,17 +12,22 @@
  * params (no shared mutable state) so they can be unit-tested in isolation.
  */
 
+import type {
+  Content,
+  GenerateContentResponse,
+  SendMessageParameters,
+} from '@google/genai';
+import { FinishReason, type GenerateContentConfig } from '@google/genai';
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { SendMessageParams } from './chatSession.js';
 import { logApiRequest } from './turnLogging.js';
+import type { ConversationManager } from './ConversationManager.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
 export type ToolGroupArray = Array<{
   functionDeclarations?: Array<{
@@ -33,7 +38,7 @@ export type ToolGroupArray = Array<{
 }>;
 
 export interface ToolSelectionHookResult {
-  tools: unknown;
+  tools: GenerateContentConfig['tools'];
   allowedFunctionNames: string[] | undefined;
 }
 
@@ -50,23 +55,33 @@ export interface PreparedRequest {
  * explicitly (issue #2304).
  */
 export function buildRequestContentsResult(
-  userContents: IContent | IContent[],
+  userContent: Content | Content[],
+  conversationManager: ConversationManager,
   historyService: HistoryService,
 ): { contents: IContent[]; pending: IContent[] } {
-  const inputArray = Array.isArray(userContents)
-    ? userContents
-    : [userContents];
-  const userIContents: IContent[] = inputArray.map((content) => {
-    const turnKey = historyService.generateTurnKey();
-    const idGen = historyService.getIdGeneratorCallback(turnKey);
+  const matcher = conversationManager.makePositionMatcher();
+  if (Array.isArray(userContent)) {
+    const userIContents = userContent.map((content) => {
+      const turnKey = historyService.generateTurnKey();
+      const idGen = historyService.getIdGeneratorCallback(turnKey);
+      return ContentConverters.toIContent(content, idGen, matcher, turnKey);
+    });
     return {
-      ...content,
-      metadata: { ...(content.metadata ?? {}), id: idGen(), turnId: turnKey },
+      contents: historyService.getCuratedForProvider(userIContents),
+      pending: userIContents,
     };
-  });
+  }
+  const turnKey = historyService.generateTurnKey();
+  const idGen = historyService.getIdGeneratorCallback(turnKey);
+  const userIContent = ContentConverters.toIContent(
+    userContent,
+    idGen,
+    matcher,
+    turnKey,
+  );
   return {
-    contents: historyService.getCuratedForProvider(userIContents),
-    pending: userIContents,
+    contents: historyService.getCuratedForProvider([userIContent]),
+    pending: [userIContent],
   };
 }
 
@@ -74,9 +89,9 @@ export function buildRequestContentsResult(
  * Select the tools for the request from params or the fallback generationConfig.
  */
 export function selectRequestTools(
-  params: SendMessageParams,
-  fallbackTools: unknown,
-): unknown {
+  params: SendMessageParameters,
+  fallbackTools: GenerateContentConfig['tools'],
+): GenerateContentConfig['tools'] {
   return params.config?.tools ?? fallbackTools;
 }
 
@@ -87,7 +102,7 @@ export function selectRequestTools(
  */
 export function buildRuntimeContext(
   baseRuntimeContext: ProviderRuntimeContext,
-  params: SendMessageParams,
+  params: SendMessageParameters,
 ): ProviderRuntimeContext {
   if (!params.config?.abortSignal) return baseRuntimeContext;
   return {
@@ -101,7 +116,7 @@ export function buildRuntimeContext(
 
 interface PrepareRequestPayloadParams {
   requestContents: IContent[];
-  tools: unknown;
+  tools: GenerateContentConfig['tools'];
   logger: DebugLogger;
   providerRuntimeBuilder: (
     source: string,
@@ -126,7 +141,7 @@ export function prepareRequestPayload(
       providerName: args.providerName,
       model: args.modelName,
       historyLength: args.requestContents.length,
-      toolCount: Array.isArray(args.tools) ? args.tools.length : 0,
+      toolCount: args.tools?.length ?? 0,
       baseUrl: args.baseUrl,
     },
   );
@@ -139,6 +154,19 @@ export function prepareRequestPayload(
   const requestPayload = { contents: args.requestContents, tools: args.tools };
 
   return { requestPayload, baseRuntimeContext };
+}
+
+/**
+ * Patch a synthetic response that is missing a finishReason.
+ */
+export function patchMissingFinishReason(
+  syntheticResponse: GenerateContentResponse,
+  candidate: NonNullable<GenerateContentResponse['candidates']>[0],
+): GenerateContentResponse {
+  return {
+    ...syntheticResponse,
+    candidates: [{ ...candidate, finishReason: FinishReason.STOP }],
+  } as GenerateContentResponse;
 }
 
 /**
@@ -205,13 +233,10 @@ export function applyRequestModifications(
   // merged request carries usable contents.
   const modifiedRequest =
     beforeModelResult.applyLLMRequestModifications(target);
-  const modifiedContents = (modifiedRequest as { contents?: unknown }).contents;
+  const modifiedContents = (modifiedRequest as { contents?: Content[] | null })
+    .contents;
   if (modifiedContents !== undefined && modifiedContents !== null) {
-    // The hook wire adapter returns Gemini-shaped contents; convert back
-    // to neutral IContent[] via toIContents at the boundary.
-    const converted = ContentConverters.toIContents(
-      modifiedContents as Parameters<typeof ContentConverters.toIContents>[0],
-    );
+    const converted = ContentConverters.toIContents(modifiedContents);
     // Guard: if the hook supplied llm_request.messages: [] (empty array) —
     // which converts to an empty contents array — treat it as "no
     // modification" and return the ORIGINAL reference. An empty contents
@@ -253,7 +278,7 @@ export function logOutgoingRequest(
   logApiRequest(
     runtimeContext,
     runtimeContext.state,
-    requestPayload.contents,
+    ContentConverters.toGeminiContents(requestPayload.contents),
     modelName,
     promptId,
   );
@@ -274,10 +299,13 @@ const systemInstructionLogger = new DebugLogger(
  * value is absent or contains no text.
  */
 export function extractSystemInstructionText(
-  raw: AgentClientGenerateConfig['systemInstruction'],
+  raw: GenerateContentConfig['systemInstruction'],
 ): string | undefined {
-  // Broadening to unknown lets the null guard pass lint without a suppression directive.
-  const value: unknown = raw;
+  // The SDK types declare systemInstruction as ContentUnion | undefined, but
+  // defensive null-safety is needed because 'parts' in null / 'text' in null
+  // would throw at runtime. Broadening to unknown lets the null guard pass
+  // lint without a suppression directive.
+  const value = raw as unknown;
   if (value === undefined || value === null) {
     return undefined;
   }

@@ -11,7 +11,7 @@ import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils
 import { LSTool } from '@vybestack/llxprt-code-tools';
 import { ReadFileTool } from '@vybestack/llxprt-code-tools';
 import { ChatSession } from '../core/chatSession.js';
-import type { FunctionCall } from './types.js';
+import { type FunctionCall } from '@google/genai';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import {
@@ -142,9 +142,7 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
     const completeToolDef = sentTools.find(
       (t: { name: string }) => t.name === TASK_COMPLETE_TOOL_NAME,
     );
-    expect(completeToolDef?.parametersJsonSchema?.required).toContain(
-      'finalResult',
-    );
+    expect(completeToolDef?.parameters?.required).toContain('finalResult');
 
     expect(output.result).toBe('Found file1.txt');
     expect(output.terminate_reason).toBe(AgentTerminateMode.GOAL);
@@ -223,7 +221,7 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
     const completeToolDef = sentTools.find(
       (t: { name: string }) => t.name === TASK_COMPLETE_TOOL_NAME,
     );
-    expect(completeToolDef?.parametersJsonSchema?.required).toStrictEqual([]);
+    expect(completeToolDef?.parameters?.required).toStrictEqual([]);
     expect(completeToolDef?.description).toContain(
       'signal that you have completed',
     );
@@ -329,16 +327,17 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
     );
 
     const turn2Params = getMockMessageParams(mockSendMessageStream, 1);
-    const turn2Message = turn2Params.message;
-    expect(turn2Message).toBeDefined();
-    expect(turn2Message.blocks).toHaveLength(1);
+    const turn2Parts = turn2Params.message;
+    expect(turn2Parts).toBeDefined();
+    expect(turn2Parts).toHaveLength(1);
 
-    expect(turn2Message.blocks[0]).toStrictEqual(
+    expect(turn2Parts![0]).toStrictEqual(
       expect.objectContaining({
-        type: 'tool_response',
-        callId: 'call1',
-        toolName: TASK_COMPLETE_TOOL_NAME,
-        result: expect.objectContaining({ error: expectedError }),
+        functionResponse: expect.objectContaining({
+          name: TASK_COMPLETE_TOOL_NAME,
+          response: { error: expectedError },
+          id: 'call1',
+        }),
       }),
     );
 
@@ -451,18 +450,16 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
     expect(output.terminate_reason).toBe(AgentTerminateMode.GOAL);
 
     const turn2Params = getMockMessageParams(mockSendMessageStream, 1);
-    const turn2Message = turn2Params.message;
-    expect(turn2Message).toBeDefined();
-    expect(turn2Message.blocks).toHaveLength(2);
-    expect(turn2Message.blocks).toStrictEqual(
+    const parts = turn2Params.message;
+    expect(parts).toBeDefined();
+    expect(parts).toHaveLength(2);
+    expect(parts).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          type: 'tool_response',
-          callId: 'c1',
+          functionResponse: expect.objectContaining({ id: 'c1' }),
         }),
         expect.objectContaining({
-          type: 'tool_response',
-          callId: 'c2',
+          functionResponse: expect.objectContaining({ id: 'c2' }),
         }),
       ]),
     );
@@ -508,15 +505,16 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
     consoleWarnSpy.mockRestore();
 
     const turn2Params = getMockMessageParams(mockSendMessageStream, 1);
-    const turn2Message = turn2Params.message;
-    expect(turn2Message).toBeDefined();
-    expect(turn2Message.blocks[0]).toStrictEqual(
+    const parts = turn2Params.message;
+    expect(parts).toBeDefined();
+    expect(parts![0]).toStrictEqual(
       expect.objectContaining({
-        type: 'tool_response',
-        callId: badCallId,
-        toolName: ReadFileTool.Name,
-        result: expect.objectContaining({
-          error: expect.stringContaining('Unauthorized tool call'),
+        functionResponse: expect.objectContaining({
+          id: badCallId,
+          name: ReadFileTool.Name,
+          response: {
+            error: expect.stringContaining('Unauthorized tool call'),
+          },
         }),
       }),
     );

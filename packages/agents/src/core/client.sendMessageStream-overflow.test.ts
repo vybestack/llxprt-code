@@ -10,21 +10,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type {
-  ContentBlock,
-  AgentMessageInput,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { Part, PartListUnion } from '@google/genai';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType, PerformCompressionResult } from './turn.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
-import {
-  fromAsync,
-  setupGeminiClient,
-  type MockResponseShape,
-} from './client-test-helpers.js';
+import { fromAsync, setupGeminiClient } from './client-test-helpers.js';
 
 // Mock prompts module before imports
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -86,6 +79,7 @@ const {
   };
 });
 
+vi.mock('@google/genai');
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -141,7 +135,7 @@ vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
-    getResponseText: (result: MockResponseShape) =>
+    getResponseText: (result: GenerateContentResponse) =>
       result.candidates?.[0]?.content?.parts
         ?.map((part) => part.text)
         .join('') ?? undefined,
@@ -181,7 +175,7 @@ vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   },
 }));
 
-describe('AgentClient (client.ts)', () => {
+describe('Gemini Client (client.ts)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
@@ -247,7 +241,7 @@ describe('AgentClient (client.ts)', () => {
       // We need a request > 95 tokens.
       // A string of length 400 is roughly 100 tokens.
       const longText = 'a'.repeat(400);
-      const request = [{ type: 'text' as const, text: longText }];
+      const request: Part[] = [{ text: longText }];
       // Structured fallback counts the text content (400 chars), not JSON structure.
       const estimatedRequestTokenCount = Math.floor(longText.length / 4);
       const remainingTokenCount = MOCKED_TOKEN_LIMIT - lastPromptTokenCount;
@@ -310,7 +304,7 @@ describe('AgentClient (client.ts)', () => {
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
       // A small "continue" request — remaining is -49,442.
-      const request: ContentBlock[] = [{ type: 'text', text: 'continue' }];
+      const request: Part[] = [{ text: 'continue' }];
 
       const mockStream = (async function* () {
         yield { type: AgentEventType.Content, value: 'ok' };
@@ -363,13 +357,13 @@ describe('AgentClient (client.ts)', () => {
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
-      // Pure tool_response continuation — 0 tokens by text estimate.
-      const request: ContentBlock[] = [
+      // Pure functionResponse continuation — 0 tokens by text estimate.
+      const request: Part[] = [
         {
-          type: 'tool_response',
-          callId: 'someTool',
-          toolName: 'someTool',
-          result: { result: 'done' },
+          functionResponse: {
+            name: 'someTool',
+            response: { result: 'done' },
+          },
         },
       ];
 
@@ -395,7 +389,7 @@ describe('AgentClient (client.ts)', () => {
       expect(mockTurnRunFn).toHaveBeenCalled();
     });
 
-    it('should use the model-aware tokenizer (estimatePendingTokens + iContentFromAgentMessageInput) when remaining capacity is positive', async () => {
+    it('should use the model-aware tokenizer (estimatePendingTokens + convertPartListUnionToIContent) when remaining capacity is positive', async () => {
       // Arrange — proves the positive-remaining path routes through the
       // tokenizer-backed sizing path rather than the text-only fallback.
       const MOCKED_TOKEN_LIMIT = 10000;
@@ -405,11 +399,16 @@ describe('AgentClient (client.ts)', () => {
         lastPromptTokenCount,
       );
 
+      const convertSpy = vi.fn().mockReturnValue({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'hi' }],
+      });
       const estimateSpy = vi.fn().mockResolvedValue(50);
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        convertPartListUnionToIContent: convertSpy,
         estimatePendingTokens: estimateSpy,
       };
       client['chat'] = mockChat as ChatSession;
@@ -419,7 +418,7 @@ describe('AgentClient (client.ts)', () => {
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
-      const request = [{ type: 'text' as const, text: 'continue' }];
+      const request: Part[] = [{ text: 'continue' }];
 
       // Act
       const stream = client.sendMessageStream(
@@ -429,14 +428,11 @@ describe('AgentClient (client.ts)', () => {
       );
       await fromAsync(stream);
 
-      // Assert — tokenizer path was used; estimatePendingTokens receives the
-      // IContent[] produced by iContentFromAgentMessageInput.
+      // Assert — tokenizer path was used; text-only fallback was not needed.
+      expect(convertSpy).toHaveBeenCalledWith(request);
       expect(estimateSpy).toHaveBeenCalledTimes(1);
       expect(estimateSpy).toHaveBeenCalledWith([
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'continue' }],
-        },
+        { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
       ]);
       // No overflow since 50 < (9000 * 0.95).
       expect(mockTurnRunFn).toHaveBeenCalled();
@@ -470,7 +466,7 @@ describe('AgentClient (client.ts)', () => {
 
       // Act
       const stream = client.sendMessageStream(
-        [{ type: 'text', text: 'continue' }],
+        [{ text: 'continue' }],
         new AbortController().signal,
         'prompt-id-tokenizer-skipped-negative',
       );
@@ -489,7 +485,7 @@ describe('AgentClient (client.ts)', () => {
 
     it('should count functionResponse payload tokens in the structured fallback (no tokenizer available)', async () => {
       // Arrange — a minimal chat double WITHOUT tokenizer methods forces the
-      // structured fallback. A tool-response-only request must be estimated
+      // structured fallback. A functionResponse-only request must be estimated
       // as > 0 tokens (its JSON payload), unlike the old text-only estimate.
       const MOCKED_TOKEN_LIMIT = 1000;
       vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
@@ -510,15 +506,15 @@ describe('AgentClient (client.ts)', () => {
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
-      // Build a tool_response payload large enough that its JSON/4 exceeds
+      // Build a functionResponse payload large enough that its JSON/4 exceeds
       // the 95% threshold of the full limit (1000 * 0.95 = 950 tokens).
       const largeResult = 'x'.repeat(4000);
-      const request = [
+      const request: Part[] = [
         {
-          type: 'tool_response' as const,
-          callId: 'someTool',
-          toolName: 'someTool',
-          result: { result: largeResult },
+          functionResponse: {
+            name: 'someTool',
+            response: { result: largeResult },
+          },
         },
       ];
 
@@ -536,17 +532,16 @@ describe('AgentClient (client.ts)', () => {
         (e) => e.type === AgentEventType.ContextWindowWillOverflow,
       );
       expect(overflow).toBeDefined();
-      // JSON of the tool_response result is well over 4000 chars → > 950 tokens.
+      // JSON of the functionResponse is well over 4000 chars → > 950 tokens.
       expect(
         (overflow as { value: { estimatedRequestTokenCount: number } }).value
           .estimatedRequestTokenCount,
       ).toBeGreaterThan(950);
     });
 
-    it('should use structured fallback when tokenizer throws before sizing', async () => {
-      // Arrange — estimatePendingTokens throws (e.g. uninitialized internals
-      // during early preflight). The fallback still needs to run instead of
-      // rejecting the stream.
+    it('should use structured fallback when request conversion throws before tokenizer sizing', async () => {
+      // Arrange — convertPartListUnionToIContent is synchronous. If it throws,
+      // the fallback still needs to run instead of rejecting the stream.
       const MOCKED_TOKEN_LIMIT = 1000;
       vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
       const lastPromptTokenCount = 0;
@@ -558,18 +553,19 @@ describe('AgentClient (client.ts)', () => {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
-        estimatePendingTokens: vi
-          .fn()
-          .mockRejectedValue(new Error('tokenizer unavailable')),
+        convertPartListUnionToIContent: vi.fn(() => {
+          throw new Error('conversion unavailable');
+        }),
+        estimatePendingTokens: vi.fn().mockResolvedValue(1),
       };
       client['chat'] = mockChat as ChatSession;
 
-      const request = [
+      const request: Part[] = [
         {
-          type: 'tool_response' as const,
-          callId: 'someTool',
-          toolName: 'someTool',
-          result: { result: 'x'.repeat(4000) },
+          functionResponse: {
+            name: 'someTool',
+            response: { result: 'x'.repeat(4000) },
+          },
         },
       ];
 
@@ -581,7 +577,7 @@ describe('AgentClient (client.ts)', () => {
       );
       const events = await fromAsync(stream);
 
-      // Assert — fallback counted the tool_response payload and emitted the
+      // Assert — fallback counted the functionResponse payload and emitted the
       // same preflight overflow event rather than throwing.
       const overflow = events.find(
         (e) => e.type === AgentEventType.ContextWindowWillOverflow,
@@ -611,13 +607,13 @@ describe('AgentClient (client.ts)', () => {
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
-      const request: ContentBlock[] = [
-        { type: 'text', text: 'short' }, // 5 chars → 1 token
+      const request: Part[] = [
+        { text: 'short' }, // 5 chars → 1 token
         {
-          type: 'media',
-          mimeType: 'application/pdf',
-          data: 'A'.repeat(11 * 1024 * 1024), // ignored
-          encoding: 'base64',
+          inlineData: {
+            mimeType: 'application/pdf',
+            data: 'A'.repeat(11 * 1024 * 1024), // ignored
+          },
         },
       ];
 
@@ -675,7 +671,7 @@ describe('AgentClient (client.ts)', () => {
       // Remaining (sticky) = 100. Threshold (95%) = 95.
       // We need a request > 95 tokens.
       const longText = 'a'.repeat(400);
-      const request = [{ type: 'text' as const, text: longText }];
+      const request: Part[] = [{ text: longText }];
       // Structured fallback counts the text content (400 chars), not JSON structure.
       const estimatedRequestTokenCount = Math.floor(longText.length / 4);
       const remainingTokenCount = STICKY_MODEL_LIMIT - lastPromptTokenCount;
@@ -718,13 +714,13 @@ describe('AgentClient (client.ts)', () => {
       // In the old implementation, this would incorrectly estimate ~2.7M tokens
       // In the new implementation, only the text part is counted
       const largePdfBase64 = 'A'.repeat(11 * 1024 * 1024);
-      const request: ContentBlock[] = [
-        { type: 'text', text: 'Please analyze this PDF document' }, // ~35 chars = ~8 tokens
+      const request: Part[] = [
+        { text: 'Please analyze this PDF document' }, // ~35 chars = ~8 tokens
         {
-          type: 'media',
-          mimeType: 'application/pdf',
-          data: largePdfBase64, // This should be ignored in token estimation
-          encoding: 'base64',
+          inlineData: {
+            mimeType: 'application/pdf',
+            data: largePdfBase64, // This should be ignored in token estimation
+          },
         },
       ];
 
@@ -778,7 +774,7 @@ describe('AgentClient (client.ts)', () => {
       };
       client['chat'] = mockChat as ChatSession;
 
-      const initialRequest = [{ type: 'text', text: 'Hi' }];
+      const initialRequest = [{ text: 'Hi' }];
       const promptId = 'prompt-id-invalid-stream';
       const signal = new AbortController().signal;
 
@@ -807,26 +803,46 @@ describe('AgentClient (client.ts)', () => {
       // First call with original request
       expect(mockTurnRunFn).toHaveBeenNthCalledWith(
         1,
-        [
-          {
-            speaker: 'human',
-            blocks: initialRequest,
-          },
-        ],
+        initialRequest,
         expect.any(Object),
       );
 
       // Second call with "Please continue."
       expect(mockTurnRunFn).toHaveBeenNthCalledWith(
         2,
-        [
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'System: Please continue.' }],
-          },
-        ],
+        [{ text: 'System: Please continue.' }],
         expect.any(Object),
       );
+    });
+
+    it('does not retry InvalidStream after ordinary content was emitted', async () => {
+      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
+        true,
+      );
+      const mockStream = (async function* () {
+        yield { type: AgentEventType.Content, value: 'Partial content' };
+        yield { type: AgentEventType.InvalidStream };
+      })();
+      mockTurnRunFn.mockReturnValueOnce(mockStream);
+      client['chat'] = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      } as unknown as ChatSession;
+
+      const events = await fromAsync(
+        client.sendMessageStream(
+          [{ text: 'Hi' }],
+          new AbortController().signal,
+          'prompt-id-invalid-stream-after-content',
+        ),
+      );
+
+      expect(events.slice(-2)).toStrictEqual([
+        { type: AgentEventType.Content, value: 'Partial content' },
+        { type: AgentEventType.InvalidStream },
+      ]);
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
     });
 
     it('should not recursively call sendMessageStream with "Please continue." when InvalidStream event is received and flag is false', async () => {
@@ -847,7 +863,7 @@ describe('AgentClient (client.ts)', () => {
       };
       client['chat'] = mockChat as ChatSession;
 
-      const initialRequest = [{ type: 'text', text: 'Hi' }];
+      const initialRequest = [{ text: 'Hi' }];
       const promptId = 'prompt-id-invalid-stream';
       const signal = new AbortController().signal;
 
@@ -877,10 +893,10 @@ describe('AgentClient (client.ts)', () => {
         false,
       );
 
-      const forwardedRequests: ContentBlock[][] = [];
+      const forwardedRequests: Part[][] = [];
       mockTurnRunFn.mockReset();
-      mockTurnRunFn.mockImplementation((req: AgentMessageInput) => {
-        forwardedRequests.push(req as ContentBlock[]);
+      mockTurnRunFn.mockImplementation((req: PartListUnion) => {
+        forwardedRequests.push(req as Part[]);
         return (async function* () {
           yield {
             type: AgentEventType.Thought,
@@ -910,7 +926,7 @@ describe('AgentClient (client.ts)', () => {
       todoStoreReadMock.mockResolvedValue([]);
 
       const stream = client.sendMessageStream(
-        [{ type: 'text', text: 'Do something' }],
+        [{ text: 'Do something' }],
         new AbortController().signal,
         'prompt-thinking-invalid-stream-no-continue',
       );
@@ -969,7 +985,7 @@ describe('AgentClient (client.ts)', () => {
       };
       client['chat'] = mockChat as ChatSession;
 
-      const initialRequest = [{ type: 'text', text: 'Hi' }];
+      const initialRequest = [{ text: 'Hi' }];
       const promptId = 'prompt-id-infinite-invalid-stream';
       const signal = new AbortController().signal;
 

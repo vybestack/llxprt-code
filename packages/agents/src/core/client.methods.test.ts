@@ -11,8 +11,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  Content,
+  EmbedContentResponse,
+  GenerateContentResponse,
+  Part,
+} from '@google/genai';
 import { AgentClient } from './client.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
@@ -23,10 +27,7 @@ import {
   getEnabledToolNamesForPrompt,
   shouldIncludeSubagentDelegationForConfig,
 } from './clientToolGovernance.js';
-import {
-  setupGeminiClient,
-  type MockResponseShape,
-} from './client-test-helpers.js';
+import { setupGeminiClient } from './client-test-helpers.js';
 
 // Mock prompts module before imports
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -88,6 +89,7 @@ const {
   };
 });
 
+vi.mock('@google/genai');
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -143,7 +145,7 @@ vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
-    getResponseText: (result: MockResponseShape) =>
+    getResponseText: (result: GenerateContentResponse) =>
       result.candidates?.[0]?.content?.parts
         ?.map((part) => part.text)
         .join('') ?? undefined,
@@ -183,7 +185,7 @@ vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   },
 }));
 
-describe('AgentClient (client.ts)', () => {
+describe('Gemini Client (client.ts)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
@@ -202,19 +204,6 @@ describe('AgentClient (client.ts)', () => {
     todoStoreReadMock.mockResolvedValue([]);
     todoStoreReadPausedMock.mockResolvedValue(false);
     todoStoreWritePausedMock.mockResolvedValue(undefined);
-
-    // Inject a mock content generator so embedding validation runs in BaseLLMClient
-    const mockContentGenerator = {
-      embedContent: vi
-        .fn()
-        .mockImplementation((opts: { texts: string[] }) =>
-          mockEmbedContentFn(opts),
-        ),
-      generateContentStream: vi.fn(),
-      generateContent: vi.fn(),
-    };
-    (client as unknown as { contentGenerator: unknown }).contentGenerator =
-      mockContentGenerator;
   });
 
   afterEach(() => {
@@ -230,7 +219,13 @@ describe('AgentClient (client.ts)', () => {
         [0.1, 0.2, 0.3],
         [0.4, 0.5, 0.6],
       ];
-      mockEmbedContentFn.mockResolvedValue({ embeddings: mockEmbeddings });
+      const mockResponse: EmbedContentResponse = {
+        embeddings: [
+          { values: mockEmbeddings[0] },
+          { values: mockEmbeddings[1] },
+        ],
+      };
+      mockEmbedContentFn.mockResolvedValue(mockResponse);
 
       const result = await client.generateEmbedding(texts);
 
@@ -243,7 +238,7 @@ describe('AgentClient (client.ts)', () => {
     });
 
     it('should throw an error if API response has no embeddings array', async () => {
-      mockEmbedContentFn.mockResolvedValue({ embeddings: [] });
+      mockEmbedContentFn.mockResolvedValue({} as EmbedContentResponse); // No `embeddings` key
 
       await expect(client.generateEmbedding(texts)).rejects.toThrow(
         'No embeddings found in API response.',
@@ -251,16 +246,20 @@ describe('AgentClient (client.ts)', () => {
     });
 
     it('should throw an error if API response has an empty embeddings array', async () => {
-      mockEmbedContentFn.mockResolvedValue({ embeddings: [] });
+      const mockResponse: EmbedContentResponse = {
+        embeddings: [],
+      };
+      mockEmbedContentFn.mockResolvedValue(mockResponse);
       await expect(client.generateEmbedding(texts)).rejects.toThrow(
         'No embeddings found in API response.',
       );
     });
 
     it('should throw an error if API returns a mismatched number of embeddings', async () => {
-      mockEmbedContentFn.mockResolvedValue({
-        embeddings: [[1, 2, 3]], // Only one for two texts
-      });
+      const mockResponse: EmbedContentResponse = {
+        embeddings: [{ values: [1, 2, 3] }], // Only one for two texts
+      };
+      mockEmbedContentFn.mockResolvedValue(mockResponse);
 
       await expect(client.generateEmbedding(texts)).rejects.toThrow(
         'API returned a mismatched number of embeddings. Expected 2, got 1.',
@@ -268,9 +267,10 @@ describe('AgentClient (client.ts)', () => {
     });
 
     it('should throw an error if any embedding has nullish values', async () => {
-      mockEmbedContentFn.mockResolvedValue({
-        embeddings: [[1, 2, 3], []], // Second one is empty
-      });
+      const mockResponse: EmbedContentResponse = {
+        embeddings: [{ values: [1, 2, 3] }, { values: undefined }], // Second one is bad
+      };
+      mockEmbedContentFn.mockResolvedValue(mockResponse);
 
       await expect(client.generateEmbedding(texts)).rejects.toThrow(
         'API returned an empty embedding for input text at index 1: "goodbye world"',
@@ -278,9 +278,10 @@ describe('AgentClient (client.ts)', () => {
     });
 
     it('should throw an error if any embedding has an empty values array', async () => {
-      mockEmbedContentFn.mockResolvedValue({
-        embeddings: [[], [1, 2, 3]], // First one is empty
-      });
+      const mockResponse: EmbedContentResponse = {
+        embeddings: [{ values: [] }, { values: [1, 2, 3] }], // First one is bad
+      };
+      mockEmbedContentFn.mockResolvedValue(mockResponse);
 
       await expect(client.generateEmbedding(texts)).rejects.toThrow(
         'API returned an empty embedding for input text at index 0: "hello world"',
@@ -507,9 +508,7 @@ sub memory
 
   describe('generateJson', () => {
     it('should call generateContent with the correct parameters', async () => {
-      const contents: IContent[] = [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
-      ];
+      const contents = [{ role: 'user', parts: [{ text: 'hello' }] }];
       const schema = { type: 'string' };
       const abortSignal = new AbortController().signal;
 
@@ -555,8 +554,8 @@ sub memory
     });
 
     it('should allow overriding model and config', async () => {
-      const contents: IContent[] = [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+      const contents: Content[] = [
+        { role: 'user', parts: [{ text: 'hello' }] },
       ];
       const schema = { type: 'string' };
       const abortSignal = new AbortController().signal;
@@ -619,9 +618,7 @@ sub memory
         throw error429;
       });
 
-      const contents: IContent[] = [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'throttle?' }] },
-      ];
+      const contents = [{ role: 'user', parts: [{ text: 'throttle?' }] }];
       const schema = { type: 'string' };
       const abortSignal = new AbortController().signal;
 
@@ -651,9 +648,9 @@ sub memory
       };
       client['chat'] = mockChat as ChatSession;
 
-      const newContent: IContent = {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'New history item' }],
+      const newContent = {
+        role: 'user',
+        parts: [{ text: 'New history item' }],
       };
       await client.addHistory(newContent);
 
@@ -664,14 +661,14 @@ sub memory
   describe('resetChat', () => {
     it('should create a new chat session, clearing the old history', async () => {
       // Setup: Mock getHistory to track history state
-      let historyState: IContent[] = [];
+      let historyState: Content[] = [];
       vi.mocked(client.getHistory).mockImplementation(() =>
         Promise.resolve([...historyState]),
       );
 
       // Mock addHistory to update the state
       const mockChat = client['chat'] as ChatSession;
-      mockChat.addHistory.mockImplementation((content: IContent) => {
+      mockChat.addHistory.mockImplementation((content: Content) => {
         historyState.push(content);
         return Promise.resolve();
       });
@@ -680,9 +677,9 @@ sub memory
       const initialChat = client.getChat();
       const initialHistory = await client.getHistory();
       await client.addHistory({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'some old message' }],
-      });
+        role: 'user',
+        parts: [{ text: 'some old message' }],
+      } as Content);
       const historyWithOldMessage = await client.getHistory();
       expect(historyWithOldMessage.length).toBeGreaterThan(
         initialHistory.length,
@@ -693,7 +690,7 @@ sub memory
         historyState = [];
         // Create a new mock chat instance
         const newMockChat = {
-          addHistory: vi.fn().mockImplementation((content: IContent) => {
+          addHistory: vi.fn().mockImplementation((content: Content) => {
             historyState.push(content);
             return Promise.resolve();
           }),
@@ -756,7 +753,7 @@ sub memory
           type: AgentEventType.ToolCallResponse,
           value: {
             callId: `call-${i}`,
-            responseParts: [] as ContentBlock[],
+            responseParts: [] as Part[],
             resultDisplay: undefined,
             error: undefined,
             errorType: undefined,

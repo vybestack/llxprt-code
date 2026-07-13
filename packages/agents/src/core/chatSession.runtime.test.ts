@@ -5,14 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ChatSessionConfig } from './chatSession.js';
-import type {
-  ToolDeclaration,
-  LegacyToolsetLike,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { GenerateContentConfig, Tool } from '@google/genai';
 import { ChatSession } from './chatSession.js';
-import type { TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { getToolCalls } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
@@ -36,19 +30,6 @@ import {
   BeforeModelHookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
-
-/**
- * Extracts visible text from a neutral ModelOutput — the post-P13
- * replacement for the deleted GenerateContentResponse `.text` getter.
- */
-function extractText(output: {
-  content: { blocks: Array<{ type: string; text?: string }> };
-}): string {
-  return output.content.blocks
-    .filter((b): b is TextBlock => b.type === 'text')
-    .map((b) => b.text)
-    .join('');
-}
 
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
@@ -116,10 +97,10 @@ describe('ChatSession runtime context', () => {
       {
         functionDeclarations: [{ name: 'doThing' } as Record<string, unknown>],
       },
-    ] as unknown as LegacyToolsetLike;
+    ] as unknown as Tool[];
 
-    const generationConfig: ChatSessionConfig = {
-      tools: tools as unknown as ToolDeclaration[],
+    const generationConfig: GenerateContentConfig = {
+      tools,
     };
 
     const runtimeState = createAgentRuntimeState({
@@ -196,29 +177,27 @@ describe('ChatSession runtime context', () => {
             parameters: { command: 'echo blocked' },
           },
         ],
-        metadata: {
-          providerMetadata: {
-            automaticFunctionCallingHistory: [
+        automaticFunctionCallingHistory: [
+          {
+            role: 'model',
+            parts: [
               {
-                speaker: 'ai',
-                blocks: [
-                  {
-                    type: 'tool_call',
-                    id: 'history-allowed-call',
-                    name: 'read_file',
-                    parameters: { file_path: 'file.txt' },
-                  },
-                  {
-                    type: 'tool_call',
-                    id: 'history-blocked-call',
-                    name: 'run_shell_command',
-                    parameters: { command: 'echo blocked-history' },
-                  },
-                ],
+                functionCall: {
+                  id: 'history-allowed-call',
+                  name: 'read_file',
+                  args: { file_path: 'file.txt' },
+                },
+              },
+              {
+                functionCall: {
+                  id: 'history-blocked-call',
+                  name: 'run_shell_command',
+                  args: { command: 'echo blocked-history' },
+                },
               },
             ],
           },
-        },
+        ],
       };
     });
 
@@ -241,7 +220,7 @@ describe('ChatSession runtime context', () => {
           { name: 'run_shell_command' } as Record<string, unknown>,
         ],
       },
-    ] as unknown as LegacyToolsetLike;
+    ] as unknown as Tool[];
     const runtimeState = createAgentRuntimeState({
       runtimeId: 'runtime-test',
       provider: provider.name,
@@ -294,7 +273,7 @@ describe('ChatSession runtime context', () => {
       'prompt-hook-selection',
     );
 
-    expect(getToolCalls(response)).toStrictEqual([
+    expect(response.functionCalls).toStrictEqual([
       expect.objectContaining({ name: 'read_file' }),
     ]);
 
@@ -321,13 +300,14 @@ describe('ChatSession runtime context', () => {
           providerMetadata: {
             automaticFunctionCallingHistory: [
               {
-                speaker: 'ai',
-                blocks: [
+                role: 'model',
+                parts: [
                   {
-                    type: 'tool_call',
-                    id: 'metadata-blocked-call',
-                    name: 'run_shell_command',
-                    parameters: { command: 'echo metadata-blocked' },
+                    functionCall: {
+                      id: 'metadata-blocked-call',
+                      name: 'run_shell_command',
+                      args: { command: 'echo metadata-blocked' },
+                    },
                   },
                 ],
               },
@@ -360,7 +340,7 @@ describe('ChatSession runtime context', () => {
           { name: 'run_shell_command' } as Record<string, unknown>,
         ],
       },
-    ] as unknown as LegacyToolsetLike;
+    ] as unknown as Tool[];
     const hookConfig = Object.create(config) as Config;
     Object.defineProperties(hookConfig, {
       getEnableHooks: { value: () => true },
@@ -414,7 +394,7 @@ describe('ChatSession runtime context', () => {
       'prompt-direct-hook-selection',
     );
 
-    expect(extractText(response)).toBe('visible textstill visible');
+    expect(response.text).toBe('visible textstill visible');
     expect(JSON.stringify(response)).not.toContain('run_shell_command');
   });
 });

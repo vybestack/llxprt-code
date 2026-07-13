@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Tool } from '@google/genai';
 import { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -91,7 +92,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
           { name: 'run_shell_command' } as Record<string, unknown>,
         ],
       },
-    ] as unknown as Array<{ functionDeclarations: Array<{ name: string }> }>;
+    ] as unknown as Tool[];
     const hookConfig = config;
     Object.defineProperties(hookConfig, {
       getConversationLoggingEnabled: { value: () => false },

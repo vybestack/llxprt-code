@@ -6,21 +6,24 @@
 
 /**
  * Regression tests for issue #1844:
- * The neutral toModelStreamChunk mapper should map both metadata.stopReason
- * and metadata.finishReason to the CanonicalFinishReason on the ModelOutput,
- * so downstream turn handling works regardless of which field the provider
- * sets.
- *
- * Migrated in P13 from the deleted convertIContentToResponse to the neutral
- * toModelStreamChunk path (@plan:PLAN-20260707-AGENTNEUTRAL.P13).
+ * MessageConverter should map both metadata.stopReason and metadata.finishReason
+ * to Gemini candidate.finishReason, so downstream turn handling works regardless
+ * of which field the provider sets.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { FinishReason } from '@google/genai';
 
-describe('issue #1844 – toModelStreamChunk finishReason/stopReason mapping', () => {
-  it('should map metadata.stopReason to finishReason', () => {
+let convertIContentToResponse: typeof import('./MessageConverter.js').convertIContentToResponse;
+
+describe('issue #1844 – MessageConverter finishReason/stopReason mapping', () => {
+  beforeAll(async () => {
+    const mod = await import('./MessageConverter.js');
+    convertIContentToResponse = mod.convertIContentToResponse;
+  });
+
+  it('should map metadata.stopReason to candidate.finishReason', () => {
     const input: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'done' }],
@@ -29,11 +32,11 @@ describe('issue #1844 – toModelStreamChunk finishReason/stopReason mapping', (
       },
     };
 
-    const chunk = toModelStreamChunk(input);
-    expect(chunk.finishReason).toBe('stop');
+    const response = convertIContentToResponse(input);
+    expect(response.candidates?.[0]?.finishReason).toBe(FinishReason.STOP);
   });
 
-  it('should map metadata.finishReason (OpenAI-style "stop") to finishReason', () => {
+  it('should map metadata.finishReason (OpenAI-style "stop") to candidate.finishReason', () => {
     const input: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'done' }],
@@ -42,11 +45,11 @@ describe('issue #1844 – toModelStreamChunk finishReason/stopReason mapping', (
       },
     };
 
-    const chunk = toModelStreamChunk(input);
-    expect(chunk.finishReason).toBe('stop');
+    const response = convertIContentToResponse(input);
+    expect(response.candidates?.[0]?.finishReason).toBe(FinishReason.STOP);
   });
 
-  it('should map metadata.finishReason "length" to finishReason max_tokens', () => {
+  it('should map metadata.finishReason "length" to candidate.finishReason MAX_TOKENS', () => {
     const input: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'truncated' }],
@@ -55,11 +58,13 @@ describe('issue #1844 – toModelStreamChunk finishReason/stopReason mapping', (
       },
     };
 
-    const chunk = toModelStreamChunk(input);
-    expect(chunk.finishReason).toBe('max_tokens');
+    const response = convertIContentToResponse(input);
+    expect(response.candidates?.[0]?.finishReason).toBe(
+      FinishReason.MAX_TOKENS,
+    );
   });
 
-  it('should map metadata.finishReason "tool_calls" to finishReason', () => {
+  it('should map metadata.finishReason "tool_calls" to candidate.finishReason', () => {
     const input: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: '' }],
@@ -68,11 +73,11 @@ describe('issue #1844 – toModelStreamChunk finishReason/stopReason mapping', (
       },
     };
 
-    const chunk = toModelStreamChunk(input);
-    expect(chunk.finishReason).toBe('tool_calls');
+    const response = convertIContentToResponse(input);
+    expect(response.candidates?.[0]?.finishReason).toBe(FinishReason.STOP);
   });
 
-  it('should map metadata.finishReason "function_call" to finishReason tool_calls', () => {
+  it('should map metadata.finishReason "function_call" to candidate.finishReason STOP', () => {
     const input: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: '' }],
@@ -81,11 +86,11 @@ describe('issue #1844 – toModelStreamChunk finishReason/stopReason mapping', (
       },
     };
 
-    const chunk = toModelStreamChunk(input);
-    expect(chunk.finishReason).toBe('tool_calls');
+    const response = convertIContentToResponse(input);
+    expect(response.candidates?.[0]?.finishReason).toBe(FinishReason.STOP);
   });
 
-  it('should map metadata.finishReason "content_filter" to finishReason safety', () => {
+  it('should map metadata.finishReason "content_filter" to candidate.finishReason SAFETY', () => {
     const input: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: '' }],
@@ -94,8 +99,8 @@ describe('issue #1844 – toModelStreamChunk finishReason/stopReason mapping', (
       },
     };
 
-    const chunk = toModelStreamChunk(input);
-    expect(chunk.finishReason).toBe('safety');
+    const response = convertIContentToResponse(input);
+    expect(response.candidates?.[0]?.finishReason).toBe('SAFETY');
   });
 
   it('should prefer stopReason over finishReason when both are present', () => {
@@ -108,13 +113,11 @@ describe('issue #1844 – toModelStreamChunk finishReason/stopReason mapping', (
       },
     };
 
-    const chunk = toModelStreamChunk(input);
-    expect(chunk.finishReason).toBe('stop');
-    // stopReason (end_turn) is preferred over finishReason (stop)
-    expect(chunk.rawStopReason).toBe('end_turn');
+    const response = convertIContentToResponse(input);
+    expect(response.candidates?.[0]?.finishReason).toBe(FinishReason.STOP);
   });
 
-  it('should map "completed" (OpenAI Responses status) to other', () => {
+  it('should map "completed" (OpenAI Responses status) to STOP', () => {
     const input: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'done' }],
@@ -123,7 +126,7 @@ describe('issue #1844 – toModelStreamChunk finishReason/stopReason mapping', (
       },
     };
 
-    const chunk = toModelStreamChunk(input);
-    expect(chunk.finishReason).toBe('other');
+    const response = convertIContentToResponse(input);
+    expect(response.candidates?.[0]?.finishReason).toBe(FinishReason.STOP);
   });
 });

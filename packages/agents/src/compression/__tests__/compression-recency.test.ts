@@ -66,8 +66,8 @@ function makeChatSession(
   vi.spyOn(historyService, 'startCompression').mockImplementation(() => {});
   vi.spyOn(historyService, 'endCompression').mockImplementation(() => {});
   vi.spyOn(historyService, 'getCurated').mockReturnValue([
-    { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
-    { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
+    { role: 'user', parts: [{ text: 'hello' }] },
+    { role: 'model', parts: [{ text: 'hi' }] },
   ]);
   vi.spyOn(historyService, 'clear').mockImplementation(() => {});
   vi.spyOn(historyService, 'add').mockImplementation(() => {});
@@ -206,9 +206,7 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
 
     const primaryCompress = vi.fn().mockRejectedValue(makeHttpError(500));
     const fallbackCompress = vi.fn().mockResolvedValue({
-      newHistory: [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'truncated' }] },
-      ],
+      newHistory: [{ role: 'user', parts: [{ text: 'truncated' }] }],
       metadata: {
         originalMessageCount: 10,
         compressedMessageCount: 2,
@@ -275,9 +273,7 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
         compress: vi.fn().mockResolvedValue({
-          newHistory: [
-            { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
-          ],
+          newHistory: [{ role: 'user', parts: [{ text: 'summary' }] }],
           metadata: {
             originalMessageCount: 10,
             compressedMessageCount: 1,
@@ -313,9 +309,7 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
         compress: vi.fn().mockResolvedValue({
-          newHistory: [
-            { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
-          ],
+          newHistory: [{ role: 'user', parts: [{ text: 'summary' }] }],
           metadata: {
             originalMessageCount: 10,
             compressedMessageCount: 1,
@@ -341,12 +335,7 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
             requiresLLM: false,
             trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
             compress: vi.fn().mockResolvedValue({
-              newHistory: [
-                {
-                  speaker: 'human',
-                  blocks: [{ type: 'text', text: 'truncated' }],
-                },
-              ],
+              newHistory: [{ role: 'user', parts: [{ text: 'truncated' }] }],
               metadata: {
                 originalMessageCount: 10,
                 compressedMessageCount: 2,

@@ -28,7 +28,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { PartListUnion } from '@google/genai';
 import type {
   ServerAgentStreamEvent,
   ToolCallResponseInfo,
@@ -68,6 +68,7 @@ import {
   MessageStreamOrchestrator,
   type MessageStreamDeps,
 } from './MessageStreamOrchestrator.js';
+import { TodoContinuationService } from './TodoContinuationService.js';
 
 function makePauseRequest(): ToolCallRequestInfo {
   return {
@@ -82,10 +83,11 @@ function makePauseResponse(success: boolean): ToolCallResponseInfo {
     callId: 'pause-call-1',
     responseParts: [
       {
-        type: 'tool_response',
-        callId: 'pause-call-1',
-        toolName: 'todo_pause',
-        result: success ? { ok: true } : {},
+        functionResponse: {
+          name: 'todo_pause',
+          id: 'pause-call-1',
+          response: success ? { ok: true } : {},
+        },
       },
     ],
     resultDisplay: undefined,
@@ -188,7 +190,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
     isSuccessfulTodoPauseResponse:
       options.isSuccessfulTodoPauseResponse ?? vi.fn().mockReturnValue(false),
     isTodoToolCall: vi.fn().mockReturnValue(false),
-    applyPendingReminder: vi.fn((r: AgentMessageInput) => Promise.resolve(r)),
+    applyPendingReminder: vi.fn((r: PartListUnion) => Promise.resolve(r)),
     getTodoReminderForCurrentState: vi.fn().mockResolvedValue({
       todos: activeTodos,
       activeTodos,
@@ -273,7 +275,7 @@ async function collectEvents(
 ): Promise<ServerAgentStreamEvent[]> {
   const events: ServerAgentStreamEvent[] = [];
   for await (const event of orchestrator.execute(
-    [{ text: 'test' }] as AgentMessageInput,
+    [{ text: 'test' }] as PartListUnion,
     new AbortController().signal,
     'prompt-1',
     1,
@@ -327,6 +329,56 @@ describe('MessageStreamOrchestrator — todo_pause loop break (issue #2287)', ()
     );
   });
 
+  it('streams ordinary content before the turn source completes', async () => {
+    let releaseSecondChunk = (): void => {};
+    const secondChunkReady = new Promise<void>((resolve) => {
+      releaseSecondChunk = resolve;
+    });
+    const turnStream = (async function* () {
+      yield { type: AgentEventType.Content, value: 'Hello' };
+      await secondChunkReady;
+      yield { type: AgentEventType.Content, value: ' world' };
+      yield {
+        type: AgentEventType.Finished,
+        value: { outcome: { hadVisibleOutput: true } },
+      };
+    })();
+    const { orchestrator, deps } = buildOrchestrator({
+      turnStream,
+      activeTodos: [],
+    });
+    deps.todoContinuationService.shouldDeferStreamEvent =
+      TodoContinuationService.prototype.shouldDeferStreamEvent.bind(
+        deps.todoContinuationService,
+      );
+
+    const iterator = orchestrator.execute(
+      [{ text: 'test' }] as PartListUnion,
+      new AbortController().signal,
+      'prompt-1',
+      1,
+      false,
+    );
+
+    const modelInfoResult = await iterator.next();
+    expect(modelInfoResult.value.type).toBe(AgentEventType.ModelInfo);
+    await expect(iterator.next()).resolves.toMatchObject({
+      done: false,
+      value: { type: AgentEventType.Content, value: 'Hello' },
+    });
+
+    releaseSecondChunk();
+    const remaining: ServerAgentStreamEvent[] = [];
+    for await (const event of iterator) remaining.push(event);
+    expect(remaining).toStrictEqual([
+      { type: AgentEventType.Content, value: ' world' },
+      {
+        type: AgentEventType.Finished,
+        value: { outcome: { hadVisibleOutput: true } },
+      },
+    ]);
+  });
+
   describe('successful pause breaks the loop via the explicit pause branch', () => {
     it('suppresses the AfterAgent-hook continuation that the generic tool-call finish would fire', async () => {
       // If todoPauseSeen is not evaluated before hadToolCallsThisTurn,
@@ -377,10 +429,11 @@ describe('MessageStreamOrchestrator — todo_pause loop break (issue #2287)', ()
         callId: 'pause-call-1',
         responseParts: [
           {
-            type: 'tool_response',
-            callId: 'pause-call-1',
-            toolName: 'todo_pause',
-            result: {},
+            functionResponse: {
+              name: 'todo_pause',
+              id: 'pause-call-1',
+              response: {},
+            },
           },
         ],
         resultDisplay: undefined,

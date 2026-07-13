@@ -5,37 +5,31 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { findCompressSplitPoint } from '../client.js';
 import { COMPRESSION_PRESERVE_THRESHOLD } from '../compression-config.js';
 
 describe('Compression Logic', () => {
   it('should calculate preservation index with new threshold', () => {
-    const mockHistory: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'Short message' }] },
-      { speaker: 'ai', blocks: [{ type: 'text', text: 'Short response' }] },
+    const mockHistory = [
+      { role: 'user', parts: [{ text: 'Short message' }] },
+      { role: 'model', parts: [{ text: 'Short response' }] },
       {
-        speaker: 'human',
-        blocks: [
+        role: 'user',
+        parts: [
           {
-            type: 'text',
             text: 'This is a longer user message that contains more content to test the calculation logic properly.',
           },
         ],
       },
       {
-        speaker: 'ai',
-        blocks: [
+        role: 'model',
+        parts: [
           {
-            type: 'text',
             text: 'This is an even longer model response with extremely detailed information to ensure we are properly measuring the character lengths in our compression calculations.',
           },
         ],
       },
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'Another short message' }],
-      },
+      { role: 'user', parts: [{ text: 'Another short message' }] },
     ];
 
     // With the new COMPRESSION_PRESERVE_THRESHOLD (0.5), we expect different behavior

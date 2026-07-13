@@ -17,7 +17,6 @@ import {
 } from '../core/turn.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { MessageBus as MessageBusType } from '../confirmation-bus/message-bus.js';
-import { emptyModelOutput } from '../llm-types/modelEnvelope.js';
 
 /**
  * Per-config cache so repeated calls for the same config instance return the same bus.
@@ -44,9 +43,7 @@ function emptyChatStream(): AsyncGenerator<never> {
 
 function createTestAgentChat(): AgentChatContract {
   return {
-    sendMessage: async () => emptyModelOutput(),
     sendMessageStream: async () => emptyChatStream(),
-    generateDirectMessage: async () => emptyModelOutput(),
     getHistory: () => [],
     setHistory: () => {},
     clearHistory: () => {},
@@ -80,9 +77,9 @@ function createTestAgentClient(): AgentClientContract {
     addDirectoryContext: async () => {},
     getContentGenerator: () => undefined as never,
     startChat: async () => chat,
-    generateDirectMessage: async () => emptyModelOutput(),
+    generateDirectMessage: async () => ({}) as never,
     generateJson: async () => ({}),
-    generateContent: async () => emptyModelOutput(),
+    generateContent: async () => ({}) as never,
     generateEmbedding: async (texts: string[]) => texts.map(() => []),
     sendMessageStream: () => emptyServerAgentStream(),
     getUserTier: () => undefined,

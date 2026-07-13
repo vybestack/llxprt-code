@@ -25,9 +25,10 @@ import {
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
-import type { FunctionDeclaration } from '../agents/types.js';
+import type { FunctionDeclaration } from '@google/genai';
+import { Type } from '@google/genai';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { Part } from '@google/genai';
 import {
   createCompletedToolCallResponse,
   createMockConfig,
@@ -168,7 +169,6 @@ describe('subagent.ts', () => {
       expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
       expect(mockSendMessageStream.mock.calls[0][0].message).toStrictEqual([
         {
-          type: 'text',
           text: 'Follow the task directives provided in the system prompt.',
         },
       ]);
@@ -264,11 +264,11 @@ describe('subagent.ts', () => {
 
       const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
       expect(secondCallArgs.message).toHaveLength(1);
-      expect(secondCallArgs.message[0]).toMatchObject({
-        type: 'tool_response',
-      });
-      expect(secondCallArgs.message[0].toolName).toBe('self_emitvalue');
-      expect(secondCallArgs.message[0].result.message).toBe(
+      expect(secondCallArgs.message[0]).toHaveProperty('functionResponse');
+      expect(secondCallArgs.message[0].functionResponse.name).toBe(
+        'self_emitvalue',
+      );
+      expect(secondCallArgs.message[0].functionResponse.response.message).toBe(
         'Emitted variable result successfully',
       );
     });
@@ -277,7 +277,7 @@ describe('subagent.ts', () => {
       const listFilesToolDef: FunctionDeclaration = {
         name: 'list_files',
         description: 'Lists files',
-        parameters: { type: 'object', properties: {} },
+        parameters: { type: Type.OBJECT, properties: {} },
       };
 
       const { config } = await createMockConfig({
@@ -354,7 +354,7 @@ describe('subagent.ts', () => {
 
       const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
       expect(secondCallArgs.message).toStrictEqual([
-        { type: 'text', text: 'file1.txt\nfile2.ts' },
+        { text: 'file1.txt\nfile2.ts' },
       ]);
 
       expect(historyAddSpy).not.toHaveBeenCalled();
@@ -422,7 +422,6 @@ describe('subagent.ts', () => {
       const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
       expect(secondCallArgs.message).toStrictEqual([
         {
-          type: 'text',
           text: 'ERROR: Tool failed catastrophically',
         },
       ]);
@@ -493,14 +492,12 @@ describe('subagent.ts', () => {
 
       const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
       for (const part of secondCallArgs.message) {
-        expect(part).not.toMatchObject({ type: 'tool_call' });
+        expect(part).not.toHaveProperty('functionCall');
       }
-      const hasToolResponse = secondCallArgs.message.some(
-        (p: ContentBlock) =>
-          'type' in p &&
-          (p as Record<string, unknown>).type === 'tool_response',
+      const hasFR = secondCallArgs.message.some(
+        (p: Part) => 'functionResponse' in p,
       );
-      expect(hasToolResponse).toBe(true);
+      expect(hasFR).toBe(true);
     });
 
     it('fails fast when a tool is disabled in the current profile', async () => {
@@ -523,10 +520,10 @@ describe('subagent.ts', () => {
             name: 'write_file',
             description: 'Write files to disk',
             parameters: {
-              type: 'object',
+              type: Type.OBJECT,
               properties: {
-                path: { type: 'string' },
-                content: { type: 'string' },
+                path: { type: Type.STRING },
+                content: { type: Type.STRING },
               },
             },
           } as FunctionDeclaration,

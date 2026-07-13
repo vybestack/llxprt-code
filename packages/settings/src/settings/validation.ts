@@ -243,14 +243,7 @@ export function parseProfile(input: unknown): Profile {
   if (typeof input.model !== 'string' || input.model === '') {
     throw new Error('missing required fields');
   }
-  // Historical compatibility (#2477): standard version 1 profiles produced
-  // by older builds may omit modelParams entirely. Normalize to {} at this
-  // shared parse boundary so all consumers (ProfileManager, repair, wizard)
-  // see a canonical shape. Genuine loadbalancer profiles are unaffected
-  // (handled above). This is safe because modelParams is optional in the
-  // schema and {} is always valid.
-  const modelParams = input.modelParams === undefined ? {} : input.modelParams;
-  if (!modelParamsSchema.safeParse(modelParams).success) {
+  if (!modelParamsSchema.safeParse(input.modelParams).success) {
     throw new Error('missing required fields');
   }
   if (!ephemeralSettingsSchema.safeParse(input.ephemeralSettings).success) {
@@ -260,8 +253,7 @@ export function parseProfile(input: unknown): Profile {
     throw new Error('unsupported profile version');
   }
 
-  const normalized = { ...input, modelParams };
-  return standardProfileSchema.parse(normalized);
+  return standardProfileSchema.parse(input);
 }
 
 function isPromptCachingValue(value: unknown): value is PromptCachingValue {

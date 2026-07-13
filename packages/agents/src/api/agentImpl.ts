@@ -17,9 +17,8 @@ import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/me
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import { getResponseTextFromBlocks } from '@vybestack/llxprt-code-core';
+import { getResponseText } from '@vybestack/llxprt-code-core';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import type {
   ApprovalMode,
@@ -554,6 +553,14 @@ export class AgentImpl implements Agent {
   }
 
   /**
+   * Injects a mid-turn steer message into the active agent loop. Delegates to
+   * the current loop's injectSteer. No-op when no loop is running.
+   */
+  injectSteer(text: string): void {
+    this.deps.loopHolder.current?.injectSteer(text);
+  }
+
+  /**
    * Streams AgentEvents by delegating to the current loop's run().
    * @plan:PLAN-20260617-COREAPI.P15
    * @requirement:REQ-003
@@ -863,8 +870,7 @@ export class AgentImpl implements Agent {
    */
   async addHistory(message: AgentMessage): Promise<void> {
     const client = this.deps.resolveClient();
-    const icontent = message as unknown as IContent;
-    await client.addHistory(icontent);
+    await client.addHistory(message);
   }
 
   /**
@@ -993,7 +999,7 @@ export class AgentImpl implements Agent {
     const message = toPartListUnion(input);
     const promptId = opts?.promptId ?? `generate-${Date.now()}`;
     const response = await client.generateDirectMessage({ message }, promptId);
-    return getResponseTextFromBlocks(response.content.blocks) ?? '';
+    return getResponseText(response) ?? '';
   }
 
   /**

@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { ChatSessionConfig } from './chatSession.js';
+import type { Content, GenerateContentConfig, Tool } from '@google/genai';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import {
@@ -18,7 +17,7 @@ import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js
 import { ChatSession } from './chatSession.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createSettingsProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
@@ -159,19 +158,20 @@ export interface CreateChatSessionDeps {
   contentGenerator: ContentGenerator;
   storedHistoryService: HistoryService | undefined;
   clearStoredHistoryService: () => void;
-  extraHistory?: IContent[];
-  generateContentConfig: ModelGenerationSettings;
+  extraHistory?: Content[];
+  generateContentConfig: GenerateContentConfig;
   todoContinuationService: TodoContinuationService;
   toolRegistry: ToolRegistry | undefined;
 }
 
 /**
- * Appends extra history onto a HistoryService with a fresh turn key per entry.
- * No-op when there is nothing to load.
+ * Appends `extraHistory` (Gemini Content[]) onto a HistoryService, converting
+ * each entry to IContent with a fresh turn key. No-op when there is nothing to
+ * load.
  */
 function loadExtraHistory(
   historyService: HistoryService,
-  extraHistory: IContent[] | undefined,
+  extraHistory: Content[] | undefined,
   currentModel: string,
 ): void {
   if (!extraHistory || extraHistory.length === 0) {
@@ -180,7 +180,7 @@ function loadExtraHistory(
   for (const content of extraHistory) {
     const turnKey = historyService.generateTurnKey();
     historyService.add(
-      { ...content, metadata: { ...content.metadata, turnId: turnKey } },
+      ContentConverters.toIContent(content, undefined, undefined, turnKey),
       currentModel,
     );
   }
@@ -199,7 +199,7 @@ function loadExtraHistory(
  */
 function setupHistoryService(
   storedHistoryService: HistoryService | undefined,
-  extraHistory: IContent[] | undefined,
+  extraHistory: Content[] | undefined,
   runtimeState: AgentRuntimeState,
 ): { historyService: HistoryService; reused: boolean } {
   const logger = new DebugLogger('llxprt:client:start');
@@ -243,19 +243,16 @@ async function applySystemPromptTokenOffset(
 }
 
 /**
- * Builds the generation settings with thinking support if applicable.
+ * Builds the GenerateContentConfig with thinking support if applicable.
  */
 function buildGenerateContentConfig(
-  baseConfig: ModelGenerationSettings,
+  baseConfig: GenerateContentConfig,
   model: string,
-): ChatSessionConfig {
+): GenerateContentConfig {
   return isThinkingSupported(model)
     ? {
         ...baseConfig,
-        reasoning: {
-          ...(baseConfig.reasoning ?? {}),
-          includeInOutput: true,
-        },
+        thinkingConfig: { thinkingBudget: -1, includeThoughts: true },
       }
     : baseConfig;
 }
@@ -268,7 +265,7 @@ async function buildChatFromRuntime(
   runtimeState: AgentRuntimeState,
   contentGenerator: ContentGenerator,
   historyService: HistoryService,
-  generateContentConfig: ModelGenerationSettings,
+  generateContentConfig: GenerateContentConfig,
   todoContinuationService: TodoContinuationService,
   toolRegistry: ToolRegistry | undefined,
   systemInstruction: string,
@@ -307,7 +304,7 @@ async function buildChatFromRuntime(
   todoContinuationService.updateTodoToolAvailabilityFromDeclarations(
     filteredDeclarations,
   );
-  const tools = [{ functionDeclarations: filteredDeclarations }];
+  const tools: Tool[] = [{ functionDeclarations: filteredDeclarations }];
 
   const chat = new ChatSession(
     runtimeBundle.runtimeContext,

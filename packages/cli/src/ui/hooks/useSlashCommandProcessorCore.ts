@@ -9,7 +9,7 @@ import { useCallback, useState } from 'react';
 import type {
   RecordingIntegration,
   Todo,
-  AgentRequestInput,
+  ContractPartListUnion,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
@@ -44,7 +44,7 @@ interface TodoContextValue {
 
 export type SlashCommandProcessorCoreResult = {
   handleSlashCommand: (
-    rawQuery: AgentRequestInput,
+    rawQuery: ContractPartListUnion,
     oneTimeShellAllowlist?: Set<string>,
     overwriteConfirmed?: boolean,
     addToHistory?: boolean,
@@ -174,7 +174,7 @@ export function useSlashCommandProcessorCore(
   );
   const handleSlashCommand = useCallback(
     (
-      rawQuery: AgentRequestInput,
+      rawQuery: ContractPartListUnion,
       oneTimeShellAllowlist?: Set<string>,
       overwriteConfirmed: boolean | undefined = undefined,
       addToHistory: boolean = true,

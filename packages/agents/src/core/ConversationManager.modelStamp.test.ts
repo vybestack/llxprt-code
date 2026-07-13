@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { Content } from '@google/genai';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -119,14 +119,14 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
   });
 
   it('stamps metadata.model on a freshly generated AI turn', () => {
-    const userInput: IContent = {
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'Hello' }],
+    const userInput: Content = {
+      role: 'user',
+      parts: [{ text: 'Hello' }],
     };
-    const modelOutput: IContent[] = [
+    const modelOutput: Content[] = [
       {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'Hi there.' }],
+        role: 'model',
+        parts: [{ text: 'Hi there.' }],
       },
     ];
 
@@ -141,21 +141,21 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
   });
 
   it('stamps metadata.model on an AI turn that carries a signed thinking block', () => {
-    const userInput: IContent = {
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'Think and answer' }],
+    const userInput: Content = {
+      role: 'user',
+      parts: [{ text: 'Think and answer' }],
     };
-    const modelOutput: IContent[] = [
+    const modelOutput: Content[] = [
       {
-        speaker: 'ai',
-        blocks: [
+        role: 'model',
+        parts: [
           {
-            type: 'thinking',
-            thought: 'reasoning about the answer',
-            signature: 'sig-A',
-            sourceField: 'thinking',
+            thought: true,
+            text: 'reasoning about the answer',
+            thoughtSignature: 'sig-A',
+            llxprtSourceField: 'thinking',
           },
-          { type: 'text', text: 'The answer is 42.' },
+          { text: 'The answer is 42.' },
         ],
       },
     ];
@@ -176,34 +176,31 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
   });
 
   it('stamps metadata.model on AI turns mixed into automaticFunctionCallingHistory but not user turns', () => {
-    const userInput: IContent = {
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'Run the tool' }],
+    const userInput: Content = {
+      role: 'user',
+      parts: [{ text: 'Run the tool' }],
     };
-    const modelOutput: IContent[] = [
-      { speaker: 'ai', blocks: [{ type: 'text', text: 'Done.' }] },
+    const modelOutput: Content[] = [
+      { role: 'model', parts: [{ text: 'Done.' }] },
     ];
     // AFC history mixes freshly generated model turns with user turns.
-    const automaticFunctionCallingHistory: IContent[] = [
+    const automaticFunctionCallingHistory: Content[] = [
       {
-        speaker: 'tool',
-        blocks: [
+        role: 'user',
+        parts: [
           {
-            type: 'tool_response',
-            callId: 'get_weather',
-            toolName: 'get_weather',
-            result: { temperature: 72 },
+            functionResponse: {
+              name: 'get_weather',
+              response: { temperature: 72 },
+            },
           },
         ],
       },
       {
-        speaker: 'ai',
-        blocks: [
+        role: 'model',
+        parts: [
           {
-            type: 'tool_call',
-            id: 'get_weather',
-            name: 'get_weather',
-            parameters: { city: 'SF' },
+            functionCall: { name: 'get_weather', args: { city: 'SF' } },
           },
         ],
       },
@@ -242,12 +239,9 @@ describe('ConversationManager import/restore paths do NOT stamp (issue #2335)', 
   });
 
   it('importInitialHistory does NOT stamp metadata.model on imported AI turns', () => {
-    const importedHistory: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'old question' }] },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'old answer from a different model' }],
-      },
+    const importedHistory: Content[] = [
+      { role: 'user', parts: [{ text: 'old question' }] },
+      { role: 'model', parts: [{ text: 'old answer from a different model' }] },
     ];
 
     conversationManager.importInitialHistory(importedHistory, GENERATING_MODEL);
@@ -260,12 +254,9 @@ describe('ConversationManager import/restore paths do NOT stamp (issue #2335)', 
   });
 
   it('setHistory does NOT stamp metadata.model on restored AI turns', () => {
-    const restoredHistory: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'restored question' }],
-      },
-      { speaker: 'ai', blocks: [{ type: 'text', text: 'restored answer' }] },
+    const restoredHistory: Content[] = [
+      { role: 'user', parts: [{ text: 'restored question' }] },
+      { role: 'model', parts: [{ text: 'restored answer' }] },
     ];
 
     conversationManager.setHistory(restoredHistory);
@@ -277,9 +268,9 @@ describe('ConversationManager import/restore paths do NOT stamp (issue #2335)', 
   });
 
   it('addHistory does NOT stamp metadata.model on externally-supplied turns', () => {
-    const externalAiTurn: IContent = {
-      speaker: 'ai',
-      blocks: [{ type: 'text', text: 'externally supplied model turn' }],
+    const externalAiTurn: Content = {
+      role: 'model',
+      parts: [{ text: 'externally supplied model turn' }],
     };
 
     conversationManager.addHistory(externalAiTurn);

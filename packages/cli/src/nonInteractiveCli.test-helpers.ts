@@ -5,14 +5,14 @@
  */
 
 import type {
-  ContentBlock,
+  ContractPart,
   ServerAgentStreamEvent,
   ToolErrorType,
 } from '@vybestack/llxprt-code-core';
 
 export function createCompletedToolCallResponse(params: {
   callId: string;
-  responseParts?: ContentBlock[];
+  responseParts?: ContractPart[];
   resultDisplay?: unknown;
   error?: Error;
   errorType?: ToolErrorType;

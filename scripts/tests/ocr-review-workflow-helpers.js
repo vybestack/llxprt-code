@@ -26,21 +26,13 @@ export function normalize(value) {
 export function commandText(step) {
   return String(step?.run ?? step?.with?.script ?? '');
 }
-function hasCommand(command, args) {
+export function hasPerl() {
   try {
-    execFileSync(command, args, { stdio: 'ignore' });
+    execFileSync('perl', ['-e', '1'], { stdio: 'ignore' });
     return true;
   } catch {
     return false;
   }
-}
-
-export function hasPerl() {
-  return hasCommand('perl', ['-e', '1']);
-}
-
-export function hasBashAndPerl() {
-  return hasCommand('bash', ['-c', 'perl -e 1']);
 }
 
 export function stepNamed(job, name) {

@@ -4,14 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  iContentFromAgentMessageInput,
-  type AgentMessageInput,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type {
-  ContentBlock,
-  IContent,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { type PartListUnion, type Part } from '@google/genai';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { AgentEventType } from './turn.js';
 import type { ServerAgentStreamEvent, ToolCallResponseInfo } from './turn.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -29,7 +23,7 @@ const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
  * Narrows a runtime `Part` to a text-bearing part. Runtime payloads from
  * providers can include null or malformed entries despite declared types.
  */
-function asTextPart(part: ContentBlock): { text: string } | undefined {
+function asTextPart(part: Part): { text: string } | undefined {
   const candidate = part as unknown;
   if (
     typeof candidate === 'object' &&
@@ -76,42 +70,17 @@ function normalizeTodoForComparison(todo: Todo): {
   };
 }
 
-function toContents(request: AgentMessageInput): IContent[] {
-  return iContentFromAgentMessageInput(request).map((content) => ({
-    ...content,
-    blocks: [...content.blocks],
-  }));
-}
-
-function appendTextToContents(
-  request: AgentMessageInput,
-  text: string,
-  matches: (candidate: string) => boolean,
-): IContent[] {
-  const contents = toContents(request);
-  if (
-    contents.some((content) =>
-      content.blocks.some((block) => {
-        const textPart = asTextPart(block);
-        return textPart !== undefined && matches(textPart.text);
-      }),
-    )
-  ) {
-    return contents;
+function toPartArray(request: PartListUnion): Part[] {
+  if (Array.isArray(request)) {
+    return [...request] as Part[];
   }
-  let lastHuman: IContent | undefined;
-  for (let index = contents.length - 1; index >= 0; index -= 1) {
-    if (contents[index].speaker === 'human') {
-      lastHuman = contents[index];
-      break;
-    }
+  if (typeof request === 'string') {
+    return [{ text: request }];
   }
-  if (lastHuman !== undefined) {
-    lastHuman.blocks.push({ type: 'text', text });
-  } else {
-    contents.push({ speaker: 'human', blocks: [{ type: 'text', text }] });
+  if ('text' in request) {
+    return [request];
   }
-  return contents;
+  return [];
 }
 
 export enum PostTurnAction {
@@ -235,10 +204,20 @@ export class TodoContinuationService {
     return normalized === 'todo_write' || normalized === 'todo_read';
   }
 
-  appendTodoSuffixToRequest(request: AgentMessageInput): AgentMessageInput {
-    return appendTextToContents(request, TODO_PROMPT_SUFFIX, (text) =>
-      text.includes(TODO_PROMPT_SUFFIX),
-    );
+  appendTodoSuffixToRequest(request: PartListUnion): PartListUnion {
+    const parts = toPartArray(request);
+
+    const suffixAlreadyPresent = parts.some((part) => {
+      const textPart = asTextPart(part);
+      return textPart?.text.includes(TODO_PROMPT_SUFFIX) ?? false;
+    });
+
+    if (suffixAlreadyPresent) {
+      return parts;
+    }
+
+    parts.push({ text: TODO_PROMPT_SUFFIX } as Part);
+    return parts;
   }
 
   recordModelActivity(event: ServerAgentStreamEvent): void {
@@ -348,19 +327,21 @@ export class TodoContinuationService {
   }
 
   appendSystemReminderToRequest(
-    request: AgentMessageInput,
+    request: PartListUnion,
     reminderText: string,
-  ): AgentMessageInput {
-    return appendTextToContents(
-      request,
-      reminderText,
-      (text) => text === reminderText,
+  ): PartListUnion {
+    const parts = toPartArray(request);
+    const alreadyPresent = parts.some(
+      (part) => asTextPart(part)?.text === reminderText,
     );
+    if (!alreadyPresent) {
+      parts.push({ text: reminderText } as Part);
+    }
+    return parts;
   }
 
   shouldDeferStreamEvent(event: ServerAgentStreamEvent): boolean {
     return (
-      event.type === AgentEventType.Content ||
       event.type === AgentEventType.Finished ||
       event.type === AgentEventType.Citation
     );
@@ -470,9 +451,7 @@ export class TodoContinuationService {
     this.lastTodoToolTurn = turn;
   }
 
-  async applyPendingReminder(
-    request: AgentMessageInput,
-  ): Promise<AgentMessageInput> {
+  async applyPendingReminder(request: PartListUnion): Promise<PartListUnion> {
     if (this.toolCallReminderLevel === 'none') return request;
 
     if (await this.readPausedState()) {
@@ -487,8 +466,15 @@ export class TodoContinuationService {
     });
 
     if (reminderResult.reminder) {
+      const parts = toPartArray(request);
+      const textOnlyParts = parts.filter(
+        (part) =>
+          typeof part === 'object' &&
+          !('functionCall' in part) &&
+          !('functionResponse' in part),
+      );
       request = this.appendSystemReminderToRequest(
-        request,
+        textOnlyParts,
         reminderResult.reminder,
       );
       this.lastTodoSnapshot = reminderResult.todos;

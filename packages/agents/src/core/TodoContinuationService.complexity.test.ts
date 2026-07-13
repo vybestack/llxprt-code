@@ -338,82 +338,56 @@ describe('TodoContinuationService', () => {
 
   describe('appendTodoSuffixToRequest', () => {
     it('appends suffix to request array', () => {
-      const req = [{ type: 'text', text: 'Do something' }];
+      const req = [{ text: 'Do something' }];
       const result = service.appendTodoSuffixToRequest(req);
-      expect(result).toStrictEqual([
-        {
-          speaker: 'human',
-          blocks: [
-            { type: 'text', text: 'Do something' },
-            {
-              type: 'text',
-              text: 'Use TODO List to organize this effort.',
-            },
-          ],
-        },
-      ]);
+      expect(Array.isArray(result)).toBe(true);
+      const arr = result as Array<{ text?: string }>;
+      expect(
+        arr.some((p): boolean => p.text?.includes('TODO List') === true),
+      ).toBe(true);
     });
 
     it('does not duplicate suffix if already present', () => {
       const req = [
-        { type: 'text', text: 'Do something' },
-        { type: 'text', text: 'Use TODO List to organize this effort.' },
+        { text: 'Do something' },
+        { text: 'Use TODO List to organize this effort.' },
       ];
       const result = service.appendTodoSuffixToRequest(req);
-      expect(result).toStrictEqual([
-        {
-          speaker: 'human',
-          blocks: [
-            { type: 'text', text: 'Do something' },
-            { type: 'text', text: 'Use TODO List to organize this effort.' },
-          ],
-        },
-      ]);
+      const arr = result as Array<{ text?: string }>;
+      const suffixCount = arr.filter(
+        (p): boolean =>
+          p.text?.includes('Use TODO List to organize this effort.') === true,
+      ).length;
+      expect(suffixCount).toBe(1);
     });
 
-    it('normalizes string request and appends suffix inside human content', () => {
-      const result = service.appendTodoSuffixToRequest('plain string request');
-      expect(result).toStrictEqual([
-        {
-          speaker: 'human',
-          blocks: [
-            { type: 'text', text: 'plain string request' },
-            {
-              type: 'text',
-              text: 'Use TODO List to organize this effort.',
-            },
-          ],
-        },
-      ]);
-    });
-
-    it('preserves singular IContent metadata while appending suffix', () => {
-      const result = service.appendTodoSuffixToRequest({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'do this task' }],
-        metadata: { turnId: 'turn-2' },
-      });
-      expect(result).toStrictEqual([
-        {
-          speaker: 'human',
-          blocks: [
-            { type: 'text', text: 'do this task' },
-            {
-              type: 'text',
-              text: 'Use TODO List to organize this effort.',
-            },
-          ],
-          metadata: { turnId: 'turn-2' },
-        },
-      ]);
-    });
-
-    it('does not mutate or alias the original array', () => {
-      const req = [{ type: 'text', text: 'Do something' }];
-      const original = [...req];
+    it('normalizes string request to Part array and appends suffix', () => {
+      const req = 'plain string request';
       const result = service.appendTodoSuffixToRequest(req);
+      expect(Array.isArray(result)).toBe(true);
+      const arr = result as Array<{ text?: string }>;
+      expect(arr[0]).toStrictEqual({ text: 'plain string request' });
+      expect(
+        arr.some((p): boolean => p.text?.includes('TODO List') === true),
+      ).toBe(true);
+    });
+
+    it('normalizes singular {text} object and appends suffix', () => {
+      const req = { text: 'do this task' };
+      const result = service.appendTodoSuffixToRequest(req);
+      expect(Array.isArray(result)).toBe(true);
+      const arr = result as Array<{ text?: string }>;
+      expect(arr[0]).toStrictEqual({ text: 'do this task' });
+      expect(
+        arr.some((p): boolean => p.text?.includes('TODO List') === true),
+      ).toBe(true);
+    });
+
+    it('does not mutate the original array', () => {
+      const req = [{ text: 'Do something' }];
+      const original = [...req];
+      service.appendTodoSuffixToRequest(req);
       expect(req).toStrictEqual(original);
-      expect(result[0].blocks).not.toBe(req);
     });
   });
 

@@ -12,7 +12,7 @@ import {
   isWithinRoot,
   debugLogger,
   createInkStdio,
-  type ContentBlock,
+  type ContractPart,
   DebugLogger,
   EmojiFilter,
   type FilterConfiguration,
@@ -28,7 +28,6 @@ import {
   type AgentEvent,
   type DoneReason,
   type ThoughtSummary,
-  type AgentInput,
 } from '@vybestack/llxprt-code-agents';
 import { Readable, Writable } from 'node:stream';
 import * as path from 'node:path';
@@ -43,6 +42,7 @@ import { AcpFileSystemService } from './fileSystemService.js';
 import { parseZedAuthMethodId, buildAvailableModes } from './zed-helpers.js';
 import { ZedPathResolver } from './zed-path-resolver.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import { StreamBatcher } from './streamBatcher.js';
 import {
   emitToolCallStart,
   emitToolStatus,
@@ -305,6 +305,27 @@ function mapDoneReasonToStopReason(reason: DoneReason): acp.StopReason {
     }
   }
 }
+const NOOP_METADATA_EVENT_TYPES = new Set<AgentEvent['type']>([
+  'context-warning',
+  'compression',
+  'model-info',
+  'retry',
+  'citation',
+]);
+
+function isNoopMetadataEvent(event: AgentEvent): event is Extract<
+  AgentEvent,
+  {
+    type:
+      | 'context-warning'
+      | 'compression'
+      | 'model-info'
+      | 'retry'
+      | 'citation';
+  }
+> {
+  return NOOP_METADATA_EVENT_TYPES.has(event.type);
+}
 
 export class Session {
   private pendingPrompt: AbortController | null = null;
@@ -423,7 +444,7 @@ export class Session {
     const promptId = Math.random().toString(16).slice(2);
 
     try {
-      let parts: ContentBlock[];
+      let parts: ContractPart[];
       try {
         parts = await this.pathResolver.resolvePrompt(
           params.prompt,
@@ -467,7 +488,14 @@ export class Session {
         }
         throw error;
       } finally {
-        await batcher.flush();
+        try {
+          await batcher.flush();
+        } catch (flushError) {
+          debugLogger.error(
+            'Failed to flush stream updates to Zed:',
+            flushError,
+          );
+        }
       }
 
       if (pendingSend.signal.aborted && terminalStopReason !== 'cancelled') {
@@ -487,13 +515,13 @@ export class Session {
   }
 
   private async consumeAgentStream(
-    parts: ContentBlock[],
+    parts: ContractPart[],
     pendingSend: AbortController,
     promptId: string,
     promptGeneration: number,
     batcher: StreamBatcher,
   ): Promise<acp.StopReason | null> {
-    const eventStream = this.agent.stream(parts as AgentInput, {
+    const eventStream = this.agent.stream(parts, {
       signal: pendingSend.signal,
       promptId,
       maxTurns: this.config.getMaxSessionTurns(),
@@ -519,23 +547,19 @@ export class Session {
     return terminalStopReason;
   }
 
-  private async handleAgentEvent(
-    event: AgentEvent,
+  private async handleFlushedAgentEvent(
+    event: Exclude<
+      AgentEvent,
+      Extract<AgentEvent, { type: 'text' | 'thinking' | 'done' }>
+    >,
     batcher: StreamBatcher,
     promptGeneration: number,
     pendingSend: AbortController,
   ): Promise<acp.StopReason | null> {
+    if (isNoopMetadataEvent(event)) {
+      return null;
+    }
     switch (event.type) {
-      case 'text':
-        batcher.append(event.text, false);
-        return null;
-      case 'thinking': {
-        const thoughtText = this.extractThoughtText(event.thought);
-        if (thoughtText.length > 0) {
-          batcher.append(thoughtText, true);
-        }
-        return null;
-      }
       case 'tool-call':
         await batcher.flush();
         await emitToolCallStart(event.call, (u) => this.sendUpdate(u));
@@ -552,9 +576,6 @@ export class Session {
         await batcher.flush();
         await this.handleToolConfirmation(event, promptGeneration, pendingSend);
         return null;
-      case 'done':
-        await batcher.flush();
-        return mapDoneReasonToStopReason(event.reason);
       case 'error':
         await batcher.flush();
         throw this.translateErrorEvent(event);
@@ -572,40 +593,53 @@ export class Session {
           event.info.systemMessage ?? 'Agent stopped by a hook blocker.',
         );
       case 'loop-detected':
-        // The agent detects a tool-call loop. Map to end_turn so the client
-        // sees a clean turn end rather than an indefinite hang.
         await batcher.flush();
         return 'end_turn';
       case 'notice':
-        // Informational notices have no direct ACP SessionUpdate; surface as
-        // an agent message so the user sees them.
         await batcher.flush();
         await this.sendUpdate({
           sessionUpdate: 'agent_message_chunk',
           content: { type: 'text', text: event.message },
         });
         return null;
-      case 'usage': {
+      case 'usage':
         await batcher.flush();
         await this.sendUsageUpdate(event.usage);
         return null;
-      }
-      case 'context-warning':
-      case 'compression':
-      case 'model-info':
-      case 'retry':
-      case 'citation':
-        // These variants have no faithful ACP translation: usage is mapped
-        // separately, compression/model-info/citation are metadata, retry is
-        // an internal agent detail, and context-warning is advisory. They are
-        // intentionally consumed without surfacing to ACP.
-        return null;
       default: {
-        // Exhaustiveness guard: any future AgentEvent variant added to the
-        // union without an explicit case above will fail to type-check here.
         const exhaustive: never = event;
         throw new Error(`Unhandled agent event: ${String(exhaustive)}`);
       }
+    }
+  }
+
+  private async handleAgentEvent(
+    event: AgentEvent,
+    batcher: StreamBatcher,
+    promptGeneration: number,
+    pendingSend: AbortController,
+  ): Promise<acp.StopReason | null> {
+    switch (event.type) {
+      case 'text':
+        batcher.append(event.text, false);
+        return null;
+      case 'thinking': {
+        const thoughtText = this.extractThoughtText(event.thought);
+        if (thoughtText.length > 0) {
+          batcher.appendThought(thoughtText, event.thought.streamId);
+        }
+        return null;
+      }
+      case 'done':
+        await batcher.flush();
+        return mapDoneReasonToStopReason(event.reason);
+      default:
+        return this.handleFlushedAgentEvent(
+          event,
+          batcher,
+          promptGeneration,
+          pendingSend,
+        );
     }
   }
 
@@ -769,94 +803,6 @@ export class Session {
       } catch (error) {
         debugLogger.error('Failed to dispose Zed session agent:', error);
       }
-    }
-  }
-}
-
-const BATCH_INTERVAL_MS = 100;
-
-class StreamBatcher {
-  private pendingChunks: Array<{ kind: 'text' | 'thought'; text: string }> = [];
-  private batchTimer: ReturnType<typeof setTimeout> | null = null;
-  private flushChain: Promise<void> = Promise.resolve();
-
-  constructor(
-    private readonly emojiFilter: EmojiFilter,
-    private readonly sendUpdate: (update: acp.SessionUpdate) => Promise<void>,
-  ) {}
-
-  append(text: string, isThought: boolean): void {
-    const filterResult = isThought
-      ? this.emojiFilter.filterText(text)
-      : this.emojiFilter.filterStreamChunk(text);
-    if (filterResult.blocked) {
-      const pending = this.flushChain
-        .then(() => this.doFlush())
-        .then(() =>
-          this.sendUpdate({
-            sessionUpdate: 'agent_message_chunk',
-            content: {
-              type: 'text',
-              text: '[Error: Response blocked due to emoji detection]',
-            },
-          }),
-        );
-      this.flushChain = pending.catch(() => undefined);
-      return;
-    }
-    const filteredText =
-      typeof filterResult.filtered === 'string' ? filterResult.filtered : '';
-    if (filteredText.length === 0) {
-      return;
-    }
-    this.appendPendingChunk(isThought ? 'thought' : 'text', filteredText);
-    this.batchTimer ??= setTimeout(() => {
-      this.batchTimer = null;
-      void this.flush();
-    }, BATCH_INTERVAL_MS);
-  }
-
-  async flush(): Promise<void> {
-    if (this.batchTimer !== null) {
-      clearTimeout(this.batchTimer);
-      this.batchTimer = null;
-    }
-    const pending = this.flushChain
-      .then(() => this.doFlush())
-      .then(() => this.flushEmojiBuffer());
-    this.flushChain = pending.catch(() => undefined);
-    await pending;
-  }
-
-  private async flushEmojiBuffer(): Promise<void> {
-    const remaining = this.emojiFilter.flushBuffer();
-    if (remaining.length === 0) {
-      return;
-    }
-    this.appendPendingChunk('text', remaining);
-    await this.doFlush();
-  }
-
-  private appendPendingChunk(kind: 'text' | 'thought', text: string): void {
-    const lastChunk = this.pendingChunks.at(-1);
-    if (lastChunk?.kind === kind) {
-      lastChunk.text += text;
-      return;
-    }
-    this.pendingChunks.push({ kind, text });
-  }
-
-  private async doFlush(): Promise<void> {
-    const chunks = this.pendingChunks;
-    this.pendingChunks = [];
-    for (const chunk of chunks) {
-      await this.sendUpdate({
-        sessionUpdate:
-          chunk.kind === 'thought'
-            ? 'agent_thought_chunk'
-            : 'agent_message_chunk',
-        content: { type: 'text', text: chunk.text },
-      });
     }
   }
 }

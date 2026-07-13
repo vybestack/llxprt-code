@@ -56,6 +56,7 @@ export type OpenAIResponsesRequest = {
   reasoning?: { effort?: string; summary?: string };
   text?: { verbosity: string };
   store?: boolean;
+  previous_response_id?: string;
   prompt_cache_key?: string;
   prompt_cache_retention?: string;
   [key: string]: unknown;

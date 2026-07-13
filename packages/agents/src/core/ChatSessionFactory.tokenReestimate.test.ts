@@ -56,7 +56,7 @@ vi.mock(
   '@vybestack/llxprt-code-core/services/history/ContentConverters.js',
   () => ({
     ContentConverters: {
-      toIContent: vi.fn().mockReturnValue({ speaker: 'human', blocks: [] }),
+      toIContent: vi.fn().mockReturnValue({ role: 'user', parts: [] }),
     },
   }),
 );

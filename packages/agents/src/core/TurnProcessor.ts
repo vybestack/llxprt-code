@@ -4,8 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { SendMessageParams } from './chatSession.js';
+import type { GenerateContentResponse } from '@google/genai';
+import {
+  type Content,
+  type GenerateContentConfig,
+  type SendMessageParameters,
+  ApiError,
+} from '@google/genai';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import {
@@ -25,8 +30,13 @@ import type {
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import type { StreamProcessor } from './StreamProcessor.js';
-import { normalizeToolInteractionInput } from './MessageConverter.js';
+import {
+  normalizeToolInteractionInput,
+  convertIContentToResponse,
+} from './MessageConverter.js';
+import { filterEagerlyRecordedToolResponses } from './agenticLoop/loopHelpers.js';
 import {
   StreamEventType,
   type StreamEvent,
@@ -34,8 +44,15 @@ import {
   INVALID_CONTENT_RETRY_OPTIONS,
 } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import {
-  filterHookRestrictedBlocks,
-  filterAfcByHookRestrictions,
+  isThoughtPart,
+  type UsageMetadataWithCache,
+} from './googlePartHelpers.js';
+import { recordActualTokenUsage } from './tokenUsageActualLogger.js';
+import {
+  attachHookRestrictedAllowedTools,
+  filterHookRestrictedContents,
+  filterHookRestrictedContent,
+  getHookRestrictedAllowedTools,
 } from './hookToolRestrictions.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import { shouldRetryStreamAttempt } from './turnAbortHelpers.js';
@@ -46,18 +63,8 @@ import {
   AgentExecutionBlockedError,
 } from './chatSession.js';
 import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
-
-import type {
-  ModelStreamChunk,
-  ModelOutput,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
-import {
-  toModelStreamChunk,
-  emptyModelOutput,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { isProviderApiError } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { responseToModelStreamChunk } from './streamChunkWrapper.js';
+import { hasVisibleOrThinkingContent } from './streamChunkVisibility.js';
 import { enrichSchemaDepthError } from './schemaDepthErrorEnrichment.js';
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{ name: string }>;
@@ -69,15 +76,13 @@ interface ToolSelectionHookResult {
 }
 
 /**
- * Wraps a neutral ModelStreamChunk into a CHUNK StreamEvent.
- *
- * @plan:PLAN-20260707-AGENTNEUTRAL.P08
- * @requirement:REQ-002.2
+ * Wraps a GenerateContentResponse chunk into a CHUNK StreamEvent carrying
+ * the neutral ModelStreamChunk at the yield boundary.
  */
-function wrapChunk(chunk: ModelStreamChunk): StreamEvent {
+function wrapChunk(resp: GenerateContentResponse): StreamEvent {
   return {
     type: StreamEventType.CHUNK,
-    value: chunk,
+    value: responseToModelStreamChunk(resp),
   };
 }
 
@@ -112,9 +117,12 @@ export class TurnProcessor {
       source: string,
       extras?: Record<string, unknown>,
     ) => ProviderRuntimeContext,
-    private readonly generationConfig: AgentClientGenerateConfig,
+    private readonly generationConfig: GenerateContentConfig,
     private readonly historyService: HistoryService,
     private readonly streamProcessor: StreamProcessor,
+    private readonly makePositionMatcher: () =>
+      | (() => { historyId: string; toolName?: string })
+      | undefined,
     private readonly resolveProviderBaseUrl: (
       provider: IProvider,
     ) => string | undefined,
@@ -125,21 +133,14 @@ export class TurnProcessor {
    * Waits for previous send, prepares message, calls provider, commits result to history.
    */
   async sendMessage(
-    params: SendMessageParams,
+    params: SendMessageParameters,
     prompt_id: string,
-  ): Promise<ModelOutput> {
+  ): Promise<GenerateContentResponse> {
     await this.sendPromise;
 
     this.lastPromptTokenCount = null;
 
     const prepared = this._prepareSendMessage(params);
-
-    // #2410: when the user message converts to zero IContent turns (e.g.
-    // empty array after hook-restriction filtering), skip the provider call
-    // entirely — never submit a fabricated placeholder to the provider.
-    if (prepared.userIContents.length === 0) {
-      return emptyModelOutput();
-    }
 
     const provider = this.providerResolver('sendMessage');
     const response = await this._executeSendWithRetry(
@@ -151,7 +152,7 @@ export class TurnProcessor {
 
     this.sendPromise = this._commitSendResult(
       response,
-      prepared.userContents,
+      prepared.userContent,
       params,
       prompt_id,
     );
@@ -168,13 +169,13 @@ export class TurnProcessor {
    * Waits for previous send, prepares message, delegates to StreamProcessor.
    */
   async sendMessageStream(
-    params: SendMessageParams,
+    params: SendMessageParameters,
     prompt_id: string,
   ): Promise<AsyncGenerator<StreamEvent>> {
     await this.sendPromise;
     this.lastPromptTokenCount = null;
 
-    const userContents = this._normalizeUserContent(params);
+    const userContent = this._normalizeUserContent(params);
 
     let streamDoneResolver: () => void;
     this.sendPromise = new Promise<void>((resolve) => {
@@ -195,16 +196,16 @@ export class TurnProcessor {
       }
     }
 
-    return this._createStreamGenerator(params, prompt_id, userContents, () => {
+    return this._createStreamGenerator(params, prompt_id, userContent, () => {
       abortSignal?.removeEventListener('abort', onAbort);
       streamDoneResolver!();
     });
   }
 
   private async *_createStreamGenerator(
-    params: SendMessageParams,
+    params: SendMessageParameters,
     prompt_id: string,
-    userContents: IContent[],
+    userContent: Content | Content[],
     onDone: () => void,
   ): AsyncGenerator<StreamEvent> {
     try {
@@ -215,7 +216,7 @@ export class TurnProcessor {
         const outcome = yield* this._runStreamAttempt(
           params,
           prompt_id,
-          userContents,
+          userContent,
           attempt,
         );
         lastError = outcome.error;
@@ -243,23 +244,25 @@ export class TurnProcessor {
    * a single break/continue.
    */
   private async *_runStreamAttempt(
-    params: SendMessageParams,
+    params: SendMessageParameters,
     prompt_id: string,
-    userContents: IContent[],
+    userContent: Content | Content[],
     attempt: number,
   ): AsyncGenerator<StreamEvent, { error: unknown; action: 'retry' | 'stop' }> {
     if (attempt > 0) {
       yield { type: StreamEventType.RETRY };
     }
 
+    let hasYieldedChunk = false;
     try {
       const currentParams = this._applyRetryTemperature(params, attempt);
       const stream = await this.streamProcessor.makeApiCallAndProcessStream(
         currentParams,
         prompt_id,
-        userContents,
+        userContent,
       );
       for await (const chunk of stream) {
+        hasYieldedChunk ||= hasVisibleOrThinkingContent(chunk);
         yield wrapChunk(chunk);
       }
       return { error: null, action: 'stop' };
@@ -281,16 +284,15 @@ export class TurnProcessor {
           systemMessage: error.systemMessage,
           contextCleared: error.contextCleared,
         };
-        if (error.blockedOutput) {
-          // P13: blockedOutput is now a neutral ModelOutput (was syntheticResponse).
-          yield {
-            type: StreamEventType.CHUNK,
-            value: error.blockedOutput,
-          };
+        if (error.syntheticResponse) {
+          yield wrapChunk(error.syntheticResponse);
         }
         return { error: null, action: 'stop' };
       }
-      if (shouldRetryStreamAttempt(error, params, attempt)) {
+      if (
+        !hasYieldedChunk &&
+        shouldRetryStreamAttempt(error, params, attempt)
+      ) {
         return { error, action: 'retry' };
       }
       return { error, action: 'stop' };
@@ -298,9 +300,9 @@ export class TurnProcessor {
   }
 
   private _applyRetryTemperature(
-    params: SendMessageParams,
+    params: SendMessageParameters,
     attempt: number,
-  ): SendMessageParams {
+  ): SendMessageParameters {
     if (attempt === 0) return params;
     const baselineTemperature = Math.max(params.config?.temperature ?? 1, 1);
     const newTemperature = Math.min(
@@ -313,19 +315,20 @@ export class TurnProcessor {
     };
   }
 
-  private _normalizeUserContent(params: SendMessageParams): IContent[] {
+  private _normalizeUserContent(
+    params: SendMessageParameters,
+  ): Content | Content[] {
     return normalizeToolInteractionInput(params.message);
   }
 
-  private _stampTurnMetadata(contents: IContent[]): IContent[] {
-    const idGen = this.historyService.getIdGeneratorCallback();
-    return contents.map((content) => ({
-      ...content,
-      metadata: {
-        ...content.metadata,
-        id: idGen(),
-      },
-    }));
+  private _convertToIContents(userContent: Content | Content[]): IContent[] {
+    const contents = Array.isArray(userContent) ? userContent : [userContent];
+    const matcher = this.makePositionMatcher();
+    return contents.map((content) => {
+      const turnKey = this.historyService.generateTurnKey();
+      const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+      return ContentConverters.toIContent(content, idGen, matcher, turnKey);
+    });
   }
 
   /**
@@ -360,25 +363,25 @@ export class TurnProcessor {
   /**
    * Prepares user message: validates and converts input before provider enforcement.
    */
-  private _prepareSendMessage(params: SendMessageParams): {
-    userContents: IContent[];
+  private _prepareSendMessage(params: SendMessageParameters): {
+    userContent: Content | Content[];
     userIContents: IContent[];
   } {
-    const userContents = this._normalizeUserContent(params);
-    const userIContents = this._stampTurnMetadata(userContents);
+    const userContent = this._normalizeUserContent(params);
+    const userIContents = this._convertToIContents(userContent);
 
-    return { userContents, userIContents };
+    return { userContent, userIContents };
   }
 
   /**
    * Executes the provider call with retry and bucket failover.
    */
   private async _executeSendWithRetry(
-    params: SendMessageParams,
+    params: SendMessageParameters,
     userIContents: IContent[],
     provider: IProvider,
     prompt_id: string,
-  ): Promise<ModelOutput> {
+  ): Promise<GenerateContentResponse> {
     this._validateProvider(provider);
     let providerStartTime = 0;
     let providerRequestStarted = false;
@@ -404,11 +407,13 @@ export class TurnProcessor {
           ),
         {
           shouldRetryOnError: (error: unknown) => {
-            if (isProviderApiError(error) && error.message) {
-              const status = error.status ?? 0;
-              if (status === 400 || isSchemaDepthError(error.message))
+            if (error instanceof ApiError && error.message) {
+              if (error.status === 400 || isSchemaDepthError(error.message))
                 return false;
-              if (status === 429 || (status >= 500 && status < 600))
+              if (
+                error.status === 429 ||
+                (error.status >= 500 && error.status < 600)
+              )
                 return true;
             }
             return false;
@@ -424,7 +429,7 @@ export class TurnProcessor {
         this.runtimeContext.state.model,
         prompt_id,
         durationMs,
-        response.usage,
+        response.usageMetadata,
         JSON.stringify(response),
       );
       return response;
@@ -468,7 +473,7 @@ export class TurnProcessor {
     logApiRequest(
       this.runtimeContext,
       this.runtimeContext.state,
-      iContents,
+      ContentConverters.toGeminiContents(iContents),
       this.runtimeContext.state.model,
       prompt_id,
     );
@@ -497,10 +502,10 @@ export class TurnProcessor {
    */
   private async _executeProviderCall(
     provider: IProvider,
-    params: SendMessageParams,
+    params: SendMessageParameters,
     requestContents: IContent[],
     providerBaseUrl: string | undefined,
-  ): Promise<ModelOutput> {
+  ): Promise<GenerateContentResponse> {
     const configForHooks = this.runtimeContext.providerRuntime.config;
     const requestTools = this._selectRequestTools(params);
     const toolSelection = await this._applyToolSelectionHook(
@@ -508,7 +513,6 @@ export class TurnProcessor {
       requestTools,
     );
     const tools = toolSelection.tools;
-    const allowedFunctionNames = toolSelection.allowedFunctionNames;
     this._logToolDiagnostics(provider, tools, providerBaseUrl);
 
     const runtimeContext = this.providerRuntimeBuilder(
@@ -537,36 +541,13 @@ export class TurnProcessor {
         timeoutController,
         upstreamAbortSignal,
       );
-      const output = toModelStreamChunk(lastResponse);
-      this._applyHookToolFiltering(output, lastResponse, allowedFunctionNames);
-      return output;
+      return attachHookRestrictedAllowedTools(
+        convertIContentToResponse(lastResponse),
+        toolSelection.allowedFunctionNames,
+      );
     } finally {
       timeoutController.abort();
       upstreamAbortSignal?.removeEventListener('abort', onAbort);
-    }
-  }
-
-  private _applyHookToolFiltering(
-    output: ModelStreamChunk,
-    _lastResponse: IContent,
-    allowedFunctionNames: string[] | undefined,
-  ): void {
-    if (allowedFunctionNames === undefined) return;
-    output.content = {
-      ...output.content,
-      blocks: filterHookRestrictedBlocks(
-        output.content.blocks,
-        allowedFunctionNames,
-      ),
-    };
-    // P13 AFC boundary: toModelStreamChunk already extracted AFC into
-    // output.afcHistory and stripped it from providerMetadata. Apply
-    // hook-restriction filtering to the first-class afcHistory field only.
-    if (output.afcHistory !== undefined) {
-      output.afcHistory = filterAfcByHookRestrictions(
-        output.afcHistory,
-        allowedFunctionNames,
-      );
     }
   }
 
@@ -665,14 +646,14 @@ export class TurnProcessor {
     this.compressionHandler.lastPromptTokenCount = this.lastPromptTokenCount;
   }
   private _selectRequestTools(
-    params: SendMessageParams,
-  ): AgentClientGenerateConfig['tools'] {
+    params: SendMessageParameters,
+  ): GenerateContentConfig['tools'] {
     return params.config?.tools ?? this.generationConfig.tools;
   }
 
   private async _applyToolSelectionHook(
     configForHooks: Config | undefined,
-    tools: AgentClientGenerateConfig['tools'],
+    tools: GenerateContentConfig['tools'],
   ): Promise<ToolSelectionHookResult> {
     const toolsFromConfig = Array.isArray(tools)
       ? (tools as ToolGroupArray)
@@ -754,99 +735,158 @@ export class TurnProcessor {
    * Commits the send result to history: adds user and model content, syncs tokens.
    */
   private async _commitSendResult(
-    response: ModelOutput,
-    userContents: IContent[],
-    _params: SendMessageParams,
-    _prompt_id: string,
+    response: GenerateContentResponse,
+    userContent: Content | Content[],
+    _params: SendMessageParameters,
+    prompt_id: string,
   ): Promise<void> {
     try {
       const currentModel = this.runtimeContext.state.model;
-      const afcHistory = response.afcHistory;
+      const afcHistory = response.automaticFunctionCallingHistory;
 
+      const allowedTools = getHookRestrictedAllowedTools(response);
       const filteredAfcHistory =
         afcHistory && afcHistory.length > 0
-          ? afcHistory.filter((content: IContent) => content.blocks.length > 0)
+          ? filterHookRestrictedContents(afcHistory, allowedTools).filter(
+              (content) => (content.parts?.length ?? 0) > 0,
+            )
           : undefined;
       if (filteredAfcHistory && filteredAfcHistory.length > 0) {
         this._recordAfcHistory(filteredAfcHistory, currentModel);
       } else {
-        this._recordUserContents(userContents, currentModel);
+        this._recordUserContent(userContent, currentModel);
       }
 
       this._recordOutputContent(response, currentModel, filteredAfcHistory);
 
-      await this._syncTokenCounts(response);
+      await this._syncTokenCounts(response, prompt_id);
     } finally {
       this.eagerlyRecordedToolResponseCallIds.clear();
     }
   }
 
   private _recordAfcHistory(
-    afcHistory: IContent[],
+    afcHistory: Content[],
     currentModel: string | undefined,
   ): void {
     const curatedHistory = this.historyService.getCurated();
-    const index = curatedHistory.length;
+    const index = ContentConverters.toGeminiContents(curatedHistory).length;
     const newEntries = afcHistory.slice(index);
+    const matcher = this.makePositionMatcher();
     for (const content of newEntries) {
+      const turnKey = this.historyService.generateTurnKey();
+      const idGen = this.historyService.getIdGeneratorCallback(turnKey);
       // AFC history is mixed user/model; stampAiTurnModel no-ops on non-ai
       // entries, so only freshly generated model turns get the origin stamp.
       this.historyService.add(
-        stampAiTurnModel(content, currentModel),
+        stampAiTurnModel(
+          ContentConverters.toIContent(content, idGen, matcher, turnKey),
+          currentModel,
+        ),
         currentModel,
       );
     }
   }
 
-  private _recordUserContents(
-    userContents: IContent[],
+  private _recordUserContent(
+    userContent: Content | Content[],
     currentModel: string | undefined,
   ): void {
-    for (const content of userContents) {
-      this.historyService.add(content, currentModel);
+    const contents = Array.isArray(userContent) ? userContent : [userContent];
+    const matcher = this.makePositionMatcher();
+    for (const content of contents) {
+      const filtered = filterEagerlyRecordedToolResponses(
+        content,
+        this.eagerlyRecordedToolResponseCallIds,
+      );
+      if (filtered.content !== null) {
+        const turnKey = this.historyService.generateTurnKey();
+        const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+        this.historyService.add(
+          ContentConverters.toIContent(
+            filtered.content,
+            idGen,
+            matcher,
+            turnKey,
+          ),
+          currentModel,
+        );
+      }
+      for (const callId of filtered.matchedCallIds) {
+        this.eagerlyRecordedToolResponseCallIds.delete(callId);
+      }
     }
   }
 
   private _recordOutputContent(
-    response: ModelOutput,
+    response: GenerateContentResponse,
     currentModel: string | undefined,
-    afcHistory: IContent[] | undefined,
+    afcHistory: Content[] | undefined,
   ): void {
-    const outputContent = response.content;
-    if (outputContent.blocks.length > 0) {
+    const outputContent = response.candidates?.[0]?.content;
+    if (outputContent) {
       const includeThoughts =
         this.runtimeContext.ephemerals.reasoning.includeInContext();
-      const allowedTools = response.hookRestrictions?.allowedToolNames;
-      const blocks = outputContent.blocks;
-      const filteredBlocks = allowedTools
-        ? filterHookRestrictedBlocks(blocks, allowedTools)
-        : blocks;
+      const filteredOutputContent = filterHookRestrictedContent(
+        outputContent,
+        getHookRestrictedAllowedTools(response),
+      );
       const contentForHistory = includeThoughts
-        ? filteredBlocks
-        : filteredBlocks.filter((b: ContentBlock) => b.type !== 'thinking');
+        ? filteredOutputContent
+        : {
+            ...filteredOutputContent,
+            parts: (filteredOutputContent.parts ?? []).filter(
+              (p) => !isThoughtPart(p),
+            ),
+          };
 
-      if (contentForHistory.length > 0) {
+      if ((contentForHistory.parts?.length ?? 0) > 0) {
+        const turnKey = this.historyService.generateTurnKey();
+        const idGen = this.historyService.getIdGeneratorCallback(turnKey);
         this.historyService.add(
           stampAiTurnModel(
-            iContentFromBlocks(contentForHistory, 'ai'),
+            ContentConverters.toIContent(
+              contentForHistory,
+              idGen,
+              undefined,
+              turnKey,
+            ),
             currentModel,
           ),
           currentModel,
         );
       }
-    } else if (!afcHistory || afcHistory.length === 0) {
+    } else if (
+      (response.candidates?.length ?? 0) > 0 &&
+      (!afcHistory || afcHistory.length === 0)
+    ) {
+      const turnKey = this.historyService.generateTurnKey();
+      const idGen = this.historyService.getIdGeneratorCallback(turnKey);
       this.historyService.add(
-        stampAiTurnModel(iContentFromBlocks([], 'ai'), currentModel),
+        stampAiTurnModel(
+          ContentConverters.toIContent(
+            { role: 'model', parts: [] } as Content,
+            idGen,
+            undefined,
+            turnKey,
+          ),
+          currentModel,
+        ),
         currentModel,
       );
     }
   }
 
-  private async _syncTokenCounts(response: ModelOutput): Promise<void> {
+  private async _syncTokenCounts(
+    response: GenerateContentResponse,
+    promptId: string,
+  ): Promise<void> {
     await this.historyService.waitForTokenUpdates();
-    const usage = response.usage;
-    if (usage?.promptTokens !== undefined) {
-      const combined = usage.promptTokens;
+    const usageMetadata = response.usageMetadata as
+      | UsageMetadataWithCache
+      | undefined;
+    if (usageMetadata?.promptTokenCount !== undefined) {
+      const combined = usageMetadata.promptTokenCount;
       if (combined > 0) {
         this.historyService.syncTotalTokens(combined);
         await this.historyService.waitForTokenUpdates();
@@ -859,5 +899,20 @@ export class TurnProcessor {
       this.historyService.syncTotalTokens(this.lastPromptTokenCount);
       await this.historyService.waitForTokenUpdates();
     }
+
+    let usageForLogging = usageMetadata;
+    if (
+      usageForLogging?.promptTokenCount === undefined &&
+      this.lastPromptTokenCount !== null &&
+      this.lastPromptTokenCount > 0 &&
+      !Number.isNaN(this.lastPromptTokenCount)
+    ) {
+      usageForLogging = { promptTokenCount: this.lastPromptTokenCount };
+    }
+    await recordActualTokenUsage(
+      this.compressionHandler.tokenUsageLogger,
+      promptId,
+      usageForLogging,
+    );
   }
 }

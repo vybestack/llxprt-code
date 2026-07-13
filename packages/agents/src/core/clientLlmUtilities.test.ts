@@ -32,7 +32,6 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { BaseLLMClient } from './baseLlmClient.js';
 import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 
 const TEST_MODEL = 'test-model';
@@ -94,12 +93,7 @@ describe('generateJson', () => {
   });
 
   it('returns parsed JSON for valid model response', async () => {
-    const contents = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'hello' }],
-      } as IContent,
-    ];
+    const contents = [{ role: 'user', parts: [{ text: 'hello' }] }];
     const schema = { type: 'object' };
 
     const result = await generateJson(
@@ -118,12 +112,7 @@ describe('generateJson', () => {
   });
 
   it('uses lightweight system prompt (getCoreSystemPromptAsync, no env context)', async () => {
-    const contents = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'hello' }],
-      } as IContent,
-    ];
+    const contents = [{ role: 'user', parts: [{ text: 'hello' }] }];
 
     await generateJson(
       config,
@@ -151,10 +140,7 @@ describe('generateJson', () => {
     );
 
     const contents = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'determine next_speaker please' }],
-      } as IContent,
+      { role: 'user', parts: [{ text: 'determine next_speaker please' }] },
     ];
 
     const result = await generateJson(
@@ -179,12 +165,7 @@ describe('generateJson', () => {
     const apiError = new Error('API failure');
     vi.mocked(baseLlmClient.generateJson).mockRejectedValue(apiError);
 
-    const contents = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'hello' }],
-      } as IContent,
-    ];
+    const contents = [{ role: 'user', parts: [{ text: 'hello' }] }];
 
     await expect(
       generateJson(
@@ -223,12 +204,7 @@ describe('generateContent', () => {
   });
 
   it('returns generated content with merged config', async () => {
-    const contents = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'write something' }],
-      } as IContent,
-    ];
+    const contents = [{ role: 'user', parts: [{ text: 'write something' }] }];
     const baseConfig = { temperature: 0, topP: 1 };
 
     const result = await generateContent(
@@ -257,12 +233,7 @@ describe('generateContent', () => {
   });
 
   it('uses lightweight system prompt (getCoreSystemPromptAsync, no env context)', async () => {
-    const contents = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'hello' }],
-      } as IContent,
-    ];
+    const contents = [{ role: 'user', parts: [{ text: 'hello' }] }];
 
     await generateContent(
       config,
@@ -291,12 +262,7 @@ describe('generateContent', () => {
       new Error('network error'),
     );
 
-    const contents = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'hello' }],
-      } as IContent,
-    ];
+    const contents = [{ role: 'user', parts: [{ text: 'hello' }] }];
 
     await expect(
       generateContent(

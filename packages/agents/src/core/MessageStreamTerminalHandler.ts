@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { type PartListUnion } from '@google/genai';
 import {
   type IterationResult,
   MAX_TURNS,
@@ -18,6 +18,10 @@ interface TerminalState {
   todoPauseSeen: boolean;
   hadThinking: boolean;
   hadContent: boolean;
+}
+
+function canRetryFailedStream(state: TerminalState): boolean {
+  return !state.hadToolCallsThisTurn && !state.hadContent && !state.hadThinking;
 }
 
 function earlyIterResult(
@@ -62,48 +66,21 @@ async function* fireAfterHookAndEmitClearContext(
   }
 }
 
-/**
- * Extracts a tool name from a single request part in neutral or legacy form.
- *
- * Recognizes:
- * - Neutral `tool_response`: `{ type: 'tool_response', toolName }`
- * - Neutral `tool_call`: `{ type: 'tool_call', name }`
- * - Legacy Google `functionResponse`: `{ functionResponse: { name } }`
- *
- * Returns the extracted name, or `undefined` if the part is not a
- * tool-response/tool-call shape.
- */
-function extractToolName(part: unknown): string | undefined {
-  if (part == null || typeof part !== 'object') return undefined;
-  const obj = part as Record<string, unknown>;
-
-  if (obj['type'] === 'tool_response') {
-    const toolName = obj['toolName'];
-    if (typeof toolName === 'string' && toolName.length > 0) return toolName;
-    return undefined;
-  }
-
-  if (obj['type'] === 'tool_call') {
-    const name = obj['name'];
-    if (typeof name === 'string' && name.length > 0) return name;
-    return undefined;
-  }
-
-  if ('functionResponse' in obj) {
-    const funcResp = obj['functionResponse'] as { name?: string } | undefined;
-    if (funcResp?.name) return funcResp.name;
-  }
-
-  return undefined;
-}
-
-function extractToolNamesFromRequest(request: AgentMessageInput): string[] {
+function extractToolNamesFromRequest(request: PartListUnion): string[] {
   if (!Array.isArray(request)) return [];
   const names = new Set<string>();
   for (const rawPart of request) {
-    const name = extractToolName(rawPart);
-    if (name !== undefined) {
-      names.add(name);
+    const part = rawPart as unknown;
+    if (
+      part != null &&
+      typeof part === 'object' &&
+      'functionResponse' in part
+    ) {
+      const funcResp = (part as { functionResponse?: { name?: string } })
+        .functionResponse;
+      if (funcResp?.name) {
+        names.add(funcResp.name);
+      }
     }
   }
   return [...names];
@@ -114,7 +91,7 @@ async function* handle413Error(
   ctx: StreamContext,
   deferredEvents: ServerAgentStreamEvent[],
   state: TerminalState,
-  initialRequest: AgentMessageInput,
+  initialRequest: PartListUnion,
   signal: AbortSignal,
   boundedTurns: number,
 ): AsyncGenerator<ServerAgentStreamEvent, IterationResult | undefined> {
@@ -150,7 +127,7 @@ async function* handle413Error(
     },
   );
   yield* deps.sendMessageStream(
-    [{ type: 'text', text: message }],
+    [{ text: message }],
     signal,
     ctx.prompt_id,
     boundedTurns - 1,
@@ -188,7 +165,7 @@ async function* handleErrorEvent(
   ctx: StreamContext,
   deferredEvents: ServerAgentStreamEvent[],
   state: TerminalState,
-  initialRequest: AgentMessageInput,
+  initialRequest: PartListUnion,
 ): AsyncGenerator<ServerAgentStreamEvent, IterationResult | undefined> {
   const errorStatus = getErrorStatus(event);
   const { config } = deps;
@@ -203,7 +180,11 @@ async function* handleErrorEvent(
     hadThinking: state.hadThinking,
   });
 
-  if (errorStatus === 413 && config.getContinueOnFailedApiCall()) {
+  if (
+    errorStatus === 413 &&
+    config.getContinueOnFailedApiCall() &&
+    canRetryFailedStream(state)
+  ) {
     const result = yield* handle413Error(
       deps,
       ctx,
@@ -252,9 +233,13 @@ async function* handleInvalidStreamEvent(
     hadThinking: state.hadThinking,
   });
 
-  if (config.getContinueOnFailedApiCall() && !ctx.isInvalidStreamRetry) {
+  if (
+    config.getContinueOnFailedApiCall() &&
+    !ctx.isInvalidStreamRetry &&
+    canRetryFailedStream(state)
+  ) {
     yield* deps.sendMessageStream(
-      [{ type: 'text', text: 'System: Please continue.' }],
+      [{ text: 'System: Please continue.' }],
       signal,
       ctx.prompt_id,
       boundedTurns - 1,
@@ -284,7 +269,7 @@ export async function* handleTerminalEvent(
   ctx: StreamContext,
   deferredEvents: ServerAgentStreamEvent[],
   state: TerminalState,
-  initialRequest: AgentMessageInput,
+  initialRequest: PartListUnion,
 ): AsyncGenerator<ServerAgentStreamEvent, IterationResult | undefined> {
   if (event.type === AgentEventType.Error) {
     return yield* handleErrorEvent(

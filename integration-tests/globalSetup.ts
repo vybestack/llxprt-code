@@ -26,6 +26,13 @@ import {
   LLXPRT_CONFIG_DIR,
   DEFAULT_CONTEXT_FILENAME,
 } from '@vybestack/llxprt-code-tools';
+// Import the quota-guard module directly (not the package index): the index
+// re-exports test-rig.ts which imports from 'vitest', and vitest cannot be
+// imported inside globalSetup (it runs in a different context).
+import {
+  clearQuotaGuard,
+  getQuotaGuardTrip,
+} from '@vybestack/llxprt-code-test-utils/src/quota-guard.js';
 
 // Handle the case where import.meta.url might be undefined in CI
 const __dirname = import.meta?.url
@@ -75,6 +82,9 @@ export async function setup() {
   }
 
   process.env['INTEGRATION_TEST_FILE_DIR'] = runDir;
+  // Clear any stale quota-guard sentinel from a previous run. `runDir` is fresh
+  // per run so this is defensive, but cheap insurance against leaked state.
+  clearQuotaGuard();
   // Don't set LLXPRT_CODE_INTEGRATION_TEST anymore - we use --ide-mode disable instead
   process.env['TELEMETRY_LOG_FILE'] = join(runDir, 'telemetry.log');
   // Ensure IDE detection doesn't trigger during tests
@@ -89,6 +99,10 @@ export async function setup() {
 }
 
 export async function teardown() {
+  // Capture the quota-guard trip BEFORE any cleanup: the sentinel lives inside
+  // `runDir` (INTEGRATION_TEST_FILE_DIR), which the cleanup below removes.
+  const trip = getQuotaGuardTrip();
+
   // Cleanup the test run directory unless KEEP_OUTPUT is set
   if (process.env['KEEP_OUTPUT'] !== 'true' && runDir) {
     try {
@@ -107,5 +121,26 @@ export async function teardown() {
     } catch {
       // File might not exist if the test failed before creating it.
     }
+  }
+
+  // A tripped guard means the run aborted early on a provider quota/rate-limit
+  // wall. Surface a prominent banner and throw so vitest exits non-zero even
+  // though the executed tests were skipped (not failed) — this is an
+  // infrastructure/quota failure, not a code regression. globalSetup may be
+  // subject to no-console lint, so use process.stdout.write.
+  if (trip !== null) {
+    const divider = '='.repeat(72);
+    const banner = [
+      divider,
+      'E2E RUN ABORTED: provider quota/rate-limit exhausted',
+      trip.reason,
+      'Remaining tests were skipped; this is an infrastructure/quota failure, not a code regression.',
+      divider,
+      '',
+    ].join('\n');
+    process.stdout.write(banner);
+    throw new Error(
+      `E2E aborted: provider quota/rate-limit exhausted — ${trip.reason}`,
+    );
   }
 }

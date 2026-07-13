@@ -14,7 +14,9 @@ import {
   sanitizeTokenForProxy,
 } from '@vybestack/llxprt-code-auth';
 import { RefreshCoordinator } from './refresh-coordinator.js';
+import type { ConnectionState } from './credential-proxy-server.js';
 
+/** Contract for an OAuth flow instance used by the credential proxy. */
 export interface OAuthFlowInterface {
   initiateDeviceFlow(redirectUri?: string): Promise<{
     device_code: string;
@@ -135,6 +137,18 @@ function getSessionTimeoutMs(options: CredentialProxyOAuthOptions): number {
   return options.oauthSessionTimeoutMs ?? SESSION_TIMEOUT_MS;
 }
 
+/**
+ * OAuth handler for the credential proxy server.
+ *
+ * Sandbox connection restrictions are enforced by the credential proxy
+ * server's dispatch table before any handler in this class is invoked.
+ * All OAuth operations (initiate, exchange, poll, cancel, refresh)
+ * are blocked for sandbox connections via `rejectIfSandbox`.
+ *
+ * The `_state` parameter is accepted by each handler for signature
+ * consistency with the dispatch contract but is not used here because
+ * the sandbox gate is applied upstream.
+ */
 export class CredentialProxyOAuthHandler {
   private readonly refreshCoordinator: RefreshCoordinator;
   private readonly oauthSessions = new Map<string, OAuthSession>();
@@ -170,6 +184,7 @@ export class CredentialProxyOAuthHandler {
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
+    _state: ConnectionState,
   ): Promise<void> {
     const provider = payload.provider as string | undefined;
     const bucket = payload.bucket as string | undefined;
@@ -222,6 +237,7 @@ export class CredentialProxyOAuthHandler {
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
+    _state: ConnectionState,
   ): Promise<void> {
     const sessionId = payload.session_id as string | undefined;
     const code = payload.code as string | undefined;
@@ -269,6 +285,7 @@ export class CredentialProxyOAuthHandler {
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
+    _state: ConnectionState,
   ): Promise<void> {
     const sessionId = payload.session_id as string | undefined;
     if (!sessionId) {
@@ -292,6 +309,7 @@ export class CredentialProxyOAuthHandler {
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
+    _state: ConnectionState,
   ): void {
     const sessionId = payload.session_id as string | undefined;
     if (!sessionId) {
@@ -307,6 +325,7 @@ export class CredentialProxyOAuthHandler {
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
+    _state: ConnectionState,
   ): Promise<void> {
     const provider = payload.provider as string | undefined;
     const bucket = payload.bucket as string | undefined;

@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core/services/history/blocks/ThinkingBlock.js';
 import { ChatSession } from './chatSession.js';
-import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { getProviderStopReason } from './providerStopReason.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -18,21 +17,9 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 
-/**
- * Extracts visible (non-thinking) text from a neutral ModelOutput's content
- * blocks — the post-P13 replacement for the deleted GenerateContentResponse
- * `.text` getter.
- */
-function extractText(output: {
-  content: { blocks: IContent['blocks'] };
-}): string {
-  return output.content.blocks
-    .filter((b): b is TextBlock => b.type === 'text')
-    .map((b) => b.text)
-    .join('');
-}
-
 describe('Issue 1729: Claude stopping after thinking block', () => {
+  let chatSession: ChatSession;
+
   beforeEach(() => {
     const settingsService = new SettingsService();
     const config = new Config({
@@ -86,7 +73,12 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
       providerRuntime: { ...providerRuntime },
     });
 
-    new ChatSession(view, {} as unknown as ContentGenerator, {}, []);
+    chatSession = new ChatSession(
+      view,
+      {} as unknown as ContentGenerator,
+      {},
+      [],
+    );
   });
 
   describe('Phase 1: finishReason propagation from Anthropic', () => {
@@ -104,10 +96,11 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
         },
       };
 
-      const chunk = toModelStreamChunk(icontent);
+      const response = chatSession.convertIContentToResponse(icontent);
 
-      expect(chunk.finishReason).toBe('stop');
-      expect(chunk.rawStopReason).toBe('end_turn');
+      expect(response.candidates).toBeDefined();
+      expect(response.candidates.length).toBe(1);
+      expect(response.candidates[0].finishReason).toBe('STOP');
     });
 
     it('should set finishReason MAX_TOKENS for max_tokens stopReason', () => {
@@ -119,8 +112,8 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
         },
       };
 
-      const chunk = toModelStreamChunk(icontent);
-      expect(chunk.finishReason).toBe('max_tokens');
+      const response = chatSession.convertIContentToResponse(icontent);
+      expect(response.candidates[0].finishReason).toBe('MAX_TOKENS');
     });
 
     it('should set finishReason STOP for stop_sequence stopReason', () => {
@@ -132,11 +125,11 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
         },
       };
 
-      const chunk = toModelStreamChunk(icontent);
-      expect(chunk.finishReason).toBe('stop');
+      const response = chatSession.convertIContentToResponse(icontent);
+      expect(response.candidates[0].finishReason).toBe('STOP');
     });
 
-    it('should set finishReason for tool_use stopReason', () => {
+    it('should set finishReason STOP for tool_use stopReason', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Some text' }],
@@ -145,10 +138,8 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
         },
       };
 
-      // tool_use is a distinct canonical finish reason (tool_calls), not
-      // collapsed to 'stop' — the neutral layer preserves the distinction.
-      const chunk = toModelStreamChunk(icontent);
-      expect(chunk.finishReason).toBe('tool_calls');
+      const response = chatSession.convertIContentToResponse(icontent);
+      expect(response.candidates[0].finishReason).toBe('STOP');
     });
 
     it('should not set finishReason when metadata has no stopReason', () => {
@@ -158,8 +149,8 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
         metadata: {},
       };
 
-      const chunk = toModelStreamChunk(icontent);
-      expect(chunk.finishReason).toBeUndefined();
+      const response = chatSession.convertIContentToResponse(icontent);
+      expect(response.candidates[0].finishReason).toBeUndefined();
     });
   });
 
@@ -176,8 +167,8 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
         metadata: {},
       };
 
-      const chunk = toModelStreamChunk(icontent);
-      expect(extractText(chunk)).toBe('');
+      const response = chatSession.convertIContentToResponse(icontent);
+      expect(response.text).toBe('');
     });
 
     it('should return actual text, not thinking text, for mixed content', () => {
@@ -195,8 +186,8 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
         metadata: {},
       };
 
-      const chunk = toModelStreamChunk(icontent);
-      expect(extractText(chunk)).toBe('Ok now I will proceed.');
+      const response = chatSession.convertIContentToResponse(icontent);
+      expect(response.text).toBe('Ok now I will proceed.');
     });
 
     it('should return text for text-only content without thinking', () => {
@@ -206,8 +197,8 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
         metadata: {},
       };
 
-      const chunk = toModelStreamChunk(icontent);
-      expect(extractText(chunk)).toBe('Hello world');
+      const response = chatSession.convertIContentToResponse(icontent);
+      expect(response.text).toBe('Hello world');
     });
 
     it('should concatenate multiple visible text blocks', () => {
@@ -226,70 +217,59 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
         metadata: {},
       };
 
-      const chunk = toModelStreamChunk(icontent);
-      expect(extractText(chunk)).toBe('First part. Second part.');
+      const response = chatSession.convertIContentToResponse(icontent);
+      expect(response.text).toBe('First part. Second part.');
     });
   });
 
   describe('stopReason mapping completeness', () => {
-    it('should map model_context_window_exceeded to other (unknown reason)', () => {
+    it('should map model_context_window_exceeded to MAX_TOKENS', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'truncated' }],
         metadata: { stopReason: 'model_context_window_exceeded' },
       };
 
-      // model_context_window_exceeded is not in any known stop-reason map, so
-      // it canonicalizes to 'other' (the raw value is preserved on
-      // rawStopReason). The old test asserted MAX_TOKENS via the deleted
-      // provider-specific mapping; the neutral layer does not guess.
-      const chunk = toModelStreamChunk(icontent);
-      expect(chunk.finishReason).toBe('other');
-      expect(chunk.rawStopReason).toBe('model_context_window_exceeded');
+      const response = chatSession.convertIContentToResponse(icontent);
+      expect(response.candidates[0].finishReason).toBe('MAX_TOKENS');
     });
 
-    it('should map pause_turn to other (unknown reason)', () => {
+    it('should map pause_turn to STOP', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'paused' }],
         metadata: { stopReason: 'pause_turn' },
       };
 
-      // pause_turn is not in any known stop-reason map; it canonicalizes to
-      // 'other' with the raw value preserved on rawStopReason.
-      const chunk = toModelStreamChunk(icontent);
-      expect(chunk.finishReason).toBe('other');
-      expect(chunk.rawStopReason).toBe('pause_turn');
+      const response = chatSession.convertIContentToResponse(icontent);
+      expect(response.candidates[0].finishReason).toBe('STOP');
     });
 
-    // @issue:2329 — refusal is a distinct canonical finish reason; the raw
-    // provider stop reason is preserved on the neutral rawStopReason carrier
-    // so consumers can distinguish a safety-classifier refusal from a normal
-    // completion.
-    it('should map refusal to refusal and preserve rawStopReason @issue:2329', () => {
+    // @issue:2329 — refusal maps to STOP (coarse reason unchanged); the raw
+    // provider stop reason is preserved on the repo-owned providerStopReason
+    // carrier so consumers can distinguish a safety-classifier refusal from a
+    // normal completion.
+    it('should map refusal to STOP and preserve providerStopReason @issue:2329', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'refused' }],
         metadata: { stopReason: 'refusal' },
       };
 
-      const chunk = toModelStreamChunk(icontent);
-      expect(chunk.finishReason).toBe('refusal');
-      expect(chunk.rawStopReason).toBe('refusal');
+      const response = chatSession.convertIContentToResponse(icontent);
+      expect(response.candidates[0].finishReason).toBe('STOP');
+      expect(getProviderStopReason(response.candidates[0])).toBe('refusal');
     });
 
-    it('should map unknown stop reasons to other', () => {
+    it('should not set finishReason for unknown stop reasons', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'text' }],
         metadata: { stopReason: 'some_future_reason' },
       };
 
-      // Unknown provider stop reasons canonicalize to 'other' (benign
-      // unknown); the raw value survives on rawStopReason.
-      const chunk = toModelStreamChunk(icontent);
-      expect(chunk.finishReason).toBe('other');
-      expect(chunk.rawStopReason).toBe('some_future_reason');
+      const response = chatSession.convertIContentToResponse(icontent);
+      expect(response.candidates[0].finishReason).toBeUndefined();
     });
   });
 });

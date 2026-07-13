@@ -21,6 +21,7 @@ import {
   snapshotMatches,
 } from '../boundaryRecovery.js';
 import { applyRequestModifications } from '../streamRequestHelpers.js';
+import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 
 // ---------------------------------------------------------------------------
@@ -52,17 +53,13 @@ function pendingUser(text: string): IContent {
 }
 
 /**
- * Simulate the observable effect of the hook wire boundary round-trip:
- * metadata and ids are stripped, fresh object identities are produced,
- * and block-level text content is preserved. This mirrors what the
- * production applyRequestModifications path does when it rebuilds
- * contents from hook-supplied messages (neutral IContent, no ids).
+ * Simulate the hook translator text-only round-trip: convert to Gemini
+ * Content (text-only, fresh IDs dropped) and back to IContent.
  */
 function roundTrip(contents: IContent[]): IContent[] {
-  return contents.map((c) => ({
-    speaker: c.speaker,
-    blocks: c.blocks.map((b) => ({ ...b })),
-  }));
+  return ContentConverters.toIContents(
+    ContentConverters.toGeminiContents(contents),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -488,11 +485,7 @@ describe('applyRequestModifications', () => {
     const result = applyRequestModifications(hook, rc, 'm');
     expect(result).not.toBe(rc);
     expect(result).toHaveLength(2);
-    // After the neutral migration, applyRequestModifications returns IContent[]
-    // (neutral {speaker, blocks}). Assert the observable shape.
-    const first = result[0];
-    expect(first.speaker).toBe('human');
-    expect(first.blocks).toStrictEqual([
+    expect(result[0].blocks).toStrictEqual([
       { type: 'text', text: 'replaced message one' },
     ]);
   });

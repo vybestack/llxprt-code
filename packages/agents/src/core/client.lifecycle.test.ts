@@ -10,20 +10,18 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { Content } from '@google/genai';
 import { AgentClient } from './client.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import {
   getEnabledToolNamesForPrompt,
   shouldIncludeSubagentDelegationForConfig,
 } from './clientToolGovernance.js';
-import {
-  setupGeminiClient,
-  type MockResponseShape,
-} from './client-test-helpers.js';
+import { setupGeminiClient } from './client-test-helpers.js';
 
 // Mock prompts module before imports
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -85,6 +83,7 @@ const {
   };
 });
 
+vi.mock('@google/genai');
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -140,7 +139,7 @@ vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
-    getResponseText: (result: MockResponseShape) =>
+    getResponseText: (result: GenerateContentResponse) =>
       result.candidates?.[0]?.content?.parts
         ?.map((part) => part.text)
         .join('') ?? undefined,
@@ -180,7 +179,7 @@ vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   },
 }));
 
-describe('AgentClient (client.ts)', () => {
+describe('Gemini Client (client.ts)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
@@ -213,24 +212,18 @@ describe('AgentClient (client.ts)', () => {
       };
       client['chat'] = mockChat as unknown as ChatSession;
 
-      const historyWithThoughts: IContent[] = [
+      const historyWithThoughts: Content[] = [
         {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'hello' }],
+          role: 'user',
+          parts: [{ text: 'hello' }],
         },
         {
-          speaker: 'ai',
-          blocks: [
+          role: 'model',
+          parts: [
+            { text: 'thinking...', thoughtSignature: 'thought-123' },
             {
-              type: 'thinking',
-              thought: 'thinking...',
-              signature: 'thought-123',
-            },
-            {
-              type: 'tool_call',
-              id: '',
-              name: 'test',
-              parameters: {},
+              functionCall: { name: 'test', args: {} },
+              thoughtSignature: 'thought-456',
             },
           ],
         },
@@ -238,16 +231,16 @@ describe('AgentClient (client.ts)', () => {
 
       await client.setHistory(historyWithThoughts, { stripThoughts: true });
 
-      const expectedHistory: IContent[] = [
+      const expectedHistory: Content[] = [
         {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'hello' }],
+          role: 'user',
+          parts: [{ text: 'hello' }],
         },
         {
-          speaker: 'ai',
-          blocks: [
-            { type: 'thinking', thought: 'thinking...' },
-            { type: 'tool_call', id: '', name: 'test', parameters: {} },
+          role: 'model',
+          parts: [
+            { text: 'thinking...' },
+            { functionCall: { name: 'test', args: {} } },
           ],
         },
       ];
@@ -261,24 +254,16 @@ describe('AgentClient (client.ts)', () => {
       };
       client['chat'] = mockChat as unknown as ChatSession;
 
-      const historyWithThoughts: IContent[] = [
+      const historyWithThoughts: Content[] = [
         {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'hello' }],
+          role: 'user',
+          parts: [{ text: 'hello' }],
         },
         {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'thinking',
-              thought: 'thinking...',
-              signature: 'thought-123',
-            },
-            {
-              type: 'thinking',
-              thought: 'ok',
-              signature: 'thought-456',
-            },
+          role: 'model',
+          parts: [
+            { text: 'thinking...', thoughtSignature: 'thought-123' },
+            { text: 'ok', thoughtSignature: 'thought-456' },
           ],
         },
       ];
@@ -293,10 +278,10 @@ describe('AgentClient (client.ts)', () => {
       client['chat'] = undefined; // Chat not initialized
       vi.spyOn(client, 'hasChatInitialized').mockReturnValue(false);
 
-      const history: IContent[] = [
+      const history: Content[] = [
         {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'hello' }],
+          role: 'user',
+          parts: [{ text: 'hello' }],
         },
       ];
 
@@ -309,33 +294,20 @@ describe('AgentClient (client.ts)', () => {
     });
 
     it('returns history from a stored history service after profile invalidation', async () => {
-      const history: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'remember issue 2049' }],
-        },
-        {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'we are preserving history' }],
-        },
+      const history: Content[] = [
+        { role: 'user', parts: [{ text: 'remember issue 2049' }] },
+        { role: 'model', parts: [{ text: 'we are preserving history' }] },
       ];
       const historyService = new HistoryService();
       for (const content of history) {
-        historyService.add(content, 'test-model');
+        historyService.add(ContentConverters.toIContent(content), 'test-model');
       }
       client['_storedHistoryService'] = historyService;
       client['_previousHistory'] = undefined;
       client['chat'] = undefined;
       client.getHistory = AgentClient.prototype.getHistory.bind(client);
 
-      const result = await client.getHistory();
-      // Compare block-level content, ignoring metadata (turnId etc.) added by
-      // the HistoryService that are not part of the test's input data.
-      expect(result).toHaveLength(history.length);
-      for (let i = 0; i < history.length; i++) {
-        expect(result[i].speaker).toBe(history[i].speaker);
-        expect(result[i].blocks).toStrictEqual(history[i].blocks);
-      }
+      await expect(client.getHistory()).resolves.toStrictEqual(history);
     });
 
     it('should update chat immediately when chat is initialized', async () => {
@@ -346,10 +318,10 @@ describe('AgentClient (client.ts)', () => {
       client['chat'] = mockChat as unknown as ChatSession;
       vi.spyOn(client, 'hasChatInitialized').mockReturnValue(true);
 
-      const history: IContent[] = [
+      const history: Content[] = [
         {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'hello' }],
+          role: 'user',
+          parts: [{ text: 'hello' }],
         },
       ];
 
@@ -370,10 +342,10 @@ describe('AgentClient (client.ts)', () => {
       client['chat'] = mockChat as unknown as ChatSession;
       vi.spyOn(client, 'hasChatInitialized').mockReturnValue(true);
 
-      const history: IContent[] = [
+      const history: Content[] = [
         {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'hello' }],
+          role: 'user',
+          parts: [{ text: 'hello' }],
         },
       ];
 

@@ -6,13 +6,10 @@
 
 import type {
   AgentClientContract,
-  AgentClientMessageParams,
-  AgentClientGenerateConfig,
+  ContractSendMessageParameters,
+  ContractGenerateContentConfig,
 } from '@vybestack/llxprt-code-core';
-import {
-  DebugLogger,
-  getResponseTextFromBlocks,
-} from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { getRuntimeBridge } from '../contexts/RuntimeContext.js';
 import {
   createDetachedAutoPromptClient,
@@ -33,7 +30,7 @@ export interface AutoPromptRuntime extends DetachedAutoPromptClientSource {
 
 function createAutoPromptRequest(
   description: string,
-): AgentClientMessageParams {
+): ContractSendMessageParameters {
   const autoModePrompt = `Generate a detailed system prompt for a subagent with the following purpose:\n\n${description}\n\nRequirements:\n- Create a comprehensive system prompt that defines the subagent's role, capabilities, and behavior\n- Be specific and actionable\n- Use clear, professional language\n- Output ONLY the system prompt text, no explanations or metadata`;
 
   return {
@@ -45,23 +42,17 @@ function createAutoPromptRequest(
         },
       },
       serverTools: [],
-    } as AgentClientGenerateConfig & { serverTools: unknown[] },
+    } as ContractGenerateContentConfig & { serverTools: unknown[] },
   };
 }
 
 async function requestFromClient(
   targetClient: AgentClientContract,
-  requestPayload: AgentClientMessageParams,
+  requestPayload: ContractSendMessageParameters,
   options?: { useRuntimeScope?: boolean },
 ): Promise<{ text?: string }> {
-  const executeRequest = async (): Promise<{ text?: string }> => {
-    const output = await targetClient.generateDirectMessage(
-      requestPayload,
-      'subagent-auto-prompt',
-    );
-    const text = getResponseTextFromBlocks(output.content.blocks);
-    return { text: text ?? '' };
-  };
+  const executeRequest = () =>
+    targetClient.generateDirectMessage(requestPayload, 'subagent-auto-prompt');
   if (options?.useRuntimeScope === false) {
     return executeRequest();
   }

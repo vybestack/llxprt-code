@@ -24,7 +24,8 @@ import {
   createContentGenerator,
   type ContentGenerator,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type { ChatSessionConfig } from './chatSession.js';
+import type { Content, GenerateContentConfig } from '@google/genai';
+import { Type } from '@google/genai';
 const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi
@@ -121,7 +122,7 @@ describe('subagent.ts', () => {
 
     it('does not preflight tools even when they request confirmation', async () => {
       const mockTool = {
-        schema: { parameters: { type: 'object', properties: {} } },
+        schema: { parameters: { type: Type.OBJECT, properties: {} } },
         build: vi.fn().mockReturnValue({
           shouldConfirmExecute: vi.fn().mockResolvedValue({
             type: 'exec',
@@ -141,7 +142,7 @@ describe('subagent.ts', () => {
           getToolMetadata: () => ({
             name: 'risky_tool',
             description: 'Risky tool',
-            parameterSchema: { type: 'object', properties: {} },
+            parameterSchema: { type: Type.OBJECT, properties: {} },
           }),
         },
       });
@@ -169,7 +170,7 @@ describe('subagent.ts', () => {
 
     it('avoids eagerly building tools when confirmation is not required', async () => {
       const mockTool = {
-        schema: { parameters: { type: 'object', properties: {} } },
+        schema: { parameters: { type: Type.OBJECT, properties: {} } },
         build: vi.fn().mockReturnValue({
           shouldConfirmExecute: vi.fn().mockResolvedValue(null),
         }),
@@ -184,7 +185,7 @@ describe('subagent.ts', () => {
           getToolMetadata: () => ({
             name: 'safe_tool',
             description: 'Safe tool',
-            parameterSchema: { type: 'object', properties: {} },
+            parameterSchema: { type: Type.OBJECT, properties: {} },
           }),
         },
       });
@@ -218,9 +219,9 @@ describe('subagent.ts', () => {
       const mockToolWithParams = {
         schema: {
           parameters: {
-            type: 'object',
+            type: Type.OBJECT,
             properties: {
-              path: { type: 'string' },
+              path: { type: Type.STRING },
             },
             required: ['path'],
           },
@@ -240,9 +241,9 @@ describe('subagent.ts', () => {
             name: 'tool_with_params',
             description: 'Tool with params',
             parameterSchema: {
-              type: 'object',
+              type: Type.OBJECT,
               properties: {
-                path: { type: 'string' },
+                path: { type: Type.STRING },
               },
             },
           }),
@@ -280,12 +281,16 @@ describe('subagent.ts', () => {
   });
 
   describe('stateless runtime enforcement', () => {
-    const getGenerationConfigFromMock = (callIndex = 0): ChatSessionConfig => {
+    const getGenerationConfigFromMock = (
+      callIndex = 0,
+    ): GenerateContentConfig & { systemInstruction?: string | Content } => {
       const callArgs = vi.mocked(ChatSession).mock.calls[callIndex];
       const generationConfig = callArgs[2];
       expect(generationConfig).toBeDefined();
       if (!generationConfig) throw new Error('generationConfig is undefined');
-      return generationConfig;
+      return generationConfig as GenerateContentConfig & {
+        systemInstruction?: string | Content;
+      };
     };
 
     beforeEach(() => {
@@ -369,7 +374,7 @@ describe('subagent.ts', () => {
           {
             name: 'stateless.tool',
             description: 'Foreground registry description',
-            parameters: { type: 'object', properties: {} },
+            parameters: { type: Type.OBJECT, properties: {} },
           },
         ]),
       });

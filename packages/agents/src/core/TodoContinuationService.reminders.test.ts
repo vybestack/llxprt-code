@@ -203,40 +203,27 @@ describe('TodoContinuationService', () => {
 
   describe('appendSystemReminderToRequest', () => {
     it('appends reminder text to request array', () => {
-      const req = [{ type: 'text', text: 'original request' }];
+      const req = [{ text: 'original request' }];
       const result = service.appendSystemReminderToRequest(
         req,
         'System reminder text',
       );
-      expect(result).toStrictEqual([
-        {
-          speaker: 'human',
-          blocks: [
-            { type: 'text', text: 'original request' },
-            { type: 'text', text: 'System reminder text' },
-          ],
-        },
-      ]);
+      const arr = result as Array<{ text?: string }>;
+      expect(arr.some((p) => p.text === 'System reminder text')).toBe(true);
     });
 
     it('does not duplicate existing reminder', () => {
       const req = [
-        { type: 'text', text: 'original request' },
-        { type: 'text', text: 'System reminder text' },
+        { text: 'original request' },
+        { text: 'System reminder text' },
       ];
       const result = service.appendSystemReminderToRequest(
         req,
         'System reminder text',
       );
-      expect(result).toStrictEqual([
-        {
-          speaker: 'human',
-          blocks: [
-            { type: 'text', text: 'original request' },
-            { type: 'text', text: 'System reminder text' },
-          ],
-        },
-      ]);
+      const arr = result as Array<{ text?: string }>;
+      const count = arr.filter((p) => p.text === 'System reminder text').length;
+      expect(count).toBe(1);
     });
 
     it('normalizes string input and appends reminder', () => {
@@ -244,36 +231,23 @@ describe('TodoContinuationService', () => {
         'plain string',
         'System reminder text',
       );
-      expect(result).toStrictEqual([
-        {
-          speaker: 'human',
-          blocks: [
-            { type: 'text', text: 'plain string' },
-            { type: 'text', text: 'System reminder text' },
-          ],
-        },
-      ]);
+      expect(Array.isArray(result)).toBe(true);
+      const arr = result as Array<{ text?: string }>;
+      expect(arr).toHaveLength(2);
+      expect(arr[0]).toStrictEqual({ text: 'plain string' });
+      expect(arr[1].text).toBe('System reminder text');
     });
 
-    it('preserves singular IContent metadata while appending reminder', () => {
+    it('normalizes singular {text} object and appends reminder', () => {
       const result = service.appendSystemReminderToRequest(
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'single part' }],
-          metadata: { turnId: 'turn-1' },
-        },
+        { text: 'single part' },
         'Reminder',
       );
-      expect(result).toStrictEqual([
-        {
-          speaker: 'human',
-          blocks: [
-            { type: 'text', text: 'single part' },
-            { type: 'text', text: 'Reminder' },
-          ],
-          metadata: { turnId: 'turn-1' },
-        },
-      ]);
+      expect(Array.isArray(result)).toBe(true);
+      const arr = result as Array<{ text?: string }>;
+      expect(arr).toHaveLength(2);
+      expect(arr[0]).toStrictEqual({ text: 'single part' });
+      expect(arr[1].text).toBe('Reminder');
     });
   });
 

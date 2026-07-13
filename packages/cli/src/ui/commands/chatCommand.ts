@@ -20,9 +20,6 @@ import {
   EmojiFilter,
   type EmojiFilterMode,
   INITIAL_HISTORY_LENGTH,
-  type IContent,
-  type TextBlock,
-  type CheckpointContent,
 } from '@vybestack/llxprt-code-core';
 import path from 'path';
 import type {
@@ -33,10 +30,6 @@ import type {
 import { MessageType } from '../types.js';
 import { type CommandArgumentSchema } from './schema/types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
-import {
-  iContentToCheckpoint,
-  checkpointToIContent,
-} from './checkpointContentValidation.js';
 
 /**
  * Resolve emoji filter mode setting, defaulting to 'auto' for invalid values.
@@ -183,9 +176,10 @@ const saveCommand: SlashCommand = {
     const chat = client.getChat();
     const history = chat.getHistory();
     if (history.length > INITIAL_HISTORY_LENGTH) {
-      const checkpointData: CheckpointContent[] =
-        history.map(iContentToCheckpoint);
-      await logger.saveCheckpoint(checkpointData, tag);
+      await logger.saveCheckpoint(
+        history as Parameters<typeof logger.saveCheckpoint>[0],
+        tag,
+      );
       return {
         type: 'message',
         messageType: 'info',
@@ -233,22 +227,23 @@ const resumeCommand: SlashCommand = {
         : undefined;
 
     const checkpoint = await logger.loadCheckpoint(tag);
-    let conversation: IContent[] = checkpoint.history.map((item) =>
-      checkpointToIContent(item),
-    );
+    let conversation = checkpoint.history;
 
     // Apply emoji filtering if needed
     if (emojiFilter) {
-      conversation = conversation.map((ic) => ({
-        ...ic,
-        blocks: ic.blocks.map((b) => {
-          if (b.type === 'text') {
-            const filterResult = emojiFilter.filterText(b.text);
-            return { ...b, text: filterResult.filtered as string };
-          }
-          return b;
-        }),
-      }));
+      conversation = conversation.map((item) => {
+        const filteredItem = { ...item };
+        if (Array.isArray(filteredItem.parts)) {
+          filteredItem.parts = filteredItem.parts.map((part) => {
+            if (part.text) {
+              const filterResult = emojiFilter.filterText(part.text);
+              return { ...part, text: filterResult.filtered as string };
+            }
+            return part;
+          });
+        }
+        return filteredItem;
+      });
     }
 
     if (conversation.length === 0) {
@@ -262,12 +257,9 @@ const resumeCommand: SlashCommand = {
     // Convert checkpoint history to UI history items for display
     // Use LoadHistoryActionReturn to properly sync both UI and client history
     const uiHistory: HistoryItemWithoutId[] = conversation.map((content) => {
-      const text = content.blocks
-        .filter((b) => b.type === 'text')
-        .map((b) => b.text)
-        .join('');
+      const text = content.parts?.map((part) => part.text ?? '').join('') ?? '';
       return {
-        type: content.speaker === 'human' ? MessageType.USER : MessageType.AI,
+        type: content.role === 'user' ? MessageType.USER : MessageType.AI,
         text,
       };
     });
@@ -482,12 +474,9 @@ const restoreHistory = async (
 
   // Convert to UI history items for display
   const uiHistory: HistoryItemWithoutId[] = newHistory.map((content) => {
-    const textBlocks = content.blocks.filter(
-      (b): b is TextBlock => b.type === 'text',
-    );
-    const text = textBlocks.map((b) => b.text).join('');
+    const text = content.parts?.map((part) => part.text ?? '').join('') ?? '';
     return {
-      type: content.speaker === 'human' ? MessageType.USER : MessageType.AI,
+      type: content.role === 'user' ? MessageType.USER : MessageType.AI,
       text,
     };
   });

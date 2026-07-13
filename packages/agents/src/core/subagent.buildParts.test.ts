@@ -25,7 +25,8 @@ import {
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { Part } from '@google/genai';
+import { Type } from '@google/genai';
 const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi
@@ -167,7 +168,7 @@ describe('subagent.ts', () => {
         name: 'run_shell_command',
         displayName: 'Shell',
         canUpdateOutput: true,
-        schema: { parameters: { type: 'object', properties: {} } },
+        schema: { parameters: { type: Type.OBJECT, properties: {} } },
         build: vi.fn(),
       };
 
@@ -234,7 +235,7 @@ describe('subagent.ts', () => {
         name: 'read_file',
         displayName: 'Read File',
         canUpdateOutput: false,
-        schema: { parameters: { type: 'object', properties: {} } },
+        schema: { parameters: { type: Type.OBJECT, properties: {} } },
         build: vi.fn(),
       };
 
@@ -300,7 +301,7 @@ describe('subagent.ts', () => {
         name: 'run_shell_command',
         displayName: 'Shell',
         canUpdateOutput: true,
-        schema: { parameters: { type: 'object', properties: {} } },
+        schema: { parameters: { type: Type.OBJECT, properties: {} } },
         build: vi.fn(),
       };
 
@@ -363,7 +364,7 @@ describe('subagent.ts', () => {
         overrides,
       );
 
-      // Simulate error completed calls with tool_call in responseParts
+      // Simulate error completed calls with functionCall in responseParts
       // (this is what coreToolScheduler's createErrorResponse produces)
       const completedCalls = [
         {
@@ -377,16 +378,18 @@ describe('subagent.ts', () => {
             callId: 'call-err',
             responseParts: [
               {
-                type: 'tool_call',
-                callId: 'call-err',
-                toolName: 'failing_tool',
-                args: { path: '/test' },
+                functionCall: {
+                  id: 'call-err',
+                  name: 'failing_tool',
+                  args: { path: '/test' },
+                },
               },
               {
-                type: 'tool_response',
-                callId: 'call-err',
-                toolName: 'failing_tool',
-                result: { error: 'Tool execution failed' },
+                functionResponse: {
+                  id: 'call-err',
+                  name: 'failing_tool',
+                  response: { error: 'Tool execution failed' },
+                },
               },
             ],
             resultDisplay: 'Tool execution failed',
@@ -404,18 +407,16 @@ describe('subagent.ts', () => {
         },
       );
 
-      // CRITICAL: No part should be a tool_call - only tool_response
-      // tool_call in user-role message causes Anthropic invalid_request_error
+      // CRITICAL: No part should contain functionCall - only functionResponse
+      // functionCall in user-role message causes Anthropic invalid_request_error
       for (const part of parts) {
-        expect(part).not.toHaveProperty('type', 'tool_call');
+        expect(part).not.toHaveProperty('functionCall');
       }
-      // Should still have a tool_response
-      const hasToolResponse = parts.some(
-        (p: ContentBlock) =>
-          'type' in p &&
-          (p as Record<string, unknown>).type === 'tool_response',
+      // Should still have a functionResponse
+      const hasFunctionResponse = parts.some(
+        (p: Part) => 'functionResponse' in p,
       );
-      expect(hasToolResponse).toBe(true);
+      expect(hasFunctionResponse).toBe(true);
     });
 
     /**
@@ -456,10 +457,11 @@ describe('subagent.ts', () => {
             callId: 'call-ok',
             responseParts: [
               {
-                type: 'tool_response',
-                callId: 'call-ok',
-                toolName: 'read_file',
-                result: { output: 'file contents' },
+                functionResponse: {
+                  id: 'call-ok',
+                  name: 'read_file',
+                  response: { output: 'file contents' },
+                },
               },
             ],
             resultDisplay: 'file contents',
@@ -476,16 +478,18 @@ describe('subagent.ts', () => {
             callId: 'call-err',
             responseParts: [
               {
-                type: 'tool_call',
-                callId: 'call-err',
-                toolName: 'write_file',
-                args: { path: '/out.txt', content: 'data' },
+                functionCall: {
+                  id: 'call-err',
+                  name: 'write_file',
+                  args: { path: '/out.txt', content: 'data' },
+                },
               },
               {
-                type: 'tool_response',
-                callId: 'call-err',
-                toolName: 'write_file',
-                result: { error: 'Permission denied' },
+                functionResponse: {
+                  id: 'call-err',
+                  name: 'write_file',
+                  response: { error: 'Permission denied' },
+                },
               },
             ],
             resultDisplay: 'Permission denied',
@@ -503,18 +507,16 @@ describe('subagent.ts', () => {
         },
       );
 
-      // No part should be a tool_call
+      // No part should contain functionCall
       for (const part of parts) {
-        expect(part).not.toHaveProperty('type', 'tool_call');
+        expect(part).not.toHaveProperty('functionCall');
       }
 
-      // Should have tool_response for both tool calls
-      const toolResponses = parts.filter(
-        (p: ContentBlock) =>
-          'type' in p &&
-          (p as Record<string, unknown>).type === 'tool_response',
+      // Should have functionResponse for both tool calls
+      const functionResponses = parts.filter(
+        (p: Part) => 'functionResponse' in p,
       );
-      expect(toolResponses.length).toBe(2);
+      expect(functionResponses.length).toBe(2);
     });
 
     it('should handle calls where tool is undefined gracefully', async () => {

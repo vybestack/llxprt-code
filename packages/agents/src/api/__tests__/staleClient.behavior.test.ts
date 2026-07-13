@@ -98,10 +98,11 @@ const SAMPLE_COMPLETED: CompletedToolCall[] = [
     response: {
       responseParts: [
         {
-          type: 'tool_response',
-          callId: 'caller-call-1',
-          toolName: 'list_directory',
-          result: { output: 'file1.txt' },
+          functionResponse: {
+            id: 'caller-call-1',
+            name: 'list_directory',
+            response: { output: 'file1.txt' },
+          },
         },
       ],
       error: undefined,

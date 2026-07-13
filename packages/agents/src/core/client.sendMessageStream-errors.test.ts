@@ -13,11 +13,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AgentClient } from './client.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType } from './turn.js';
-import {
-  fromAsync,
-  setupGeminiClient,
-  type MockResponseShape,
-} from './client-test-helpers.js';
+import { fromAsync, setupGeminiClient } from './client-test-helpers.js';
 
 // Mock prompts module before imports
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -79,6 +75,7 @@ const {
   };
 });
 
+vi.mock('@google/genai');
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -134,7 +131,7 @@ vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
-    getResponseText: (result: MockResponseShape) =>
+    getResponseText: (result: GenerateContentResponse) =>
       result.candidates?.[0]?.content?.parts
         ?.map((part) => part.text)
         .join('') ?? undefined,
@@ -237,20 +234,20 @@ describe('Gemini Client (client.ts)', () => {
       };
       client['chat'] = mockChat as ChatSession;
 
-      // Include tool_response blocks to test tool name extraction
+      // Include functionResponse parts to test tool name extraction
       const initialRequest = [
-        { type: 'text', text: 'Hi' },
+        { text: 'Hi' },
         {
-          type: 'tool_response',
-          callId: 'read_file',
-          toolName: 'read_file',
-          result: { content: 'large content...' },
+          functionResponse: {
+            name: 'read_file',
+            response: { content: 'large content...' },
+          },
         },
         {
-          type: 'tool_response',
-          callId: 'search_file',
-          toolName: 'search_file',
-          result: { content: 'more large content...' },
+          functionResponse: {
+            name: 'search_file',
+            response: { content: 'more large content...' },
+          },
         },
       ];
       const promptId = 'prompt-id-413-retry';
@@ -288,18 +285,107 @@ describe('Gemini Client (client.ts)', () => {
         2,
         [
           {
-            speaker: 'human',
-            blocks: [
-              {
-                type: 'text',
-                text: 'System: The previous tool calls produced a response that was too large (HTTP 413). The tools involved were: read_file, search_file. Please retry with fewer or more focused queries.',
-              },
-            ],
+            text: 'System: The previous tool calls produced a response that was too large (HTTP 413). The tools involved were: read_file, search_file. Please retry with fewer or more focused queries.',
           },
         ],
         expect.any(Object),
       );
     });
+
+    it('does not retry a 413 after ordinary content was already emitted', async () => {
+      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
+        true,
+      );
+      const mockStream = (async function* () {
+        yield { type: AgentEventType.Content, value: 'Partial content' };
+        yield {
+          type: AgentEventType.Error,
+          value: {
+            error: { message: 'Payload too large', status: 413 },
+          },
+        };
+      })();
+      mockTurnRunFn.mockReturnValueOnce(mockStream);
+      client['chat'] = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      } as unknown as ChatSession;
+
+      const events = await fromAsync(
+        client.sendMessageStream(
+          [{ text: 'Hi' }],
+          new AbortController().signal,
+          'prompt-id-413-after-content',
+        ),
+      );
+
+      expect(events.slice(-2)).toStrictEqual([
+        { type: AgentEventType.Content, value: 'Partial content' },
+        {
+          type: AgentEventType.Error,
+          value: {
+            error: { message: 'Payload too large', status: 413 },
+          },
+        },
+      ]);
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      {
+        name: '413 error',
+        terminalEvent: {
+          type: AgentEventType.Error,
+          value: {
+            error: { message: 'Payload too large', status: 413 },
+          },
+        },
+      },
+      {
+        name: 'InvalidStream',
+        terminalEvent: { type: AgentEventType.InvalidStream },
+      },
+    ])(
+      'does not retry after a $name follows a tool call',
+      async ({ terminalEvent }) => {
+        vi.spyOn(
+          client['config'],
+          'getContinueOnFailedApiCall',
+        ).mockReturnValue(true);
+        const toolCallEvent = {
+          type: AgentEventType.ToolCallRequest,
+          value: {
+            callId: 'call-1',
+            name: 'read_file',
+            args: { file_path: 'README.md' },
+            isClientInitiated: false,
+            prompt_id: 'prompt-id-after-tool-call',
+          },
+        };
+        const mockStream = (async function* () {
+          yield toolCallEvent;
+          yield terminalEvent;
+        })();
+        mockTurnRunFn.mockReturnValueOnce(mockStream);
+        client['chat'] = {
+          addHistory: vi.fn(),
+          getHistory: vi.fn().mockReturnValue([]),
+          getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+        } as unknown as ChatSession;
+
+        const events = await fromAsync(
+          client.sendMessageStream(
+            [{ text: 'Hi' }],
+            new AbortController().signal,
+            'prompt-id-after-tool-call',
+          ),
+        );
+
+        expect(events.slice(-2)).toStrictEqual([toolCallEvent, terminalEvent]);
+        expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+      },
+    );
 
     it('should not retry on 413 when getContinueOnFailedApiCall returns false', async () => {
       vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(

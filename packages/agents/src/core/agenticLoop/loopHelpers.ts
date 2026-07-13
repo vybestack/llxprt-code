@@ -13,31 +13,39 @@
  * → 'user' role, to maintain well-formed Gemini turn history).
  */
 
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { Content, Part } from '@google/genai';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { ToolCallBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { convertBlocksToParts } from '../MessageConverter.js';
+import {
+  DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+  enforceImageBudget,
+  buildOmissionFeedback,
+} from '../imagePayloadBudget.js';
+
+function isFunctionCallPart(part: Part): boolean {
+  return 'functionCall' in part;
+}
 
 /**
- * Partitions a flat `ContentBlock[]` into tool-call, tool-response, and other
- * blocks. Used to maintain proper history ordering: tool calls go to the
- * 'ai' speaker, tool responses + other blocks go to the 'tool' speaker.
+ * Partitions a flat `Part[]` into functionCalls, functionResponses, and other
+ * parts. Used to maintain proper history ordering: functionCalls go to the
+ * 'model' role, functionResponses + otherParts go to the 'user' role.
  */
-export function splitPartsByRole(parts: ContentBlock[]): {
-  functionCalls: ContentBlock[];
-  functionResponses: ContentBlock[];
-  otherParts: ContentBlock[];
+export function splitPartsByRole(parts: Part[]): {
+  functionCalls: Part[];
+  functionResponses: Part[];
+  otherParts: Part[];
 } {
-  const functionCalls: ContentBlock[] = [];
-  const functionResponses: ContentBlock[] = [];
-  const otherParts: ContentBlock[] = [];
+  const functionCalls: Part[] = [];
+  const functionResponses: Part[] = [];
+  const otherParts: Part[] = [];
 
   for (const part of parts) {
-    if (part.type === 'tool_call') {
+    if ('functionCall' in part) {
       functionCalls.push(part);
-    } else if (part.type === 'tool_response') {
+    } else if ('functionResponse' in part) {
       functionResponses.push(part);
     } else {
       otherParts.push(part);
@@ -74,24 +82,85 @@ export function classifyCompletedTools(tools: CompletedToolCall[]): {
 }
 
 /**
- * Builds the flat list of tool-response blocks to feed back to the model.
- * Filters out tool-call blocks (already present in the assistant turn).
+ * Builds the flat list of functionResponse parts to feed back to the model.
+ * Filters out functionCall parts (already present in the assistant turn).
+ *
+ * Enforces a cumulative image-payload budget to prevent HTTP 413 errors when
+ * parallel tool calls each return large image data. Images that would exceed
+ * the budget are omitted and replaced with a feedback message instructing the
+ * model to re-read them individually.
  */
 export function buildToolResponses(
   geminiTools: CompletedToolCall[],
-): ContentBlock[] {
-  return geminiTools.flatMap((toolCall) =>
-    toolCall.response.responseParts.filter(
-      (block) => block.type !== 'tool_call',
+  budgetBytes: number = DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+): Part[] {
+  const parts = geminiTools.flatMap((toolCall) =>
+    convertBlocksToParts(toolCall.response.responseParts).filter(
+      (part) => !isFunctionCallPart(part),
     ),
   );
+
+  if (budgetBytes <= 0) {
+    return parts;
+  }
+
+  const { parts: budgeted, omitted } = enforceImageBudget(parts, budgetBytes);
+  if (omitted.length > 0) {
+    budgeted.push({ text: buildOmissionFeedback(omitted) });
+  }
+  return budgeted;
+}
+
+export interface FilteredEagerToolResponses {
+  readonly content: Content | null;
+  readonly matchedCallIds: readonly string[];
+}
+
+export function filterEagerlyRecordedToolResponses(
+  content: Content,
+  eagerlyRecordedToolResponseCallIds: ReadonlySet<string>,
+): FilteredEagerToolResponses {
+  if (eagerlyRecordedToolResponseCallIds.size === 0) {
+    return { content, matchedCallIds: [] };
+  }
+
+  const remainingParts: Part[] = [];
+  const matchedCallIds: string[] = [];
+
+  for (const part of content.parts ?? []) {
+    const callId = part.functionResponse?.id;
+    if (
+      typeof callId === 'string' &&
+      eagerlyRecordedToolResponseCallIds.has(callId)
+    ) {
+      matchedCallIds.push(callId);
+      continue;
+    }
+    remainingParts.push(part);
+  }
+
+  if (matchedCallIds.length === 0) {
+    return { content, matchedCallIds };
+  }
+  if (remainingParts.length === 0) {
+    return { content: null, matchedCallIds };
+  }
+
+  return {
+    content: {
+      ...content,
+      parts: remainingParts,
+    },
+    matchedCallIds,
+  };
 }
 
 /**
- * Records completed or cancelled tool history via `agentClient.addHistory`,
- * splitting blocks by type so tool calls land under speaker 'ai' and tool
- * responses under speaker 'tool'. Used so the model sees a well-formed tool
- * response for every tool call it emitted.
+ * Records completed tool history via `agentClient.addHistory`, splitting parts
+ * by role so functionCalls land under 'model' and functionResponses under
+ * 'user'. This eagerly persists tool outcomes before the next provider stream
+ * starts, so a later stream failure/retry cannot orphan the prior tool_call and
+ * trigger a synthetic null "interrupted or cancelled" placeholder.
  *
  * Awaits both writes so callers that continue or exit the loop immediately
  * afterwards can guarantee the tool history is durable before the next turn.
@@ -100,17 +169,20 @@ async function recordCompletedToolHistory(
   tools: CompletedToolCall[],
   agentClient: AgentClientContract,
 ): Promise<void> {
-  const allBlocks = tools.flatMap((tc) => tc.response.responseParts);
-  const toolCallBlocks = allBlocks.filter(
-    (b): b is ToolCallBlock => b.type === 'tool_call',
+  const allParts = tools.flatMap((tc) =>
+    convertBlocksToParts(tc.response.responseParts),
   );
-  const nonToolCallBlocks = allBlocks.filter((b) => b.type !== 'tool_call');
+  const { functionCalls, functionResponses, otherParts } =
+    splitPartsByRole(allParts);
 
-  if (toolCallBlocks.length > 0) {
-    await agentClient.addHistory(iContentFromBlocks(toolCallBlocks, 'ai'));
+  if (functionCalls.length > 0) {
+    await agentClient.addHistory({ role: 'model', parts: functionCalls });
   }
-  if (nonToolCallBlocks.length > 0) {
-    await agentClient.addHistory(iContentFromBlocks(nonToolCallBlocks, 'tool'));
+  if (functionResponses.length > 0 || otherParts.length > 0) {
+    await agentClient.addHistory({
+      role: 'user',
+      parts: [...functionResponses, ...otherParts],
+    });
   }
 }
 

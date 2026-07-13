@@ -37,63 +37,100 @@ import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { ContentGenerator } from './contentGenerator.js';
 import type { ToolSchedulerFactory } from './toolSchedulerContract.js';
 import type { TaskToolRegistration } from '../config/toolRegistryFactory.js';
-import type { ModelOutput } from '../llm-types/modelEnvelope.js';
-import type { AgentMessageInput } from '../llm-types/agentMessageInput.js';
 
 /**
- * Neutral request-input type for the agent-client send surface.
+ * Structural shapes matching the portions of the @google/genai SDK types used
+ * by the agent-client contract surface. Defined locally so core does not
+ * import @google/genai; the concrete AgentClient (agents package, #2349)
+ * supplies objects that are structurally compatible with these shapes.
  *
- * Aliases the neutral {@link AgentMessageInput} contract — accepts text,
- * neutral ContentBlock[], or pre-built IContent turn(s). Never a provider
- * Part/role shape; legacy input must be converted via
- * iContentFromLegacyInput at the boundary before reaching this type.
+ * These intentionally model only the fields the contract surface references;
+ * they are NOT a full re-declaration of the SDK types.
  */
-export type AgentRequestInput = AgentMessageInput;
 
-/**
- * Neutral message parameters for the agent-client send surface.
- *
- * Replaces the former ContractSendMessageParameters. The message field
- * accepts AgentRequestInput (neutral AgentMessageInput).
- */
-export interface AgentClientMessageParams {
-  message: AgentRequestInput;
-  config?: AgentClientGenerateConfig;
+interface ContractFunctionCall {
+  id?: string;
+  args?: Record<string, unknown>;
+  name?: string;
 }
 
-/**
- * Neutral generation config for the agent-client surface. Carries only
- * the fields the contract surface references. Concrete AgentClient
- * implementations accept provider-native config objects that are
- * structurally wider (tools, toolConfig, abortSignal, etc.); those are
- * assignable to this minimal shape via structural typing.
- */
-export interface AgentClientGenerateConfig {
+interface ContractFunctionResponse {
+  id?: string;
+  name?: string;
+  response?: Record<string, unknown>;
+}
+
+export interface ContractPart {
+  text?: string;
+  inlineData?: { data?: string; mimeType?: string; displayName?: string };
+  functionCall?: ContractFunctionCall;
+  functionResponse?: ContractFunctionResponse;
+  fileData?: { fileUri?: string; mimeType?: string; displayName?: string };
+  thought?: boolean;
+  thoughtSignature?: string;
+}
+
+export type ContractPartListUnion =
+  | ContractPart
+  | string
+  | Array<ContractPart | string>;
+
+export interface ContractContent {
+  role?: string;
+  parts?: ContractPart[];
+}
+
+export type ContractContentUnion =
+  | ContractContent
+  | ContractPart
+  | string
+  | Array<ContractPart | string>;
+
+export interface ContractGenerateContentConfig {
   temperature?: number;
   maxOutputTokens?: number;
   topP?: number;
   topK?: number;
+  systemInstruction?: ContractContentUnion;
   abortSignal?: AbortSignal;
   tools?: unknown;
   toolConfig?: unknown;
-  systemInstruction?: unknown;
+}
+
+export interface ContractGenerateContentResponse {
+  text?: string;
+  data: unknown | undefined;
+  functionCalls: ContractFunctionCall[] | undefined;
+  executableCode: unknown | undefined;
+  codeExecutionResult: unknown | undefined;
+  candidates?: Array<{
+    content?: { role?: string; parts?: ContractPart[] };
+    finishReason?: string;
+    index?: number;
+    safetyRatings?: unknown[];
+  }>;
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+    cachedContentTokenCount?: number;
+    thoughtsTokenCount?: number;
+    toolUsePromptTokenCount?: number;
+  };
+}
+
+export interface ContractSendMessageParameters {
+  message: ContractPartListUnion;
+  config?: ContractGenerateContentConfig;
 }
 
 export interface AgentChatContract {
-  sendMessage(
-    params: AgentClientMessageParams,
-    prompt_id: string,
-  ): Promise<ModelOutput>;
   sendMessageStream(
-    params: AgentClientMessageParams,
+    params: ContractSendMessageParameters,
     prompt_id: string,
   ): Promise<AsyncGenerator<StreamEvent>>;
-  generateDirectMessage(
-    params: AgentClientMessageParams,
-    prompt_id: string,
-  ): Promise<ModelOutput>;
-  getHistory(): IContent[];
-  setHistory(history: IContent[]): void;
+  getHistory(): ContractContent[];
+  setHistory(history: ContractContent[]): void;
   clearHistory(): void;
   getHistoryService(): HistoryService | null;
   wasRecentlyCompressed(): boolean;
@@ -113,45 +150,45 @@ export interface AgentClientContract {
   isInitialized(): boolean;
   hasChatInitialized(): boolean;
   getChat(): AgentChatContract;
-  getHistory(): Promise<IContent[]>;
+  getHistory(): Promise<ContractContent[]>;
   getHistoryService(): HistoryService | null;
   storeHistoryServiceForReuse(service: HistoryService): void;
-  storeHistoryForLaterUse(history: IContent[]): void;
+  storeHistoryForLaterUse(history: ContractContent[]): void;
   dispose(): void;
   setTools(): Promise<void>;
   clearTools(): void;
   updateSystemInstruction(): Promise<void>;
-  addHistory(content: IContent): Promise<void>;
+  addHistory(content: ContractContent): Promise<void>;
   resetChat(): Promise<void>;
-  resumeChat(history: IContent[]): Promise<void>;
+  resumeChat(history: ContractContent[]): Promise<void>;
   setHistory(
-    history: IContent[],
+    history: ContractContent[],
     options?: { stripThoughts?: boolean },
   ): Promise<void>;
   restoreHistory(historyItems: IContent[]): Promise<void>;
   addDirectoryContext(): Promise<void>;
   getContentGenerator(): ContentGenerator;
-  startChat(extraHistory?: IContent[]): Promise<AgentChatContract>;
+  startChat(extraHistory?: ContractContent[]): Promise<AgentChatContract>;
   generateDirectMessage(
-    params: AgentClientMessageParams,
+    params: ContractSendMessageParameters,
     promptId: string,
-  ): Promise<ModelOutput>;
+  ): Promise<ContractGenerateContentResponse>;
   generateJson(
-    contents: IContent[],
+    contents: ContractContent[],
     schema: Record<string, unknown>,
     abortSignal: AbortSignal,
     model: string,
-    config?: AgentClientGenerateConfig,
+    config?: ContractGenerateContentConfig,
   ): Promise<Record<string, unknown>>;
   generateContent(
-    contents: IContent[],
-    generationConfig: AgentClientGenerateConfig,
+    contents: ContractContent[],
+    generationConfig: ContractGenerateContentConfig,
     abortSignal: AbortSignal,
     model: string,
-  ): Promise<ModelOutput>;
+  ): Promise<ContractGenerateContentResponse>;
   generateEmbedding(texts: string[]): Promise<number[][]>;
   sendMessageStream(
-    initialRequest: AgentRequestInput,
+    initialRequest: ContractPartListUnion,
     signal: AbortSignal,
     prompt_id: string,
     turns?: number,

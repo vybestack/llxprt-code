@@ -15,7 +15,7 @@ import {
   type ToolCallRequestInfo,
   UserPromptEvent,
   MessageSenderType,
-  type AgentRequestInput,
+  type ContractPartListUnion,
 } from '@vybestack/llxprt-code-core';
 import { type SlashCommandProcessorResult } from '../../types.js';
 import { isAtCommand, isSlashCommand } from '../../utils/commandUtils.js';
@@ -44,7 +44,7 @@ export interface PrepareQueryDeps {
   onDebugMessage: (message: string) => void;
   handleShellCommand: (query: string, signal: AbortSignal) => boolean;
   handleSlashCommand: (
-    cmd: AgentRequestInput,
+    cmd: ContractPartListUnion,
   ) => Promise<SlashCommandProcessorResult | false>;
   logger:
     | { logMessage: (sender: MessageSenderType, text: string) => Promise<void> }
@@ -58,13 +58,13 @@ export interface PrepareQueryDeps {
 }
 
 export async function prepareQueryForAgent(
-  query: AgentRequestInput,
+  query: ContractPartListUnion,
   userMessageTimestamp: number,
   abortSignal: AbortSignal,
   promptId: string,
   deps: PrepareQueryDeps,
 ): Promise<{
-  queryToSend: AgentRequestInput | null;
+  queryToSend: ContractPartListUnion | null;
   shouldProceed: boolean;
 }> {
   const { onDebugMessage } = deps;
@@ -79,7 +79,7 @@ export async function prepareQueryForAgent(
     return { queryToSend: null, shouldProceed: false };
   }
 
-  let localQueryToSendToAgent: AgentRequestInput | null = null;
+  let localQueryToSendToAgent: ContractPartListUnion | null = null;
 
   if (typeof query === 'string') {
     localQueryToSendToAgent = await processStringQuery(
@@ -108,7 +108,7 @@ async function processStringQuery(
   abortSignal: AbortSignal,
   promptId: string,
   deps: PrepareQueryDeps,
-): Promise<AgentRequestInput | null> {
+): Promise<ContractPartListUnion | null> {
   const {
     runtime,
     logUserPrompt,

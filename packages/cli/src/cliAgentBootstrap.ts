@@ -4,11 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  type Config,
-  type MessageBus,
-  PLACEHOLDER_MODEL,
-} from '@vybestack/llxprt-code-core';
+import type { Config, MessageBus } from '@vybestack/llxprt-code-core';
+import { PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-core';
 import {
   fromConfig,
   type Agent,

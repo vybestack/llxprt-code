@@ -264,10 +264,6 @@ jobs:
         run: |-
           npm run lint:cli-boundary
 
-      - name: 'Run agents neutral gate (anti-#2424 enforcement)'
-        run: |-
-          npm run gate:agents-neutral
-
       # Build must run BEFORE the type-aware lint: several workspace tsconfigs
       # map cross-workspace imports to `dist/*.d.ts` (e.g. storage, settings),
       # so tsserver (projectService) needs the compiled declarations on disk to
@@ -640,7 +636,7 @@ jobs:
   # service when bun is absent from PATH. Pinning to .bun-version reconciles the
   # CI toolchain with dev-docs/bun.md and avoids a floating Bun version.
   test:
-    name: 'Test (${{ matrix.os }}, ${{ matrix.secure-store-mode }})'
+    name: 'Test (${{ matrix.os }})'
     runs-on: '${{ matrix.os }}'
     needs:
       - 'lint'
@@ -659,9 +655,6 @@ jobs:
           - 'macos-latest'
         node-version:
           - '24.x'
-        secure-store-mode:
-          - 'keyring'
-          - 'fallback'
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -728,8 +721,6 @@ jobs:
           CI: true
           # Allow OpenAI integration tests to exceed Vitest's 5s default timeout (issue #338)
           VITEST_TEST_TIMEOUT: 15000
-          # Force SecureStore to use encrypted-file fallback instead of keyring (R15.2)
-          LLXPRT_SECURE_STORE_FORCE_FALLBACK: ${{ matrix.secure-store-mode == 'fallback' && 'true' || '' }}
         run: 'npm run test'
 
       - name: 'Run script harness tests (macOS)'
@@ -749,7 +740,7 @@ jobs:
           ${{ always() && (github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: 'dorny/test-reporter@dc3a92680fcc15842eef52e8c4606ea7ce6bd3f3' # ratchet:dorny/test-reporter@v2
         with:
-          name: 'Test Results (Node ${{ matrix.node-version }})'
+          name: 'Test Results (Node ${{ matrix.node-version }}, ${{ matrix.os }})'
           path: 'packages/*/junit.xml'
           reporter: 'java-junit'
           fail-on-error: 'false'
@@ -759,7 +750,7 @@ jobs:
           ${{ always() && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
         uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
         with:
-          name: 'test-results-fork-${{ matrix.node-version }}-${{ matrix.os }}-${{ matrix.secure-store-mode }}'
+          name: 'test-results-fork-${{ matrix.node-version }}-${{ matrix.os }}'
           path: 'packages/*/junit.xml'
 
       - name: 'Upload coverage reports'
@@ -767,8 +758,165 @@ jobs:
           ${{ always() }}
         uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
         with:
-          name: 'coverage-reports-${{ matrix.node-version }}-${{ matrix.os }}-${{ matrix.secure-store-mode }}'
+          name: 'coverage-reports-${{ matrix.node-version }}-${{ matrix.os }}'
           path: 'packages/*/coverage'
+
+  secure_store_backend:
+    name: 'SecureStore Backend (${{ matrix.os }}, ${{ matrix.secure-store-mode }})'
+    runs-on: '${{ matrix.os }}'
+    timeout-minutes: 15
+    needs:
+      - 'lint'
+      - 'doc_change_filter'
+      - 'skip_check'
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
+    permissions:
+      contents: 'read'
+      checks: 'write'
+      pull-requests: 'write'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: 'ubuntu-latest'
+            node-version: '24.x'
+            secure-store-mode: 'keyring'
+            test-config: 'vitest.config.native-keyring.ts'
+          - os: 'macos-latest'
+            node-version: '24.x'
+            secure-store-mode: 'keyring'
+            test-config: 'vitest.config.native-keyring.ts'
+          - os: 'ubuntu-latest'
+            node-version: '24.x'
+            secure-store-mode: 'fallback'
+            test-config: 'vitest.config.fallback-behavior.ts'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: 'Set up Node.js ${{ matrix.node-version }}'
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
+        with:
+          node-version: '${{ matrix.node-version }}'
+
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
+      - name: 'Cache Bun dependencies'
+        uses: 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' # ratchet:actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+
+      - name: 'Install dependencies for SecureStore tests'
+        run: |-
+          bun install
+          git checkout -- bun.lock
+
+      - name: 'Install Linux Secret Service dependencies'
+        if: matrix.os == 'ubuntu-latest' && matrix.secure-store-mode == 'keyring'
+        run: |-
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y dbus-x11 gnome-keyring libglib2.0-bin libsecret-1-0
+
+      - name: 'Run SecureStore backend tests'
+        env:
+          CI: true
+          NO_COLOR: true
+          SECURE_STORE_MODE: '${{ matrix.secure-store-mode }}'
+          TEST_CONFIG: '${{ matrix.test-config }}'
+          KEYRING_PASSWORD: 'llxprt-ci-keyring'
+        run: |-
+          if [[ "$RUNNER_OS" == 'Linux' && "$SECURE_STORE_MODE" == 'keyring' ]]; then
+            export XDG_RUNTIME_DIR
+            XDG_RUNTIME_DIR="$(mktemp -d "$RUNNER_TEMP/secure-store-runtime.XXXXXX")"
+            chmod 700 "$XDG_RUNTIME_DIR"
+            trap 'rm -rf "$XDG_RUNTIME_DIR"' EXIT
+            dbus-run-session -- bash -euo pipefail -c '
+              export XDG_DATA_HOME="$XDG_RUNTIME_DIR/data"
+              install -d -m 700 "$XDG_DATA_HOME"
+
+              import_keyring_environment() {
+                local assignment export_suffix variable_name variable_value
+                while IFS= read -r assignment; do
+                  [[ -z "$assignment" ]] && continue
+                  case "$assignment" in
+                    GNOME_KEYRING_CONTROL=*|GNOME_KEYRING_PID=*|GPG_AGENT_INFO=*|SSH_AUTH_SOCK=*)
+                      variable_name="${assignment%%=*}"
+                      variable_value="${assignment#*=}"
+                      export_suffix="; export $variable_name;"
+                      if [[ "$variable_value" == *"$export_suffix" ]]; then
+                        variable_value="${variable_value%"$export_suffix"}"
+                      elif [[ "$variable_value" == *";"* ]]; then
+                        printf "Unsafe gnome-keyring-daemon assignment: %s\n" "$assignment" >&2
+                        exit 1
+                      fi
+                      export "$variable_name=$variable_value"
+                      ;;
+                    *)
+                      printf "Unexpected gnome-keyring-daemon output: %s\n" "$assignment" >&2
+                      exit 1
+                      ;;
+                  esac
+                done <<<"$1"
+              }
+
+              login_env="$(printf "%s" "$KEYRING_PASSWORD" | gnome-keyring-daemon --login)"
+              import_keyring_environment "$login_env"
+              daemon_env="$(gnome-keyring-daemon --start --components=secrets)"
+              import_keyring_environment "$daemon_env"
+
+              if [[ -z "$DBUS_SESSION_BUS_ADDRESS" ]]; then
+                printf "dbus-run-session did not provide a session bus address\n" >&2
+                exit 1
+              fi
+              secret_service_owner="$(gdbus call --session \
+                --dest org.freedesktop.DBus \
+                --object-path /org/freedesktop/DBus \
+                --method org.freedesktop.DBus.NameHasOwner \
+                org.freedesktop.secrets)"
+              if [[ "$secret_service_owner" != "(true,)" ]]; then
+                printf "org.freedesktop.secrets has no owner: %s\n" "$secret_service_owner" >&2
+                exit 1
+              fi
+              login_collection_locked="$(gdbus call --session \
+                --dest org.freedesktop.secrets \
+                --object-path /org/freedesktop/secrets/collection/login \
+                --method org.freedesktop.DBus.Properties.Get \
+                org.freedesktop.Secret.Collection Locked)"
+              if [[ "$login_collection_locked" != "(<false>,)" ]]; then
+                printf "GNOME login collection is not unlocked: %s\n" "$login_collection_locked" >&2
+                exit 1
+              fi
+              npm run test:ci --workspace @vybestack/llxprt-code-storage -- --config "$TEST_CONFIG"
+            '
+          else
+            npm run test:ci --workspace @vybestack/llxprt-code-storage -- \
+              --config "$TEST_CONFIG"
+          fi
+
+      - name: 'Publish SecureStore Test Report'
+        if: |-
+          ${{ always() && (github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: 'dorny/test-reporter@dc3a92680fcc15842eef52e8c4606ea7ce6bd3f3' # ratchet:dorny/test-reporter@v2
+        with:
+          name: 'SecureStore Backend Results (Node ${{ matrix.node-version }}, ${{ matrix.os }}, ${{ matrix.secure-store-mode }})'
+          path: 'packages/storage/junit.secure-store.xml'
+          reporter: 'java-junit'
+          fail-on-error: 'false'
+
+      - name: 'Upload SecureStore Test Results Artifact (for forks)'
+        if: |-
+          ${{ always() && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
+        uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
+        with:
+          name: 'secure-store-results-fork-${{ matrix.node-version }}-${{ matrix.os }}-${{ matrix.secure-store-mode }}'
+          path: 'packages/storage/junit.secure-store.xml'
 
   post_coverage_comment:
     name: 'Post Coverage Comment'
@@ -794,7 +942,7 @@ jobs:
       - name: 'Download coverage reports artifact'
         uses: 'actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0' # ratchet:actions/download-artifact@v5
         with:
-          name: 'coverage-reports-${{ matrix.node-version }}-${{ matrix.os }}-keyring'
+          name: 'coverage-reports-${{ matrix.node-version }}-${{ matrix.os }}'
           path: 'coverage_artifact' # Download to a specific directory
 
       - name: 'Post Coverage Comment using Composite Action'

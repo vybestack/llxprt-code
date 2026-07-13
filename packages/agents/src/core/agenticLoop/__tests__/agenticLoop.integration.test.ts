@@ -129,7 +129,7 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     expect(turnMessages).toHaveLength(2);
     const turn2Parts = partListUnionToParts(turnMessages[1]);
     const hasFnResponseInTurn2 = turn2Parts.some(
-      (p) => p.type === 'tool_response',
+      (p) => 'functionResponse' in p,
     );
     expect(hasFnResponseInTurn2).toBe(true);
     expect(hasFunctionResponse(history)).toBe(true);

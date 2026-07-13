@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { Content } from '@google/genai';
 import {
   isThinkingSupported,
   findCompressSplitPoint,
@@ -53,71 +53,46 @@ describe('findCompressSplitPoint', () => {
   });
 
   it('handles single content item', () => {
-    const history: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
-    ];
+    const history: Content[] = [{ role: 'user', parts: [{ text: 'Hello' }] }];
     expect(findCompressSplitPoint(history, 0.5)).toBe(0);
   });
 
   it('returns correct index at threshold boundary', () => {
-    const history: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'This is the first message.' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'This is the second message.' }],
-      },
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'This is the third message.' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'This is the fourth message.' }],
-      },
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'This is the fifth message.' }],
-      },
+    const history: Content[] = [
+      { role: 'user', parts: [{ text: 'This is the first message.' }] },
+      { role: 'model', parts: [{ text: 'This is the second message.' }] },
+      { role: 'user', parts: [{ text: 'This is the third message.' }] },
+      { role: 'model', parts: [{ text: 'This is the fourth message.' }] },
+      { role: 'user', parts: [{ text: 'This is the fifth message.' }] },
     ];
     expect(findCompressSplitPoint(history, 0.5)).toBe(4);
   });
 
   it('falls back to tool call split when no valid user splits exist', () => {
-    const history: IContent[] = [
+    const history: Content[] = [
+      { role: 'model', parts: [{ functionCall: { name: 'toolA' } }] },
       {
-        speaker: 'ai',
-        blocks: [
-          { type: 'tool_call', id: 'toolA', name: 'toolA', parameters: {} },
-        ],
-      },
-      {
-        speaker: 'tool',
-        blocks: [
+        role: 'user',
+        parts: [
           {
-            type: 'tool_response',
-            callId: 'toolA',
-            toolName: 'toolA',
-            result: { ok: true },
+            functionResponse: {
+              name: 'toolA',
+              response: { ok: true },
+              id: 'toolA',
+            },
           },
         ],
       },
+      { role: 'model', parts: [{ functionCall: { name: 'toolB' } }] },
       {
-        speaker: 'ai',
-        blocks: [
-          { type: 'tool_call', id: 'toolB', name: 'toolB', parameters: {} },
-        ],
-      },
-      {
-        speaker: 'tool',
-        blocks: [
+        role: 'user',
+        parts: [
           {
-            type: 'tool_response',
-            callId: 'toolB',
-            toolName: 'toolB',
-            result: { ok: true },
+            functionResponse: {
+              name: 'toolB',
+              response: { ok: true },
+              id: 'toolB',
+            },
           },
         ],
       },
@@ -126,23 +101,11 @@ describe('findCompressSplitPoint', () => {
   });
 
   it('returns earlier split point when no valid ones exist after threshold', () => {
-    const history: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'This is the first message.' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'This is the second message.' }],
-      },
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'This is the third message.' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'tool_call', id: '', name: '', parameters: {} }],
-      },
+    const history: Content[] = [
+      { role: 'user', parts: [{ text: 'This is the first message.' }] },
+      { role: 'model', parts: [{ text: 'This is the second message.' }] },
+      { role: 'user', parts: [{ text: 'This is the third message.' }] },
+      { role: 'model', parts: [{ functionCall: {} }] },
     ];
     expect(findCompressSplitPoint(history, 0.99)).toBe(2);
   });
@@ -155,81 +118,56 @@ describe('estimateRequestTokensStructured', () => {
 
   it('estimates text parts from text length', () => {
     expect(
-      estimateRequestTokensStructured([
-        { type: 'text', text: 'hello' },
-        { type: 'text', text: ' world' },
-      ]),
+      estimateRequestTokensStructured([{ text: 'hello' }, { text: ' world' }]),
     ).toBe(2);
   });
 
   it('handles single-object text input', () => {
-    expect(
-      estimateRequestTokensStructured({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'hello world' }],
-      }),
-    ).toBe(2);
+    expect(estimateRequestTokensStructured({ text: 'hello world' })).toBe(2);
   });
 
   it('counts functionResponse JSON payloads', () => {
-    const result = { result: 'x'.repeat(40) };
+    const payload = {
+      name: 'toolResult',
+      response: { result: 'x'.repeat(40) },
+    };
 
-    expect(
-      estimateRequestTokensStructured([
-        {
-          type: 'tool_response',
-          callId: 'toolResult',
-          toolName: 'toolResult',
-          result,
-        },
-      ]),
-    ).toBe(Math.floor(JSON.stringify(result).length / 4));
+    expect(estimateRequestTokensStructured({ functionResponse: payload })).toBe(
+      Math.floor(JSON.stringify(payload).length / 4),
+    );
   });
 
   it('counts functionCall JSON payloads', () => {
-    const parameters = { query: 'x'.repeat(40) };
+    const payload = {
+      name: 'toolCall',
+      args: { query: 'x'.repeat(40) },
+    };
 
-    expect(
-      estimateRequestTokensStructured([
-        {
-          type: 'tool_call',
-          id: 'toolCall',
-          name: 'toolCall',
-          parameters,
-        },
-      ]),
-    ).toBe(Math.floor(JSON.stringify(parameters).length / 4));
+    expect(estimateRequestTokensStructured({ functionCall: payload })).toBe(
+      Math.floor(JSON.stringify(payload).length / 4),
+    );
   });
 
   it('ignores inlineData and fileData payloads', () => {
     expect(
       estimateRequestTokensStructured([
-        { type: 'text', text: 'abcd' },
-        {
-          type: 'media',
-          mimeType: 'image/png',
-          data: 'x'.repeat(10_000),
-          encoding: 'base64',
-        },
+        { text: 'abcd' },
+        { inlineData: { mimeType: 'image/png', data: 'x'.repeat(10_000) } },
+        { fileData: { fileUri: 'gs://bucket/file' } },
       ]),
     ).toBe(1);
   });
 
   it('sums mixed strings, text parts, and function payloads', () => {
-    const result = { value: 'abcd' };
+    const response = { name: 'tool', response: { value: 'abcd' } };
     const expectedChars =
-      'hello'.length + 'world'.length + JSON.stringify(result).length;
+      'hello'.length + 'world'.length + JSON.stringify(response).length;
 
     expect(
       estimateRequestTokensStructured([
         'hello',
-        { type: 'text', text: 'world' },
-        {
-          type: 'tool_response',
-          callId: 'tool',
-          toolName: 'tool',
-          result,
-        },
+        { text: 'world' },
+        { functionResponse: response },
       ]),
     ).toBe(Math.floor(expectedChars / 4));
   });

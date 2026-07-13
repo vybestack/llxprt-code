@@ -15,10 +15,7 @@ import {
   type ToolCallResponseInfo,
   type ServerToolCallConfirmationDetails,
   type StructuredError,
-  type ModelInfo,
 } from '@vybestack/llxprt-code-core/core/turn.js';
-import type { UsageStats } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { ThoughtSummary } from '@vybestack/llxprt-code-core/utils/thoughtUtils.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import type {
   ToolCall,
@@ -34,8 +31,6 @@ import type {
   AgentStopInfo,
   DoneReason,
   FinishedValue,
-  UsageMetadataValue,
-  ChatCompressionInfo as CompressionInfo,
 } from './event-types.js';
 
 // @pseudocode event-adapter.md steps 10-12: mutable per-stream adapter state.
@@ -214,36 +209,6 @@ function toStopInfo(e: StopEvent): AgentStopInfo {
 }
 
 /**
- * Maps neutral UsageStats to the Gemini-named public UsageMetadataValue.
- *
- * The internal Finished event carries a neutral UsageStats (promptTokens,
- * completionTokens, totalTokens). The public wire type
- * (UsageMetadataValue) stays Gemini-named (promptTokenCount, etc.) for
- * backward compatibility. This mapper is the sole bridge.
- *
- * Per OQ-14 PUBLIC-out-of-scope: reasoningTokens / thoughtsTokenCount are
- * NOT emitted to the public wire.
- *
- * @plan:PLAN-20260707-AGENTNEUTRAL.P19
- * @requirement:REQ-007.2
- */
-function usageStatsToPublicUsageMetadata(
-  usage: UsageStats | undefined,
-): UsageMetadataValue | undefined {
-  if (usage === undefined) {
-    return undefined;
-  }
-  return {
-    promptTokenCount: usage.promptTokens,
-    candidatesTokenCount: usage.completionTokens,
-    totalTokenCount: usage.totalTokens,
-    ...(usage.cachedTokens !== undefined
-      ? { cachedContentTokenCount: usage.cachedTokens }
-      : {}),
-  };
-}
-
-/**
  * Maps a Finished value to the public DoneReason. A Finished event represents
  * normal completion; other terminal causes arrive via their own variants. When
  * the raw provider stop reason is `'refusal'` (the model's safety classifier
@@ -275,85 +240,69 @@ function* mapValueEvent(
   e: Extract<ServerAgentStreamEvent, { value: unknown }>,
   state: AdapterState,
 ): Iterable<AgentEvent> {
-  yield* mapValueEventInner(e, e.value, state);
-}
-
-function* mapValueEventInner(
-  e: Extract<ServerAgentStreamEvent, { value: unknown }>,
-  value: unknown,
-  state: AdapterState,
-): Iterable<AgentEvent> {
   switch (e.type) {
+    // @pseudocode event-adapter.md step 212: Content
     case AgentEventType.Content:
-      yield { type: 'text', text: value as string };
+      yield { type: 'text', text: e.value };
       return;
+    // @pseudocode event-adapter.md step 213: Thought
     case AgentEventType.Thought:
-      yield { type: 'thinking', thought: value as ThoughtSummary };
+      yield { type: 'thinking', thought: e.value };
       return;
+    // @pseudocode event-adapter.md step 214: ToolCallRequest
     case AgentEventType.ToolCallRequest:
-      yield {
-        type: 'tool-call',
-        call: projectToolCall(value as ToolCallRequestInfo),
-      };
+      yield { type: 'tool-call', call: projectToolCall(e.value) };
       return;
+    // @pseudocode event-adapter.md step 215: ToolCallResponse
     case AgentEventType.ToolCallResponse:
-      yield {
-        type: 'tool-result',
-        result: projectToolResult(
-          value as ToolCallResponseInfo | CompletedToolCall,
-        ),
-      };
+      yield { type: 'tool-result', result: projectToolResult(e.value) };
       return;
+    // @pseudocode event-adapter.md step 216: ToolCallConfirmation
     case AgentEventType.ToolCallConfirmation:
       yield {
         type: 'tool-confirmation',
-        confirmation: projectConfirmationFromDetails(
-          value as ServerToolCallConfirmationDetails,
-        ),
+        confirmation: projectConfirmationFromDetails(e.value),
       };
       return;
+    // @pseudocode event-adapter.md step 217: UsageMetadata
     case AgentEventType.UsageMetadata:
-      yield { type: 'usage', usage: value as UsageMetadataValue };
+      yield { type: 'usage', usage: e.value };
       return;
+    // @pseudocode event-adapter.md step 218: ModelInfo
     case AgentEventType.ModelInfo:
-      yield { type: 'model-info', info: value as ModelInfo };
+      yield { type: 'model-info', info: e.value };
       return;
+    // @pseudocode event-adapter.md step 219: SystemNotice
     case AgentEventType.SystemNotice:
-      yield { type: 'notice', message: value as string };
+      yield { type: 'notice', message: e.value };
       return;
+    // @pseudocode event-adapter.md step 220: ChatCompressed
     case AgentEventType.ChatCompressed:
-      yield { type: 'compression', info: value as CompressionInfo };
+      yield { type: 'compression', info: e.value };
       return;
+    // @pseudocode event-adapter.md step 221: Citation
     case AgentEventType.Citation:
-      yield { type: 'citation', citation: value as string };
+      yield { type: 'citation', citation: e.value };
       return;
-    default:
-      yield* mapValueEventComplex(e, value, state);
-  }
-}
-
-function* mapValueEventComplex(
-  e: Extract<ServerAgentStreamEvent, { value: unknown }>,
-  value: unknown,
-  state: AdapterState,
-): Iterable<AgentEvent> {
-  switch (e.type) {
+    // @pseudocode event-adapter.md steps 232-233: StreamIdleTimeout
     case AgentEventType.StreamIdleTimeout: {
-      const error: StructuredError = (value as { error: StructuredError })
+      const error: StructuredError = (e.value as { error: StructuredError })
         .error;
       yield { type: 'idle-timeout', error };
       state.pendingDoneReason = 'error';
       return;
     }
+    // @pseudocode event-adapter.md steps 236-237: Error
     case AgentEventType.Error: {
-      const error: StructuredError = (value as { error: StructuredError })
+      const error: StructuredError = (e.value as { error: StructuredError })
         .error;
       yield { type: 'error', error };
       state.pendingDoneReason = 'error';
       return;
     }
+    // @pseudocode event-adapter.md steps 224-228: ContextWindowWillOverflow
     case AgentEventType.ContextWindowWillOverflow: {
-      const v = value as {
+      const v = e.value as {
         estimatedRequestTokenCount: number;
         remainingTokenCount: number;
       };
@@ -365,19 +314,10 @@ function* mapValueEventComplex(
       state.pendingDoneReason = 'context-overflow';
       return;
     }
+    // @pseudocode event-adapter.md steps 243-244: Finished
     case AgentEventType.Finished: {
-      const v = value as {
-        reason: string;
-        stopReason?: string;
-        usageMetadata?: UsageStats;
-      };
-      const publicUsage = usageStatsToPublicUsageMetadata(v.usageMetadata);
-      const finishedValue: FinishedValue = {
-        reason: v.reason,
-        ...(publicUsage !== undefined ? { usageMetadata: publicUsage } : {}),
-        ...(v.stopReason !== undefined ? { stopReason: v.stopReason } : {}),
-      };
-      state.lastFinished = finishedValue;
+      const v = e.value as { reason: string; stopReason?: string };
+      state.lastFinished = v;
       yield makeDone(state, mapFinishReason(v.stopReason));
       state.emittedDone = true;
       return;

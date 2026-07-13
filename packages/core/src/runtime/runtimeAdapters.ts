@@ -86,20 +86,11 @@ export function createTelemetryAdapterFromConfig(
       logApiRequest(config, legacy);
     },
     logApiResponse: (event) => {
-      const usageForLegacy =
-        event.usageMetadata ??
-        (event.usage !== undefined
-          ? {
-              promptTokenCount: event.usage.inputTokens,
-              candidatesTokenCount: event.usage.outputTokens,
-              totalTokenCount: event.usage.totalTokens,
-            }
-          : undefined);
       const legacy = new LegacyApiResponseEvent(
         event.model,
         event.durationMs,
         event.promptId ?? event.runtimeId ?? 'runtime',
-        usageForLegacy,
+        event.usageMetadata,
         event.responseText,
         event.error,
       );

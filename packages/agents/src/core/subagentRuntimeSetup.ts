@@ -22,9 +22,13 @@ import {
   type SchedulerOptions,
 } from '@vybestack/llxprt-code-core/config/config.js';
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { ChatSession, type ChatSessionConfig } from './chatSession.js';
+import {
+  type Content,
+  type FunctionDeclaration,
+  type GenerateContentConfig,
+  Type,
+} from '@google/genai';
+import { ChatSession } from './chatSession.js';
 import type {
   AgentRuntimeContext,
   ReadonlySettingsSnapshot,
@@ -65,7 +69,7 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
- * Returns true when a non-string ToolDeclaration entry is excluded from
+ * Returns true when a non-string FunctionDeclaration entry is excluded from
  * subagent runtimes (task/list_subagents). Declarations without a usable
  * string name are never excluded.
  */
@@ -113,12 +117,12 @@ function getDeclarationWhitelistName(
 }
 
 /**
- * Converts a ToolMetadata object into a ToolDeclaration for the Gemini API.
+ * Converts a ToolMetadata object into a FunctionDeclaration for the Gemini API.
  */
 export function convertMetadataToFunctionDeclaration(
   fallbackName: string,
   metadata: ToolMetadata,
-): ToolDeclaration {
+): FunctionDeclaration {
   const rawSchema =
     metadata.parameterSchema && typeof metadata.parameterSchema === 'object'
       ? { ...metadata.parameterSchema }
@@ -126,7 +130,7 @@ export function convertMetadataToFunctionDeclaration(
   const properties =
     (rawSchema.properties as Record<string, unknown> | undefined) ?? {};
 
-  const parameterType = (rawSchema.type as string | undefined) ?? 'object';
+  const parameterType = (rawSchema.type as Type | undefined) ?? Type.OBJECT;
   const parameterProperties = { ...properties };
   const parametersJsonSchema: Record<string, unknown> = {
     ...rawSchema,
@@ -392,7 +396,7 @@ function resolveDeclarationEntry(
     toolsView: ToolRegistryView;
     registryNameByCanonical: Map<string, string>;
   },
-): ToolDeclaration | null {
+): FunctionDeclaration | null {
   if (typeof entry !== 'string') {
     if (isSubagentExcludedDeclaration(entry)) {
       return null;
@@ -464,7 +468,7 @@ function resolveDeclarationEntry(
 export function buildRuntimeFunctionDeclarations(
   toolsView: ToolRegistryView,
   toolConfig: ToolConfig | undefined,
-): ToolDeclaration[] {
+): FunctionDeclaration[] {
   const listedNames =
     typeof toolsView.listToolNames === 'function'
       ? toolsView.listToolNames()
@@ -478,7 +482,7 @@ export function buildRuntimeFunctionDeclarations(
   }
   const allowedNames = new Set(registryNameByCanonical.keys());
 
-  const declarations: ToolDeclaration[] = [];
+  const declarations: FunctionDeclaration[] = [];
 
   if (toolConfig === undefined) {
     for (const name of listedNames) {
@@ -498,7 +502,7 @@ export function buildRuntimeFunctionDeclarations(
   }
 
   if (toolConfig.tools.length === 0) {
-    const noFunctionDeclarations: ToolDeclaration[] = [];
+    const noFunctionDeclarations: FunctionDeclaration[] = [];
     return noFunctionDeclarations;
   }
 
@@ -517,25 +521,25 @@ export function buildRuntimeFunctionDeclarations(
 
 export function getScopeLocalFuncDefs(
   outputConfig?: OutputConfig,
-): ToolDeclaration[] {
+): FunctionDeclaration[] {
   if (!outputConfig?.outputs) {
     return [];
   }
 
-  const emitValueTool: ToolDeclaration = {
+  const emitValueTool: FunctionDeclaration = {
     name: 'self_emitvalue',
     description: `* This tool emits A SINGLE return value from this execution, such that it can be collected and presented to the calling function.
         * You can only emit ONE VALUE each time you call this tool. You are expected to call this tool MULTIPLE TIMES if you have MULTIPLE OUTPUTS.`,
     parametersJsonSchema: {
-      type: 'object',
+      type: Type.OBJECT,
       properties: {
         emit_variable_name: {
           description: 'This is the name of the variable to be returned.',
-          type: 'string',
+          type: Type.STRING,
         },
         emit_variable_value: {
           description: 'This is the _value_ to be returned for this variable.',
-          type: 'string',
+          type: Type.STRING,
         },
       },
       required: ['emit_variable_name', 'emit_variable_value'],
@@ -746,7 +750,7 @@ export async function createChatObject(
     throw new Error('PromptConfig.systemPrompt must be a non-empty string.');
   }
 
-  const startHistory: IContent[] = [];
+  const startHistory: Content[] = [];
   const personaPrompt = buildChatSystemPrompt(
     promptConfig,
     outputConfig,
@@ -785,7 +789,7 @@ async function buildSystemInstruction(
   environmentContextLoader: EnvironmentContextLoader,
   runtimeContext: AgentRuntimeContext,
   modelConfig: ModelConfig,
-  combinedDeclarations: ToolDeclaration[],
+  combinedDeclarations: FunctionDeclaration[],
   config: Config,
   personaPrompt: string,
   logger: { debug: (fn: () => string) => void },
@@ -799,7 +803,7 @@ async function buildSystemInstruction(
   const toolNames = Array.from(
     new Set(
       combinedDeclarations
-        .map((d) => (d as Partial<ToolDeclaration>).name?.trim())
+        .map((d) => (d as Partial<FunctionDeclaration>).name?.trim())
         .filter((name): name is string => Boolean(name && name.length > 0)),
     ),
   );
@@ -838,14 +842,16 @@ async function buildSystemInstruction(
 function instantiateChat(
   modelConfig: ModelConfig,
   systemInstruction: string,
-  combinedDeclarations: ToolDeclaration[],
-  startHistory: IContent[],
+  combinedDeclarations: FunctionDeclaration[],
+  startHistory: Content[],
   runtimeContext: AgentRuntimeContext,
   contentGenerator: ContentGenerator,
   _logger: { debug: (fn: () => string) => void },
 ): ChatSession | null {
   try {
-    const generationConfig: ChatSessionConfig = {
+    const generationConfig: GenerateContentConfig & {
+      systemInstruction?: string | Content;
+    } = {
       temperature: modelConfig.temp,
       topP: modelConfig.top_p,
       systemInstruction: systemInstruction || undefined,

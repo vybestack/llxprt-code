@@ -9,7 +9,6 @@ export * from './safety/index.js';
 
 // Export config
 export * from './config/config.js';
-export * from './config/models.js';
 export * from './config/subagentManager.js';
 export * from './config/schedulerSingleton.js';
 export * from './policy/index.js';
@@ -510,7 +509,6 @@ export * from './telemetry/uiTelemetry.js';
 export { sessionId } from './utils/session.js';
 // Export content interfaces
 export * from './services/history/IContent.js';
-export { ContentConverters } from './services/history/ContentConverters.js';
 
 // @plan PLAN-20260702-LLMTYPES.P04
 // @requirement REQ-013.1

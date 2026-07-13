@@ -18,7 +18,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { Content } from '@google/genai';
 import { hasNonInteractiveMessages } from './subagentNonInteractive.js';
 
 describe('issue #2410 – hasNonInteractiveMessages type guard', () => {
@@ -31,22 +31,20 @@ describe('issue #2410 – hasNonInteractiveMessages type guard', () => {
     // not null) when all calls are hook-restricted. The old `!nextMessages`
     // guard evaluated `![]` as `false`, so the loop continued and sent an
     // empty user turn to the provider (causing z.ai error 1213).
-    const emptyArray: IContent[] = [];
+    const emptyArray: Content[] = [];
     expect(hasNonInteractiveMessages(emptyArray)).toBe(false);
   });
 
   it('returns true for a non-empty array — loop should continue', () => {
-    const messages: IContent[] = [
-      { speaker: 'tool', blocks: [{ type: 'text', text: 'result' }] },
-    ];
+    const messages: Content[] = [{ role: 'user', parts: [{ text: 'result' }] }];
     expect(hasNonInteractiveMessages(messages)).toBe(true);
   });
 
-  it('returns true for a non-empty array even if individual blocks are empty', () => {
+  it('returns true for a non-empty array even if individual parts are empty', () => {
     // The guard only checks whether there are ANY messages at all (array
-    // length). It does NOT inspect individual ContentBlocks — empty-blocks
+    // length). It does NOT inspect individual Content.parts — empty-parts
     // filtering is handled downstream by ContentConverters/HistoryService.
-    const messages: IContent[] = [{ speaker: 'tool', blocks: [] }];
+    const messages: Content[] = [{ role: 'user', parts: [] }];
     expect(hasNonInteractiveMessages(messages)).toBe(true);
   });
 });

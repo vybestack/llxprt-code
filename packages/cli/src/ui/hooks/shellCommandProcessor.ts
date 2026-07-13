@@ -18,8 +18,7 @@ import {
   type AnsiOutput,
   type ShellOutputEvent,
   debugLogger,
-  type IContent,
-  type ContentBlock,
+  type ContractPartListUnion,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type UseHistoryManagerReturn } from './useHistoryManager.js';
@@ -82,10 +81,9 @@ function addShellCommandToAgentHistory(
   if (agent) {
     void agent
       .addHistory({
-        speaker: 'human',
-        blocks: [
+        role: 'user',
+        parts: [
           {
-            type: 'text',
             text: `I ran the following shell command:
 \`\`\`sh
 ${rawQuery}
@@ -605,10 +603,7 @@ export const useShellCommandProcessor = (
   const [activeShellPtyId, setActiveShellPtyId] = useState<number | null>(null);
   const [lastShellOutputTime, setLastShellOutputTime] = useState(0);
   const handleShellCommand = useCallback(
-    (
-      rawQuery: string | ContentBlock[] | IContent,
-      abortSignal: AbortSignal,
-    ): boolean => {
+    (rawQuery: ContractPartListUnion, abortSignal: AbortSignal): boolean => {
       if (typeof rawQuery !== 'string' || rawQuery.trim() === '') {
         return false;
       }

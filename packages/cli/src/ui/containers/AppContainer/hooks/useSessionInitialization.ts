@@ -85,8 +85,8 @@ async function runSessionStartHook(
       const agentClient = uiRuntime.agentClientSource.getAgentClient();
       try {
         await agentClient.addHistory({
-          speaker: 'human',
-          blocks: [{ type: 'text', text: additionalContext }],
+          role: 'user',
+          parts: [{ text: additionalContext }],
         });
       } catch {
         // Failures adding hook-provided context to history are non-fatal.

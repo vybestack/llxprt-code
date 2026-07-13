@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { Content } from '@google/genai';
 import { findCompressSplitPoint, isThinkingSupported } from './client.js';
 
 describe('isThinkingSupported', () => {
@@ -56,160 +56,88 @@ describe('findCompressSplitPoint', () => {
   });
 
   it('should handle a fraction in the middle', () => {
-    const history: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'This is the first message.' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'This is the second message.' }],
-      },
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'This is the third message.' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'This is the fourth message.' }],
-      },
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'This is the fifth message.' }],
-      },
+    const history: Content[] = [
+      { role: 'user', parts: [{ text: 'This is the first message.' }] },
+      { role: 'model', parts: [{ text: 'This is the second message.' }] },
+      { role: 'user', parts: [{ text: 'This is the third message.' }] },
+      { role: 'model', parts: [{ text: 'This is the fourth message.' }] },
+      { role: 'user', parts: [{ text: 'This is the fifth message.' }] },
     ];
     expect(findCompressSplitPoint(history, 0.5)).toBe(4);
   });
 
   it('should handle a fraction of last index', () => {
-    const history: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'This is the first message.' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'This is the second message.' }],
-      },
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'This is the third message.' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'This is the fourth message.' }],
-      },
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'This is the fifth message.' }],
-      },
+    const history: Content[] = [
+      { role: 'user', parts: [{ text: 'This is the first message.' }] },
+      { role: 'model', parts: [{ text: 'This is the second message.' }] },
+      { role: 'user', parts: [{ text: 'This is the third message.' }] },
+      { role: 'model', parts: [{ text: 'This is the fourth message.' }] },
+      { role: 'user', parts: [{ text: 'This is the fifth message.' }] },
     ];
     expect(findCompressSplitPoint(history, 0.9)).toBe(4);
   });
 
   it('should handle a fraction of after last index', () => {
-    const history: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'This is the first message.' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'This is the second message.' }],
-      },
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'This is the third message.' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'This is the fourth message.' }],
-      },
+    const history: Content[] = [
+      { role: 'user', parts: [{ text: 'This is the first message.' }] },
+      { role: 'model', parts: [{ text: 'This is the second message.' }] },
+      { role: 'user', parts: [{ text: 'This is the third message.' }] },
+      { role: 'model', parts: [{ text: 'This is the fourth message.' }] },
     ];
     expect(findCompressSplitPoint(history, 0.8)).toBe(4);
   });
 
   it('should return earlier splitpoint if no valid ones are after threshhold', () => {
-    const history: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'This is the first message.' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'This is the second message.' }],
-      },
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'This is the third message.' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'tool_call', id: '', name: '', parameters: {} }],
-      },
+    const history: Content[] = [
+      { role: 'user', parts: [{ text: 'This is the first message.' }] },
+      { role: 'model', parts: [{ text: 'This is the second message.' }] },
+      { role: 'user', parts: [{ text: 'This is the third message.' }] },
+      { role: 'model', parts: [{ functionCall: {} }] },
     ];
     expect(findCompressSplitPoint(history, 0.99)).toBe(2);
   });
 
   it('should handle a history with only one item', () => {
-    const historyWithEmptyParts: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'Message 1' }] },
+    const historyWithEmptyParts: Content[] = [
+      { role: 'user', parts: [{ text: 'Message 1' }] },
     ];
     expect(findCompressSplitPoint(historyWithEmptyParts, 0.5)).toBe(0);
   });
 
   it('should handle history with weird parts', () => {
-    const historyWithEmptyParts: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'Message 1' }] },
-      {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'media',
-            mimeType: 'application/octet-stream',
-            data: 'derp',
-            encoding: 'url',
-          },
-        ],
-      },
-      { speaker: 'human', blocks: [{ type: 'text', text: 'Message 2' }] },
+    const historyWithEmptyParts: Content[] = [
+      { role: 'user', parts: [{ text: 'Message 1' }] },
+      { role: 'model', parts: [{ fileData: { fileUri: 'derp' } }] },
+      { role: 'user', parts: [{ text: 'Message 2' }] },
     ];
     expect(findCompressSplitPoint(historyWithEmptyParts, 0.5)).toBe(2);
   });
 
   it('should fall back to tool call split when no user splits exist', () => {
-    const history: IContent[] = [
+    const history: Content[] = [
+      { role: 'model', parts: [{ functionCall: { name: 'toolA' } }] },
       {
-        speaker: 'ai',
-        blocks: [
-          { type: 'tool_call', id: 'toolA', name: 'toolA', parameters: {} },
-        ],
-      },
-      {
-        speaker: 'tool',
-        blocks: [
+        role: 'user',
+        parts: [
           {
-            type: 'tool_response',
-            callId: 'toolA',
-            toolName: 'toolA',
-            result: { ok: true },
+            functionResponse: {
+              name: 'toolA',
+              response: { ok: true },
+              id: 'toolA',
+            },
           },
         ],
       },
+      { role: 'model', parts: [{ functionCall: { name: 'toolB' } }] },
       {
-        speaker: 'ai',
-        blocks: [
-          { type: 'tool_call', id: 'toolB', name: 'toolB', parameters: {} },
-        ],
-      },
-      {
-        speaker: 'tool',
-        blocks: [
+        role: 'user',
+        parts: [
           {
-            type: 'tool_response',
-            callId: 'toolB',
-            toolName: 'toolB',
-            result: { ok: true },
+            functionResponse: {
+              name: 'toolB',
+              response: { ok: true },
+              id: 'toolB',
+            },
           },
         ],
       },

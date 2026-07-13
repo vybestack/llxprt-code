@@ -5,8 +5,10 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { AgentClientContract } from '../core/clientContract.js';
-import type { IContent } from '../services/history/IContent.js';
+import type {
+  AgentClientContract,
+  ContractContent,
+} from '../core/clientContract.js';
 import { LruCache } from './LruCache.js';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 
@@ -128,12 +130,11 @@ export async function FixLLMEditWithInstruction(
     .replace('{error}', error)
     .replace('{current_content}', current_content);
 
-  const contents: IContent[] = [
+  const contents: ContractContent[] = [
     {
-      speaker: 'human',
-      blocks: [
+      role: 'user',
+      parts: [
         {
-          type: 'text',
           text: `${EDIT_SYS_PROMPT}
 ${userPrompt}`,
         },

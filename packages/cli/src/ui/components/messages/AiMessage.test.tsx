@@ -134,6 +134,73 @@ describe('<AiMessage />', () => {
       expect(lastFrame()).not.toContain('MockThinking:First thought');
     });
 
+    it('should render thinking blocks in pending items during streaming (issue #1723)', () => {
+      mockGetEphemeralSetting.mockReturnValue(true);
+
+      const { lastFrame } = renderWithProviders(
+        <AiMessage
+          {...baseProps}
+          isPending={true}
+          thinkingBlocks={thinkingBlocks}
+        />,
+        {
+          uiState: {
+            renderMarkdown: true,
+            streamingState: StreamingState.Responding,
+          },
+        },
+      );
+
+      expect(lastFrame()).toContain('MockThinking:First thought');
+    });
+
+    it('should render thinking blocks in committed items', () => {
+      mockGetEphemeralSetting.mockReturnValue(true);
+
+      const { lastFrame } = renderWithProviders(
+        <AiMessage
+          {...baseProps}
+          isPending={false}
+          thinkingBlocks={thinkingBlocks}
+        />,
+        {
+          uiState: {
+            renderMarkdown: true,
+            streamingState: StreamingState.Idle,
+          },
+        },
+      );
+
+      expect(lastFrame()).toContain('MockThinking:First thought');
+    });
+
+    it('should not render hidden thinking blocks when other thinking is visible', () => {
+      mockGetEphemeralSetting.mockReturnValue(true);
+
+      const { lastFrame } = renderWithProviders(
+        <AiMessage
+          {...baseProps}
+          thinkingBlocks={[
+            { ...thinkingBlocks[0], isHidden: true },
+            {
+              type: 'thinking',
+              thought: 'Visible thought',
+              sourceField: 'thinking',
+            },
+          ]}
+        />,
+        {
+          uiState: {
+            renderMarkdown: true,
+            streamingState: StreamingState.Idle,
+          },
+        },
+      );
+
+      expect(lastFrame()).not.toContain('MockThinking:First thought');
+      expect(lastFrame()).toContain('MockThinking:Visible thought');
+    });
+
     it('should not render thinking blocks when thinkingBlocks is undefined', () => {
       mockGetEphemeralSetting.mockReturnValue(true);
 

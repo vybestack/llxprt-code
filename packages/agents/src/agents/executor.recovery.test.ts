@@ -14,6 +14,7 @@ import {
   type StreamEvent,
 } from '../core/chatSession.js';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
+import type { Part } from '@google/genai';
 import {
   setupExecutorFixture,
   createTestDefinition,
@@ -52,6 +53,12 @@ vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
 
 const MockedChatSession = vi.mocked(ChatSession);
 const mockedGetDirectoryContextString = vi.mocked(getDirectoryContextString);
+
+/**
+ * Safely extracts text from a Part, returning empty string when not a text part.
+ */
+const extractPartText = (part: Part): string =>
+  'text' in part && typeof part.text === 'string' ? part.text : '';
 
 describe('AgentExecutor (Recovery Turn)', () => {
   let fixture: ExecutorTestFixture;
@@ -421,12 +428,12 @@ describe('AgentExecutor (Recovery Turn)', () => {
 
     // The second call to sendMessageStream should contain the warning message
     const secondCallParams = getMockMessageParams(mockSendMessageStream, 1);
-    const recoveryMessage = secondCallParams.message;
-    expect(recoveryMessage).toBeDefined();
-    expect(recoveryMessage.blocks).toHaveLength(1);
-    const block = recoveryMessage.blocks[0];
-    expect(block?.type).toBe('text');
-    const text = (block as { text: string }).text;
+    const messageParts = secondCallParams.message;
+    expect(messageParts).toBeDefined();
+    expect(messageParts).toHaveLength(1);
+    const part = messageParts![0];
+    expect(part).toHaveProperty('text');
+    const text = extractPartText(part);
     expect(text).toContain('WARNING');
     expect(text).toContain(TASK_COMPLETE_TOOL_NAME);
     expect(text).toContain('ONE final chance');

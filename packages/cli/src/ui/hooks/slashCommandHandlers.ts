@@ -9,7 +9,7 @@ import type {
   RecordingIntegration,
   ToolCallConfirmationDetails,
   DebugLogger,
-  AgentRequestInput,
+  ContractPartListUnion,
 } from '@vybestack/llxprt-code-core';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import {
@@ -76,7 +76,7 @@ interface ParsedCommandState {
 
 export async function processSlashCommand(
   deps: SlashCommandHandlerDeps,
-  rawQuery: AgentRequestInput,
+  rawQuery: ContractPartListUnion,
   oneTimeShellAllowlist?: Set<string>,
   overwriteConfirmed?: boolean,
   addToHistory: boolean = true,
@@ -223,7 +223,7 @@ async function handleActionResult(
     case 'submit_prompt':
       return {
         type: 'submit_prompt',
-        content: stringifyPrompt(result.content as AgentRequestInput),
+        content: stringifyPrompt(result.content as ContractPartListUnion),
       };
     case 'confirm_shell_commands':
       return confirmShellCommands(deps, result);
@@ -379,7 +379,7 @@ function handleLoadHistoryResult(
   return { type: 'handled' };
 }
 
-function stringifyPrompt(content: AgentRequestInput): string {
+function stringifyPrompt(content: ContractPartListUnion): string {
   if (typeof content === 'string') {
     return content;
   }

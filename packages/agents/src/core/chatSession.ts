@@ -7,41 +7,13 @@
 // ChatSession — thin coordinator that wires up the decomposed modules.
 
 import type {
-  ModelGenerationSettings,
-  ModelOutput,
-  AgentMessageInput,
-  ToolDeclaration,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { ToolGroupArray } from './streamRequestHelpers.js';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-
-/**
- * Neutral generation config carried by ChatSession. Extends the neutral
- * {@link ModelGenerationSettings} with the request-scoped fields the
- * turn/stream pipeline references (abortSignal, tools, toolConfig).
- *
- * @plan:PLAN-20260707-AGENTNEUTRAL.P27
- * @requirement:REQ-005.5c
- */
-export interface ChatSessionConfig extends ModelGenerationSettings {
-  abortSignal?: AbortSignal;
-  tools?: ToolGroupArray;
-  toolConfig?: unknown;
-}
-
-/**
- * Neutral send-message DTO replacing the provider-shaped
- * `SendMessageParameters`. Carries a neutral {@link AgentMessageInput}
- * message and an optional per-request config — never a provider Part/role
- * shape.
- *
- * @plan:PLAN-20260707-AGENTNEUTRAL.P27
- * @requirement:REQ-005.5c
- */
-export interface SendMessageParams {
-  message: AgentMessageInput;
-  config?: ChatSessionConfig;
-}
+  Content,
+  GenerateContentConfig,
+  GenerateContentResponse,
+  SendMessageParameters,
+  Tool,
+  PartListUnion,
+} from '@google/genai';
 import type { CompletedToolCall } from './coreToolScheduler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -64,8 +36,12 @@ import { ConversationManager } from './ConversationManager.js';
 import { TurnProcessor } from './TurnProcessor.js';
 import { StreamProcessor } from './StreamProcessor.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
+import { TokenUsageLogger } from './TokenUsageLogger.js';
+import * as nodePath from 'node:path';
 import {
   convertPartListUnionToIContent,
+  convertIContentToResponse,
+  convertBlocksToParts,
   validateHistory,
 } from './MessageConverter.js';
 import { splitPartsByRole } from './agenticLoop/loopHelpers.js';
@@ -120,19 +96,16 @@ export class AgentExecutionStoppedError extends Error {
 
 /**
  * Error thrown when agent execution is blocked by a hook.
- *
- * @plan:PLAN-20260707-AGENTNEUTRAL.P13
- * @requirement:REQ-002.6
  */
 export class AgentExecutionBlockedError extends Error {
   readonly reason: string;
   readonly systemMessage?: string;
-  readonly blockedOutput?: ModelOutput;
+  readonly syntheticResponse?: GenerateContentResponse;
   readonly contextCleared?: boolean;
 
   constructor(
     reason: string,
-    blockedOutput?: ModelOutput,
+    syntheticResponse?: GenerateContentResponse,
     systemMessage?: string,
     contextCleared?: boolean,
   ) {
@@ -143,7 +116,7 @@ export class AgentExecutionBlockedError extends Error {
     this.name = 'AgentExecutionBlockedError';
     this.reason = reason;
     this.systemMessage = systemMessage;
-    this.blockedOutput = blockedOutput;
+    this.syntheticResponse = syntheticResponse;
     this.contextCleared = contextCleared;
   }
 }
@@ -162,7 +135,7 @@ export class ChatSession {
   private readonly runtimeState: AgentRuntimeState;
   private readonly historyService: HistoryService;
   private readonly runtimeContext: AgentRuntimeContext;
-  private readonly generationConfig: ChatSessionConfig;
+  private readonly generationConfig: GenerateContentConfig;
 
   // Composed modules
   private readonly compressionHandler: CompressionHandler;
@@ -170,6 +143,7 @@ export class ChatSession {
   private readonly turnProcessor: TurnProcessor;
   private readonly streamProcessor: StreamProcessor;
   private readonly directMessageProcessor: DirectMessageProcessor;
+  private readonly tokenUsageLogger: TokenUsageLogger;
   private readonly compressionLoadBalancerRoundRobinIndexes = new Map<
     string,
     number
@@ -178,8 +152,8 @@ export class ChatSession {
   constructor(
     view: AgentRuntimeContext,
     contentGenerator: ContentGenerator,
-    generationConfig: ChatSessionConfig = {},
-    initialHistory: IContent[] = [],
+    generationConfig: GenerateContentConfig = {},
+    initialHistory: Content[] = [],
   ) {
     this.runtimeContext = view;
     this.runtimeState = view.state;
@@ -205,6 +179,7 @@ export class ChatSession {
       this.resolveProviderForRuntime(ctx);
     const providerRuntimeBuilder = (s: string, m?: Record<string, unknown>) =>
       this.buildProviderRuntime(s, m);
+    const makePositionMatcher = () => this._makePositionMatcher();
     const resolveBaseUrl = (p: IProvider) => this.resolveProviderBaseUrl(p);
 
     this.compressionHandler = new CompressionHandler(
@@ -224,6 +199,9 @@ export class ChatSession {
         }
       },
     );
+
+    this.tokenUsageLogger = this._createTokenUsageLogger(view);
+    this.compressionHandler.tokenUsageLogger = this.tokenUsageLogger;
 
     this.conversationManager = new ConversationManager(
       this.historyService,
@@ -248,6 +226,7 @@ export class ChatSession {
         view,
         providerResolver,
         providerRuntimeBuilder,
+        makePositionMatcher,
         resolveBaseUrl,
       );
     this.turnProcessor = turnProcessor;
@@ -261,6 +240,9 @@ export class ChatSession {
       s: string,
       m?: Record<string, unknown>,
     ) => ProviderRuntimeContext,
+    makePositionMatcher: () =>
+      | (() => { historyId: string; toolName?: string })
+      | undefined,
     resolveBaseUrl: (p: IProvider) => string | undefined,
   ): {
     turnProcessor: TurnProcessor;
@@ -274,6 +256,7 @@ export class ChatSession {
       this.generationConfig,
       this.historyService,
       this.streamProcessor,
+      makePositionMatcher,
       resolveBaseUrl,
     );
 
@@ -282,7 +265,9 @@ export class ChatSession {
       providerResolver,
       providerRuntimeBuilder,
       this.generationConfig,
+
       this.historyService,
+      makePositionMatcher,
     );
 
     return { turnProcessor, directMessageProcessor };
@@ -467,26 +452,34 @@ export class ChatSession {
     };
   }
 
+  // ── Position matcher (used by multiple modules) ──────────────────
+
+  private _makePositionMatcher():
+    | (() => { historyId: string; toolName?: string })
+    | undefined {
+    return this.conversationManager.makePositionMatcher();
+  }
+
   // ── Public API — thin delegation ─────────────────────────────────
 
   async sendMessage(
-    params: SendMessageParams,
+    params: SendMessageParameters,
     prompt_id: string,
-  ): Promise<ModelOutput> {
+  ): Promise<GenerateContentResponse> {
     return this.turnProcessor.sendMessage(params, prompt_id);
   }
 
   async sendMessageStream(
-    params: SendMessageParams,
+    params: SendMessageParameters,
     prompt_id: string,
   ): Promise<AsyncGenerator<StreamEvent>> {
     return this.turnProcessor.sendMessageStream(params, prompt_id);
   }
 
   async generateDirectMessage(
-    params: SendMessageParams,
+    params: SendMessageParameters,
     prompt_id: string,
-  ): Promise<ModelOutput> {
+  ): Promise<GenerateContentResponse> {
     return this.directMessageProcessor.generateDirectMessage(params, prompt_id);
   }
 
@@ -506,15 +499,15 @@ export class ChatSession {
     return this.runtimeContext.tools;
   }
 
-  setTools(tools: ToolDeclaration[]): void {
-    this.generationConfig.tools = [{ functionDeclarations: tools }];
+  setTools(tools: Tool[]): void {
+    this.generationConfig.tools = tools;
   }
 
   clearTools(): void {
     this.generationConfig.tools = undefined;
   }
 
-  getHistory(curated: boolean = false): IContent[] {
+  getHistory(curated: boolean = false): Content[] {
     return this.conversationManager.getHistory(curated);
   }
 
@@ -522,11 +515,11 @@ export class ChatSession {
     this.conversationManager.clearHistory();
   }
 
-  addHistory(content: IContent): void {
+  addHistory(content: Content): void {
     this.conversationManager.addHistory(content);
   }
 
-  setHistory(history: IContent[]): void {
+  setHistory(history: Content[]): void {
     this.conversationManager.setHistory(history);
   }
 
@@ -549,6 +542,40 @@ export class ChatSession {
     return this.compressionHandler.lastPromptTokenCount ?? 0;
   }
 
+  getTokenUsageLogger(): TokenUsageLogger {
+    return this.compressionHandler.tokenUsageLogger ?? this.tokenUsageLogger;
+  }
+
+  setTokenUsageLoggerForTesting(logger: TokenUsageLogger): void {
+    this.compressionHandler.tokenUsageLogger = logger;
+  }
+
+  private _createTokenUsageLogger(view: AgentRuntimeContext): TokenUsageLogger {
+    const settingsService = view.providerRuntime.settingsService;
+    const tokenUsageEnabled = settingsService.get('token-usage-log') !== false;
+    const config = view.providerRuntime.config;
+    const sessionId = view.state.sessionId;
+    let logFilePath: string | undefined;
+    if (tokenUsageEnabled && config) {
+      try {
+        const tempDir = config.getProjectTempDir();
+        if (tempDir) {
+          logFilePath = nodePath.join(
+            tempDir,
+            'token-usage',
+            `${sessionId}.jsonl`,
+          );
+        }
+      } catch {
+        // Storage unavailable — logging disabled
+      }
+    }
+    return new TokenUsageLogger(
+      tokenUsageEnabled && logFilePath !== undefined,
+      logFilePath,
+    );
+  }
+
   /**
    * Baseline prompt tokens for projection: prefer the API-observed count,
    * falling back to the history-derived estimate. Mirrors
@@ -564,7 +591,7 @@ export class ChatSession {
     _model: string,
     toolCalls: CompletedToolCall[],
   ): void {
-    const allBlocks = toolCalls.flatMap((toolCall): ContentBlock[] => {
+    const allParts = toolCalls.flatMap((toolCall) => {
       // Defensive for deserialized/test-cast tool responses that bypass the
       // static ToolCallResponseInfo contract.
       const response = toolCall.response as
@@ -578,9 +605,9 @@ export class ChatSession {
         );
         return [];
       }
-      return responseParts as ContentBlock[];
+      return convertBlocksToParts(responseParts);
     });
-    const { functionResponses } = splitPartsByRole(allBlocks);
+    const { functionResponses } = splitPartsByRole(allParts);
 
     // Only persist the tool-response side eagerly. The assistant tool_call is
     // already recorded by the preceding model stream, and any non-tool-response
@@ -590,13 +617,11 @@ export class ChatSession {
     // turns or continuation text when the next stream succeeds.
     if (functionResponses.length > 0) {
       this.addHistory({
-        speaker: 'tool',
-        blocks: functionResponses,
+        role: 'user',
+        parts: functionResponses,
       });
       const responseCallIds = functionResponses
-        .map((response) =>
-          response.type === 'tool_response' ? response.callId : undefined,
-        )
+        .map((response) => response.functionResponse?.id)
         .filter((id): id is string => typeof id === 'string' && id.length > 0);
       this.turnProcessor.markToolResponsesRecorded(responseCallIds);
       this.streamProcessor.markToolResponsesRecorded(responseCallIds);
@@ -604,8 +629,12 @@ export class ChatSession {
   }
 
   // Public conversion methods — delegated to standalone functions
-  convertPartListUnionToIContent(input: AgentMessageInput): IContent {
+  convertPartListUnionToIContent(input: PartListUnion): IContent {
     return convertPartListUnionToIContent(input);
+  }
+
+  convertIContentToResponse(input: IContent): GenerateContentResponse {
+    return convertIContentToResponse(input);
   }
 
   async estimatePendingTokens(contents: IContent[]): Promise<number> {

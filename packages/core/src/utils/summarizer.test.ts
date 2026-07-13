@@ -7,7 +7,6 @@
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { AgentClientContract } from '../core/clientContract.js';
-import type { ModelOutput } from '../llm-types/modelEnvelope.js';
 import { debugLogger } from './debugLogger.js';
 import {
   summarizeToolOutput,
@@ -61,13 +60,9 @@ describe('summarizers', () => {
     it('should call generateContent if text is longer than maxLength', async () => {
       const longText = 'This is a very long text.'.repeat(200);
       const summary = 'This is a summary.';
-      const mockOutput: ModelOutput = {
-        content: {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: summary }],
-        },
-      };
-      (mockAgentClient.generateContent as Mock).mockResolvedValue(mockOutput);
+      (mockAgentClient.generateContent as Mock).mockResolvedValue({
+        candidates: [{ content: { parts: [{ text: summary }] } }],
+      });
 
       const result = await summarizeToolOutput(
         longText,
@@ -103,13 +98,9 @@ describe('summarizers', () => {
     it('should construct the correct prompt for summarization', async () => {
       const longText = 'This is a very long text.'.repeat(200);
       const summary = 'This is a summary.';
-      const mockOutput: ModelOutput = {
-        content: {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: summary }],
-        },
-      };
-      (mockAgentClient.generateContent as Mock).mockResolvedValue(mockOutput);
+      (mockAgentClient.generateContent as Mock).mockResolvedValue({
+        candidates: [{ content: { parts: [{ text: summary }] } }],
+      });
 
       await summarizeToolOutput(longText, mockAgentClient, abortSignal, 1000);
 
@@ -129,7 +120,7 @@ Return the summary string which should first contain an overall summarization of
       const calledWith = (mockAgentClient.generateContent as Mock).mock
         .calls[0];
       const contents = calledWith[0];
-      expect(contents[0].blocks[0].text).toBe(expectedPrompt);
+      expect(contents[0].parts[0].text).toBe(expectedPrompt);
     });
   });
 
@@ -140,13 +131,9 @@ Return the summary string which should first contain an overall summarization of
         returnDisplay: '',
       };
       const summary = 'This is a summary.';
-      const mockOutput: ModelOutput = {
-        content: {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: summary }],
-        },
-      };
-      (mockAgentClient.generateContent as Mock).mockResolvedValue(mockOutput);
+      (mockAgentClient.generateContent as Mock).mockResolvedValue({
+        candidates: [{ content: { parts: [{ text: summary }] } }],
+      });
 
       const result = await llmSummarizer(
         toolResult,
@@ -165,13 +152,9 @@ Return the summary string which should first contain an overall summarization of
         returnDisplay: '',
       };
       const summary = 'This is a summary.';
-      const mockOutput: ModelOutput = {
-        content: {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: summary }],
-        },
-      };
-      (mockAgentClient.generateContent as Mock).mockResolvedValue(mockOutput);
+      (mockAgentClient.generateContent as Mock).mockResolvedValue({
+        candidates: [{ content: { parts: [{ text: summary }] } }],
+      });
 
       const result = await llmSummarizer(
         toolResult,
@@ -183,7 +166,7 @@ Return the summary string which should first contain an overall summarization of
       const calledWith = (mockAgentClient.generateContent as Mock).mock
         .calls[0];
       const contents = calledWith[0];
-      expect(contents[0].blocks[0].text).toContain(`"${longText}"`);
+      expect(contents[0].parts[0].text).toContain(`"${longText}"`);
       expect(result).toBe(summary);
     });
   });

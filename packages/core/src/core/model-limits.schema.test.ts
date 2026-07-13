@@ -51,6 +51,14 @@ describe('ModelLimitsCatalogSchema', () => {
     expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
   });
 
+  it('rejects a whitespace-only substring in a substring rule', () => {
+    const bad = {
+      ...catalogData,
+      orderedRules: [{ type: 'substring', substring: '   ', limit: 100 }],
+    };
+    expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
+  });
+
   it('rejects an empty substring in a substringOrProviderPrefix rule', () => {
     const bad = {
       ...catalogData,
@@ -105,6 +113,16 @@ describe('ModelLimitsCatalogSchema', () => {
     const bad = {
       ...catalogData,
       orderedRules: [{ type: 'prefixGroup', prefixes: ['o3', ''], limit: 100 }],
+    };
+    expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('rejects a prefixGroup with a whitespace-only entry', () => {
+    const bad = {
+      ...catalogData,
+      orderedRules: [
+        { type: 'prefixGroup', prefixes: ['o3', '   '], limit: 100 },
+      ],
     };
     expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
   });

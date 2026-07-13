@@ -19,7 +19,17 @@
  * @issue #2280 — Make default model limits data-driven.
  */
 
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import { ModelLimitsCatalogSchema } from './model-limits.schema.js';
 import {
@@ -120,5 +130,39 @@ describe('substringCaseInsensitive normalizes both sides (@issue:2280)', () => {
 describe('exact-limit lookup safety (@issue:2280)', () => {
   it('does not treat inherited object properties as model entries', () => {
     expect(tokenLimit('toString')).toBe(DEFAULT_TOKEN_LIMIT);
+  });
+});
+
+describe('model-limits package asset (@issue:2280)', () => {
+  it('copies the catalog beside the compiled core module', () => {
+    const packageRoot = fileURLToPath(new URL('../..', import.meta.url));
+    const sourceCatalog = join(packageRoot, 'src', 'core', 'model-limits.json');
+    const copyScript = fileURLToPath(
+      new URL('../../../../scripts/copy_files.ts', import.meta.url),
+    );
+    const tempPackage = mkdtempSync(join(tmpdir(), 'llxprt-model-limits-'));
+    const stagedCoreDir = join(tempPackage, 'src', 'core');
+    const builtCatalog = join(
+      tempPackage,
+      'dist',
+      'src',
+      'core',
+      'model-limits.json',
+    );
+
+    mkdirSync(stagedCoreDir, { recursive: true });
+    copyFileSync(sourceCatalog, join(stagedCoreDir, 'model-limits.json'));
+
+    try {
+      execFileSync(process.execPath, [copyScript], {
+        cwd: tempPackage,
+        stdio: 'pipe',
+      });
+      expect(readFileSync(builtCatalog)).toStrictEqual(
+        readFileSync(sourceCatalog),
+      );
+    } finally {
+      rmSync(tempPackage, { recursive: true, force: true });
+    }
   });
 });
