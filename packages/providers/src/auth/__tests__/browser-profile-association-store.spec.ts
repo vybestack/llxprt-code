@@ -166,6 +166,11 @@ describe('BrowserProfileAssociationStore', () => {
 
       const codexList = store.listAssociations('codex');
       expect(codexList).toHaveLength(1);
+      expect(codexList).toContainEqual({
+        bucket: 'default',
+        browser: 'chrome',
+        profileDirectory: 'Profile 2',
+      });
     });
   });
 
@@ -228,22 +233,23 @@ describe('BrowserProfileAssociationStore', () => {
 
     it('rejects persisted data with an unsupported browser kind', () => {
       const path = '/fake/path/oauth-browser-profiles.json';
-      const fs = createInMemoryFs({
-        [path]: JSON.stringify({
-          version: 1,
-          associations: {
-            'anthropic:default': {
-              browser: 'invalid-browser',
-              profileDirectory: 'Default',
-            },
+      const originalContent = JSON.stringify({
+        version: 1,
+        associations: {
+          'anthropic:default': {
+            browser: 'invalid-browser',
+            profileDirectory: 'Default',
           },
-        }),
+        },
       });
+      const fs = createInMemoryFs({ [path]: originalContent });
       const store = createStore(fs);
 
       // An unknown browser would fail later at launch time; the type guard
       // must reject it on read so callers never receive an invalid value.
       expect(store.getAssociation('anthropic', 'default')).toBeUndefined();
+      // The invalid file must not be overwritten or corrupted by the read.
+      expect(fs.files.get(path)).toBe(originalContent);
     });
   });
 

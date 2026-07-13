@@ -14,6 +14,7 @@ import {
 // Create mock function using vi.hoisted
 const mockExecFile = vi.hoisted(() => vi.fn());
 const mockExistsSync = vi.hoisted(() => vi.fn());
+const mockStatSync = vi.hoisted(() => vi.fn());
 
 // Mock modules
 vi.mock('node:child_process');
@@ -22,6 +23,7 @@ vi.mock('node:util', () => ({
 }));
 vi.mock('node:fs', () => ({
   existsSync: mockExistsSync,
+  statSync: mockStatSync,
 }));
 
 describe('secure-browser-launcher', () => {
@@ -32,6 +34,11 @@ describe('secure-browser-launcher', () => {
     vi.clearAllMocks();
     mockExecFile.mockResolvedValue({ stdout: '', stderr: '' });
     mockExistsSync.mockReturnValue(false);
+    // statSync defaults to "does not exist"; tests that simulate present
+    // files override both existsSync and statSync consistently.
+    mockStatSync.mockImplementation(() => {
+      throw new Error('ENOENT');
+    });
     originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     originalProgramFiles = process.env.PROGRAMFILES;
   });
@@ -429,6 +436,10 @@ describe('secure-browser-launcher', () => {
       mockExistsSync.mockImplementation((p: unknown) =>
         String(p).includes('Chrome'),
       );
+      // statSync must agree with existsSync: treat present paths as files.
+      mockStatSync.mockImplementation((p: unknown) => ({
+        isFile: () => String(p).includes('Chrome'),
+      }));
 
       await openBrowserSecurely('https://example.com', {
         browser: 'chrome',

@@ -7,9 +7,10 @@
 import { execFile, type ExecFileOptions } from 'node:child_process';
 import { promisify } from 'node:util';
 import { platform } from 'node:os';
-import { existsSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { env } from 'node:process';
 import { URL } from 'node:url';
+import { envOr } from './env.js';
 import * as nodePath from 'node:path';
 
 const execFileAsync = promisify(execFile);
@@ -54,16 +55,6 @@ const LINUX_CHROME_BINARIES = [
  * Debian/Ubuntu).
  */
 const LINUX_FIREFOX_BINARIES = ['firefox', 'firefox-esr'];
-
-/**
- * Resolve a Windows environment variable, falling back to `fallback` when the
- * variable is unset OR set to an empty string. A truthiness check (rather
- * than `??`) is used so an explicitly-empty value does not bypass the
- * fallback and produce a malformed partial path.
- */
-function envOr(value: string | undefined, fallback: string): string {
-  return value?.trim() ? value : fallback;
-}
 
 /**
  * Typical Windows install locations for Chrome (relative to the system drive
@@ -539,7 +530,17 @@ async function tryWindowsFallbackBinaries(
   const tried = new Set<string>([primaryCommand]);
   for (const candidate of candidates) {
     const resolved = candidate();
-    if (tried.has(resolved) || !existsSync(resolved)) {
+    // existsSync returns true for directories too; only attempt to execute
+    // real files so a directory at a candidate path is not mistaken for a
+    // browser binary (execFileAsync would emit a confusing EACCES/UNKNOWN).
+    const isExecutableFile = (() => {
+      try {
+        return statSync(resolved).isFile();
+      } catch {
+        return false;
+      }
+    })();
+    if (tried.has(resolved) || !isExecutableFile) {
       continue;
     }
     tried.add(resolved);

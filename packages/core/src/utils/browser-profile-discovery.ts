@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { BrowserKind } from './secure-browser-launcher.js';
+import { envOr } from './env.js';
 
 /**
  * A discovered browser profile.
@@ -33,16 +34,6 @@ interface ChromeLocalState {
   profile?: {
     info_cache?: Record<string, { name?: string } | undefined>;
   };
-}
-
-/**
- * Resolve a Windows environment variable, falling back to `fallback` when the
- * variable is unset OR set to an empty string. A truthiness check (rather
- * than `??`) is used so an explicitly-empty value does not bypass the
- * fallback and produce a malformed partial path.
- */
-function envOr(value: string | undefined, fallback: string): string {
-  return value?.trim() ? value : fallback;
 }
 
 /**
@@ -309,14 +300,25 @@ export function discoverBrowserProfiles(
 
   switch (browser) {
     case 'chrome': {
-      const userDataDir =
-        opts?.userDataDir ?? chromeUserDataDir(platformName, homeDir);
-      return discoverChromeProfiles({ ...fsOpts, userDataDir });
+      // An unsupported platform surfaces as a thrown error from
+      // chromeUserDataDir; discovery is best-effort, so degrade to an empty
+      // list rather than crashing the calling command.
+      try {
+        const userDataDir =
+          opts?.userDataDir ?? chromeUserDataDir(platformName, homeDir);
+        return discoverChromeProfiles({ ...fsOpts, userDataDir });
+      } catch {
+        return [];
+      }
     }
 
     case 'firefox': {
-      const rootDir = firefoxProfileRoot(platformName, homeDir);
-      return discoverFirefoxProfiles(rootDir, fsOpts);
+      try {
+        const rootDir = firefoxProfileRoot(platformName, homeDir);
+        return discoverFirefoxProfiles(rootDir, fsOpts);
+      } catch {
+        return [];
+      }
     }
 
     case 'safari':

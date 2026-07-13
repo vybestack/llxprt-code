@@ -614,7 +614,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       });
     });
 
-    it('@given no Chrome profiles found @when create without bucket @then shows manual-association guidance and defaults bucket to default', async () => {
+    it('@given no Chrome profiles found @when create action given without a bucket argument @then shows manual-association guidance with the default bucket', async () => {
       (
         discoverBrowserProfiles as unknown as ReturnType<typeof vi.fn>
       ).mockReturnValue([]);

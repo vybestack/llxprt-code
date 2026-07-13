@@ -89,6 +89,21 @@ describe('discoverBrowserProfiles', () => {
       expect(profiles).toStrictEqual([]);
     });
 
+    it('returns empty array on an unsupported platform instead of throwing', () => {
+      expect(() =>
+        discoverBrowserProfiles('chrome', {
+          platform: 'sunos' as NodeJS.Platform,
+          homeDir: '/home/user',
+        }),
+      ).not.toThrow();
+
+      const profiles = discoverBrowserProfiles('chrome', {
+        platform: 'sunos' as NodeJS.Platform,
+        homeDir: '/home/user',
+      });
+      expect(profiles).toStrictEqual([]);
+    });
+
     it('uses the default userDataDir for darwin', () => {
       let capturedPath = '';
       const localState = {
