@@ -51,7 +51,7 @@ export class TerminalManager {
   async handleToolCall(call: AgentToolCall): Promise<void> {
     const command =
       typeof call.args['command'] === 'string' ? call.args['command'] : '';
-    if (command === '') return;
+    if (command.trim() === '') return;
     const cwd =
       typeof call.args['dir_path'] === 'string'
         ? call.args['dir_path']
