@@ -83,6 +83,7 @@ describe('Trusted Folders Loading', () => {
     mockFsStatSync = vi.mocked(fs.statSync);
     mockFsRenameSync = vi.mocked(fs.renameSync);
     mockFsUnlinkSync = vi.mocked(fs.unlinkSync);
+    mockFsStatSync.mockReturnValue({ mode: 0o100600 } as fs.Stats);
     vi.mocked(osActual.homedir).mockReturnValue('/mock/home/user');
     (mockStripJsonComments as unknown as Mock).mockImplementation(
       (jsonString: string) => jsonString,
@@ -254,6 +255,39 @@ describe('Trusted Folders Loading', () => {
     );
     expect(mockFsStatSync.mock.invocationCallOrder[0]).toBeLessThan(
       mockFsRenameSync.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('deleteValue should remove an existing rule and save it', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const loadedFolders = loadTrustedFolders();
+    loadedFolders.user.config['/existing/path'] = TrustLevel.TRUST_FOLDER;
+
+    loadedFolders.deleteValue('/existing/path');
+
+    expect(loadedFolders.user.config['/existing/path']).toBeUndefined();
+    expect(mockFsWriteFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('.trustedFolders.json.'),
+      JSON.stringify({}, null, 2),
+      { encoding: 'utf-8', mode: 0o600, flag: 'wx' },
+    );
+    expect(mockFsRenameSync).toHaveBeenCalledOnce();
+  });
+
+  it('deleteValue restores the in-memory rule when saving fails', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const loadedFolders = loadTrustedFolders();
+    loadedFolders.user.config['/existing/path'] = TrustLevel.DO_NOT_TRUST;
+    mockFsRenameSync.mockImplementationOnce(() => {
+      throw new Error('rename denied');
+    });
+
+    expect(() => loadedFolders.deleteValue('/existing/path')).toThrow(
+      'rename denied',
+    );
+
+    expect(loadedFolders.user.config['/existing/path']).toBe(
+      TrustLevel.DO_NOT_TRUST,
     );
   });
 

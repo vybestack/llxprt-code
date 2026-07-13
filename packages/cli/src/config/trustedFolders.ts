@@ -129,12 +129,25 @@ export class LoadedTrustedFolders {
     try {
       saveTrustedFolders(this.user);
     } catch (e) {
-      // Revert the in-memory change if the save failed.
       if (!hadOriginalTrustLevel) {
         delete this.user.config[path];
       } else {
         this.user.config[path] = originalTrustLevel;
       }
+      throw e;
+    }
+  }
+
+  deleteValue(path: string): void {
+    if (!Object.hasOwn(this.user.config, path)) {
+      return;
+    }
+    const originalTrustLevel = this.user.config[path];
+    delete this.user.config[path];
+    try {
+      saveTrustedFolders(this.user);
+    } catch (e) {
+      this.user.config[path] = originalTrustLevel;
       throw e;
     }
   }

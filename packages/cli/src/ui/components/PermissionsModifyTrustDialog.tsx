@@ -261,7 +261,7 @@ export function getTrustCommitErrorMessage(
 ): string {
   const detail = error instanceof Error ? error.message : String(error);
   return phase === 'live'
-    ? `Trust settings were saved but could not be applied live: ${detail}`
+    ? `Trust settings could not be applied live, so the saved setting was restored: ${detail}`
     : `Failed to save trust settings: ${detail}`;
 }
 

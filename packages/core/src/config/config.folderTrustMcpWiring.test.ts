@@ -332,6 +332,63 @@ describe('Config MCP wiring on folder trust change', () => {
       );
     });
 
+    it('bounds hook initialization during a trust transition', async () => {
+      const config = new Config({
+        ...baseParams,
+        trustedFolder: false,
+        enableHooks: true,
+      });
+      await initializeTestConfig(config);
+      config.getHookSystem();
+      hookInitializers[0].mockReturnValue(new Promise<void>(() => {}));
+      vi.useFakeTimers();
+
+      try {
+        config.setTrustedFolderLive(true);
+        const outcome = config.whenTrustTransitionSettled().then(
+          () => 'resolved',
+          (error: unknown) => error,
+        );
+        await vi.advanceTimersByTimeAsync(30_000);
+
+        const result = await Promise.race([
+          outcome,
+          Promise.resolve('pending'),
+        ]);
+        expect(result).toBeInstanceOf(Error);
+        expect(result).toMatchObject({
+          message: expect.stringContaining('timed out'),
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('cancels pending hook initialization when disposal begins', async () => {
+      const config = new Config({
+        ...baseParams,
+        trustedFolder: false,
+        enableHooks: true,
+      });
+      await initializeTestConfig(config);
+      config.getHookSystem();
+      hookInitializers[0].mockReturnValue(new Promise<void>(() => {}));
+
+      config.setTrustedFolderLive(true);
+      await vi.waitFor(() =>
+        expect(hookInitializers[0]).toHaveBeenCalledOnce(),
+      );
+
+      const disposed = config.dispose().then(() => 'disposed');
+      const deadline = new Promise<string>((resolve) => {
+        setTimeout(() => resolve('deadline'), 50);
+      });
+
+      await expect(Promise.race([disposed, deadline])).resolves.toBe(
+        'disposed',
+      );
+    });
+
     describe('dispose cleanup', () => {
       it('cancels MCP work before awaiting an in-flight trust transition', async () => {
         const config = new Config({ ...baseParams, trustedFolder: true });

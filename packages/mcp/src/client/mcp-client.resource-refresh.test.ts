@@ -102,6 +102,66 @@ describe('McpClient resource refresh', () => {
     await refresh;
   });
 
+  it('removes stale resources when authorization is revoked during discovery', async () => {
+    let trusted = true;
+    let resourceListHandler:
+      | ((notification: unknown) => Promise<void> | void)
+      | undefined;
+    const mockedClient = {
+      connect: vi.fn(),
+      registerCapabilities: vi.fn(),
+      setRequestHandler: vi.fn(),
+      setNotificationHandler: vi.fn((schema, handler) => {
+        if (schema === ResourceListChangedNotificationSchema) {
+          resourceListHandler = handler;
+        }
+      }),
+      getServerCapabilities: vi
+        .fn()
+        .mockReturnValue({ resources: { listChanged: true } }),
+      request: vi.fn().mockImplementation(async () => {
+        trusted = false;
+        return { resources: [{ uri: 'file:///new' }] };
+      }),
+    };
+    vi.mocked(ClientLib.Client).mockReturnValue(
+      mockedClient as unknown as Client,
+    );
+    vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue(
+      {} as SdkClientStdioLib.StdioClientTransport,
+    );
+    const resourceRegistry = {
+      setResourcesForServer: vi.fn(),
+      removeResourcesByServer: vi.fn(),
+    } as unknown as ResourceRegistry;
+    const config = { isTrustedFolder: () => trusted } as Config;
+    const client = new McpClient(
+      'test-server',
+      { command: 'test-command' },
+      {
+        registerTool: vi.fn(),
+        sortTools: vi.fn(),
+        getMessageBus: vi.fn(),
+      } as unknown as ToolRegistry,
+      {} as PromptRegistry,
+      resourceRegistry,
+      new WorkspaceContext('/workspace'),
+      config,
+      false,
+      '0.0.1',
+    );
+    await client.connect();
+
+    await resourceListHandler?.({
+      method: 'notifications/resources/list_changed',
+    });
+
+    expect(resourceRegistry.removeResourcesByServer).toHaveBeenCalledWith(
+      'test-server',
+    );
+    expect(resourceRegistry.setResourcesForServer).not.toHaveBeenCalled();
+  });
+
   it('clears the refresh timeout when registry publication fails', async () => {
     let resourceListHandler:
       | ((notification: unknown) => Promise<void> | void)
@@ -162,5 +222,6 @@ describe('McpClient resource refresh', () => {
     });
 
     expect(clearTimeoutSpy).toHaveBeenCalledOnce();
+    clearTimeoutSpy.mockRestore();
   });
 });

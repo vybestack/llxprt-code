@@ -60,6 +60,89 @@ export interface UsePermissionsModifyTrustReturn {
   trustedFolders: LoadedTrustedFolders;
 }
 
+function restoreSavedTrustLevel(
+  trustedFolders: LoadedTrustedFolders,
+  folderPath: string,
+  hadSavedRule: boolean,
+  previousSavedLevel: TrustLevel,
+): void {
+  if (hadSavedRule) {
+    trustedFolders.setValue(folderPath, previousSavedLevel);
+  } else {
+    trustedFolders.deleteValue(folderPath);
+  }
+}
+
+function applyLiveTrustLevel(
+  config: PermissionsTrustRuntime | undefined,
+  trustedFolders: LoadedTrustedFolders,
+  folderPath: string,
+  nextLevel: TrustLevel,
+): boolean {
+  if (config === undefined) {
+    return nextLevel !== TrustLevel.DO_NOT_TRUST;
+  }
+  config.setTrustedFolderLive(
+    resolveLocalWorkspaceTrust(
+      { folderTrust: config.getFolderTrust() },
+      trustedFolders,
+      folderPath,
+    ) ?? false,
+  );
+  return config.isTrustedFolder();
+}
+
+type TrustCommitResult =
+  | { success: true }
+  | { success: false; phase: 'persistence' | 'live'; error: unknown };
+
+function commitSavedTrustLevel(
+  config: PermissionsTrustRuntime | undefined,
+  trustedFolders: LoadedTrustedFolders,
+  folderPath: string,
+  nextLevel: TrustLevel,
+): { result: TrustCommitResult; effectiveTrust?: boolean } {
+  const hadSavedRule = Object.hasOwn(trustedFolders.user.config, folderPath);
+  const previousSavedLevel = trustedFolders.user.config[folderPath];
+  try {
+    trustedFolders.setValue(folderPath, nextLevel);
+  } catch (error) {
+    return { result: { success: false, phase: 'persistence', error } };
+  }
+  try {
+    return {
+      result: { success: true },
+      effectiveTrust: applyLiveTrustLevel(
+        config,
+        trustedFolders,
+        folderPath,
+        nextLevel,
+      ),
+    };
+  } catch (error) {
+    try {
+      restoreSavedTrustLevel(
+        trustedFolders,
+        folderPath,
+        hadSavedRule,
+        previousSavedLevel,
+      );
+    } catch (rollbackError) {
+      return {
+        result: {
+          success: false,
+          phase: 'live',
+          error: new AggregateError(
+            [error, rollbackError],
+            'Live trust update and saved-state rollback both failed',
+          ),
+        },
+      };
+    }
+    return { result: { success: false, phase: 'live', error } };
+  }
+}
+
 /**
  * Hook that manages folder trust settings for the permissions dialog.
  * Handles current trust level state, pending changes, inherited trust detection,
@@ -103,30 +186,18 @@ export function usePermissionsModifyTrust(
         return { success: true };
       }
 
-      try {
-        trustedFolders.setValue(normalizedCwd, nextLevel);
-      } catch (error) {
-        return { success: false, phase: 'persistence', error };
+      const commit = commitSavedTrustLevel(
+        config,
+        trustedFolders,
+        normalizedCwd,
+        nextLevel,
+      );
+      if (!commit.result.success) {
+        return commit.result;
       }
+      setEffectiveTrust(commit.effectiveTrust);
       setPendingTrustLevel(nextLevel);
       setCommittedLevel(nextLevel);
-
-      try {
-        if (config) {
-          config.setTrustedFolderLive(
-            resolveLocalWorkspaceTrust(
-              { folderTrust: config.getFolderTrust() },
-              trustedFolders,
-              normalizedCwd,
-            ) ?? false,
-          );
-          setEffectiveTrust(config.isTrustedFolder());
-        } else {
-          setEffectiveTrust(nextLevel !== TrustLevel.DO_NOT_TRUST);
-        }
-      } catch (error) {
-        return { success: false, phase: 'live', error };
-      }
       return { success: true };
     },
     [pendingTrustLevel, trustedFolders, normalizedCwd, config],

@@ -756,8 +756,8 @@ describe('FileCommandLoader', () => {
       const nestedCmd = commands.find((cmd) => cmd.name === 'b:c');
       expect(nestedCmd?.extensionName).toBe('a');
       expect(nestedCmd?.description).toMatch(/^\[a\]/);
-      expect(nestedCmd).toBeDefined();
-      const result = await nestedCmd!.action?.(
+      assert(nestedCmd, 'Expected nested command');
+      const result = await nestedCmd.action?.(
         createMockCommandContext({
           invocation: {
             raw: '/b:c',
@@ -785,9 +785,9 @@ describe('FileCommandLoader', () => {
       const loader = new FileCommandLoader(null);
       const commands = await loader.loadCommands(signal);
       const command = commands.find((c) => c.name === 'shorthand');
-      expect(command).toBeDefined();
+      assert(command, 'Expected shorthand command');
 
-      const result = await command!.action?.(
+      const result = await command.action?.(
         createMockCommandContext({
           invocation: {
             raw: '/shorthand do something cool',

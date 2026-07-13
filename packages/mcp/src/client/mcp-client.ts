@@ -152,7 +152,14 @@ export class McpClient {
         if (this.status !== MCPServerStatus.CONNECTED) {
           return;
         }
-        if (originalOnError) originalOnError(error);
+        try {
+          originalOnError?.(error);
+        } catch (handlerError) {
+          debugLogger.warn(
+            `Original MCP error handler failed for ${this.serverName}:`,
+            handlerError,
+          );
+        }
         debugLogger.error(`MCP ERROR (${this.serverName}):`, error.toString());
         this.toolRegistry.removeMcpToolsByServer(this.serverName);
         this.promptRegistry.removePromptsByServer(this.serverName);
@@ -236,7 +243,7 @@ export class McpClient {
         return;
       }
 
-      const connectedClient = this.client!;
+      const connectedClient = this.getConnectedClient();
       const isAuthorized = this.createCapabilityAuthorization(connectedClient);
       for (const prompt of prompts) {
         this.promptRegistry.registerPrompt({
@@ -380,8 +387,7 @@ export class McpClient {
   }
 
   async readResource(uri: string): Promise<ReadResourceResult> {
-    this.assertConnected();
-    const client = this.client!;
+    const client = this.getConnectedClient();
     if (!this.createCapabilityAuthorization(client)()) {
       throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
     }
@@ -553,6 +559,9 @@ export class McpClient {
           capabilityGeneration,
         )
       ) {
+        if (this.cliConfig.isTrustedFolder() === false) {
+          this.toolRegistry.removeMcpToolsByServer(this.serverName);
+        }
         return false;
       }
       this.toolRegistry.removeMcpToolsByServer(this.serverName);
@@ -662,6 +671,9 @@ export class McpClient {
           capabilityGeneration,
         )
       ) {
+        if (this.cliConfig.isTrustedFolder() === false) {
+          this.resourceRegistry.removeResourcesByServer(this.serverName);
+        }
         return false;
       }
       this.updateResourceRegistry(newResources);

@@ -11,6 +11,7 @@ import type { LoadedSettings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import {
   loadTrustedFolders,
+  resolveLocalWorkspaceTrust,
   TrustLevel,
   isWorkspaceTrusted,
 } from '../../config/trustedFolders.js';
@@ -126,12 +127,16 @@ export const useFolderTrust = (
       }
 
       const newIsTrusted =
-        loadTrustedFolders().isPathTrusted(workingDirectory) ?? false;
+        resolveLocalWorkspaceTrust(
+          settings.merged,
+          loadTrustedFolders(),
+          workingDirectory,
+        ) ?? false;
       setIsFolderTrustDialogOpen(false);
 
       config?.setTrustedFolderLive(newIsTrusted);
     },
-    [addItem, config, workingDirectory],
+    [addItem, config, settings.merged, workingDirectory],
   );
 
   return {

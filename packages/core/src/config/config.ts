@@ -114,6 +114,38 @@ import type { ShellExecutionConfig } from '../services/shellExecutionService.js'
 import type { ToolSchedulerContract } from '../core/toolSchedulerContract.js';
 
 const MAX_TRUST_FAILURES = 100;
+const HOOK_INITIALIZATION_TIMEOUT_MS = 30_000;
+
+function abortError(message: string): DOMException {
+  return new DOMException(message, 'AbortError');
+}
+
+function waitForHookInitialization(
+  initialization: Promise<void>,
+  signal: AbortSignal,
+): Promise<void> {
+  if (signal.aborted) {
+    return Promise.reject(abortError('Hook initialization was cancelled'));
+  }
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      finish(() => reject(abortError('Hook initialization was cancelled')));
+    };
+    const finish = (settle: () => void): void => {
+      clearTimeout(timeoutId);
+      signal.removeEventListener('abort', onAbort);
+      settle();
+    };
+    const timeoutId = setTimeout(() => {
+      finish(() => reject(new Error('Hook initialization timed out')));
+    }, HOOK_INITIALIZATION_TIMEOUT_MS);
+    signal.addEventListener('abort', onAbort, { once: true });
+    initialization.then(
+      () => finish(resolve),
+      (error: unknown) => finish(() => reject(error)),
+    );
+  });
+}
 
 export class Config extends ConfigBase {
   private static readonly logger = new DebugLogger('llxprt:config');
@@ -570,6 +602,10 @@ export class Config extends ConfigBase {
   setTrustedFolderLive(trusted: boolean): void {
     const previousEffectiveTrust = this.isTrustedFolder();
     this.trustedFolder = trusted;
+    this.reconcileEffectiveTrust(previousEffectiveTrust);
+  }
+
+  private reconcileEffectiveTrust(previousEffectiveTrust: boolean): void {
     const effectiveTrust = this.isTrustedFolder();
     this.cachedEffectiveTrust = effectiveTrust;
     if (previousEffectiveTrust !== effectiveTrust) {
@@ -866,6 +902,7 @@ export class Config extends ConfigBase {
 
   private trustTransitionChain: Promise<void> = Promise.resolve();
   private trustTransitionFailures: unknown[] = [];
+  private readonly trustTransitionAbortController = new AbortController();
   private disposing = false;
   private ideTrust: boolean | undefined;
   private cachedEffectiveTrust: boolean;
@@ -907,13 +944,22 @@ export class Config extends ConfigBase {
         try {
           const system = this.getHookSystem();
           if (system) {
-            await system.initialize();
+            await waitForHookInitialization(
+              system.initialize(),
+              this.trustTransitionAbortController.signal,
+            );
           }
         } catch (error) {
-          Config.logger.error(
-            `Error re-initializing hooks during trust transition: ${getErrorMessage(error)}`,
-          );
-          failures.push(error);
+          const initializationWasCancelled =
+            this.trustTransitionAbortController.signal.aborted &&
+            error instanceof DOMException &&
+            error.name === 'AbortError';
+          if (!initializationWasCancelled) {
+            Config.logger.error(
+              `Error re-initializing hooks during trust transition: ${getErrorMessage(error)}`,
+            );
+            failures.push(error);
+          }
         }
       }
       this.trustTransitionFailures = [
@@ -952,25 +998,18 @@ export class Config extends ConfigBase {
     }
     const previousEffectiveTrust = this.cachedEffectiveTrust;
     this.ideTrust = ideContext.getIdeContext()?.workspaceState?.isTrusted;
-    const effectiveTrust = this.isTrustedFolder();
-    this.cachedEffectiveTrust = effectiveTrust;
-    if (effectiveTrust !== previousEffectiveTrust) {
-      this.applyTrustTransition(effectiveTrust, false);
-    }
+    this.reconcileEffectiveTrust(previousEffectiveTrust);
     this.ideTrustChangeListener = (isTrusted: boolean | undefined) => {
-      const previousEffectiveTrust = this.cachedEffectiveTrust;
+      const priorEffectiveTrust = this.cachedEffectiveTrust;
       this.ideTrust = isTrusted;
-      const effectiveTrust = this.isTrustedFolder();
-      this.cachedEffectiveTrust = effectiveTrust;
-      if (effectiveTrust !== previousEffectiveTrust) {
-        this.applyTrustTransition(effectiveTrust, false);
-      }
+      this.reconcileEffectiveTrust(priorEffectiveTrust);
     };
     client.addTrustChangeListener(this.ideTrustChangeListener);
   }
 
   async dispose(): Promise<void> {
     this.disposing = true;
+    this.trustTransitionAbortController.abort();
     const stopPromise = this.mcpClientManager?.stop();
     if (
       this.ideTrustChangeListener &&

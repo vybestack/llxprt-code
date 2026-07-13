@@ -730,7 +730,9 @@ describe('mcp-client', () => {
           }
           return Promise.resolve({});
         }),
-        onerror: undefined as ((error: Error) => void) | undefined,
+        onerror: vi.fn(() => {
+          throw new Error('original handler failed');
+        }) as ((error: Error) => void) | undefined,
       };
       vi.mocked(ClientLib.Client).mockReturnValue(
         mockedClient as unknown as ClientLib.Client,
@@ -768,11 +770,12 @@ describe('mcp-client', () => {
       await client.connect();
       await client.discover(createTrustedConfig());
 
-      const errorHandler = mockedClient.onerror!;
-      expect(errorHandler).toBeDefined();
+      expect(mockedClient.onerror).toBeTypeOf('function');
 
       vi.spyOn(console, 'error').mockImplementation(() => {});
-      errorHandler(new Error('connection lost'));
+      expect(() =>
+        mockedClient.onerror?.(new Error('connection lost')),
+      ).not.toThrow();
 
       await vi.waitFor(() => {
         expect(mockedClient.close).toHaveBeenCalled();

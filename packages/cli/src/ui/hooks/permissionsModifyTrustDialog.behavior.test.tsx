@@ -17,6 +17,7 @@ import {
   shouldDismissTrustDialog,
 } from '../components/PermissionsModifyTrustDialog.js';
 const mockedSetValue = vi.hoisted(() => vi.fn());
+const mockedDeleteValue = vi.hoisted(() => vi.fn());
 const mockedUserConfig = vi.hoisted<{
   value: Record<string, TrustLevel>;
 }>(() => ({ value: {} }));
@@ -35,6 +36,7 @@ vi.mock('../../config/trustedFolders.js', async () => {
       errors: [],
       rules: [],
       setValue: mockedSetValue,
+      deleteValue: mockedDeleteValue,
       resolvePathTrust: vi.fn(() => undefined),
       isPathTrusted: vi.fn(() => undefined),
     })),
@@ -49,8 +51,15 @@ import { usePermissionsModifyTrust } from './usePermissionsModifyTrust.js';
 
 describe('PermissionsModifyTrustDialog trust provenance', () => {
   beforeEach(() => {
-    mockedSetValue.mockClear();
+    mockedSetValue.mockReset();
+    mockedDeleteValue.mockReset();
     mockedUserConfig.value = {};
+    mockedSetValue.mockImplementation((folderPath, trustLevel) => {
+      mockedUserConfig.value[folderPath] = trustLevel;
+    });
+    mockedDeleteValue.mockImplementation((folderPath) => {
+      delete mockedUserConfig.value[folderPath];
+    });
   });
 
   it('represents an IDE false override', () => {
@@ -90,7 +99,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     ]).toStrictEqual([false, true, true]);
   });
 
-  it('reports a persisted-but-not-live result and remains usable after a live setter throws', () => {
+  it('reports a rolled-back live failure and remains usable after retry', () => {
     const setTrustedFolderLive = vi
       .fn()
       .mockImplementationOnce(() => {
@@ -118,11 +127,14 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
       '/configured/workspace',
       TrustLevel.TRUST_FOLDER,
     );
-    expect(result.current.committedTrustLevel).toBe(TrustLevel.TRUST_FOLDER);
+    expect(result.current.committedTrustLevel).toBeUndefined();
+    expect(mockedDeleteValue).toHaveBeenCalledExactlyOnceWith(
+      '/configured/workspace',
+    );
     expect(
       getTrustCommitErrorMessage('live', new Error('live update failed')),
     ).toBe(
-      'Trust settings were saved but could not be applied live: live update failed',
+      'Trust settings could not be applied live, so the saved setting was restored: live update failed',
     );
 
     act(() => {

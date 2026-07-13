@@ -48,9 +48,18 @@ const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 function abortError(cause?: unknown): DOMException {
   const error = new DOMException('MCP connection was cancelled', 'AbortError');
   if (cause !== undefined) {
-    Object.defineProperty(error, 'cause', { value: cause });
+    Object.defineProperty(error, 'cause', {
+      configurable: true,
+      enumerable: false,
+      value: cause,
+      writable: true,
+    });
   }
   return error;
+}
+
+function isAbortError(error: unknown): error is DOMException {
+  return error instanceof DOMException && error.name === 'AbortError';
 }
 
 function closeTransport(transport?: Transport): Promise<void> {
@@ -69,46 +78,51 @@ function abortable<T>(
   cleanup: (value: T) => void | Promise<void>,
   cleanupOnAbort?: () => void | Promise<void>,
 ): Promise<T> {
-  let cleaned = false;
-  const runCleanup = (cleanupOperation: () => void | Promise<void>) => {
-    if (cleaned) return;
-    cleaned = true;
-    Promise.resolve(cleanupOperation()).catch((error: unknown) => {
-      debugLogger.warn('MCP cancellation cleanup failed:', error);
-    });
+  let cleanupPromise: Promise<void> | undefined;
+  const runCleanup = (
+    cleanupOperation: () => void | Promise<void>,
+  ): Promise<void> => {
+    cleanupPromise ??= Promise.resolve()
+      .then(cleanupOperation)
+      .catch((error: unknown) => {
+        debugLogger.warn('MCP cancellation cleanup failed:', error);
+      });
+    return cleanupPromise;
   };
-  const cleanupResolvedValue = (value: T) => runCleanup(() => cleanup(value));
-  const cleanupAfterAbort = () => {
+  const cleanupResolvedValue = (value: T): Promise<void> =>
+    runCleanup(() => cleanup(value));
+  const cleanupAfterAbort = (): Promise<void> => {
     if (cleanupOnAbort !== undefined) {
-      runCleanup(cleanupOnAbort);
-    } else {
-      void promise.then(cleanupResolvedValue, () => {});
+      return runCleanup(cleanupOnAbort);
     }
+    void promise.then(cleanupResolvedValue, () => {});
+    return Promise.resolve();
   };
   if (signal.aborted) {
-    cleanupAfterAbort();
-    return Promise.reject(abortError());
+    return cleanupAfterAbort().then(() => Promise.reject(abortError()));
   }
 
   return new Promise<T>((resolve, reject) => {
     const onAbort = () => {
-      cleanupAfterAbort();
-      reject(abortError());
+      void cleanupAfterAbort().then(() => reject(abortError()));
     };
     signal.addEventListener('abort', onAbort, { once: true });
     promise.then(
       (value) => {
         signal.removeEventListener('abort', onAbort);
         if (signal.aborted) {
-          cleanupResolvedValue(value);
-          reject(abortError());
+          void cleanupResolvedValue(value).then(() => reject(abortError()));
         } else {
           resolve(value);
         }
       },
       (error: unknown) => {
         signal.removeEventListener('abort', onAbort);
-        reject(error);
+        if (signal.aborted) {
+          void cleanupAfterAbort().then(() => reject(abortError()));
+        } else {
+          reject(error);
+        }
       },
     );
   });
@@ -275,7 +289,11 @@ async function connectWithDiscoveredOAuth(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
 ): Promise<Client> {
-  const serverUrl = new URL(mcpServerConfig.httpUrl ?? mcpServerConfig.url!);
+  const serverAddress = mcpServerConfig.httpUrl ?? mcpServerConfig.url;
+  if (serverAddress === undefined) {
+    throw new Error(`MCP server '${mcpServerName}' has no network URL`);
+  }
+  const serverUrl = new URL(serverAddress);
   const baseUrl = `${serverUrl.protocol}//${serverUrl.host}`;
 
   try {
@@ -439,6 +457,40 @@ async function closeAfterConnectionFailure(
   }
 }
 
+async function connectClient(
+  mcpClient: Client,
+  transport: Transport,
+  timeout: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  let transportClosed = false;
+  const closeConnectedTransport = async (): Promise<void> => {
+    if (transportClosed) {
+      return;
+    }
+    transportClosed = true;
+    await closeTransport(transport);
+  };
+  try {
+    const connection = Promise.resolve(
+      mcpClient.connect(transport, { timeout }),
+    );
+    if (signal === undefined) {
+      await connection;
+    } else {
+      await abortable(
+        connection,
+        signal,
+        closeConnectedTransport,
+        closeConnectedTransport,
+      );
+    }
+  } catch (error) {
+    await closeAfterConnectionFailure(closeConnectedTransport);
+    throw error;
+  }
+}
+
 /**
  * Creates and connects an MCP client to a server based on the provided configuration.
  */
@@ -464,45 +516,27 @@ export async function connectToMcpServer(
       signal !== undefined
         ? await abortable(transportPromise, signal, closeTransport)
         : await transportPromise;
-    let transportClosed = false;
-    const closeConnectedTransport = async () => {
-      if (transportClosed) {
-        return;
-      }
-      transportClosed = true;
-      await closeTransport(transport);
-    };
     try {
-      const connectPromise = Promise.resolve(
-        mcpClient.connect(transport, {
-          timeout: mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
-        }),
+      await connectClient(
+        mcpClient,
+        transport,
+        mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
+        signal,
       );
-      if (signal !== undefined) {
-        await abortable(
-          connectPromise,
-          signal,
-          closeConnectedTransport,
-          closeConnectedTransport,
-        );
-      } else {
-        await connectPromise;
-      }
       updateMCPServerStatus(mcpServerName, MCPServerStatus.CONNECTED);
       return mcpClient;
     } catch (error) {
-      await closeAfterConnectionFailure(closeConnectedTransport);
-      if (signal?.aborted === true) {
-        throw error;
-      }
-      if (is404Error(error)) {
+      if (signal?.aborted !== true && is404Error(error)) {
         httpReturned404 = true;
       }
       throw error;
     }
   } catch (error) {
     if (signal?.aborted === true) {
-      void mcpClient.close().catch(() => {});
+      await closeAfterConnectionFailure(() => mcpClient.close());
+      if (isAbortError(error)) {
+        throw error;
+      }
       throw abortError(error);
     }
     const recoveryPromise = handleConnectionError(

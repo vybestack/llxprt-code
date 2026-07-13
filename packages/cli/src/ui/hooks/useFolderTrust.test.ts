@@ -9,13 +9,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
-import { useFolderTrust } from './useFolderTrust.js';
+import { type FolderTrustRuntime, useFolderTrust } from './useFolderTrust.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import type { LoadedTrustedFolders } from '../../config/trustedFolders.js';
 import { TrustLevel } from '../../config/trustedFolders.js';
 import * as trustedFolders from '../../config/trustedFolders.js';
-import { ideContext } from '@vybestack/llxprt-code-core';
 
 const mockedCwd = vi.hoisted(() => vi.fn());
 
@@ -35,9 +34,8 @@ describe('useFolderTrust', () => {
   let loadTrustedFoldersSpy: vi.SpyInstance;
   let isWorkspaceTrustedSpy: vi.SpyInstance;
   let addItem: vi.Mock;
-  let mockConfig: {
+  let mockConfig: FolderTrustRuntime & {
     setTrustedFolderLive: vi.Mock;
-    getWorkingDir: () => string;
   };
 
   beforeEach(() => {
@@ -57,7 +55,6 @@ describe('useFolderTrust', () => {
         mockTrustedFolders.user.config[folderPath] = trustLevel;
       },
     );
-    ideContext.clearIdeContext();
 
     loadTrustedFoldersSpy = vi
       .spyOn(trustedFolders, 'loadTrustedFolders')
@@ -146,6 +143,7 @@ describe('useFolderTrust', () => {
       result.current.handleFolderTrustSelect(FolderTrustChoice.TRUST_PARENT);
     });
 
+    expect(loadTrustedFoldersSpy).toHaveBeenCalled();
     expect(mockTrustedFolders.setValue).toHaveBeenCalledWith(
       mockConfig.getWorkingDir(),
       TrustLevel.TRUST_PARENT,
@@ -165,6 +163,7 @@ describe('useFolderTrust', () => {
       result.current.handleFolderTrustSelect(FolderTrustChoice.DO_NOT_TRUST);
     });
 
+    expect(loadTrustedFoldersSpy).toHaveBeenCalled();
     expect(mockTrustedFolders.setValue).toHaveBeenCalledWith(
       mockConfig.getWorkingDir(),
       TrustLevel.DO_NOT_TRUST,

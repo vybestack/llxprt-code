@@ -96,27 +96,42 @@ describe('connectToMcpServer with OAuth', () => {
     vi.clearAllMocks();
   });
 
-  it('cleans an already-aborted transport exactly once', async () => {
+  it('awaits cleanup for an already-aborted connection', async () => {
     const transport = { close: vi.fn().mockResolvedValue(undefined) };
-    vi.mocked(mockedClient.close).mockResolvedValue(undefined);
+    let releaseClientClose: (() => void) | undefined;
+    vi.mocked(mockedClient.close).mockReturnValue(
+      new Promise<void>((resolve) => {
+        releaseClientClose = resolve;
+      }),
+    );
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
       transport as unknown as SdkClientStdioLib.StdioClientTransport,
     );
     const controller = new AbortController();
     controller.abort();
 
-    await expect(
-      connectToMcpServer(
-        '0.0.1',
-        'test-server',
-        { command: 'test-command' },
-        false,
-        workspaceContext,
-        controller.signal,
-      ),
-    ).rejects.toMatchObject({ name: 'AbortError' });
-    await vi.waitFor(() => expect(transport.close).toHaveBeenCalledOnce());
-    await vi.waitFor(() => expect(mockedClient.close).toHaveBeenCalledOnce());
+    const connection = connectToMcpServer(
+      '0.0.1',
+      'test-server',
+      { command: 'test-command' },
+      false,
+      workspaceContext,
+      controller.signal,
+    );
+    const outcome = connection.then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(await Promise.race([outcome, Promise.resolve('pending')])).toBe(
+      'pending',
+    );
+    releaseClientClose?.();
+    await expect(outcome).resolves.toMatchObject({ name: 'AbortError' });
+    expect(transport.close).toHaveBeenCalledOnce();
+    expect(mockedClient.close).toHaveBeenCalledOnce();
   });
 
   it('preserves the connection failure when transport cleanup also fails', async () => {
@@ -141,17 +156,30 @@ describe('connectToMcpServer with OAuth', () => {
     ).rejects.toThrow('primary connection failure');
   });
 
-  it('closes the transport when cancellation races a rejected connect', async () => {
-    const transport = { close: vi.fn().mockResolvedValue(undefined) };
+  it('awaits transport cleanup and preserves one AbortError when connect is cancelled', async () => {
+    let releaseTransportClose: (() => void) | undefined;
+    const transport = {
+      close: vi.fn().mockReturnValue(
+        new Promise<void>((resolve) => {
+          releaseTransportClose = resolve;
+        }),
+      ),
+    };
     vi.mocked(mockedClient.close).mockResolvedValue(undefined);
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
       transport as unknown as SdkClientStdioLib.StdioClientTransport,
     );
     let rejectConnect: ((error: Error) => void) | undefined;
-    const connectFailure = new Promise<void>((_resolve, reject) => {
-      rejectConnect = reject;
+    let notifyConnectStarted: (() => void) | undefined;
+    const connectStarted = new Promise<void>((resolve) => {
+      notifyConnectStarted = resolve;
     });
-    vi.mocked(mockedClient.connect).mockReturnValue(connectFailure);
+    vi.mocked(mockedClient.connect).mockImplementation(() => {
+      notifyConnectStarted?.();
+      return new Promise<void>((_resolve, reject) => {
+        rejectConnect = reject;
+      });
+    });
     const controller = new AbortController();
 
     const connection = connectToMcpServer(
@@ -162,12 +190,76 @@ describe('connectToMcpServer with OAuth', () => {
       workspaceContext,
       controller.signal,
     );
-    await vi.waitFor(() => expect(mockedClient.connect).toHaveBeenCalledOnce());
+    const outcome = connection.then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    await connectStarted;
     controller.abort();
     rejectConnect?.(new Error('connect failed'));
+    await Promise.resolve();
 
-    await expect(connection).rejects.toMatchObject({ name: 'AbortError' });
-    await vi.waitFor(() => expect(transport.close).toHaveBeenCalledOnce());
+    expect(await Promise.race([outcome, Promise.resolve('pending')])).toBe(
+      'pending',
+    );
+    releaseTransportClose?.();
+    const failure = await outcome;
+    expect(failure).toBeInstanceOf(DOMException);
+    expect(failure).toMatchObject({ name: 'AbortError' });
+    expect(failure).not.toHaveProperty('cause');
+    expect(transport.close).toHaveBeenCalledOnce();
+  });
+
+  it('awaits cleanup when connect resolves after cancellation', async () => {
+    let releaseTransportClose: (() => void) | undefined;
+    const transport = {
+      close: vi.fn().mockReturnValue(
+        new Promise<void>((resolve) => {
+          releaseTransportClose = resolve;
+        }),
+      ),
+    };
+    vi.mocked(mockedClient.close).mockResolvedValue(undefined);
+    vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+      transport as unknown as SdkClientStdioLib.StdioClientTransport,
+    );
+    let resolveConnect: (() => void) | undefined;
+    let notifyConnectStarted: (() => void) | undefined;
+    const connectStarted = new Promise<void>((resolve) => {
+      notifyConnectStarted = resolve;
+    });
+    vi.mocked(mockedClient.connect).mockImplementation(() => {
+      notifyConnectStarted?.();
+      return new Promise<void>((resolve) => {
+        resolveConnect = resolve;
+      });
+    });
+    const controller = new AbortController();
+
+    const outcome = connectToMcpServer(
+      '0.0.1',
+      'test-server',
+      { command: 'test-command' },
+      false,
+      workspaceContext,
+      controller.signal,
+    ).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    await connectStarted;
+    controller.abort();
+    resolveConnect?.();
+    await Promise.resolve();
+
+    expect(await Promise.race([outcome, Promise.resolve('pending')])).toBe(
+      'pending',
+    );
+    releaseTransportClose?.();
+    const failure = await outcome;
+    expect(failure).toBeInstanceOf(DOMException);
+    expect(failure).toMatchObject({ name: 'AbortError' });
+    expect(transport.close).toHaveBeenCalledOnce();
   });
 
   it('preserves a connection failure when cleanup aborts the same handshake', async () => {
@@ -198,10 +290,16 @@ describe('connectToMcpServer with OAuth', () => {
       failure = error;
     }
 
-    expect(failure).toMatchObject({ name: 'AbortError' });
-    expect(Object.getOwnPropertyDescriptor(failure, 'cause')?.value).toBe(
-      connectionFailure,
-    );
+    expect(failure).toBeInstanceOf(DOMException);
+    expect(failure).toMatchObject({
+      name: 'AbortError',
+      cause: connectionFailure,
+    });
+    expect(Object.getOwnPropertyDescriptor(failure, 'cause')).toMatchObject({
+      configurable: true,
+      enumerable: false,
+      writable: true,
+    });
   });
 
   it('should handle automatic OAuth flow on 401 with stored token', async () => {

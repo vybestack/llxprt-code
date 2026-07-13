@@ -20,7 +20,9 @@ import { MessageType } from '../types.js';
 const mockedExit = vi.hoisted(() => vi.fn());
 const mockedCwd = vi.hoisted(() => vi.fn());
 const mockedSetValue = vi.hoisted(() => vi.fn());
+const mockedDeleteValue = vi.hoisted(() => vi.fn());
 const mockedResolvePathTrust = vi.hoisted(() => vi.fn());
+const mockedTrustedConfig = vi.hoisted<Record<string, TrustLevel>>(() => ({}));
 
 vi.mock('node:process', async () => {
   const actual = await vi.importActual('node:process');
@@ -39,7 +41,8 @@ vi.mock('../../config/trustedFolders.js', async () => {
     loadTrustedFolders: vi.fn(() => ({
       rules: [],
       setValue: mockedSetValue,
-      user: { path: '/mock/path', config: {} },
+      deleteValue: mockedDeleteValue,
+      user: { path: '/mock/path', config: mockedTrustedConfig },
       errors: [],
       isPathTrusted: vi.fn(() => undefined),
       resolvePathTrust: mockedResolvePathTrust,
@@ -82,6 +85,15 @@ describe('PermissionsModifyTrustDialog', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const key of Object.keys(mockedTrustedConfig)) {
+      delete mockedTrustedConfig[key];
+    }
+    mockedSetValue.mockImplementation((folderPath, trustLevel) => {
+      mockedTrustedConfig[folderPath] = trustLevel;
+    });
+    mockedDeleteValue.mockImplementation((folderPath) => {
+      delete mockedTrustedConfig[folderPath];
+    });
     ideContext.clearIdeContext();
     mockedResolvePathTrust.mockReturnValue(undefined);
     mockedCwd.mockReturnValue('/test/dir');
@@ -217,7 +229,7 @@ describe('PermissionsModifyTrustDialog', () => {
     expect(mockConfig.setTrustedFolderLive).not.toHaveBeenCalled();
   });
 
-  it('reports saved-but-not-live failure and remains usable when live application throws', async () => {
+  it('restores an absent saved rule when live application throws', async () => {
     const addItem = vi.fn();
     mockConfig.setTrustedFolderLive.mockImplementation(() => {
       throw new Error('live update failed');
@@ -237,7 +249,7 @@ describe('PermissionsModifyTrustDialog', () => {
       expect(addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.ERROR,
-          text: expect.stringMatching(/saved.*not.*live/i),
+          text: expect.stringMatching(/restored/i),
         }),
         expect.any(Number),
       );
@@ -247,6 +259,8 @@ describe('PermissionsModifyTrustDialog', () => {
       '/test/dir',
       TrustLevel.TRUST_FOLDER,
     );
+    expect(mockedDeleteValue).toHaveBeenCalledWith('/test/dir');
+    expect(mockedTrustedConfig['/test/dir']).toBeUndefined();
     expect(lastFrame()).toContain('Modify Trust Settings');
 
     stdin.write('\u001B[B');
@@ -254,6 +268,33 @@ describe('PermissionsModifyTrustDialog', () => {
     await waitFor(() => {
       expect(mockedSetValue).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('restores the exact saved rule when live application throws', async () => {
+    mockedTrustedConfig['/test/dir'] = TrustLevel.DO_NOT_TRUST;
+    mockConfig.setTrustedFolderLive.mockImplementation(() => {
+      throw new Error('live update failed');
+    });
+    const { stdin } = renderWithProviders(
+      <Wrapper>
+        <PermissionsModifyTrustDialog
+          onExit={vi.fn()}
+          addItem={vi.fn()}
+          config={mockConfig}
+        />
+      </Wrapper>,
+    );
+
+    stdin.write('\r');
+    await waitFor(() => {
+      expect(mockedSetValue).toHaveBeenLastCalledWith(
+        '/test/dir',
+        TrustLevel.DO_NOT_TRUST,
+      );
+    });
+
+    expect(mockedTrustedConfig['/test/dir']).toBe(TrustLevel.DO_NOT_TRUST);
+    expect(mockedDeleteValue).not.toHaveBeenCalled();
   });
 
   it('saves an exact cwd rule when selecting the same level as inherited trust', async () => {

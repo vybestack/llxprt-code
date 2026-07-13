@@ -116,6 +116,10 @@ export class IdeClient {
     this.statusListeners.delete(listener);
   }
 
+  /**
+   * Subscribes to effective IDE workspace trust. `undefined` means the IDE trust
+   * state is unavailable or unknown, including after disconnection.
+   */
   addTrustChangeListener(listener: (isTrusted: boolean | undefined) => void) {
     this.trustChangeListeners.add(listener);
   }

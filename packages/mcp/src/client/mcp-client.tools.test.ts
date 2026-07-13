@@ -739,6 +739,59 @@ describe('mcp-client', () => {
       );
     });
 
+    it('removes stale tools when authorization is revoked during discovery', async () => {
+      let trusted = true;
+      const mockedClient = {
+        connect: vi.fn(),
+        getServerCapabilities: vi
+          .fn()
+          .mockReturnValue({ tools: { listChanged: true } }),
+        setNotificationHandler: vi.fn(),
+        listTools: vi.fn().mockImplementation(async () => {
+          trusted = false;
+          return {
+            tools: [{ name: 'newTool', inputSchema: { type: 'object' } }],
+          };
+        }),
+        registerCapabilities: vi.fn(),
+        setRequestHandler: vi.fn(),
+      };
+      vi.mocked(ClientLib.Client).mockReturnValue(
+        mockedClient as unknown as ClientLib.Client,
+      );
+      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+        {} as SdkClientStdioLib.StdioClientTransport,
+      );
+      const toolRegistry = {
+        removeMcpToolsByServer: vi.fn(),
+        registerTool: vi.fn(),
+        sortTools: vi.fn(),
+        getMessageBus: vi.fn().mockReturnValue(undefined),
+      } as unknown as ToolRegistry;
+      const client = new McpClient(
+        'test-server',
+        { command: 'test-command' },
+        toolRegistry,
+        {} as PromptRegistry,
+        createMockResourceRegistry(),
+        workspaceContext,
+        { isTrustedFolder: () => trusted } as Config,
+        false,
+        '0.0.1',
+      );
+      await client.connect();
+      const notificationCallback =
+        mockedClient.setNotificationHandler.mock.calls[0][1];
+
+      await notificationCallback();
+
+      expect(toolRegistry.removeMcpToolsByServer).toHaveBeenCalledWith(
+        'test-server',
+      );
+      expect(toolRegistry.registerTool).not.toHaveBeenCalled();
+      expect(coreEvents.emitFeedback).not.toHaveBeenCalled();
+    });
+
     it('removes newly registered tools when authorization is revoked during the update callback', async () => {
       let trusted = true;
       const mockedClient = {
