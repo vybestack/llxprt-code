@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 export const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = join(SCRIPT_DIR, '..', '..');
 export const SCRIPT = join(REPO_ROOT, 'scripts', 'check-genai-enclave.ts');
-export const RUNTIME = process.env.BUN_EXECUTABLE ?? 'bun';
+export const RUNTIME = process.env.BUN_EXECUTABLE || 'bun';
 
 let cachedBunAvailable: boolean | undefined;
 

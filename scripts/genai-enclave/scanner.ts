@@ -553,7 +553,3 @@ function inferScriptKind(filePath: string): ts.ScriptKind {
   if (lower.endsWith('.json')) return ts.ScriptKind.JSON;
   return ts.ScriptKind.TS;
 }
-
-export function getLine(sourceFile: ts.SourceFile, pos: number): number {
-  return sourceFile.getLineAndCharacterOfPosition(pos).line + 1;
-}
