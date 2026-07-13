@@ -148,8 +148,11 @@ export class SessionLifecycle {
     if (live === undefined) {
       return false;
     }
-    await live.dispose();
-    this.sessions.delete(sessionId);
+    try {
+      await live.dispose();
+    } finally {
+      this.sessions.delete(sessionId);
+    }
     return true;
   }
 }

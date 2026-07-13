@@ -161,7 +161,10 @@ export async function executeZedCommand(
   try {
     return await command.handler(context, parsed.args);
   } catch (error) {
-    logger.error(() => `Command /${command.name} failed: ${String(error)}`);
+    logger.error(
+      () =>
+        `Command /${command.name} failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
     return { text: `Command /${command.name} failed.` };
   }
 }

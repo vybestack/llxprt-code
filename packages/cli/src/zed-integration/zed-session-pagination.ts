@@ -131,7 +131,13 @@ function compareDescending(a: string, b: string): number {
 function getCreatedAt(session: LifecycleSession): string {
   const value = session.createdAt ?? session.updatedAt;
   const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : value;
+  if (Number.isFinite(timestamp)) {
+    return new Date(timestamp).toISOString();
+  }
+  // Invalid or non-standard timestamp (corrupted/legacy data). Fall back to
+  // the epoch sentinel so sort order is deterministic and cursor encoding
+  // never embeds an invalid value that would break decode (issue #1611).
+  return new Date(0).toISOString();
 }
 
 function encodeCursor(session: LifecycleSession, cwd: string | null): string {
@@ -151,22 +157,26 @@ function decodeCursor(
   if (cursor === null) {
     return null;
   }
+  let detail: string;
   try {
     const value: unknown = JSON.parse(
       Buffer.from(cursor, 'base64url').toString('utf8'),
     );
     const decoded = normalizeCursorPayload(value);
-    if (decoded === null || decoded.cwd !== cwd) {
-      throw new Error('cursor does not match this request');
+    if (decoded === null) {
+      throw new Error('malformed cursor payload');
+    }
+    if (decoded.cwd !== cwd) {
+      throw new Error('cursor cwd does not match request cwd');
     }
     return decoded;
   } catch (error) {
-    const detail = error instanceof Error ? error.message : 'invalid encoding';
-    throw acp.RequestError.invalidParams(
-      { cursor },
-      `Invalid session cursor: ${detail}`,
-    );
+    detail = error instanceof Error ? error.message : 'invalid encoding';
   }
+  throw acp.RequestError.invalidParams(
+    { cursor },
+    `Invalid session cursor: ${detail}`,
+  );
 }
 
 function normalizeCursorPayload(value: unknown): CursorPayload | null {

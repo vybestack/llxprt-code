@@ -178,14 +178,14 @@ export async function runPromptTurn(
   await safeFlush(batcher, deps.streamDeps.logger);
   batcher.dispose();
   if (thrownError !== null) {
-    if (getErrorStatus(thrownError) === 429) {
-      throw new acp.RequestError(429, 'Rate limit exceeded. Try again later.');
-    }
     if (
       pendingSend.signal.aborted ||
       (thrownError instanceof Error && thrownError.name === 'AbortError')
     ) {
       return { stopReason: 'cancelled' };
+    }
+    if (getErrorStatus(thrownError) === 429) {
+      throw new acp.RequestError(429, 'Rate limit exceeded. Try again later.');
     }
     throw thrownError;
   }

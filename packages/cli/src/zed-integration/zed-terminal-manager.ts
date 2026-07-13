@@ -211,6 +211,20 @@ export class TerminalManager {
       }
       previousOutput = current.output;
     }
+    // Final poll after exit settles so output produced between the last poll
+    // and process exit is never lost.
+    if (exit !== undefined) {
+      try {
+        const final = await active.handle.currentOutput();
+        const finalDelta = outputDelta(previousOutput, final.output);
+        if (finalDelta !== '') {
+          onOutput({ type: 'data', chunk: finalDelta });
+        }
+        previousOutput = final.output;
+      } catch {
+        // Swallow transient poll errors after exit.
+      }
+    }
     return {
       output: previousOutput,
       exitCode: exit?.exitCode ?? null,

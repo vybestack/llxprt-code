@@ -180,4 +180,20 @@ describe('session lifecycle pagination', () => {
       'c',
     ]);
   });
+
+  it('returns empty sessions with no nextCursor for an empty list', () => {
+    const result = paginateSessions([], { cwd: null, cursor: null }, 10);
+    expect(result.sessions).toStrictEqual([]);
+    expect(result.nextCursor).toBeUndefined();
+  });
+
+  it('returns no nextCursor when results fit exactly within pageSize', () => {
+    const exact: LifecycleSession[] = [
+      { sessionId: 'x', cwd: '/w', updatedAt: '2026-01-02T00:00:00.000Z' },
+      { sessionId: 'y', cwd: '/w', updatedAt: '2026-01-01T00:00:00.000Z' },
+    ];
+    const result = paginateSessions(exact, { cwd: null, cursor: null }, 2);
+    expect(result.sessions.map((s) => s.sessionId)).toStrictEqual(['x', 'y']);
+    expect(result.nextCursor).toBeUndefined();
+  });
 });

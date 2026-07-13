@@ -453,6 +453,9 @@ describe('recorded ACP session listing', () => {
       const updatedAt = result.sessions[0].updatedAt;
       expect(updatedAt).toBeDefined();
       expect(new Date(updatedAt ?? '').toISOString()).toBe(updatedAt);
+      expect(new Date(updatedAt!).getTime()).toBeGreaterThan(
+        Date.now() - 10_000,
+      );
     });
   });
 });

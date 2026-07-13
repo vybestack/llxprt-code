@@ -206,23 +206,25 @@ export function observeZedConfigOptions(
     pending = true;
     if (running) return;
     running = true;
-    void (async () => {
+    void runRefreshLoop();
+  };
+
+  async function runRefreshLoop(): Promise<void> {
+    try {
       while (pending && !stopped) {
         pending = false;
-        try {
-          const configOptions = await buildZedConfigOptions(agent, config);
-          if (isStopped()) return;
-          await sendUpdate({
-            sessionUpdate: 'config_option_update',
-            configOptions,
-          });
-        } catch (error) {
-          onError(error);
-        }
+        await sendConfigOptionUpdate(
+          agent,
+          config,
+          sendUpdate,
+          isStopped,
+          onError,
+        );
       }
+    } finally {
       running = false;
-    })();
-  };
+    }
+  }
   coreEvents.on(CoreEvent.ModelChanged, refresh);
   coreEvents.on(CoreEvent.SettingsChanged, refresh);
   return () => {
@@ -247,4 +249,23 @@ export function zedSessionConfigOptions(
   return capabilities?.session?.configOptions === true
     ? session.getConfigOptions().then((configOptions) => ({ configOptions }))
     : Promise.resolve({});
+}
+
+async function sendConfigOptionUpdate(
+  agent: Pick<Agent, 'getModel' | 'getProviderStatus'>,
+  config: Config,
+  sendUpdate: (update: acp.SessionUpdate) => Promise<void>,
+  isStopped: () => boolean,
+  onError: (error: unknown) => void,
+): Promise<void> {
+  try {
+    const configOptions = await buildZedConfigOptions(agent, config);
+    if (isStopped()) return;
+    await sendUpdate({
+      sessionUpdate: 'config_option_update',
+      configOptions,
+    });
+  } catch (error) {
+    onError(error);
+  }
 }

@@ -68,7 +68,7 @@ export async function tryHandleZedCommand(
   } catch (error) {
     logger.debug(() => `Command response delivery failed: ${String(error)}`);
     throw acp.RequestError.internalError(
-      {},
+      { cause: String(error) },
       'Command response delivery failed.',
     );
   }

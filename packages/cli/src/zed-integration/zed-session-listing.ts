@@ -5,7 +5,7 @@
  */
 
 import type { SessionSummary } from '@vybestack/llxprt-code-core';
-import { SessionDiscovery } from '@vybestack/llxprt-code-core';
+import { SessionDiscovery, DebugLogger } from '@vybestack/llxprt-code-core';
 import type * as acp from '@agentclientprotocol/sdk';
 import {
   paginateSessions,
@@ -13,6 +13,8 @@ import {
 } from './zed-session-pagination.js';
 
 const SESSION_PAGE_SIZE = 50;
+
+const logger = new DebugLogger('llxprt:zed-integration:session-listing');
 
 export async function listRecordedSessions(
   chatsDir: string,
@@ -101,7 +103,8 @@ async function readTitleSafe(
 ): Promise<string | null | undefined> {
   try {
     return await read();
-  } catch {
+  } catch (error) {
+    logger.debug(() => `Title resolution failed: ${String(error)}`);
     return undefined;
   }
 }

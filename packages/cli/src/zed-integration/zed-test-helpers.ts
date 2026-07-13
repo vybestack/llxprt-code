@@ -184,7 +184,7 @@ export class RecordingConnection {
 
   private terminalOutput = '';
   private terminalExitDelayed = false;
-  private terminalExitResolve: ((value: void) => void) | null = null;
+  private terminalExitResolves = new Map<string, () => void>();
 
   setTerminalOutput(output: string): void {
     this.terminalOutput = output;
@@ -194,13 +194,23 @@ export class RecordingConnection {
     this.terminalExitDelayed = true;
   }
 
-  resolveDelayedTerminalExit(): void {
-    if (this.terminalExitResolve !== null) {
-      const fn = this.terminalExitResolve;
-      this.terminalExitResolve = null;
-      this.terminalExitDelayed = false;
+  resolveDelayedTerminalExit(terminalId?: string): void {
+    if (terminalId !== undefined) {
+      const fn = this.terminalExitResolves.get(terminalId);
+      if (fn !== undefined) {
+        this.terminalExitResolves.delete(terminalId);
+        fn();
+      }
+      if (this.terminalExitResolves.size === 0) {
+        this.terminalExitDelayed = false;
+      }
+      return;
+    }
+    for (const fn of this.terminalExitResolves.values()) {
       fn();
     }
+    this.terminalExitResolves.clear();
+    this.terminalExitDelayed = false;
   }
 
   /**
@@ -212,16 +222,24 @@ export class RecordingConnection {
     if (this.hasTerminalContentUpdate()) return Promise.resolve();
     const deadline = Date.now() + timeoutMs;
     return new Promise<void>((resolve, reject) => {
-      const check = (): void => {
-        if (this.hasTerminalContentUpdate()) {
-          resolve();
-        } else if (Date.now() >= deadline) {
-          reject(new Error('waitForTerminalCreated timed out'));
-        } else {
-          setTimeout(check, 5);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const cleanup = (): void => {
+        if (timer !== undefined) {
+          clearTimeout(timer);
         }
       };
-      setTimeout(check, 5);
+      const check = (): void => {
+        if (this.hasTerminalContentUpdate()) {
+          cleanup();
+          resolve();
+        } else if (Date.now() >= deadline) {
+          cleanup();
+          reject(new Error('waitForTerminalCreated timed out'));
+        } else {
+          timer = setTimeout(check, 5);
+        }
+      };
+      timer = setTimeout(check, 5);
     });
   }
 
@@ -385,19 +403,19 @@ export class RecordingConnection {
       waitForExit: vi.fn(async () => {
         if (this.terminalExitDelayed) {
           await new Promise<void>((resolve) => {
-            this.terminalExitResolve = resolve;
+            this.terminalExitResolves.set(terminalId, resolve);
           });
         }
         return { exitCode: 0, signal: null };
       }),
       kill: vi.fn(async () => {
         this.killCalls += 1;
-        this.resolveDelayedTerminalExit();
+        this.resolveDelayedTerminalExit(terminalId);
         return {};
       }),
       release: vi.fn(async () => {
         this.releaseCalls += 1;
-        this.resolveDelayedTerminalExit();
+        this.resolveDelayedTerminalExit(terminalId);
         return {};
       }),
     };

@@ -250,7 +250,12 @@ export class ZedAgent {
     }
     await this.disposePriorSession(sessionId);
     const session = await this.installResumedSession(sessionId, params.cwd);
-    await session.sendAvailableCommands();
+    try {
+      await session.sendAvailableCommands();
+    } catch (error) {
+      await this.rollbackSession(sessionId, session);
+      throw error;
+    }
     return {
       modes: buildSessionModes(session.getApprovalMode()),
       ...(await zedSessionConfigOptions(this.clientCapabilities, session)),
@@ -277,12 +282,16 @@ export class ZedAgent {
     await existing.replayLiveHistory();
     return existing;
   }
+  private async rollbackSession(
+    sessionId: string,
+    session: Session,
+  ): Promise<void> {
+    this.sessions.delete(sessionId);
+    await session.dispose().catch(() => undefined);
+  }
   private async disposePriorSession(sessionId: string): Promise<void> {
     const existing = this.sessions.get(sessionId);
-    if (existing !== undefined) {
-      this.sessions.delete(sessionId);
-      await existing.dispose();
-    }
+    if (existing !== undefined) await this.rollbackSession(sessionId, existing);
   }
   private async installResumedSession(
     sessionId: string,
@@ -296,12 +305,7 @@ export class ZedAgent {
     try {
       await session.streamHistory(history);
     } catch (error) {
-      this.sessions.delete(sessionId);
-      try {
-        await session.dispose();
-      } catch {
-        /* original error rethrown */
-      }
+      await this.rollbackSession(sessionId, session);
       this.logger.debug(() => `loadSession - replay failed: ${error}`);
       throw error;
     }
@@ -505,29 +509,18 @@ export class Session {
   }
   async cancelPendingPrompt(): Promise<void> {
     this.settleActiveConfirmation();
-    await this.terminals?.settleAll();
-    if (!this.pendingPrompt) {
-      return;
-    }
+    await this.terminals
+      ?.settleAll()
+      .catch((e: unknown) =>
+        this.logger.debug(() => `Terminal settleAll failed: ${e}`),
+      );
+    if (!this.pendingPrompt) return;
     this.pendingPrompt.abort();
     this.pendingPrompt = null;
   }
   private settleActiveConfirmation(): void {
-    const confirmations = [...this.activeConfirmations.entries()];
-    this.activeConfirmations.clear();
-    for (const [confirmationId, state] of confirmations) {
-      if (state.settled) continue;
-      state.settled = true;
-      try {
-        this.agent.tools.respondToConfirmation(
-          confirmationId,
-          ToolConfirmationOutcome.Cancel,
-        );
-      } catch (error) {
-        debugLogger.error('Failed to cancel active tool confirmation:', error);
-      } finally {
-        state.cancelWaiter();
-      }
+    for (const confirmationId of [...this.activeConfirmations.keys()]) {
+      this.settleConfirmation(confirmationId);
     }
   }
   private settleConfirmation(confirmationId: string): void {
@@ -641,9 +634,8 @@ export class Session {
       return;
     }
     for (const update of updates) {
-      const title = update.title;
-      if (typeof title === 'string') {
-        await this.sendTitleUpdate(update, title);
+      if (typeof update.title === 'string') {
+        await this.sendTitleUpdate(update, update.title);
       } else {
         await this.sendUpdate(update);
       }
@@ -657,9 +649,9 @@ export class Session {
     try {
       await this.sendUpdateStrict(update);
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
       this.logger.debug(
-        () =>
-          `sendTitleUpdate ERROR (will retry next turn): ${error instanceof Error ? error.message : String(error)}`,
+        () => `sendTitleUpdate ERROR (will retry next turn): ${msg}`,
       );
       this.sessionInfo.markPendingTitle(title);
     }
@@ -667,10 +659,8 @@ export class Session {
 
   private recordMetadataTitle(title: string | undefined): void {
     const recording = this.config.getSessionRecordingService();
-    if (recording?.isActive() !== true) {
-      return;
-    }
-    recording.recordSessionMetadata(title ?? null);
+    if (recording?.isActive() === true)
+      recording.recordSessionMetadata(title ?? null);
   }
   private async sendUsageUpdate(
     usage: Extract<AgentEvent, { type: 'usage' }>['usage'],
@@ -679,9 +669,7 @@ export class Session {
       usage,
       getTokenLimitForConfiguredContext(this.config.getModel(), this.config),
     );
-    if (update !== null) {
-      await this.sendUpdate(update);
-    }
+    if (update !== null) await this.sendUpdate(update);
   }
   private isPromptStale(
     promptGeneration: number,
@@ -800,13 +788,11 @@ export class Session {
       this.pendingPrompt?.abort();
       this.pendingPrompt = null;
     } finally {
-      try {
-        await this.agent.dispose();
-      } catch (error) {
-        this.logger.debug(
-          () => `Failed to dispose Zed session agent: ${error}`,
+      await this.agent
+        .dispose()
+        .catch((e: unknown) =>
+          this.logger.debug(() => `Failed to dispose Zed session agent: ${e}`),
         );
-      }
     }
   }
 }

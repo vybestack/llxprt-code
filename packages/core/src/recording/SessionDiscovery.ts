@@ -38,6 +38,7 @@ import {
   resumeSessionIndexOutOfRangeMessage,
   resumeSessionNotFoundMessage,
 } from './resumeNotFoundMessages.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 /**
  * Result of successfully resolving a session reference.
@@ -320,7 +321,11 @@ export class SessionDiscovery {
         }
       }
       return title;
-    } catch {
+    } catch (error) {
+      debugLogger.debug(
+        () =>
+          `readSessionMetadataTitle failed for ${filePath}: ${String(error)}`,
+      );
       return undefined;
     } finally {
       reader?.close();
