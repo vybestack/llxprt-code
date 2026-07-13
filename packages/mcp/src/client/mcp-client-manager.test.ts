@@ -741,6 +741,7 @@ describe('McpClientManager', () => {
 
         expect(mockedMcpClient.discover).toHaveBeenCalledOnce();
         expect(manager.getDiscoveryFailures().has('ext-server')).toBe(false);
+        expect(manager.getMcpServerCount()).toBe(1);
       } finally {
         vi.useRealTimers();
       }

@@ -88,6 +88,26 @@ describe('McpClientManager trust transitions', () => {
       expect(client.discover).toHaveBeenCalled();
     });
 
+    it('does not restart discovery after the manager has stopped', async () => {
+      const client = createMockMcpClient();
+      vi.mocked(McpClient).mockReturnValue(client);
+
+      const refreshMcpContext = vi.fn();
+      const config = createMockConfig({ refreshMcpContext });
+      const manager = new McpClientManager(
+        '0.0.1',
+        createToolRegistry(config),
+        config,
+      );
+      await manager.stop();
+
+      await manager.onFolderTrustGained();
+
+      expect(McpClient).not.toHaveBeenCalled();
+      expect(client.connect).not.toHaveBeenCalled();
+      expect(refreshMcpContext).not.toHaveBeenCalled();
+    });
+
     it('does nothing if there are no configured servers', async () => {
       const client = createMockMcpClient();
       vi.mocked(McpClient).mockReturnValue(client);

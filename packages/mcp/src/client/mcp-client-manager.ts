@@ -611,6 +611,9 @@ export class McpClientManager {
    * suppressed because the folder was untrusted.
    */
   async onFolderTrustGained(): Promise<void> {
+    if (this.stopped) {
+      return;
+    }
     const servers = populateMcpServerCommand(
       this.cliConfig.getMcpServers() ?? {},
       this.cliConfig.getMcpServerCommand(),

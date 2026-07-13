@@ -29,8 +29,14 @@ vi.mock('../../services/BuiltinCommandLoader.js', () => ({
 
 vi.mock('../../services/FileCommandLoader.js', () => ({
   FileCommandLoader: class {
+    constructor(private readonly config: CliUiRuntime) {}
+
     loadCommands(): Promise<readonly SlashCommand[]> {
-      return Promise.resolve(loaderState.fileCommands);
+      return Promise.resolve(
+        this.config.getFolderTrust() && !this.config.isTrustedFolder()
+          ? []
+          : loaderState.fileCommands,
+      );
     }
   },
 }));
@@ -86,7 +92,10 @@ describe('useCommandReload', () => {
   });
 
   it('reloads the command registry when folder trust changes', async () => {
-    const config = {} as CliUiRuntime;
+    const config = {
+      getFolderTrust: () => false,
+      isTrustedFolder: () => true,
+    } as CliUiRuntime;
     const { result } = renderHook(() => useCommandRegistry(config));
     await waitFor(() => expect(result.current).toStrictEqual([]));
 
@@ -108,7 +117,7 @@ describe('useCommandReload', () => {
     });
   });
 
-  it('removes file commands when folder trust is revoked', async () => {
+  it('removes populated file commands when folder trust is revoked', async () => {
     loaderState.fileCommands = [
       {
         name: 'trusted-file-command',
@@ -116,20 +125,28 @@ describe('useCommandReload', () => {
         kind: CommandKind.FILE,
       },
     ];
-    const config = {} as CliUiRuntime;
+    let trusted = true;
+    const config = {
+      getFolderTrust: () => true,
+      isTrustedFolder: () => trusted,
+    } as CliUiRuntime;
     const { result } = renderHook(() => useCommandRegistry(config));
     await waitFor(() => expect(result.current).toHaveLength(1));
 
-    loaderState.fileCommands = [];
+    trusted = false;
     act(() => {
       coreEvents.emitFolderTrustChanged(false);
     });
 
     await waitFor(() => expect(result.current).toStrictEqual([]));
+    expect(loaderState.fileCommands).toHaveLength(1);
   });
 
   it('stops listening for folder trust changes after unmount', async () => {
-    const config = {} as CliUiRuntime;
+    const config = {
+      getFolderTrust: () => false,
+      isTrustedFolder: () => true,
+    } as CliUiRuntime;
     const listenersBeforeMount = coreEvents.listenerCount(
       CoreEvent.FolderTrustChanged,
     );

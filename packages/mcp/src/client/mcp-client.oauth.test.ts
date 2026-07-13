@@ -205,8 +205,10 @@ describe('connectToMcpServer with OAuth', () => {
     releaseTransportClose?.();
     const failure = await outcome;
     expect(failure).toBeInstanceOf(DOMException);
-    expect(failure).toMatchObject({ name: 'AbortError' });
-    expect(failure).not.toHaveProperty('cause');
+    expect(failure).toMatchObject({
+      name: 'AbortError',
+      cause: expect.objectContaining({ message: 'connect failed' }),
+    });
     expect(transport.close).toHaveBeenCalledOnce();
   });
 

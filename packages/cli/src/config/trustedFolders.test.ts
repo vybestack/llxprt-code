@@ -157,6 +157,17 @@ describe('Trusted Folders Loading', () => {
       );
     });
 
+    it('prefers denial when direct and TRUST_PARENT rules have equal specificity', () => {
+      const { folders } = setup({
+        config: {
+          '/workspace/trust-parent-source': TrustLevel.TRUST_PARENT,
+          '/workspace': TrustLevel.DO_NOT_TRUST,
+        },
+      });
+
+      expect(folders.isPathTrusted('/workspace/project')).toBe(false);
+    });
+
     it('does not treat a sibling string prefix as an ancestor', () => {
       const { folders } = setup({
         config: { '/workspace/app': TrustLevel.TRUST_FOLDER },

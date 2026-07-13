@@ -197,7 +197,6 @@ export class Config extends ConfigBase {
         'Config.initialize requires an explicit session/runtime MessageBus dependency.',
       );
     }
-    this.initialized = true;
     this.cachedEffectiveTrust = this.isTrustedFolder();
     this.ideClient = await IdeClient.getInstance();
     // Initialize centralized FileDiscoveryService
@@ -214,6 +213,7 @@ export class Config extends ConfigBase {
       this,
       this.eventEmitter,
     );
+    this.initialized = true;
     this.registerIdeTrustListener();
     // Issue #2325: Fire MCP discovery in the background — don't block startup.
     // Tools are gated before model turns via McpClientManager.whenDiscoverySettled().
@@ -597,6 +597,9 @@ export class Config extends ConfigBase {
   setTrustedFolderLive(trusted: boolean): void {
     const previousEffectiveTrust = this.isTrustedFolder();
     this.trustedFolder = trusted;
+    if (!this.initialized) {
+      return;
+    }
     this.reconcileEffectiveTrust(previousEffectiveTrust);
   }
 

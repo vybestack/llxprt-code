@@ -131,6 +131,7 @@ export class McpClient {
     const connectionGeneration = ++this.connectionGeneration;
     const abortController = new AbortController();
     this.connectionAbortController = abortController;
+    let connectedClient: Client | undefined;
     try {
       const client = await connectToMcpServer(
         this.clientVersion,
@@ -140,14 +141,15 @@ export class McpClient {
         this.workspaceContext,
         abortController.signal,
       );
+      connectedClient = client;
 
       if (connectionGeneration !== this.connectionGeneration) {
         await client.close().catch(() => {});
         return;
       }
 
+      this.registerNotificationHandlers(client);
       this.client = client;
-      this.registerNotificationHandlers();
       const originalOnError = this.client.onerror;
       this.client.onerror = (error) => {
         if (
@@ -178,7 +180,11 @@ export class McpClient {
       this.updateStatus(MCPServerStatus.CONNECTED);
     } catch (error) {
       if (connectionGeneration === this.connectionGeneration) {
+        this.client = undefined;
         this.updateStatus(MCPServerStatus.DISCONNECTED);
+      }
+      if (connectedClient !== undefined) {
+        await connectedClient.close().catch(() => {});
       }
       if (abortController.signal.aborted) {
         return;
@@ -430,19 +436,15 @@ export class McpClient {
     return this.client.getInstructions() ?? '';
   }
 
-  private registerNotificationHandlers(): void {
-    if (!this.client) {
-      return;
-    }
-
-    const capabilities = this.client.getServerCapabilities();
+  private registerNotificationHandlers(client: Client): void {
+    const capabilities = client.getServerCapabilities();
 
     if (capabilities?.tools?.listChanged === true) {
       debugLogger.log(
         `Server '${this.serverName}' supports tool updates. Listening for changes...`,
       );
 
-      this.client.setNotificationHandler(
+      client.setNotificationHandler(
         ToolListChangedNotificationSchema,
         async () => {
           debugLogger.log(
@@ -458,7 +460,7 @@ export class McpClient {
         `Server '${this.serverName}' supports resource updates. Listening for changes...`,
       );
 
-      this.client.setNotificationHandler(
+      client.setNotificationHandler(
         ResourceListChangedNotificationSchema,
         async () => {
           debugLogger.log(

@@ -19,6 +19,13 @@ const baseParams: ConfigParameters = {
   cwd: '.',
 };
 
+class InitializedConfig extends Config {
+  constructor(params: ConfigParameters) {
+    super(params);
+    this.initialized = true;
+  }
+}
+
 describe('Config.setTrustedFolderLive', () => {
   let emitSpy: ReturnType<typeof vi.spyOn>;
 
@@ -31,8 +38,20 @@ describe('Config.setTrustedFolderLive', () => {
     vi.restoreAllMocks();
   });
 
-  it('reflects trusted=true immediately after gaining trust', () => {
+  it('updates local trust without running transitions before initialization', () => {
     const config = new Config({ ...baseParams, trustedFolder: false });
+
+    config.setTrustedFolderLive(true);
+
+    expect(config.isTrustedFolder()).toBe(true);
+    expect(emitSpy).not.toHaveBeenCalled();
+  });
+
+  it('reflects trusted=true immediately after gaining trust', () => {
+    const config = new InitializedConfig({
+      ...baseParams,
+      trustedFolder: false,
+    });
     expect(config.isTrustedFolder()).toBe(false);
 
     config.setTrustedFolderLive(true);
@@ -41,7 +60,10 @@ describe('Config.setTrustedFolderLive', () => {
   });
 
   it('reflects trusted=false immediately after revoking trust', () => {
-    const config = new Config({ ...baseParams, trustedFolder: true });
+    const config = new InitializedConfig({
+      ...baseParams,
+      trustedFolder: true,
+    });
     expect(config.isTrustedFolder()).toBe(true);
 
     config.setTrustedFolderLive(false);
@@ -50,7 +72,10 @@ describe('Config.setTrustedFolderLive', () => {
   });
 
   it('emits FolderTrustChanged(true) when trust is gained', () => {
-    const config = new Config({ ...baseParams, trustedFolder: false });
+    const config = new InitializedConfig({
+      ...baseParams,
+      trustedFolder: false,
+    });
 
     config.setTrustedFolderLive(true);
 
@@ -58,7 +83,10 @@ describe('Config.setTrustedFolderLive', () => {
   });
 
   it('emits FolderTrustChanged(false) when trust is revoked', () => {
-    const config = new Config({ ...baseParams, trustedFolder: true });
+    const config = new InitializedConfig({
+      ...baseParams,
+      trustedFolder: true,
+    });
 
     config.setTrustedFolderLive(false);
 
@@ -66,7 +94,10 @@ describe('Config.setTrustedFolderLive', () => {
   });
 
   it('does not emit when the effective value does not change', () => {
-    const config = new Config({ ...baseParams, trustedFolder: true });
+    const config = new InitializedConfig({
+      ...baseParams,
+      trustedFolder: true,
+    });
 
     config.setTrustedFolderLive(true);
 
@@ -74,7 +105,10 @@ describe('Config.setTrustedFolderLive', () => {
   });
 
   it('does not emit on no-op in untrusted state either', () => {
-    const config = new Config({ ...baseParams, trustedFolder: false });
+    const config = new InitializedConfig({
+      ...baseParams,
+      trustedFolder: false,
+    });
 
     config.setTrustedFolderLive(false);
 
@@ -86,7 +120,10 @@ describe('Config.setTrustedFolderLive', () => {
       workspaceState: { isTrusted: true },
     });
 
-    const config = new Config({ ...baseParams, trustedFolder: false });
+    const config = new InitializedConfig({
+      ...baseParams,
+      trustedFolder: false,
+    });
 
     config.setTrustedFolderLive(false);
 
@@ -99,7 +136,10 @@ describe('Config.setTrustedFolderLive', () => {
       workspaceState: { isTrusted: false },
     });
 
-    const config = new Config({ ...baseParams, trustedFolder: true });
+    const config = new InitializedConfig({
+      ...baseParams,
+      trustedFolder: true,
+    });
 
     config.setTrustedFolderLive(true);
 
@@ -108,7 +148,10 @@ describe('Config.setTrustedFolderLive', () => {
   });
 
   it('allows setApprovalMode(YOLO) after gaining trust live', () => {
-    const config = new Config({ ...baseParams, trustedFolder: false });
+    const config = new InitializedConfig({
+      ...baseParams,
+      trustedFolder: false,
+    });
     expect(() => config.setApprovalMode(ApprovalMode.YOLO)).toThrow(
       'Cannot enable privileged approval modes in an untrusted folder.',
     );
@@ -119,7 +162,10 @@ describe('Config.setTrustedFolderLive', () => {
   });
 
   it('blocks setApprovalMode(YOLO) after revoking trust live', () => {
-    const config = new Config({ ...baseParams, trustedFolder: true });
+    const config = new InitializedConfig({
+      ...baseParams,
+      trustedFolder: true,
+    });
     config.setApprovalMode(ApprovalMode.YOLO);
 
     config.setTrustedFolderLive(false);
@@ -137,7 +183,10 @@ describe('Config.setTrustedFolderLive', () => {
     coreEvents.on(CoreEvent.FolderTrustChanged, listener);
 
     try {
-      const config = new Config({ ...baseParams, trustedFolder: false });
+      const config = new InitializedConfig({
+        ...baseParams,
+        trustedFolder: false,
+      });
       config.setTrustedFolderLive(true);
 
       expect(received).toStrictEqual([true]);
@@ -148,7 +197,10 @@ describe('Config.setTrustedFolderLive', () => {
 
   describe('synchronous approval-mode downgrade on revoke', () => {
     it('downgrades YOLO to DEFAULT synchronously when trust is revoked', () => {
-      const config = new Config({ ...baseParams, trustedFolder: true });
+      const config = new InitializedConfig({
+        ...baseParams,
+        trustedFolder: true,
+      });
       config.setApprovalMode(ApprovalMode.YOLO);
       expect(config.getApprovalMode()).toBe(ApprovalMode.YOLO);
 
@@ -158,7 +210,10 @@ describe('Config.setTrustedFolderLive', () => {
     });
 
     it('downgrades AUTO_EDIT to DEFAULT synchronously when trust is revoked', () => {
-      const config = new Config({ ...baseParams, trustedFolder: true });
+      const config = new InitializedConfig({
+        ...baseParams,
+        trustedFolder: true,
+      });
       config.setApprovalMode(ApprovalMode.AUTO_EDIT);
       expect(config.getApprovalMode()).toBe(ApprovalMode.AUTO_EDIT);
 
@@ -168,7 +223,10 @@ describe('Config.setTrustedFolderLive', () => {
     });
 
     it('leaves DEFAULT unchanged when trust is revoked', () => {
-      const config = new Config({ ...baseParams, trustedFolder: true });
+      const config = new InitializedConfig({
+        ...baseParams,
+        trustedFolder: true,
+      });
       config.setApprovalMode(ApprovalMode.DEFAULT);
 
       config.setTrustedFolderLive(false);
@@ -177,7 +235,10 @@ describe('Config.setTrustedFolderLive', () => {
     });
 
     it('does not change approval mode when trust is gained', () => {
-      const config = new Config({ ...baseParams, trustedFolder: false });
+      const config = new InitializedConfig({
+        ...baseParams,
+        trustedFolder: false,
+      });
       config.setApprovalMode(ApprovalMode.DEFAULT);
 
       config.setTrustedFolderLive(true);
@@ -188,8 +249,14 @@ describe('Config.setTrustedFolderLive', () => {
 
   describe('multi-Config isolation', () => {
     it('revoking trust on config A does not affect config B approval mode', () => {
-      const configA = new Config({ ...baseParams, trustedFolder: true });
-      const configB = new Config({ ...baseParams, trustedFolder: true });
+      const configA = new InitializedConfig({
+        ...baseParams,
+        trustedFolder: true,
+      });
+      const configB = new InitializedConfig({
+        ...baseParams,
+        trustedFolder: true,
+      });
       configA.setApprovalMode(ApprovalMode.YOLO);
       configB.setApprovalMode(ApprovalMode.YOLO);
 
@@ -202,8 +269,14 @@ describe('Config.setTrustedFolderLive', () => {
     });
 
     it('gaining trust on config A does not change config B trusted state', () => {
-      const configA = new Config({ ...baseParams, trustedFolder: false });
-      const configB = new Config({ ...baseParams, trustedFolder: false });
+      const configA = new InitializedConfig({
+        ...baseParams,
+        trustedFolder: false,
+      });
+      const configB = new InitializedConfig({
+        ...baseParams,
+        trustedFolder: false,
+      });
 
       configA.setTrustedFolderLive(true);
 
@@ -214,7 +287,10 @@ describe('Config.setTrustedFolderLive', () => {
 
   describe('defense-in-depth policy rule cleanup on revoke', () => {
     it('removes MCP Trusted policy rules when trust is revoked', () => {
-      const config = new Config({ ...baseParams, trustedFolder: true });
+      const config = new InitializedConfig({
+        ...baseParams,
+        trustedFolder: true,
+      });
       config.getPolicyEngine().addRule({
         toolName: 'trusted-server__tool',
         decision: PolicyDecision.ALLOW,
@@ -241,7 +317,7 @@ describe('Config.setTrustedFolderLive', () => {
     });
 
     it('rebuilds configured MCP trust rules on gain', () => {
-      const config = new Config({
+      const config = new InitializedConfig({
         ...baseParams,
         trustedFolder: false,
         mcpServers: { 'trusted-server': { trust: true } },

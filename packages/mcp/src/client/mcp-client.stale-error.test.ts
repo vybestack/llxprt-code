@@ -39,6 +39,42 @@ describe('McpClient stale error handling', () => {
     vi.restoreAllMocks();
   });
 
+  it('closes and forgets an SDK client when handler registration fails', async () => {
+    const sdkClient = createSdkClient();
+    sdkClient.getServerCapabilities.mockReturnValue({
+      tools: { listChanged: true },
+    });
+    sdkClient.setNotificationHandler.mockImplementation(() => {
+      throw new Error('handler registration failed');
+    });
+    Object.assign(sdkClient, {
+      getInstructions: vi.fn().mockReturnValue('stale instructions'),
+    });
+    vi.mocked(ClientLib.Client).mockReturnValue(sdkClient as unknown as Client);
+    vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue(
+      {} as SdkClientStdioLib.StdioClientTransport,
+    );
+    const client = new McpClient(
+      'test-server',
+      { command: 'test-command' },
+      { removeMcpToolsByServer: vi.fn() } as unknown as ToolRegistry,
+      { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
+      { removeResourcesByServer: vi.fn() } as unknown as ResourceRegistry,
+      new WorkspaceContext('/workspace'),
+      { isTrustedFolder: () => true } as Config,
+      false,
+      '0.0.1',
+    );
+
+    await expect(client.connect()).rejects.toThrow(
+      'handler registration failed',
+    );
+
+    expect(client.getStatus()).toBe('disconnected');
+    expect(client.getInstructions()).toBe('');
+    expect(sdkClient.close).toHaveBeenCalledOnce();
+  });
+
   it('ignores errors emitted by a stale SDK client after reconnect', async () => {
     const staleSdkClient = createSdkClient();
     const activeSdkClient = createSdkClient();

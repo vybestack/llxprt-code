@@ -7,7 +7,6 @@
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { getErrorMessage } from '../utils/errors.js';
 
-const MAX_TRUST_FAILURES = 100;
 const HOOK_INITIALIZATION_TIMEOUT_MS = 30_000;
 
 export interface LiveTrustTransitionDependencies {
@@ -34,6 +33,9 @@ export class LiveTrustTransitionLifecycle {
   constructor(private readonly dependencies: LiveTrustTransitionDependencies) {}
 
   apply(trusted: boolean): void {
+    if (this.disposing) {
+      return;
+    }
     const batch =
       this.pendingTransitions === 0
         ? ++this.transitionBatch
@@ -130,7 +132,7 @@ export class LiveTrustTransitionLifecycle {
     this.failures = [
       ...this.failures,
       ...failures.map((error) => ({ batch, error })),
-    ].slice(-MAX_TRUST_FAILURES);
+    ];
   }
 
   async whenSettled(): Promise<void> {

@@ -159,7 +159,7 @@ describe('useFolderTrust', () => {
     );
 
     act(() => {
-      // After persisting DO_NOT_TRUST, the canonical resolver returns false.
+      // Persisting DO_NOT_TRUST updates the loaded config before local trust is resolved.
       result.current.handleFolderTrustSelect(FolderTrustChoice.DO_NOT_TRUST);
     });
 
@@ -197,7 +197,7 @@ describe('useFolderTrust', () => {
     );
 
     act(() => {
-      // After persisting TRUST_FOLDER, the canonical resolver returns true.
+      // Persisting TRUST_FOLDER updates the loaded config before local trust is resolved.
       result.current.handleFolderTrustSelect(FolderTrustChoice.TRUST_FOLDER);
     });
 
@@ -212,7 +212,7 @@ describe('useFolderTrust', () => {
     );
 
     act(() => {
-      // After persisting DO_NOT_TRUST, the canonical resolver returns false.
+      // Persisting DO_NOT_TRUST updates the loaded config before local trust is resolved.
       result.current.handleFolderTrustSelect(FolderTrustChoice.DO_NOT_TRUST);
     });
 

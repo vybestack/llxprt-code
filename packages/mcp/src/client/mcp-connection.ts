@@ -79,6 +79,7 @@ function abortable<T>(
   cleanupOnAbort?: () => void | Promise<void>,
 ): Promise<T> {
   let cleanupPromise: Promise<void> | undefined;
+  let cancellationCause: unknown;
   const runCleanup = (
     cleanupOperation: () => void | Promise<void>,
   ): Promise<void> => {
@@ -104,7 +105,9 @@ function abortable<T>(
 
   return new Promise<T>((resolve, reject) => {
     const onAbort = () => {
-      void cleanupAfterAbort().then(() => reject(abortError()));
+      void cleanupAfterAbort().then(() =>
+        reject(abortError(cancellationCause)),
+      );
     };
     signal.addEventListener('abort', onAbort, { once: true });
     promise.then(
@@ -119,7 +122,8 @@ function abortable<T>(
       (error: unknown) => {
         signal.removeEventListener('abort', onAbort);
         if (signal.aborted) {
-          void cleanupAfterAbort().then(() => reject(abortError()));
+          cancellationCause = error;
+          void cleanupAfterAbort().then(() => reject(abortError(error)));
         } else {
           reject(error);
         }

@@ -151,14 +151,12 @@ describe('mcp-client', () => {
         { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        { isTrustedFolder: () => true } as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
       await client.connect();
-      const discovery = client.discover({
-        isTrustedFolder: () => true,
-      } as Config);
+      const discovery = client.discover(createTrustedConfig());
       await vi.waitFor(() => expect(resourceSignal).toBeDefined());
 
       await client.disconnect();
