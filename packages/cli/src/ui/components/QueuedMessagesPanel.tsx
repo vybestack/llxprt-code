@@ -145,13 +145,17 @@ function calculatePanelHeight(rows: number): number {
   return Math.max(1, Math.floor(rows * PANEL_HEIGHT_RATIO));
 }
 
+function calculateAvailableRows(panelHeight: number): number {
+  const borderRows = panelHeight > 1 ? 1 : 0;
+  const headerRows = 1;
+  return Math.max(0, panelHeight - borderRows - headerRows);
+}
+
 function calculateMaxVisibleItems(
   panelHeight: number,
   messageCount: number,
 ): number {
-  const borderRows = panelHeight > 1 ? 1 : 0;
-  const headerRows = 1;
-  const availableRows = Math.max(0, panelHeight - borderRows - headerRows);
+  const availableRows = calculateAvailableRows(panelHeight);
   if (messageCount <= availableRows) {
     return messageCount;
   }
@@ -221,8 +225,7 @@ export function prepareQueuedMessagesPanelView({
     boundedWidth - EXPANDED_CONTENT_WIDTH_OFFSET,
   );
   const moreCount = messages.length - visibleMessages.length;
-  const borderRows = panelHeight > 1 ? 1 : 0;
-  const availableRows = Math.max(0, panelHeight - borderRows - 1);
+  const availableRows = calculateAvailableRows(panelHeight);
 
   return {
     kind: 'expanded',

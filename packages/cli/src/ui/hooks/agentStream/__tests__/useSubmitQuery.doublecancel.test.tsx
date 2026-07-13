@@ -387,6 +387,10 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     await act(async () => {
       result.current.cancelOngoingRequest();
     });
+    // Simulate the new AbortController that initTurn would create when the
+    // next submitQuery runs. We assign directly rather than calling
+    // submitQuery again to keep the test focused on the isCurrentTurn guard
+    // without starting a real second turn's streaming pipeline.
     deps.abortControllerRef.current = new AbortController();
     handleSubmissionErrorMock.mockClear();
 

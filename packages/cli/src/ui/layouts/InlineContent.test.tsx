@@ -24,9 +24,14 @@ import { InlineContent, type InlineContentProps } from './InlineContent.js';
 // from test-utils/real-ink.ts) to bypass the `ink → ink-stub` resolve alias.
 vi.mock('ink', async () => import('../../../test-utils/real-ink.js'));
 
-vi.mock('../components/ContextSummaryDisplay.js', () => ({
-  ContextSummaryDisplay: () => null,
-}));
+vi.mock('../components/ContextSummaryDisplay.js', async () => {
+  const { Text } = await import('ink');
+  return {
+    ContextSummaryDisplay: () => (
+      <Text color="white">context-summary-mock</Text>
+    ),
+  };
+});
 
 function renderInlineContent(props: InlineContentProps) {
   return render(
@@ -121,11 +126,11 @@ describe('InlineContent', () => {
     const props = { ...createProps(), hideContextSummary: false };
     const { lastFrame } = renderInlineContent(props);
 
-    expect(lastFrame()).toBeDefined();
+    expect(lastFrame()).toContain('context-summary-mock');
   });
 
   it('renders the system-md indicator when GEMINI_SYSTEM_MD is set', () => {
-    vi.stubEnv('GEMINI_SYSTEM_MD', '1');
+    vi.stubEnv('GEMINI_SYSTEM_MD', 'true');
     const { lastFrame } = renderInlineContent(createProps());
 
     expect(lastFrame()).toContain('⌐■_■');
