@@ -72,7 +72,7 @@ type Dict = Readonly<Record<string, unknown>>;
  * tool response for a pending id emits the terminal completed/failed update and
  * clears it; unmatched responses are dropped; and any call still pending after
  * the whole history is walked yields a trailing synthetic failed update, in
- * original start order (Set iteration preserves insertion order). The output
+ * original start order (Map iteration preserves insertion order). The output
  * preserves history order and, per message, block order.
  */
 export function mapHistoryToSessionUpdates(

@@ -28,7 +28,6 @@ const ACP_TOOL_KINDS = [
   'execute',
   'think',
   'fetch',
-  'switch_mode',
   'other',
 ] as const;
 
