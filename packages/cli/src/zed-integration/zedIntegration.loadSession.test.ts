@@ -327,7 +327,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     ).rejects.toThrow(/Session not found/);
   });
 
-  it('closeSession keeps a session tracked when agent disposal fails', async () => {
+  it('closeSession succeeds and removes the session even when agent disposal fails', async () => {
     const stub = buildStubAgent({});
     stub.dispose.mockRejectedValueOnce(new Error('dispose failed'));
     mockFromConfig.mockResolvedValue(stub.agent);
@@ -342,14 +342,10 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
 
     await expect(
       zedAgent.closeSession({ sessionId: created.sessionId }),
-    ).rejects.toThrow('dispose failed');
+    ).resolves.toEqual({});
     await expect(
-      zedAgent.resumeSession({
-        sessionId: created.sessionId,
-        cwd: '/project',
-        mcpServers: [],
-      }),
-    ).resolves.toMatchObject({ modes: expect.any(Object) });
+      zedAgent.prompt({ sessionId: created.sessionId, prompt: [] }),
+    ).rejects.toThrow(/Session not found/);
   });
 
   it('initialize() advertises loadSession: true', async () => {

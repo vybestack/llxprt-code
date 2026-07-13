@@ -828,7 +828,13 @@ export class Session {
       this.pendingPrompt?.abort();
       this.pendingPrompt = null;
     } finally {
-      await this.agent.dispose();
+      try {
+        await this.agent.dispose();
+      } catch (error) {
+        this.logger.debug(
+          () => `Failed to dispose Zed session agent: ${error}`,
+        );
+      }
     }
   }
 }
