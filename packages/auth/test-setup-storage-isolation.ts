@@ -4,6 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { isolateStorageRoots } from '../storage/src/testing/isolateStorageRoots.js';
+import { isolateStorageRoots } from '../storage/src/testing.js';
 
 isolateStorageRoots();

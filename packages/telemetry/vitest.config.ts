@@ -38,6 +38,10 @@ function resolveTsSource(baseDir: string, specifier: string): string | null {
   if (existsSync(direct)) {
     return direct;
   }
+  const tsFallback = direct + '.ts';
+  if (existsSync(tsFallback)) {
+    return tsFallback;
+  }
   return null;
 }
 

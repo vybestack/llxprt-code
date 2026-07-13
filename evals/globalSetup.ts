@@ -24,7 +24,14 @@ const rootDir = join(__dirname, '..');
 const evalsDir = join(rootDir, '.evals');
 let runDir = ''; // Make runDir accessible in teardown
 let evalsStorageRoot = ''; // Track temp storage root for cleanup
-let savedStorageEnv: Record<string, string | undefined> = {};
+const STORAGE_ENV_KEYS = [
+  'LLXPRT_CONFIG_HOME',
+  'LLXPRT_DATA_HOME',
+  'LLXPRT_CACHE_HOME',
+  'LLXPRT_LOG_HOME',
+] as const;
+type StorageEnvKey = (typeof STORAGE_ENV_KEYS)[number];
+let savedStorageEnv: Partial<Record<StorageEnvKey, string>> = {};
 
 export async function setup() {
   // Isolate ALL storage roots so spawned CLI subprocesses (which inherit
@@ -34,12 +41,10 @@ export async function setup() {
   for (const sub of storageSubdirs) {
     await mkdir(join(evalsStorageRoot, sub), { recursive: true });
   }
-  savedStorageEnv = {
-    LLXPRT_CONFIG_HOME: process.env.LLXPRT_CONFIG_HOME,
-    LLXPRT_DATA_HOME: process.env.LLXPRT_DATA_HOME,
-    LLXPRT_CACHE_HOME: process.env.LLXPRT_CACHE_HOME,
-    LLXPRT_LOG_HOME: process.env.LLXPRT_LOG_HOME,
-  };
+  savedStorageEnv = {};
+  for (const key of STORAGE_ENV_KEYS) {
+    savedStorageEnv[key] = process.env[key];
+  }
   process.env.LLXPRT_CONFIG_HOME = join(evalsStorageRoot, 'config');
   process.env.LLXPRT_DATA_HOME = join(evalsStorageRoot, 'data');
   process.env.LLXPRT_CACHE_HOME = join(evalsStorageRoot, 'cache');
@@ -100,7 +105,8 @@ export async function teardown() {
 
   // Restore original storage env vars so code running after teardown
   // does not reference the now-deleted temp directories.
-  for (const [key, value] of Object.entries(savedStorageEnv)) {
+  for (const key of STORAGE_ENV_KEYS) {
+    const value = savedStorageEnv[key];
     if (value === undefined) {
       delete process.env[key];
     } else {

@@ -35,29 +35,43 @@ const ISOLATION_MARKER = 'LLXPRT_TEST_STORAGE_ISOLATED';
 export function isolateStorageRoots(): string {
   if (process.env[ISOLATION_MARKER]) {
     const configHome = process.env.LLXPRT_CONFIG_HOME;
-    if (configHome) {
+    if (configHome && path.isAbsolute(configHome)) {
       return path.dirname(configHome);
     }
   }
 
-  const testStorageRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'llxprt-test-storage-'),
-  );
+  let testStorageRoot: string;
+  try {
+    testStorageRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'llxprt-test-storage-'),
+    );
+  } catch (e) {
+    throw new Error(
+      `Failed to create isolated test storage root: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 
-  const configDir = path.join(testStorageRoot, 'config');
-  const dataDir = path.join(testStorageRoot, 'data');
-  const cacheDir = path.join(testStorageRoot, 'cache');
-  const logDir = path.join(testStorageRoot, 'log');
+  const subdirs: Record<string, string> = {
+    config: path.join(testStorageRoot, 'config'),
+    data: path.join(testStorageRoot, 'data'),
+    cache: path.join(testStorageRoot, 'cache'),
+    log: path.join(testStorageRoot, 'log'),
+  };
 
-  fs.mkdirSync(configDir, { recursive: true });
-  fs.mkdirSync(dataDir, { recursive: true });
-  fs.mkdirSync(cacheDir, { recursive: true });
-  fs.mkdirSync(logDir, { recursive: true });
+  try {
+    for (const dir of Object.values(subdirs)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  } catch (e) {
+    throw new Error(
+      `Failed to create isolated test storage subdirectories: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 
-  process.env.LLXPRT_CONFIG_HOME = configDir;
-  process.env.LLXPRT_DATA_HOME = dataDir;
-  process.env.LLXPRT_CACHE_HOME = cacheDir;
-  process.env.LLXPRT_LOG_HOME = logDir;
+  process.env.LLXPRT_CONFIG_HOME = subdirs.config;
+  process.env.LLXPRT_DATA_HOME = subdirs.data;
+  process.env.LLXPRT_CACHE_HOME = subdirs.cache;
+  process.env.LLXPRT_LOG_HOME = subdirs.log;
   process.env[ISOLATION_MARKER] = '1';
 
   return testStorageRoot;
