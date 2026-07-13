@@ -32,14 +32,13 @@
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import type { Content } from '@google/genai';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import {
   Logger,
   SessionRecordingService,
   RecordingIntegration,
   resumeSession,
   CONTINUE_LATEST,
-  getProjectHash,
   type ResumeRequest,
   type LockHandle,
 } from '@vybestack/llxprt-code-core';
@@ -266,7 +265,7 @@ export class SessionControl implements AgentSessionControl {
     this.ensureSubscribed();
     const request: ResumeRequest = {
       continueRef: target === 'latest' ? CONTINUE_LATEST : target,
-      projectHash: getProjectHash(this.deps.config.getProjectRoot()),
+      projectHash: this.persistenceProjectHash(),
       chatsDir: this.chatsDir(),
       currentProvider: this.deps.getProvider(),
       currentModel: this.deps.getModel(),
@@ -597,9 +596,10 @@ export class SessionControl implements AgentSessionControl {
     await this.stopRecording();
     const service = new SessionRecordingService({
       sessionId: this.deps.sessionId(),
-      projectHash: getProjectHash(this.deps.config.getProjectRoot()),
+      projectHash: this.persistenceProjectHash(),
       chatsDir: this.chatsDir(),
       workspaceDirs: this.workspaceDirs(),
+      cwd: this.deps.config.getProjectRoot(),
       provider: this.deps.getProvider(),
       model: this.deps.getModel(),
     });
@@ -890,6 +890,10 @@ export class SessionControl implements AgentSessionControl {
     } catch {
       return [];
     }
+  }
+
+  private persistenceProjectHash(): string {
+    return basename(this.deps.config.storage.getProjectTempDir());
   }
 
   // ─── Path derivation ─────────────────────────────────────────────────────

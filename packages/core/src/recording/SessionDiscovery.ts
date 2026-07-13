@@ -24,14 +24,21 @@
  * for the resume flow.
  */
 
+import { createReadStream } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { type SessionSummary, type SessionStartPayload } from './types.js';
+import * as readline from 'node:readline';
+import {
+  SESSION_TITLE_MAX_LENGTH,
+  type SessionSummary,
+  type SessionStartPayload,
+} from './types.js';
 import { readSessionHeader } from './ReplayEngine.js';
 import {
   resumeSessionIndexOutOfRangeMessage,
   resumeSessionNotFoundMessage,
 } from './resumeNotFoundMessages.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 /**
  * Result of successfully resolving a session reference.
@@ -272,7 +279,7 @@ export class SessionDiscovery {
    */
   static async readFirstUserMessage(
     filePath: string,
-    maxLength: number = 120,
+    maxLength: number = SESSION_TITLE_MAX_LENGTH,
   ): Promise<string | null> {
     try {
       const fileContent = await fs.readFile(filePath, 'utf-8');
@@ -286,6 +293,43 @@ export class SessionDiscovery {
       return null;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Read the tri-state title from the last valid `session_metadata` event in a
+   * session file (issue #1611). Returns:
+   * - `undefined` when no `session_metadata` event exists (legacy fallback).
+   * - `null` when the event explicitly asserts untitled.
+   * - `string` when the event carries a concrete title.
+   */
+  static async readSessionMetadataTitle(
+    filePath: string,
+  ): Promise<string | null | undefined> {
+    const stream = createReadStream(filePath, { encoding: 'utf8' });
+    let reader: readline.Interface | undefined;
+    try {
+      reader = readline.createInterface({
+        input: stream,
+        crlfDelay: Infinity,
+      });
+      let title: string | null | undefined;
+      for await (const line of reader) {
+        const result = extractSessionMetadataTitle(line);
+        if (result !== undefined) {
+          title = result;
+        }
+      }
+      return title;
+    } catch (error) {
+      debugLogger.debug(
+        () =>
+          `readSessionMetadataTitle failed for ${filePath}: ${String(error)}`,
+      );
+      return undefined;
+    } finally {
+      reader?.close();
+      stream.destroy();
     }
   }
 }
@@ -314,6 +358,10 @@ async function readSessionSummary(
     fileSize: stat.size,
     provider: header.provider,
     model: header.model,
+    ...(typeof header.cwd === 'string' ? { cwd: header.cwd } : {}),
+    ...(typeof header.startTime === 'string'
+      ? { createdAt: header.startTime }
+      : {}),
   };
 }
 
@@ -370,4 +418,46 @@ function extractUserMessageText(line: string): string | null {
     .join('');
 
   return text || null;
+}
+
+/**
+ * Extract the title from a `session_metadata` JSONL line.
+ * Returns:
+ * - `undefined` when the line is not a valid `session_metadata` event (so
+ *   callers can continue scanning).
+ * - `null` when title is explicitly null (untitled).
+ * - `string` when a concrete title is present.
+ */
+function extractSessionMetadataTitle(line: string): string | null | undefined {
+  if (!line.trim()) {
+    return undefined;
+  }
+  let event: unknown;
+  try {
+    event = JSON.parse(line);
+  } catch {
+    return undefined;
+  }
+  if (event === null || typeof event !== 'object') {
+    return undefined;
+  }
+  const record = event as Record<string, unknown>;
+  if (record.type !== 'session_metadata') {
+    return undefined;
+  }
+  const payload = record.payload as Record<string, unknown> | undefined;
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+  if (!('title' in payload)) {
+    return undefined;
+  }
+  const title = payload.title;
+  if (title === null) {
+    return null;
+  }
+  if (typeof title === 'string') {
+    return title;
+  }
+  return undefined;
 }

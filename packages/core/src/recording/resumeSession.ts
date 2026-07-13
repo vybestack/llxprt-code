@@ -139,6 +139,7 @@ function initializeRecordingForResume(
   recording.initializeForResume(
     lockedSession.targetFilePath,
     replayResult.lastSeq,
+    replayResult.metadata.title,
   );
 
   if (
