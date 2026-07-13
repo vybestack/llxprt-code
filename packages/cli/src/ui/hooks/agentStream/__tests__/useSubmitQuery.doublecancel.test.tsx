@@ -357,7 +357,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
   });
 
   it('processes a non-string submission immediately even when MCP discovery is in progress (issue #2516)', async () => {
-    let discoveryState = MCPDiscoveryState.IN_PROGRESS;
+    const discoveryState = MCPDiscoveryState.IN_PROGRESS;
     const mcpManager: UiMcpClientManager = {
       getDiscoveryState: () => discoveryState,
       getMcpServerCount: () => 1,
