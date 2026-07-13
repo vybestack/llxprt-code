@@ -75,15 +75,14 @@ describe('recordTokenEstimate', () => {
       'gpt-4',
     );
 
-    expect(recordEstimate).toHaveBeenCalledWith(
-      'prompt-2',
-      expect.objectContaining({
-        estimator: 'openai-tiktoken',
-        tiktokenTokens: 42,
-        tiktokenEstimationFailed: false,
-      }),
-    );
-    expect(resolveEstimatorType('Anthropic')).toBe('anthropic-char');
+    expect(recordEstimate).toHaveBeenCalledExactlyOnceWith('prompt-2', {
+      provider: 'OpenAI',
+      model: 'gpt-4',
+      estimatedTokens: 10,
+      estimator: 'openai-tiktoken',
+      tiktokenTokens: 42,
+      tiktokenEstimationFailed: false,
+    });
   });
 
   it('skips disabled and missing usage loggers', () => {
@@ -112,5 +111,33 @@ describe('recordTokenEstimate', () => {
     );
 
     expect(recordEstimate).not.toHaveBeenCalled();
+  });
+
+  it('keeps logger failures from disrupting request processing', () => {
+    vi.mocked(estimateRequestTokensStructured).mockReturnValue(1);
+    expect(() =>
+      recordTokenEstimate(
+        {
+          getTokenUsageLogger: () => ({
+            isEnabled: () => true,
+            recordEstimate: () => {
+              throw new Error('record failed');
+            },
+          }),
+        },
+        'prompt-6',
+        [],
+        1,
+        'openai',
+        'gpt-4',
+      ),
+    ).not.toThrow();
+  });
+});
+
+describe('resolveEstimatorType', () => {
+  it('normalizes provider name casing', () => {
+    expect(resolveEstimatorType('Anthropic')).toBe('anthropic-char');
+    expect(resolveEstimatorType('OpenAI')).toBe('openai-tiktoken');
   });
 });

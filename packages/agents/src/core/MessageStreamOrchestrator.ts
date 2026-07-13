@@ -136,6 +136,7 @@ export class MessageStreamOrchestrator {
     const request = yield* this._preflight(initialRequest, ctx);
     if (request instanceof Turn) return request;
 
+    // Include BeforeAgent hook context because it is part of the provider payload.
     const earlyTurn = yield* this._checkSessionLimits(request, ctx);
     if (earlyTurn) return earlyTurn;
 

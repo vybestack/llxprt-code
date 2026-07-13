@@ -69,7 +69,13 @@ export class TokenUsageLogger {
     if (!this.pending.has(promptId) && this.pending.size >= PENDING_CAP) {
       // Maps preserve insertion order, so this evicts only the oldest estimate.
       const oldestKey = this.pending.keys().next().value;
-      if (oldestKey !== undefined) this.pending.delete(oldestKey);
+      if (oldestKey !== undefined) {
+        this.pending.delete(oldestKey);
+        this.errorLogger.debug('Evicted unmatched token estimate at capacity', {
+          promptId: oldestKey,
+          pendingCap: PENDING_CAP,
+        });
+      }
     }
     const entry: PendingTokenEstimate = {
       ...data,
