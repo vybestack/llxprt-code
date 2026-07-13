@@ -6,12 +6,23 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApprovalMode, Config } from '@vybestack/llxprt-code-core';
-import { render } from '../../test-utils/render.js';
+import { render } from 'ink-testing-library';
 import { LoadedSettings } from '../../config/settings.js';
 import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
 import { StreamingState } from '../types.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
 import { InlineContent, type InlineContentProps } from './InlineContent.js';
+
+// Override the global ink stub alias (vitest.config.ts) so InlineContent
+// and its children use the real Ink components. Without this, the ink-stub
+// passthrough fragments cause the real Ink reconciler to throw "Text string
+// must be rendered inside <Text>", which renders as an error overlay locally
+// but as a blank frame under CI (chalk level 0 suppresses the overlay) —
+// making the tests non-deterministic across platforms.
+//
+// The factory imports the real Ink module via a direct file path (re-exported
+// from test-utils/real-ink.ts) to bypass the `ink → ink-stub` resolve alias.
+vi.mock('ink', async () => import('../../../test-utils/real-ink.js'));
 
 vi.mock('../components/ContextSummaryDisplay.js', () => ({
   ContextSummaryDisplay: () => null,
