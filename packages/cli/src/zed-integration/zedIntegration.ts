@@ -691,6 +691,7 @@ export class Session {
             promptGeneration,
             pendingSend,
           ),
+        resolveToolKind: (toolName) => this.agent.tools.get(toolName)?.kind,
       });
       if (stopReason !== null) {
         terminalStopReason = stopReason;

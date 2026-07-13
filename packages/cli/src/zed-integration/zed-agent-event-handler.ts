@@ -27,6 +27,7 @@ interface AgentEventHandlers {
   handleConfirmation(
     event: Extract<AgentEvent, { type: 'tool-confirmation' }>,
   ): Promise<void>;
+  resolveToolKind(toolName: string): string | undefined;
 }
 
 export async function handleZedAgentEvent(
@@ -45,15 +46,27 @@ export async function handleZedAgentEvent(
     }
     case 'tool-call':
       await batcher.flush();
-      await emitToolCallStart(event.call, handlers.sendUpdate);
+      await emitToolCallStart(
+        event.call,
+        handlers.sendUpdate,
+        handlers.resolveToolKind(event.call.name),
+      );
       return null;
     case 'tool-status':
       await batcher.flush();
-      await emitToolStatus(event.update, handlers.sendUpdate);
+      await emitToolStatus(
+        event.update,
+        handlers.sendUpdate,
+        handlers.resolveToolKind(event.update.name),
+      );
       return null;
     case 'tool-result':
       await batcher.flush();
-      await emitToolResult(event.result, handlers.sendUpdate);
+      await emitToolResult(
+        event.result,
+        handlers.sendUpdate,
+        handlers.resolveToolKind(event.result.name),
+      );
       return null;
     case 'tool-confirmation':
       await batcher.flush();
