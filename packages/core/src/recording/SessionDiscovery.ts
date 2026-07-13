@@ -24,8 +24,10 @@
  * for the resume flow.
  */
 
+import { createReadStream } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import * as readline from 'node:readline';
 import { type SessionSummary, type SessionStartPayload } from './types.js';
 import { readSessionHeader } from './ReplayEngine.js';
 import {
@@ -288,6 +290,37 @@ export class SessionDiscovery {
       return null;
     }
   }
+
+  /**
+   * Read the tri-state title from the last valid `session_metadata` event in a
+   * session file (issue #1611). Returns:
+   * - `undefined` when no `session_metadata` event exists (legacy fallback).
+   * - `null` when the event explicitly asserts untitled.
+   * - `string` when the event carries a concrete title.
+   */
+  static async readSessionMetadataTitle(
+    filePath: string,
+  ): Promise<string | null | undefined> {
+    let reader: readline.Interface | undefined;
+    try {
+      reader = readline.createInterface({
+        input: createReadStream(filePath, { encoding: 'utf8' }),
+        crlfDelay: Infinity,
+      });
+      let title: string | null | undefined;
+      for await (const line of reader) {
+        const result = extractSessionMetadataTitle(line);
+        if (result !== undefined) {
+          title = result;
+        }
+      }
+      return title;
+    } catch {
+      return undefined;
+    } finally {
+      reader?.close();
+    }
+  }
 }
 
 async function readSessionSummary(
@@ -315,6 +348,9 @@ async function readSessionSummary(
     provider: header.provider,
     model: header.model,
     ...(typeof header.cwd === 'string' ? { cwd: header.cwd } : {}),
+    ...(typeof header.startTime === 'string'
+      ? { createdAt: header.startTime }
+      : {}),
   };
 }
 
@@ -371,4 +407,46 @@ function extractUserMessageText(line: string): string | null {
     .join('');
 
   return text || null;
+}
+
+/**
+ * Extract the title from a `session_metadata` JSONL line.
+ * Returns:
+ * - `undefined` when the line is not a valid `session_metadata` event (so
+ *   callers can continue scanning).
+ * - `null` when title is explicitly null (untitled).
+ * - `string` when a concrete title is present.
+ */
+function extractSessionMetadataTitle(line: string): string | null | undefined {
+  if (!line.trim()) {
+    return undefined;
+  }
+  let event: unknown;
+  try {
+    event = JSON.parse(line);
+  } catch {
+    return undefined;
+  }
+  if (event === null || typeof event !== 'object') {
+    return undefined;
+  }
+  const record = event as Record<string, unknown>;
+  if (record.type !== 'session_metadata') {
+    return undefined;
+  }
+  const payload = record.payload as Record<string, unknown> | undefined;
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+  if (!('title' in payload)) {
+    return undefined;
+  }
+  const title = payload.title;
+  if (title === null) {
+    return null;
+  }
+  if (typeof title === 'string') {
+    return title;
+  }
+  return undefined;
 }

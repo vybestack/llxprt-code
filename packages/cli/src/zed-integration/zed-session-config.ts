@@ -19,6 +19,7 @@ import {
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import type { FileSystemService } from '@vybestack/llxprt-code-storage';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
 /**
  * Resolves the effective target directory for a session from an optional
@@ -61,12 +62,16 @@ export function createSessionScopedConfig(
   config: Config,
   initialFileSystemService: FileSystemService,
   targetDir: string = config.getTargetDir(),
+  resolveToolRegistry?: () => ToolRegistry | undefined,
 ): Config {
   let fileSystemService = initialFileSystemService;
   let providerManager: RuntimeProviderManager | undefined =
     config.getProviderManager();
   return new Proxy(config, {
     get(target, property, receiver) {
+      if (property === 'getToolRegistry' && resolveToolRegistry !== undefined) {
+        return () => resolveToolRegistry() ?? config.getToolRegistry();
+      }
       if (property === 'getFileSystemService') {
         return () => fileSystemService;
       }

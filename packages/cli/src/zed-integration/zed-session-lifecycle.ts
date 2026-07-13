@@ -14,12 +14,19 @@ import {
 import { buildSessionModes } from './zed-helpers.js';
 import { listRecordedSessions } from './zed-session-listing.js';
 import type { LifecycleSession } from './zed-session-pagination.js';
+import type {
+  CloseSessionRequest,
+  CloseSessionResponse,
+  DeleteSessionRequest,
+  DeleteSessionResponse,
+} from './acp-types.js';
 
 export interface LifecycleSessionHandle {
   getApprovalMode(): ApprovalMode;
   getLifecycleInfo(): LifecycleSession;
   dispose(): Promise<void>;
   sendAvailableCommands(): Promise<void>;
+  getConfigOptions(): Promise<acp.SessionConfigOption[]>;
 }
 
 interface RestoredSession {
@@ -36,6 +43,11 @@ export class SessionLifecycle {
       sessionId: string,
       cwd: string | undefined,
     ) => Promise<RestoredSession>,
+    private readonly configOptions: (
+      session: LifecycleSessionHandle,
+    ) => Promise<
+      Pick<acp.ResumeSessionResponse, 'configOptions'>
+    > = async () => ({}),
   ) {}
 
   list(params: acp.ListSessionsRequest): Promise<acp.ListSessionsResponse> {
@@ -55,14 +67,14 @@ export class SessionLifecycle {
     );
   }
 
-  close(params: acp.CloseSessionRequest): Promise<acp.CloseSessionResponse> {
+  close(params: CloseSessionRequest): Promise<CloseSessionResponse> {
     return this.runSerialized(params.sessionId, async () => {
       await this.disposeLive(params.sessionId);
       return {};
     });
   }
 
-  delete(params: acp.DeleteSessionRequest): Promise<acp.DeleteSessionResponse> {
+  delete(params: DeleteSessionRequest): Promise<DeleteSessionResponse> {
     return this.runSerialized(params.sessionId, () =>
       this.performDelete(params),
     );
@@ -88,7 +100,10 @@ export class SessionLifecycle {
         throw acp.RequestError.resourceNotFound(params.sessionId);
       }
       await live.sendAvailableCommands();
-      return { modes: buildSessionModes(live.getApprovalMode()) };
+      return {
+        modes: buildSessionModes(live.getApprovalMode()),
+        ...(await this.configOptions(live)),
+      };
     }
     const listed = await this.list({ cwd: params.cwd });
     if (!listed.sessions.some((item) => item.sessionId === params.sessionId)) {
@@ -97,12 +112,15 @@ export class SessionLifecycle {
     const { session } = await this.restore(params.sessionId, params.cwd);
     await session.sendAvailableCommands();
     this.sessions.set(params.sessionId, session);
-    return { modes: buildSessionModes(session.getApprovalMode()) };
+    return {
+      modes: buildSessionModes(session.getApprovalMode()),
+      ...(await this.configOptions(session)),
+    };
   }
 
   private async performDelete(
-    params: acp.DeleteSessionRequest,
-  ): Promise<acp.DeleteSessionResponse> {
+    params: DeleteSessionRequest,
+  ): Promise<DeleteSessionResponse> {
     const hadLiveSession = await this.disposeLive(params.sessionId);
     const projectRoot = this.config.getProjectRoot();
     const result = await deleteSessionById(

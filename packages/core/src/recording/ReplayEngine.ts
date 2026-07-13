@@ -290,6 +290,40 @@ function handleSessionEvent(
   }
 }
 
+/**
+ * @requirement issue #1611: session_metadata — update metadata.title (tri-state).
+ *
+ * The title is tri-state: undefined (field absent) is legacy and does NOT
+ * modify metadata.title; null sets it to null (explicit untitled); string sets
+ * it to that string. Malformed title values (non-string, non-null, non-
+ * undefined) are recorded as malformed.
+ */
+function handleSessionMetadata(
+  payload: Record<string, unknown>,
+  acc: ReplayAccumulators,
+  lineNumber: number,
+): void {
+  if (acc.metadata === null) {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${lineNumber}: session_metadata before session_start, skipping`,
+    );
+    return;
+  }
+  if (!('title' in payload)) {
+    return;
+  }
+  const title = payload.title;
+  if (title === null || typeof title === 'string') {
+    acc.metadata.title = title;
+  } else {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${lineNumber}: malformed session_metadata title, skipping`,
+    );
+  }
+}
+
 /** @pseudocode line 126-131: directories_changed — update metadata or record malformed. */
 function handleDirectoriesChanged(
   payload: Record<string, unknown>,
@@ -381,6 +415,9 @@ function dispatchEvent(
       break;
     case 'session_event':
       handleSessionEvent(payload, acc, lineNumber);
+      break;
+    case 'session_metadata':
+      handleSessionMetadata(payload, acc, lineNumber);
       break;
     case 'directories_changed':
       handleDirectoriesChanged(payload, acc, lineNumber);
