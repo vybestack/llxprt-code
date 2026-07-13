@@ -37,6 +37,7 @@ export interface CliArgs {
   prompt: string | undefined;
   promptInteractive: string | undefined;
   outputFormat: string | undefined;
+  quiet: boolean | undefined;
 
   showMemoryUsage: boolean | undefined;
   yolo: boolean | undefined;
@@ -161,6 +162,7 @@ function mapParsedArgsToCliArgs(result: Record<string, unknown>): CliArgs {
     ),
     promptInteractive: result['promptInteractive'] as string | undefined,
     outputFormat: result['outputFormat'] as string | undefined,
+    quiet: result['quiet'] as boolean | undefined,
     showMemoryUsage: result['showMemoryUsage'] as boolean | undefined,
     yolo: result['yolo'] as boolean | undefined,
     approvalMode: result['approvalMode'] as string | undefined,

@@ -110,11 +110,40 @@ export async function hydrateModelsWithRegistry(
     }
 
     // Merge registry data
+    //
+    // Geometry (contextWindow, maxOutputTokens) precedence is
+    // field-specific based on geometryAuthority markers:
+    // - geometryAuthority.contextWindow === true: model contextWindow
+    //   wins; registry only fills gaps.
+    // - geometryAuthority.maxOutputTokens === true: model maxOutputTokens
+    //   wins; registry only fills gaps.
+    // - otherwise: the registry value wins; model value fills gaps.
+    //   This matches the pre-fix behavior so that provider-fallback
+    //   geometry (often absent) is refreshed from the registry.
+    //
+    // See issue #2483.
+    const authority = model.geometryAuthority;
+    const resolveGeometry = (
+      modelValue: number | undefined,
+      registryValue: number | undefined,
+      isAuthoritative: boolean | undefined,
+    ): number | undefined =>
+      isAuthoritative === true
+        ? (modelValue ?? registryValue)
+        : (registryValue ?? modelValue);
+
     return {
       ...model,
-      // Override context/output if registry has them
-      contextWindow: registryModel.contextWindow ?? model.contextWindow,
-      maxOutputTokens: registryModel.maxOutputTokens ?? model.maxOutputTokens,
+      contextWindow: resolveGeometry(
+        model.contextWindow,
+        registryModel.contextWindow,
+        authority?.contextWindow,
+      ),
+      maxOutputTokens: resolveGeometry(
+        model.maxOutputTokens,
+        registryModel.maxOutputTokens,
+        authority?.maxOutputTokens,
+      ),
       // Add hydration data
       capabilities: registryModel.capabilities,
       pricing: registryModel.pricing,

@@ -114,6 +114,7 @@ function useAgentStreamReturn(
   return {
     streamingState: orchestration.streamingState,
     submitQuery: orchestration.submitQuery,
+    sanitizeContent: orchestration.st.sanitizeContent,
     initError: orchestration.st.initError,
     pendingHistoryItems,
     thought: orchestration.st.thought,

@@ -25,7 +25,6 @@ import {
   buildFinishReasonMessage,
   buildRefusalNoticeMessage,
   deduplicateToolCallRequests,
-  buildThinkingBlock,
   buildSplitContent,
   processSlashCommandResult,
   handleSubmissionError,
@@ -350,47 +349,6 @@ describe('deduplicateToolCallRequests', () => {
   it('returns all items when no duplicates', () => {
     const requests = [makeRequest('x'), makeRequest('y'), makeRequest('z')];
     expect(deduplicateToolCallRequests(requests)).toHaveLength(3);
-  });
-});
-
-// ─── buildThinkingBlock ───────────────────────────────────────────────────────
-
-describe('buildThinkingBlock', () => {
-  it('creates a ThinkingBlock from thought text', () => {
-    const block = buildThinkingBlock('my thought', []);
-    expect(block).toStrictEqual({
-      type: 'thinking',
-      thought: 'my thought',
-      sourceField: 'thought',
-    });
-  });
-
-  it('returns null for empty thought text', () => {
-    expect(buildThinkingBlock('', [])).toBeNull();
-  });
-
-  it('returns null if thought already exists in existingBlocks', () => {
-    const existing = [
-      {
-        type: 'thinking' as const,
-        thought: 'duplicate',
-        sourceField: 'thought' as const,
-      },
-    ];
-    expect(buildThinkingBlock('duplicate', existing)).toBeNull();
-  });
-
-  it('creates new block if thought is unique', () => {
-    const existing = [
-      {
-        type: 'thinking' as const,
-        thought: 'other',
-        sourceField: 'thought' as const,
-      },
-    ];
-    const block = buildThinkingBlock('new thought', existing);
-    expect(block).not.toBeNull();
-    expect(block?.thought).toBe('new thought');
   });
 });
 

@@ -94,6 +94,7 @@ export function buildSettingsSnapshot(
       | 'medium'
       | 'high'
       | 'xhigh'
+      | 'max'
       | undefined,
     'reasoning.maxTokens': config.getEphemeralSetting('reasoning.maxTokens') as
       | number

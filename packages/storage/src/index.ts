@@ -5,6 +5,7 @@ export { NullStorageLoggerImpl } from './types/logger.js';
 export {
   Storage,
   LLXPRT_DIR,
+  AGENTS_DIR,
   PROVIDER_ACCOUNTS_FILENAME,
   OAUTH_FILE,
 } from './config/storage.js';
