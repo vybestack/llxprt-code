@@ -634,6 +634,7 @@ export class StreamProcessor {
     hookRestrictedAllowedTools?: string[],
   ): AsyncGenerator<GenerateContentResponse> {
     let lastConvertedChunk: GenerateContentResponse | undefined;
+    let lastProviderUsage: UsageMetadataWithCache | undefined;
 
     for await (const iContent of streamResponse) {
       this._trackPromptTokens(iContent);
@@ -643,6 +644,12 @@ export class StreamProcessor {
         hookRestrictedAllowedTools,
       );
       lastConvertedChunk = convertedChunk;
+      const providerUsage = convertedChunk.usageMetadata as
+        | UsageMetadataWithCache
+        | undefined;
+      if (providerUsage?.promptTokenCount !== undefined) {
+        lastProviderUsage = providerUsage;
+      }
 
       const hookResult = await this._processAfterModelHook(
         iContent,
@@ -664,7 +671,11 @@ export class StreamProcessor {
       yield convertedChunk;
     }
 
-    await this._logTelemetry(telemetryContext, lastConvertedChunk);
+    await this._logTelemetry(
+      telemetryContext,
+      lastConvertedChunk,
+      lastProviderUsage,
+    );
   }
 
   private _trackPromptTokens(iContent: IContent): void {
@@ -751,6 +762,7 @@ export class StreamProcessor {
   private async _logTelemetry(
     telemetryContext: { promptId: string; startTime: number } | undefined,
     lastConvertedChunk: GenerateContentResponse | undefined,
+    providerUsage: UsageMetadataWithCache | undefined,
   ): Promise<void> {
     if (telemetryContext && lastConvertedChunk) {
       const durationMs = Date.now() - telemetryContext.startTime;
@@ -760,14 +772,17 @@ export class StreamProcessor {
         this.runtimeContext.state.model,
         telemetryContext.promptId,
         durationMs,
-        lastConvertedChunk.usageMetadata,
+        providerUsage ?? lastConvertedChunk.usageMetadata,
         JSON.stringify(lastConvertedChunk),
       );
 
       await recordActualTokenUsage(
         this.compressionHandler.tokenUsageLogger,
         telemetryContext.promptId,
-        lastConvertedChunk.usageMetadata as UsageMetadataWithCache | undefined,
+        providerUsage ??
+          (lastConvertedChunk.usageMetadata as
+            | UsageMetadataWithCache
+            | undefined),
       );
     }
   }
