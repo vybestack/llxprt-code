@@ -31,6 +31,10 @@ export async function setup() {
   integrationStorageRoot = await mkdtemp(
     path.join(os.tmpdir(), 'llxprt-integration-storage-'),
   );
+  const storageSubdirs = ['config', 'data', 'cache', 'log'];
+  for (const sub of storageSubdirs) {
+    await mkdir(join(integrationStorageRoot, sub), { recursive: true });
+  }
   process.env.LLXPRT_CONFIG_HOME = join(integrationStorageRoot, 'config');
   process.env.LLXPRT_DATA_HOME = join(integrationStorageRoot, 'data');
   process.env.LLXPRT_CACHE_HOME = join(integrationStorageRoot, 'cache');

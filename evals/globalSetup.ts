@@ -31,6 +31,10 @@ export async function setup() {
   evalsStorageRoot = await mkdtemp(
     path.join(os.tmpdir(), 'llxprt-evals-storage-'),
   );
+  const storageSubdirs = ['config', 'data', 'cache', 'log'];
+  for (const sub of storageSubdirs) {
+    await mkdir(join(evalsStorageRoot, sub), { recursive: true });
+  }
   process.env.LLXPRT_CONFIG_HOME = join(evalsStorageRoot, 'config');
   process.env.LLXPRT_DATA_HOME = join(evalsStorageRoot, 'data');
   process.env.LLXPRT_CACHE_HOME = join(evalsStorageRoot, 'cache');
