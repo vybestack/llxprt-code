@@ -97,6 +97,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
         toolCallId: 'call-1',
         status: 'failed',
         content: [],
+        kind: 'read',
       },
     ]);
   });
@@ -132,6 +133,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
       sessionUpdate: 'tool_call_update',
       toolCallId: 'call-1',
       status: 'completed',
+      kind: 'read',
       content: [
         {
           type: 'content',
@@ -170,6 +172,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
       sessionUpdate: 'tool_call_update',
       toolCallId: 'call-out',
       status: 'completed',
+      kind: 'execute',
       content: [{ type: 'content', content: { type: 'text', text: 'x' } }],
     });
   });
@@ -203,6 +206,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
       sessionUpdate: 'tool_call_update',
       toolCallId: 'call-err',
       status: 'failed',
+      kind: 'execute',
       content: [{ type: 'content', content: { type: 'text', text: 'y' } }],
     });
   });
@@ -238,6 +242,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
       sessionUpdate: 'tool_call_update',
       toolCallId: 'call-obj-err',
       status: 'failed',
+      kind: 'execute',
       content: [{ type: 'content', content: { type: 'text', text: 'boom' } }],
     });
   });
@@ -272,6 +277,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
       sessionUpdate: 'tool_call_update',
       toolCallId: 'call-boom',
       status: 'failed',
+      kind: 'edit',
       content: [
         {
           type: 'content',
@@ -310,6 +316,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
       sessionUpdate: 'tool_call_update',
       toolCallId: 'call-2',
       status: 'completed',
+      kind: 'other',
       content: [],
     });
   });
@@ -333,7 +340,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
     expect(mapHistoryToSessionUpdates(history)).toStrictEqual([]);
   });
 
-  it('omits kind for an unknown tool name but still emits the in_progress tool_call (with no inferable locations)', () => {
+  it('maps an unknown tool name to other while still emitting the in_progress tool_call', () => {
     const history: IContent[] = [
       {
         speaker: 'ai',
@@ -353,11 +360,12 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
       toolCallId: 'call-x',
       title: 'totally_unknown_tool',
       status: 'in_progress',
+      kind: 'other',
       content: [],
       locations: [],
       rawInput: { foo: 'bar' },
     });
-    expect('kind' in update).toBe(false);
+    expect(update).toHaveProperty('kind', 'other');
   });
 
   it('pairs an ai tool_call with its later tool_response: in_progress start THEN completed update, no synthetic failure (FINDING 2/3 ordered pairing)', () => {
@@ -400,6 +408,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
         sessionUpdate: 'tool_call_update',
         toolCallId: 'paired-1',
         status: 'completed',
+        kind: 'read',
         content: [
           { type: 'content', content: { type: 'text', text: 'paired body' } },
         ],
@@ -537,6 +546,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
         sessionUpdate: 'tool_call_update',
         toolCallId: 'dup-1',
         status: 'completed',
+        kind: 'read',
         content: [
           { type: 'content', content: { type: 'text', text: 'winner' } },
         ],
@@ -695,6 +705,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
       sessionUpdate: 'tool_call_update',
       toolCallId: 'mcp-1',
       status: 'completed',
+      kind: 'execute',
       content: [
         {
           type: 'content',
@@ -706,6 +717,17 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
 
   it('joins ONLY the text elements of a mixed MCP content array, skipping non-text elements (FINDING D)', () => {
     const history: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'mcp-mixed',
+            name: 'some_tool',
+            parameters: {},
+          },
+        ],
+      },
       {
         speaker: 'tool',
         blocks: [
@@ -724,29 +746,12 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
         ],
       },
     ];
-    // MCP content-array extraction is asserted through a PAIRED call/response:
-    // an orphan response (no matching start) would be dropped by the pending
-    // check before extraction is observable, so pairing is required to surface
-    // the extracted text on the terminal update.
-    const paired: IContent[] = [
-      {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: 'mcp-mixed',
-            name: 'some_tool',
-            parameters: {},
-          },
-        ],
-      },
-      ...history,
-    ];
-    const updates = mapHistoryToSessionUpdates(paired);
+    const updates = mapHistoryToSessionUpdates(history);
     expect(updates[1]).toStrictEqual({
       sessionUpdate: 'tool_call_update',
       toolCallId: 'mcp-mixed',
       status: 'completed',
+      kind: 'other',
       content: [
         { type: 'content', content: { type: 'text', text: 'visible text' } },
       ],
@@ -796,6 +801,7 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
       sessionUpdate: 'tool_call_update',
       toolCallId: 'mcp-empty',
       status: 'completed',
+      kind: 'other',
       content: [],
     });
   });

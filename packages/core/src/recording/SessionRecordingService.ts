@@ -26,8 +26,6 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
-
 import { mkdirSync, existsSync, watch, type FSWatcher } from 'node:fs';
 import { type IContent } from '../services/history/IContent.js';
 import { debugLogger } from '../utils/debugLogger.js';
@@ -36,6 +34,8 @@ import {
   type SessionEventType,
   type SessionRecordLine,
 } from './types.js';
+
+export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
 
 /**
  * Core service for recording session events to a JSONL file.

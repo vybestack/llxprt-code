@@ -132,8 +132,8 @@ export class StreamBatcher {
    * disposed so a late {@link append} after the turn ends is a silent no-op
    * (nothing new can enter the flush chain). Idempotent and safe to call after
    * {@link flush}; it does NOT emit, so any pending chunks must be flushed first
-   * (the prompt path flushes then disposes). An in-flight flush link is left to
-   * settle naturally — it only drains the (now empty) pending queue.
+   * (the prompt path flushes then disposes). An in-flight flush is not aborted:
+   * chunks it already detached may finish sending while the chain settles.
    */
   dispose(): void {
     this.disposed = true;

@@ -44,9 +44,7 @@ import {
 import { ZedPathResolver } from './zed-path-resolver.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
-  emitToolCallStart,
-  emitToolStatus,
-  emitToolResult,
+  emitAgentToolEvent,
   requestToolConfirmation,
   type PermissionRoundTripResult,
 } from './zed-tool-handler.js';
@@ -612,16 +610,14 @@ export class Session {
         return null;
       }
       case 'tool-call':
-        await batcher.flush();
-        await emitToolCallStart(event.call, (u) => this.sendUpdate(u));
-        return null;
       case 'tool-status':
-        await batcher.flush();
-        await emitToolStatus(event.update, (u) => this.sendUpdate(u));
-        return null;
       case 'tool-result':
         await batcher.flush();
-        await emitToolResult(event.result, (u) => this.sendUpdate(u));
+        await emitAgentToolEvent(
+          event,
+          (update) => this.sendUpdate(update),
+          this.agent.tools,
+        );
         return null;
       case 'tool-confirmation':
         await batcher.flush();
@@ -720,6 +716,7 @@ export class Session {
           event.confirmation.name,
           event.confirmation.details,
           this.connection,
+          this.agent.tools.get(event.confirmation.name)?.kind,
         ),
         cancelled,
       ] as const);
