@@ -330,6 +330,12 @@ export function isErrorEvent(
   return e.type === 'error';
 }
 
+export function isNoticeEvent(
+  e: AgentEvent,
+): e is Extract<AgentEvent, { type: 'notice' }> {
+  return e.type === 'notice';
+}
+
 // ─── Tool-scenario utilities ────────────────────────────────────────────────
 
 /**

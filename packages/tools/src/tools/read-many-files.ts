@@ -23,7 +23,7 @@ import {
   getSpecificMimeType,
   DEFAULT_MAX_LINES_TEXT_FILE,
 } from '../utils/fileUtils.js';
-import { type PartUnion } from '@google/genai';
+import { type ContentPartUnion } from '../types/wire-types.js';
 import { stat } from 'fs/promises';
 import { ToolErrorType } from '../types/tool-error.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
@@ -162,7 +162,7 @@ ${this.host.getTargetDir()}
     const filesToConsider = new Set<string>();
     const skippedFiles: Array<{ path: string; reason: string }> = [];
     const processedFilesRelativePaths: string[] = [];
-    const contentParts: Array<string | PartUnion> = [];
+    const contentParts: Array<string | ContentPartUnion> = [];
 
     const searchResult = await this.discoverFiles(
       inputPatterns,
@@ -223,7 +223,7 @@ ${this.host.getTargetDir()}
     inputPatterns: string[],
     skippedFiles: Array<{ path: string; reason: string }>,
     processedFilesRelativePaths: string[],
-    contentParts: Array<string | PartUnion>,
+    contentParts: Array<string | ContentPartUnion>,
     limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
   ): Promise<ToolResult> {
     const totalTokens = await this.processFiles(
@@ -497,7 +497,7 @@ ${this.host.getTargetDir()}
     inputPatterns: string[],
     skippedFiles: Array<{ path: string; reason: string }>,
     processedFilesRelativePaths: string[],
-    contentParts: Array<string | PartUnion>,
+    contentParts: Array<string | ContentPartUnion>,
     limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
   ): Promise<number> {
     let totalTokens = 0;
@@ -526,7 +526,7 @@ ${this.host.getTargetDir()}
     inputPatterns: string[],
     skippedFiles: Array<{ path: string; reason: string }>,
     processedFilesRelativePaths: string[],
-    contentParts: Array<string | PartUnion>,
+    contentParts: Array<string | ContentPartUnion>,
     limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
     currentTokens: number,
   ): Promise<{ done: boolean; totalTokens: number }> {
@@ -662,7 +662,7 @@ ${this.host.getTargetDir()}
     relativePathForDisplay: string,
     skippedFiles: Array<{ path: string; reason: string }>,
     _processedFilesRelativePaths: string[],
-    contentParts: Array<string | PartUnion>,
+    contentParts: Array<string | ContentPartUnion>,
     limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
     totalTokens: number,
     sortedFiles: string[],
@@ -701,7 +701,7 @@ ${this.host.getTargetDir()}
     filePath: string,
     relativePathForDisplay: string,
     skippedFiles: Array<{ path: string; reason: string }>,
-    contentParts: Array<string | PartUnion>,
+    contentParts: Array<string | ContentPartUnion>,
     limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
     totalTokens: number,
     sortedFiles: string[],
@@ -743,7 +743,7 @@ ${this.host.getTargetDir()}
     relativePathForDisplay: string,
     sortedFiles: string[],
     processedFilesRelativePaths: string[],
-    contentParts: Array<string | PartUnion>,
+    contentParts: Array<string | ContentPartUnion>,
     contentToAdd: string,
     totalTokens: number,
     skippedFiles: Array<{ path: string; reason: string }>,
@@ -779,7 +779,7 @@ ${this.host.getTargetDir()}
 
   private recordReadMetric(
     filePath: string,
-    llmContent: string | PartUnion,
+    llmContent: string | ContentPartUnion,
   ): void {
     const lines =
       typeof llmContent === 'string'

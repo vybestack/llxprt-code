@@ -5,10 +5,10 @@
  */
 
 import {
-  type FunctionCall,
+  type ToolCallRequest as FunctionCall,
   type FunctionDeclaration,
-  type PartListUnion,
-} from '@google/genai';
+  type ContentPartListUnion,
+} from '../types/wire-types.js';
 import { randomUUID } from 'node:crypto';
 import {
   type IToolMessageBus,
@@ -459,7 +459,7 @@ export interface ToolBuilder<
   kind: Kind;
 
   /**
-   * Function declaration schema from @google/genai.
+   * Function declaration schema (neutral structural type).
    */
   schema: FunctionDeclaration;
 
@@ -708,7 +708,7 @@ export interface ToolResult {
    * Content meant to be included in LLM history.
    * This should represent the factual outcome of the tool execution.
    */
-  llmContent: PartListUnion;
+  llmContent: ContentPartListUnion;
 
   /**
    * Markdown string for user display.

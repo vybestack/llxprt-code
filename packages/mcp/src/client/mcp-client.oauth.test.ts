@@ -28,7 +28,6 @@ import * as path from 'node:path';
 
 vi.mock('@modelcontextprotocol/sdk/client/stdio.js');
 vi.mock('@modelcontextprotocol/sdk/client/index.js');
-vi.mock('@google/genai');
 vi.mock('../auth/oauth-provider.js');
 vi.mock('../auth/oauth-token-storage.js');
 vi.mock('../auth/oauth-utils.js');

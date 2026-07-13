@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Type } from '@google/genai';
+import { Type } from '../types/schema-type.js';
 import { BaseTool, type ToolResult, Kind } from './tools.js';
 import { type Todo, TodoArraySchema } from '../types/todo-schemas.js';
 import { TodoStore, DEFAULT_AGENT_ID } from './todo-store.js';

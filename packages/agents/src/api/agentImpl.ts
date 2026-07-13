@@ -36,7 +36,6 @@ import {
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
-  AgentError,
   AgentHistoryItem,
   AgentInput,
   AgentMessage,
@@ -532,29 +531,27 @@ export class AgentImpl implements Agent {
 
   /**
    * Awaits MCP discovery readiness before a model turn (the discovery gate).
-   * Returns a structured AgentError when discovery FAILED, or undefined when it
-   * is ready/absent. `mcpDiscovery:'skip'` opts out (returns undefined without
-   * awaiting). Non-blocking methods (mcp.status/discoveryState, listTools)
-   * remain callable throughout.
+   * The wait is bounded by the manager so a never-settling server cannot hang
+   * the turn. Per-server discovery failures are NON-FATAL: the turn proceeds
+   * with whatever tools are available and each failed server is surfaced as a
+   * warning notice (issue #2516). `mcpDiscovery:'skip'` opts out (returns no
+   * failures without awaiting). Non-blocking methods (mcp.status/discoveryState,
+   * listTools) remain callable throughout.
    * @plan:PLAN-20260617-COREAPI.P22
    * @requirement:REQ-013
    */
   private async awaitMcpDiscoveryGate(
     opts?: TurnOptions,
-  ): Promise<AgentError | undefined> {
-    if (opts?.mcpDiscovery === 'skip') return undefined;
+  ): Promise<ReadonlyMap<string, string>> {
+    if (opts?.mcpDiscovery === 'skip') {
+      return new Map();
+    }
     const manager = this.deps.config.getMcpClientManager();
-    if (manager === undefined) return undefined;
+    if (manager === undefined) {
+      return new Map();
+    }
     await manager.whenDiscoverySettled();
-    const failures = manager.getDiscoveryFailures();
-    if (failures.size === 0) return undefined;
-    const detail = Array.from(failures.entries())
-      .map(([server, message]) => `${server}: ${message}`)
-      .join('; ');
-    return {
-      code: 'mcp_discovery_failed',
-      message: `MCP discovery failed (${detail})`,
-    };
+    return manager.getDiscoveryFailures();
   }
 
   /**
@@ -568,18 +565,24 @@ export class AgentImpl implements Agent {
     opts?: TurnOptions,
   ): AsyncIterable<AgentEvent> {
     // @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-013
-    // MCP discovery gate: by default await readiness before the model turn. On
-    // discovery FAILURE the stream yields a structured `error` event (carrying
-    // the failure message so consumers can surface useful diagnostics) followed
-    // by exactly ONE done{reason:'error'} and stops — no model turn runs.
-    const gateError = await this.awaitMcpDiscoveryGate(opts);
-    if (gateError !== undefined) {
+    // MCP discovery gate: by default await readiness before the model turn.
+    // Per-server discovery failures are NON-FATAL — each failed server is
+    // surfaced as a warning notice, then the turn proceeds with whatever tools
+    // are available (issue #2516). The await is bounded by the manager so a
+    // never-settling server cannot hang the turn.
+    //
+    // Failures are emitted as `notice` (NOT `error`): an `error` event would
+    // set AgentResult.error and make consumers treat the turn as failed — the
+    // exact fatal behavior #2516 removes. Stream consumers see the per-server
+    // warning inline; chat()/non-streaming consumers query the dedicated MCP
+    // control surface (agent.mcp.status()/discoveryState()) which projects the
+    // per-server failures as 'partial'/'failed' + per-server error status.
+    const discoveryFailures = await this.awaitMcpDiscoveryGate(opts);
+    for (const [server, message] of discoveryFailures.entries()) {
       yield {
-        type: 'error',
-        error: { message: `[${gateError.code}] ${gateError.message}` },
+        type: 'notice',
+        message: `MCP server '${server}' discovery failed: ${message}`,
       };
-      yield { type: 'done', reason: 'error' };
-      return;
     }
     const init = resolveLoopOrError(
       this.deps.loopHolder,
@@ -628,22 +631,10 @@ export class AgentImpl implements Agent {
    */
   async chat(input: AgentInput, opts?: TurnOptions): Promise<AgentResult> {
     // @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-013
-    // Run the MCP discovery gate once here so the buffered result surfaces the
-    // typed AgentError{code:'mcp_discovery_failed'} (the stream error event
-    // payload carries no code). On success the turn proceeds with the gate
-    // already satisfied (skip re-awaiting inside stream()).
-    const gateError = await this.awaitMcpDiscoveryGate(opts);
-    if (gateError !== undefined) {
-      return {
-        text: '',
-        toolCalls: [],
-        finishReason: 'error',
-        error: gateError,
-      };
-    }
-    const drained = await drainToResult(
-      this.stream(input, { ...opts, mcpDiscovery: 'skip' }),
-    );
+    // The MCP discovery gate runs inside stream(): it awaits (bounded) and
+    // surfaces per-server failures as warning notices without aborting the
+    // turn (issue #2516). chat() simply drains stream() into an AgentResult.
+    const drained = await drainToResult(this.stream(input, opts));
     return buildAgentResult(drained);
   }
 

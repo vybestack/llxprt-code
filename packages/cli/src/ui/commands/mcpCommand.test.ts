@@ -9,9 +9,7 @@ import { mcpCommand } from './mcpCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import {
   MCPServerStatus,
-  MCPDiscoveryState,
   getMCPServerStatus,
-  getMCPDiscoveryState,
   DiscoveredMCPTool,
 } from '@vybestack/llxprt-code-mcp';
 import type { MessageActionReturn } from './types.js';
@@ -34,7 +32,6 @@ vi.mock('@vybestack/llxprt-code-mcp', async (importOriginal) => {
   return {
     ...actual,
     getMCPServerStatus: vi.fn(),
-    getMCPDiscoveryState: vi.fn(),
     mcpServerRequiresOAuth: new Map<string, boolean>(),
     MCPOAuthProvider: {
       authenticate: vi.fn(),
@@ -111,6 +108,9 @@ interface MockAgentOptions {
   tools?: DiscoveredMCPTool[];
   resources?: Array<{ serverName: string; resource: McpResourceInfo }>;
   blockedServers?: Array<{ name: string; extensionName: string }>;
+  discoveryState?: 'idle' | 'pending' | 'ready' | 'partial' | 'failed';
+  /** When set, mcp.details() rejects with this value (degraded-path tests). */
+  detailsRejectsWith?: unknown;
 }
 
 /**
@@ -148,13 +148,16 @@ function createMockAgent(opts: MockAgentOptions = {}): Agent {
   };
   return {
     mcp: {
-      details: vi.fn().mockResolvedValue(detailStatus),
+      details:
+        opts.detailsRejectsWith !== undefined
+          ? vi.fn().mockRejectedValue(opts.detailsRejectsWith)
+          : vi.fn().mockResolvedValue(detailStatus),
       refresh: vi.fn().mockResolvedValue(undefined),
       status: vi.fn(),
       listServers: vi.fn().mockReturnValue([]),
       toolsByServer: vi.fn().mockReturnValue({}),
       auth: vi.fn(),
-      discoveryState: vi.fn().mockReturnValue('ready'),
+      discoveryState: vi.fn().mockReturnValue(opts.discoveryState ?? 'ready'),
       authenticate: vi.fn(),
     },
     tools: {
@@ -181,9 +184,6 @@ describe('mcpCommand', () => {
     vi.clearAllMocks();
     delete process.env.SANDBOX;
     vi.mocked(getMCPServerStatus).mockReturnValue(MCPServerStatus.CONNECTED);
-    vi.mocked(getMCPDiscoveryState).mockReturnValue(
-      MCPDiscoveryState.COMPLETED,
-    );
     mockConfig = {
       getMcpServers: vi.fn().mockReturnValue({}),
       getBlockedMcpServers: vi.fn().mockReturnValue([]),
@@ -454,17 +454,16 @@ describe('mcpCommand', () => {
         return MCPServerStatus.DISCONNECTED;
       });
 
-      vi.mocked(getMCPDiscoveryState).mockReturnValue(
-        MCPDiscoveryState.IN_PROGRESS,
-      );
-
       const tools = [
         createMockMCPTool('server1_tool1', 'server1'),
         createMockMCPTool('server2_tool1', 'server2'),
       ];
 
       const testContext = createMockCommandContext({
-        services: { config: mockConfig, agent: createMockAgent({ tools }) },
+        services: {
+          config: mockConfig,
+          agent: createMockAgent({ tools, discoveryState: 'pending' }),
+        },
         ui: { reloadCommands: vi.fn() },
       });
 
@@ -555,15 +554,9 @@ describe('mcpCommand', () => {
       });
 
       // Create an agent whose mcp.details() rejects.
-      const failingAgent = {
-        mcp: {
-          details: vi.fn().mockRejectedValue(new Error('details unavailable')),
-          refresh: vi.fn().mockResolvedValue(undefined),
-          status: vi.fn(),
-          listServers: vi.fn().mockReturnValue([]),
-        },
-        tools: { list: vi.fn().mockReturnValue([]) },
-      } as unknown as Agent;
+      const failingAgent = createMockAgent({
+        detailsRejectsWith: new Error('details unavailable'),
+      });
 
       const testContext = createMockCommandContext({
         services: {
@@ -591,6 +584,59 @@ describe('mcpCommand', () => {
       // Warning line must be present.
       expect(message).toContain('Failed to load MCP tool details');
       expect(message).toContain('details unavailable');
+    });
+  });
+
+  describe('/mcp list discovery indicator reflects manager instance (issue #2516)', () => {
+    it('shows the startup banner when discoveryState is pending even though servers are CONNECTED with tools', async () => {
+      mockConfig.getMcpServers = vi.fn().mockReturnValue({
+        server1: { command: 'cmd1' },
+      });
+      vi.mocked(getMCPServerStatus).mockReturnValue(MCPServerStatus.CONNECTED);
+
+      const tools = [createMockMCPTool('server1_tool1', 'server1')];
+
+      const testContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+          agent: createMockAgent({ tools, discoveryState: 'pending' }),
+        },
+        ui: { reloadCommands: vi.fn() },
+      });
+
+      const result = await mcpCommand.action!(testContext, '');
+      assertMessageAction(result);
+
+      // The banner appears because the manager-instance discoveryState is
+      // 'pending' — even though server1 is CONNECTED with tools. This is the
+      // divergence fix: /mcp list reads the real manager, not the stale global.
+      expect(result.content).toContain('MCP servers are starting up');
+    });
+
+    it('does NOT show the startup banner when discoveryState is ready and servers are CONNECTED', async () => {
+      mockConfig.getMcpServers = vi.fn().mockReturnValue({
+        server1: { command: 'cmd1' },
+      });
+      vi.mocked(getMCPServerStatus).mockReturnValue(MCPServerStatus.CONNECTED);
+
+      const tools = [createMockMCPTool('server1_tool1', 'server1')];
+
+      const testContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+          agent: createMockAgent({ tools, discoveryState: 'ready' }),
+        },
+        ui: { reloadCommands: vi.fn() },
+      });
+
+      const result = await mcpCommand.action!(testContext, '');
+      assertMessageAction(result);
+
+      // No startup banner — discovery is ready.
+      expect(result.content).not.toContain('MCP servers are starting up');
+      expect(result.content).toContain(
+        '[READY] \u001b[1mserver1\u001b[0m - Ready (1 tool)',
+      );
     });
   });
 });

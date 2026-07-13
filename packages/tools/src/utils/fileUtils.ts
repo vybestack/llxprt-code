@@ -6,7 +6,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { type PartUnion } from '@google/genai';
+import { type ContentPartUnion } from '../types/wire-types.js';
 import mime from 'mime-types';
 import { ToolErrorType } from '../types/tool-error.js';
 import { debugLogger } from './debugLogger.js';
@@ -242,7 +242,7 @@ export async function detectFileType(
 }
 
 export interface ProcessedFileReadResult {
-  llmContent: PartUnion;
+  llmContent: ContentPartUnion;
   returnDisplay: string;
   error?: string;
   errorType?: ToolErrorType;
