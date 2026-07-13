@@ -345,7 +345,7 @@ describe('QueuedMessagesPanel content preparation', () => {
 
       expect(view.kind).toBe('expanded');
       expect(view.kind === 'expanded' ? view.messages[0].key : '').toBe(
-        'queued-abc-123',
+        'queued-abc-123-0',
       );
     });
 

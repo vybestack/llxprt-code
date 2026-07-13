@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApprovalMode, Config } from '@vybestack/llxprt-code-core';
 import { render } from 'ink-testing-library';
@@ -60,8 +61,8 @@ function createProps(): InlineContentProps {
     config: buildSlashCommandRuntime(
       new Config({
         sessionId: 'inline-content-test',
-        targetDir: '/tmp',
-        cwd: '/tmp',
+        targetDir: tmpdir(),
+        cwd: tmpdir(),
         debugMode: false,
         model: 'test-model',
       }),

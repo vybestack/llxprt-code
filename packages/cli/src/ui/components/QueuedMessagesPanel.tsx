@@ -139,7 +139,7 @@ function stableKey(
   preview: string,
 ): string {
   if (message.promptId !== undefined && message.promptId !== '') {
-    return `queued-${message.promptId}`;
+    return `queued-${message.promptId}-${index}`;
   }
   return `queued-${index}-${preview.slice(0, FALLBACK_KEY_PREVIEW_LENGTH)}`;
 }
