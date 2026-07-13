@@ -18,8 +18,10 @@ import {
 } from './zed-test-helpers.js';
 
 const createdSessions: Session[] = [];
-// Mirrors the output of buildCommandToExecute('echo hello', false, '/tmp/shell.tmp')
-// from packages/tools/src/tools/shell-helpers.ts. Update together if the wrapping format changes.
+// Hardcoded mirror of buildCommandToExecute('echo hello', false, '/tmp/shell.tmp')
+// from packages/tools/src/tools/shell-helpers.ts. This function is not exported
+// from the tools package, so we cannot import it directly. If the wrapping
+// format in buildCommandToExecute changes, this constant MUST be updated to match.
 const preparedEcho =
   '{ echo hello; }; __code=$?; pgrep -g 0 >/tmp/shell.tmp 2>&1; exit $__code;';
 

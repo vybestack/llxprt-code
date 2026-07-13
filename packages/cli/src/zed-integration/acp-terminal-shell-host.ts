@@ -63,6 +63,17 @@ export class AcpTerminalShellHost implements IShellToolHost {
     onOutput: (event: ShellOutputEvent) => void,
     signal: AbortSignal,
   ): Promise<ShellExecutionResult> {
+    const allowed = this.delegate.isCommandAllowed(command);
+    if (!allowed.allowed) {
+      return Promise.resolve({
+        output: '',
+        exitCode: null,
+        signal: null,
+        error: new Error(allowed.reason ?? 'Command not allowed'),
+        aborted: false,
+        pid: undefined,
+      });
+    }
     return this.terminals.executeShellCommand(command, cwd, onOutput, signal);
   }
 

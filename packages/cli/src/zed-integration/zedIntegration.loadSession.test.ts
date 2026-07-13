@@ -163,6 +163,9 @@ function buildBaseConfig(): Config {
     getTargetDir: () => '/project',
     getProjectRoot: () => '/project',
     getMaxSessionTurns: () => 50,
+    // No recording service in loadSession tests — the session lifecycle under
+    // test does not depend on session recording (only the re-attach/resume
+    // probes and session-info hydration paths are exercised here).
     getSessionRecordingService: () => undefined,
     // The re-attach + corrupt-vs-missing probes derive the chats dir from
     // storage.getProjectChatsDir(); point it at a dir that never exists so the

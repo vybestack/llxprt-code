@@ -98,19 +98,35 @@ async function processStreamEvent(
     handleConfirmation: deps.handleConfirmation,
     resolveToolKind: (toolName) => deps.agent.tools.get(toolName)?.kind,
   });
-  if (
-    event.type === 'tool-call' &&
-    deps.terminals !== null &&
-    TerminalManager.isShellToolCall(
-      event.call,
-      deps.agent.tools.get(event.call.name)?.kind,
-    )
-  ) {
-    await deps.terminals.observeToolCall(event.call);
-  } else if (event.type === 'tool-result' && deps.terminals !== null) {
-    deps.terminals.completeToolCall(event.result.id);
-  }
+  await trackTerminalEvent(event, deps);
   return stopReason;
+}
+
+/**
+ * Best-effort terminal bookkeeping after each event. Extracted so terminal
+ * tracking errors never mask the stop reason from `handleZedAgentEvent`.
+ * The single `deps.terminals !== null` check addresses the repeated null guard.
+ */
+async function trackTerminalEvent(
+  event: AgentEvent,
+  deps: SessionStreamDeps,
+): Promise<void> {
+  if (deps.terminals === null) return;
+  try {
+    if (
+      event.type === 'tool-call' &&
+      TerminalManager.isShellToolCall(
+        event.call,
+        deps.agent.tools.get(event.call.name)?.kind,
+      )
+    ) {
+      await deps.terminals.observeToolCall(event.call);
+    } else if (event.type === 'tool-result') {
+      deps.terminals.completeToolCall(event.result.id);
+    }
+  } catch (error) {
+    deps.logger.debug(() => `Terminal tracking failed: ${String(error)}`);
+  }
 }
 
 export interface PromptTurnDeps {
@@ -173,11 +189,11 @@ export async function runPromptTurn(
     }
     throw thrownError;
   }
-  if (pendingSend.signal.aborted && terminalStopReason !== 'cancelled') {
-    return { stopReason: 'cancelled' };
-  }
   if (terminalStopReason !== null) {
     return { stopReason: terminalStopReason };
+  }
+  if (pendingSend.signal.aborted) {
+    return { stopReason: 'cancelled' };
   }
   return { stopReason: 'end_turn' };
 }

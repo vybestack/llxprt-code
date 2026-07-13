@@ -404,6 +404,12 @@ export class RecordingConnection {
     return handle;
   }
 
+  /**
+   * Returns content-focused session updates, excluding infrastructure
+   * notifications (`available_commands_update` and `session_info_update`).
+   * Use {@link sessionInfoUpdates} for title/updatedAt assertions and
+   * {@link availableCommandUpdates} for command-registry assertions.
+   */
   onlySessionUpdates(): acp.SessionUpdate[] {
     return this.messages
       .filter((m) => m.kind === 'sessionUpdate')

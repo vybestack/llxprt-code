@@ -108,8 +108,9 @@ export async function applyZedConfigOption(
   if (configId === 'model') {
     const models = await availableModels(agent, config);
     if (
+      models !== undefined &&
       value !== agent.getModel() &&
-      models?.some(({ id }) => id === value) !== true
+      !models.some(({ id }) => id === value)
     ) {
       throw acp.RequestError.invalidParams({ value }, 'Unavailable model.');
     }
@@ -149,14 +150,8 @@ export async function setZedConfigOption(
   agent: Agent,
   config: Config,
   configId: string,
-  value: string | boolean,
+  value: string,
 ): Promise<acp.SetSessionConfigOptionResponse> {
-  if (typeof value !== 'string') {
-    throw acp.RequestError.invalidParams(
-      { configId },
-      'Expected select value.',
-    );
-  }
   return {
     configOptions: await applyZedConfigOption(agent, config, configId, value),
   };
@@ -165,7 +160,7 @@ export async function setZedConfigOption(
 interface ConfigurableZedSession {
   setConfigOption(
     configId: string,
-    value: string | boolean,
+    value: string,
   ): Promise<acp.SetSessionConfigOptionResponse>;
 }
 
@@ -175,8 +170,20 @@ export function dispatchZedConfigOption(
   params: acp.SetSessionConfigOptionRequest,
 ): Promise<acp.SetSessionConfigOptionResponse> {
   const session = sessions.get(params.sessionId);
-  if (session === undefined || capabilities?.session?.configOptions !== true) {
+  if (session === undefined) {
     throw acp.RequestError.resourceNotFound(params.sessionId);
+  }
+  if (capabilities?.session?.configOptions !== true) {
+    throw acp.RequestError.invalidParams(
+      { sessionId: params.sessionId },
+      'Config options not supported by client.',
+    );
+  }
+  if (typeof params.value !== 'string') {
+    throw acp.RequestError.invalidParams(
+      { configId: params.configId },
+      'Expected select value.',
+    );
   }
   return session.setConfigOption(params.configId, params.value);
 }
