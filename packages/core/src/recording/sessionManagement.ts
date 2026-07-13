@@ -25,7 +25,10 @@
 
 import { type SessionSummary } from './types.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
-import { SessionLockManager } from './SessionLockManager.js';
+import {
+  SessionLockManager,
+  SessionLockedError,
+} from './SessionLockManager.js';
 
 /**
  * Result of listing sessions for a project.
@@ -111,28 +114,35 @@ async function deleteResolvedSession(
   try {
     lock = await SessionLockManager.acquire(chatsDir, target.sessionId);
   } catch (error: unknown) {
-    if ((error as Error).message === 'Session is in use by another process') {
+    if (error instanceof SessionLockedError) {
       return {
         ok: false,
         error: 'Cannot delete: session is in use by another process',
       };
     }
+    const detail = error instanceof Error ? error.message : String(error);
     return {
       ok: false,
-      error: `Failed to lock session for deletion: ${(error as Error).message}`,
+      error: `Failed to lock session for deletion: ${detail}`,
     };
   }
 
   const { unlink } = await import('node:fs/promises');
+  let result: DeleteSessionResult | DeleteSessionError;
   try {
     await unlink(target.filePath);
-    return { ok: true, deletedSessionId: target.sessionId };
+    result = { ok: true, deletedSessionId: target.sessionId };
   } catch (error: unknown) {
-    return {
+    result = {
       ok: false,
       error: `Failed to delete session: ${(error as Error).message}`,
     };
   } finally {
-    await lock.release();
+    try {
+      await lock.release();
+    } catch {
+      // Best-effort release; the deletion outcome is already captured.
+    }
   }
+  return result;
 }

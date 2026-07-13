@@ -55,7 +55,7 @@ describe('buildZedTerminalSetup', () => {
       new DebugLogger('llxprt:zed-terminal-setup-test'),
     );
 
-    const tool = setup.registry.getTool('run_shell_command');
+    const tool = setup.registry.getTool(ShellTool.Name);
     expect(tool).toBeDefined();
     expect(tool).not.toBe(baseShellTool);
   });

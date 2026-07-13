@@ -7,6 +7,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
+  CoreEvent,
   coreEvents,
   type Config,
   type RuntimeModel,
@@ -228,10 +229,15 @@ describe('Zed config options', () => {
     try {
       coreEvents.emitSettingsChanged();
       await vi.waitFor(() => expect(sendUpdate).toHaveBeenCalledOnce());
+      coreEvents.emit(CoreEvent.ModelProfileChanged, {
+        model: 'alpha',
+        providerName: 'test',
+        displayLabel: 'test:alpha',
+      });
+      await vi.waitFor(() => expect(sendUpdate).toHaveBeenCalledTimes(2));
       stop();
       coreEvents.emitSettingsChanged();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(sendUpdate).toHaveBeenCalledOnce();
+      expect(sendUpdate).toHaveBeenCalledTimes(2);
     } finally {
       stop();
     }

@@ -19,6 +19,22 @@ import {
   emitToolStatus,
 } from './zed-tool-handler.js';
 
+/**
+ * Flushes pending batched chunks without letting a flush failure replace the
+ * original event context. StreamBatcher.flush is designed to never reject
+ * (settleChainLink catches), but this guard ensures a future contract change
+ * cannot cause an 'error' event to be swallowed or a 'done' stop reason to be
+ * dropped by a flush exception.
+ */
+async function safeFlush(batcher: StreamBatcher): Promise<void> {
+  try {
+    await batcher.flush();
+  } catch {
+    // Best-effort: the batcher's internal chain swallows its own errors, so
+    // this is a defense-in-depth guard against unexpected rejections.
+  }
+}
+
 interface AgentEventHandlers {
   sendUpdate(update: acp.SessionUpdate): Promise<void>;
   sendUsage(
@@ -48,35 +64,35 @@ export async function handleZedAgentEvent(
     case 'tool-result':
       return handleToolResultEvent(event, batcher, handlers);
     case 'tool-confirmation':
-      await batcher.flush();
+      await safeFlush(batcher);
       await handlers.handleConfirmation(event);
       return null;
     case 'done':
-      await batcher.flush();
+      await safeFlush(batcher);
       return mapDoneReasonToStopReason(event.reason);
     case 'error':
-      await batcher.flush();
+      await safeFlush(batcher);
       throw translateErrorEvent(event);
     case 'idle-timeout':
-      await batcher.flush();
+      await safeFlush(batcher);
       throw translateIdleTimeout(event);
     case 'invalid-stream':
-      await batcher.flush();
+      await safeFlush(batcher);
       throw new Error(
         'Agent produced an invalid stream that could not be recovered.',
       );
     case 'hook-blocked':
-      await batcher.flush();
+      await safeFlush(batcher);
       throw new Error(
         event.info.systemMessage ?? 'Agent stopped by a hook blocker.',
       );
     case 'loop-detected':
-      await batcher.flush();
+      await safeFlush(batcher);
       return 'end_turn';
     case 'notice':
       return handleNotice(event, batcher, handlers);
     case 'usage':
-      await batcher.flush();
+      await safeFlush(batcher);
       await handlers.sendUsage(event.usage);
       return null;
     case 'context-warning':
@@ -104,7 +120,7 @@ async function handleToolEvent(
   batcher: StreamBatcher,
   handlers: AgentEventHandlers,
 ): Promise<null> {
-  await batcher.flush();
+  await safeFlush(batcher);
   await emitToolCallStart(
     event.call,
     handlers.sendUpdate,
@@ -118,7 +134,7 @@ async function handleToolUpdate(
   batcher: StreamBatcher,
   handlers: AgentEventHandlers,
 ): Promise<null> {
-  await batcher.flush();
+  await safeFlush(batcher);
   await emitToolStatus(
     event.update,
     handlers.sendUpdate,
@@ -132,7 +148,7 @@ async function handleToolResultEvent(
   batcher: StreamBatcher,
   handlers: AgentEventHandlers,
 ): Promise<null> {
-  await batcher.flush();
+  await safeFlush(batcher);
   await emitToolResult(
     event.result,
     handlers.sendUpdate,
@@ -146,7 +162,7 @@ async function handleNotice(
   batcher: StreamBatcher,
   handlers: AgentEventHandlers,
 ): Promise<null> {
-  await batcher.flush();
+  await safeFlush(batcher);
   await handlers.sendUpdate({
     sessionUpdate: 'agent_message_chunk',
     content: { type: 'text', text: event.message },

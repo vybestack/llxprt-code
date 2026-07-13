@@ -69,7 +69,7 @@ describe('Zed available commands', () => {
     await expect(
       executeZedCommand('/compact', { agent }),
     ).resolves.toStrictEqual({
-      text: 'Command /compact failed.',
+      text: 'Command /compact failed: compression unavailable',
     });
   });
 

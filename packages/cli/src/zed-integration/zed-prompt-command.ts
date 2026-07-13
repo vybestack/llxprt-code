@@ -68,11 +68,11 @@ export async function tryHandleZedCommand(
   } catch (error) {
     logger.debug(() => `Command response delivery failed: ${String(error)}`);
     throw acp.RequestError.internalError(
-      { cause: String(error) },
+      { cause: error },
       'Command response delivery failed.',
     );
   }
   return {
-    response: { stopReason: result.stopReason ?? 'end_turn' },
+    response: { stopReason: 'end_turn' },
   };
 }

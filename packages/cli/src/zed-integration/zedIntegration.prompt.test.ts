@@ -333,6 +333,7 @@ describe('Zed Session.prompt (Agent API) - cancellation', () => {
     await expect(runPrompt(session)).rejects.toMatchObject({
       code: 429,
       message: 'Rate limit exceeded. Try again later.',
+      data: { reason: 'too many requests' },
     });
   });
 

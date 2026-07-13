@@ -33,7 +33,11 @@ import * as fc from 'fast-check';
 import * as path from 'path';
 import * as os from 'os';
 import { fork, type ChildProcess } from 'child_process';
-import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
+import {
+  SessionLockManager,
+  SessionLockedError,
+  type LockHandle,
+} from './SessionLockManager.js';
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
@@ -417,7 +421,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
 
       await expect(
         SessionLockManager.acquire(chatsDir, sessionId),
-      ).rejects.toThrow(/in use/i);
+      ).rejects.toBeInstanceOf(SessionLockedError);
 
       await handle.release();
     });

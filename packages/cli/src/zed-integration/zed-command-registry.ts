@@ -16,7 +16,6 @@ export interface ZedCommandContext {
 
 export interface ZedCommandResult {
   readonly text: string;
-  readonly stopReason?: acp.StopReason;
 }
 
 interface ZedCommandDefinition {
@@ -161,10 +160,8 @@ export async function executeZedCommand(
   try {
     return await command.handler(context, parsed.args);
   } catch (error) {
-    logger.error(
-      () =>
-        `Command /${command.name} failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return { text: `Command /${command.name} failed.` };
+    const detail = error instanceof Error ? error.message : String(error);
+    logger.error(() => `Command /${command.name} failed: ${detail}`);
+    return { text: `Command /${command.name} failed: ${detail}` };
   }
 }

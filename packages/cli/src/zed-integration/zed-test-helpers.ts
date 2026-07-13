@@ -184,7 +184,8 @@ export class RecordingConnection {
 
   private terminalOutput = '';
   private terminalExitDelayed = false;
-  private terminalExitResolves = new Map<string, () => void>();
+  private terminalExitResolvers = new Map<string, Array<() => void>>();
+  private terminalCreationWaiters = new Set<() => void>();
 
   setTerminalOutput(output: string): void {
     this.terminalOutput = output;
@@ -196,21 +197,36 @@ export class RecordingConnection {
 
   resolveDelayedTerminalExit(terminalId?: string): void {
     if (terminalId !== undefined) {
-      const fn = this.terminalExitResolves.get(terminalId);
-      if (fn !== undefined) {
-        this.terminalExitResolves.delete(terminalId);
-        fn();
+      const resolvers = this.terminalExitResolvers.get(terminalId);
+      if (resolvers !== undefined) {
+        this.terminalExitResolvers.delete(terminalId);
+        for (const fn of resolvers) {
+          fn();
+        }
       }
-      if (this.terminalExitResolves.size === 0) {
+      if (this.terminalExitResolvers.size === 0) {
         this.terminalExitDelayed = false;
       }
       return;
     }
-    for (const fn of this.terminalExitResolves.values()) {
-      fn();
+    for (const resolvers of this.terminalExitResolvers.values()) {
+      for (const fn of resolvers) {
+        fn();
+      }
     }
-    this.terminalExitResolves.clear();
+    this.terminalExitResolvers.clear();
     this.terminalExitDelayed = false;
+  }
+
+  waitForTerminalProcessCreated(): Promise<void> {
+    if (this.createTerminalCalls.length > 0) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const waiter = (): void => {
+        this.terminalCreationWaiters.delete(waiter);
+        resolve();
+      };
+      this.terminalCreationWaiters.add(waiter);
+    });
   }
 
   /**
@@ -387,6 +403,9 @@ export class RecordingConnection {
           : {}),
       };
       this.createTerminalCalls.push(call);
+      for (const resolve of this.terminalCreationWaiters) {
+        resolve();
+      }
       const terminalId = `terminal-${this.createTerminalCalls.length}`;
       return this.buildFakeTerminalHandle(terminalId);
     },
@@ -403,7 +422,12 @@ export class RecordingConnection {
       waitForExit: vi.fn(async () => {
         if (this.terminalExitDelayed) {
           await new Promise<void>((resolve) => {
-            this.terminalExitResolves.set(terminalId, resolve);
+            const existing = this.terminalExitResolvers.get(terminalId);
+            if (existing !== undefined) {
+              existing.push(resolve);
+            } else {
+              this.terminalExitResolvers.set(terminalId, [resolve]);
+            }
           });
         }
         return { exitCode: 0, signal: null };

@@ -7,7 +7,10 @@
 import * as path from 'node:path';
 import type * as acp from '@agentclientprotocol/sdk';
 import type { DebugLogger } from '@vybestack/llxprt-code-core';
-import { getShellConfiguration } from '@vybestack/llxprt-code-core';
+import {
+  getShellConfiguration,
+  isWithinRoot,
+} from '@vybestack/llxprt-code-core';
 import type { AgentToolCall } from '@vybestack/llxprt-code-agents';
 import type {
   ShellExecutionResult,
@@ -92,6 +95,11 @@ export class TerminalManager {
     );
     if (pendingIndex >= 0) {
       this.pendingCalls.splice(pendingIndex, 1);
+    }
+    for (const terminal of this.activeTerminals) {
+      if (terminal.toolCallId === toolCallId) {
+        terminal.toolCallId = undefined;
+      }
     }
   }
 
@@ -220,8 +228,10 @@ export class TerminalManager {
           onOutput({ type: 'data', chunk: finalDelta });
         }
         previousOutput = final.output;
-      } catch {
-        // Swallow transient poll errors after exit.
+      } catch (error) {
+        this.logger.debug(
+          () => `Terminal post-exit output poll failed: ${errorMessage(error)}`,
+        );
       }
     }
     return {
@@ -275,7 +285,10 @@ function resolveCallCwd(call: AgentToolCall, targetDir: string): string {
   if (value === '') {
     return targetDir;
   }
-  return path.isAbsolute(value) ? value : path.resolve(targetDir, value);
+  const resolved = path.isAbsolute(value)
+    ? path.resolve(value)
+    : path.resolve(targetDir, value);
+  return isWithinRoot(resolved, targetDir) ? resolved : targetDir;
 }
 
 function commandsMatch(preparedCommand: string, rawCommand: string): boolean {

@@ -38,9 +38,11 @@ function buildConfig(): Config {
   } as unknown as Config;
 }
 
+const FIXED_SESSION_TIMESTAMP = '2026-07-11T10-00-00';
+
 /** The real recorded-file name shape for a session id. */
 function recordedName(sessionId: string): string {
-  return `session-2026-07-11T10-00-00-${sessionId.substring(0, 12)}.jsonl`;
+  return `session-${FIXED_SESSION_TIMESTAMP}-${sessionId.substring(0, 12)}.jsonl`;
 }
 
 describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {

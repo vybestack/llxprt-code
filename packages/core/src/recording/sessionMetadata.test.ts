@@ -15,7 +15,7 @@
  * - SessionDiscovery.readSessionMetadataTitle extracts the tri-state title.
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { assert, describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -37,7 +37,7 @@ const tempDirs: string[] = [];
 
 describe('session_metadata recording (issue #1611)', () => {
   afterEach(async () => {
-    await Promise.all(
+    await Promise.allSettled(
       tempDirs
         .splice(0)
         .map((dir) => fs.rm(dir, { recursive: true, force: true })),
@@ -61,8 +61,8 @@ describe('session_metadata recording (issue #1611)', () => {
       await service.flush();
 
       const filePath = service.getFilePath();
-      expect(filePath).not.toBeNull();
-      const fileContent = await fs.readFile(filePath!, 'utf-8');
+      assert(filePath !== null);
+      const fileContent = await fs.readFile(filePath, 'utf-8');
       const lines = fileContent.trim().split('\n');
       const types = lines.map((line) => JSON.parse(line).type);
 
@@ -81,7 +81,8 @@ describe('session_metadata recording (issue #1611)', () => {
       service.recordSessionMetadata(null);
       await service.flush();
 
-      const filePath = service.getFilePath()!;
+      const filePath = service.getFilePath();
+      assert(filePath !== null);
       const fileContent = await fs.readFile(filePath, 'utf-8');
       const metadataLine = fileContent
         .trim()
@@ -99,8 +100,9 @@ describe('session_metadata recording (issue #1611)', () => {
       service.recordSessionMetadata('Slash command title');
       await service.flush();
 
-      expect(service.getFilePath()).not.toBeNull();
-      const fileContent = await fs.readFile(service.getFilePath()!, 'utf-8');
+      const filePath = service.getFilePath();
+      assert(filePath !== null);
+      const fileContent = await fs.readFile(filePath, 'utf-8');
       const types = fileContent
         .trim()
         .split('\n')
@@ -119,7 +121,9 @@ describe('session_metadata recording (issue #1611)', () => {
       service.recordContent(makeContent('hello'));
       await service.flush();
 
-      const fileContent = await fs.readFile(service.getFilePath()!, 'utf-8');
+      const filePath = service.getFilePath();
+      assert(filePath !== null);
+      const fileContent = await fs.readFile(filePath, 'utf-8');
       const types = fileContent
         .trim()
         .split('\n')

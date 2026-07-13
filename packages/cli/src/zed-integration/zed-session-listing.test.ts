@@ -19,7 +19,7 @@ const roots: string[] = [];
 
 describe('recorded ACP session listing', () => {
   afterEach(async () => {
-    await Promise.all(
+    await Promise.allSettled(
       roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
     );
   });
@@ -429,6 +429,7 @@ describe('recorded ACP session listing', () => {
       roots.push(root);
       const chatsDir = join(root, 'chats');
       await mkdir(chatsDir);
+      const startedAt = Date.now();
       const service = new SessionRecordingService({
         sessionId: 'created-at-session',
         projectHash: 'project-hash',
@@ -453,8 +454,11 @@ describe('recorded ACP session listing', () => {
       const updatedAt = result.sessions[0].updatedAt;
       expect(updatedAt).toBeDefined();
       expect(new Date(updatedAt ?? '').toISOString()).toBe(updatedAt);
-      expect(new Date(updatedAt!).getTime()).toBeGreaterThan(
-        Date.now() - 10_000,
+      expect(new Date(updatedAt ?? '').getTime()).toBeGreaterThanOrEqual(
+        startedAt,
+      );
+      expect(new Date(updatedAt ?? '').getTime()).toBeLessThanOrEqual(
+        Date.now(),
       );
     });
   });

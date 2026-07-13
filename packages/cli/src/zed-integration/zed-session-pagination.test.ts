@@ -60,10 +60,28 @@ describe('session lifecycle pagination', () => {
     ]);
   });
 
-  it('rejects a malformed cursor', () => {
-    expect(() =>
-      paginateSessions(sessions, { cwd: null, cursor: 'not-a-cursor' }, 2),
-    ).toThrow(/cursor/i);
+  it.each([
+    ['empty', ''],
+    ['invalid base64url', '***'],
+    ['non-JSON base64url', Buffer.from('not json').toString('base64url')],
+    [
+      'JSON missing version',
+      Buffer.from(JSON.stringify({ cwd: null })).toString('base64url'),
+    ],
+    [
+      'JSON missing session identity',
+      Buffer.from(
+        JSON.stringify({
+          v: 2,
+          cwd: null,
+          createdAt: '2026-01-03T00:00:00.000Z',
+        }),
+      ).toString('base64url'),
+    ],
+  ])('rejects a malformed %s cursor', (_label, cursor) => {
+    expect(() => paginateSessions(sessions, { cwd: null, cursor }, 2)).toThrow(
+      /cursor/i,
+    );
   });
 
   it('rejects a cursor created for a different cwd filter', () => {

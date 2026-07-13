@@ -199,6 +199,42 @@ describe('mapHistoryToSessionUpdates — malformed persisted history (issue #160
     expect(mapHistoryToSessionUpdates(history)).toStrictEqual([]);
   });
 
+  it('skips a malformed tool response result without aborting later replay', () => {
+    const history = [
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'call-malformed-result',
+            name: 'read_file',
+            parameters: {},
+          },
+        ],
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call-malformed-result',
+            toolName: 'read_file',
+            result: 42,
+          } as unknown as ToolResponseBlock,
+        ],
+      },
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'later content survives' }],
+      },
+    ] as readonly IContent[];
+
+    expect(mapHistoryToSessionUpdates(history).at(-1)).toStrictEqual({
+      sessionUpdate: 'user_message_chunk',
+      content: { type: 'text', text: 'later content survives' },
+    });
+  });
+
   it("falls back the tool_call's title to the id when name is missing but keeps the (valid) id (FINDING D4)", () => {
     const history = [
       {

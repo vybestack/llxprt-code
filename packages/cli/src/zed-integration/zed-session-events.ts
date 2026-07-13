@@ -185,7 +185,13 @@ export async function runPromptTurn(
       return { stopReason: 'cancelled' };
     }
     if (getErrorStatus(thrownError) === 429) {
-      throw new acp.RequestError(429, 'Rate limit exceeded. Try again later.');
+      const reason =
+        thrownError instanceof Error
+          ? thrownError.message
+          : String(thrownError);
+      throw new acp.RequestError(429, 'Rate limit exceeded. Try again later.', {
+        reason,
+      });
     }
     throw thrownError;
   }

@@ -19,13 +19,17 @@
 import type * as acp from '@agentclientprotocol/sdk';
 import { type EmojiFilter, DebugLogger } from '@vybestack/llxprt-code-core';
 
+// 100ms balances streaming latency (users see text quickly) with throughput
+// (fewer, larger ACP notifications). Tuned for local stdio transport; not
+// configurable because the ACP protocol expects near-real-time streaming.
 const BATCH_INTERVAL_MS = 100;
 
 /**
  * The message emitted (as an agent_message_chunk) when the EmojiFilter blocks a
  * streamed response in error mode (FINDING E2). Exported so tests reference this
  * single source of truth instead of duplicating the literal, keeping the wire
- * text and its assertions in lockstep.
+ * text and its assertions in lockstep. Intentionally hardcoded — not i18n'd
+ * because the ACP protocol requires deterministic, locale-independent status.
  */
 export const STREAM_BLOCKED_MESSAGE =
   '[Error: Response blocked due to emoji detection]';
@@ -177,13 +181,15 @@ export class StreamBatcher {
     const chunks = this.pendingChunks;
     this.pendingChunks = [];
     let firstError: unknown = null;
+    let lastError: unknown = null;
     let failureCount = 0;
     // FINDING F4: iterate a detached local copy and CONTINUE past a per-chunk
     // send failure so a single rejecting sendUpdate does not drop every later
     // chunk. The injected sendUpdate is best-effort today (Session.sendUpdate
     // swallows), so this cannot reject in practice — but the injected contract
     // is not guaranteed, so no chunk is silently lost if it ever does. The first
-    // error is collected + logged (not rethrown) to keep the flushChain intact.
+    // and last distinct errors are collected + logged (not rethrown) to keep
+    // the flushChain intact.
     for (const chunk of chunks) {
       try {
         await this.sendUpdate({
@@ -198,15 +204,18 @@ export class StreamBatcher {
         if (firstError === null) {
           firstError = error;
         }
+        lastError = error;
       }
     }
     if (firstError !== null) {
+      const firstMsg =
+        firstError instanceof Error ? firstError.message : String(firstError);
+      const lastMsg =
+        lastError instanceof Error ? lastError.message : String(lastError);
       this.logger.debug(
         () =>
-          `doFlush: ${failureCount} chunk update(s) failed to send; the remaining chunks were still attempted (no chunk dropped). First error: ${
-            firstError instanceof Error
-              ? firstError.message
-              : String(firstError)
+          `doFlush: ${failureCount} chunk update(s) failed to send; the remaining chunks were still attempted (no chunk dropped). First error: ${firstMsg}${
+            lastMsg !== firstMsg ? `. Last error: ${lastMsg}` : ''
           }`,
       );
     }

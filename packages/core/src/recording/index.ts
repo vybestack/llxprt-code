@@ -26,7 +26,11 @@ export {
   SESSION_FILE_ID_PREFIX_LENGTH,
 } from './SessionRecordingService.js';
 export { replaySession, readSessionHeader } from './ReplayEngine.js';
-export { SessionLockManager, type LockHandle } from './SessionLockManager.js';
+export {
+  SessionLockManager,
+  SessionLockedError,
+  type LockHandle,
+} from './SessionLockManager.js';
 export { RecordingIntegration } from './RecordingIntegration.js';
 export {
   type JsonlSessionFileEntry,

@@ -226,19 +226,13 @@ export function observeZedConfigOptions(
     }
   }
   coreEvents.on(CoreEvent.ModelChanged, refresh);
+  coreEvents.on(CoreEvent.ModelProfileChanged, refresh);
   coreEvents.on(CoreEvent.SettingsChanged, refresh);
   return () => {
     stopped = true;
-    try {
-      coreEvents.off(CoreEvent.ModelChanged, refresh);
-    } catch {
-      // Listener removal is best-effort during teardown.
-    }
-    try {
-      coreEvents.off(CoreEvent.SettingsChanged, refresh);
-    } catch {
-      // Listener removal is best-effort during teardown.
-    }
+    coreEvents.off(CoreEvent.ModelChanged, refresh);
+    coreEvents.off(CoreEvent.ModelProfileChanged, refresh);
+    coreEvents.off(CoreEvent.SettingsChanged, refresh);
   };
 }
 

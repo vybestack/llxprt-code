@@ -33,13 +33,21 @@ interface UpdateCollector {
   readonly texts: () => string[];
 }
 
+function hasTextContent(
+  update: acp.SessionUpdate,
+): update is acp.SessionUpdate & { content: { text: string } } {
+  if (!('content' in update)) return false;
+  if (typeof update.content !== 'object' || update.content === null)
+    return false;
+  return 'text' in update.content && typeof update.content.text === 'string';
+}
+
 function buildCollector(): UpdateCollector {
   const texts: string[] = [];
   return {
     sendUpdate: async (update: acp.SessionUpdate) => {
-      const maybe = update as { content?: { text?: string } };
-      if (typeof maybe.content?.text === 'string') {
-        texts.push(maybe.content.text);
+      if (hasTextContent(update)) {
+        texts.push(update.content.text);
       }
     },
     texts: () => [...texts],

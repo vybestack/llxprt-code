@@ -139,6 +139,31 @@ describe('Zed terminal execution', () => {
     );
   });
 
+  it('confines an agent-reported cwd to the session project root', async () => {
+    const connection = new RecordingConnection();
+    const terminals = terminalManager(connection);
+    await terminals.observeToolCall({
+      id: 'shell-traversal',
+      name: 'run_shell_command',
+      args: { command: 'echo hello', dir_path: '../../etc' },
+    });
+
+    await terminals.executeShellCommand(
+      preparedEcho,
+      '/project',
+      () => undefined,
+      new AbortController().signal,
+    );
+
+    expect(connection.onlySessionUpdates()).toContainEqual(
+      expect.objectContaining({
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'shell-traversal',
+        content: [{ type: 'terminal', terminalId: 'terminal-1' }],
+      }),
+    );
+  });
+
   it('retries terminal correlation after update delivery fails', async () => {
     const connection = new RecordingConnection();
     connection.delayTerminalExit();
@@ -159,7 +184,7 @@ describe('Zed terminal execution', () => {
       () => undefined,
       new AbortController().signal,
     );
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await connection.waitForTerminalProcessCreated();
 
     await expect(
       terminals.observeToolCall({

@@ -107,11 +107,13 @@ describe('mapResumeError (issue #1604 FINDING 4)', () => {
   });
 });
 
+const FIXED_SESSION_TIMESTAMP = '2026-07-11T10-00-00';
+
 // A recorded session file for `sessionId` is named
 // `session-<timestamp>-<first-12-of-id>.jsonl` (SessionRecordingService), so a
 // matching entry both starts with `session-` and ends with `-<first12>.jsonl`.
 function matchingFileName(sessionId: string): string {
-  return `session-2026-07-11T10-00-00-${sessionId.substring(0, 12)}.jsonl`;
+  return `session-${FIXED_SESSION_TIMESTAMP}-${sessionId.substring(0, 12)}.jsonl`;
 }
 
 describe('classifyResumeFailure (issue #1604 FINDING B: corrupt vs missing)', () => {

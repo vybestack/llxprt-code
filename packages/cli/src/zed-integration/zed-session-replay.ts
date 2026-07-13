@@ -410,8 +410,9 @@ function mapToolResponseBlock(
   kind: acp.ToolKind,
 ): acp.SessionUpdate {
   const record = asRecord(block.result);
-  const failed = isFailedResponse(block, record);
-  const text = extractResponseText(block, record, failed);
+  const errorText = failureText(block, record);
+  const failed = errorText !== null;
+  const text = extractResponseText(block, record, failed, errorText);
   const content: acp.ToolCallContent[] =
     text !== null && text.length > 0
       ? [{ type: 'content', content: { type: 'text', text } }]
@@ -423,25 +424,6 @@ function mapToolResponseBlock(
     content,
     kind,
   };
-}
-
-/**
- * A recorded tool response is a failure when its block carries a non-empty
- * error string OR its result object exposes an `error` property that is either a
- * non-empty string (the `{ error: string }` shape) OR an object with a non-empty
- * string `message` (the `{ error: { message } }` shape the core
- * createErrorResponse path can produce, FINDING F3). Both error shapes must mark
- * the update 'failed' so an object-shaped error is not silently rendered as a
- * completed call.
- */
-function isFailedResponse(
-  block: ToolResponseBlock,
-  record: Dict | null,
-): boolean {
-  if (typeof block.error === 'string' && block.error.length > 0) {
-    return true;
-  }
-  return resultErrorText(record) !== null;
 }
 
 /**
@@ -476,6 +458,7 @@ function extractResponseText(
   block: ToolResponseBlock,
   record: Dict | null,
   failed: boolean,
+  precomputedErrorText: string | null = null,
 ): string | null {
   const output = record?.output;
   if (typeof output === 'string' && output.length > 0) {
@@ -490,12 +473,16 @@ function extractResponseText(
     return arrayText;
   }
   if (failed) {
-    const errorText = failureText(block, record);
+    const errorText = precomputedErrorText ?? failureText(block, record);
     if (errorText !== null) {
       return errorText;
     }
   }
-  return extractToolResultText({ llmContent: block.result });
+  try {
+    return extractToolResultText({ llmContent: block.result });
+  } catch {
+    return null;
+  }
 }
 
 /**
