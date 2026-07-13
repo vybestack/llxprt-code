@@ -12,6 +12,10 @@ type TerminalHandleLike = Pick<acp.TerminalHandle, 'id' | 'kill' | 'release'>;
 
 type SendUpdateFn = (update: acp.SessionUpdate) => Promise<void>;
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /**
  * Manages ACP terminal lifecycle for a single Zed session.
  *
@@ -64,7 +68,9 @@ export class TerminalManager {
         sessionId: this.sessionId,
       });
     } catch (error) {
-      this.logger.debug(() => `Failed to create ACP terminal: ${error}`);
+      this.logger.debug(
+        () => `Failed to create ACP terminal: ${errorMessage(error)}`,
+      );
       return;
     }
     const existing = this.activeTerminals.get(call.id);
@@ -73,7 +79,9 @@ export class TerminalManager {
       try {
         await existing.release();
       } catch (error) {
-        this.logger.debug(() => `Prior terminal release failed: ${error}`);
+        this.logger.debug(
+          () => `Prior terminal release failed: ${errorMessage(error)}`,
+        );
       }
     }
     this.activeTerminals.set(call.id, handle);
@@ -89,9 +97,13 @@ export class TerminalManager {
       try {
         await handle.release();
       } catch (releaseError) {
-        this.logger.debug(() => `Terminal release failed: ${releaseError}`);
+        this.logger.debug(
+          () => `Terminal release failed: ${errorMessage(releaseError)}`,
+        );
       }
-      this.logger.debug(() => `Terminal update send failed: ${error}`);
+      this.logger.debug(
+        () => `Terminal update send failed: ${errorMessage(error)}`,
+      );
     }
   }
 
@@ -106,7 +118,9 @@ export class TerminalManager {
     try {
       await handle.release();
     } catch (error) {
-      this.logger.debug(() => `Terminal release failed: ${error}`);
+      this.logger.debug(
+        () => `Terminal release failed: ${errorMessage(error)}`,
+      );
     }
   }
 
@@ -122,12 +136,16 @@ export class TerminalManager {
         try {
           await handle.kill();
         } catch (error) {
-          this.logger.debug(() => `Terminal kill failed: ${error}`);
+          this.logger.debug(
+            () => `Terminal kill failed: ${errorMessage(error)}`,
+          );
         }
         try {
           await handle.release();
         } catch (error) {
-          this.logger.debug(() => `Terminal release failed: ${error}`);
+          this.logger.debug(
+            () => `Terminal release failed: ${errorMessage(error)}`,
+          );
         }
       }),
     );
