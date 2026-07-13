@@ -121,6 +121,12 @@ Default keyboard shortcuts for editing, navigation, and UI control.
 | Toggle the TODO dialog visibility. | `Ctrl + Q` |
 | Toggle tool descriptions display.  | `Ctrl + T` |
 
+## Queued Messages
+
+| Action                                       | Keys       |
+| -------------------------------------------- | ---------- |
+| Toggle the queued messages panel visibility. | `Ctrl + ]` |
+
 ## Mouse
 
 | Action                       | Keys       |
