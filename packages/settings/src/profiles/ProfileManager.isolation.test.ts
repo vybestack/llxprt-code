@@ -48,9 +48,11 @@ describe('ProfileManager storage isolation', () => {
     expect(JSON.parse(content).provider).toBe('gemini');
 
     // The file must NOT exist beneath the real home directory.
-    // Use os.homedir() to verify regardless of platform-specific config dir.
-    const profilePathRelativeToHome = path.relative(os.homedir(), profilePath);
-    expect(profilePathRelativeToHome.startsWith('..')).toBe(true);
+    // Use path.resolve to handle cross-platform (Windows drive letter) cases
+    // where path.relative returns an absolute path instead of a '..' prefix.
+    const resolvedProfile = path.resolve(profilePath);
+    const resolvedHome = path.resolve(os.homedir()) + path.sep;
+    expect(resolvedProfile.startsWith(resolvedHome)).toBe(false);
   });
 
   it('constructs the default profiles directory from Storage.getGlobalConfigDir', async () => {

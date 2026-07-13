@@ -24,6 +24,7 @@ const rootDir = join(__dirname, '..');
 const integrationTestsDir = join(rootDir, '.integration-tests');
 let runDir = ''; // Make runDir accessible in teardown
 let integrationStorageRoot = ''; // Track temp storage root for cleanup
+let savedStorageEnv: Record<string, string | undefined> = {};
 
 export async function setup() {
   // Isolate ALL storage roots so spawned CLI subprocesses (which inherit
@@ -35,6 +36,12 @@ export async function setup() {
   for (const sub of storageSubdirs) {
     await mkdir(join(integrationStorageRoot, sub), { recursive: true });
   }
+  savedStorageEnv = {
+    LLXPRT_CONFIG_HOME: process.env.LLXPRT_CONFIG_HOME,
+    LLXPRT_DATA_HOME: process.env.LLXPRT_DATA_HOME,
+    LLXPRT_CACHE_HOME: process.env.LLXPRT_CACHE_HOME,
+    LLXPRT_LOG_HOME: process.env.LLXPRT_LOG_HOME,
+  };
   process.env.LLXPRT_CONFIG_HOME = join(integrationStorageRoot, 'config');
   process.env.LLXPRT_DATA_HOME = join(integrationStorageRoot, 'data');
   process.env.LLXPRT_CACHE_HOME = join(integrationStorageRoot, 'cache');
@@ -91,6 +98,16 @@ export async function teardown() {
       await rm(integrationStorageRoot, { recursive: true, force: true });
     } catch (e) {
       console.warn('Failed to clean up temporary storage root:', e);
+    }
+  }
+
+  // Restore original storage env vars so code running after teardown
+  // does not reference the now-deleted temp directories.
+  for (const [key, value] of Object.entries(savedStorageEnv)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
     }
   }
 }

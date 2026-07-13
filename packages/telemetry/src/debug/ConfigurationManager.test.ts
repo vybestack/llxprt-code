@@ -5,52 +5,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+import { Storage } from '@vybestack/llxprt-code-storage';
 import { ConfigurationManager } from './ConfigurationManager.js';
 import type { DebugSettings } from './types.js';
 
 describe('ConfigurationManager', () => {
-  let originalHome: string | undefined;
-  let originalDebugSection: string | undefined;
-  let backupPath: string | undefined;
-  let tempHomeDir: string | undefined;
-
   beforeEach(() => {
     ConfigurationManager.resetForTesting();
 
-    originalHome = process.env.HOME;
-    tempHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-config-test-'));
-    process.env.HOME = tempHomeDir;
+    // Clean any settings.json left by a previous test in the same worker.
+    const settingsPath = Storage.getGlobalSettingsPath();
+    if (fs.existsSync(settingsPath)) {
+      try {
+        fs.unlinkSync(settingsPath);
+      } catch {
+        // Best-effort cleanup within isolated temp root.
+      }
+    }
 
     delete process.env.DEBUG;
     delete process.env.LLXPRT_DEBUG;
     delete process.env.DEBUG_ENABLED;
     delete process.env.DEBUG_LEVEL;
     delete process.env.DEBUG_OUTPUT;
-
-    // os.homedir() is cached in vitest worker threads and does NOT reflect
-    // changes to process.env.HOME. We must clean the debug section from the
-    // real settings.json (resolved by os.homedir()) to prevent cross-test
-    // contamination. We write a backup to disk for crash-safety recovery.
-    const realSettingsPath = path.join(
-      os.homedir(),
-      '.llxprt',
-      'settings.json',
-    );
-    backupPath = realSettingsPath + '.test-backup';
-    if (fs.existsSync(realSettingsPath)) {
-      try {
-        const content = JSON.parse(fs.readFileSync(realSettingsPath, 'utf8'));
-        if (content.debug !== undefined) {
-          originalDebugSection = JSON.stringify(content.debug);
-          fs.writeFileSync(backupPath, JSON.stringify(content, null, 2));
-          delete content.debug;
-          fs.writeFileSync(realSettingsPath, JSON.stringify(content, null, 2));
-        }
-      } catch {
-        // Non-JSON or unreadable; nothing to clean.
-      }
-    }
 
     const projectConfigPath = path.join(
       process.cwd(),
@@ -63,49 +40,15 @@ describe('ConfigurationManager', () => {
   });
 
   afterEach(() => {
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
-    }
+    ConfigurationManager.resetForTesting();
 
-    // Restore the original debug section in the real settings.json.
-    const realSettingsPath = path.join(
-      os.homedir(),
-      '.llxprt',
-      'settings.json',
-    );
-    if (originalDebugSection !== undefined && backupPath !== undefined) {
-      if (fs.existsSync(backupPath)) {
-        // Restore from disk backup for crash safety.
-        try {
-          fs.copyFileSync(backupPath, realSettingsPath);
-          fs.unlinkSync(backupPath);
-        } catch {
-          // Best-effort restore.
-        }
-      } else if (fs.existsSync(realSettingsPath)) {
-        // Fallback: restore debug section from memory.
-        try {
-          const content = JSON.parse(fs.readFileSync(realSettingsPath, 'utf8'));
-          content.debug = JSON.parse(originalDebugSection);
-          fs.writeFileSync(realSettingsPath, JSON.stringify(content, null, 2));
-        } catch {
-          // Best-effort restore.
-        }
-      }
-    }
-    originalDebugSection = undefined;
-    backupPath = undefined;
-
-    // Clean up the temp home directory.
-    if (tempHomeDir !== undefined) {
+    const settingsPath = Storage.getGlobalSettingsPath();
+    if (fs.existsSync(settingsPath)) {
       try {
-        fs.rmSync(tempHomeDir, { recursive: true, force: true });
+        fs.unlinkSync(settingsPath);
       } catch {
-        // Best-effort cleanup.
+        // Best-effort cleanup within isolated temp root.
       }
-      tempHomeDir = undefined;
     }
   });
 

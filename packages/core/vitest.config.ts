@@ -17,6 +17,7 @@ const corePackagePrefix = '@vybestack/llxprt-code-core/';
 const toolsPackagePrefix = '@vybestack/llxprt-code-tools/';
 const settingsPackagePrefix = '@vybestack/llxprt-code-settings/';
 const ideIntegrationPackagePrefix = '@vybestack/llxprt-code-ide-integration/';
+const storagePackagePrefix = '@vybestack/llxprt-code-storage/';
 const providersEntry = fileURLToPath(
   new URL('../providers/index.ts', import.meta.url),
 );
@@ -40,6 +41,23 @@ const ideIntegrationEntry = fileURLToPath(
 const ideIntegrationSrcDir = fileURLToPath(
   new URL('../ide-integration/src/', import.meta.url),
 );
+const storageEntry = fileURLToPath(
+  new URL('../storage/index.ts', import.meta.url),
+);
+const storageSrcDir = fileURLToPath(
+  new URL('../storage/src/', import.meta.url),
+);
+
+const storageExportToSource: Record<string, string> = {
+  'config/storage': 'config/storage',
+  'services/fileSystemService': 'services/fileSystemService',
+  'services/fileDiscoveryService': 'services/fileDiscoveryService',
+  'storage/secure-store': 'secure-store/secure-store',
+  'storage/provider-key-storage': 'secure-store/provider-key-storage',
+  'storage/envelope-codec': 'secure-store/envelope-codec',
+  'storage/sessionTypes': 'session/sessionTypes',
+  'storage/ConversationFileWriter': 'conversation/ConversationFileWriter',
+};
 // Resolve ajv/fdir dynamically rather than hardcoding nested node_modules
 // paths. npm may hoist or nest these differently depending on the rest of the
 // dependency tree (e.g. after security-driven version bumps), so a fixed
@@ -118,6 +136,25 @@ const workspaceDependencyAliasPlugin = {
       return resolveTsSource(
         ideIntegrationSrcDir,
         source.slice(ideIntegrationPackagePrefix.length),
+      );
+    }
+    if (source === '@vybestack/llxprt-code-storage') {
+      return storageEntry;
+    }
+    if (source.startsWith(storagePackagePrefix)) {
+      const subPath = source
+        .slice(storagePackagePrefix.length)
+        .replace(/\.js$/, '');
+      const sourcePath = storageExportToSource[subPath];
+      if (sourcePath) {
+        const tsPath = storageSrcDir + sourcePath + '.ts';
+        if (existsSync(tsPath)) {
+          return tsPath;
+        }
+      }
+      return resolveTsSource(
+        storageSrcDir,
+        source.slice(storagePackagePrefix.length),
       );
     }
     if (source === 'ajv') {
