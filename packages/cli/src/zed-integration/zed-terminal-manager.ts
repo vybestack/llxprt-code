@@ -8,11 +8,7 @@ import type * as acp from '@agentclientprotocol/sdk';
 import type { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { AgentToolCall } from '@vybestack/llxprt-code-agents';
 
-interface PendingShellCall {
-  readonly toolCallId: string;
-  readonly command: string;
-  readonly cwd: string;
-}
+type TerminalHandleLike = Pick<acp.TerminalHandle, 'id' | 'kill' | 'release'>;
 
 type SendUpdateFn = (update: acp.SessionUpdate) => Promise<void>;
 
@@ -21,13 +17,12 @@ type SendUpdateFn = (update: acp.SessionUpdate) => Promise<void>;
  *
  * When the client advertises the `terminal` capability, shell tool-calls
  * trigger terminal creation via `connection.createTerminal`.  Each terminal
- * is correlated to its tool-call (by command/cwd matching) so that terminal
- * content can be emitted inline and terminals are cleaned up on completion,
- * cancel, and dispose.
+ * is correlated to its tool-call by `toolCallId` so that terminal content can
+ * be emitted inline and terminals are cleaned up on completion, cancel, and
+ * dispose.
  */
 export class TerminalManager {
-  private readonly activeTerminals = new Map<string, acp.TerminalHandle>();
-  private readonly pendingShellCalls: PendingShellCall[] = [];
+  private readonly activeTerminals = new Map<string, TerminalHandleLike>();
 
   constructor(
     private readonly sessionId: string,
@@ -49,9 +44,9 @@ export class TerminalManager {
   }
 
   /**
-   * Records a pending shell tool-call and creates an ACP terminal for it.
-   * Emits an early terminal-content update so the client renders the terminal
-   * inline during execution.
+   * Creates an ACP terminal for a shell tool-call and immediately correlates
+   * it by `toolCallId`.  Emits a terminal-content update so the client renders
+   * the terminal inline during execution.
    */
   async handleToolCall(call: AgentToolCall): Promise<void> {
     const command =
@@ -61,7 +56,6 @@ export class TerminalManager {
       typeof call.args['dir_path'] === 'string'
         ? call.args['dir_path']
         : this.targetDir;
-    this.pendingShellCalls.push({ toolCallId: call.id, command, cwd });
     try {
       const handle = await this.connection.createTerminal({
         command,
@@ -69,32 +63,16 @@ export class TerminalManager {
         sessionId: this.sessionId,
         args: ['-c', command],
       });
-      await this.registerTerminal(command, cwd, handle);
+      this.activeTerminals.set(call.id, handle);
+      await this.sendUpdate({
+        sessionUpdate: 'tool_call_update',
+        toolCallId: call.id,
+        status: 'in_progress',
+        content: [{ type: 'terminal', terminalId: handle.id }],
+      });
     } catch (error) {
       this.logger.debug(() => `Failed to create ACP terminal: ${error}`);
     }
-  }
-
-  /**
-   * Correlates a created terminal to its tool-call by matching command/cwd,
-   * records the handle, and emits the terminal-content update.
-   */
-  async registerTerminal(
-    command: string,
-    cwd: string,
-    handle: acp.TerminalHandle,
-  ): Promise<void> {
-    const match = this.pendingShellCalls.find(
-      (entry) => entry.command === command && entry.cwd === cwd,
-    );
-    if (match === undefined) return;
-    this.activeTerminals.set(match.toolCallId, handle);
-    await this.sendUpdate({
-      sessionUpdate: 'tool_call_update',
-      toolCallId: match.toolCallId,
-      status: 'in_progress',
-      content: [{ type: 'terminal', terminalId: handle.id }],
-    });
   }
 
   /**
@@ -105,10 +83,6 @@ export class TerminalManager {
     const handle = this.activeTerminals.get(toolCallId);
     if (handle === undefined) return;
     this.activeTerminals.delete(toolCallId);
-    const idx = this.pendingShellCalls.findIndex(
-      (entry) => entry.toolCallId === toolCallId,
-    );
-    if (idx >= 0) this.pendingShellCalls.splice(idx, 1);
     try {
       await handle.release();
     } catch (error) {

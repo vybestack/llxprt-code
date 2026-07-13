@@ -155,6 +155,6 @@ async function handleNotice(
   return null;
 }
 
-function assertNever(event: never): acp.StopReason | null {
+function assertNever(event: never): never {
   throw new Error(`Unhandled agent event: ${String(event)}`);
 }

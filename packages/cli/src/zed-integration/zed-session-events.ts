@@ -73,17 +73,24 @@ export async function consumeAgentStream(
     ) {
       await deps.terminals.handleToolCall(event.call);
     }
-    const stopReason = await handleZedAgentEvent(event, batcher, {
-      sendUpdate: deps.sendUpdate,
-      sendUsage: deps.sendUsage,
-      handleConfirmation: deps.handleConfirmation,
-      resolveToolKind: (toolName) => deps.agent.tools.get(toolName)?.kind,
-    });
-    if (event.type === 'tool-result' && deps.terminals !== null) {
-      await deps.terminals.releaseTerminal(event.result.id);
-    }
-    if (stopReason !== null) {
-      terminalStopReason = stopReason;
+    try {
+      const stopReason = await handleZedAgentEvent(event, batcher, {
+        sendUpdate: deps.sendUpdate,
+        sendUsage: deps.sendUsage,
+        handleConfirmation: deps.handleConfirmation,
+        resolveToolKind: (toolName) => deps.agent.tools.get(toolName)?.kind,
+      });
+      if (event.type === 'tool-result' && deps.terminals !== null) {
+        await deps.terminals.releaseTerminal(event.result.id);
+      }
+      if (stopReason !== null) {
+        terminalStopReason = stopReason;
+      }
+    } catch (error) {
+      if (deps.terminals !== null) {
+        await deps.terminals.settleAll();
+      }
+      throw error;
     }
   }
   return terminalStopReason;
@@ -133,21 +140,20 @@ export async function runPromptTurn(
     );
   } catch (error) {
     if (getErrorStatus(error) === 429) {
+      await safeFlush(batcher);
       throw new acp.RequestError(429, 'Rate limit exceeded. Try again later.');
     }
     if (
       pendingSend.signal.aborted ||
       (error instanceof Error && error.name === 'AbortError')
     ) {
+      await safeFlush(batcher);
       return { stopReason: 'cancelled' };
     }
+    await safeFlush(batcher);
     throw error;
   } finally {
-    try {
-      await batcher.flush();
-    } finally {
-      batcher.dispose();
-    }
+    batcher.dispose();
   }
   if (pendingSend.signal.aborted && terminalStopReason !== 'cancelled') {
     return { stopReason: 'cancelled' };
@@ -156,4 +162,13 @@ export async function runPromptTurn(
     return { stopReason: terminalStopReason };
   }
   return { stopReason: 'end_turn' };
+}
+
+async function safeFlush(batcher: StreamBatcher): Promise<void> {
+  try {
+    await batcher.flush();
+  } catch {
+    // Swallow flush errors so the original error from consumeAgentStream
+    // is not masked by a secondary flush failure.
+  }
 }

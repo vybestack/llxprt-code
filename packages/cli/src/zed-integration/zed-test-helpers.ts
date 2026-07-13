@@ -145,6 +145,11 @@ export function buildBlockingFakeAgent(
   return buildBlockingScriptedAgent(() => events, toolKinds);
 }
 
+export type FakeTerminalHandle = Pick<
+  acp.TerminalHandle,
+  'id' | 'currentOutput' | 'waitForExit' | 'kill' | 'release'
+>;
+
 export class RecordingConnection {
   readonly messages: Array<
     | { kind: 'sessionUpdate'; update: acp.SessionUpdate }
@@ -350,7 +355,7 @@ export class RecordingConnection {
   );
 
   createTerminal: Mock = vi.fn(
-    async (params: acp.CreateTerminalRequest): Promise<acp.TerminalHandle> => {
+    async (params: acp.CreateTerminalRequest): Promise<FakeTerminalHandle> => {
       const call = {
         command: params.command,
         cwd: params.cwd,
@@ -367,7 +372,7 @@ export class RecordingConnection {
     },
   );
 
-  private buildFakeTerminalHandle(terminalId: string): acp.TerminalHandle {
+  private buildFakeTerminalHandle(terminalId: string): FakeTerminalHandle {
     const handle = {
       id: terminalId,
       currentOutput: vi.fn(async () => ({
@@ -393,12 +398,8 @@ export class RecordingConnection {
         this.resolveDelayedTerminalExit();
         return {};
       }),
-      [Symbol.asyncDispose]: vi.fn(async () => {
-        this.releaseCalls += 1;
-        this.resolveDelayedTerminalExit();
-      }),
     };
-    return handle as unknown as acp.TerminalHandle;
+    return handle;
   }
 
   onlySessionUpdates(): acp.SessionUpdate[] {
