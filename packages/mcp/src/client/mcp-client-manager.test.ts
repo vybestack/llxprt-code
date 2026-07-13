@@ -558,11 +558,7 @@ describe('McpClientManager', () => {
       }),
       refreshMcpContext: vi.fn(),
     } as unknown as Config;
-    const manager = new McpClientManager(
-      '0.0.1',
-      toolRegistry,
-      mockConfig,
-    );
+    const manager = new McpClientManager('0.0.1', toolRegistry, mockConfig);
     return { manager, mockConfig };
   };
 
