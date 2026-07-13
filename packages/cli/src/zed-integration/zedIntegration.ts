@@ -745,6 +745,7 @@ export class Session {
           event.confirmation.name,
           event.confirmation.details,
           this.connection,
+          this.agent.tools.get(event.confirmation.name)?.kind,
         ),
         cancelled,
       ] as const);

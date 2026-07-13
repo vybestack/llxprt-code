@@ -192,14 +192,13 @@ export class SessionControl implements AgentSessionControl {
    * core SessionDiscovery resolves). On success the returned recording service
    * is adopted as the live recording (installed on Config as the active
    * recording, same swap semantics as setRecording) and the returned session
-   * lock is retained, both stored into the instance fields SYNCHRONOUSLY before
-   * any await. The prior recording service and session lock are then released,
-   * and the reconstructed IContent history is fed through the client restore
-   * path. Adopting the resumed recording + lock before any throwable await
-   * guarantees that if prior teardown or restoreHistory fails, the resumed
-   * recording service and on-disk session lock remain owned by the fields and
-   * are released by dispose()/teardownActiveSession(), so neither the prior nor
-   * the resumed resources leak on any path. On failure a clear typed Error is
+   * lock is retained. The resumed resources remain local while the prior
+   * recording service and session lock are released and the reconstructed
+   * IContent history is fed through the client restore path. Only after the new
+   * integration subscribes successfully are the recording and lock committed to
+   * the instance fields; every earlier failure disposes/releases the locals, so
+   * neither the prior nor the resumed resources leak on any path. On failure a
+   * clear typed Error is
    * thrown carrying the core error (never a not-implemented signal).
    *
    * After the resumed history is restored into the client, a fresh

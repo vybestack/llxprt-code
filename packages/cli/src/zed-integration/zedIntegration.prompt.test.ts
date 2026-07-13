@@ -126,7 +126,7 @@ describe('Zed Session.prompt (Agent API) - streaming output', () => {
     expect(update.content.text).toContain('blocked due to emoji detection');
   });
 
-  it('flushes the emoji buffer on a blocked chunk so a following clean chunk is emitted (not re-blocked) (FINDING F10)', async () => {
+  it('flushes the emoji buffer on a blocked chunk so a following clean chunk is emitted instead of re-blocked', async () => {
     // Error mode: the first chunk carries an emoji and is blocked. The blocking
     // content stays in the EmojiFilter's internal buffer; without flushing it on
     // the blocked path, the NEXT (clean) chunk would be concatenated with the
@@ -202,14 +202,50 @@ describe('Zed Session.prompt (Agent API) - tool-call status progression', () => 
     expect(startUpdate.locations).toStrictEqual([
       { path: '/project/file.txt', line: 7 },
     ]);
-    // FINDING F: the LIVE tool_call start carries rawInput (the tool args) for
-    // parity with the replay start shape and ACP debugging conformance.
+    // The live tool_call start carries rawInput for replay parity and ACP debugging.
     expect(startUpdate.rawInput).toStrictEqual({
       absolute_path: '/project/file.txt',
       offset: 7,
     });
     expect((updates[1] as { status: string }).status).toBe('in_progress');
     expect((updates[2] as { status: string }).status).toBe('completed');
+  });
+
+  it('uses the registered tool kind on every live tool notification', async () => {
+    const toolCallId = 'registry-kind';
+    const { agent } = buildFakeAgent(
+      [
+        {
+          type: 'tool-call',
+          call: { id: toolCallId, name: 'custom_lookup', args: {} },
+        },
+        {
+          type: 'tool-status',
+          update: {
+            id: toolCallId,
+            name: 'custom_lookup',
+            status: 'executing',
+          },
+        },
+        {
+          type: 'tool-result',
+          result: { id: toolCallId, name: 'custom_lookup', output: 'found' },
+        },
+        { type: 'done', reason: 'stop' },
+      ],
+      { custom_lookup: 'search' },
+    );
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    await runPrompt(session);
+
+    expect(
+      connection
+        .onlySessionUpdates()
+        .map((update) => (update as { kind?: acp.ToolKind }).kind),
+    ).toStrictEqual(['search', 'search', 'search']);
   });
 
   it('surfaces multiple path locations and known tool kinds', async () => {

@@ -22,7 +22,10 @@ export type ConfirmationCapture = {
   requiresUserConfirmation?: boolean;
 };
 
-export function buildScriptedAgent(nextEvents: () => readonly AgentEvent[]): {
+export function buildScriptedAgent(
+  nextEvents: () => readonly AgentEvent[],
+  toolKinds: Readonly<Record<string, string>> = {},
+): {
   agent: Agent;
   confirmations: ConfirmationCapture[];
 } {
@@ -37,6 +40,8 @@ export function buildScriptedAgent(nextEvents: () => readonly AgentEvent[]): {
     setApprovalMode: vi.fn(),
     dispose: vi.fn().mockResolvedValue(undefined),
     tools: {
+      get: (name: string) =>
+        Object.hasOwn(toolKinds, name) ? { kind: toolKinds[name] } : undefined,
       respondToConfirmation: (
         confirmationId: string,
         decision: ToolConfirmationOutcome,
@@ -63,11 +68,14 @@ export function buildScriptedAgent(nextEvents: () => readonly AgentEvent[]): {
   return { agent, confirmations };
 }
 
-export function buildFakeAgent(events: readonly AgentEvent[]): {
+export function buildFakeAgent(
+  events: readonly AgentEvent[],
+  toolKinds: Readonly<Record<string, string>> = {},
+): {
   agent: Agent;
   confirmations: ConfirmationCapture[];
 } {
-  return buildScriptedAgent(() => events);
+  return buildScriptedAgent(() => events, toolKinds);
 }
 
 export class RecordingConnection {
