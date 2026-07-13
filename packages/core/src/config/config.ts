@@ -113,12 +113,15 @@ import {
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 import type { ToolSchedulerContract } from '../core/toolSchedulerContract.js';
 
+const MAX_RETAINED_TRUST_TRANSITION_FAILURES = 100;
+
 export class Config extends ConfigBase {
   private static readonly logger = new DebugLogger('llxprt:config');
 
   constructor(params: ConfigParameters) {
     super();
     applyConfigParams(this as unknown as ConfigConstructorTarget, params);
+    this.cachedEffectiveTrust = this.isTrustedFolder();
   }
 
   // Issue #2325: Background MCP discovery promise started in initialize() so
@@ -565,6 +568,10 @@ export class Config extends ConfigBase {
     );
   }
 
+  /**
+   * Updates the local trust fallback. IDE trust remains authoritative, so this
+   * only triggers a transition when the effective trust value changes.
+   */
   setTrustedFolderLive(trusted: boolean): void {
     const previousEffectiveTrust = this.isTrustedFolder();
     this.trustedFolder = trusted;
@@ -861,7 +868,7 @@ export class Config extends ConfigBase {
   private trustTransitionFailures: unknown[] = [];
   private disposing = false;
   private ideTrust: boolean | undefined;
-  private cachedEffectiveTrust: boolean | undefined;
+  private cachedEffectiveTrust: boolean;
 
   /**
    * Serializes trust-transition side-effects (MCP connect/disconnect, hook
@@ -899,7 +906,10 @@ export class Config extends ConfigBase {
           failures.push(error);
         }
       }
-      this.trustTransitionFailures.push(...failures);
+      this.trustTransitionFailures = [
+        ...this.trustTransitionFailures,
+        ...failures,
+      ].slice(-MAX_RETAINED_TRUST_TRANSITION_FAILURES);
     });
   }
 
@@ -934,10 +944,7 @@ export class Config extends ConfigBase {
     this.ideTrust = ideContext.getIdeContext()?.workspaceState?.isTrusted;
     const effectiveTrust = this.isTrustedFolder();
     this.cachedEffectiveTrust = effectiveTrust;
-    if (
-      previousEffectiveTrust !== undefined &&
-      effectiveTrust !== previousEffectiveTrust
-    ) {
+    if (effectiveTrust !== previousEffectiveTrust) {
       this.applyTrustTransition(effectiveTrust, false);
     }
     this.ideTrustChangeListener = (isTrusted: boolean | undefined) => {
@@ -963,11 +970,11 @@ export class Config extends ConfigBase {
       this.ideClient.removeTrustChangeListener(this.ideTrustChangeListener);
       this.ideTrustChangeListener = undefined;
     }
-    let transitionFailure: unknown;
+    const failures: unknown[] = [];
     try {
       await this.whenTrustTransitionSettled();
     } catch (error) {
-      transitionFailure = error;
+      failures.push(error);
     }
     const client = this.agentClient as AgentClientContract | undefined;
     if (client !== undefined) {
@@ -983,10 +990,17 @@ export class Config extends ConfigBase {
       }
     }
     if (stopPromise !== undefined) {
-      await stopPromise;
+      try {
+        await stopPromise;
+      } catch (error) {
+        failures.push(error);
+      }
     }
-    if (transitionFailure !== undefined) {
-      throw transitionFailure;
+    if (failures.length === 1) {
+      throw failures[0];
+    }
+    if (failures.length > 1) {
+      throw new AggregateError(failures, 'Config disposal failed');
     }
   }
 }

@@ -117,21 +117,31 @@ describe('McpClientManager trust transitions', () => {
         .mockReturnValueOnce(clientB);
 
       const refreshFn = vi.fn();
+      const promptRegistry = new PromptRegistry();
+      const resourceRegistry = new ResourceRegistry();
       const config = createMockConfig({
         refreshMcpContext: refreshFn,
+        getPromptRegistry: () => promptRegistry,
+        getResourceRegistry: () => resourceRegistry,
       });
-      const manager = new McpClientManager(
-        '0.0.1',
-        createToolRegistry(config),
-        config,
-      );
+      const toolRegistry = createToolRegistry(config);
+      const manager = new McpClientManager('0.0.1', toolRegistry, config);
 
       await manager.startConfiguredMcpServers();
+      const removeTools = vi.spyOn(toolRegistry, 'removeMcpToolsByServer');
+      const removePrompts = vi.spyOn(promptRegistry, 'removePromptsByServer');
+      const removeResources = vi.spyOn(
+        resourceRegistry,
+        'removeResourcesByServer',
+      );
 
       await manager.onFolderTrustRevoked();
 
       expect(clientA.disconnect).toHaveBeenCalled();
       expect(clientB.disconnect).toHaveBeenCalled();
+      expect(removeTools).toHaveBeenCalledTimes(2);
+      expect(removePrompts).toHaveBeenCalledTimes(2);
+      expect(removeResources).toHaveBeenCalledTimes(2);
     });
 
     it('invalidates every client capability generation synchronously during quarantine', async () => {
@@ -395,6 +405,7 @@ describe('McpClientManager trust transitions', () => {
 
       expect(client.connect).toHaveBeenCalled();
       expect(client.discover).toHaveBeenCalled();
+      expect(manager.getDiscoveryState()).toBe('completed');
     });
   });
 

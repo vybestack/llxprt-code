@@ -686,9 +686,6 @@ export class McpClientManager {
         }
       }),
     );
-    for (const name of entries.keys()) {
-      this.removeServerArtifacts(name);
-    }
     await this.cliConfig.refreshMcpContext();
   }
 

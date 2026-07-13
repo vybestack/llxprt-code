@@ -211,6 +211,37 @@ function removeTemporaryFile(temporaryPath: string): void {
   }
 }
 
+function isUnsupportedFileModeError(error: unknown): boolean {
+  if (!(error instanceof Error) || !('code' in error)) {
+    return false;
+  }
+  return (
+    error.code === 'ENOSYS' ||
+    error.code === 'ENOTSUP' ||
+    error.code === 'EOPNOTSUPP'
+  );
+}
+
+function secureTemporaryFileMode(temporaryPath: string): void {
+  try {
+    fs.chmodSync(temporaryPath, 0o600);
+    const temporaryMode = fs.statSync(temporaryPath).mode & 0o777;
+    if (temporaryMode !== 0o600) {
+      throw new Error(
+        `Trusted folders temporary file has mode ${temporaryMode.toString(8)} instead of 600.`,
+      );
+    }
+  } catch (error) {
+    if (!isUnsupportedFileModeError(error)) {
+      throw error;
+    }
+    debugLogger.warn(
+      `Filesystem for trusted folders does not support POSIX file modes; continuing with the mode requested at file creation for ${temporaryPath}:`,
+      error,
+    );
+  }
+}
+
 export function saveTrustedFolders(
   trustedFoldersFile: TrustedFoldersFile,
 ): void {
@@ -231,13 +262,7 @@ export function saveTrustedFolders(
       { encoding: 'utf-8', mode: 0o600, flag: 'wx' },
     );
     if (process.platform !== 'win32') {
-      fs.chmodSync(temporaryPath, 0o600);
-      const temporaryMode = fs.statSync(temporaryPath).mode & 0o777;
-      if (temporaryMode !== 0o600) {
-        throw new Error(
-          `Trusted folders temporary file has mode ${temporaryMode.toString(8)} instead of 600.`,
-        );
-      }
+      secureTemporaryFileMode(temporaryPath);
     }
   } catch (error) {
     removeTemporaryFile(temporaryPath);

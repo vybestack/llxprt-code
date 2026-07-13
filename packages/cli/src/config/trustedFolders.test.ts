@@ -271,6 +271,52 @@ describe('Trusted Folders Loading', () => {
     );
   });
 
+  it('commits the file when chmod reports that POSIX modes are unsupported', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const loadedFolders = loadTrustedFolders();
+    const unsupportedError = Object.assign(new Error('chmod unsupported'), {
+      code: 'ENOTSUP',
+    });
+    const warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
+    mockFsChmodSync.mockImplementationOnce(() => {
+      throw unsupportedError;
+    });
+
+    loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
+
+    expect(mockFsRenameSync).toHaveBeenCalledOnce();
+    expect(loadedFolders.user.config['/new/path']).toBe(
+      TrustLevel.TRUST_FOLDER,
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('does not support POSIX file modes'),
+      unsupportedError,
+    );
+  });
+
+  it('commits the file when stat reports that POSIX modes are unsupported', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const loadedFolders = loadTrustedFolders();
+    const unsupportedError = Object.assign(new Error('stat unsupported'), {
+      code: 'ENOSYS',
+    });
+    const warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
+    mockFsStatSync.mockImplementationOnce(() => {
+      throw unsupportedError;
+    });
+
+    loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
+
+    expect(mockFsRenameSync).toHaveBeenCalledOnce();
+    expect(loadedFolders.user.config['/new/path']).toBe(
+      TrustLevel.TRUST_FOLDER,
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('does not support POSIX file modes'),
+      unsupportedError,
+    );
+  });
+
   it('removes the temporary file when the atomic rename fails', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();

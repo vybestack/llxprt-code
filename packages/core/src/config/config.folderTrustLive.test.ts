@@ -94,6 +94,19 @@ describe('Config.setTrustedFolderLive', () => {
     expect(emitSpy).not.toHaveBeenCalled();
   });
 
+  it('preserves IDE trust precedence when the IDE says untrusted', () => {
+    vi.spyOn(ideContext, 'getIdeContext').mockReturnValue({
+      workspaceState: { isTrusted: false },
+    });
+
+    const config = new Config({ ...baseParams, trustedFolder: true });
+
+    config.setTrustedFolderLive(true);
+
+    expect(config.isTrustedFolder()).toBe(false);
+    expect(emitSpy).not.toHaveBeenCalled();
+  });
+
   it('allows setApprovalMode(YOLO) after gaining trust live', () => {
     const config = new Config({ ...baseParams, trustedFolder: false });
     expect(() => config.setApprovalMode(ApprovalMode.YOLO)).toThrow(

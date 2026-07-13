@@ -14,6 +14,7 @@ import {
   getTrustLevelDisplay,
   getTrustUpdateDisplay,
   getWarningMessage,
+  shouldDismissTrustDialog,
 } from '../components/PermissionsModifyTrustDialog.js';
 const mockedSetValue = vi.hoisted(() => vi.fn());
 const mockedUserConfig = vi.hoisted<{
@@ -81,6 +82,13 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
       'Trusted (via parent folder)',
     );
   });
+  it('requires Enter to dismiss the updated prompt while preserving Escape', () => {
+    expect([
+      shouldDismissTrustDialog(true, 'x'),
+      shouldDismissTrustDialog(true, 'return'),
+      shouldDismissTrustDialog(false, 'escape'),
+    ]).toStrictEqual([false, true, true]);
+  });
 
   it('reports a persisted-but-not-live result and remains usable after a live setter throws', () => {
     const setTrustedFolderLive = vi
@@ -124,6 +132,8 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     });
     expect(mockedSetValue).toHaveBeenCalledTimes(2);
     expect(setTrustedFolderLive).toHaveBeenCalledTimes(2);
+    expect(result.current.committedTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
+    expect(result.current.effectiveTrust).toBe(true);
   });
 
   it('reads and persists the direct rule by normalized working directory', () => {

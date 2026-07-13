@@ -298,7 +298,7 @@ describe('PermissionsModifyTrustDialog', () => {
     expect(lastFrame()).toContain('Current:');
   });
 
-  it('applies the selected trust level live and closes after confirmation', async () => {
+  it('applies the selected trust level live and requires Enter to close the confirmation', async () => {
     const onExit = vi.fn();
     const { stdin, lastFrame } = renderWithProviders(
       <Wrapper>
@@ -321,6 +321,10 @@ describe('PermissionsModifyTrustDialog', () => {
     expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(false);
 
     stdin.write('x');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onExit).not.toHaveBeenCalled();
+
+    stdin.write('\r');
     await waitFor(() => {
       expect(onExit).toHaveBeenCalledTimes(1);
     });

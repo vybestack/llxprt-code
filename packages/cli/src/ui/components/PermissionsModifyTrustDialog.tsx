@@ -147,7 +147,7 @@ const UpdatedPrompt: React.FC<UpdatedPromptProps> = ({
         Effective now:{' '}
         <Text color={Colors.AccentGreen}>{effectiveTrustDisplay}</Text>
       </Text>
-      <Text color={Colors.Comment}>Press any key to continue.</Text>
+      <Text color={Colors.Comment}>Press Enter to continue.</Text>
     </Box>
   </Box>
 );
@@ -348,6 +348,13 @@ function useTrustDialogState(
   };
 }
 
+export function shouldDismissTrustDialog(
+  showUpdatedPrompt: boolean,
+  keyName: string,
+): boolean {
+  return keyName === 'escape' || (showUpdatedPrompt && keyName === 'return');
+}
+
 export const PermissionsModifyTrustDialog: React.FC<
   PermissionsModifyTrustDialogProps
 > = ({ onExit, addItem, config }) => {
@@ -355,7 +362,7 @@ export const PermissionsModifyTrustDialog: React.FC<
 
   useKeypress(
     (key) => {
-      if (state.showUpdatedPrompt || key.name === 'escape') {
+      if (shouldDismissTrustDialog(state.showUpdatedPrompt, key.name)) {
         onExit();
       }
     },

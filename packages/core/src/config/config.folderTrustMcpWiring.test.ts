@@ -65,6 +65,13 @@ const baseParams: ConfigParameters = {
   cwd: '.',
 };
 
+function asAggregateError(error: unknown): AggregateError {
+  if (!(error instanceof AggregateError)) {
+    throw new Error(`Expected AggregateError, got ${typeof error}`);
+  }
+  return error;
+}
+
 describe('Config MCP wiring on folder trust change', () => {
   beforeEach(() => {
     instances.length = 0;
@@ -346,6 +353,56 @@ describe('Config MCP wiring on folder trust change', () => {
 
         expect(instances[0].onFolderTrustRevoked).not.toHaveBeenCalled();
       });
+
+      it('reports both transition and manager stop failures', async () => {
+        const config = new Config({ ...baseParams, trustedFolder: true });
+        await initializeTestConfig(config);
+        const transitionError = new Error('transition failed');
+        const stopError = new Error('stop failed');
+        instances[0].onFolderTrustRevoked.mockRejectedValue(transitionError);
+        instances[0].stop.mockRejectedValue(stopError);
+
+        config.setTrustedFolderLive(false);
+
+        await expect(config.dispose()).rejects.toMatchObject({
+          errors: [transitionError, stopError],
+        });
+      });
+
+      it('retains an undefined transition rejection alongside a stop failure', async () => {
+        const config = new Config({ ...baseParams, trustedFolder: true });
+        await initializeTestConfig(config);
+        const stopError = new Error('stop failed');
+        instances[0].onFolderTrustRevoked.mockRejectedValue(undefined);
+        instances[0].stop.mockRejectedValue(stopError);
+
+        config.setTrustedFolderLive(false);
+
+        await expect(config.dispose()).rejects.toMatchObject({
+          errors: [undefined, stopError],
+        });
+      });
+    });
+
+    it('bounds retained transition failures when callers do not drain them', async () => {
+      const config = new Config({ ...baseParams, trustedFolder: true });
+      await initializeTestConfig(config);
+      const mock = instances[0];
+      mock.onFolderTrustGained.mockRejectedValue(new Error('gain failed'));
+      mock.onFolderTrustRevoked.mockRejectedValue(new Error('revoke failed'));
+
+      for (let index = 0; index < 101; index++) {
+        config.setTrustedFolderLive(index % 2 !== 0);
+      }
+
+      let failure: unknown;
+      try {
+        await config.whenTrustTransitionSettled();
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect(asAggregateError(failure).errors).toHaveLength(100);
     });
   });
 });
