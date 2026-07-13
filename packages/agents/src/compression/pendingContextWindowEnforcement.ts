@@ -464,9 +464,9 @@ export class PendingContextWindowEnforcer {
           },
           input.marginAdjustedLimit,
         );
-      } catch (estimatorError) {
+      } catch (truncatorError) {
         return this.handleTruncatorThrow(
-          estimatorError,
+          truncatorError,
           input.truncationFailure,
           input.compressionFailure,
           input.pendingTokens,
@@ -488,13 +488,13 @@ export class PendingContextWindowEnforcer {
   }
 
   private handleTruncatorThrow(
-    estimatorError: unknown,
+    truncatorError: unknown,
     prevTruncationFailure: Error | undefined,
     compressionFailure: Error | undefined,
     pendingTokens: number,
     completionBudget: number,
   ): ReductionResult {
-    const normalized = this.normalizeError(estimatorError);
+    const normalized = this.normalizeError(truncatorError);
     this.deps.logger.warn(
       () =>
         '[CompressionHandler] Tool-response truncation threw during last-resort enforcement; falling through to structured overflow',
