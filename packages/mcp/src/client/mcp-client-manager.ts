@@ -287,6 +287,24 @@ export class McpClientManager {
     );
   }
 
+  private async removeAndDisconnectClient(
+    name: string,
+    client: McpClient,
+  ): Promise<void> {
+    if (this.clients.get(name) === client) {
+      this.clients.delete(name);
+    }
+    this.removeServerArtifacts(name);
+    this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+      clients: new Map(this.clients),
+    });
+    try {
+      await client.disconnect();
+    } catch {
+      // Best-effort cleanup
+    }
+  }
+
   private async connectAndDiscover(
     name: string,
     config: MCPServerConfig,
@@ -317,11 +335,7 @@ export class McpClientManager {
       // the (potentially slow) connect handshake. If so, disconnect and
       // do NOT register the client.
       if (this.isDiscoveryInvalid(generationBeforeConnect)) {
-        try {
-          await client.disconnect();
-        } catch {
-          // Best-effort cleanup
-        }
+        await this.removeAndDisconnectClient(name, client);
         return;
       }
 
@@ -340,16 +354,7 @@ export class McpClientManager {
       // the (potentially slow) discovery handshake. If so, remove the
       // client and disconnect it.
       if (this.isDiscoveryInvalid(generationBeforeConnect)) {
-        this.clients.delete(name);
-        this.removeServerArtifacts(name);
-        this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-          clients: new Map(this.clients),
-        });
-        try {
-          await client.disconnect();
-        } catch {
-          // Best-effort cleanup
-        }
+        await this.removeAndDisconnectClient(name, client);
         return;
       }
 

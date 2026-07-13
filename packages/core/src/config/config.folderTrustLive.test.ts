@@ -23,6 +23,7 @@ describe('Config.setTrustedFolderLive', () => {
   let emitSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    ideContext.clearIdeContext();
     emitSpy = vi.spyOn(coreEvents, 'emitFolderTrustChanged');
   });
 

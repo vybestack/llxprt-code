@@ -62,11 +62,11 @@ const TrustDialogHeader: React.FC = () => (
   </Box>
 );
 
-interface RestartingMessageProps {
+interface ExitMessageProps {
   exiting: boolean;
 }
 
-const RestartingMessage: React.FC<RestartingMessageProps> = ({ exiting }) => {
+const ExitMessage: React.FC<ExitMessageProps> = ({ exiting }) => {
   if (!exiting) {
     return null;
   }
@@ -120,7 +120,7 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
           isFocused={true}
         />
       </Box>
-      <RestartingMessage exiting={exiting} />
+      <ExitMessage exiting={exiting} />
     </Box>
   );
 };

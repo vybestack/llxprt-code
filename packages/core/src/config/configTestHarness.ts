@@ -211,9 +211,11 @@ export function buildEventsMockBody(
   const eventsModule = actual as { coreEvents: object };
   return {
     ...(actual as object),
-    coreEvents: Object.assign(eventsModule.coreEvents, hoisted.coreEvents, {
+    coreEvents: {
+      ...eventsModule.coreEvents,
+      ...hoisted.coreEvents,
       emit: vi.fn(),
-    }),
+    },
   };
 }
 

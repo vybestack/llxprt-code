@@ -255,6 +255,22 @@ describe('Trusted Folders Loading', () => {
     );
   });
 
+  it('removes the temporary file when the atomic rename fails', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const loadedFolders = loadTrustedFolders();
+    vi.mocked(fs.renameSync).mockImplementationOnce(() => {
+      throw new Error('rename denied');
+    });
+
+    expect(() =>
+      loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER),
+    ).toThrow('rename denied');
+
+    const temporaryPath = vi.mocked(fs.writeFileSync).mock.calls[0][0];
+    expect(fs.unlinkSync).toHaveBeenCalledWith(temporaryPath);
+    expect(loadedFolders.user.config['/new/path']).toBeUndefined();
+  });
+
   it('atomically saves on Windows without POSIX mode operations', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
     const loadedFolders = loadTrustedFolders();

@@ -10,6 +10,7 @@ interface InstanceMock {
   startConfiguredMcpServers: ReturnType<typeof vi.fn>;
   onFolderTrustGained: ReturnType<typeof vi.fn>;
   onFolderTrustRevoked: ReturnType<typeof vi.fn>;
+  quarantineForTrustRevocation: ReturnType<typeof vi.fn>;
   whenDiscoverySettled: ReturnType<typeof vi.fn>;
   stop: ReturnType<typeof vi.fn>;
   getMcpInstructions: ReturnType<typeof vi.fn>;

@@ -65,6 +65,12 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     ).toContain('This folder is not trusted via a parent folder setting.');
   });
 
+  it('represents inherited trust when no direct trust level is set', () => {
+    expect(getTrustLevelDisplay(undefined, undefined, true)).toBe(
+      'Trusted (via parent folder)',
+    );
+  });
+
   it('reports a persisted-but-not-live result and remains usable after a live setter throws', () => {
     const setTrustedFolderLive = vi
       .fn()
@@ -95,7 +101,9 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     expect(result.current.committedTrustLevel).toBe(TrustLevel.TRUST_FOLDER);
     expect(
       getTrustCommitErrorMessage('live', new Error('live update failed')),
-    ).toMatch(/saved.*not.*live/i);
+    ).toBe(
+      'Trust settings were saved but could not be applied live: live update failed',
+    );
 
     act(() => {
       expect(

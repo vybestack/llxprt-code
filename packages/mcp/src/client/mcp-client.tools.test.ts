@@ -42,6 +42,11 @@ const createMockResourceRegistry = (): ResourceRegistry =>
     removeResourcesByServer: vi.fn(),
   }) as unknown as ResourceRegistry;
 
+const createTrustedConfig = (): Config =>
+  ({
+    isTrustedFolder: () => true,
+  }) as Config;
+
 describe('mcp-client', () => {
   let workspaceContext: WorkspaceContext;
   let testWorkspace: string;
@@ -88,7 +93,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
@@ -125,7 +130,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
@@ -162,7 +167,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
@@ -221,7 +226,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
         onToolsUpdatedSpy,
@@ -292,7 +297,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
@@ -363,7 +368,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
         onToolsUpdatedSpy,
@@ -376,7 +381,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
         onToolsUpdatedSpy,
@@ -460,7 +465,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
@@ -525,7 +530,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
         onToolsUpdatedSpy,
@@ -543,6 +548,109 @@ describe('mcp-client', () => {
       // Verify the signal passed was not aborted (happy path)
       const signal = onToolsUpdatedSpy.mock.calls[0][0];
       expect(signal.aborted).toBe(false);
+    });
+
+    it('clears the refresh timeout and removes new tools when the update callback fails', async () => {
+      vi.useFakeTimers();
+      try {
+        const mockedClient = {
+          connect: vi.fn(),
+          getServerCapabilities: vi
+            .fn()
+            .mockReturnValue({ tools: { listChanged: true } }),
+          setNotificationHandler: vi.fn(),
+          listTools: vi.fn().mockResolvedValue({
+            tools: [{ name: 'newTool', inputSchema: { type: 'object' } }],
+          }),
+          registerCapabilities: vi.fn(),
+          setRequestHandler: vi.fn(),
+        };
+        vi.mocked(ClientLib.Client).mockReturnValue(
+          mockedClient as unknown as ClientLib.Client,
+        );
+        vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+          {} as SdkClientStdioLib.StdioClientTransport,
+        );
+        const toolRegistry = {
+          removeMcpToolsByServer: vi.fn(),
+          registerTool: vi.fn(),
+          sortTools: vi.fn(),
+          getMessageBus: vi.fn().mockReturnValue(undefined),
+        } as unknown as ToolRegistry;
+        const client = new McpClient(
+          'test-server',
+          { command: 'test-command', timeout: 100 },
+          toolRegistry,
+          {} as PromptRegistry,
+          createMockResourceRegistry(),
+          workspaceContext,
+          { isTrustedFolder: () => true } as Config,
+          false,
+          '0.0.1',
+          vi.fn().mockRejectedValue(new Error('context refresh failed')),
+        );
+        await client.connect();
+        const notificationCallback =
+          mockedClient.setNotificationHandler.mock.calls[0][1];
+
+        await notificationCallback();
+
+        expect(vi.getTimerCount()).toBe(0);
+        expect(toolRegistry.removeMcpToolsByServer).toHaveBeenCalledTimes(2);
+        expect(coreEvents.emitFeedback).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('removes newly registered tools when authorization is revoked during the update callback', async () => {
+      let trusted = true;
+      const mockedClient = {
+        connect: vi.fn(),
+        getServerCapabilities: vi
+          .fn()
+          .mockReturnValue({ tools: { listChanged: true } }),
+        setNotificationHandler: vi.fn(),
+        listTools: vi.fn().mockResolvedValue({
+          tools: [{ name: 'newTool', inputSchema: { type: 'object' } }],
+        }),
+        registerCapabilities: vi.fn(),
+        setRequestHandler: vi.fn(),
+      };
+      vi.mocked(ClientLib.Client).mockReturnValue(
+        mockedClient as unknown as ClientLib.Client,
+      );
+      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+        {} as SdkClientStdioLib.StdioClientTransport,
+      );
+      const toolRegistry = {
+        removeMcpToolsByServer: vi.fn(),
+        registerTool: vi.fn(),
+        sortTools: vi.fn(),
+        getMessageBus: vi.fn().mockReturnValue(undefined),
+      } as unknown as ToolRegistry;
+      const client = new McpClient(
+        'test-server',
+        { command: 'test-command' },
+        toolRegistry,
+        {} as PromptRegistry,
+        createMockResourceRegistry(),
+        workspaceContext,
+        { isTrustedFolder: () => trusted } as Config,
+        false,
+        '0.0.1',
+        vi.fn().mockImplementation(async () => {
+          trusted = false;
+        }),
+      );
+      await client.connect();
+      const notificationCallback =
+        mockedClient.setNotificationHandler.mock.calls[0][1];
+
+      await notificationCallback();
+
+      expect(toolRegistry.removeMcpToolsByServer).toHaveBeenCalledTimes(2);
+      expect(coreEvents.emitFeedback).not.toHaveBeenCalled();
     });
   });
 

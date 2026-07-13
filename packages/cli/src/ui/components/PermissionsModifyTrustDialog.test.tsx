@@ -76,12 +76,11 @@ const Wrapper = ({ children }: { children: React.ReactNode }) => (
 );
 
 describe('PermissionsModifyTrustDialog', () => {
-  let mockConfig: {
+  let mockConfig: Pick<
+    CliUiRuntime,
+    'getWorkingDir' | 'getFolderTrust' | 'getIdeClient' | 'isTrustedFolder'
+  > & {
     setTrustedFolderLive: ReturnType<typeof vi.fn>;
-    getWorkingDir: () => string;
-    getFolderTrust: () => boolean;
-    getIdeClient: () => undefined;
-    isTrustedFolder: () => boolean;
   };
 
   beforeEach(() => {

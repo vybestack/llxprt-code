@@ -444,6 +444,14 @@ export async function connectToMcpServer(
       signal !== undefined
         ? await abortable(transportPromise, signal, closeTransport)
         : await transportPromise;
+    let transportClosed = false;
+    const closeConnectedTransport = async () => {
+      if (transportClosed) {
+        return;
+      }
+      transportClosed = true;
+      await closeTransport(transport);
+    };
     try {
       const connectPromise = Promise.resolve(
         mcpClient.connect(transport, {
@@ -454,8 +462,8 @@ export async function connectToMcpServer(
         await abortable(
           connectPromise,
           signal,
-          () => closeTransport(transport),
-          () => closeTransport(transport),
+          closeConnectedTransport,
+          closeConnectedTransport,
         );
       } else {
         await connectPromise;
@@ -463,10 +471,10 @@ export async function connectToMcpServer(
       updateMCPServerStatus(mcpServerName, MCPServerStatus.CONNECTED);
       return mcpClient;
     } catch (error) {
+      await closeConnectedTransport();
       if (signal?.aborted === true) {
         throw error;
       }
-      await closeTransport(transport);
       if (is404Error(error)) {
         httpReturned404 = true;
       }

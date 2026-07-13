@@ -108,6 +108,8 @@ export class LoadedTrustedFolders {
       ];
     });
 
+    // The most specific rule wins; at equal specificity, denial wins so an
+    // ambiguous configuration cannot accidentally grant trust.
     matches.sort((left, right) => {
       const specificity =
         right.effectivePath.length - left.effectivePath.length;
@@ -231,8 +233,18 @@ export function saveTrustedFolders(
     throw error;
   }
 
-  // Atomic replacement is the commit point; nothing fallible may follow it.
-  fs.renameSync(temporaryPath, trustedFoldersFile.path);
+  // Atomic replacement is the commit point; nothing fallible may follow it on
+  // success. A failed commit still owns the temporary file and must remove it.
+  try {
+    fs.renameSync(temporaryPath, trustedFoldersFile.path);
+  } catch (error) {
+    try {
+      fs.unlinkSync(temporaryPath);
+    } catch {
+      // Preserve the rename error if cleanup also fails.
+    }
+    throw error;
+  }
 }
 
 /** Is folder trust feature enabled per the current applied settings */

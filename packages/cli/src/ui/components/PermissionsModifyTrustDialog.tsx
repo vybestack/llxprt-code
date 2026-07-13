@@ -47,9 +47,12 @@ export function getTrustLevelDisplay(
     return isIdeTrusted ? 'Trusted (via IDE)' : 'Not trusted (via IDE)';
   }
   const localDisplay = getLocalTrustLevelDisplay(level);
-  return isParentTrusted === true && level !== undefined
-    ? `${localDisplay} (via parent folder)`
-    : localDisplay;
+  if (isParentTrusted === true) {
+    return level === undefined
+      ? 'Trusted (via parent folder)'
+      : `${localDisplay} (via parent folder)`;
+  }
+  return localDisplay;
 }
 
 function buildOptions(

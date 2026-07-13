@@ -104,6 +104,7 @@ describe('McpClientManager trust transitions', () => {
       await manager.onFolderTrustGained();
 
       expect(client.connect).not.toHaveBeenCalled();
+      expect(client.discover).not.toHaveBeenCalled();
     });
   });
 
@@ -312,6 +313,51 @@ describe('McpClientManager trust transitions', () => {
 
       expect(manager.getMcpServerCount()).toBe(0);
       expect(client.discover).not.toHaveBeenCalled();
+    });
+
+    it('removes an existing client and its artifacts when trust is revoked after reconnect', async () => {
+      let trusted = true;
+      let resolveReconnect: (() => void) | undefined;
+      const client = createMockMcpClient();
+      (client.connect as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(undefined)
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              resolveReconnect = resolve;
+            }),
+        );
+      vi.mocked(McpClient).mockReturnValue(client);
+      const promptRegistry = new PromptRegistry();
+      const resourceRegistry = new ResourceRegistry();
+      const removePrompts = vi.spyOn(promptRegistry, 'removePromptsByServer');
+      const removeResources = vi.spyOn(
+        resourceRegistry,
+        'removeResourcesByServer',
+      );
+      const config = createMockConfig({
+        getMcpServers: () => ({ 'server-a': {} }),
+        getPromptRegistry: () => promptRegistry,
+        getResourceRegistry: () => resourceRegistry,
+        isTrustedFolder: () => trusted,
+      });
+      const toolRegistry = createToolRegistry(config);
+      const removeTools = vi.spyOn(toolRegistry, 'removeMcpToolsByServer');
+      const manager = new McpClientManager('0.0.1', toolRegistry, config);
+      await manager.startConfiguredMcpServers();
+      expect(manager.getMcpServerCount()).toBe(1);
+
+      const restart = manager.restartServer('server-a');
+      await vi.waitFor(() => expect(client.connect).toHaveBeenCalledTimes(2));
+      trusted = false;
+      resolveReconnect?.();
+      await restart;
+
+      expect(manager.getMcpServerCount()).toBe(0);
+      expect(removeTools).toHaveBeenCalledWith('server-a');
+      expect(removePrompts).toHaveBeenCalledWith('server-a');
+      expect(removeResources).toHaveBeenCalledWith('server-a');
+      expect(client.discover).toHaveBeenCalledTimes(1);
     });
   });
 

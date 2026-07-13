@@ -113,6 +113,56 @@ describe('mcp-client', () => {
       );
     });
 
+    it('aborts initial resource discovery when disconnected', async () => {
+      let resourceSignal: AbortSignal | undefined;
+      const mockedClient = {
+        connect: vi.fn(),
+        close: vi.fn().mockResolvedValue(undefined),
+        registerCapabilities: vi.fn(),
+        setRequestHandler: vi.fn(),
+        setNotificationHandler: vi.fn(),
+        getServerCapabilities: vi.fn().mockReturnValue({ resources: {} }),
+        request: vi.fn().mockImplementation((_request, _schema, options) => {
+          resourceSignal = options?.signal;
+          return new Promise((_resolve, reject) => {
+            options?.signal?.addEventListener('abort', () => {
+              reject(new Error('resource discovery aborted'));
+            });
+          });
+        }),
+      };
+      vi.mocked(ClientLib.Client).mockReturnValue(
+        mockedClient as unknown as ClientLib.Client,
+      );
+      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+        {} as SdkClientStdioLib.StdioClientTransport,
+      );
+      const client = new McpClient(
+        'test-server',
+        { command: 'test-command' },
+        {
+          getMessageBus: vi.fn(),
+          removeMcpToolsByServer: vi.fn(),
+        } as unknown as ToolRegistry,
+        { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
+        createMockResourceRegistry(),
+        workspaceContext,
+        { isTrustedFolder: () => true } as Config,
+        false,
+        '0.0.1',
+      );
+      await client.connect();
+      const discovery = client.discover({
+        isTrustedFolder: () => true,
+      } as Config);
+      await vi.waitFor(() => expect(resourceSignal).toBeDefined());
+
+      await client.disconnect();
+
+      expect(resourceSignal?.aborted).toBe(true);
+      await expect(discovery).rejects.toThrow('resource discovery aborted');
+    });
+
     it('should not skip tools even if a parameter is missing a type', async () => {
       const consoleWarnSpy = vi
         .spyOn(console, 'warn')

@@ -9,6 +9,8 @@ import { permissionsCommand } from './permissionsCommand.js';
 import { CommandKind } from './types.js';
 import * as path from 'node:path';
 import * as trustedFolders from '../../config/trustedFolders.js';
+import { createMockCommandContext as createBaseMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 const mockSetValue = vi.fn();
 const mockIsPathTrusted = vi.fn();
@@ -67,45 +69,26 @@ describe('permissionsCommand', () => {
   const createMockContext = (configOverrides?: {
     setTrustedFolderLive?: ReturnType<typeof vi.fn>;
     getWorkingDir?: () => string;
-  }) => ({
-    services: {
-      config: configOverrides
-        ? ({
-            setTrustedFolderLive:
-              configOverrides.setTrustedFolderLive ?? vi.fn(),
-            getWorkingDir:
-              configOverrides.getWorkingDir ??
-              (() => '/home/user/projects/myapp'),
-            getFolderTrust: () => true,
-          } as never)
-        : null,
-      agent: null,
-      settings: { merged: { folderTrust: true } } as never,
-      git: undefined,
-      logger: {} as never,
-    },
-    ui: {
-      addItem: () => 0,
-      clear: () => {},
-      setDebugMessage: () => {},
-      pendingItem: null,
-      setPendingItem: () => {},
-      loadHistory: () => {},
-      toggleCorgiMode: () => {},
-      toggleDebugProfiler: () => {},
-      toggleVimEnabled: async () => false,
-      setLlxprtMdFileCount: () => {},
-      updateHistoryTokenCount: () => {},
-      reloadCommands: () => {},
-      extensionsUpdateState: new Map(),
-      dispatchExtensionStateUpdate: () => {},
-      addConfirmUpdateExtensionRequest: () => {},
-    },
-    session: {
-      stats: {} as never,
-      sessionShellAllowlist: new Set<string>(),
-    },
-  });
+  }) => {
+    const config = configOverrides
+      ? ({
+          setTrustedFolderLive: configOverrides.setTrustedFolderLive ?? vi.fn(),
+          getWorkingDir:
+            configOverrides.getWorkingDir ??
+            (() => '/home/user/projects/myapp'),
+          getFolderTrust: () => true,
+        } satisfies Pick<
+          CliUiRuntime,
+          'setTrustedFolderLive' | 'getWorkingDir' | 'getFolderTrust'
+        >)
+      : null;
+    return createBaseMockCommandContext({
+      services: {
+        config: config as CliUiRuntime | null,
+        settings: { merged: { folderTrust: true } },
+      },
+    });
+  };
 
   it('should have correct name and description', () => {
     expect(permissionsCommand.name).toBe('permissions');

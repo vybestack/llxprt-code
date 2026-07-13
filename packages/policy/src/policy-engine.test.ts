@@ -751,6 +751,23 @@ describe('PolicyEngine', () => {
       expect(engine.evaluate('allowed-tool', {})).toBe(PolicyDecision.ALLOW);
     });
 
+    it('preserves rules without a source', () => {
+      const engine = new PolicyEngine({
+        rules: [
+          {
+            toolName: 'unsourced-tool',
+            decision: PolicyDecision.ALLOW,
+            priority: 2.3,
+          },
+        ],
+      });
+
+      engine.removeRulesBySource('Settings (MCP Trusted)');
+
+      expect(engine.evaluate('unsourced-tool', {})).toBe(PolicyDecision.ALLOW);
+      expect(engine.getRules()).toHaveLength(1);
+    });
+
     it('is a no-op when no rules match the source', () => {
       const engine = new PolicyEngine({
         rules: [

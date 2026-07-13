@@ -101,6 +101,7 @@ export class McpClient {
   private pendingResourceRefresh: boolean = false;
   private connectionGeneration = 0;
   private connectionAbortController: AbortController | undefined;
+  private discoveryAbortController: AbortController | undefined;
   private capabilityGeneration = 0;
   private activeCapabilityGeneration: number | undefined;
 
@@ -205,38 +206,59 @@ export class McpClient {
   ): Promise<void> {
     this.assertConnected();
 
-    const prompts = await this.discoverPrompts();
-    const tools = await this.discoverTools(cliConfig);
-    const resources = await this.discoverResources();
-
-    if (prompts.length === 0 && tools.length === 0 && resources.length === 0) {
-      throw new Error('No prompts, tools, or resources found on the server.');
-    }
-    if (!mayPublish()) {
-      return;
-    }
-
-    const connectedClient = this.client!;
-    const isAuthorized = this.createCapabilityAuthorization(connectedClient);
-    for (const prompt of prompts) {
-      this.promptRegistry.registerPrompt({
-        ...prompt,
-        serverName: this.serverName,
-        invoke: (params: Record<string, unknown>) =>
-          invokeMcpPrompt(
-            this.serverName,
-            connectedClient,
-            prompt.name,
-            params,
-            isAuthorized,
-          ),
+    const timeoutMs = this.serverConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC;
+    const abortController = new AbortController();
+    this.discoveryAbortController = abortController;
+    const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
+    try {
+      const prompts = await this.discoverPrompts();
+      const tools = await this.discoverTools(cliConfig, {
+        timeout: timeoutMs,
+        signal: abortController.signal,
       });
+      const resources = await this.discoverResources({
+        timeout: timeoutMs,
+        signal: abortController.signal,
+      });
+
+      if (
+        prompts.length === 0 &&
+        tools.length === 0 &&
+        resources.length === 0
+      ) {
+        throw new Error('No prompts, tools, or resources found on the server.');
+      }
+      if (!mayPublish()) {
+        return;
+      }
+
+      const connectedClient = this.client!;
+      const isAuthorized = this.createCapabilityAuthorization(connectedClient);
+      for (const prompt of prompts) {
+        this.promptRegistry.registerPrompt({
+          ...prompt,
+          serverName: this.serverName,
+          invoke: (params: Record<string, unknown>) =>
+            invokeMcpPrompt(
+              this.serverName,
+              connectedClient,
+              prompt.name,
+              params,
+              isAuthorized,
+            ),
+        });
+      }
+      this.updateResourceRegistry(resources);
+      for (const tool of tools) {
+        this.toolRegistry.registerTool(tool);
+      }
+      this.toolRegistry.sortTools();
+    } finally {
+      clearTimeout(timeoutId);
+      if (this.discoveryAbortController === abortController) {
+        this.discoveryAbortController = undefined;
+      }
     }
-    this.updateResourceRegistry(resources);
-    for (const tool of tools) {
-      this.toolRegistry.registerTool(tool);
-    }
-    this.toolRegistry.sortTools();
   }
 
   async disconnect(): Promise<void> {
@@ -254,6 +276,8 @@ export class McpClient {
     this.updateStatus(MCPServerStatus.DISCONNECTING);
     this.connectionAbortController?.abort();
     this.connectionAbortController = undefined;
+    this.discoveryAbortController?.abort();
+    this.discoveryAbortController = undefined;
     const client = this.client;
     this.client = undefined;
     const transport = this.transport;
@@ -465,38 +489,19 @@ export class McpClient {
     const abortController = new AbortController();
     const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
 
-    let newTools;
     try {
-      newTools = await this.discoverTools(this.cliConfig, {
-        signal: abortController.signal,
-      });
-    } catch (err) {
-      debugLogger.error(
-        `Discovery failed during refresh: ${getErrorMessage(err)}`,
-      );
-      clearTimeout(timeoutId);
-      return false;
-    }
+      let newTools;
+      try {
+        newTools = await this.discoverTools(this.cliConfig, {
+          signal: abortController.signal,
+        });
+      } catch (err) {
+        debugLogger.error(
+          `Discovery failed during refresh: ${getErrorMessage(err)}`,
+        );
+        return false;
+      }
 
-    if (
-      !this.isRefreshAuthorized(
-        client,
-        connectionGeneration,
-        capabilityGeneration,
-      )
-    ) {
-      clearTimeout(timeoutId);
-      return false;
-    }
-    this.toolRegistry.removeMcpToolsByServer(this.serverName);
-
-    for (const tool of newTools) {
-      this.toolRegistry.registerTool(tool);
-    }
-    this.toolRegistry.sortTools();
-
-    if (this.onToolsUpdated) {
-      await this.onToolsUpdated(abortController.signal);
       if (
         !this.isRefreshAuthorized(
           client,
@@ -504,18 +509,42 @@ export class McpClient {
           capabilityGeneration,
         )
       ) {
-        clearTimeout(timeoutId);
         return false;
       }
+      this.toolRegistry.removeMcpToolsByServer(this.serverName);
+
+      for (const tool of newTools) {
+        this.toolRegistry.registerTool(tool);
+      }
+      this.toolRegistry.sortTools();
+
+      if (this.onToolsUpdated) {
+        try {
+          await this.onToolsUpdated(abortController.signal);
+        } catch (error) {
+          this.toolRegistry.removeMcpToolsByServer(this.serverName);
+          throw error;
+        }
+        if (
+          !this.isRefreshAuthorized(
+            client,
+            connectionGeneration,
+            capabilityGeneration,
+          )
+        ) {
+          this.toolRegistry.removeMcpToolsByServer(this.serverName);
+          return false;
+        }
+      }
+
+      coreEvents.emitFeedback(
+        'info',
+        `Tools updated for server: ${this.serverName}`,
+      );
+      return true;
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    clearTimeout(timeoutId);
-
-    coreEvents.emitFeedback(
-      'info',
-      `Tools updated for server: ${this.serverName}`,
-    );
-    return true;
   }
 
   private consumePendingRefresh(): boolean {

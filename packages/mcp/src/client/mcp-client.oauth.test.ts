@@ -118,6 +118,35 @@ describe('connectToMcpServer with OAuth', () => {
     await vi.waitFor(() => expect(transport.close).toHaveBeenCalledOnce());
   });
 
+  it('closes the transport when cancellation races a rejected connect', async () => {
+    const transport = { close: vi.fn().mockResolvedValue(undefined) };
+    vi.mocked(mockedClient.close).mockResolvedValue(undefined);
+    vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+      transport as unknown as SdkClientStdioLib.StdioClientTransport,
+    );
+    let rejectConnect: ((error: Error) => void) | undefined;
+    const connectFailure = new Promise<void>((_resolve, reject) => {
+      rejectConnect = reject;
+    });
+    vi.mocked(mockedClient.connect).mockReturnValue(connectFailure);
+    const controller = new AbortController();
+
+    const connection = connectToMcpServer(
+      '0.0.1',
+      'test-server',
+      { command: 'test-command' },
+      false,
+      workspaceContext,
+      controller.signal,
+    );
+    await vi.waitFor(() => expect(mockedClient.connect).toHaveBeenCalledOnce());
+    void connectFailure.catch(() => controller.abort());
+    rejectConnect?.(new Error('connect failed'));
+
+    await expect(connection).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.waitFor(() => expect(transport.close).toHaveBeenCalledOnce());
+  });
+
   it('should handle automatic OAuth flow on 401 with stored token', async () => {
     const serverUrl = 'http://test-server.com/';
 

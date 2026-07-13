@@ -42,6 +42,11 @@ const createMockResourceRegistry = (): ResourceRegistry =>
     removeResourcesByServer: vi.fn(),
   }) as unknown as ResourceRegistry;
 
+const createTrustedConfig = (): Config =>
+  ({
+    isTrustedFolder: () => true,
+  }) as Config;
+
 describe('mcp-client', () => {
   let workspaceContext: WorkspaceContext;
   let testWorkspace: string;
@@ -81,7 +86,7 @@ describe('mcp-client', () => {
         { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
@@ -146,12 +151,20 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         mockedResourceRegistry,
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
       await client.connect();
-      await client.discover({} as Config);
+      await client.discover(createTrustedConfig());
+      expect(mockedClient.request).toHaveBeenCalledWith(
+        expect.objectContaining({ method: 'resources/list' }),
+        expect.anything(),
+        expect.objectContaining({
+          timeout: expect.any(Number),
+          signal: expect.any(AbortSignal),
+        }),
+      );
       expect(mockedResourceRegistry.setResourcesForServer).toHaveBeenCalledWith(
         'test-server',
         [
@@ -235,7 +248,7 @@ describe('mcp-client', () => {
         '0.0.1',
       );
       await client.connect();
-      await client.discover({} as Config);
+      await client.discover(createTrustedConfig());
 
       expect(resourceListHandler).toBeDefined();
 
@@ -344,7 +357,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
@@ -613,12 +626,12 @@ describe('mcp-client', () => {
         mockedPromptRegistry,
         mockedResourceRegistry,
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
       await client.connect();
-      await client.discover({} as Config);
+      await client.discover(createTrustedConfig());
 
       expect(mockedToolRegistry.registerTool).toHaveBeenCalledOnce();
       expect(mockedPromptRegistry.registerPrompt).toHaveBeenCalledOnce();
@@ -658,7 +671,7 @@ describe('mcp-client', () => {
         { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
@@ -734,12 +747,12 @@ describe('mcp-client', () => {
         mockedPromptRegistry,
         mockedResourceRegistry,
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
       await client.connect();
-      await client.discover({} as Config);
+      await client.discover(createTrustedConfig());
 
       const errorHandler = mockedClient.onerror!;
       expect(errorHandler).toBeDefined();
@@ -789,7 +802,7 @@ describe('mcp-client', () => {
         { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
