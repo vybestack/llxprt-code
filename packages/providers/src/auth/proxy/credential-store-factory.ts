@@ -168,13 +168,7 @@ export function createProviderKeyStorage(): ProviderKeyStorageLike {
     return proxyKeyStorage;
   }
   // Clean up stale proxy singletons when switching to direct mode
-  if (proxyKeyStorage !== undefined) {
-    safeClose(() => proxyKeyStorageClient?.close());
-    proxyKeyStorageClient = undefined;
-    proxyKeyStorage = undefined;
-    proxyKeyStorageCapabilityToken = undefined;
-    proxyKeyStorageSocketPath = undefined;
-  }
+  cleanupProxySingletons();
   directKeyStorage ??= getProviderKeyStorage();
   return directKeyStorage;
 }

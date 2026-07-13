@@ -18,6 +18,7 @@ import type {
   CredentialProxyBridgeResult,
   SshAgentResult,
 } from './sandbox-ssh.js';
+import { runBestEffortSyncCleanup } from './cleanup.js';
 import {
   USER_SETTINGS_DIR,
   SETTINGS_DIRECTORY_NAME,
@@ -78,19 +79,13 @@ function composeCleanups(
   a: (() => void) | undefined,
   b: (() => void) | undefined,
 ): (() => void) | undefined {
-  if (a === undefined) return b;
-  if (b === undefined) return a;
+  if (a === undefined && b === undefined) return undefined;
+  const reportCleanupError = (error: unknown): void => {
+    debugLogger.error('cleanup step failed:', error);
+  };
   return () => {
-    try {
-      a();
-    } catch (err) {
-      debugLogger.error('cleanup step failed:', err);
-    }
-    try {
-      b();
-    } catch (err) {
-      debugLogger.error('cleanup step failed:', err);
-    }
+    runBestEffortSyncCleanup(a, reportCleanupError);
+    runBestEffortSyncCleanup(b, reportCleanupError);
   };
 }
 

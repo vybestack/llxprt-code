@@ -27,6 +27,21 @@ describe('cleanup', () => {
     ).not.toThrow();
   });
 
+  it('should report synchronous cleanup failures without throwing', () => {
+    let reportedError: unknown;
+
+    runBestEffortSyncCleanup(
+      () => {
+        throw new Error('cleanup failure');
+      },
+      (error) => {
+        reportedError = error;
+      },
+    );
+
+    expect(reportedError).toEqual(new Error('cleanup failure'));
+  });
+
   it('should execute registered synchronous cleanup function', async () => {
     let cleaned = false;
     registerCleanup(() => {

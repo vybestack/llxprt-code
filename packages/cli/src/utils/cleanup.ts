@@ -25,11 +25,14 @@ export function registerSyncCleanup(fn: () => void) {
   syncCleanupFunctions.push(fn);
 }
 
-export function runBestEffortSyncCleanup(cleanup: (() => void) | undefined) {
+export function runBestEffortSyncCleanup(
+  cleanup: (() => void) | undefined,
+  onError?: (error: unknown) => void,
+) {
   try {
     cleanup?.();
-  } catch {
-    // Ignore errors during cleanup.
+  } catch (error) {
+    onError?.(error);
   }
 }
 
