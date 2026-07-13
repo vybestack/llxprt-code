@@ -28,6 +28,7 @@ import {
   parseCompressionStrategyName,
 } from './compressionStrategyFactory.js';
 import { PendingContextWindowEnforcer } from './pendingContextWindowEnforcement.js';
+import type { TokenUsageLogger } from '../core/TokenUsageLogger.js';
 /**
  * @plan:PLAN-20260603-ISSUE1584.P05
  * @requirement:REQ-DEP-001
@@ -85,6 +86,7 @@ export class CompressionHandler {
   private _suppressDensityDirtyDepth: number = 0;
   private activeTodosProvider?: () => Promise<string | undefined>;
   lastPromptTokenCount: number | null = null;
+  tokenUsageLogger: TokenUsageLogger | null = null;
 
   private logger = new DebugLogger('llxprt:gemini:compression');
 

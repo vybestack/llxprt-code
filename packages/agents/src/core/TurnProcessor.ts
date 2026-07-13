@@ -47,6 +47,7 @@ import {
   isThoughtPart,
   type UsageMetadataWithCache,
 } from './googlePartHelpers.js';
+import { recordActualTokenUsage } from './tokenUsageActualLogger.js';
 import {
   attachHookRestrictedAllowedTools,
   filterHookRestrictedContents,
@@ -737,7 +738,7 @@ export class TurnProcessor {
     response: GenerateContentResponse,
     userContent: Content | Content[],
     _params: SendMessageParameters,
-    _prompt_id: string,
+    prompt_id: string,
   ): Promise<void> {
     try {
       const currentModel = this.runtimeContext.state.model;
@@ -758,7 +759,7 @@ export class TurnProcessor {
 
       this._recordOutputContent(response, currentModel, filteredAfcHistory);
 
-      await this._syncTokenCounts(response);
+      await this._syncTokenCounts(response, prompt_id);
     } finally {
       this.eagerlyRecordedToolResponseCallIds.clear();
     }
@@ -878,6 +879,7 @@ export class TurnProcessor {
 
   private async _syncTokenCounts(
     response: GenerateContentResponse,
+    promptId: string,
   ): Promise<void> {
     await this.historyService.waitForTokenUpdates();
     const usageMetadata = response.usageMetadata as
@@ -897,5 +899,20 @@ export class TurnProcessor {
       this.historyService.syncTotalTokens(this.lastPromptTokenCount);
       await this.historyService.waitForTokenUpdates();
     }
+
+    let usageForLogging = usageMetadata;
+    if (
+      usageForLogging?.promptTokenCount === undefined &&
+      this.lastPromptTokenCount !== null &&
+      this.lastPromptTokenCount > 0 &&
+      !Number.isNaN(this.lastPromptTokenCount)
+    ) {
+      usageForLogging = { promptTokenCount: this.lastPromptTokenCount };
+    }
+    await recordActualTokenUsage(
+      this.compressionHandler.tokenUsageLogger,
+      promptId,
+      usageForLogging,
+    );
   }
 }
