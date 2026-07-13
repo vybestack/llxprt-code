@@ -56,44 +56,63 @@ export async function consumeAgentStream(
     maxTurns: deps.maxTurns,
   });
   let terminalStopReason: acp.StopReason | null = null;
-  for await (const event of eventStream) {
-    if (deps.isPromptStale(promptGeneration, pendingSend)) {
-      if (event.type === 'done') {
-        return 'cancelled';
-      }
-      continue;
+  try {
+    for await (const event of eventStream) {
+      const result = await processStreamEvent(
+        event,
+        deps,
+        batcher,
+        promptGeneration,
+        pendingSend,
+      );
+      if (result === 'cancelled') return 'cancelled';
+      if (result !== null) terminalStopReason = result;
     }
-    if (
-      event.type === 'tool-call' &&
-      deps.terminals !== null &&
-      TerminalManager.isShellToolCall(
-        event.call,
-        deps.agent.tools.get(event.call.name)?.kind,
-      )
-    ) {
-      await deps.terminals.handleToolCall(event.call);
-    }
-    try {
-      const stopReason = await handleZedAgentEvent(event, batcher, {
-        sendUpdate: deps.sendUpdate,
-        sendUsage: deps.sendUsage,
-        handleConfirmation: deps.handleConfirmation,
-        resolveToolKind: (toolName) => deps.agent.tools.get(toolName)?.kind,
-      });
-      if (event.type === 'tool-result' && deps.terminals !== null) {
-        await deps.terminals.releaseTerminal(event.result.id);
-      }
-      if (stopReason !== null) {
-        terminalStopReason = stopReason;
-      }
-    } catch (error) {
-      if (deps.terminals !== null) {
-        await deps.terminals.settleAll();
-      }
-      throw error;
+    return terminalStopReason;
+  } finally {
+    if (deps.terminals !== null) {
+      await deps.terminals.settleAll();
     }
   }
-  return terminalStopReason;
+}
+
+async function processStreamEvent(
+  event: AgentEvent,
+  deps: SessionStreamDeps,
+  batcher: StreamBatcher,
+  promptGeneration: number,
+  pendingSend: AbortController,
+): Promise<acp.StopReason | null | 'cancelled'> {
+  if (deps.isPromptStale(promptGeneration, pendingSend)) {
+    return event.type === 'done' ? 'cancelled' : null;
+  }
+  if (
+    event.type === 'tool-call' &&
+    deps.terminals !== null &&
+    TerminalManager.isShellToolCall(
+      event.call,
+      deps.agent.tools.get(event.call.name)?.kind,
+    )
+  ) {
+    await deps.terminals.handleToolCall(event.call);
+  }
+  try {
+    const stopReason = await handleZedAgentEvent(event, batcher, {
+      sendUpdate: deps.sendUpdate,
+      sendUsage: deps.sendUsage,
+      handleConfirmation: deps.handleConfirmation,
+      resolveToolKind: (toolName) => deps.agent.tools.get(toolName)?.kind,
+    });
+    if (event.type === 'tool-result' && deps.terminals !== null) {
+      await deps.terminals.releaseTerminal(event.result.id);
+    }
+    return stopReason;
+  } catch (error) {
+    if (deps.terminals !== null) {
+      await deps.terminals.settleAll();
+    }
+    throw error;
+  }
 }
 
 export interface PromptTurnDeps {

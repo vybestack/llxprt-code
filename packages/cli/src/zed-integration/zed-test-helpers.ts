@@ -90,6 +90,7 @@ export function buildBlockingScriptedAgent(
       if (signal !== undefined && !signal.aborted) {
         await new Promise<void>((resolve) => {
           signal.addEventListener('abort', () => resolve(), { once: true });
+          if (signal.aborted) resolve();
         });
       }
     },

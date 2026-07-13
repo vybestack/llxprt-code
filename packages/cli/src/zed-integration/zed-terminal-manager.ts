@@ -61,7 +61,6 @@ export class TerminalManager {
         command,
         cwd,
         sessionId: this.sessionId,
-        args: ['-c', command],
       });
       this.activeTerminals.set(call.id, handle);
       await this.sendUpdate({

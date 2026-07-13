@@ -20,9 +20,15 @@ import {
 const createdSessions: Session[] = [];
 
 async function disposeCreatedSessions(): Promise<void> {
-  for (const session of createdSessions.splice(0)) {
-    await session.dispose();
-  }
+  await Promise.allSettled(
+    createdSessions.splice(0).map(async (session) => {
+      try {
+        await session.dispose();
+      } catch {
+        // Continue disposing remaining sessions even if one fails
+      }
+    }),
+  );
 }
 
 function createTerminalSession(
