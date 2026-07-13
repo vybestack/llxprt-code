@@ -99,6 +99,12 @@ function classifyForm(node: ts.Node): string {
     if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
       return 'dynamic import()';
     }
+    if (isModuleRequireCall(node)) {
+      return 'module.require()';
+    }
+    if (isCreateRequireCall(node)) {
+      return 'createRequire()';
+    }
     return 'require()';
   }
   return 'unknown-import-form';
@@ -135,16 +141,48 @@ function classifyCallSpecifier(expr: ts.CallExpression): CallSpecResult {
 }
 
 /**
- * Check whether a CallExpression is a dynamic import() or bare require().
+ * Check whether a CallExpression is a `module.require(...)` call.
+ * The callee must be a PropertyAccessExpression: `module.require`.
+ */
+function isModuleRequireCall(expr: ts.CallExpression): boolean {
+  const callee = expr.expression;
+  return (
+    ts.isPropertyAccessExpression(callee) &&
+    callee.name.text === REQUIRE_IDENTIFIER &&
+    ts.isIdentifier(callee.expression) &&
+    callee.expression.text === 'module'
+  );
+}
+
+/**
+ * Check whether a CallExpression is a `createRequire(...)(...)` call.
+ * The callee must itself be a CallExpression whose function is an identifier
+ * named "createRequire".
+ */
+function isCreateRequireCall(expr: ts.CallExpression): boolean {
+  const callee = expr.expression;
+  return (
+    ts.isCallExpression(callee) &&
+    ts.isIdentifier(callee.expression) &&
+    callee.expression.text === 'createRequire'
+  );
+}
+
+/**
+ * Check whether a CallExpression is a dynamic import(), bare require(),
+ * module.require(), or createRequire()(...) call.
  */
 function isImportOrRequireCall(expr: ts.CallExpression): boolean {
   if (expr.expression.kind === ts.SyntaxKind.ImportKeyword) {
     return true;
   }
-  return (
+  if (
     ts.isIdentifier(expr.expression) &&
     expr.expression.text === REQUIRE_IDENTIFIER
-  );
+  ) {
+    return true;
+  }
+  return isModuleRequireCall(expr) || isCreateRequireCall(expr);
 }
 
 /**
@@ -194,7 +232,12 @@ function findGenaiImportViolation(
     ts.isImportEqualsDeclaration(node) &&
     ts.isExternalModuleReference(node.moduleReference)
   ) {
-    specifier = literalText(node.moduleReference.expression);
+    const refExpr = node.moduleReference.expression;
+    specifier = literalText(refExpr);
+    // import x = require(<non-string-literal>) is a computed require.
+    if (specifier === null) {
+      return createComputedViolation(sourceFile, relPath, node);
+    }
   } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
     specifier = literalText(node.argument.literal);
   }
@@ -236,13 +279,14 @@ function createImportViolation(
 }
 
 /**
- * Create a computed-import violation for a dynamic import()/require() call
+ * Create a computed-import violation for a dynamic import(), require(),
+ * module.require(), createRequire()(...), or computed import-equals call
  * with a non-string-literal specifier.
  */
 function createComputedViolation(
   sourceFile: ts.SourceFile,
   relPath: string,
-  node: ts.CallExpression,
+  node: ts.Node,
 ): ComputedImportViolation {
   const line =
     sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1;
@@ -250,10 +294,7 @@ function createComputedViolation(
     kind: 'computed-import',
     file: relPath,
     line,
-    importForm:
-      node.expression.kind === ts.SyntaxKind.ImportKeyword
-        ? 'dynamic import()'
-        : 'require()',
+    importForm: classifyForm(node),
   };
 }
 
@@ -445,6 +486,148 @@ function checkExportAssignment(
 }
 
 /**
+ * Check an expression statement at any depth for CommonJS export patterns:
+ * `module.exports.GeminiName = ...` or `exports.GeminiName = ...`.
+ * These are the standard CommonJS ways to expose named exports in .js/.cjs
+ * files and can smuggle a Gemini-named identifier.
+ */
+function checkCommonJSExport(
+  sourceFile: ts.SourceFile,
+  relPath: string,
+  node: ts.ExpressionStatement,
+  violations: GeminiExportViolation[],
+): void {
+  const expr = node.expression;
+  if (
+    !ts.isBinaryExpression(expr) ||
+    expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken
+  ) {
+    return;
+  }
+  const lhs = expr.left;
+  if (!ts.isPropertyAccessExpression(lhs)) {
+    return;
+  }
+  // The object must be `exports` or `module.exports`.
+  const isExports =
+    ts.isIdentifier(lhs.expression) && lhs.expression.text === 'exports';
+  const isModuleExports =
+    ts.isPropertyAccessExpression(lhs.expression) &&
+    lhs.expression.name.text === 'exports' &&
+    ts.isIdentifier(lhs.expression.expression) &&
+    lhs.expression.expression.text === 'module';
+  if (!isExports && !isModuleExports) {
+    return;
+  }
+  const propName = lhs.name.text;
+  if (containsGemini(propName)) {
+    addExportViolation(
+      sourceFile,
+      relPath,
+      node,
+      propName,
+      'module.exports / exports assignment',
+      violations,
+    );
+  }
+}
+
+function checkNamespaceExport(
+  sourceFile: ts.SourceFile,
+  relPath: string,
+  node: ts.NamespaceExportDeclaration,
+  violations: GeminiExportViolation[],
+): void {
+  if (containsGemini(node.name.text)) {
+    addExportViolation(
+      sourceFile,
+      relPath,
+      node,
+      node.name.text,
+      'export as namespace',
+      violations,
+    );
+  }
+}
+
+/**
+ * Dispatch a single node to the appropriate export-check function.
+ * Extracted from scanGeminiExports so the visitor closure stays compact.
+ */
+function dispatchExportCheck(
+  sourceFile: ts.SourceFile,
+  relPath: string,
+  node: ts.Node,
+  violations: GeminiExportViolation[],
+): void {
+  if (ts.isFunctionDeclaration(node)) {
+    checkNamedDeclaration(
+      sourceFile,
+      relPath,
+      node,
+      node.name,
+      'export function',
+      violations,
+    );
+  } else if (ts.isClassDeclaration(node)) {
+    checkNamedDeclaration(
+      sourceFile,
+      relPath,
+      node,
+      node.name,
+      'export class',
+      violations,
+    );
+  } else if (ts.isInterfaceDeclaration(node)) {
+    checkNamedDeclaration(
+      sourceFile,
+      relPath,
+      node,
+      node.name,
+      'export interface',
+      violations,
+    );
+  } else if (ts.isTypeAliasDeclaration(node)) {
+    checkNamedDeclaration(
+      sourceFile,
+      relPath,
+      node,
+      node.name,
+      'export type',
+      violations,
+    );
+  } else if (ts.isEnumDeclaration(node)) {
+    checkNamedDeclaration(
+      sourceFile,
+      relPath,
+      node,
+      node.name,
+      'export enum',
+      violations,
+    );
+  } else if (ts.isModuleDeclaration(node)) {
+    checkNamedDeclaration(
+      sourceFile,
+      relPath,
+      node,
+      ts.isIdentifier(node.name) ? node.name : undefined,
+      'export namespace/module',
+      violations,
+    );
+  } else if (ts.isNamespaceExportDeclaration(node)) {
+    checkNamespaceExport(sourceFile, relPath, node, violations);
+  } else if (ts.isVariableStatement(node)) {
+    checkVariableStatement(sourceFile, relPath, node, violations);
+  } else if (ts.isExportDeclaration(node)) {
+    checkNamedExports(sourceFile, relPath, node, violations);
+  } else if (ts.isExportAssignment(node)) {
+    checkExportAssignment(sourceFile, relPath, node, violations);
+  } else if (ts.isExpressionStatement(node)) {
+    checkCommonJSExport(sourceFile, relPath, node, violations);
+  }
+}
+
+/**
  * Collect all exported identifiers in a source file that are declared locally
  * (not re-exports from another module) and whose name contains "Gemini".
  *
@@ -457,67 +640,7 @@ export function scanGeminiExports(
 ): GeminiExportViolation[] {
   const violations: GeminiExportViolation[] = [];
   const visit = (node: ts.Node): void => {
-    if (ts.isFunctionDeclaration(node)) {
-      checkNamedDeclaration(
-        sourceFile,
-        relPath,
-        node,
-        node.name,
-        'export function',
-        violations,
-      );
-    } else if (ts.isClassDeclaration(node)) {
-      checkNamedDeclaration(
-        sourceFile,
-        relPath,
-        node,
-        node.name,
-        'export class',
-        violations,
-      );
-    } else if (ts.isInterfaceDeclaration(node)) {
-      checkNamedDeclaration(
-        sourceFile,
-        relPath,
-        node,
-        node.name,
-        'export interface',
-        violations,
-      );
-    } else if (ts.isTypeAliasDeclaration(node)) {
-      checkNamedDeclaration(
-        sourceFile,
-        relPath,
-        node,
-        node.name,
-        'export type',
-        violations,
-      );
-    } else if (ts.isEnumDeclaration(node)) {
-      checkNamedDeclaration(
-        sourceFile,
-        relPath,
-        node,
-        node.name,
-        'export enum',
-        violations,
-      );
-    } else if (ts.isModuleDeclaration(node)) {
-      checkNamedDeclaration(
-        sourceFile,
-        relPath,
-        node,
-        ts.isIdentifier(node.name) ? node.name : undefined,
-        'export namespace/module',
-        violations,
-      );
-    } else if (ts.isVariableStatement(node)) {
-      checkVariableStatement(sourceFile, relPath, node, violations);
-    } else if (ts.isExportDeclaration(node)) {
-      checkNamedExports(sourceFile, relPath, node, violations);
-    } else if (ts.isExportAssignment(node)) {
-      checkExportAssignment(sourceFile, relPath, node, violations);
-    }
+    dispatchExportCheck(sourceFile, relPath, node, violations);
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);

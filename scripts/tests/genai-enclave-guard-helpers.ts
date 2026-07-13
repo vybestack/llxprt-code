@@ -53,12 +53,35 @@ export interface ScriptResult {
 }
 
 interface ExecErrorLike {
-  status: number | null;
-  signal?: string;
-  code?: string;
-  message: string;
-  stdout?: string | Buffer;
-  stderr?: string | Buffer;
+  readonly status?: number | null;
+  readonly signal?: string;
+  readonly code?: string;
+  readonly message: string;
+  readonly stdout?: string | Buffer;
+  readonly stderr?: string | Buffer;
+}
+
+function toExecError(error: unknown): ExecErrorLike {
+  if (typeof error !== 'object' || error === null) {
+    return { message: String(error) };
+  }
+  const candidate = error as Record<string, unknown>;
+  return {
+    status:
+      typeof candidate.status === 'number' || candidate.status === null
+        ? candidate.status
+        : undefined,
+    signal: typeof candidate.signal === 'string' ? candidate.signal : undefined,
+    code: typeof candidate.code === 'string' ? candidate.code : undefined,
+    message:
+      typeof candidate.message === 'string' ? candidate.message : String(error),
+    stdout: isOutput(candidate.stdout) ? candidate.stdout : undefined,
+    stderr: isOutput(candidate.stderr) ? candidate.stderr : undefined,
+  };
+}
+
+function isOutput(value: unknown): value is string | Buffer {
+  return typeof value === 'string' || Buffer.isBuffer(value);
 }
 
 /**
@@ -97,7 +120,7 @@ function runGuard(
       maxBuffer,
     });
   } catch (error) {
-    const err = error as ExecErrorLike;
+    const err = toExecError(error);
     const isTimeout =
       err.status === null &&
       (err.signal === 'SIGTERM' || err.code === 'ETIMEDOUT');

@@ -266,12 +266,33 @@ interface ManifestViolation {
  * Read and parse a package.json file. Throws on read or parse failure so
  * that manifest scanning fails closed on malformed/unreadable manifests
  * instead of silently skipping them (which could hide a genai dep).
+ * Also validates that dependency sections (when present) are plain objects —
+ * a non-object section could hide a genai declaration and must fail-closed.
  */
 function readPackageJson(filePath: string): PackageJsonMetadata {
   const content = readFileSync(filePath, 'utf8');
   const parsed: unknown = JSON.parse(content);
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     throw new Error('package.json must contain a JSON object');
+  }
+  const manifest = parsed as Record<string, unknown>;
+  for (const depKey of [
+    'dependencies',
+    'devDependencies',
+    'peerDependencies',
+    'optionalDependencies',
+  ]) {
+    const section = manifest[depKey];
+    if (
+      section !== undefined &&
+      (typeof section !== 'object' ||
+        section === null ||
+        Array.isArray(section))
+    ) {
+      throw new Error(
+        `package.json "${depKey}" must be an object when present`,
+      );
+    }
   }
   return parsed as PackageJsonMetadata;
 }
@@ -377,43 +398,38 @@ function checkManifests(): {
   const errors: OperationalError[] = [];
   const allowedDirs = new Set(getGenaiDependencyWorkspaceDirs());
 
-  // ── Collect all manifest paths: root + packages/*/ ─────────────────
-  const manifestPaths: Array<{ workspaceDir: string; path: string }> = [];
+  const manifestPaths: Array<{ workspaceDir: string; path: string }> = [
+    { workspaceDir: '.', path: join(REPO_ROOT, 'package.json') },
+  ];
 
-  // Root package.json
-  manifestPaths.push({
-    workspaceDir: '.',
-    path: join(REPO_ROOT, 'package.json'),
-  });
-
-  // packages/*/package.json
-  let pkgEntries: Dirent[];
-  try {
-    pkgEntries = readdirSync(PACKAGES_DIR, { withFileTypes: true });
-  } catch (e) {
-    const err = e as { code?: string };
-    // ENOENT means no packages/ directory — acceptable (e.g. a temp fixture
-    // testing only root package.json). Fall through with an empty list so the
-    // root manifest is still checked. All other errors fail closed.
-    if (err.code !== 'ENOENT') {
+  function discoverManifests(dir: string): void {
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch (e) {
+      const err = e as { code?: string };
+      if (err.code === 'ENOENT' && dir === PACKAGES_DIR) {
+        return;
+      }
       const msg = e instanceof Error ? e.message : String(e);
       errors.push({
         message:
-          `Cannot read packages directory (${PACKAGES_DIR}): ${msg} — ` +
+          `Cannot read package directory (${relRepo(dir)}): ${msg} — ` +
           'fail-closed.',
       });
-      return { violations, errors };
+      return;
     }
-    pkgEntries = [];
-  }
-  for (const entry of pkgEntries) {
-    if (entry.isDirectory() && !PRUNE_DIRS.has(entry.name)) {
-      manifestPaths.push({
-        workspaceDir: `packages/${entry.name}`,
-        path: join(PACKAGES_DIR, entry.name, 'package.json'),
-      });
+    for (const entry of entries) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory() && !PRUNE_DIRS.has(entry.name)) {
+        discoverManifests(path);
+      } else if (entry.isFile() && entry.name === 'package.json') {
+        manifestPaths.push({ workspaceDir: relRepo(dir), path });
+      }
     }
   }
+
+  discoverManifests(PACKAGES_DIR);
 
   for (const { workspaceDir, path } of manifestPaths) {
     const result = checkManifest(workspaceDir, path, allowedDirs);
@@ -484,9 +500,7 @@ function collectGenaiImportViolations(
   relPath: string,
 ): Violation[] {
   if (isInGenaiImportEnclave(relPath)) return [];
-  return scanGenaiImports(sourceFile, relPath).filter(
-    (violation) => violation.kind !== 'computed-import' || !isTestFile(relPath),
-  );
+  return scanGenaiImports(sourceFile, relPath);
 }
 
 function scanFile(filePath: string): FileScanResult {

@@ -26,196 +26,18 @@
  */
 
 import { beforeAll, describe, expect, it } from 'vitest';
-import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import {
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-  existsSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = join(SCRIPT_DIR, '..', '..');
-const SCRIPT = join(REPO_ROOT, 'scripts', 'check-genai-enclave.ts');
-const RUNTIME = process.env.BUN_EXECUTABLE ?? 'bun';
-
-let cachedBunAvailable: boolean | undefined;
-
-function bunAvailable(): boolean {
-  if (cachedBunAvailable !== undefined) {
-    return cachedBunAvailable;
-  }
-  try {
-    execFileSync(RUNTIME, ['--version'], {
-      encoding: 'utf8',
-      timeout: 15_000,
-    });
-    cachedBunAvailable = true;
-  } catch (error) {
-    const err = error as { code?: string };
-    const isMissingOrDenied =
-      err.code === 'ENOENT' || err.code === 'EACCES' || err.code === 'ENOEXEC';
-    if (!isMissingOrDenied) {
-      throw error;
-    }
-    cachedBunAvailable = false;
-  }
-  return cachedBunAvailable;
-}
+  REPO_ROOT,
+  bunAvailable,
+  runScript,
+  runScriptRealRepo,
+  withFixture,
+} from './genai-enclave-guard-helpers.ts';
 
 const missingBunMessage =
   '[genai-enclave] Bun runtime not found — install Bun or set BUN_EXECUTABLE.';
-
-interface ScriptResult {
-  readonly code: number;
-  readonly stdout: string;
-  readonly stderr: string;
-}
-
-/**
- * Run the guard script against `root` (a temp fixture root). Returns exit
- * code, stdout, stderr.
- */
-function runScript(root: string, expectedCode?: number): ScriptResult {
-  const env = { ...process.env, GENAI_ENCLAVE_ROOT: root };
-  let stdout = '';
-  let stderr = '';
-  let exitCode = 0;
-  try {
-    stdout = execFileSync(RUNTIME, [SCRIPT], {
-      cwd: REPO_ROOT,
-      env,
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 30_000,
-      maxBuffer: 10 * 1024 * 1024,
-    });
-  } catch (error) {
-    const err = error as {
-      status: number | null;
-      signal?: string;
-      code?: string;
-      message: string;
-      stdout?: string | Buffer;
-      stderr?: string | Buffer;
-    };
-    const isTimeout =
-      err.status === null &&
-      (err.signal === 'SIGTERM' || err.code === 'ETIMEDOUT');
-    if (isTimeout) {
-      throw new Error(
-        'Guard script timed out after 30s (SIGTERM/ETIMEDOUT). ' +
-          'This indicates a hang, not a deliberate exit(1).',
-      );
-    }
-    if (err.code === 'ENOENT') {
-      throw new Error(
-        `Guard script failed with ENOENT. Runtime "${RUNTIME}" not on PATH ` +
-          `or script missing: ${SCRIPT}. Original: ${err.message}`,
-      );
-    }
-    stdout = err.stdout ? err.stdout.toString() : '';
-    stderr = err.stderr ? err.stderr.toString() : '';
-    exitCode = err.status ?? 1;
-  }
-  if (expectedCode !== undefined && exitCode !== expectedCode) {
-    throw new Error(
-      `Guard script exited with code ${exitCode}, expected ${expectedCode}.` +
-        (stderr ? `\nstderr:\n${stderr}` : '') +
-        (stdout ? `\nstdout:\n${stdout}` : ''),
-    );
-  }
-  return { code: exitCode, stdout, stderr };
-}
-
-function runScriptRealRepo(expectedCode?: number): ScriptResult {
-  const env = { ...process.env };
-  delete env.GENAI_ENCLAVE_ROOT;
-  let stdout = '';
-  let stderr = '';
-  let exitCode = 0;
-  try {
-    stdout = execFileSync(RUNTIME, [SCRIPT], {
-      cwd: REPO_ROOT,
-      env,
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 60_000,
-      maxBuffer: 20 * 1024 * 1024,
-    });
-  } catch (error) {
-    const err = error as {
-      status: number | null;
-      signal?: string;
-      code?: string;
-      message: string;
-      stdout?: string | Buffer;
-      stderr?: string | Buffer;
-    };
-    const isTimeout =
-      err.status === null &&
-      (err.signal === 'SIGTERM' || err.code === 'ETIMEDOUT');
-    if (isTimeout) {
-      throw new Error('Guard script timed out against real repo.');
-    }
-    if (err.code === 'ENOENT') {
-      throw new Error(
-        `Guard script failed with ENOENT against real repo. Runtime "${RUNTIME}" not on PATH ` +
-          `or script missing: ${SCRIPT}. Original: ${err.message}`,
-      );
-    }
-    stdout = err.stdout ? err.stdout.toString() : '';
-    stderr = err.stderr ? err.stderr.toString() : '';
-    exitCode = err.status ?? 1;
-  }
-  if (expectedCode !== undefined && exitCode !== expectedCode) {
-    throw new Error(
-      `Guard script exited with code ${exitCode}, expected ${expectedCode}.` +
-        (stderr ? `\nstderr:\n${stderr}` : '') +
-        (stdout ? `\nstdout:\n${stdout}` : ''),
-    );
-  }
-  return { code: exitCode, stdout, stderr };
-}
-
-interface FixtureHelpers {
-  readonly root: string;
-  write(relPath: string, content: string): void;
-}
-
-function withFixture(
-  fn: (helpers: FixtureHelpers) => ScriptResult,
-): ScriptResult {
-  const root = mkdtempSync(join(tmpdir(), 'genai-enclave-'));
-  let result: ScriptResult;
-  try {
-    const write = (relPath: string, content: string): void => {
-      const full = join(root, relPath);
-      mkdirSync(dirname(full), { recursive: true });
-      writeFileSync(full, content);
-    };
-    result = fn({ root, write });
-  } finally {
-    // Cleanup errors must not mask test failures. Wrap in try/catch and
-    // emit a warning to stderr instead of throwing.
-    try {
-      rmSync(root, { recursive: true, force: true });
-    } catch (cleanupError) {
-      const msg =
-        cleanupError instanceof Error
-          ? cleanupError.message
-          : String(cleanupError);
-      console.warn(
-        `[genai-enclave] Warning: temp cleanup failed for ${root}: ${msg}`,
-      );
-    }
-  }
-  return result;
-}
 
 // ─── Fixture content helpers ────────────────────────────────────────────────
 
@@ -529,37 +351,41 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('template-import.ts');
       });
 
-      it('does NOT flag computed imports in test files', () => {
-        const { code } = withFixture(({ root, write }) => {
+      it('FAILS computed imports in test files (no exemption)', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
           write(
             'packages/cli/src/module.test.ts',
             "const mod = await import('./mod?t=' + Date.now());\nexport { mod };\n",
           );
-          return runScript(root, 0);
+          return runScript(root, 1);
         });
-        expect(code).toBe(0);
+        expect(code).toBe(1);
+        expect(stdout).toContain('module.test.ts');
+        expect(stdout).toContain('computed');
       });
 
-      it('does NOT flag computed imports in .mts test files', () => {
-        const { code } = withFixture(({ root, write }) => {
+      it('FAILS computed imports in .mts test files (no exemption)', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
           write(
             'packages/cli/src/module.test.mts',
             "const mod = await import('./mod?t=' + Date.now());\nexport { mod };\n",
           );
-          return runScript(root, 0);
+          return runScript(root, 1);
         });
-        expect(code).toBe(0);
+        expect(code).toBe(1);
+        expect(stdout).toContain('module.test.mts');
       });
 
-      it('does NOT flag computed imports in .cts spec files', () => {
-        const { code } = withFixture(({ root, write }) => {
+      it('FAILS computed imports in .cts spec files (no exemption)', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
           write(
             'packages/cli/src/module.spec.cts',
             "const mod = await import('./mod?t=' + Date.now());\nexport { mod };\n",
           );
-          return runScript(root, 0);
+          return runScript(root, 1);
         });
-        expect(code).toBe(0);
+        expect(code).toBe(1);
+        expect(stdout).toContain('module.spec.cts');
       });
 
       it('does NOT flag computed imports in enclave files', () => {
@@ -681,6 +507,23 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('@google/genai');
       });
 
+      it('FAILS when a nested package manifest declares @google/genai', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/examples/server/package.json',
+            JSON.stringify({
+              name: 'nested-server',
+              dependencies: { '@google/genai': '1.30.0' },
+            }) + '\n',
+          );
+          write('packages/cli/src/index.ts', 'export const x = 1;\n');
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('packages/cli/examples/server');
+        expect(stdout).toContain('@google/genai');
+      });
+
       it('FAILS when packages/core declares wrong version of @google/genai', () => {
         const { code, stdout } = withFixture(({ root, write }) => {
           write(
@@ -756,6 +599,55 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
           return runScript(root, 0);
         });
         expect(code).toBe(0);
+      });
+
+      it('FAILS when a dependency section is an array instead of an object (fail-closed)', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'package.json',
+            JSON.stringify({
+              name: 'bad-shape',
+              dependencies: ['@google/genai'],
+            }) + '\n',
+          );
+          write('packages/cli/src/index.ts', 'export const x = 1;\n');
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('fail-closed');
+        expect(stdout).toContain('dependencies');
+      });
+
+      it('FAILS when a dependency section is a string instead of an object (fail-closed)', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/core/package.json',
+            JSON.stringify({
+              name: 'bad-shape-pkg',
+              dependencies: '@google/genai',
+            }) + '\n',
+          );
+          write('packages/core/src/index.ts', 'export const x = 1;\n');
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('fail-closed');
+      });
+
+      it('FAILS when a dependency section is null instead of an object (fail-closed)', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/package.json',
+            JSON.stringify({
+              name: 'null-deps',
+              dependencies: null,
+            }) + '\n',
+          );
+          write('packages/cli/src/index.ts', 'export const x = 1;\n');
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('fail-closed');
       });
     });
 

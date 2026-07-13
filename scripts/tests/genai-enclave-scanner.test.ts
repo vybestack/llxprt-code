@@ -239,6 +239,113 @@ describe('scanGenaiImports — computed (non-string-literal) specifiers', () => 
   });
 });
 
+describe('scanGenaiImports — module.require and createRequire forms', () => {
+  it('detects module.require(@google/genai)', () => {
+    expect(scanImportsFor("const g = module.require('@google/genai');")).toBe(
+      1,
+    );
+  });
+
+  it('detects module.require(@google/genai/sub)', () => {
+    expect(
+      scanImportsFor("const g = module.require('@google/genai/sub');"),
+    ).toBe(1);
+  });
+
+  it('detects createRequire(import.meta.url)(@google/genai)', () => {
+    expect(
+      scanImportsFor(
+        "const g = createRequire(import.meta.url)('@google/genai');",
+      ),
+    ).toBe(1);
+  });
+
+  it('does NOT flag module.require of a non-genai package', () => {
+    expect(scanImportsFor("const g = module.require('node:fs');")).toBe(0);
+  });
+
+  it('does NOT flag createRequire of a non-genai package', () => {
+    expect(
+      scanImportsFor("const g = createRequire(import.meta.url)('node:path');"),
+    ).toBe(0);
+  });
+
+  it('flags computed module.require with a variable specifier', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "const pkg = 'x'; const g = module.require(pkg);",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].kind).toBe('computed-import');
+  });
+
+  it('flags computed createRequire with a variable specifier', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "const pkg = 'x'; const g = createRequire(import.meta.url)(pkg);",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].kind).toBe('computed-import');
+  });
+});
+
+describe('scanGenaiImports — exported import-equals declarations', () => {
+  it('detects export import genai = require(@google/genai)', () => {
+    expect(
+      scanImportsFor("export import genai = require('@google/genai');"),
+    ).toBe(1);
+  });
+
+  it('detects computed import-equals (require with variable)', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "const pkg = 'x'; import genai = require(pkg);",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].kind).toBe('computed-import');
+  });
+});
+
+describe('scanGeminiExports — export as namespace', () => {
+  it('detects export as namespace with a Gemini name', () => {
+    expect(scanExportsFor('export as namespace GeminiSDK;')).toContain(
+      'GeminiSDK',
+    );
+  });
+
+  it('does NOT flag export as namespace with a non-Gemini name', () => {
+    expect(scanExportsFor('export as namespace ReactUtils;')).toEqual([]);
+  });
+});
+
+describe('scanGeminiExports — CommonJS module.exports / exports property assignments', () => {
+  it('detects module.exports.GeminiName assignment in a .cjs file', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'module.exports.GeminiHelper = function() {};',
+    );
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations.map((v) => v.exportName)).toContain('GeminiHelper');
+  });
+
+  it('detects exports.GeminiName assignment in a .js file', () => {
+    const sf = parseSourceFile('legacy.js', 'exports.GeminiConfig = class {};');
+    const violations = scanGeminiExports(sf, 'legacy.js');
+    expect(violations.map((v) => v.exportName)).toContain('GeminiConfig');
+  });
+
+  it('does NOT flag module.exports of a non-Gemini name', () => {
+    const sf = parseSourceFile(
+      'normal.cjs',
+      'module.exports.NormalHelper = function() {};',
+    );
+    expect(scanGeminiExports(sf, 'normal.cjs')).toEqual([]);
+  });
+});
+
 describe('scanGeminiExports — direct declaration forms', () => {
   it('detects exported function', () => {
     expect(scanExportsFor('export function geminiHelper(): void {}')).toContain(

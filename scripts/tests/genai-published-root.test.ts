@@ -20,7 +20,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { SANCTIONED_GENAI_VERSION } from '../genai-enclave/config.ts';
 import { REPO_ROOT, bunAvailable } from './genai-enclave-guard-helpers.ts';
@@ -42,7 +42,39 @@ interface DependencyManifest {
 
 function readManifest(workspaceDir: string): DependencyManifest {
   const manifestPath = join(REPO_ROOT, workspaceDir, 'package.json');
-  return JSON.parse(readFileSync(manifestPath, 'utf8')) as DependencyManifest;
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    if (!isDependencyManifest(parsed)) {
+      throw new Error('dependency sections must be objects when present');
+    }
+    return parsed;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Cannot read dependency manifest ${manifestPath}: ${message}`,
+    );
+  }
+}
+
+function isDependencyManifest(value: unknown): value is DependencyManifest {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const manifest = value as Record<string, unknown>;
+  return [
+    'dependencies',
+    'devDependencies',
+    'peerDependencies',
+    'optionalDependencies',
+  ].every((key) => {
+    const section = manifest[key];
+    return (
+      section === undefined ||
+      (typeof section === 'object' &&
+        section !== null &&
+        !Array.isArray(section))
+    );
+  });
 }
 
 function getGenaiVersion(manifest: DependencyManifest): string | undefined {
@@ -77,9 +109,9 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         const versions = REQUIRED_WORKSPACES.map((ws) =>
           getGenaiVersion(readManifest(ws)),
         );
-        const unique = new Set(versions);
-        expect(unique.size).toBe(1);
-        expect([...unique][0]).toBe(REQUIRED_VERSION);
+        const uniqueVersions = new Set(versions);
+        expect(uniqueVersions.size).toBe(1);
+        expect([...uniqueVersions][0]).toBe(REQUIRED_VERSION);
       });
     });
 
@@ -91,6 +123,35 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
           readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'),
         ) as { private?: boolean };
         expect(rootManifest.private).toBe(true);
+      });
+    });
+
+    describe('broad publish dependency invariant', () => {
+      // The package-tree invariant: @google/genai may appear only in core and
+      // providers. Root bridge coverage is handled by the focused checks above.
+      // The repository currently uses a flat packages/* workspace layout.
+      it('no workspace OTHER than root/core/providers declares @google/genai', () => {
+        const rogueWorkspaces: string[] = [];
+        const packagesDir = join(REPO_ROOT, 'packages');
+        for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {
+          const wsDir = `packages/${entry.name}`;
+          const manifestPath = join(packagesDir, entry.name, 'package.json');
+          const shouldCheck =
+            entry.isDirectory() &&
+            !(REQUIRED_WORKSPACES as readonly string[]).includes(wsDir) &&
+            existsSync(manifestPath);
+          if (shouldCheck) {
+            const version = getGenaiVersion(readManifest(wsDir));
+            if (version !== undefined) {
+              rogueWorkspaces.push(`${wsDir} (${version})`);
+            }
+          }
+        }
+        expect(
+          rogueWorkspaces,
+          `Non-sanctioned workspaces declaring ${GENAI_PACKAGE}: ` +
+            rogueWorkspaces.join(', '),
+        ).toEqual([]);
       });
     });
   },

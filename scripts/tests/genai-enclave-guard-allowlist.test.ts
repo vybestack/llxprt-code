@@ -47,13 +47,12 @@ describe('check-genai-enclave — allowlist consistency', () => {
   });
 
   it('GENAI_DEPENDENCY_MANIFESTS includes the packaging bridge and implementation workspaces', async () => {
-    const { GENAI_DEPENDENCY_MANIFESTS } = await import(
-      '../genai-enclave/config.ts'
-    );
+    const { GENAI_DEPENDENCY_MANIFESTS, SANCTIONED_GENAI_VERSION } =
+      await import('../genai-enclave/config.ts');
     const dirs = GENAI_DEPENDENCY_MANIFESTS.map((e) => e.workspaceDir).sort();
     expect(dirs).toEqual(['.', 'packages/core', 'packages/providers']);
     for (const entry of GENAI_DEPENDENCY_MANIFESTS) {
-      expect(entry.version).toBe('1.30.0');
+      expect(entry.version).toBe(SANCTIONED_GENAI_VERSION);
       expect(entry.justification.length).toBeGreaterThan(0);
     }
   });
