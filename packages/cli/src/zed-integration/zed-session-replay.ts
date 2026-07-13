@@ -274,10 +274,9 @@ function mapThinkingBlock(
  * ai tool_call -> in_progress tool_call. Field names + shape mirror the live
  * start path in zed-tool-handler.ts (emitToolCallStart): status 'in_progress',
  * empty content, locations inferred from the recorded parameters via the SAME
- * buildToolLocations helper, kind inferred via the SAME inferToolKind table, and
- * rawInput ALWAYS present ({} when parameters are missing/malformed) exactly as
- * the live path always sends call.args. kind is omitted (rather than sent as
- * undefined) for unknown tools; both are wire-identical after JSON encoding.
+ * buildToolLocations helper, kind inferred via the SAME inferToolKind table and
+ * normalized to `other` for unknown tools, and rawInput ALWAYS present ({} when
+ * parameters are missing/malformed) exactly as the live path sends call.args.
  */
 function buildToolCallStart(
   block: ToolCallBlock,
