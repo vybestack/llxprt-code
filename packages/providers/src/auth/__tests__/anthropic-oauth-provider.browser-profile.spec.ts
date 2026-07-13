@@ -87,6 +87,16 @@ function stubDeviceFlow(provider: AnthropicOAuthProvider): void {
   }));
 }
 
+function configureSuccessfulLocalCallback(): void {
+  startLocalOAuthCallbackMock.mockResolvedValue({
+    redirectUri: 'http://localhost:8765/callback',
+    waitForCallback: vi
+      .fn()
+      .mockResolvedValue({ code: 'auth-code', state: 'generated-state' }),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+  });
+}
+
 describe('AnthropicOAuthProvider browser profile association', () => {
   let provider: AnthropicOAuthProvider;
   let openBrowserSpy: ReturnType<typeof vi.spyOn>;
@@ -126,13 +136,7 @@ describe('AnthropicOAuthProvider browser profile association', () => {
 
     provider.setAuthContext({ bucket: 'work' });
 
-    startLocalOAuthCallbackMock.mockResolvedValue({
-      redirectUri: 'http://localhost:8765/callback',
-      waitForCallback: vi
-        .fn()
-        .mockResolvedValue({ code: 'auth-code', state: 'generated-state' }),
-      shutdown: vi.fn().mockResolvedValue(undefined),
-    });
+    configureSuccessfulLocalCallback();
 
     await provider.initiateAuth();
 
@@ -149,13 +153,7 @@ describe('AnthropicOAuthProvider browser profile association', () => {
     // No accessors registered → getBrowserProfileAssociation returns undefined
     provider.setAuthContext({ bucket: 'work' });
 
-    startLocalOAuthCallbackMock.mockResolvedValue({
-      redirectUri: 'http://localhost:8765/callback',
-      waitForCallback: vi
-        .fn()
-        .mockResolvedValue({ code: 'auth-code', state: 'generated-state' }),
-      shutdown: vi.fn().mockResolvedValue(undefined),
-    });
+    configureSuccessfulLocalCallback();
 
     await provider.initiateAuth();
 
@@ -175,13 +173,7 @@ describe('AnthropicOAuthProvider browser profile association', () => {
 
     provider.setAuthContext({ bucket: 'work' });
 
-    startLocalOAuthCallbackMock.mockResolvedValue({
-      redirectUri: 'http://localhost:8765/callback',
-      waitForCallback: vi
-        .fn()
-        .mockResolvedValue({ code: 'auth-code', state: 'generated-state' }),
-      shutdown: vi.fn().mockResolvedValue(undefined),
-    });
+    configureSuccessfulLocalCallback();
 
     await provider.initiateAuth();
 
@@ -220,13 +212,7 @@ describe('AnthropicOAuthProvider browser profile association', () => {
     openBrowserSpy.mockRejectedValue(new Error('spawn chrome ENOENT'));
     provider.setAuthContext({ bucket: 'work' });
 
-    startLocalOAuthCallbackMock.mockResolvedValue({
-      redirectUri: 'http://localhost:8765/callback',
-      waitForCallback: vi
-        .fn()
-        .mockResolvedValue({ code: 'auth-code', state: 'generated-state' }),
-      shutdown: vi.fn().mockResolvedValue(undefined),
-    });
+    configureSuccessfulLocalCallback();
 
     await expect(provider.initiateAuth()).resolves.toStrictEqual(
       expect.objectContaining({ token_type: 'Bearer' }),
