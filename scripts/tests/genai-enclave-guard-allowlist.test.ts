@@ -121,13 +121,13 @@ describe('check-genai-enclave — allowlist consistency', () => {
         string,
         Record<string, string> | undefined
       >;
-      const actualVersion = depTypes
-        .map((dt) => pkg[dt]?.[GENAI_PACKAGE])
-        .find((v) => v !== undefined);
-      if (actualVersion !== undefined && actualVersion !== entry.version) {
-        drift.push(
-          `${entry.workspaceDir}: manifest has "${actualVersion}" but config has "${entry.version}"`,
-        );
+      for (const depType of depTypes) {
+        const actualVersion = pkg[depType]?.[GENAI_PACKAGE];
+        if (actualVersion !== undefined && actualVersion !== entry.version) {
+          drift.push(
+            `${entry.workspaceDir} ${depType}: manifest has "${actualVersion}" but config has "${entry.version}"`,
+          );
+        }
       }
     }
     expect(drift, `Config/manifest version drift: ${drift.join(', ')}`).toEqual(
