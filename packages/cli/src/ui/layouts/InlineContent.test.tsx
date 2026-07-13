@@ -14,6 +14,8 @@ import { StreamingState } from '../types.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
 import { InlineContent, type InlineContentProps } from './InlineContent.js';
 
+const activeRenders: Array<ReturnType<typeof render>> = [];
+
 // Override the global ink stub alias (vitest.config.ts) so InlineContent
 // and its children use the real Ink components. Without this, the ink-stub
 // passthrough fragments cause the real Ink reconciler to throw "Text string
@@ -35,11 +37,13 @@ vi.mock('../components/ContextSummaryDisplay.js', async () => {
 });
 
 function renderInlineContent(props: InlineContentProps) {
-  return render(
+  const rendered = render(
     <StreamingContext.Provider value={props.streamingState}>
       <InlineContent {...props} />
     </StreamingContext.Provider>,
   );
+  activeRenders.push(rendered);
+  return rendered;
 }
 
 function createProps(): InlineContentProps {
@@ -93,6 +97,9 @@ describe('InlineContent', () => {
   });
 
   afterEach(() => {
+    for (const rendered of activeRenders.splice(0)) {
+      rendered.unmount();
+    }
     vi.unstubAllEnvs();
   });
 
@@ -100,6 +107,16 @@ describe('InlineContent', () => {
     const { lastFrame } = renderInlineContent(createProps());
 
     expect(lastFrame()).not.toMatch(/Press|⌐■_■/);
+  });
+
+  it('does not add narrow-screen spacing when no status indicator is visible', () => {
+    const { lastFrame: regularFrame } = renderInlineContent(createProps());
+    const { lastFrame: narrowFrame } = renderInlineContent({
+      ...createProps(),
+      isNarrow: true,
+    });
+
+    expect(narrowFrame()).toBe(regularFrame());
   });
 
   it('renders the escape prompt', () => {

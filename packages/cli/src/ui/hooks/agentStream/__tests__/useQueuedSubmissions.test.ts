@@ -206,6 +206,20 @@ describe('useQueuedSubmissions', () => {
       expect(result.current.tryReserveDrain()).toBe(true);
     });
 
+    it('keeps an active reservation owned when queued submissions are cleared', () => {
+      const { result } = renderHook(() => useQueuedSubmissions());
+
+      expect(result.current.tryReserveDrain()).toBe(true);
+      act(() => {
+        result.current.enqueueSubmission(makeSubmission('queued'));
+        result.current.clearSubmissions();
+      });
+
+      expect(result.current.tryReserveDrain()).toBe(false);
+      result.current.releaseDrain();
+      expect(result.current.tryReserveDrain()).toBe(true);
+    });
+
     it('keeps reservations isolated between hook instances', () => {
       const { result: first } = renderHook(() => useQueuedSubmissions());
       const { result: second } = renderHook(() => useQueuedSubmissions());

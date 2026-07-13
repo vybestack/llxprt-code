@@ -344,19 +344,27 @@ describe('useAgentStream', () => {
       });
     };
 
-    it('should cancel an in-progress stream when escape is pressed', async () => {
-      const mockStream = (async function* () {
+    const createControllableStream = () => {
+      let closeStream: () => void;
+      const streamClosed = new Promise<void>((resolve) => {
+        closeStream = resolve;
+      });
+      const stream = (async function* () {
         yield { type: 'content', value: 'Part 1' };
-        // Keep the stream open
-        await new Promise(() => {});
+        await streamClosed;
       })();
-      mockSendMessageStream.mockReturnValue(mockStream);
+      return { stream, closeStream };
+    };
+
+    it('should cancel an in-progress stream when escape is pressed', async () => {
+      const { stream, closeStream } = createControllableStream();
+      mockSendMessageStream.mockReturnValue(stream);
 
       const { result } = renderTestHook();
+      let submission!: Promise<void>;
 
-      // Start a query — fire-and-forget because the mock stream never ends
       await act(async () => {
-        void result.current.submitQuery('test query').catch(() => undefined);
+        submission = result.current.submitQuery('test query');
       });
 
       // Wait for the first part of the response
@@ -380,16 +388,17 @@ describe('useAgentStream', () => {
 
       // Verify state is reset
       expect(result.current.streamingState).toBe(StreamingState.Idle);
+
+      await act(async () => {
+        closeStream();
+        await submission;
+      });
     });
 
     it('should call onCancelSubmit handler when escape is pressed', async () => {
       const cancelSubmitSpy = vi.fn();
-      const mockStream = (async function* () {
-        yield { type: 'content', value: 'Part 1' };
-        // Keep the stream open
-        await new Promise(() => {});
-      })();
-      mockSendMessageStream.mockReturnValue(mockStream);
+      const { stream, closeStream } = createControllableStream();
+      mockSendMessageStream.mockReturnValue(stream);
 
       const { result } = renderHook(() =>
         useAgentStream(
@@ -412,9 +421,9 @@ describe('useAgentStream', () => {
         ),
       );
 
-      // Start a query — fire-and-forget because the mock stream never ends
+      let submission!: Promise<void>;
       await act(async () => {
-        void result.current.submitQuery('test query').catch(() => undefined);
+        submission = result.current.submitQuery('test query');
       });
 
       // Wait for streaming to start
@@ -427,15 +436,17 @@ describe('useAgentStream', () => {
       expect(cancelSubmitSpy).toHaveBeenCalled();
       // Normal cancel should NOT request prompt restoration
       expect(cancelSubmitSpy).not.toHaveBeenCalledWith(true);
+
+      await act(async () => {
+        closeStream();
+        await submission;
+      });
     });
 
     it('should call setShellInputFocused(false) when escape is pressed', async () => {
       const setShellInputFocusedSpy = vi.fn();
-      const mockStream = (async function* () {
-        yield { type: 'content', value: 'Part 1' };
-        await new Promise(() => {}); // Keep stream open
-      })();
-      mockSendMessageStream.mockReturnValue(mockStream);
+      const { stream, closeStream } = createControllableStream();
+      mockSendMessageStream.mockReturnValue(stream);
 
       const { result } = renderHook(() =>
         useAgentStream(
@@ -458,9 +469,9 @@ describe('useAgentStream', () => {
         ),
       );
 
-      // Start a query — fire-and-forget because the mock stream never ends
+      let submission!: Promise<void>;
       await act(async () => {
-        void result.current.submitQuery('test query').catch(() => undefined);
+        submission = result.current.submitQuery('test query');
       });
 
       // Wait for streaming to start
@@ -471,6 +482,11 @@ describe('useAgentStream', () => {
       simulateEscapeKeyPress();
 
       expect(setShellInputFocusedSpy).toHaveBeenCalledWith(false);
+
+      await act(async () => {
+        closeStream();
+        await submission;
+      });
     });
 
     it('should not do anything if escape is pressed when not responding', () => {
@@ -504,11 +520,10 @@ describe('useAgentStream', () => {
       mockSendMessageStream.mockReturnValue(mockStream);
 
       const { result } = renderTestHook();
+      let submission!: Promise<void>;
 
       await act(async () => {
-        void result.current
-          .submitQuery('long running query')
-          .catch(() => undefined);
+        submission = result.current.submitQuery('long running query');
       });
 
       await waitFor(() => {
@@ -521,8 +536,7 @@ describe('useAgentStream', () => {
       // Allow the stream to continue
       await act(async () => {
         continueStream();
-        // Wait a bit to see if the second part is processed
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await submission;
       });
 
       // The text should not have been updated with " Canceled"

@@ -97,9 +97,34 @@ const createHarness = (): HookHarness => ({
   setCopyModeEnabled: vi.fn(),
 });
 
+type UseKeybindingsParams = Parameters<typeof useKeybindings>[0];
+type DisplayParams = UseKeybindingsParams['display'];
+
+const buildDisplay = (
+  harness: HookHarness,
+  overrides: Partial<DisplayParams> = {},
+): DisplayParams => ({
+  showErrorDetails: false,
+  setShowErrorDetails: harness.setShowErrorDetails,
+  showToolDescriptions: false,
+  setShowToolDescriptions: harness.setShowToolDescriptions,
+  renderMarkdown: true,
+  setRenderMarkdown: harness.setRenderMarkdown,
+  isTodoPanelCollapsed: false,
+  setIsTodoPanelCollapsed: harness.setIsTodoPanelCollapsed,
+  isQueuedMessagesPanelCollapsed: false,
+  setIsQueuedMessagesPanelCollapsed: harness.setIsQueuedMessagesPanelCollapsed,
+  constrainHeight: true,
+  setConstrainHeight: harness.setConstrainHeight,
+  refreshStatic: harness.refreshStatic,
+  addItem: harness.addItem,
+  handleSlashCommand: harness.handleSlashCommand,
+  ...overrides,
+});
+
 const renderUseKeybindings = (
   harness: HookHarness,
-  overrides: Partial<Parameters<typeof useKeybindings>[0]> = {},
+  overrides: Partial<UseKeybindingsParams> = {},
 ) =>
   renderHook(() =>
     useKeybindings({
@@ -110,24 +135,7 @@ const renderUseKeybindings = (
         cancelOngoingRequest: harness.cancelOngoingRequest,
         bufferTextLength: 0,
       },
-      display: {
-        showErrorDetails: false,
-        setShowErrorDetails: harness.setShowErrorDetails,
-        showToolDescriptions: false,
-        setShowToolDescriptions: harness.setShowToolDescriptions,
-        renderMarkdown: true,
-        setRenderMarkdown: harness.setRenderMarkdown,
-        isTodoPanelCollapsed: false,
-        setIsTodoPanelCollapsed: harness.setIsTodoPanelCollapsed,
-        isQueuedMessagesPanelCollapsed: false,
-        setIsQueuedMessagesPanelCollapsed:
-          harness.setIsQueuedMessagesPanelCollapsed,
-        constrainHeight: true,
-        setConstrainHeight: harness.setConstrainHeight,
-        refreshStatic: harness.refreshStatic,
-        addItem: harness.addItem,
-        handleSlashCommand: harness.handleSlashCommand,
-      },
+      display: buildDisplay(harness),
       shell: {
         activeShellPtyId: null,
         setEmbeddedShellFocused: harness.setEmbeddedShellFocused,
@@ -309,24 +317,7 @@ describe('useKeybindings', () => {
     const harness = createHarness();
 
     renderUseKeybindings(harness, {
-      display: {
-        showErrorDetails: false,
-        setShowErrorDetails: harness.setShowErrorDetails,
-        showToolDescriptions: false,
-        setShowToolDescriptions: harness.setShowToolDescriptions,
-        renderMarkdown: true,
-        setRenderMarkdown: harness.setRenderMarkdown,
-        isTodoPanelCollapsed: false,
-        setIsTodoPanelCollapsed: harness.setIsTodoPanelCollapsed,
-        isQueuedMessagesPanelCollapsed: false,
-        setIsQueuedMessagesPanelCollapsed:
-          harness.setIsQueuedMessagesPanelCollapsed,
-        constrainHeight: false,
-        setConstrainHeight: harness.setConstrainHeight,
-        refreshStatic: harness.refreshStatic,
-        addItem: harness.addItem,
-        handleSlashCommand: harness.handleSlashCommand,
-      },
+      display: buildDisplay(harness, { constrainHeight: false }),
     });
 
     const handler = getRegisteredHandler();
@@ -464,33 +455,13 @@ describe('useKeybindings', () => {
   });
 
   describe('toggle keybindings regression (issue #2296)', () => {
-    const buildQueuedMessagesDisplay = (
-      harness: HookHarness,
-      isQueuedMessagesPanelCollapsed: boolean,
-    ) => ({
-      showErrorDetails: false,
-      setShowErrorDetails: harness.setShowErrorDetails,
-      showToolDescriptions: false,
-      setShowToolDescriptions: harness.setShowToolDescriptions,
-      renderMarkdown: true,
-      setRenderMarkdown: harness.setRenderMarkdown,
-      isTodoPanelCollapsed: false,
-      setIsTodoPanelCollapsed: harness.setIsTodoPanelCollapsed,
-      isQueuedMessagesPanelCollapsed,
-      setIsQueuedMessagesPanelCollapsed:
-        harness.setIsQueuedMessagesPanelCollapsed,
-      constrainHeight: true,
-      setConstrainHeight: harness.setConstrainHeight,
-      refreshStatic: harness.refreshStatic,
-      addItem: harness.addItem,
-      handleSlashCommand: harness.handleSlashCommand,
-    });
-
     it('Ctrl+] collapses queued messages panel when currently expanded (collapsed=false)', () => {
       const harness = createHarness();
 
       renderUseKeybindings(harness, {
-        display: buildQueuedMessagesDisplay(harness, false),
+        display: buildDisplay(harness, {
+          isQueuedMessagesPanelCollapsed: false,
+        }),
       });
 
       const handler = getRegisteredHandler();
@@ -510,7 +481,9 @@ describe('useKeybindings', () => {
       const harness = createHarness();
 
       renderUseKeybindings(harness, {
-        display: buildQueuedMessagesDisplay(harness, true),
+        display: buildDisplay(harness, {
+          isQueuedMessagesPanelCollapsed: true,
+        }),
       });
 
       const handler = getRegisteredHandler();
