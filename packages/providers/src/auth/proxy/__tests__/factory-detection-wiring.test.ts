@@ -82,6 +82,18 @@ describe('Factory Detection Wiring (P33)', () => {
   });
 
   describe('createProviderKeyStorage factory', () => {
+    it('clears all proxy state when switching to direct mode', () => {
+      process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/test-socket.sock';
+      const proxyTokenStore = createTokenStore();
+      createProviderKeyStorage();
+
+      delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+      createProviderKeyStorage();
+      process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/test-socket.sock';
+
+      expect(createTokenStore()).not.toBe(proxyTokenStore);
+    });
+
     it('returns direct storage when LLXPRT_CREDENTIAL_SOCKET is not set', () => {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
       const storage = createProviderKeyStorage();

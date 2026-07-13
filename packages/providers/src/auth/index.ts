@@ -74,6 +74,7 @@ export {
   createAndStartProxy,
   stopProxy,
   getProxySocketPath,
+  getProxyCapabilityToken,
 } from './proxy/sandbox-proxy-lifecycle.js';
 export type {
   SandboxProxyConfig,
