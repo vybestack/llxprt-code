@@ -83,7 +83,7 @@ describe('Trusted Folders Loading', () => {
     mockFsStatSync = vi.mocked(fs.statSync);
     mockFsRenameSync = vi.mocked(fs.renameSync);
     mockFsUnlinkSync = vi.mocked(fs.unlinkSync);
-    mockFsStatSync.mockReturnValue({ mode: 0o100600 } as fs.Stats);
+    mockFsStatSync.mockReturnValue({ mode: 0o600 } as fs.Stats);
     vi.mocked(osActual.homedir).mockReturnValue('/mock/home/user');
     (mockStripJsonComments as unknown as Mock).mockImplementation(
       (jsonString: string) => jsonString,

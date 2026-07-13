@@ -68,4 +68,31 @@ describe('FolderTrustChanged event', () => {
     expect(first).toStrictEqual([false]);
     expect(second).toStrictEqual([false]);
   });
+
+  it('continues notifying trust listeners after one listener throws', () => {
+    const received: boolean[] = [];
+    events.on(CoreEvent.FolderTrustChanged, () => {
+      throw new Error('listener failed');
+    });
+    events.on(CoreEvent.FolderTrustChanged, (trusted: boolean) => {
+      received.push(trusted);
+    });
+
+    expect(() => events.emitFolderTrustChanged(false)).toThrow(
+      'listener failed',
+    );
+    expect(received).toStrictEqual([false]);
+  });
+
+  it('supports duplicate listeners and ignores removing an unknown listener', () => {
+    const received: boolean[] = [];
+    const listener = (trusted: boolean) => received.push(trusted);
+    events.on(CoreEvent.FolderTrustChanged, listener);
+    events.on(CoreEvent.FolderTrustChanged, listener);
+    events.off(CoreEvent.FolderTrustChanged, () => undefined);
+
+    events.emitFolderTrustChanged(true);
+
+    expect(received).toStrictEqual([true, true]);
+  });
 });

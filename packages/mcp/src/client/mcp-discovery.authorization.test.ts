@@ -7,9 +7,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
+import { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
 import type { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import {
+  connectAndDiscover,
+  discoverPrompts,
+  invokeMcpPrompt,
+  registerMcpPrompts,
+} from './mcp-discovery.js';
 import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from './mcp-errors.js';
 
 const connection = vi.hoisted(() => ({
@@ -34,9 +40,7 @@ vi.mock('./mcp-status.js', () => ({
   updateMCPServerStatus: vi.fn(),
 }));
 
-import { connectAndDiscover } from './mcp-discovery.js';
-
-describe('connectAndDiscover authorization', () => {
+describe('MCP capability authorization', () => {
   it('blocks a discovered tool after live folder trust is revoked', async () => {
     let trusted = true;
     const callTool = vi.fn().mockResolvedValue({ content: [] });
@@ -70,7 +74,7 @@ describe('connectAndDiscover authorization', () => {
       'server',
       { command: 'server', trust: true },
       toolRegistry,
-      { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
+      new PromptRegistry(),
       false,
       {} as WorkspaceContext,
       config,
@@ -88,5 +92,52 @@ describe('connectAndDiscover authorization', () => {
       },
     });
     expect(callTool).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when prompt invocation has no authorization callback', async () => {
+    const client = {
+      getPrompt: vi.fn().mockResolvedValue({ messages: [] }),
+    } as unknown as Client;
+
+    await expect(
+      invokeMcpPrompt('server', client, 'prompt', {}, undefined),
+    ).rejects.toThrow(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
+    expect(client.getPrompt).not.toHaveBeenCalled();
+  });
+
+  it('forwards cancellation options to prompt discovery', async () => {
+    const controller = new AbortController();
+    const client = {
+      getServerCapabilities: () => ({ prompts: {} }),
+      listPrompts: vi.fn().mockResolvedValue({ prompts: [] }),
+    } as unknown as Client;
+
+    await discoverPrompts('server', client, { signal: controller.signal });
+
+    expect(client.listPrompts).toHaveBeenCalledWith(
+      {},
+      { signal: controller.signal },
+    );
+  });
+
+  it('registers prompts through a shared fail-closed authorization boundary', async () => {
+    const registry = new PromptRegistry();
+    const client = {
+      getPrompt: vi.fn().mockResolvedValue({ messages: [] }),
+    } as unknown as Client;
+    registerMcpPrompts(
+      'server',
+      client,
+      registry,
+      [{ name: 'prompt' }],
+      () => false,
+    );
+
+    const prompt = registry.getPrompt('prompt');
+    expect(prompt).toBeDefined();
+    await expect(prompt?.invoke({})).rejects.toThrow(
+      MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE,
+    );
+    expect(client.getPrompt).not.toHaveBeenCalled();
   });
 });

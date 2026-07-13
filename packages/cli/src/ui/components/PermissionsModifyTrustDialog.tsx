@@ -291,7 +291,7 @@ function useTrustDialogState(
   const { options, initialIndex } = useTrustFormOptions(
     workingDirectory,
     parentFolderName,
-    pendingTrustLevel,
+    pendingTrustLevel ?? effectiveLocalTrustLevel,
   );
   const handleSelect = useCallback(
     (level: TrustLevel) => {

@@ -287,9 +287,27 @@ export class McpClientManager {
   }
 
   private removeServerArtifacts(name: string): void {
-    this.toolRegistry.removeMcpToolsByServer(name);
-    this.cliConfig.getPromptRegistry().removePromptsByServer(name);
-    this.cliConfig.getResourceRegistry().removeResourcesByServer(name);
+    const failures: unknown[] = [];
+    for (const remove of [
+      () => this.toolRegistry.removeMcpToolsByServer(name),
+      () => this.cliConfig.getPromptRegistry().removePromptsByServer(name),
+      () => this.cliConfig.getResourceRegistry().removeResourcesByServer(name),
+    ]) {
+      try {
+        remove();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length === 1) {
+      throw failures[0];
+    }
+    if (failures.length > 1) {
+      throw new AggregateError(
+        failures,
+        `Failed to remove MCP artifacts for '${name}'`,
+      );
+    }
   }
 
   private createClient(name: string, config: MCPServerConfig): McpClient {
@@ -768,7 +786,13 @@ export class McpClientManager {
       ...clientsToDisconnect.keys(),
       ...this.discoveringServers.keys(),
     ])) {
-      this.removeServerArtifacts(name);
+      try {
+        this.removeServerArtifacts(name);
+      } catch (error) {
+        debugLogger.error(
+          `Error removing artifacts while stopping client '${name}': ${getErrorMessage(error)}`,
+        );
+      }
     }
     const disconnectionPromises = Array.from(clientsToDisconnect.entries()).map(
       async ([name, client]) => {

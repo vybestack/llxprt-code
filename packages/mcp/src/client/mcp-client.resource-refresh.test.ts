@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -31,6 +31,10 @@ vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
 }));
 
 describe('McpClient resource refresh', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('aborts an in-flight resource refresh when disconnected', async () => {
     let resourceListHandler:
       | ((notification: unknown) => Promise<void> | void)
@@ -102,7 +106,7 @@ describe('McpClient resource refresh', () => {
     await refresh;
   });
 
-  it('removes stale resources when authorization is revoked during discovery', async () => {
+  it('rolls back resources when authorization is revoked during publication', async () => {
     let trusted = true;
     let resourceListHandler:
       | ((notification: unknown) => Promise<void> | void)
@@ -119,10 +123,9 @@ describe('McpClient resource refresh', () => {
       getServerCapabilities: vi
         .fn()
         .mockReturnValue({ resources: { listChanged: true } }),
-      request: vi.fn().mockImplementation(async () => {
-        trusted = false;
-        return { resources: [{ uri: 'file:///new' }] };
-      }),
+      request: vi
+        .fn()
+        .mockResolvedValue({ resources: [{ uri: 'file:///new' }] }),
     };
     vi.mocked(ClientLib.Client).mockReturnValue(
       mockedClient as unknown as Client,
@@ -131,7 +134,9 @@ describe('McpClient resource refresh', () => {
       {} as SdkClientStdioLib.StdioClientTransport,
     );
     const resourceRegistry = {
-      setResourcesForServer: vi.fn(),
+      setResourcesForServer: vi.fn(() => {
+        trusted = false;
+      }),
       removeResourcesByServer: vi.fn(),
     } as unknown as ResourceRegistry;
     const config = { isTrustedFolder: () => trusted } as Config;
@@ -159,7 +164,10 @@ describe('McpClient resource refresh', () => {
     expect(resourceRegistry.removeResourcesByServer).toHaveBeenCalledWith(
       'test-server',
     );
-    expect(resourceRegistry.setResourcesForServer).not.toHaveBeenCalled();
+    expect(resourceRegistry.setResourcesForServer).toHaveBeenCalledWith(
+      'test-server',
+      [{ uri: 'file:///new' }],
+    );
   });
 
   it('clears the refresh timeout when registry publication fails', async () => {

@@ -193,6 +193,7 @@ describe('McpClientManager trust transitions', () => {
 
       expect(() => manager.quarantineForTrustRevocation()).not.toThrow();
 
+      expect(clientA.invalidateCapabilities).toHaveBeenCalledOnce();
       expect(clientB.invalidateCapabilities).toHaveBeenCalledOnce();
       expect(manager.getMcpServerCount()).toBe(0);
       expect(removeTools).toHaveBeenCalledTimes(2);
@@ -279,6 +280,53 @@ describe('McpClientManager trust transitions', () => {
 
       expect(client.disconnect).toHaveBeenCalledOnce();
     });
+
+    it.each(['tools', 'prompts', 'resources'] as const)(
+      'disconnects all clients when %s artifact cleanup fails during stop',
+      async (failingRegistry) => {
+        const client = createMockMcpClient();
+        vi.mocked(McpClient).mockReturnValue(client);
+        const promptRegistry = new PromptRegistry();
+        const resourceRegistry = new ResourceRegistry();
+        const config = createMockConfig({
+          getMcpServers: () => ({ 'server-a': {} }),
+          getPromptRegistry: () => promptRegistry,
+          getResourceRegistry: () => resourceRegistry,
+        });
+        const toolRegistry = createToolRegistry(config);
+        const failCleanup = () => {
+          throw new Error('cleanup failed');
+        };
+        switch (failingRegistry) {
+          case 'tools':
+            vi.spyOn(
+              toolRegistry,
+              'removeMcpToolsByServer',
+            ).mockImplementationOnce(failCleanup);
+            break;
+          case 'prompts':
+            vi.spyOn(
+              promptRegistry,
+              'removePromptsByServer',
+            ).mockImplementationOnce(failCleanup);
+            break;
+          case 'resources':
+            vi.spyOn(
+              resourceRegistry,
+              'removeResourcesByServer',
+            ).mockImplementationOnce(failCleanup);
+            break;
+          default:
+            throw new Error(`Unknown registry: ${failingRegistry}`);
+        }
+        const manager = new McpClientManager('0.0.1', toolRegistry, config);
+        await manager.startConfiguredMcpServers();
+
+        await expect(manager.stop()).resolves.toBeUndefined();
+
+        expect(client.disconnect).toHaveBeenCalledOnce();
+      },
+    );
   });
 
   describe('race: CONNECTING/discovery vs revoke', () => {
@@ -503,8 +551,12 @@ describe('McpClientManager trust transitions', () => {
           }),
       );
       vi.mocked(McpClient).mockReturnValue(client);
+      const promptRegistry = new PromptRegistry();
+      const resourceRegistry = new ResourceRegistry();
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
+        getPromptRegistry: () => promptRegistry,
+        getResourceRegistry: () => resourceRegistry,
         isTrustedFolder: () => trusted,
       });
       const toolRegistry = createToolRegistry(config);
@@ -512,6 +564,11 @@ describe('McpClientManager trust transitions', () => {
         () => {
           throw new Error('registry cleanup failed');
         },
+      );
+      const removePrompts = vi.spyOn(promptRegistry, 'removePromptsByServer');
+      const removeResources = vi.spyOn(
+        resourceRegistry,
+        'removeResourcesByServer',
       );
       const manager = new McpClientManager('0.0.1', toolRegistry, config);
 
@@ -523,6 +580,8 @@ describe('McpClientManager trust transitions', () => {
 
       expect(manager.getMcpServerCount()).toBe(0);
       expect(client.disconnect).toHaveBeenCalledOnce();
+      expect(removePrompts).toHaveBeenCalledWith('server-a');
+      expect(removeResources).toHaveBeenCalledWith('server-a');
     });
   });
 });

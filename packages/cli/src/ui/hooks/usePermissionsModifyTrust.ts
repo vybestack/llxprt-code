@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import * as path from 'node:path';
 import {
   loadTrustedFolders,
@@ -174,6 +174,13 @@ export function usePermissionsModifyTrust(
   const [effectiveTrust, setEffectiveTrust] = useState<boolean | undefined>(
     config?.isTrustedFolder() ?? winningRule?.trusted,
   );
+
+  useEffect(() => {
+    const resolvedRule = trustedFolders.resolvePathTrust(normalizedCwd);
+    setPendingTrustLevel(trustedFolders.user.config[normalizedCwd]);
+    setCommittedLevel(undefined);
+    setEffectiveTrust(config?.isTrustedFolder() ?? resolvedRule?.trusted);
+  }, [config, normalizedCwd, trustedFolders]);
 
   const commitTrustLevel = useCallback(
     (

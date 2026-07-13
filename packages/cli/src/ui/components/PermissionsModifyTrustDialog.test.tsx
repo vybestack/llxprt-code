@@ -433,7 +433,7 @@ describe('PermissionsModifyTrustDialog', () => {
     expect(lastFrame()).toContain('Effective now: Not trusted (via IDE)');
   });
 
-  it('shows an inherited DO_NOT_TRUST rule as inherited untrusted', () => {
+  it('selects an inherited DO_NOT_TRUST rule when the form opens', async () => {
     mockedResolvePathTrust.mockReturnValue({
       rule: { path: '/test', trustLevel: TrustLevel.DO_NOT_TRUST },
       effectivePath: '/test',
@@ -441,7 +441,7 @@ describe('PermissionsModifyTrustDialog', () => {
       provenance: 'inherited',
     });
 
-    const { lastFrame } = renderWithProviders(
+    const { lastFrame, stdin } = renderWithProviders(
       <Wrapper>
         <PermissionsModifyTrustDialog
           onExit={vi.fn()}
@@ -455,5 +455,12 @@ describe('PermissionsModifyTrustDialog', () => {
     expect(lastFrame()).toContain(
       'This folder is not trusted via a parent folder setting.',
     );
+    stdin.write('\r');
+    await waitFor(() => {
+      expect(mockedSetValue).toHaveBeenCalledWith(
+        '/test/dir',
+        TrustLevel.DO_NOT_TRUST,
+      );
+    });
   });
 });

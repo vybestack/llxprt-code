@@ -15,7 +15,7 @@ export interface LiveTrustTransitionDependencies {
   removeTrustedPolicyRules(): void;
   updateTrustPolicy(trusted: boolean): void;
   transitionMcp(trusted: boolean): Promise<void> | undefined;
-  initializeHooks(): Promise<void> | undefined;
+  initializeHooks(signal: AbortSignal): Promise<void> | undefined;
   emitTrustChanged(trusted: boolean): void;
 }
 
@@ -25,80 +25,121 @@ export class LiveTrustTransitionLifecycle {
   );
 
   private transitionChain: Promise<void> = Promise.resolve();
-  private failures: unknown[] = [];
+  private failures: Array<{ batch: number; error: unknown }> = [];
+  private transitionBatch = 0;
+  private pendingTransitions = 0;
   private readonly abortController = new AbortController();
   private disposing = false;
 
   constructor(private readonly dependencies: LiveTrustTransitionDependencies) {}
 
   apply(trusted: boolean): void {
+    const batch =
+      this.pendingTransitions === 0
+        ? ++this.transitionBatch
+        : this.transitionBatch;
     if (!trusted) {
       this.dependencies.downgradeApprovalMode();
     }
-    this.runSynchronousStep(() => this.dependencies.removeTrustedPolicyRules());
-    this.runSynchronousStep(() => this.dependencies.updateTrustPolicy(trusted));
-    this.enqueue(trusted);
-    this.runSynchronousStep(() => this.dependencies.emitTrustChanged(trusted));
+    this.runSynchronousStep(
+      () => this.dependencies.removeTrustedPolicyRules(),
+      batch,
+    );
+    this.runSynchronousStep(
+      () => this.dependencies.updateTrustPolicy(trusted),
+      batch,
+    );
+    this.enqueue(trusted, batch);
+    this.runSynchronousStep(
+      () => this.dependencies.emitTrustChanged(trusted),
+      batch,
+    );
   }
 
-  private runSynchronousStep(step: () => void): void {
+  private runSynchronousStep(step: () => void, batch: number): void {
     try {
       step();
     } catch (error) {
       LiveTrustTransitionLifecycle.logger.error(
         `Trust step failed: ${getErrorMessage(error)}`,
       );
-      this.retainFailures([error]);
+      this.retainFailures([error], batch);
     }
   }
 
-  private enqueue(trusted: boolean): void {
+  private enqueue(trusted: boolean, batch: number): void {
     if (this.disposing) {
       return;
     }
-    this.transitionChain = this.transitionChain.then(async () => {
-      const failures: unknown[] = [];
-      try {
-        await this.dependencies.transitionMcp(trusted);
-      } catch (error) {
-        LiveTrustTransitionLifecycle.logger.error(
-          `Error during trust transition side-effects: ${getErrorMessage(error)}`,
-        );
-        failures.push(error);
-      }
-      if (!this.disposing) {
-        try {
-          const initialization = this.dependencies.initializeHooks();
-          if (initialization) {
-            await waitForHookInitialization(
-              initialization,
-              this.abortController.signal,
-            );
-          }
-        } catch (error) {
-          const initializationWasCancelled =
-            this.abortController.signal.aborted &&
-            error instanceof DOMException &&
-            error.name === 'AbortError';
-          if (!initializationWasCancelled) {
-            LiveTrustTransitionLifecycle.logger.error(
-              `Error re-initializing hooks during trust transition: ${getErrorMessage(error)}`,
-            );
-            failures.push(error);
-          }
-        }
-      }
-      this.retainFailures(failures);
-    });
+    this.pendingTransitions++;
+    this.transitionChain = this.transitionChain.then(() =>
+      this.runTransition(trusted, batch),
+    );
   }
 
-  private retainFailures(failures: readonly unknown[]): void {
-    this.failures = [...this.failures, ...failures].slice(-MAX_TRUST_FAILURES);
+  private async runTransition(trusted: boolean, batch: number): Promise<void> {
+    const failures: unknown[] = [];
+    try {
+      await this.collectMcpFailure(trusted, failures);
+      await this.collectHookFailure(failures);
+      this.retainFailures(failures, batch);
+    } finally {
+      this.pendingTransitions--;
+    }
+  }
+
+  private async collectMcpFailure(
+    trusted: boolean,
+    failures: unknown[],
+  ): Promise<void> {
+    try {
+      await this.dependencies.transitionMcp(trusted);
+    } catch (error) {
+      LiveTrustTransitionLifecycle.logger.error(
+        `Error during trust transition side-effects: ${getErrorMessage(error)}`,
+      );
+      failures.push(error);
+    }
+  }
+
+  private async collectHookFailure(failures: unknown[]): Promise<void> {
+    if (this.disposing) {
+      return;
+    }
+    try {
+      await waitForHookInitialization(
+        (signal) => this.dependencies.initializeHooks(signal),
+        this.abortController.signal,
+      );
+    } catch (error) {
+      const initializationWasCancelled =
+        this.abortController.signal.aborted &&
+        error instanceof DOMException &&
+        error.name === 'AbortError';
+      if (initializationWasCancelled) {
+        return;
+      }
+      LiveTrustTransitionLifecycle.logger.error(
+        `Error re-initializing hooks during trust transition: ${getErrorMessage(error)}`,
+      );
+      failures.push(error);
+    }
+  }
+
+  private retainFailures(failures: readonly unknown[], batch: number): void {
+    this.failures = [
+      ...this.failures,
+      ...failures.map((error) => ({ batch, error })),
+    ].slice(-MAX_TRUST_FAILURES);
   }
 
   async whenSettled(): Promise<void> {
-    await this.transitionChain;
-    const failures = this.failures.splice(0);
+    const batch = this.transitionBatch;
+    const transition = this.transitionChain;
+    await transition;
+    const failures = this.failures
+      .filter((failure) => failure.batch === batch)
+      .map((failure) => failure.error);
     if (failures.length === 1) {
       throw failures[0];
     }
@@ -118,28 +159,38 @@ function abortError(message: string): DOMException {
 }
 
 function waitForHookInitialization(
-  initialization: Promise<void>,
-  signal: AbortSignal,
+  initialize: (signal: AbortSignal) => Promise<void> | undefined,
+  lifecycleSignal: AbortSignal,
 ): Promise<void> {
-  if (signal.aborted) {
+  if (lifecycleSignal.aborted) {
     return Promise.reject(abortError('Hook initialization was cancelled'));
   }
+  const operationController = new AbortController();
   return new Promise<void>((resolve, reject) => {
-    const onAbort = () => {
-      finish(() => reject(abortError('Hook initialization was cancelled')));
-    };
+    let settled = false;
     const finish = (settle: () => void): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       clearTimeout(timeoutId);
-      signal.removeEventListener('abort', onAbort);
+      lifecycleSignal.removeEventListener('abort', onAbort);
       settle();
     };
+    const onAbort = () => {
+      operationController.abort();
+      finish(() => reject(abortError('Hook initialization was cancelled')));
+    };
     const timeoutId = setTimeout(() => {
+      operationController.abort();
       finish(() => reject(new Error('Hook initialization timed out')));
     }, HOOK_INITIALIZATION_TIMEOUT_MS);
-    signal.addEventListener('abort', onAbort, { once: true });
-    initialization.then(
-      () => finish(resolve),
-      (error: unknown) => finish(() => reject(error)),
-    );
+    lifecycleSignal.addEventListener('abort', onAbort, { once: true });
+    Promise.resolve()
+      .then(() => initialize(operationController.signal))
+      .then(
+        () => finish(resolve),
+        (error: unknown) => finish(() => reject(error)),
+      );
   });
 }

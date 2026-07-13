@@ -37,6 +37,9 @@ const createMockResourceRegistry = (): ResourceRegistry =>
     removeResourcesByServer: vi.fn(),
   }) as unknown as ResourceRegistry;
 
+const createTrustedConfig = (): Config =>
+  ({ isTrustedFolder: () => true }) as Config;
+
 describe('mcp-client', () => {
   let workspaceContext: WorkspaceContext;
   let testWorkspace: string;
@@ -100,12 +103,12 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
       await client.connect();
-      await client.discover({} as Config);
+      await client.discover(createTrustedConfig());
       expect(mockedClient.listTools).toHaveBeenCalledWith(
         {},
         expect.objectContaining({ timeout: 600000 }),
@@ -224,12 +227,12 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
       await client.connect();
-      await client.discover({} as Config);
+      await client.discover(createTrustedConfig());
       expect(mockedToolRegistry.registerTool).toHaveBeenCalledTimes(2);
       expect(consoleWarnSpy).not.toHaveBeenCalled();
       consoleWarnSpy.mockRestore();
@@ -267,12 +270,12 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
       await client.connect();
-      await expect(client.discover({} as Config)).rejects.toThrow(
+      await expect(client.discover(createTrustedConfig())).rejects.toThrow(
         'No prompts, tools, or resources found on the server.',
       );
       // discoverPrompts logs to console.error, not coreEvents.emitFeedback
@@ -311,12 +314,12 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
       await client.connect();
-      await expect(client.discover({} as Config)).rejects.toThrow(
+      await expect(client.discover(createTrustedConfig())).rejects.toThrow(
         'No prompts, tools, or resources found on the server.',
       );
     });
@@ -362,12 +365,12 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
       await client.connect();
-      await client.discover({} as Config);
+      await client.discover(createTrustedConfig());
       expect(mockedToolRegistry.registerTool).toHaveBeenCalledOnce();
     });
 
@@ -427,12 +430,12 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
       await client.connect();
-      await client.discover({} as Config);
+      await client.discover(createTrustedConfig());
       expect(mockedToolRegistry.registerTool).toHaveBeenCalledOnce();
       const registeredTool = vi.mocked(mockedToolRegistry.registerTool).mock
         .calls[0][0];

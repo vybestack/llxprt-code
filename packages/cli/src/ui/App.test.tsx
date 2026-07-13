@@ -262,9 +262,7 @@ vi.mock('./hooks/useFocus', () => ({
 }));
 
 vi.mock('./hooks/useIdeTrustListener', () => ({
-  useIdeTrustListener: vi.fn(() => ({
-    needsRestart: false,
-  })),
+  useIdeTrustListener: vi.fn(() => ({})),
 }));
 
 vi.mock('./hooks/useLogger', () => ({

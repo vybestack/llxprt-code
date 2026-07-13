@@ -315,6 +315,23 @@ describe('Config MCP wiring on folder trust change', () => {
       expect(mock.onFolderTrustGained).toHaveBeenCalledTimes(1);
     });
 
+    it('reports the same transition failure to concurrent settlement observers', async () => {
+      const config = new Config({
+        ...baseParams,
+        trustedFolder: true,
+      });
+      await initializeTestConfig(config);
+      const failure = new Error('disconnect failed');
+      instances[0].onFolderTrustRevoked.mockRejectedValueOnce(failure);
+
+      config.setTrustedFolderLive(false);
+      const firstObserver = config.whenTrustTransitionSettled();
+      const secondObserver = config.whenTrustTransitionSettled();
+
+      await expect(firstObserver).rejects.toBe(failure);
+      await expect(secondObserver).rejects.toBe(failure);
+    });
+
     it('exposes hook re-initialization failures', async () => {
       const config = new Config({
         ...baseParams,
@@ -351,14 +368,14 @@ describe('Config MCP wiring on folder trust change', () => {
         );
         await vi.advanceTimersByTimeAsync(30_000);
 
-        const result = await Promise.race([
-          outcome,
-          Promise.resolve('pending'),
-        ]);
+        const result = await outcome;
         expect(result).toBeInstanceOf(Error);
         expect(result).toMatchObject({
           message: expect.stringContaining('timed out'),
         });
+        const initializationSignal = hookInitializers[0].mock.calls[0][0];
+        expect(initializationSignal).toBeInstanceOf(AbortSignal);
+        expect(initializationSignal.aborted).toBe(true);
       } finally {
         vi.useRealTimers();
       }
@@ -378,6 +395,7 @@ describe('Config MCP wiring on folder trust change', () => {
       await vi.waitFor(() =>
         expect(hookInitializers[0]).toHaveBeenCalledOnce(),
       );
+      const initializationSignal = hookInitializers[0].mock.calls[0][0];
 
       const disposed = config.dispose().then(() => 'disposed');
       const deadline = new Promise<string>((resolve) => {
@@ -387,6 +405,8 @@ describe('Config MCP wiring on folder trust change', () => {
       await expect(Promise.race([disposed, deadline])).resolves.toBe(
         'disposed',
       );
+      expect(initializationSignal).toBeInstanceOf(AbortSignal);
+      expect(initializationSignal.aborted).toBe(true);
     });
 
     describe('dispose cleanup', () => {

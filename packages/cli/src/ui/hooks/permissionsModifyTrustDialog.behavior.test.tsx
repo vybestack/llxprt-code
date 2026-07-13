@@ -198,4 +198,43 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
       TrustLevel.TRUST_FOLDER,
     );
   });
+
+  it('resets dialog trust state when the runtime working directory changes', () => {
+    mockedUserConfig.value = {
+      '/workspace/first': TrustLevel.TRUST_FOLDER,
+      '/workspace/second': TrustLevel.DO_NOT_TRUST,
+    };
+    const firstConfig: PermissionsTrustRuntime = {
+      getWorkingDir: () => '/workspace/first',
+      getFolderTrust: () => true,
+      getIdeClient: () => undefined,
+      isTrustedFolder: () => true,
+      setTrustedFolderLive: vi.fn(),
+    };
+    const secondConfig: PermissionsTrustRuntime = {
+      getWorkingDir: () => '/workspace/second',
+      getFolderTrust: () => true,
+      getIdeClient: () => undefined,
+      isTrustedFolder: () => false,
+      setTrustedFolderLive: vi.fn(),
+    };
+    const { result, rerender } = renderHook(
+      ({ config }) => usePermissionsModifyTrust(config),
+      { initialProps: { config: firstConfig } },
+    );
+
+    expect(result.current.pendingTrustLevel).toBe(TrustLevel.TRUST_FOLDER);
+    expect(result.current.effectiveTrust).toBe(true);
+    act(() => {
+      result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
+    });
+    expect(result.current.committedTrustLevel).toBe(TrustLevel.TRUST_FOLDER);
+
+    rerender({ config: secondConfig });
+
+    expect(result.current.workingDirectory).toBe('/workspace/second');
+    expect(result.current.pendingTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
+    expect(result.current.effectiveTrust).toBe(false);
+    expect(result.current.committedTrustLevel).toBeUndefined();
+  });
 });

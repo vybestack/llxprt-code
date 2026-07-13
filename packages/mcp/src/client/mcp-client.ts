@@ -47,6 +47,7 @@ import {
   discoverResources,
   discoverPrompts,
   invokeMcpPrompt,
+  registerMcpPrompts,
 } from './mcp-discovery.js';
 import { connectToMcpServer } from './mcp-connection.js';
 import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from './mcp-errors.js';
@@ -149,7 +150,10 @@ export class McpClient {
       this.registerNotificationHandlers();
       const originalOnError = this.client.onerror;
       this.client.onerror = (error) => {
-        if (this.status !== MCPServerStatus.CONNECTED) {
+        if (
+          this.status !== MCPServerStatus.CONNECTED ||
+          this.client !== client
+        ) {
           return;
         }
         try {
@@ -164,13 +168,11 @@ export class McpClient {
         this.toolRegistry.removeMcpToolsByServer(this.serverName);
         this.promptRegistry.removePromptsByServer(this.serverName);
         this.resourceRegistry.removeResourcesByServer(this.serverName);
-        const client = this.client;
+        const failedClient = this.client;
         this.invalidateCapabilities();
         this.client = undefined;
         this.updateStatus(MCPServerStatus.DISCONNECTED);
-        if (client) {
-          client.close().catch(() => {});
-        }
+        failedClient.close().catch(() => {});
       };
       this.activeCapabilityGeneration = ++this.capabilityGeneration;
       this.updateStatus(MCPServerStatus.CONNECTED);
@@ -222,7 +224,10 @@ export class McpClient {
     this.discoveryAbortController = abortController;
     const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
     try {
-      const prompts = await this.discoverPrompts();
+      const prompts = await this.discoverPrompts({
+        timeout: timeoutMs,
+        signal: abortController.signal,
+      });
       const tools = await this.discoverTools(cliConfig, {
         timeout: timeoutMs,
         signal: abortController.signal,
@@ -245,22 +250,33 @@ export class McpClient {
 
       const connectedClient = this.getConnectedClient();
       const isAuthorized = this.createCapabilityAuthorization(connectedClient);
-      for (const prompt of prompts) {
-        this.promptRegistry.registerPrompt({
-          ...prompt,
-          serverName: this.serverName,
-          invoke: (params: Record<string, unknown>) =>
-            invokeMcpPrompt(
-              this.serverName,
-              connectedClient,
-              prompt.name,
-              params,
-              isAuthorized,
-            ),
-        });
+      if (!mayPublish() || !isAuthorized()) {
+        return;
+      }
+      registerMcpPrompts(
+        this.serverName,
+        connectedClient,
+        this.promptRegistry,
+        prompts,
+        isAuthorized,
+      );
+      if (!mayPublish() || !isAuthorized()) {
+        this.promptRegistry.removePromptsByServer(this.serverName);
+        return;
       }
       this.updateResourceRegistry(resources);
+      if (!mayPublish() || !isAuthorized()) {
+        this.promptRegistry.removePromptsByServer(this.serverName);
+        this.resourceRegistry.removeResourcesByServer(this.serverName);
+        return;
+      }
       for (const tool of tools) {
+        if (!mayPublish() || !isAuthorized()) {
+          this.promptRegistry.removePromptsByServer(this.serverName);
+          this.resourceRegistry.removeResourcesByServer(this.serverName);
+          this.toolRegistry.removeMcpToolsByServer(this.serverName);
+          return;
+        }
         this.toolRegistry.registerTool(tool);
       }
       this.toolRegistry.sortTools();
@@ -367,8 +383,11 @@ export class McpClient {
     );
   }
 
-  private async discoverPrompts(): Promise<Prompt[]> {
-    return discoverPrompts(this.serverName, this.getConnectedClient());
+  private async discoverPrompts(options?: {
+    timeout?: number;
+    signal?: AbortSignal;
+  }): Promise<Prompt[]> {
+    return discoverPrompts(this.serverName, this.getConnectedClient(), options);
   }
 
   private async discoverResources(options?: {
@@ -677,6 +696,16 @@ export class McpClient {
         return false;
       }
       this.updateResourceRegistry(newResources);
+      if (
+        !this.isRefreshAuthorized(
+          client,
+          connectionGeneration,
+          capabilityGeneration,
+        )
+      ) {
+        this.resourceRegistry.removeResourcesByServer(this.serverName);
+        return false;
+      }
 
       coreEvents.emitFeedback(
         'info',

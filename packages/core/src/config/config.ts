@@ -146,7 +146,7 @@ export class Config extends ConfigBase {
         trusted
           ? this.mcpClientManager?.onFolderTrustGained()
           : this.mcpClientManager?.onFolderTrustRevoked(),
-      initializeHooks: () => this.getHookSystem()?.initialize(),
+      initializeHooks: (signal) => this.getHookSystem()?.initialize(signal),
       emitTrustChanged: (trusted) => coreEvents.emitFolderTrustChanged(trusted),
     });
   }

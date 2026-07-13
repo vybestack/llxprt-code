@@ -149,7 +149,20 @@ export class CoreEventEmitter extends EventEmitter {
    * during the active session (e.g. via the permissions dialog).
    */
   emitFolderTrustChanged(trusted: boolean): void {
-    this.emit(CoreEvent.FolderTrustChanged, trusted);
+    const failures: unknown[] = [];
+    for (const listener of this.rawListeners(CoreEvent.FolderTrustChanged)) {
+      try {
+        listener.call(this, trusted);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length === 1) {
+      throw failures[0];
+    }
+    if (failures.length > 1) {
+      throw new AggregateError(failures, 'Folder trust listeners failed');
+    }
   }
 
   /**

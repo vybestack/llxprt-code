@@ -97,7 +97,8 @@ export class HookSystem {
    * @requirement:HOOK-003 - Calls HookRegistry.initialize() to load hooks from config
    * @requirement:HOOK-008 - Called by trigger functions on first event fire
    */
-  async initialize(): Promise<void> {
+  async initialize(signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
     debugLogger.debug('Initializing HookSystem');
 
     // Dispose old event handler to prevent MessageBus subscription leaks.
@@ -109,7 +110,8 @@ export class HookSystem {
     this.dispose();
 
     // Initialize the registry (loads hooks from config)
-    await this.registry.initialize();
+    await this.registry.initialize(signal);
+    signal?.throwIfAborted();
 
     // Create the event handler now that registry is ready,
     // forwarding injected dependencies per DELTA-HSYS-001

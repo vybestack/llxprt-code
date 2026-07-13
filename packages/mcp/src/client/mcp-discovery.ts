@@ -132,20 +132,13 @@ export async function connectAndDiscover(
 
     updateMCPServerStatus(mcpServerName, MCPServerStatus.CONNECTED);
 
-    for (const prompt of prompts) {
-      promptRegistry.registerPrompt({
-        ...prompt,
-        serverName: mcpServerName,
-        invoke: (params: Record<string, unknown>) =>
-          invokeMcpPrompt(
-            mcpServerName,
-            connectedClient,
-            prompt.name,
-            params,
-            isAuthorized,
-          ),
-      });
-    }
+    registerMcpPrompts(
+      mcpServerName,
+      connectedClient,
+      promptRegistry,
+      prompts,
+      isAuthorized,
+    );
     for (const tool of tools) {
       toolRegistry.registerTool(tool);
     }
@@ -310,11 +303,12 @@ async function listResources(
 export async function discoverPrompts(
   mcpServerName: string,
   mcpClient: Client,
+  options?: { timeout?: number; signal?: AbortSignal },
 ): Promise<Prompt[]> {
   try {
     if (mcpClient.getServerCapabilities()?.prompts == null) return [];
 
-    const response = await mcpClient.listPrompts({});
+    const response = await mcpClient.listPrompts({}, options);
 
     return response.prompts;
   } catch (error) {
@@ -327,6 +321,29 @@ export async function discoverPrompts(
   }
 }
 
+export function registerMcpPrompts(
+  mcpServerName: string,
+  mcpClient: Client,
+  promptRegistry: PromptRegistry,
+  prompts: readonly Prompt[],
+  isAuthorized: () => boolean,
+): void {
+  for (const prompt of prompts) {
+    promptRegistry.registerPrompt({
+      ...prompt,
+      serverName: mcpServerName,
+      invoke: (params: Record<string, unknown>) =>
+        invokeMcpPrompt(
+          mcpServerName,
+          mcpClient,
+          prompt.name,
+          params,
+          isAuthorized,
+        ),
+    });
+  }
+}
+
 /**
  * Invokes a prompt on a connected MCP client.
  */
@@ -335,10 +352,10 @@ export async function invokeMcpPrompt(
   mcpClient: Client,
   promptName: string,
   promptParams: Record<string, unknown>,
-  isAuthorized: () => boolean = () => true,
+  isAuthorized?: () => boolean,
 ): Promise<GetPromptResult> {
   try {
-    if (!isAuthorized()) {
+    if (isAuthorized?.() !== true) {
       throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
     }
     const sanitizedParams: Record<string, string> = {};
