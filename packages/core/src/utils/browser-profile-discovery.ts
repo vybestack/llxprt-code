@@ -31,10 +31,7 @@ export interface DiscoverBrowserProfilesOptions {
 
 interface ChromeLocalState {
   profile?: {
-    info_cache?: Record<
-      string,
-      { name?: string; gaia_name?: string } | undefined
-    >;
+    info_cache?: Record<string, { name?: string } | undefined>;
   };
 }
 
@@ -254,10 +251,17 @@ function discoverFirefoxProfiles(
 
   const profiles: DiscoveredBrowserProfile[] = [];
   for (const entry of entries) {
-    if (entry.path) {
+    // Firefox's -P flag selects a profile by its Name (the [Profile*]
+    // "Name=" key), not by its on-disk Path. When the two differ (which they
+    // do whenever the user renamed a profile or Firefox relocated it),
+    // passing the Path would fail to select the intended profile, so prefer
+    // Name and fall back to Path only as a last resort for entries that omit
+    // a Name entirely.
+    const directoryName = entry.name ?? entry.path;
+    if (directoryName) {
       profiles.push({
-        directoryName: entry.path,
-        displayName: entry.name ?? entry.path,
+        directoryName,
+        displayName: entry.name ?? directoryName,
       });
     }
   }

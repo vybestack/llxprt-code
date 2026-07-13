@@ -176,7 +176,10 @@ describe('discoverBrowserProfiles', () => {
   });
 
   describe('Firefox', () => {
-    it('discovers profiles from profiles.ini', () => {
+    it('discovers profiles from profiles.ini using Name (not Path) as the profile identifier', () => {
+      // Firefox's -P flag selects by Name, not Path. When they differ (as
+      // they do for the "dev" profile below), discovery must surface Name so
+      // the launcher passes the correct value to -P.
       const profilesIni = `[General]
 StartWithLastProfile=1
 
@@ -199,11 +202,11 @@ Path=yyyyyyyy.dev`;
 
       expect(profiles).toHaveLength(2);
       expect(profiles).toContainEqual({
-        directoryName: 'xxxxxxxx.default',
+        directoryName: 'default',
         displayName: 'default',
       });
       expect(profiles).toContainEqual({
-        directoryName: 'yyyyyyyy.dev',
+        directoryName: 'dev',
         displayName: 'dev',
       });
     });

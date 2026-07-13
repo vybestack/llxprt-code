@@ -41,19 +41,26 @@ function createTokenStore(): TokenStore {
 }
 
 /**
+ * The slice of the provider's internal device flow that initiateAuth drives.
+ * Defined here (test-only) so the cast below is checked against a documented
+ * contract rather than an untyped `any`. Direct internal access is required
+ * because the public API would make real network calls; these stubs let the
+ * auth orchestration run end-to-end without touching the network.
+ */
+interface DeviceFlowTestHarness {
+  initiateDeviceFlow: () => Promise<DeviceCodeResponse>;
+  getState: () => string;
+  buildAuthorizationUrl: (redirectUri: string) => string;
+  exchangeCodeForToken: (authCode: string) => Promise<OAuthToken>;
+}
+
+/**
  * Wire stubs onto the provider's internal deviceFlow so initiateAuth can run
  * without making network calls.
  */
 function stubDeviceFlow(provider: AnthropicOAuthProvider): void {
   const deviceFlow = (
-    provider as unknown as {
-      deviceFlow: {
-        initiateDeviceFlow: () => Promise<DeviceCodeResponse>;
-        getState: () => string;
-        buildAuthorizationUrl: (redirectUri: string) => string;
-        exchangeCodeForToken: (authCode: string) => Promise<OAuthToken>;
-      };
-    }
+    provider as unknown as { deviceFlow: DeviceFlowTestHarness }
   ).deviceFlow;
 
   deviceFlow.initiateDeviceFlow = vi.fn(async () => ({
@@ -179,5 +186,51 @@ describe('AnthropicOAuthProvider browser profile association', () => {
     await provider.initiateAuth();
 
     expect(openBrowserSpy).toHaveBeenCalledWith(expect.any(String), undefined);
+  });
+
+  it('does not launch a browser when shouldLaunchBrowser returns false (headless/CI)', async () => {
+    vi.spyOn(secureBrowserModule, 'shouldLaunchBrowser').mockReturnValue(false);
+    provider.setAuthContext({ bucket: 'work' });
+
+    // In headless mode the flow blocks on manual code entry (pendingAuthPromise).
+    // Wrap armPendingAuthDialog so the promise it installs is replaced with an
+    // already-resolved one, letting initiateAuth complete deterministically.
+    const providerInternals = provider as unknown as {
+      armPendingAuthDialog: () => void;
+      pendingAuthPromise?: Promise<string>;
+    };
+    const original =
+      providerInternals.armPendingAuthDialog.bind(providerInternals);
+    vi.spyOn(providerInternals, 'armPendingAuthDialog').mockImplementation(
+      () => {
+        original();
+        providerInternals.pendingAuthPromise = Promise.resolve('manual-code');
+      },
+    );
+
+    await provider.initiateAuth();
+
+    expect(openBrowserSpy).not.toHaveBeenCalled();
+  });
+
+  it('tolerates a browser launch failure and still completes auth (graceful degradation)', async () => {
+    // The provider intentionally swallows browser-launch errors (logging at
+    // debug) and falls back to the local callback / manual entry path, so a
+    // failed launch must NOT fail initiateAuth.
+    openBrowserSpy.mockRejectedValue(new Error('spawn chrome ENOENT'));
+    provider.setAuthContext({ bucket: 'work' });
+
+    startLocalOAuthCallbackMock.mockResolvedValue({
+      redirectUri: 'http://localhost:8765/callback',
+      waitForCallback: vi
+        .fn()
+        .mockResolvedValue({ code: 'auth-code', state: 'generated-state' }),
+      shutdown: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await expect(provider.initiateAuth()).resolves.toStrictEqual(
+      expect.objectContaining({ token_type: 'Bearer' }),
+    );
+    expect(openBrowserSpy).toHaveBeenCalled();
   });
 });

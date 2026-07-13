@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as nodePath from 'node:path';
 import {
   openBrowserSecurely,
   shouldLaunchBrowser,
@@ -12,11 +13,15 @@ import {
 
 // Create mock function using vi.hoisted
 const mockExecFile = vi.hoisted(() => vi.fn());
+const mockExistsSync = vi.hoisted(() => vi.fn());
 
 // Mock modules
 vi.mock('node:child_process');
 vi.mock('node:util', () => ({
   promisify: () => mockExecFile,
+}));
+vi.mock('node:fs', () => ({
+  existsSync: mockExistsSync,
 }));
 
 describe('secure-browser-launcher', () => {
@@ -25,6 +30,7 @@ describe('secure-browser-launcher', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockExecFile.mockResolvedValue({ stdout: '', stderr: '' });
+    mockExistsSync.mockReturnValue(false);
     originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
   });
 
@@ -402,6 +408,57 @@ describe('secure-browser-launcher', () => {
         ['-P', 'dev-profile', 'https://example.com'],
         expect.any(Object),
       );
+    });
+
+    it('falls back to a typical Windows Chrome install location when chrome.exe is not on PATH', async () => {
+      setPlatform('win32');
+      process.env.PROGRAMFILES = String.raw`C:\Program Files`;
+      // Primary chrome.exe launch fails (ENOENT), and only the Program Files
+      // install location is treated as present on disk.
+      mockExecFile.mockReset();
+      mockExecFile.mockRejectedValueOnce(new Error('spawn chrome.exe ENOENT'));
+      mockExecFile.mockResolvedValueOnce({ stdout: '', stderr: '' });
+      mockExistsSync.mockImplementation((p: unknown) =>
+        String(p).includes('Chrome'),
+      );
+
+      await openBrowserSecurely('https://example.com', {
+        browser: 'chrome',
+        profileDirectory: 'Default',
+      });
+
+      // nodePath.join uses the test host's separator, so build the expected
+      // path the same way the implementation does rather than hardcoding one.
+      const expectedPath = nodePath.join(
+        String.raw`C:\Program Files`,
+        'Google',
+        'Chrome',
+        'Application',
+        'chrome.exe',
+      );
+      expect(mockExecFile).toHaveBeenCalledTimes(2);
+      expect(mockExecFile).toHaveBeenNthCalledWith(
+        2,
+        expectedPath,
+        ['--profile-directory=Default', 'https://example.com'],
+        expect.any(Object),
+      );
+      delete process.env.PROGRAMFILES;
+    });
+
+    it('throws when no Windows Chrome install location is found', async () => {
+      setPlatform('win32');
+      // Primary chrome.exe launch fails and no install location exists, so
+      // only the single primary attempt is made (fallback candidates are
+      // skipped before execFile because existsSync returns false).
+      mockExecFile.mockReset();
+      mockExecFile.mockRejectedValue(new Error('spawn chrome.exe ENOENT'));
+      mockExistsSync.mockReturnValue(false);
+
+      await expect(
+        openBrowserSecurely('https://example.com', { browser: 'chrome' }),
+      ).rejects.toThrow('Failed to open chrome');
+      expect(mockExecFile).toHaveBeenCalledTimes(1);
     });
 
     it('launches Safari on macOS (ignoring profile directory)', async () => {

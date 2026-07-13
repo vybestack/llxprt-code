@@ -255,9 +255,10 @@ export class BrowserProfileAssociationStore {
    */
   private writeData(data: AssociationFileData): void {
     const dir = path.dirname(this.filePath);
-    if (!this.existsFn(dir)) {
-      this.mkdirFn(dir, { recursive: true });
-    }
+    // mkdir with recursive:true is a no-op when the directory already exists,
+    // so no separate existence check is needed (and one would introduce a
+    // TOCTOU window between check and write).
+    this.mkdirFn(dir, { recursive: true });
     this.writeFileFn(this.filePath, JSON.stringify(data, null, 2));
   }
 }

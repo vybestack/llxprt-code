@@ -7,7 +7,10 @@
 import { execFile, type ExecFileOptions } from 'node:child_process';
 import { promisify } from 'node:util';
 import { platform } from 'node:os';
+import { existsSync } from 'node:fs';
+import { env } from 'node:process';
 import { URL } from 'node:url';
+import * as nodePath from 'node:path';
 
 const execFileAsync = promisify(execFile);
 
@@ -51,6 +54,57 @@ const LINUX_CHROME_BINARIES = [
  * Debian/Ubuntu).
  */
 const LINUX_FIREFOX_BINARIES = ['firefox', 'firefox-esr'];
+
+/**
+ * Typical Windows install locations for Chrome (relative to the system drive
+ * root, Program Files, and LOCALAPPDATA). Probed when a bare `chrome.exe` is
+ * not on PATH.
+ */
+const WINDOWS_CHROME_PATHS = [
+  () =>
+    nodePath.join(
+      env.PROGRAMFILES ?? String.raw`C:\Program Files`,
+      'Google',
+      'Chrome',
+      'Application',
+      'chrome.exe',
+    ),
+  () =>
+    nodePath.join(
+      env['PROGRAMFILES(X86)'] ?? String.raw`C:\Program Files (x86)`,
+      'Google',
+      'Chrome',
+      'Application',
+      'chrome.exe',
+    ),
+  () =>
+    nodePath.join(
+      env.LOCALAPPDATA ?? String.raw`C:\Users\Public`,
+      'Google',
+      'Chrome',
+      'Application',
+      'chrome.exe',
+    ),
+];
+
+/**
+ * Typical Windows install locations for Firefox, probed when a bare
+ * `firefox.exe` is not on PATH.
+ */
+const WINDOWS_FIREFOX_PATHS = [
+  () =>
+    nodePath.join(
+      env.PROGRAMFILES ?? String.raw`C:\Program Files`,
+      'Mozilla Firefox',
+      'firefox.exe',
+    ),
+  () =>
+    nodePath.join(
+      env['PROGRAMFILES(X86)'] ?? String.raw`C:\Program Files (x86)`,
+      'Mozilla Firefox',
+      'firefox.exe',
+    ),
+];
 
 /**
  * Supported browser kinds for targeted launching.
@@ -356,12 +410,9 @@ async function openSpecificBrowser(
   try {
     await execFileAsync(command, args, browserExecOptions);
   } catch (error) {
-    const succeeded = await tryLinuxFallbackBinaries(
-      platformName,
-      browser,
-      command,
-      args,
-    );
+    const succeeded =
+      (await tryLinuxFallbackBinaries(platformName, browser, command, args)) ||
+      (await tryWindowsFallbackBinaries(platformName, browser, command, args));
     if (succeeded) {
       return;
     }
@@ -418,6 +469,56 @@ function linuxBrowserFallbacks(browser: BrowserKind): string[] {
     return LINUX_FIREFOX_BINARIES;
   }
   return [];
+}
+
+/**
+ * Resolve the candidate fallback paths for a browser on Windows. Returns an
+ * empty array for browsers without known install locations (e.g. Safari).
+ */
+function windowsBrowserFallbackPaths(
+  browser: BrowserKind,
+): Array<() => string> {
+  if (browser === 'chrome') {
+    return WINDOWS_CHROME_PATHS;
+  }
+  if (browser === 'firefox') {
+    return WINDOWS_FIREFOX_PATHS;
+  }
+  return [];
+}
+
+/**
+ * On Windows, a bare `chrome.exe`/`firefox.exe` is only on PATH if the user
+ * opted in during install. When it is missing (ENOENT), probe the typical
+ * install locations under Program Files and LOCALAPPDATA and launch the first
+ * one that exists. Resolves false when the platform is not Windows, the
+ * browser has no fallback list, or every candidate failed.
+ */
+async function tryWindowsFallbackBinaries(
+  platformName: NodeJS.Platform,
+  browser: BrowserKind,
+  primaryCommand: string,
+  args: string[],
+): Promise<boolean> {
+  if (platformName !== 'win32') {
+    return false;
+  }
+  const candidates = windowsBrowserFallbackPaths(browser);
+  const tried = new Set<string>([primaryCommand]);
+  for (const candidate of candidates) {
+    const resolved = candidate();
+    if (tried.has(resolved) || !existsSync(resolved)) {
+      continue;
+    }
+    tried.add(resolved);
+    try {
+      await execFileAsync(resolved, args, browserExecOptions);
+      return true;
+    } catch {
+      // Try the next candidate path.
+    }
+  }
+  return false;
 }
 
 /**
