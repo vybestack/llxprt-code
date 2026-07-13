@@ -253,24 +253,22 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
   });
 
   it('emits exactly one ModelInfo on a continuation when model identity changes', async () => {
-    const { orchestrator, state } = buildOrchestrator({
-      model: 'gpt-4',
+    let identity: EffectiveModelIdentity = {
       providerName: 'openai',
+      model: 'gpt-4',
+    };
+    const { orchestrator, state } = buildOrchestrator({
+      identityProvider: () => identity,
     });
 
-    // Simulate the first prompt already completed (lastPromptId is set)
     state.lastPromptId = 'prompt-1';
-
-    // Now simulate a model change during a continuation (same prompt id)
-    state.identity = {
+    identity = {
       providerName: 'anthropic',
       model: 'claude-3',
     };
 
-    // Re-enter execute with the SAME prompt id (continuation/retry)
     const infos = await collectModelInfos(orchestrator, 'prompt-1');
 
-    // Should emit exactly one ModelInfo for the changed identity
     expect(infos).toHaveLength(1);
     expect(infos[0]?.model).toBe('claude-3');
     expect(infos[0]?.providerName).toBe('anthropic');

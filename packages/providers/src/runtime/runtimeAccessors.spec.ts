@@ -95,16 +95,7 @@ describe('runtimeAccessors', () => {
         isPaidMode: vi.fn().mockReturnValue(false),
       }),
       getActiveProviderName: vi.fn().mockReturnValue('openai'),
-      getProviderByName: vi.fn().mockImplementation((name: string) => {
-        if (name === 'openai') {
-          return {
-            name: 'openai',
-            getDefaultModel: vi.fn().mockReturnValue('gpt-4'),
-            isPaidMode: vi.fn().mockReturnValue(false),
-          };
-        }
-        return undefined;
-      }),
+      getProviderByName: vi.fn().mockReturnValue(undefined),
       listProviders: vi.fn().mockReturnValue(['openai', 'anthropic']),
       getProviderMetrics: vi.fn().mockReturnValue({}),
       getSessionTokenUsage: vi.fn().mockReturnValue({
@@ -403,6 +394,7 @@ describe('runtimeAccessors', () => {
       const status = getActiveProviderStatus();
 
       expect(status.providerName).toBeNull();
+      expect(status.modelName).toBeNull();
       expect(status.isPaidMode).toBeUndefined();
       expect(status.baseURL).toBeUndefined();
       expect(status.displayLabel).toBe('unknown');
@@ -446,6 +438,7 @@ describe('runtimeAccessors', () => {
       const status = getActiveProviderStatus();
 
       expect(status.providerName).toBe('gemini');
+      expect(status.modelName).toBe('gemini-2.5-pro');
       expect(status.isPaidMode).toBe(true);
       expect(status.baseURL).toBeUndefined();
     });
