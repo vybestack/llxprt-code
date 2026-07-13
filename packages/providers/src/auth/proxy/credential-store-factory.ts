@@ -37,12 +37,67 @@ import type {
 import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 
 let proxyTokenStore: ProxyTokenStore | undefined;
+let proxyTokenStoreCapabilityToken: string | undefined;
+let proxyTokenStoreSocketPath: string | undefined;
 let directTokenStore: KeyringTokenStore | undefined;
 let proxyKeyStorage: ProxyProviderKeyStorage | undefined;
+let proxyKeyStorageClient: ProxySocketClient | undefined;
+let proxyKeyStorageCapabilityToken: string | undefined;
+let proxyKeyStorageSocketPath: string | undefined;
 let directKeyStorage: ProviderKeyStorage | undefined;
 
 /**
+ * Reads and validates the LLXPRT_CAPABILITY_TOKEN env var.
+ * Returns undefined if unset or empty so the client omits it from
+ * the handshake (matching the "no token" behavior).
+ */
+function readCapabilityToken(): string | undefined {
+  const raw = process.env.LLXPRT_CAPABILITY_TOKEN;
+  if (raw === undefined) return undefined;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/**
+ * Closes a resource best-effort, swallowing errors.
+ */
+function safeClose(closeFn: (() => void) | undefined): void {
+  if (!closeFn) return;
+  try {
+    closeFn();
+  } catch {
+    // best-effort cleanup
+  }
+}
+
+/**
+ * Tears down ALL proxy singletons (token store + key storage) and clears
+ * their associated module-level state. Used when switching from proxy mode
+ * to direct mode to ensure neither set of connections is orphaned.
+ */
+function cleanupProxySingletons(): void {
+  if (proxyTokenStore !== undefined) {
+    safeClose(() => proxyTokenStore?.getClient().close());
+    proxyTokenStore = undefined;
+    proxyTokenStoreCapabilityToken = undefined;
+    proxyTokenStoreSocketPath = undefined;
+  }
+  if (proxyKeyStorage !== undefined) {
+    safeClose(() => proxyKeyStorageClient?.close());
+    proxyKeyStorageClient = undefined;
+    proxyKeyStorage = undefined;
+    proxyKeyStorageCapabilityToken = undefined;
+    proxyKeyStorageSocketPath = undefined;
+  }
+}
+
+/**
  * Creates or returns a singleton TokenStore appropriate for the current environment.
+ *
+ * NOTE: This function is fully synchronous — no awaits — so concurrent
+ * interleaving is impossible in Node.js's single-threaded model. The
+ * read-check-create-assign sequence is atomic with respect to the event loop.
+ * If async operations are ever added, a serialization lock will be needed.
  *
  * **This is the ONLY sanctioned way to obtain a TokenStore instance.**
  * Do not instantiate `KeyringTokenStore` or `ProxyTokenStore` directly.
@@ -58,9 +113,24 @@ let directKeyStorage: ProviderKeyStorage | undefined;
 export function createTokenStore(): TokenStore {
   const socketPath = process.env.LLXPRT_CREDENTIAL_SOCKET;
   if (socketPath) {
-    proxyTokenStore ??= new ProxyTokenStore(socketPath);
+    const capabilityToken = readCapabilityToken();
+    if (
+      proxyTokenStore === undefined ||
+      proxyTokenStoreCapabilityToken !== capabilityToken ||
+      proxyTokenStoreSocketPath !== socketPath
+    ) {
+      const oldStore = proxyTokenStore;
+      const newStore = new ProxyTokenStore(socketPath, capabilityToken);
+      // Close old connection best-effort, then mutate singletons
+      safeClose(() => oldStore?.getClient().close());
+      proxyTokenStore = newStore;
+      proxyTokenStoreCapabilityToken = capabilityToken;
+      proxyTokenStoreSocketPath = socketPath;
+    }
     return proxyTokenStore;
   }
+  // Clean up stale proxy singletons when switching to direct mode
+  cleanupProxySingletons();
   directTokenStore ??= createKeyringTokenStore();
   return directTokenStore;
 }
@@ -79,12 +149,26 @@ export function createTokenStore(): TokenStore {
 export function createProviderKeyStorage(): ProviderKeyStorageLike {
   const socketPath = process.env.LLXPRT_CREDENTIAL_SOCKET;
   if (socketPath) {
-    if (!proxyKeyStorage) {
-      const client = new ProxySocketClient(socketPath);
-      proxyKeyStorage = new ProxyProviderKeyStorage(client);
+    const capabilityToken = readCapabilityToken();
+    if (
+      proxyKeyStorage === undefined ||
+      proxyKeyStorageCapabilityToken !== capabilityToken ||
+      proxyKeyStorageSocketPath !== socketPath
+    ) {
+      const oldClient = proxyKeyStorageClient;
+      const newClient = new ProxySocketClient(socketPath, capabilityToken);
+      const newStorage = new ProxyProviderKeyStorage(newClient);
+      // Close old connection best-effort, then mutate singletons
+      safeClose(() => oldClient?.close());
+      proxyKeyStorageClient = newClient;
+      proxyKeyStorage = newStorage;
+      proxyKeyStorageCapabilityToken = capabilityToken;
+      proxyKeyStorageSocketPath = socketPath;
     }
     return proxyKeyStorage;
   }
+  // Clean up stale proxy singletons when switching to direct mode
+  cleanupProxySingletons();
   directKeyStorage ??= getProviderKeyStorage();
   return directKeyStorage;
 }
@@ -93,8 +177,20 @@ export function createProviderKeyStorage(): ProviderKeyStorageLike {
  * Resets factory singletons. Used for test isolation.
  */
 export function resetFactorySingletons(): void {
+  // Reset module-level singletons first, then close old connections.
+  // This ensures that even if close() throws, the singletons are cleared
+  // and subsequent calls create fresh instances (test isolation safety).
+  const oldProxyTokenStore = proxyTokenStore;
+  const oldProxyKeyStorageClient = proxyKeyStorageClient;
   proxyTokenStore = undefined;
+  proxyTokenStoreCapabilityToken = undefined;
+  proxyTokenStoreSocketPath = undefined;
   directTokenStore = undefined;
   proxyKeyStorage = undefined;
+  proxyKeyStorageClient = undefined;
+  proxyKeyStorageCapabilityToken = undefined;
+  proxyKeyStorageSocketPath = undefined;
   directKeyStorage = undefined;
+  safeClose(() => oldProxyTokenStore?.getClient().close());
+  safeClose(() => oldProxyKeyStorageClient?.close());
 }

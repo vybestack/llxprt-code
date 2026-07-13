@@ -73,6 +73,7 @@ const baseArgv: CliArgs = {
   nobrowser: undefined,
   listSessions: undefined,
   deleteSession: undefined,
+  quiet: undefined,
 };
 
 const baseContext: ContextResolutionResult = {

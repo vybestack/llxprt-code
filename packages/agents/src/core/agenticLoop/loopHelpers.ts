@@ -18,6 +18,11 @@ import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { convertBlocksToParts } from '../MessageConverter.js';
+import {
+  DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+  enforceImageBudget,
+  buildOmissionFeedback,
+} from '../imagePayloadBudget.js';
 
 function isFunctionCallPart(part: Part): boolean {
   return 'functionCall' in part;
@@ -79,13 +84,31 @@ export function classifyCompletedTools(tools: CompletedToolCall[]): {
 /**
  * Builds the flat list of functionResponse parts to feed back to the model.
  * Filters out functionCall parts (already present in the assistant turn).
+ *
+ * Enforces a cumulative image-payload budget to prevent HTTP 413 errors when
+ * parallel tool calls each return large image data. Images that would exceed
+ * the budget are omitted and replaced with a feedback message instructing the
+ * model to re-read them individually.
  */
-export function buildToolResponses(geminiTools: CompletedToolCall[]): Part[] {
-  return geminiTools.flatMap((toolCall) =>
+export function buildToolResponses(
+  geminiTools: CompletedToolCall[],
+  budgetBytes: number = DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+): Part[] {
+  const parts = geminiTools.flatMap((toolCall) =>
     convertBlocksToParts(toolCall.response.responseParts).filter(
       (part) => !isFunctionCallPart(part),
     ),
   );
+
+  if (budgetBytes <= 0) {
+    return parts;
+  }
+
+  const { parts: budgeted, omitted } = enforceImageBudget(parts, budgetBytes);
+  if (omitted.length > 0) {
+    budgeted.push({ text: buildOmissionFeedback(omitted) });
+  }
+  return budgeted;
 }
 
 export interface FilteredEagerToolResponses {

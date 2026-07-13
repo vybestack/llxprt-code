@@ -342,7 +342,6 @@ export class TodoContinuationService {
 
   shouldDeferStreamEvent(event: ServerAgentStreamEvent): boolean {
     return (
-      event.type === AgentEventType.Content ||
       event.type === AgentEventType.Finished ||
       event.type === AgentEventType.Citation
     );

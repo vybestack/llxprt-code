@@ -63,6 +63,7 @@ type ConfigBuildPieces = {
   extensionsEnabled: boolean;
   adminSkillsEnabled: boolean;
   outputFormat: Parameters<typeof buildConfig>[0]['outputFormat'];
+  quiet: boolean;
   allowedTools: readonly string[];
 };
 
@@ -263,6 +264,7 @@ function buildLoadedConfig(
     extensionsEnabled: pieces.extensionsEnabled,
     adminSkillsEnabled: pieces.adminSkillsEnabled,
     outputFormat: pieces.outputFormat,
+    quiet: pieces.quiet,
     allowedTools: pieces.allowedTools,
   });
 }

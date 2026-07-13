@@ -21,6 +21,7 @@ import {
   normalizeShellReplacement,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
+  DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
   type AccessibilitySettings,
   type BugCommandSettings,
   type ChatCompressionSettings,
@@ -96,6 +97,7 @@ export interface ConfigConstructorTarget {
   debugMode: boolean;
   outputFormat: OutputFormat;
   question: string | undefined;
+  quiet: boolean;
 
   // Tool governance
   coreTools: string[] | undefined;
@@ -169,6 +171,7 @@ export interface ConfigConstructorTarget {
   truncateToolOutputLines: number;
   enableToolOutputTruncation: boolean;
   continueOnFailedApiCall: boolean;
+  imagePayloadBudgetBytes: number;
   enableShellOutputEfficiency: boolean;
   continueSession: boolean | string;
   extensionManagement: boolean;
@@ -256,6 +259,7 @@ function applyCoreIdentity(
   config.debugMode = params.debugMode;
   config.outputFormat = params.outputFormat ?? OutputFormat.TEXT;
   config.question = params.question;
+  config.quiet = params.quiet ?? false;
 }
 
 function applyToolGovernance(
@@ -436,6 +440,13 @@ function applySessionFlags(
   params: ConfigParameters,
 ): void {
   config.continueOnFailedApiCall = params.continueOnFailedApiCall ?? true;
+  const imagePayloadBudgetBytes = params.imagePayloadBudgetBytes;
+  config.imagePayloadBudgetBytes =
+    typeof imagePayloadBudgetBytes === 'number' &&
+    Number.isSafeInteger(imagePayloadBudgetBytes) &&
+    imagePayloadBudgetBytes >= 0
+      ? imagePayloadBudgetBytes
+      : DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES;
   config.continueSession = params.continueSession ?? false;
   config.storage = new Storage(config.targetDir);
   config.fileExclusions = new FileExclusions(config as unknown as Config);

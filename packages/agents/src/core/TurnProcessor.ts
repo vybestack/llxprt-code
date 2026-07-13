@@ -47,6 +47,7 @@ import {
   isThoughtPart,
   type UsageMetadataWithCache,
 } from './googlePartHelpers.js';
+import { recordActualTokenUsage } from './tokenUsageActualLogger.js';
 import {
   attachHookRestrictedAllowedTools,
   filterHookRestrictedContents,
@@ -63,6 +64,7 @@ import {
 } from './chatSession.js';
 import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
 import { responseToModelStreamChunk } from './streamChunkWrapper.js';
+import { hasVisibleOrThinkingContent } from './streamChunkVisibility.js';
 import { enrichSchemaDepthError } from './schemaDepthErrorEnrichment.js';
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{ name: string }>;
@@ -251,6 +253,7 @@ export class TurnProcessor {
       yield { type: StreamEventType.RETRY };
     }
 
+    let hasYieldedChunk = false;
     try {
       const currentParams = this._applyRetryTemperature(params, attempt);
       const stream = await this.streamProcessor.makeApiCallAndProcessStream(
@@ -259,6 +262,7 @@ export class TurnProcessor {
         userContent,
       );
       for await (const chunk of stream) {
+        hasYieldedChunk ||= hasVisibleOrThinkingContent(chunk);
         yield wrapChunk(chunk);
       }
       return { error: null, action: 'stop' };
@@ -285,7 +289,10 @@ export class TurnProcessor {
         }
         return { error: null, action: 'stop' };
       }
-      if (shouldRetryStreamAttempt(error, params, attempt)) {
+      if (
+        !hasYieldedChunk &&
+        shouldRetryStreamAttempt(error, params, attempt)
+      ) {
         return { error, action: 'retry' };
       }
       return { error, action: 'stop' };
@@ -731,7 +738,7 @@ export class TurnProcessor {
     response: GenerateContentResponse,
     userContent: Content | Content[],
     _params: SendMessageParameters,
-    _prompt_id: string,
+    prompt_id: string,
   ): Promise<void> {
     try {
       const currentModel = this.runtimeContext.state.model;
@@ -752,7 +759,7 @@ export class TurnProcessor {
 
       this._recordOutputContent(response, currentModel, filteredAfcHistory);
 
-      await this._syncTokenCounts(response);
+      await this._syncTokenCounts(response, prompt_id);
     } finally {
       this.eagerlyRecordedToolResponseCallIds.clear();
     }
@@ -872,6 +879,7 @@ export class TurnProcessor {
 
   private async _syncTokenCounts(
     response: GenerateContentResponse,
+    promptId: string,
   ): Promise<void> {
     await this.historyService.waitForTokenUpdates();
     const usageMetadata = response.usageMetadata as
@@ -891,5 +899,20 @@ export class TurnProcessor {
       this.historyService.syncTotalTokens(this.lastPromptTokenCount);
       await this.historyService.waitForTokenUpdates();
     }
+
+    let usageForLogging = usageMetadata;
+    if (
+      usageForLogging?.promptTokenCount === undefined &&
+      this.lastPromptTokenCount !== null &&
+      this.lastPromptTokenCount > 0 &&
+      !Number.isNaN(this.lastPromptTokenCount)
+    ) {
+      usageForLogging = { promptTokenCount: this.lastPromptTokenCount };
+    }
+    await recordActualTokenUsage(
+      this.compressionHandler.tokenUsageLogger,
+      promptId,
+      usageForLogging,
+    );
   }
 }

@@ -23,6 +23,7 @@ import type {
   ToolCallBlock,
   ToolResponseBlock,
   ThinkingBlock,
+  MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
@@ -32,6 +33,7 @@ import {
 } from './googlePartHelpers.js';
 import { getResponseTextFromParts } from './googlePartHelpers.js';
 import { setProviderStopReason } from './providerStopReason.js';
+import { setResponseId } from './responseIdCarrier.js';
 
 const logger = new DebugLogger('llxprt:core:message-converter');
 
@@ -460,11 +462,19 @@ export function classifyMixedParts(parts: Part[]): {
       const thinkingBlock: ThinkingBlock = {
         type: 'thinking',
         thought: part.text ?? '',
-        isHidden: true,
         sourceField: part.llxprtSourceField ?? 'thought',
       };
-      if (part.thoughtSignature) {
+      if (part.llxprtThoughtIsHidden !== undefined) {
+        thinkingBlock.isHidden = part.llxprtThoughtIsHidden;
+      }
+      if (part.thoughtSignature !== undefined) {
         thinkingBlock.signature = part.thoughtSignature;
+      }
+      if (part.llxprtThoughtBlockId !== undefined) {
+        thinkingBlock.streamId = part.llxprtThoughtBlockId;
+      }
+      if (part.llxprtThoughtBlockStatus !== undefined) {
+        thinkingBlock.streamStatus = part.llxprtThoughtBlockStatus;
       }
       blocks.push(thinkingBlock);
       hasAIContent = true;
@@ -492,6 +502,26 @@ export function classifyMixedParts(parts: Part[]): {
   }
 
   return { blocks, hasAIContent, hasToolContent };
+}
+
+function convertMediaBlockToPart(block: MediaBlock): Part | null {
+  if (!block.data || !block.mimeType) {
+    return null;
+  }
+  if (block.encoding === 'url') {
+    return {
+      fileData: {
+        mimeType: block.mimeType,
+        fileUri: block.data,
+      },
+    };
+  }
+  return {
+    inlineData: {
+      mimeType: block.mimeType,
+      data: block.data,
+    },
+  };
 }
 
 /**
@@ -527,17 +557,33 @@ export function convertBlocksToParts(blocks: ContentBlock[]): Part[] {
         });
         break;
       }
+      case 'media': {
+        const mediaPart = convertMediaBlockToPart(block);
+        if (mediaPart !== null) {
+          parts.push(mediaPart);
+        }
+        break;
+      }
       case 'thinking': {
         const thinkingBlock = block;
         const thoughtPart: ThoughtPart = {
           thought: true,
           text: thinkingBlock.thought,
         };
-        if (thinkingBlock.signature) {
+        if (thinkingBlock.signature !== undefined) {
           thoughtPart.thoughtSignature = thinkingBlock.signature;
         }
-        if (thinkingBlock.sourceField) {
+        if (thinkingBlock.sourceField !== undefined) {
           thoughtPart.llxprtSourceField = thinkingBlock.sourceField;
+        }
+        if (thinkingBlock.streamId !== undefined) {
+          thoughtPart.llxprtThoughtBlockId = thinkingBlock.streamId;
+        }
+        if (thinkingBlock.streamStatus !== undefined) {
+          thoughtPart.llxprtThoughtBlockStatus = thinkingBlock.streamStatus;
+        }
+        if (thinkingBlock.isHidden !== undefined) {
+          thoughtPart.llxprtThoughtIsHidden = thinkingBlock.isHidden;
         }
         parts.push(thoughtPart);
         break;
@@ -698,6 +744,16 @@ export function applyResponseMetadata(
         input.metadata.usage.cache_creation_input_tokens ?? 0,
     };
     response.usageMetadata = usageMetadata;
+  }
+
+  // Carry the provider response id and stored flag onto the synthetic response
+  // so they survive the Gemini intermediate and reach recorded history.
+  if (input.metadata?.id) {
+    setResponseId(
+      response,
+      input.metadata.id,
+      input.metadata.responsesStored === true ? true : undefined,
+    );
   }
 
   applyFinishReasonMapping(response, input);

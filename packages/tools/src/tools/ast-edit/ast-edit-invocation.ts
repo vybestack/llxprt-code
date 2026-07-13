@@ -42,6 +42,13 @@ import {
   getFileLastModified,
   type CalculatedEdit,
 } from './edit-calculator.js';
+import {
+  summarizeAstValidation,
+  computeLineDelta,
+  findEditStartLine,
+  formatValidationLineLabel,
+  type AstValidationResult,
+} from './validation-categorizer.js';
 
 function normalizeSeverity(severity: unknown): string {
   if (typeof severity !== 'number') {
@@ -113,6 +120,7 @@ export class ASTEditToolInvocation
       },
       metadata: {
         astValidation: editData.astValidation,
+        preEditValidation: editData.preEditValidation,
         fileFreshness: editData.fileFreshness,
       },
     };
@@ -186,9 +194,8 @@ export class ASTEditToolInvocation
           workspaceRoot,
         );
 
-      const astValidation =
-        editData.astValidation ??
-        this.validateASTSyntax(this.params.file_path, editData.newContent);
+      const { astValidation, preEditValidation, lineDelta, editStartLine } =
+        this.computeValidationContext(editData);
 
       const fileName = path.basename(this.params.file_path);
       const fileDiff = Diff.createPatch(
@@ -203,6 +210,9 @@ export class ASTEditToolInvocation
       const editPreviewLlmContent = this.buildPreviewLlmContent(
         enhancedContext,
         astValidation,
+        preEditValidation,
+        lineDelta,
+        editStartLine,
         currentMtime,
         workspaceRoot,
       );
@@ -212,7 +222,7 @@ export class ASTEditToolInvocation
         fileName,
         originalContent: currentContent,
         newContent: editData.newContent,
-        metadata: { astValidation, currentMtime },
+        metadata: { astValidation, preEditValidation, currentMtime },
       };
 
       return {
@@ -232,20 +242,60 @@ export class ASTEditToolInvocation
     }
   }
 
+  private computeValidationContext(editData: CalculatedEdit): {
+    astValidation: { valid: boolean; errors: string[] };
+    preEditValidation: AstValidationResult | undefined;
+    lineDelta: number;
+    editStartLine: number | null;
+  } {
+    const astValidation =
+      editData.astValidation ??
+      this.validateASTSyntax(this.params.file_path, editData.newContent);
+    const preEditValidation: AstValidationResult | undefined =
+      editData.preEditValidation ??
+      (editData.currentContent !== null
+        ? this.validateASTSyntax(this.params.file_path, editData.currentContent)
+        : undefined);
+    const lineDelta = computeLineDelta(
+      this.params.old_string,
+      this.params.new_string,
+    );
+    const editStartLine = findEditStartLine(
+      editData.currentContent,
+      this.params.old_string,
+    );
+    return { astValidation, preEditValidation, lineDelta, editStartLine };
+  }
+
   private buildPreviewLlmContent(
     enhancedContext: Awaited<
       ReturnType<ASTContextCollector['collectEnhancedContext']>
     >,
     astValidation: { valid: boolean; errors: string[] },
+    preEditValidation: { valid: boolean; errors: string[] } | undefined,
+    lineDelta: number,
+    editStartLine: number | null,
     currentMtime: number | null,
     workspaceRoot: string,
   ): string {
+    const summary = summarizeAstValidation(
+      preEditValidation,
+      astValidation,
+      lineDelta,
+      editStartLine,
+    );
     return [
       `LLXPRT EDIT PREVIEW: ${this.params.file_path}`,
       `- Context: ${enhancedContext.language} file with ${enhancedContext.declarations.length} declarations`,
       `- Functions: ${enhancedContext.languageContext.functions.length}`,
       `- Classes: ${enhancedContext.languageContext.classes.length}`,
-      `- AST validation: ${astValidation.valid ? 'PASSED' : 'FAILED'}`,
+      `- AST validation: ${summary.label}`,
+      preEditValidation && !preEditValidation.valid
+        ? `- Pre-existing syntax errors: Yes${formatValidationLineLabel(preEditValidation.errors)}`
+        : '',
+      !astValidation.valid
+        ? `- AST errors: ${astValidation.errors.join(', ')}`
+        : '',
       `- Relevant snippets: ${enhancedContext.relevantSnippets.length} found`,
       enhancedContext.repositoryContext
         ? `- Repository: ${enhancedContext.repositoryContext.gitUrl}`
@@ -254,9 +304,6 @@ export class ASTEditToolInvocation
         ? `- Related files: ${enhancedContext.relatedFiles.length}`
         : '',
       this.formatConnectedFilesContext(enhancedContext, workspaceRoot),
-      !astValidation.valid
-        ? `- AST errors: ${astValidation.errors.join(', ')}`
-        : '',
       currentMtime !== null ? `- Timestamp: ${currentMtime}` : '',
       '',
       'ENHANCED CONTEXT ANALYSIS:',
@@ -372,20 +419,43 @@ export class ASTEditToolInvocation
         DEFAULT_CREATE_PATCH_OPTIONS,
       );
 
+      const { astValidation, preEditValidation, lineDelta, editStartLine } =
+        this.computeValidationContext(editData);
       const displayResult = {
         fileDiff,
         fileName,
         originalContent: editData.currentContent,
         newContent: editData.newContent,
         applied: true,
-        metadata: { astValidation: editData.astValidation },
+        metadata: {
+          astValidation,
+          preEditValidation,
+        },
       };
+      const summary = summarizeAstValidation(
+        preEditValidation,
+        astValidation,
+        lineDelta,
+        editStartLine,
+      );
 
       const llmSuccessMessageParts: string[] = [
         `Successfully applied edit to: ${this.params.file_path}`,
         `- Changes: ${editData.occurrences} replacement(s) applied`,
-        `- AST validation: ${editData.astValidation?.valid === true ? 'PASSED' : 'FAILED'}`,
+        `- AST validation: ${summary.label}`,
       ];
+
+      if (preEditValidation && !preEditValidation.valid) {
+        llmSuccessMessageParts.push(
+          `- Pre-existing syntax errors: Yes${formatValidationLineLabel(preEditValidation.errors)}${summary.newlyIntroduced ? '' : ' (not introduced by this edit)'}`,
+        );
+      }
+
+      if (summary.newlyIntroduced) {
+        llmSuccessMessageParts.push(
+          `- AST errors: ${astValidation.errors.join(', ')}`,
+        );
+      }
 
       await this.appendLspDiagnostics(llmSuccessMessageParts);
 
