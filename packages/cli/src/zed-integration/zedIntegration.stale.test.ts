@@ -27,6 +27,26 @@ async function disposeCreatedSessions(): Promise<void> {
 
 describe('Zed Session.prompt (Agent API) - stale prompt terminal events', () => {
   afterEach(disposeCreatedSessions);
+
+  it('preserves a completed turn when cancellation arrives after done', async () => {
+    const sessionRef: { current: Session | null } = { current: null };
+    const { agent } = buildFakeAgent([]);
+    agent.stream = async function* () {
+      yield { type: 'done', reason: 'stop' } as const;
+      const currentSession = sessionRef.current;
+      if (currentSession === null) throw new Error('Session not initialized');
+      await currentSession.cancelPendingPrompt();
+    };
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    sessionRef.current = session;
+    createdSessions.push(session);
+
+    const response = await runPrompt(session);
+
+    expect(response.stopReason).toBe('end_turn');
+  });
+
   it('returns cancelled (not an error) when a superseded prompt ends with done:error', async () => {
     const toolCallId = 'stale-error-tool';
     let promptCount = 0;

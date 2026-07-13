@@ -260,6 +260,16 @@ describe('recorded ACP session listing', () => {
     // extractUserMessageText) joins text blocks with '' and truncates — NO trim,
     // NO newline collapse. The live path (deriveSessionTitle) must match exactly
     // so the on-disk listing title and the session_info_update title agree.
+
+    function buildBlocks(name: string, text: string) {
+      return name === 'multiple text blocks'
+        ? [
+            { type: 'text' as const, text: 'part1' },
+            { type: 'text' as const, text: 'part2' },
+          ]
+        : [{ type: 'text' as const, text }];
+    }
+
     const cases: Array<{ name: string; text: string }> = [
       { name: 'multiline', text: 'line one\nline two\nline three' },
       { name: 'leading/trailing whitespace', text: '  padded title  ' },
@@ -283,15 +293,10 @@ describe('recorded ACP session listing', () => {
           provider: 'openai',
           model: 'test-model',
         });
+        const blocks = buildBlocks(name, text);
         const content: IContent = {
           speaker: 'human',
-          blocks:
-            name === 'multiple text blocks'
-              ? [
-                  { type: 'text', text: 'part1' },
-                  { type: 'text', text: 'part2' },
-                ]
-              : [{ type: 'text', text }],
+          blocks,
         };
         service.recordContent(content);
         await service.flush();
@@ -305,14 +310,7 @@ describe('recorded ACP session listing', () => {
         );
         const durableTitle = result.sessions[0].title;
 
-        const liveTitle = deriveSessionTitle(
-          name === 'multiple text blocks'
-            ? [
-                { type: 'text', text: 'part1' },
-                { type: 'text', text: 'part2' },
-              ]
-            : [{ type: 'text', text }],
-        );
+        const liveTitle = deriveSessionTitle(blocks);
 
         expect(durableTitle).toBe(liveTitle);
       });

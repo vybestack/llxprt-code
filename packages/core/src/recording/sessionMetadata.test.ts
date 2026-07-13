@@ -263,6 +263,15 @@ describe('session_metadata recording (issue #1611)', () => {
       expect(title).toBeUndefined();
     });
 
+    it('returns undefined when the source stream cannot be opened', async () => {
+      const chatsDir = await makeTempChatsDir();
+      const filePath = path.join(chatsDir, 'missing-session.jsonl');
+
+      const title = await SessionDiscovery.readSessionMetadataTitle(filePath);
+
+      expect(title).toBeUndefined();
+    });
+
     it('reads the last valid session_metadata title when multiple exist', async () => {
       const chatsDir = await makeTempChatsDir();
       const filePath = path.join(chatsDir, 'session-discovery-multi.jsonl');

@@ -76,7 +76,7 @@ describe('Zed config options', () => {
           model: 'alpha',
           authStatus: 'authenticated' as const,
         }),
-      } as Agent,
+      } as unknown as Agent,
       configFixture(values),
       'emojifilter',
       'error',
@@ -158,17 +158,19 @@ describe('Zed config options', () => {
           value: 'warn',
         },
       ),
-    ).toThrow('Resource not found');
+    ).toThrow('Config options not supported by client');
     expect(setConfigOption).not.toHaveBeenCalled();
   });
 
   it('switches models and strictly publishes the updated full snapshot', async () => {
     const config = configFixture();
-    const setModel = vi.fn(async () => undefined);
+    let currentModel = 'alpha';
     const result = await setZedConfigOption(
       {
-        setModel,
-        getModel: () => 'beta',
+        setModel: async (model: string) => {
+          currentModel = model;
+        },
+        getModel: () => currentModel,
         getProviderStatus: () => ({
           provider: 'test',
           model: 'alpha',
@@ -180,7 +182,7 @@ describe('Zed config options', () => {
       'beta',
     );
 
-    expect(setModel).toHaveBeenCalledWith('beta');
+    expect(currentModel).toBe('beta');
     expect(result.configOptions.find(({ id }) => id === 'model')).toMatchObject(
       { currentValue: 'beta' },
     );

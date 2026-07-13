@@ -84,7 +84,9 @@ import {
 } from './zed-session-info.js';
 import type {
   CloseSessionRequest,
+  CloseSessionResponse,
   DeleteSessionRequest,
+  DeleteSessionResponse,
   ClientCapabilitiesWithSession,
 } from './acp-types.js';
 export { parseZedAuthMethodId } from './zed-helpers.js';
@@ -98,7 +100,6 @@ export async function runZedIntegration(
   const { stdout: workingStdout } = createInkStdio();
   const stdout = Writable.toWeb(workingStdout) as WritableStream;
   const stdin = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
-  logger.debug(() => 'Streams created');
   setCliRuntimeContext(config.getSettingsService(), config, {
     runtimeId: 'cli.runtime.zed',
     metadata: { source: 'zed-integration', stage: 'bootstrap' },
@@ -108,11 +109,9 @@ export async function runZedIntegration(
   try {
     const stream = acp.ndJsonStream(stdout, stdin);
     const connection = new acp.AgentSideConnection((conn) => {
-      logger.debug(() => 'Creating ZedAgent');
       zedAgent = new ZedAgent(config, settings, conn);
       return zedAgent;
     }, stream);
-    logger.debug(() => 'AgentSideConnection created successfully');
     try {
       await connection.closed;
     } finally {
@@ -194,7 +193,7 @@ export class ZedAgent {
       throw error;
     }
   }
-  resumeSession(params: acp.ResumeSessionRequest) {
+  resumeSession(params: acp.ResumeSessionRequest): Promise<acp.ResumeSessionResponse> {
     return this.lifecycle.resume(params);
   }
   private supportsConfigOptions(): boolean {
@@ -223,7 +222,7 @@ export class ZedAgent {
       (error) => this.logger.debug(() => `Session cleanup failed: ${error}`),
     );
   }
-  async loadSession(params: acp.LoadSessionRequest) {
+  async loadSession(params: acp.LoadSessionRequest): Promise<acp.LoadSessionResponse> {
     return this.lifecycle.runSerialized(params.sessionId, () =>
       this.performLoadSession(params),
     );
@@ -232,7 +231,6 @@ export class ZedAgent {
     params: acp.LoadSessionRequest,
   ): Promise<acp.LoadSessionResponse> {
     const { sessionId } = params;
-    this.logger.debug(() => `loadSession - loading session ${sessionId}`);
     const reattached = await this.tryReattachLiveSession(sessionId);
     if (reattached !== null) {
       await reattached.sendAvailableCommands();
@@ -264,11 +262,7 @@ export class ZedAgent {
     if (recordingExists) {
       return null;
     }
-    this.logger.debug(
-      () =>
-        `loadSession - re-attaching live session ${sessionId} (no on-disk ` +
-        `recording; replaying in-memory history)`,
-    );
+    this.logger.debug(() => `loadSession - re-attaching live session ${sessionId}`);
     await existing.replayLiveHistory();
     return existing;
   }
@@ -292,14 +286,7 @@ export class ZedAgent {
       await session.streamHistory(history);
     } catch (error) {
       this.sessions.delete(sessionId);
-      try {
-        await session.dispose();
-      } catch (disposeError) {
-        this.logger.debug(
-          () =>
-            `loadSession - dispose after replay failure also failed (original error rethrown): ${disposeError}`,
-        );
-      }
+      try { await session.dispose(); } catch { /* original error rethrown */ }
       this.logger.debug(() => `loadSession - replay failed: ${error}`);
       throw error;
     }
@@ -369,7 +356,6 @@ export class ZedAgent {
         this.logger,
       );
     }
-    this.logger.debug(() => `buildSessionAgent - session ${sessionId}`);
     const agent = await fromConfig({
       config: sessionConfig,
       sessionId,
@@ -383,10 +369,10 @@ export class ZedAgent {
       terminals: terminalSetup?.terminals ?? null,
     };
   }
-  deleteSession(params: DeleteSessionRequest) {
+  deleteSession(params: DeleteSessionRequest): Promise<DeleteSessionResponse> {
     return this.lifecycle.delete(params);
   }
-  closeSession(params: CloseSessionRequest) {
+  closeSession(params: CloseSessionRequest): Promise<CloseSessionResponse> {
     return this.lifecycle.close(params);
   }
   setSessionMode(
@@ -403,7 +389,7 @@ export class ZedAgent {
       dispatchZedConfigOption(this.clientCapabilities, this.sessions, params),
     );
   }
-  async cancel({ sessionId }: acp.CancelNotification) {
+  async cancel({ sessionId }: acp.CancelNotification): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
     await session.cancelPendingPrompt();
@@ -415,7 +401,7 @@ export class ZedAgent {
     }
     return session.prompt(params);
   }
-  async disposeAll() {
+  async disposeAll(): Promise<void> {
     const sessions = [...this.sessions.values()];
     this.sessions.clear();
     await Promise.allSettled(sessions.map((session) => session.dispose()));
@@ -488,7 +474,7 @@ export class Session {
   getApprovalMode(): ApprovalMode {
     return this.agent.getApprovalMode();
   }
-  setConfigOption(configId: string, value: string | boolean) {
+  setConfigOption(configId: string, value: string) {
     return setZedConfigOption(this.agent, this.config, configId, value);
   }
   getConfigOptions = () => buildZedConfigOptions(this.agent, this.config);
@@ -785,12 +771,12 @@ export class Session {
     }
     this.sessionInfo.hydrateFromHistory(items);
   }
-  async replayLiveHistory() {
+  async replayLiveHistory(): Promise<void> {
     await this.streamHistory(
       await readAgentHistoryForReplay(this.agent, this.id),
     );
   }
-  async dispose() {
+  async dispose(): Promise<void> {
     try {
       todoEvents.offTodoUpdated(this.todoListener);
       this.stopConfigUpdates();

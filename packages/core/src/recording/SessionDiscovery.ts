@@ -303,17 +303,25 @@ export class SessionDiscovery {
   ): Promise<string | null | undefined> {
     let reader: readline.Interface | undefined;
     try {
-      reader = readline.createInterface({
-        input: createReadStream(filePath, { encoding: 'utf8' }),
+      const stream = createReadStream(filePath, { encoding: 'utf8' });
+      const streamError = new Promise<never>((_, reject) => {
+        stream.on('error', (err: NodeJS.ErrnoException) => reject(err));
+      });
+      const rl = readline.createInterface({
+        input: stream,
         crlfDelay: Infinity,
       });
+      reader = rl;
       let title: string | null | undefined;
-      for await (const line of reader) {
-        const result = extractSessionMetadataTitle(line);
-        if (result !== undefined) {
-          title = result;
+      const iterate = (async () => {
+        for await (const line of rl) {
+          const result = extractSessionMetadataTitle(line);
+          if (result !== undefined) {
+            title = result;
+          }
         }
-      }
+      })();
+      await Promise.race([iterate, streamError]);
       return title;
     } catch {
       return undefined;
