@@ -50,6 +50,7 @@ import {
   getOrCreateAsyncTaskReminderService,
   setupAsyncTaskAutoTrigger,
 } from './asyncTaskServices.js';
+import { LiveTrustTransitionLifecycle } from './liveTrustTransitionLifecycle.js';
 import { parseSettingsSubagentDefinitions } from './subagentSettingsParser.js';
 
 import {
@@ -113,47 +114,41 @@ import {
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 import type { ToolSchedulerContract } from '../core/toolSchedulerContract.js';
 
-const MAX_TRUST_FAILURES = 100;
-const HOOK_INITIALIZATION_TIMEOUT_MS = 30_000;
-
-function abortError(message: string): DOMException {
-  return new DOMException(message, 'AbortError');
-}
-
-function waitForHookInitialization(
-  initialization: Promise<void>,
-  signal: AbortSignal,
-): Promise<void> {
-  if (signal.aborted) {
-    return Promise.reject(abortError('Hook initialization was cancelled'));
-  }
-  return new Promise<void>((resolve, reject) => {
-    const onAbort = () => {
-      finish(() => reject(abortError('Hook initialization was cancelled')));
-    };
-    const finish = (settle: () => void): void => {
-      clearTimeout(timeoutId);
-      signal.removeEventListener('abort', onAbort);
-      settle();
-    };
-    const timeoutId = setTimeout(() => {
-      finish(() => reject(new Error('Hook initialization timed out')));
-    }, HOOK_INITIALIZATION_TIMEOUT_MS);
-    signal.addEventListener('abort', onAbort, { once: true });
-    initialization.then(
-      () => finish(resolve),
-      (error: unknown) => finish(() => reject(error)),
-    );
-  });
-}
-
 export class Config extends ConfigBase {
   private static readonly logger = new DebugLogger('llxprt:config');
+
+  private readonly liveTrustTransitionLifecycle: LiveTrustTransitionLifecycle;
 
   constructor(params: ConfigParameters) {
     super();
     applyConfigParams(this as unknown as ConfigConstructorTarget, params);
     this.cachedEffectiveTrust = this.isTrustedFolder();
+    this.liveTrustTransitionLifecycle = new LiveTrustTransitionLifecycle({
+      downgradeApprovalMode: () => {
+        if (this.approvalMode !== ApprovalMode.DEFAULT) {
+          this.approvalMode = ApprovalMode.DEFAULT;
+        }
+      },
+      removeTrustedPolicyRules: () =>
+        this.policyEngine.removeRulesBySource(MCP_TRUSTED_POLICY_SOURCE),
+      updateTrustPolicy: (trusted) => {
+        if (trusted) {
+          for (const rule of buildMcpTrustedRules({
+            mcpServers: this.getMcpServers(),
+          })) {
+            this.policyEngine.addRule(rule);
+          }
+        } else {
+          this.mcpClientManager?.quarantineForTrustRevocation();
+        }
+      },
+      transitionMcp: (trusted) =>
+        trusted
+          ? this.mcpClientManager?.onFolderTrustGained()
+          : this.mcpClientManager?.onFolderTrustRevoked(),
+      initializeHooks: () => this.getHookSystem()?.initialize(),
+      emitTrustChanged: (trusted) => coreEvents.emitFolderTrustChanged(trusted),
+    });
   }
 
   // Issue #2325: Background MCP discovery promise started in initialize() so
@@ -609,42 +604,8 @@ export class Config extends ConfigBase {
     const effectiveTrust = this.isTrustedFolder();
     this.cachedEffectiveTrust = effectiveTrust;
     if (previousEffectiveTrust !== effectiveTrust) {
-      this.applyTrustTransition(effectiveTrust, false);
+      this.liveTrustTransitionLifecycle.apply(effectiveTrust);
     }
-  }
-
-  /**
-   * Shared core for all trust-transition paths. Updates the effective trust
-   * state, synchronously downgrades approval mode if revoking, and fires the
-   * serialized side-effect chain.
-   */
-  private applyTrustTransition(
-    trusted: boolean,
-    updateLocalFallback = true,
-  ): void {
-    if (updateLocalFallback) {
-      this.trustedFolder = trusted;
-    }
-    if (!trusted && this.approvalMode !== ApprovalMode.DEFAULT) {
-      this.approvalMode = ApprovalMode.DEFAULT;
-    }
-    this.runTrustTransitionStep(() =>
-      this.policyEngine.removeRulesBySource(MCP_TRUSTED_POLICY_SOURCE),
-    );
-    const updateTrustPolicy = trusted
-      ? () => {
-          for (const rule of buildMcpTrustedRules({
-            mcpServers: this.getMcpServers(),
-          })) {
-            this.policyEngine.addRule(rule);
-          }
-        }
-      : () => this.mcpClientManager?.quarantineForTrustRevocation();
-    this.runTrustTransitionStep(updateTrustPolicy);
-    this.enqueueTrustTransition(trusted);
-    this.runTrustTransitionStep(() =>
-      coreEvents.emitFolderTrustChanged(trusted),
-    );
   }
 
   setPtyTerminalSize(
@@ -900,87 +861,14 @@ export class Config extends ConfigBase {
     return this.hookSystem;
   }
 
-  private trustTransitionChain: Promise<void> = Promise.resolve();
-  private trustTransitionFailures: unknown[] = [];
-  private readonly trustTransitionAbortController = new AbortController();
-  private disposing = false;
   private ideTrust: boolean | undefined;
   private cachedEffectiveTrust: boolean;
-
-  private runTrustTransitionStep(step: () => void): void {
-    try {
-      step();
-    } catch (error) {
-      Config.logger.error(`Trust step failed: ${getErrorMessage(error)}`);
-      const failures = [...this.trustTransitionFailures, error];
-      this.trustTransitionFailures = failures.slice(-MAX_TRUST_FAILURES);
-    }
-  }
-
-  /**
-   * Serializes trust-transition side-effects (MCP connect/disconnect, hook
-   * re-initialization) per-Config instance while preserving every ordered
-   * security boundary, including transient revocations.
-   */
-  private enqueueTrustTransition(trusted: boolean): void {
-    if (this.disposing) {
-      return;
-    }
-    this.trustTransitionChain = this.trustTransitionChain.then(async () => {
-      const failures: unknown[] = [];
-      try {
-        if (trusted) {
-          await this.mcpClientManager?.onFolderTrustGained();
-        } else {
-          await this.mcpClientManager?.onFolderTrustRevoked();
-        }
-      } catch (error) {
-        Config.logger.error(
-          `Error during trust transition side-effects: ${getErrorMessage(error)}`,
-        );
-        failures.push(error);
-      }
-      if (!this.disposing) {
-        try {
-          const system = this.getHookSystem();
-          if (system) {
-            await waitForHookInitialization(
-              system.initialize(),
-              this.trustTransitionAbortController.signal,
-            );
-          }
-        } catch (error) {
-          const initializationWasCancelled =
-            this.trustTransitionAbortController.signal.aborted &&
-            error instanceof DOMException &&
-            error.name === 'AbortError';
-          if (!initializationWasCancelled) {
-            Config.logger.error(
-              `Error re-initializing hooks during trust transition: ${getErrorMessage(error)}`,
-            );
-            failures.push(error);
-          }
-        }
-      }
-      this.trustTransitionFailures = [
-        ...this.trustTransitionFailures,
-        ...failures,
-      ].slice(-MAX_TRUST_FAILURES);
-    });
-  }
 
   /**
    * Resolves once any pending trust-transition side-effects have settled.
    */
   async whenTrustTransitionSettled(): Promise<void> {
-    await this.trustTransitionChain;
-    const failures = this.trustTransitionFailures.splice(0);
-    if (failures.length === 1) {
-      throw failures[0];
-    }
-    if (failures.length > 1) {
-      throw new AggregateError(failures, 'Trust transition failed');
-    }
+    await this.liveTrustTransitionLifecycle.whenSettled();
   }
 
   private ideTrustChangeListener:
@@ -1008,8 +896,7 @@ export class Config extends ConfigBase {
   }
 
   async dispose(): Promise<void> {
-    this.disposing = true;
-    this.trustTransitionAbortController.abort();
+    this.liveTrustTransitionLifecycle.beginDisposal();
     const stopPromise = this.mcpClientManager?.stop();
     if (
       this.ideTrustChangeListener &&
