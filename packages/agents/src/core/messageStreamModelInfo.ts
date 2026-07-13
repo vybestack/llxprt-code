@@ -33,7 +33,12 @@ function isModelProvider(value: unknown): value is ModelProvider {
 export function resolveModelForInfo(deps: ModelInfoDeps): string {
   const providerManager =
     deps.config.getContentGeneratorConfig()?.providerManager;
-  const activeProvider: unknown = providerManager?.getActiveProvider();
+  let activeProvider: unknown;
+  try {
+    activeProvider = providerManager?.getActiveProvider();
+  } catch {
+    return deps.getEffectiveModel();
+  }
   if (isModelProvider(activeProvider)) {
     const activeModel = activeProvider.getCurrentModel?.();
     if (typeof activeModel === 'string' && activeModel.trim() !== '')
@@ -72,7 +77,7 @@ export function getProfileName(config: Config): string | null {
     const profileName = settingsService.getCurrentProfileName();
     if (profileName !== null) return profileName;
     const profile = settingsService.get('currentProfile');
-    return typeof profile === 'string' ? profile : null;
+    return typeof profile === 'string' && profile !== '' ? profile : null;
   } catch {
     return null;
   }

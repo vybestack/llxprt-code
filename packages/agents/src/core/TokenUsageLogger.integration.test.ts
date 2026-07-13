@@ -50,6 +50,17 @@ function isSerializedTokenUsageRecord(
   if (!('estimator' in value) || typeof value.estimator !== 'string')
     return false;
   if (
+    !('tiktoken_tokens' in value) ||
+    (typeof value.tiktoken_tokens !== 'number' &&
+      value.tiktoken_tokens !== null)
+  )
+    return false;
+  if (
+    !('tiktoken_estimation_failed' in value) ||
+    typeof value.tiktoken_estimation_failed !== 'boolean'
+  )
+    return false;
+  if (
     !('actual_prompt_tokens' in value) ||
     typeof value.actual_prompt_tokens !== 'number'
   )

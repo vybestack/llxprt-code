@@ -27,7 +27,7 @@ import { resolvePreflightOverflow } from './preflightRecovery.js';
 import {
   recordTokenEstimate,
   estimateRequestTokens,
-  estimateStructuredTokensOrZero,
+  estimateStructuredTokensOrFallback,
 } from './tokenUsageEstimateLogger.js';
 import { buildModelInfo, modelIdentityKey } from './messageStreamModelInfo.js';
 import type { Todo } from '@vybestack/llxprt-code-tools';
@@ -267,7 +267,10 @@ export class MessageStreamOrchestrator {
       getTokenLimitForConfiguredContext(getEffectiveModel(), config) -
       chat.getLastPromptTokenCount();
 
-    const fallback = estimateStructuredTokensOrZero(initialRequest);
+    const fallback = estimateStructuredTokensOrFallback(
+      initialRequest,
+      Math.max(1, remainingTokenCount + 1),
+    );
 
     if (remainingTokenCount <= 0) {
       recordTokenEstimate(

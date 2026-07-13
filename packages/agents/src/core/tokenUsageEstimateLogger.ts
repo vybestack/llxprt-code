@@ -29,8 +29,9 @@ const OPENAI_PROVIDERS = new Set([
 const ANTHROPIC_PROVIDERS = new Set(['anthropic']);
 
 export function resolveEstimatorType(providerName: string): TokenEstimatorType {
-  if (OPENAI_PROVIDERS.has(providerName)) return 'openai-tiktoken';
-  if (ANTHROPIC_PROVIDERS.has(providerName)) return 'anthropic-char';
+  const normalizedProviderName = providerName.toLowerCase();
+  if (OPENAI_PROVIDERS.has(normalizedProviderName)) return 'openai-tiktoken';
+  if (ANTHROPIC_PROVIDERS.has(normalizedProviderName)) return 'anthropic-char';
   return 'core-fallback';
 }
 
@@ -60,8 +61,11 @@ export function recordTokenEstimate(
   });
 }
 
-export function estimateStructuredTokensOrZero(request: PartListUnion): number {
-  return safeEstimateStructuredTokens(request).tokens ?? 0;
+export function estimateStructuredTokensOrFallback(
+  request: PartListUnion,
+  fallback: number,
+): number {
+  return safeEstimateStructuredTokens(request).tokens ?? fallback;
 }
 
 export async function estimateRequestTokens(
