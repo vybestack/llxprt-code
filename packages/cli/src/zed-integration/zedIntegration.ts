@@ -45,9 +45,7 @@ import {
 import { ZedPathResolver } from './zed-path-resolver.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
-  emitToolCallStart,
-  emitToolStatus,
-  emitToolResult,
+  emitAgentToolEvent,
   requestToolConfirmation,
   type PermissionRoundTripResult,
 } from './zed-tool-handler.js';
@@ -629,16 +627,14 @@ export class Session {
         return null;
       }
       case 'tool-call':
-        await batcher.flush();
-        await emitToolCallStart(event.call, (u) => this.sendUpdate(u));
-        return null;
       case 'tool-status':
-        await batcher.flush();
-        await emitToolStatus(event.update, (u) => this.sendUpdate(u));
-        return null;
       case 'tool-result':
         await batcher.flush();
-        await emitToolResult(event.result, (u) => this.sendUpdate(u));
+        await emitAgentToolEvent(
+          event,
+          (update) => this.sendUpdate(update),
+          this.agent.tools,
+        );
         return null;
       case 'tool-confirmation':
         await batcher.flush();
@@ -664,13 +660,9 @@ export class Session {
           event.info.systemMessage ?? 'Agent stopped by a hook blocker.',
         );
       case 'loop-detected':
-        // The agent detects a tool-call loop. Map to end_turn so the client
-        // sees a clean turn end rather than an indefinite hang.
         await batcher.flush();
         return 'end_turn';
       case 'notice':
-        // Informational notices have no direct ACP SessionUpdate; surface as
-        // an agent message so the user sees them.
         await batcher.flush();
         await this.sendUpdate({
           sessionUpdate: 'agent_message_chunk',
@@ -687,14 +679,8 @@ export class Session {
       case 'model-info':
       case 'retry':
       case 'citation':
-        // These variants have no faithful ACP translation: usage is mapped
-        // separately, compression/model-info/citation are metadata, retry is
-        // an internal agent detail, and context-warning is advisory. They are
-        // intentionally consumed without surfacing to ACP.
         return null;
       default: {
-        // Exhaustiveness guard: any future AgentEvent variant added to the
-        // union without an explicit case above will fail to type-check here.
         const exhaustive: never = event;
         throw new Error(`Unhandled agent event: ${String(exhaustive)}`);
       }
@@ -703,10 +689,6 @@ export class Session {
   private async sendUsageUpdate(
     usage: Extract<AgentEvent, { type: 'usage' }>['usage'],
   ): Promise<void> {
-    // size = the configured context window (user override -> provider limit ->
-    // model lookup, the shared #2251 resolver), used = tokens now in context —
-    // so the client renders consumption against the real window (issue #1607)
-    // instead of the previous used===size placeholder.
     const update = buildUsageUpdate(
       usage,
       getTokenLimitForConfiguredContext(this.config.getModel(), this.config),
@@ -751,6 +733,7 @@ export class Session {
           event.confirmation.name,
           event.confirmation.details,
           this.connection,
+          this.agent.tools.get(event.confirmation.name)?.kind,
         ),
         cancelled,
       ] as const);
@@ -824,11 +807,6 @@ export class Session {
   async streamHistory(items: readonly IContent[]): Promise<void> {
     const updates = mapHistoryToSessionUpdates(items);
     for (const update of updates) {
-      // STRICT: a failed delivery here (dead/failing transport) must reject so
-      // loadSession can clean up and report the failure instead of resolving as
-      // a success with a lost transcript (FINDING A). wrapReplayFailure maps the
-      // rejection to a precise internalError (passing an existing RequestError
-      // through unchanged) for loadSession's catch path.
       try {
         await this.sendUpdateStrict(update);
       } catch (error) {

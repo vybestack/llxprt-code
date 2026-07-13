@@ -6,6 +6,7 @@
 
 import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-core';
 import {
+  Kind,
   ToolConfirmationOutcome,
   type ToolConfirmationPayload,
 } from '@vybestack/llxprt-code-tools';
@@ -13,7 +14,9 @@ import type * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
 import { toPermissionOptions } from './zed-helpers.js';
 import type {
+  AgentEvent,
   AgentToolCall,
+  AgentToolControl,
   AgentToolResult,
   ToolUpdate,
 } from '@vybestack/llxprt-code-agents';
@@ -24,6 +27,7 @@ type Dict = Readonly<Record<string, unknown>>;
 export async function emitToolCallStart(
   call: AgentToolCall,
   sendUpdate: SendUpdateFn,
+  registeredKind?: string,
 ): Promise<void> {
   // rawInput carries the tool arguments for parity with the replay start shape
   // (zed-session-replay.ts buildToolCallStart) and because ACP recommends it on
@@ -35,7 +39,7 @@ export async function emitToolCallStart(
     title: call.name,
     content: [],
     locations: buildToolLocations(call.args),
-    kind: inferToolKind(call.name),
+    kind: resolveToolKind(call.name, registeredKind),
     rawInput: call.args,
   });
 }
@@ -43,6 +47,7 @@ export async function emitToolCallStart(
 export async function emitToolStatus(
   update: ToolUpdate,
   sendUpdate: SendUpdateFn,
+  registeredKind?: string,
 ): Promise<void> {
   const status = mapToolUpdateStatus(update.status);
   if (status === null) {
@@ -54,12 +59,14 @@ export async function emitToolStatus(
     toolCallId: update.id,
     status,
     content: text ? textContent(text) : [],
+    kind: resolveToolKind(update.name, registeredKind),
   });
 }
 
 export async function emitToolResult(
   result: AgentToolResult,
   sendUpdate: SendUpdateFn,
+  registeredKind?: string,
 ): Promise<void> {
   const isError = result.isError === true;
   const content = isError
@@ -70,7 +77,39 @@ export async function emitToolResult(
     toolCallId: result.id,
     status: isError ? 'failed' : 'completed',
     content,
+    kind: resolveToolKind(result.name, registeredKind),
   });
+}
+
+export async function emitAgentToolEvent(
+  event: Extract<
+    AgentEvent,
+    { type: 'tool-call' | 'tool-status' | 'tool-result' }
+  >,
+  sendUpdate: SendUpdateFn,
+  tools: Pick<AgentToolControl, 'get'>,
+): Promise<void> {
+  if (event.type === 'tool-call') {
+    await emitToolCallStart(
+      event.call,
+      sendUpdate,
+      tools.get(event.call.name)?.kind,
+    );
+    return;
+  }
+  if (event.type === 'tool-status') {
+    await emitToolStatus(
+      event.update,
+      sendUpdate,
+      tools.get(event.update.name)?.kind,
+    );
+    return;
+  }
+  await emitToolResult(
+    event.result,
+    sendUpdate,
+    tools.get(event.result.name)?.kind,
+  );
 }
 
 function buildErrorContent(result: AgentToolResult): acp.ToolCallContent[] {
@@ -89,6 +128,7 @@ export async function requestToolConfirmation(
   name: string,
   details: unknown,
   connection: acp.AgentSideConnection,
+  registeredKind?: string,
 ): Promise<PermissionRoundTripResult> {
   const confirmationDetails = coerceConfirmationDetails(details);
   const params: acp.RequestPermissionRequest = {
@@ -103,7 +143,7 @@ export async function requestToolConfirmation(
       title: confirmationDetails?.title ?? name,
       content: buildConfirmationContent(confirmationDetails),
       locations: buildConfirmationLocations(confirmationDetails),
-      kind: inferToolKind(name),
+      kind: resolveToolKind(name, registeredKind),
     },
   };
   return parsePermissionOutcome(await connection.requestPermission(params));
@@ -362,6 +402,21 @@ export const TOOL_KIND_BY_NAME: ReadonlyMap<string, acp.ToolKind> = new Map([
 
 export function inferToolKind(name: string): acp.ToolKind | undefined {
   return TOOL_KIND_BY_NAME.get(name);
+}
+
+const ACP_TOOL_KINDS: ReadonlySet<string> = new Set(Object.values(Kind));
+
+export function toAcpToolKind(kind: string | undefined): acp.ToolKind {
+  return kind !== undefined && ACP_TOOL_KINDS.has(kind)
+    ? (kind as acp.ToolKind)
+    : 'other';
+}
+
+function resolveToolKind(
+  name: string,
+  registeredKind: string | undefined,
+): acp.ToolKind {
+  return toAcpToolKind(registeredKind ?? inferToolKind(name));
 }
 
 function asRecord(value: unknown): Dict | null {

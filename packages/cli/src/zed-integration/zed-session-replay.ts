@@ -52,7 +52,11 @@ import type {
   ToolCallBlock,
   ToolResponseBlock,
 } from '@vybestack/llxprt-code-core';
-import { buildToolLocations, inferToolKind } from './zed-tool-handler.js';
+import {
+  buildToolLocations,
+  inferToolKind,
+  toAcpToolKind,
+} from './zed-tool-handler.js';
 import { extractToolResultText } from './zed-content-utils.js';
 
 /** Readonly JSON-object shape used when narrowing recorded `unknown` payloads. */
@@ -68,14 +72,14 @@ type Dict = Readonly<Record<string, unknown>>;
  * tool response for a pending id emits the terminal completed/failed update and
  * clears it; unmatched responses are dropped; and any call still pending after
  * the whole history is walked yields a trailing synthetic failed update, in
- * original start order (Set iteration preserves insertion order). The output
+ * original start order (Map iteration preserves insertion order). The output
  * preserves history order and, per message, block order.
  */
 export function mapHistoryToSessionUpdates(
   items: readonly IContent[],
 ): acp.SessionUpdate[] {
   const updates: acp.SessionUpdate[] = [];
-  const pending = new Set<string>();
+  const pending = new Map<string, acp.ToolKind>();
   // FINDING D1: iterate as `unknown` because persisted history read back from
   // disk is UNTRUSTED — the static `readonly IContent[]` type is a contract, not
   // a runtime guarantee. A corrupt/truncated JSONL line can yield a null item or
@@ -106,10 +110,10 @@ export function mapHistoryToSessionUpdates(
   }
   // Every id still pending had no delivered response (an interrupted turn):
   // synthesize its terminal failed update now, in start order, so the client
-  // does not render a perpetually-running tool. Set iteration order is the
+  // does not render a perpetually-running tool. Map iteration preserves the
   // insertion (call-start) order.
-  for (const toolCallId of pending) {
-    updates.push(buildSyntheticFailedUpdate(toolCallId));
+  for (const [toolCallId, kind] of pending) {
+    updates.push(buildSyntheticFailedUpdate(toolCallId, kind));
   }
   return updates;
 }
@@ -124,7 +128,7 @@ export function mapHistoryToSessionUpdates(
 function appendBlockUpdates(
   speaker: IContent['speaker'],
   block: ContentBlock,
-  pending: Set<string>,
+  pending: Map<string, acp.ToolKind>,
   out: acp.SessionUpdate[],
 ): void {
   switch (block.type) {
@@ -139,8 +143,9 @@ function appendBlockUpdates(
       // (nothing could ever pair its response) and would emit an update carrying
       // an undefined toolCallId on the wire. Skip it entirely.
       if (speaker === 'ai' && isNonEmptyString(block.id)) {
-        out.push(buildToolCallStart(block));
-        pending.add(block.id);
+        const kind = toolKindForRecordedCall(block);
+        out.push(buildToolCallStart(block, kind));
+        pending.set(block.id, kind);
       }
       return;
     case 'tool_response':
@@ -175,14 +180,15 @@ function appendBlockUpdates(
  */
 function appendToolResponseUpdate(
   block: ToolResponseBlock,
-  pending: Set<string>,
+  pending: Map<string, acp.ToolKind>,
   out: acp.SessionUpdate[],
 ): void {
-  if (!pending.has(block.callId)) {
+  const kind = pending.get(block.callId);
+  if (kind === undefined) {
     return;
   }
   pending.delete(block.callId);
-  out.push(mapToolResponseBlock(block));
+  out.push(mapToolResponseBlock(block, kind));
 }
 
 /**
@@ -190,12 +196,16 @@ function appendToolResponseUpdate(
  * response: a 'failed' tool_call_update with empty content, matching the live
  * behavior of never leaving a perpetually-running tool on the client.
  */
-function buildSyntheticFailedUpdate(toolCallId: string): acp.SessionUpdate {
+function buildSyntheticFailedUpdate(
+  toolCallId: string,
+  kind: acp.ToolKind,
+): acp.SessionUpdate {
   return {
     sessionUpdate: 'tool_call_update',
     toolCallId,
     status: 'failed',
     content: [],
+    kind,
   };
 }
 
@@ -264,21 +274,19 @@ function mapThinkingBlock(
  * ai tool_call -> in_progress tool_call. Field names + shape mirror the live
  * start path in zed-tool-handler.ts (emitToolCallStart): status 'in_progress',
  * empty content, locations inferred from the recorded parameters via the SAME
- * buildToolLocations helper, kind inferred via the SAME inferToolKind table, and
- * rawInput ALWAYS present ({} when parameters are missing/malformed) exactly as
- * the live path always sends call.args. kind is omitted (rather than sent as
- * undefined) for unknown tools; both are wire-identical after JSON encoding.
+ * buildToolLocations helper, kind inferred via the SAME inferToolKind table and
+ * normalized to `other` for unknown tools, and rawInput ALWAYS present ({} when
+ * parameters are missing/malformed) exactly as the live path sends call.args.
  */
-function buildToolCallStart(block: ToolCallBlock): acp.SessionUpdate {
+function buildToolCallStart(
+  block: ToolCallBlock,
+  kind: acp.ToolKind,
+): acp.SessionUpdate {
   // FINDING D4: fall back to the id for the title when `name` is missing/non-
   // string in malformed persisted data. Keeping the (already-validated string)
   // id as the title preserves identifying info on the wire rather than sending
-  // an undefined title. inferToolKind is only consulted for a validated string
-  // name — its signature requires one, and a malformed block must not leak a
-  // non-string into the lookup — so an unknown/malformed name yields undefined
-  // (kind omitted), which is correct for an unknown tool.
+  // an undefined title.
   const named = isNonEmptyString(block.name);
-  const kind = named ? inferToolKind(block.name) : undefined;
   // rawInput is sent unconditionally ({} when the recorded parameters are
   // missing/malformed) to stay wire-identical with the live start path in
   // zed-tool-handler.ts (emitToolCallStart), which always includes rawInput.
@@ -290,9 +298,15 @@ function buildToolCallStart(block: ToolCallBlock): acp.SessionUpdate {
     status: 'in_progress',
     content: [],
     locations: buildToolLocations(rawInput),
-    ...(kind !== undefined ? { kind } : {}),
+    kind,
     rawInput,
   };
+}
+
+function toolKindForRecordedCall(block: ToolCallBlock): acp.ToolKind {
+  return toAcpToolKind(
+    isNonEmptyString(block.name) ? inferToolKind(block.name) : undefined,
+  );
 }
 
 /**
@@ -391,7 +405,10 @@ function asRenderableBlock(value: unknown): ContentBlock | null {
  * intentionally deferred here (tracked on issue #1604); replay surfaces the
  * textual result instead of a structured diff.
  */
-function mapToolResponseBlock(block: ToolResponseBlock): acp.SessionUpdate {
+function mapToolResponseBlock(
+  block: ToolResponseBlock,
+  kind: acp.ToolKind,
+): acp.SessionUpdate {
   const record = asRecord(block.result);
   const failed = isFailedResponse(block, record);
   const text = extractResponseText(block, record, failed);
@@ -404,6 +421,7 @@ function mapToolResponseBlock(block: ToolResponseBlock): acp.SessionUpdate {
     toolCallId: block.callId,
     status: failed ? 'failed' : 'completed',
     content,
+    kind,
   };
 }
 
