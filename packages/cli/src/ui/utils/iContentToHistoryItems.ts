@@ -16,6 +16,8 @@ import {
   ToolCallStatus,
 } from '../types.js';
 
+const NEWLINE = String.fromCharCode(10);
+
 function safeToolResultToString(result: unknown): string {
   if (typeof result === 'string') {
     return result;
@@ -51,23 +53,54 @@ function buildResponseMap(
   return map;
 }
 
+/**
+ * Appends a text fragment to the running list of markdown segments. Adjacent
+ * text fragments are concatenated onto the trailing segment so they render as
+ * flowing prose (matching the live streaming path) instead of one line each.
+ */
+function appendTextSegment(segments: string[], text: string): void {
+  if (text === '') return;
+  const lastIndex = segments.length - 1;
+  if (
+    segments.length > 0 &&
+    !isCodeSegment(segments[lastIndex]) &&
+    !segments[lastIndex].endsWith(NEWLINE)
+  ) {
+    segments[lastIndex] += text;
+  } else {
+    segments.push(text);
+  }
+}
+
+/**
+ * A code block is emitted as a fenced markdown segment; detecting it lets us
+ * keep text flowing without merging into a fence.
+ */
+function isCodeSegment(segment: string): boolean {
+  return segment.startsWith('```');
+}
+
 function processAiContent(
   content: IContent,
   responseMap: Map<string, { result: unknown; error?: string }>,
   items: HistoryItem[],
   idCounter: { value: number },
 ): void {
-  const textParts: string[] = [];
+  const segments: string[] = [];
   const thinkingBlocks: ThinkingBlock[] = [];
   const toolCallBlocks: ToolCallBlock[] = [];
 
   for (const block of content.blocks) {
     switch (block.type) {
       case 'text':
-        textParts.push(block.text);
+        // Consecutive text blocks are fragments of the same flowing prose
+        // (e.g. per-streamed-token), so they are concatenated directly to
+        // match the live streaming path. Joining them with newlines caused a
+        // resumed conversation to render one token per line (#2549).
+        appendTextSegment(segments, block.text);
         break;
       case 'code':
-        textParts.push(`\`\`\`${block.language ?? ''}\n${block.code}\n\`\`\``);
+        segments.push(`\`\`\`${block.language ?? ''}\n${block.code}\n\`\`\``);
         break;
       case 'thinking':
         thinkingBlocks.push(block);
@@ -79,7 +112,7 @@ function processAiContent(
         break;
     }
   }
-  const combinedText = textParts.join('\n');
+  const combinedText = segments.join(NEWLINE);
 
   if (combinedText) {
     items.push({
