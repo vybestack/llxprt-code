@@ -16,11 +16,7 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  REPO_ROOT,
-  bunAvailable,
-  missingBunMessage,
-} from './genai-enclave-guard-helpers.ts';
+import { REPO_ROOT, bunAvailable } from './genai-enclave-guard-helpers.ts';
 
 describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
   'check-genai-enclave — allowlist consistency',
@@ -147,9 +143,5 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         `Config/manifest version drift: ${drift.join(', ')}`,
       ).toEqual([]);
     });
-
-    // Silence unused-warning when Bun is not available — the skip message is
-    // informational only.
-    void missingBunMessage;
   },
 );

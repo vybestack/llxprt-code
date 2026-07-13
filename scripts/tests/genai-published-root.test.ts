@@ -22,10 +22,11 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { SANCTIONED_GENAI_VERSION } from '../genai-enclave/config.ts';
 import { REPO_ROOT, bunAvailable } from './genai-enclave-guard-helpers.ts';
 
 const GENAI_PACKAGE = '@google/genai';
-const REQUIRED_VERSION = '1.30.0';
+const REQUIRED_VERSION = SANCTIONED_GENAI_VERSION;
 const REQUIRED_WORKSPACES = [
   '.',
   'packages/core',

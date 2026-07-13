@@ -20,11 +20,6 @@ import { fileURLToPath } from 'node:url';
 export const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = join(SCRIPT_DIR, '..', '..');
 export const SCRIPT = join(REPO_ROOT, 'scripts', 'check-genai-enclave.ts');
-export const INVENTORY_SCRIPT = join(
-  REPO_ROOT,
-  'scripts',
-  'genai-import-inventory.ts',
-);
 export const RUNTIME = process.env.BUN_EXECUTABLE ?? 'bun';
 
 export const missingBunMessage =
@@ -86,33 +81,6 @@ export function runScriptRealRepo(expectedCode?: number): ScriptResult {
   delete env.GENAI_ENCLAVE_ROOT;
   return runGuard(env, 60_000, 20 * 1024 * 1024, expectedCode);
 }
-
-/**
- * Run the genai-import-inventory script with --check against the real repo.
- * Verifies the checked-in baseline matches the current set of @google/genai
- * importers (the #2352 enforcement ratchet).
- */
-export function runInventoryCheck(): ScriptResult {
-  let stdout = '';
-  let stderr = '';
-  let exitCode = 0;
-  try {
-    stdout = execFileSync(RUNTIME, [INVENTORY_SCRIPT, '--check'], {
-      cwd: REPO_ROOT,
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 60_000,
-      maxBuffer: 20 * 1024 * 1024,
-    });
-  } catch (error) {
-    const err = error as ExecErrorLike;
-    stdout = err.stdout ? err.stdout.toString() : '';
-    stderr = err.stderr ? err.stderr.toString() : '';
-    exitCode = err.status ?? 1;
-  }
-  return { code: exitCode, stdout, stderr };
-}
-
 function runGuard(
   env: NodeJS.ProcessEnv,
   timeout: number,

@@ -210,7 +210,7 @@ describe('scanGenaiImports — computed (non-string-literal) specifiers', () => 
     expect(scanImportsFor("await import('node:fs');")).toBe(0);
   });
 
-  it('does NOT flag a string-literal import of @google/genai (it is a genai-import, not computed)', () => {
+  it('flags a string-literal @google/genai import as genai-import, not computed', () => {
     const sf = parseSourceFile('test.ts', "await import('@google/genai');");
     const violations = scanGenaiImports(sf, 'test.ts');
     expect(violations).toHaveLength(1);
@@ -319,6 +319,15 @@ describe('scanGeminiExports — export default', () => {
   it('detects export default of a Gemini-named function identifier', () => {
     expect(
       scanExportsFor('function geminiThing() {}\nexport default geminiThing;'),
+    ).toContain('geminiThing');
+  });
+
+  it('detects inline default class and function declarations with Gemini names', () => {
+    expect(scanExportsFor('export default class GeminiHandler {}')).toContain(
+      'GeminiHandler',
+    );
+    expect(
+      scanExportsFor('export default function geminiThing() {}'),
     ).toContain('geminiThing');
   });
 

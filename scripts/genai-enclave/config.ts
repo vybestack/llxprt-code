@@ -86,25 +86,27 @@ export interface DependencyManifestAllowlistEntry {
  * shown. The root declaration is a packaging bridge for the root artifact;
  * source imports remain confined to the implementation enclaves.
  */
+export const SANCTIONED_GENAI_VERSION = '1.30.0';
+
 export const GENAI_DEPENDENCY_MANIFESTS: readonly DependencyManifestAllowlistEntry[] =
   [
     {
       workspaceDir: '.',
-      version: '1.30.0',
+      version: SANCTIONED_GENAI_VERSION,
       justification:
         'The published root artifact ships core/provider source, so npm must ' +
         'install the SDK even though root source may not import it.',
     },
     {
       workspaceDir: 'packages/core',
-      version: '1.30.0',
+      version: SANCTIONED_GENAI_VERSION,
       justification:
         'Code-Assist back-end (packages/core/src/code_assist/) requires the ' +
         'SDK at runtime for OAuth and API calls.',
     },
     {
       workspaceDir: 'packages/providers',
-      version: '1.30.0',
+      version: SANCTIONED_GENAI_VERSION,
       justification:
         'Gemini provider implementation (packages/providers/src/gemini/) ' +
         'requires the SDK at runtime for API calls.',
