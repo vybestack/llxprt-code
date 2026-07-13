@@ -14,6 +14,12 @@ import {
 import { buildSessionModes } from './zed-helpers.js';
 import { listRecordedSessions } from './zed-session-listing.js';
 import type { LifecycleSession } from './zed-session-pagination.js';
+import type {
+  CloseSessionRequest,
+  CloseSessionResponse,
+  DeleteSessionRequest,
+  DeleteSessionResponse,
+} from './acp-types.js';
 
 export interface LifecycleSessionHandle {
   getApprovalMode(): ApprovalMode;
@@ -61,14 +67,14 @@ export class SessionLifecycle {
     );
   }
 
-  close(params: acp.CloseSessionRequest): Promise<acp.CloseSessionResponse> {
+  close(params: CloseSessionRequest): Promise<CloseSessionResponse> {
     return this.runSerialized(params.sessionId, async () => {
       await this.disposeLive(params.sessionId);
       return {};
     });
   }
 
-  delete(params: acp.DeleteSessionRequest): Promise<acp.DeleteSessionResponse> {
+  delete(params: DeleteSessionRequest): Promise<DeleteSessionResponse> {
     return this.runSerialized(params.sessionId, () =>
       this.performDelete(params),
     );
@@ -113,8 +119,8 @@ export class SessionLifecycle {
   }
 
   private async performDelete(
-    params: acp.DeleteSessionRequest,
-  ): Promise<acp.DeleteSessionResponse> {
+    params: DeleteSessionRequest,
+  ): Promise<DeleteSessionResponse> {
     const hadLiveSession = await this.disposeLive(params.sessionId);
     const projectRoot = this.config.getProjectRoot();
     const result = await deleteSessionById(

@@ -13,6 +13,7 @@ import {
   type RuntimeModel,
 } from '@vybestack/llxprt-code-core';
 import { parseEphemeralSettingValue } from '@vybestack/llxprt-code-providers/runtime.js';
+import type { ClientCapabilitiesWithSession } from './acp-types.js';
 
 const REASONING_VALUES = ['minimal', 'low', 'medium', 'high', 'xhigh'];
 const EMOJI_VALUES = ['allowed', 'auto', 'warn', 'error'];
@@ -135,7 +136,7 @@ export async function applyZedConfigOption(
 }
 
 export async function zedConfigOptionsForClient(
-  capabilities: acp.ClientCapabilities | undefined,
+  capabilities: ClientCapabilitiesWithSession | undefined,
   agent: Pick<Agent, 'getModel' | 'getProviderStatus'>,
   config: Config,
 ): Promise<Pick<acp.NewSessionResponse, 'configOptions'>> {
@@ -169,7 +170,7 @@ interface ConfigurableZedSession {
 }
 
 export function dispatchZedConfigOption(
-  capabilities: acp.ClientCapabilities | undefined,
+  capabilities: ClientCapabilitiesWithSession | undefined,
   sessions: ReadonlyMap<string, ConfigurableZedSession>,
   params: acp.SetSessionConfigOptionRequest,
 ): Promise<acp.SetSessionConfigOptionResponse> {
@@ -221,7 +222,7 @@ export function observeZedConfigOptions(
 }
 
 export function zedSessionConfigOptions(
-  capabilities: acp.ClientCapabilities | undefined,
+  capabilities: ClientCapabilitiesWithSession | undefined,
   session: { getConfigOptions(): Promise<acp.SessionConfigOption[]> },
 ): Promise<Pick<acp.LoadSessionResponse, 'configOptions'>> {
   return capabilities?.session?.configOptions == null
