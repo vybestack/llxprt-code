@@ -191,7 +191,7 @@ describe('session_metadata recording (issue #1611)', () => {
       expect(result.metadata.title).toBe('Updated title');
     });
 
-    it('records a warning for session_metadata before session_start', async () => {
+    it('returns a fatal replay error when session_metadata precedes session_start', async () => {
       const chatsDir = await makeTempChatsDir();
       const filePath = path.join(chatsDir, 'session-test-meta-early.jsonl');
       await writeJsonlFile(filePath, [

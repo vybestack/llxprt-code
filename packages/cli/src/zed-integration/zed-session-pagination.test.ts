@@ -142,6 +142,24 @@ describe('session lifecycle pagination', () => {
     ]);
   });
 
+  it('continues a legacy page when updatedAt is valid but not canonical', () => {
+    const legacy: LifecycleSession[] = [
+      { sessionId: 'new', cwd: '/w', updatedAt: '2026-06-01T00:00:00Z' },
+      { sessionId: 'old', cwd: '/w', updatedAt: '2026-01-01T00:00:00Z' },
+    ];
+    const first = paginateSessions(legacy, { cwd: null, cursor: null }, 1);
+
+    const second = paginateSessions(
+      legacy,
+      { cwd: null, cursor: first.nextCursor ?? null },
+      1,
+    );
+
+    expect(second.sessions.map((session) => session.sessionId)).toStrictEqual([
+      'old',
+    ]);
+  });
+
   it('rejects a legacy v1 cursor (version mismatch)', () => {
     const v1Cursor = Buffer.from(
       JSON.stringify({

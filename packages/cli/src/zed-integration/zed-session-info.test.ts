@@ -296,17 +296,16 @@ describe('SessionTitleTracker.hydrateFromHistory (issue #1611 finding 2: restore
     expect(title).toBe('First title');
   });
 
-  it('returns undefined when history has no human text', () => {
+  it('consumes title eligibility when restored history has no human text', () => {
     const tracker = new SessionTitleTracker();
     const title = tracker.hydrateFromHistory([
       { speaker: 'ai', blocks: [{ type: 'text', text: 'response' }] },
     ]);
     expect(title).toBeUndefined();
-    // Eligibility NOT consumed — a later text prompt can still win the title.
     const result = tracker.consumeTitleEligibility([
       { type: 'text', text: 'First live prompt' },
     ]);
-    expect(result.wonTitle).toBe(true);
+    expect(result.wonTitle).toBe(false);
   });
 });
 

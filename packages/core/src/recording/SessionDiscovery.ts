@@ -301,13 +301,14 @@ export class SessionDiscovery {
   static async readSessionMetadataTitle(
     filePath: string,
   ): Promise<string | null | undefined> {
+    let reader: readline.Interface | undefined;
     try {
-      const lines = readline.createInterface({
+      reader = readline.createInterface({
         input: createReadStream(filePath, { encoding: 'utf8' }),
         crlfDelay: Infinity,
       });
       let title: string | null | undefined;
-      for await (const line of lines) {
+      for await (const line of reader) {
         const result = extractSessionMetadataTitle(line);
         if (result !== undefined) {
           title = result;
@@ -316,6 +317,8 @@ export class SessionDiscovery {
       return title;
     } catch {
       return undefined;
+    } finally {
+      reader?.close();
     }
   }
 }

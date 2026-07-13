@@ -85,9 +85,9 @@ export function paginateSessions(
  */
 function compareSessions(a: LifecycleSession, b: LifecycleSession): number {
   return compareByCreatedAtAndId(
-    a.createdAt ?? a.updatedAt,
+    getCreatedAt(a),
     a.sessionId,
-    b.createdAt ?? b.updatedAt,
+    getCreatedAt(b),
     b.sessionId,
   );
 }
@@ -97,7 +97,7 @@ function compareWithCursor(
   cursor: CursorPayload,
 ): number {
   return compareByCreatedAtAndId(
-    session.createdAt ?? session.updatedAt,
+    getCreatedAt(session),
     session.sessionId,
     cursor.createdAt,
     cursor.sessionId,
@@ -121,11 +121,17 @@ function compareDescending(a: string, b: string): number {
   return a > b ? -1 : 1;
 }
 
+function getCreatedAt(session: LifecycleSession): string {
+  const value = session.createdAt ?? session.updatedAt;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : value;
+}
+
 function encodeCursor(session: LifecycleSession, cwd: string | null): string {
   const payload: CursorPayload = {
     v: 2,
     cwd,
-    createdAt: session.createdAt ?? session.updatedAt,
+    createdAt: getCreatedAt(session),
     sessionId: session.sessionId,
   };
   return Buffer.from(JSON.stringify(payload)).toString('base64url');

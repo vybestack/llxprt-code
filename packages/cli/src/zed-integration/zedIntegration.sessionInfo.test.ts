@@ -13,7 +13,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { Session } from './zedIntegration.js';
+import type { Session } from './zedIntegration.js';
 import {
   buildFakeAgent,
   buildScriptedAgent,

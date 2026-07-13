@@ -201,11 +201,11 @@ export class SessionTitleTracker {
       return this.title;
     }
     const derived = deriveTitleFromHistory(history);
+    this.titleEligibilityConsumed = true;
     if (derived === null) {
       return undefined;
     }
     this.title = derived;
-    this.titleEligibilityConsumed = true;
     return this.title;
   }
 

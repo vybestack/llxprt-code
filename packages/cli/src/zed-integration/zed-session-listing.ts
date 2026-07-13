@@ -69,7 +69,8 @@ export async function listRecordedSessions(
  * Issue #1611: a persisted `session_metadata` event is the source of truth.
  * For legacy files without one (title === undefined), fall back to the first
  * human message (which returns null for no-human-text sessions, omitted from
- * the output). A null metadata title (explicit untitled) is preserved.
+ * the output). A null metadata title remains explicitly untitled by suppressing
+ * that legacy fallback and omitting the ACP title property.
  */
 async function toLifecycleSession(
   summary: SessionSummary,
@@ -78,7 +79,7 @@ async function toLifecycleSession(
   const metadataTitle = await SessionDiscovery.readSessionMetadataTitle(
     summary.filePath,
   );
-  const resolvedTitle =
+  const displayTitle =
     metadataTitle === undefined
       ? await SessionDiscovery.readFirstUserMessage(summary.filePath)
       : metadataTitle;
@@ -89,7 +90,7 @@ async function toLifecycleSession(
     ...(summary.createdAt !== undefined
       ? { createdAt: summary.createdAt }
       : {}),
-    ...(typeof resolvedTitle === 'string' ? { title: resolvedTitle } : {}),
+    ...(typeof displayTitle === 'string' ? { title: displayTitle } : {}),
   };
 }
 
