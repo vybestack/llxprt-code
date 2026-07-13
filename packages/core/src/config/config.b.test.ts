@@ -201,6 +201,55 @@ describe('Server Config (config.ts)', () => {
       expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);
     });
 
+    it('preserves carried history when the previous client is not yet initialized (#2500)', async () => {
+      // Reproduces the --continue second-rebuild scenario: the previous
+      // client was created by an earlier refreshAuth + finalizeAgent. It
+      // holds restored conversation in `_previousHistory` (surfaced via
+      // getHistory()) but its chat/content generator were never lazily
+      // initialized (isInitialized() === false). The old `!isInitialized()`
+      // guard in extractExistingState discarded that history, so --continue
+      // lost model context. getHistory() must still be consulted.
+      const config = new Config(baseParams);
+      const mockContentConfig = {
+        model: 'gemini-pro',
+        apiKey: 'test-key',
+      };
+      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+
+      const carriedHistory: ContractContent[] = [
+        { role: 'user', parts: [{ text: 'Remember the passphrase' }] },
+        { role: 'model', parts: [{ text: 'PURPLE-TANGERINE-7741' }] },
+      ];
+
+      const mockExistingClient = {
+        isInitialized: vi.fn().mockReturnValue(false),
+        hasChatInitialized: vi.fn().mockReturnValue(false),
+        getHistory: vi.fn().mockResolvedValue(carriedHistory),
+        getHistoryService: vi.fn().mockReturnValue(null),
+      };
+
+      const mockNewClient = {
+        isInitialized: vi.fn().mockReturnValue(true),
+        getHistory: vi.fn().mockResolvedValue([]),
+        getHistoryService: vi.fn().mockReturnValue(null),
+        initialize: vi.fn().mockResolvedValue(undefined),
+        storeHistoryForLaterUse: vi.fn(),
+      };
+
+      (
+        config as unknown as { agentClient: typeof mockExistingClient }
+      ).agentClient = mockExistingClient;
+      AgentClient.mockImplementation(() => mockNewClient);
+
+      await config.refreshAuth();
+
+      // The carried history must be recovered despite !isInitialized().
+      expect(mockExistingClient.getHistory).toHaveBeenCalled();
+      expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalledWith(
+        carriedHistory,
+      );
+    });
+
     it('preserves committed chat history without waiting for an active turn to become idle', async () => {
       const config = new Config(baseParams);
       const mockContentConfig = {

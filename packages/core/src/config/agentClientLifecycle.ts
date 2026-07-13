@@ -81,7 +81,12 @@ export interface AgentClientLifecycleContext {
 
 /**
  * Extracts existing history and HistoryService from the current agent client.
- * Returns empty values when the client is not yet initialized.
+ *
+ * Returns empty values only when no client exists or the client carries no
+ * recoverable state. A client pending lazy initialization (no chat yet) may
+ * still hold restored conversation in `_previousHistory` / a stored
+ * HistoryService, which `getHistory()` / `getHistoryService()` surface — that
+ * state must survive a rebuild so --continue keeps model context (issue #2500).
  *
  * The agentClient parameter is accepted as `| undefined` because the Config
  * field is declared with a definite-assignment assertion but is genuinely
@@ -97,10 +102,15 @@ export async function extractExistingState(
   if (agentClient === null || agentClient === undefined) {
     return { history: [], historyService: null };
   }
-  if (!agentClient.isInitialized()) {
-    return { history: [], historyService: null };
-  }
 
+  // A client may carry restored conversation in `_previousHistory` (e.g. a
+  // prior --continue restoreHistory, or a previous rebuild's carried history)
+  // even before its chat/content generator are lazily initialized. The old
+  // `!isInitialized()` guard discarded that history on the next rebuild, so
+  // --continue lost model context (issue #2500). `getHistory()` /
+  // `getHistoryService()` already recover `_previousHistory` /
+  // `_storedHistoryService` when no chat exists, so fall through and let them
+  // surface whatever state the client holds.
   const hasInitializedChat = hasCallableProperty(
     agentClient,
     'hasChatInitialized',

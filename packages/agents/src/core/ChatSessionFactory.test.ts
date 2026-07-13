@@ -57,6 +57,8 @@ vi.mock(
       estimateTokensForText: vi.fn().mockResolvedValue(100),
       resetTokenAccounting: vi.fn(),
       recalculateTotalTokens: vi.fn().mockResolvedValue(undefined),
+      isEmpty: vi.fn().mockReturnValue(true),
+      getAll: vi.fn().mockReturnValue([]),
     })),
   }),
 );
@@ -366,6 +368,140 @@ describe('createChatSession', () => {
         }),
       }),
     );
+  });
+
+  it('folds extraHistory into an empty reused HistoryService (#2500)', async () => {
+    // Use a REAL HistoryService so the round-trip into the reused service is
+    // exercised — the component under test is setupHistoryService's folding of
+    // extraHistory into a stored service, and a real service proves the
+    // restored turn is actually retained (not silently dropped).
+    const { HistoryService: RealHistoryService } = await vi.importActual<
+      typeof import('@vybestack/llxprt-code-core/services/history/HistoryService.js')
+    >('@vybestack/llxprt-code-core/services/history/HistoryService.js');
+    const storedHistoryService = new RealHistoryService();
+    expect(storedHistoryService.isEmpty()).toBe(true);
+
+    // The file-level ContentConverters mock returns an invalid shape; point it
+    // at a real conversion so the Gemini Content becomes a valid IContent
+    // (speaker + non-empty blocks) the real HistoryService will actually store.
+    const { ContentConverters: RealContentConverters } = await vi.importActual<
+      typeof import('@vybestack/llxprt-code-core/services/history/ContentConverters.js')
+    >('@vybestack/llxprt-code-core/services/history/ContentConverters.js');
+    const { ContentConverters: MockedContentConverters } = await import(
+      '@vybestack/llxprt-code-core/services/history/ContentConverters.js'
+    );
+    vi.mocked(MockedContentConverters.toIContent).mockImplementationOnce(
+      (content) =>
+        RealContentConverters.toIContent(
+          content,
+          undefined,
+          undefined,
+          'turn-2500',
+        ),
+    );
+
+    const config = makeConfig();
+    const runtimeState = makeRuntimeState();
+    const todoContinuationService = makeTodoContinuationService();
+
+    const extraHistory = [
+      { role: 'user' as const, parts: [{ text: 'Soft circuits awaken' }] },
+    ];
+
+    await createChatSession({
+      config,
+      runtimeState,
+      contentGenerator: makeContentGenerator(),
+      storedHistoryService,
+      clearStoredHistoryService: vi.fn(),
+      extraHistory,
+      generateContentConfig: {},
+      todoContinuationService,
+      toolRegistry: undefined,
+    });
+
+    // The reused stored service — the one forwarded to the chat the model
+    // reads from — must now carry the restored turn rather than staying empty.
+    expect(storedHistoryService.isEmpty()).toBe(false);
+    const restored = storedHistoryService.getAll();
+    expect(restored.length).toBe(1);
+    expect(restored[0].speaker).toBe('human');
+    const textBlock = restored[0].blocks.find((b) => b.type === 'text');
+    expect(textBlock).toBeDefined();
+    expect((textBlock as { text?: string }).text).toBe('Soft circuits awaken');
+  });
+
+  it('does not fold extraHistory into a non-empty reused HistoryService', async () => {
+    // A mid-session provider switch stores the live (non-empty) HistoryService;
+    // setupHistoryService must reuse it as-is and NOT also load extraHistory,
+    // or the conversation would be duplicated. This pins the isEmpty()
+    // discriminator's other branch.
+    const { HistoryService: RealHistoryService } = await vi.importActual<
+      typeof import('@vybestack/llxprt-code-core/services/history/HistoryService.js')
+    >('@vybestack/llxprt-code-core/services/history/HistoryService.js');
+    const storedHistoryService = new RealHistoryService();
+    // Pre-seed the stored service so it is non-empty (simulating a live conv).
+    storedHistoryService.add(
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'live turn before switch' }],
+      },
+      'model-x',
+    );
+    expect(storedHistoryService.isEmpty()).toBe(false);
+
+    // Point the file-level ContentConverters mock at the real converter so any
+    // (erroneous) loadExtraHistory call would actually store valid content,
+    // making this test a real guard against dropping the isEmpty() check.
+    const { ContentConverters: RealContentConverters } = await vi.importActual<
+      typeof import('@vybestack/llxprt-code-core/services/history/ContentConverters.js')
+    >('@vybestack/llxprt-code-core/services/history/ContentConverters.js');
+    const { ContentConverters: MockedContentConverters } = await import(
+      '@vybestack/llxprt-code-core/services/history/ContentConverters.js'
+    );
+    vi.mocked(MockedContentConverters.toIContent).mockImplementationOnce(
+      (content) =>
+        RealContentConverters.toIContent(
+          content,
+          undefined,
+          undefined,
+          'turn-nodup',
+        ),
+    );
+
+    const config = makeConfig();
+    const runtimeState = makeRuntimeState();
+    const todoContinuationService = makeTodoContinuationService();
+    const clearStoredHistoryService = vi.fn();
+
+    const extraHistory = [
+      { role: 'user' as const, parts: [{ text: 'stale carried history' }] },
+    ];
+
+    await createChatSession({
+      config,
+      runtimeState,
+      contentGenerator: makeContentGenerator(),
+      storedHistoryService,
+      clearStoredHistoryService,
+      extraHistory,
+      generateContentConfig: {},
+      todoContinuationService,
+      toolRegistry: undefined,
+    });
+
+    // The stored service keeps exactly its one live turn; extraHistory was
+    // ignored, not appended.
+    const after = storedHistoryService.getAll();
+    expect(after.length).toBe(1);
+    expect(
+      after[0].blocks.some(
+        (b) => b.type === 'text' && b.text === 'live turn before switch',
+      ),
+    ).toBe(true);
+    // Reusing the stored service must still hand ownership to the chat session
+    // (the stored reference is cleared on the client so it cannot be reused).
+    expect(clearStoredHistoryService).toHaveBeenCalledTimes(1);
   });
 
   it('passes profile context-limit into the rebuilt runtime settings', async () => {

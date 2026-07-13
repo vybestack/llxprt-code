@@ -59,7 +59,7 @@ export function buildModelInfo(deps: ModelInfoDeps): ModelInfo {
     model,
     providerName,
     profileName,
-    displayLabel: hasProfile ? profileName : model,
+    displayLabel: hasProfile ? `${profileName}:${model}` : model,
   };
 }
 

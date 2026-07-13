@@ -321,7 +321,7 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
 
     expect(infos).toHaveLength(1);
     expect(infos[0]?.profileName).toBe('profile-b');
-    expect(infos[0]?.displayLabel).toBe('profile-b');
+    expect(infos[0]?.displayLabel).toBe('profile-b:gpt-4');
   });
 
   it('prefers provider manager active model over config.getModel', async () => {
@@ -403,7 +403,7 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     expect(infos[0]?.model).toBe('glm-5.2');
     expect(infos[0]?.providerName).toBe('load-balancer');
     expect(infos[0]?.profileName).toBe('glm');
-    expect(infos[0]?.displayLabel).toBe('glm');
+    expect(infos[0]?.displayLabel).toBe('glm:glm-5.2');
   });
 
   it('B2: load-balancer profile with no active selection falls back to the provider default model, never the config Gemini default', async () => {
@@ -419,7 +419,37 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
 
     expect(infos).toHaveLength(1);
     expect(infos[0]?.model).toBe('glm-5.2');
-    expect(infos[0]?.displayLabel).toBe('glm');
+    expect(infos[0]?.displayLabel).toBe('glm:glm-5.2');
     expect(infos[0]?.model).not.toBe('gemini-2.5-pro');
+  });
+
+  it('displayLabel shows profile:model when a profile is active (issue #2501)', async () => {
+    const { orchestrator } = buildOrchestrator({
+      model: 'gpt-5.6-sol',
+      providerName: 'codex',
+      profileName: 'gpt56solhigh',
+    });
+
+    const infos = await collectModelInfos(orchestrator, 'prompt-2501');
+
+    expect(infos).toHaveLength(1);
+    expect(infos[0]?.model).toBe('gpt-5.6-sol');
+    expect(infos[0]?.displayLabel).toBe('gpt56solhigh:gpt-5.6-sol');
+  });
+
+  it('displayLabel shows just the model when no profile is active (issue #2501)', async () => {
+    const { orchestrator } = buildOrchestrator({
+      model: 'gpt-5.6-sol',
+      providerName: 'codex',
+      profileName: null,
+    });
+
+    const infos = await collectModelInfos(
+      orchestrator,
+      'prompt-2501-noprofile',
+    );
+
+    expect(infos).toHaveLength(1);
+    expect(infos[0]?.displayLabel).toBe('gpt-5.6-sol');
   });
 });

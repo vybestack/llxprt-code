@@ -278,8 +278,15 @@ function clearEphemeralsForSwitch(
   const maxOutputTokensBeforeSwitch = existingEphemerals.maxOutputTokens;
 
   for (const key of Object.keys(existingEphemerals)) {
+    // activeProvider and currentProfile are session-level identity state,
+    // not per-provider ephemerals. They must survive a provider switch —
+    // clearing currentProfile here would wipe the profile name set by
+    // applyProfileSnapshot, causing the UI to lose the active profile
+    // identity (issue #2501).
     const shouldPreserve =
-      key === 'activeProvider' || context.preserveEphemerals.includes(key);
+      key === 'activeProvider' ||
+      key === 'currentProfile' ||
+      context.preserveEphemerals.includes(key);
     if (!shouldPreserve) {
       context.config.setEphemeralSetting(key, undefined);
     }
