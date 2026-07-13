@@ -158,6 +158,22 @@ priority = 100
       expect(result.rules).toHaveLength(1);
       expect(result.rules[0]?.toolName).toBe('google-workspace__*');
       expect(result.rules[0]).not.toHaveProperty('toolNamePrefix');
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should preserve a trailing star as an exact MCP tool name', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+mcpName = "google-workspace"
+toolName = "*"
+decision = "allow"
+priority = 100
+`);
+
+      expect(result.rules).toHaveLength(1);
+      expect(result.rules[0]?.toolName).toBe('google-workspace__*');
+      expect(result.rules[0]).not.toHaveProperty('toolNamePrefix');
+      expect(result.errors).toHaveLength(0);
     });
 
     it('should filter rules by mode', async () => {

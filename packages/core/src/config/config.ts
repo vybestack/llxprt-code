@@ -858,6 +858,7 @@ export class Config extends ConfigBase {
   }
 
   private trustTransitionChain: Promise<void> = Promise.resolve();
+  private trustTransitionFailures: unknown[] = [];
   private disposing = false;
   private ideTrust: boolean | undefined;
   private cachedEffectiveTrust: boolean | undefined;
@@ -871,22 +872,21 @@ export class Config extends ConfigBase {
     if (this.disposing) {
       return;
     }
-    this.trustTransitionChain = this.trustTransitionChain
-      .then(async () => {
-        try {
-          if (trusted) {
-            await this.mcpClientManager?.onFolderTrustGained();
-          } else {
-            await this.mcpClientManager?.onFolderTrustRevoked();
-          }
-        } catch (error) {
-          Config.logger.error(
-            `Error during trust transition side-effects: ${getErrorMessage(error)}`,
-          );
+    this.trustTransitionChain = this.trustTransitionChain.then(async () => {
+      const failures: unknown[] = [];
+      try {
+        if (trusted) {
+          await this.mcpClientManager?.onFolderTrustGained();
+        } else {
+          await this.mcpClientManager?.onFolderTrustRevoked();
         }
-        if (this.disposing) {
-          return;
-        }
+      } catch (error) {
+        Config.logger.error(
+          `Error during trust transition side-effects: ${getErrorMessage(error)}`,
+        );
+        failures.push(error);
+      }
+      if (!this.disposing) {
         try {
           const system = this.getHookSystem();
           if (system) {
@@ -896,13 +896,11 @@ export class Config extends ConfigBase {
           Config.logger.error(
             `Error re-initializing hooks during trust transition: ${getErrorMessage(error)}`,
           );
+          failures.push(error);
         }
-      })
-      .catch((error) => {
-        Config.logger.error(
-          `Unexpected error in trust transition chain: ${getErrorMessage(error)}`,
-        );
-      });
+      }
+      this.trustTransitionFailures.push(...failures);
+    });
   }
 
   /**
@@ -910,6 +908,13 @@ export class Config extends ConfigBase {
    */
   async whenTrustTransitionSettled(): Promise<void> {
     await this.trustTransitionChain;
+    const failures = this.trustTransitionFailures.splice(0);
+    if (failures.length === 1) {
+      throw failures[0];
+    }
+    if (failures.length > 1) {
+      throw new AggregateError(failures, 'Trust transition failed');
+    }
   }
 
   private ideTrustChangeListener:
@@ -958,7 +963,12 @@ export class Config extends ConfigBase {
       this.ideClient.removeTrustChangeListener(this.ideTrustChangeListener);
       this.ideTrustChangeListener = undefined;
     }
-    await this.whenTrustTransitionSettled();
+    let transitionFailure: unknown;
+    try {
+      await this.whenTrustTransitionSettled();
+    } catch (error) {
+      transitionFailure = error;
+    }
     const client = this.agentClient as AgentClientContract | undefined;
     if (client !== undefined) {
       client.dispose();
@@ -974,6 +984,9 @@ export class Config extends ConfigBase {
     }
     if (stopPromise !== undefined) {
       await stopPromise;
+    }
+    if (transitionFailure !== undefined) {
+      throw transitionFailure;
     }
   }
 }

@@ -130,9 +130,15 @@ describe('useCommandReload', () => {
 
   it('stops reloading commands after unmount', async () => {
     const config = {} as CliUiRuntime;
+    const offSpy = vi.spyOn(coreEvents, 'off');
     const { result, unmount } = renderHook(() => useCommandRegistry(config));
     await waitFor(() => expect(result.current).toStrictEqual([]));
     unmount();
+
+    expect(offSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(Function),
+    );
 
     loaderState.fileCommands = [
       {

@@ -265,9 +265,9 @@ describe('McpClientManager trust transitions', () => {
       await vi.waitFor(() => expect(client.connect).toHaveBeenCalled());
 
       const revokePromise = manager.onFolderTrustRevoked();
-      expect(client.disconnect).toHaveBeenCalledTimes(1);
       expect(manager.getMcpServerCount()).toBe(0);
       await revokePromise;
+      expect(client.disconnect).toHaveBeenCalledTimes(1);
 
       // Now resolve the stuck connect — the client must NOT be registered
       resolveConnect();

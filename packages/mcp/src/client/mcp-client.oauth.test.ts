@@ -116,6 +116,7 @@ describe('connectToMcpServer with OAuth', () => {
       ),
     ).rejects.toMatchObject({ name: 'AbortError' });
     await vi.waitFor(() => expect(transport.close).toHaveBeenCalledOnce());
+    expect(mockedClient.close).toHaveBeenCalledOnce();
   });
 
   it('closes the transport when cancellation races a rejected connect', async () => {

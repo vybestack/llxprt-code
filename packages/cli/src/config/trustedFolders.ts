@@ -13,7 +13,9 @@ import {
   getIdeTrust,
 } from '@vybestack/llxprt-code-core';
 import stripJsonComments from 'strip-json-comments';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Settings } from './settings.js';
+import { formatConfigFileErrors } from './configError.js';
 import { USER_SETTINGS_DIR } from './paths.js';
 
 export const TRUSTED_FOLDERS_FILENAME = 'trustedFolders.json';
@@ -196,6 +198,19 @@ export function loadTrustedFolders(): LoadedTrustedFolders {
   return loadedTrustedFolders;
 }
 
+function removeTemporaryFile(temporaryPath: string): void {
+  try {
+    fs.unlinkSync(temporaryPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      debugLogger.warn(
+        `Failed to remove trusted folders temporary file ${temporaryPath}:`,
+        error,
+      );
+    }
+  }
+}
+
 export function saveTrustedFolders(
   trustedFoldersFile: TrustedFoldersFile,
 ): void {
@@ -225,11 +240,7 @@ export function saveTrustedFolders(
       }
     }
   } catch (error) {
-    try {
-      fs.unlinkSync(temporaryPath);
-    } catch {
-      // The temporary file may not have been created.
-    }
+    removeTemporaryFile(temporaryPath);
     throw error;
   }
 
@@ -238,11 +249,7 @@ export function saveTrustedFolders(
   try {
     fs.renameSync(temporaryPath, trustedFoldersFile.path);
   } catch (error) {
-    try {
-      fs.unlinkSync(temporaryPath);
-    } catch {
-      // Preserve the rename error if cleanup also fails.
-    }
+    removeTemporaryFile(temporaryPath);
     throw error;
   }
 }
@@ -294,11 +301,8 @@ export function isWorkspaceTrusted(
 
   const trustedFolders = loadTrustedFolders();
   if (trustedFolders.errors.length > 0) {
-    const errorMessages = trustedFolders.errors.map(
-      (error) => `Error in ${error.path}: ${error.message}`,
-    );
     throw new FatalConfigError(
-      `${errorMessages.join('\n')}\nPlease fix the configuration file and try again.`,
+      formatConfigFileErrors(trustedFolders.errors, 'configuration file'),
     );
   }
   return resolveWorkspaceTrust(

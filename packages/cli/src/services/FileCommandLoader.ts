@@ -36,6 +36,9 @@ interface CommandDirectory {
   extensionName?: string;
 }
 
+export const FILE_COMMANDS_UNTRUSTED_MESSAGE =
+  'File-based commands are disabled because this folder is not trusted.';
+
 /**
  * Defines the Zod schema for a command definition file. This serves as the
  * single source of truth for both validation and type inference.
@@ -306,8 +309,7 @@ export class FileCommandLoader implements ICommandLoader {
         return {
           type: 'message',
           messageType: 'error',
-          content:
-            'File-based commands are disabled because this folder is not trusted.',
+          content: FILE_COMMANDS_UNTRUSTED_MESSAGE,
         };
       }
 

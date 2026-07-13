@@ -11,6 +11,7 @@ import type { Settings } from './settingsSchema.js';
 import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
 import { USER_SETTINGS_PATH } from './paths.js';
 import { mergeSettings } from './settingsMerge.js';
+import { formatConfigFileErrors } from './configError.js';
 import {
   migrateHooksConfig,
   migrateLegacyInteractiveShellSetting,
@@ -193,12 +194,7 @@ function throwSettingsErrors(errors: SettingsError[]): void {
   if (errors.length === 0) {
     return;
   }
-  const errorMessages = errors.map(
-    (error) => `Error in ${error.path}: ${error.message}`,
-  );
-  throw new FatalConfigError(
-    `${errorMessages.join('\n')}\nPlease fix the configuration file(s) and try again.`,
-  );
+  throw new FatalConfigError(formatConfigFileErrors(errors));
 }
 
 function migrateLoadedSettings(settings: SettingsState): void {

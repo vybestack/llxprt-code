@@ -65,7 +65,9 @@ function abortable<T>(
   const runCleanup = (cleanupOperation: () => void | Promise<void>) => {
     if (cleaned) return;
     cleaned = true;
-    Promise.resolve(cleanupOperation()).catch(() => {});
+    Promise.resolve(cleanupOperation()).catch((error: unknown) => {
+      debugLogger.warn('MCP cancellation cleanup failed:', error);
+    });
   };
   const cleanupResolvedValue = (value: T) => runCleanup(() => cleanup(value));
   const cleanupAfterAbort = () => {

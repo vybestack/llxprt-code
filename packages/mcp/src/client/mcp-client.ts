@@ -186,6 +186,8 @@ export class McpClient {
   }
 
   private createCapabilityAuthorization(client: Client): () => boolean {
+    // Capturing both generations prevents late discovery and refresh callbacks
+    // from publishing capabilities after disconnect or trust revocation.
     const generation = this.activeCapabilityGeneration;
     return () => {
       const capabilityIsCurrent =

@@ -204,18 +204,29 @@ describe('Config.setTrustedFolderLive', () => {
   describe('defense-in-depth policy rule cleanup on revoke', () => {
     it('removes MCP Trusted policy rules when trust is revoked', () => {
       const config = new Config({ ...baseParams, trustedFolder: true });
-      // Simulate a trust-derived MCP ALLOW rule
       config.getPolicyEngine().addRule({
         toolName: 'trusted-server__tool',
         decision: PolicyDecision.ALLOW,
         priority: 2.2,
         source: 'Settings (MCP Trusted)',
       });
-      expect(config.getPolicyEngine().getRules()).toHaveLength(1);
+      config.getPolicyEngine().addRule({
+        toolName: 'user-tool',
+        decision: PolicyDecision.DENY,
+        priority: 2.9,
+        source: 'User Defined',
+      });
 
       config.setTrustedFolderLive(false);
 
-      expect(config.getPolicyEngine().getRules()).toHaveLength(0);
+      expect(
+        config
+          .getPolicyEngine()
+          .evaluate('trusted-server__tool', {}, 'trusted-server'),
+      ).toBe(PolicyDecision.ASK_USER);
+      expect(config.getPolicyEngine().evaluate('user-tool', {})).toBe(
+        PolicyDecision.DENY,
+      );
     });
 
     it('rebuilds configured MCP trust rules on gain', () => {
@@ -223,6 +234,12 @@ describe('Config.setTrustedFolderLive', () => {
         ...baseParams,
         trustedFolder: false,
         mcpServers: { 'trusted-server': { trust: true } },
+      });
+      config.getPolicyEngine().addRule({
+        toolName: 'user-tool',
+        decision: PolicyDecision.DENY,
+        priority: 2.9,
+        source: 'User Defined',
       });
 
       expect(
@@ -238,6 +255,9 @@ describe('Config.setTrustedFolderLive', () => {
           .getPolicyEngine()
           .evaluate('trusted-server__tool', {}, 'trusted-server'),
       ).toBe(PolicyDecision.ALLOW);
+      expect(config.getPolicyEngine().evaluate('user-tool', {})).toBe(
+        PolicyDecision.DENY,
+      );
     });
   });
 });

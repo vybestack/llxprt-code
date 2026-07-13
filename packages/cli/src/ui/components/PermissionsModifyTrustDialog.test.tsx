@@ -317,7 +317,10 @@ describe('PermissionsModifyTrustDialog', () => {
     await waitFor(() => {
       expect(lastFrame()).toContain('Trust level updated');
     });
-    expect(mockedSetValue).toHaveBeenCalledWith('/test/dir', 'TRUST_FOLDER');
+    expect(mockedSetValue).toHaveBeenCalledWith(
+      '/test/dir',
+      TrustLevel.TRUST_FOLDER,
+    );
     expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(false);
 
     stdin.write('x');

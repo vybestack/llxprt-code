@@ -56,8 +56,12 @@ describe('FolderTrustChanged event', () => {
   it('broadcasts the same trust value to every subscriber', () => {
     const first: boolean[] = [];
     const second: boolean[] = [];
-    events.on(CoreEvent.FolderTrustChanged, (trusted) => first.push(trusted));
-    events.on(CoreEvent.FolderTrustChanged, (trusted) => second.push(trusted));
+    events.on(CoreEvent.FolderTrustChanged, (trusted: boolean) =>
+      first.push(trusted),
+    );
+    events.on(CoreEvent.FolderTrustChanged, (trusted: boolean) =>
+      second.push(trusted),
+    );
 
     events.emitFolderTrustChanged(false);
 

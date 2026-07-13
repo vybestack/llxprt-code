@@ -16,6 +16,7 @@ vi.mock('os', async (importOriginal) => {
 });
 
 import { FatalConfigError, getIdeTrust } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   describe,
   it,
@@ -275,6 +276,29 @@ describe('Trusted Folders Loading', () => {
     const temporaryPath = vi.mocked(fs.writeFileSync).mock.calls[0][0];
     expect(fs.unlinkSync).toHaveBeenCalledWith(temporaryPath);
     expect(loadedFolders.user.config['/new/path']).toBeUndefined();
+  });
+  it('warns when a failed atomic rename cannot remove its temporary file', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const cleanupError = new Error('unlink denied');
+    const warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
+    const loadedFolders = loadTrustedFolders();
+    vi.mocked(fs.renameSync).mockImplementationOnce(() => {
+      throw new Error('rename denied');
+    });
+    vi.mocked(fs.unlinkSync).mockImplementationOnce(() => {
+      throw cleanupError;
+    });
+
+    expect(() =>
+      loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER),
+    ).toThrow('rename denied');
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Failed to remove trusted folders temporary file',
+      ),
+      cleanupError,
+    );
   });
 
   it('atomically saves on Windows without POSIX mode operations', () => {

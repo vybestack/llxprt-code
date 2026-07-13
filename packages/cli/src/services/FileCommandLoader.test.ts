@@ -9,7 +9,10 @@ import * as path from 'node:path';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import mock from 'mock-fs';
-import { FileCommandLoader } from './FileCommandLoader.js';
+import {
+  FileCommandLoader,
+  FILE_COMMANDS_UNTRUSTED_MESSAGE,
+} from './FileCommandLoader.js';
 import { assert, vi } from 'vitest';
 import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
 import { SHORTHAND_ARGS_PLACEHOLDER } from './prompt-processors/types.js';
@@ -801,50 +804,45 @@ describe('FileCommandLoader', () => {
   });
 
   describe('live folder trust', () => {
-    it('gains and revokes file commands from the same loader without an external event', async () => {
+    function setupLiveTrust(initialTrust: boolean) {
       const userCommandsDir = Storage.getUserCommandsDir();
       mock({
         [userCommandsDir]: {
           'live.toml': 'prompt = "Live prompt"',
         },
       });
-      let trusted = false;
+      let trusted = initialTrust;
       const config = {
         getProjectRoot: () => process.cwd(),
         getExtensions: () => [],
         getFolderTrust: () => true,
         isTrustedFolder: () => trusted,
       } as unknown as Config;
-      const loader = new FileCommandLoader(config);
+      return {
+        loader: new FileCommandLoader(config),
+        setTrusted: (value: boolean) => {
+          trusted = value;
+        },
+      };
+    }
+
+    it('gains and revokes file commands from the same loader without an external event', async () => {
+      const { loader, setTrusted } = setupLiveTrust(false);
 
       expect(await loader.loadCommands(signal)).toStrictEqual([]);
 
-      trusted = true;
+      setTrusted(true);
       expect(await loader.loadCommands(signal)).toHaveLength(1);
 
-      trusted = false;
+      setTrusted(false);
       expect(await loader.loadCommands(signal)).toStrictEqual([]);
     });
 
     it('blocks execution synchronously when trust is revoked after loading', async () => {
-      const userCommandsDir = Storage.getUserCommandsDir();
-      mock({
-        [userCommandsDir]: {
-          'secure.toml': 'prompt = "Sensitive prompt"',
-        },
-      });
-      let trusted = true;
-      const config = {
-        getProjectRoot: () => process.cwd(),
-        getExtensions: () => [],
-        getFolderTrust: () => true,
-        isTrustedFolder: () => trusted,
-      } as unknown as Config;
-      const [command] = await new FileCommandLoader(config).loadCommands(
-        signal,
-      );
+      const { loader, setTrusted } = setupLiveTrust(true);
+      const [command] = await loader.loadCommands(signal);
 
-      trusted = false;
+      setTrusted(false);
       const result = await command.action?.(
         createMockCommandContext({
           invocation: {
@@ -859,8 +857,7 @@ describe('FileCommandLoader', () => {
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
-        content:
-          'File-based commands are disabled because this folder is not trusted.',
+        content: FILE_COMMANDS_UNTRUSTED_MESSAGE,
       });
     });
   });

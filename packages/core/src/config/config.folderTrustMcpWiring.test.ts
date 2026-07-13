@@ -243,7 +243,7 @@ describe('Config MCP wiring on folder trust change', () => {
       expect(mock.onFolderTrustRevoked).toHaveBeenCalledTimes(1);
     });
 
-    it('handles MCP errors without breaking the serialization chain', async () => {
+    it('exposes MCP failures without breaking the serialization chain', async () => {
       const config = new Config({
         ...baseParams,
         trustedFolder: true,
@@ -256,14 +256,33 @@ describe('Config MCP wiring on folder trust change', () => {
       );
 
       config.setTrustedFolderLive(false);
-      await config.whenTrustTransitionSettled();
+      await expect(config.whenTrustTransitionSettled()).rejects.toThrow(
+        'disconnect failed',
+      );
 
-      // The chain must not reject even if the MCP call throws.
-      // Verify by doing another transition.
       config.setTrustedFolderLive(true);
-      await config.whenTrustTransitionSettled();
+      await expect(
+        config.whenTrustTransitionSettled(),
+      ).resolves.toBeUndefined();
 
       expect(mock.onFolderTrustGained).toHaveBeenCalledTimes(1);
+    });
+
+    it('exposes hook re-initialization failures', async () => {
+      const config = new Config({
+        ...baseParams,
+        trustedFolder: false,
+        enableHooks: true,
+      });
+      await initializeTestConfig(config);
+      config.getHookSystem();
+      hookInitializers[0].mockRejectedValueOnce(new Error('hooks failed'));
+
+      config.setTrustedFolderLive(true);
+
+      await expect(config.whenTrustTransitionSettled()).rejects.toThrow(
+        'hooks failed',
+      );
     });
 
     describe('dispose cleanup', () => {
@@ -305,6 +324,7 @@ describe('Config MCP wiring on folder trust change', () => {
             }),
         );
 
+        const getHookSystemSpy = vi.spyOn(config, 'getHookSystem');
         config.setTrustedFolderLive(false);
         await vi.waitFor(() =>
           expect(mock.onFolderTrustRevoked).toHaveBeenCalledOnce(),
@@ -313,7 +333,7 @@ describe('Config MCP wiring on folder trust change', () => {
         releaseTransition?.();
         await disposePromise;
 
-        expect(hookInitializers).toHaveLength(0);
+        expect(getHookSystemSpy).not.toHaveBeenCalled();
       });
 
       it('does not enqueue transitions after disposal begins', async () => {
