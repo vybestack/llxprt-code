@@ -242,7 +242,12 @@ export class ZedAgent {
     const { sessionId } = params;
     const reattached = await this.tryReattachLiveSession(sessionId);
     if (reattached !== null) {
-      await reattached.sendAvailableCommands();
+      try {
+        await reattached.sendAvailableCommands();
+      } catch (error) {
+        await this.rollbackSession(sessionId, reattached);
+        throw error;
+      }
       return {
         modes: buildSessionModes(reattached.getApprovalMode()),
         ...(await zedSessionConfigOptions(this.clientCapabilities, reattached)),

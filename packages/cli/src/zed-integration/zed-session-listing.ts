@@ -13,8 +13,26 @@ import {
 } from './zed-session-pagination.js';
 
 const SESSION_PAGE_SIZE = 50;
+const LIST_CONCURRENCY_LIMIT = 8;
 
 const logger = new DebugLogger('llxprt:zed-integration:session-listing');
+
+async function mapWithConcurrencyLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = [];
+  let index = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (index < items.length) {
+      const current = index++;
+      results[current] = await fn(items[current]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
 
 export async function listRecordedSessions(
   chatsDir: string,
@@ -24,8 +42,10 @@ export async function listRecordedSessions(
   liveSessions: readonly LifecycleSession[] = [],
 ): Promise<acp.ListSessionsResponse> {
   const summaries = await SessionDiscovery.listSessions(chatsDir, projectHash);
-  const records = await Promise.all(
-    summaries.map((summary) => toLifecycleSession(summary, fallbackCwd)),
+  const records = await mapWithConcurrencyLimit(
+    summaries,
+    LIST_CONCURRENCY_LIMIT,
+    (summary) => toLifecycleSession(summary, fallbackCwd),
   );
   const merged = new Map(
     records.map((session) => [session.sessionId, session] as const),

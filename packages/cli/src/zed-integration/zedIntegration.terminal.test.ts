@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type * as acp from '@agentclientprotocol/sdk';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
+import { buildCommandToExecute } from '@vybestack/llxprt-code-tools';
 
 import { Session } from './zedIntegration.js';
 import { TerminalManager } from './zed-terminal-manager.js';
@@ -18,12 +19,9 @@ import {
 } from './zed-test-helpers.js';
 
 const createdSessions: Session[] = [];
-// Hardcoded mirror of buildCommandToExecute('echo hello', false, '/tmp/shell.tmp')
-// from packages/tools/src/tools/shell-helpers.ts. This function is not exported
-// from the tools package, so we cannot import it directly. If the wrapping
-// format in buildCommandToExecute changes, this constant MUST be updated to match.
-const preparedEcho =
-  '{ echo hello; }; __code=$?; pgrep -g 0 >/tmp/shell.tmp 2>&1; exit $__code;';
+// Derived from the production buildCommandToExecute so the wrapping format
+// stays in sync automatically.
+const preparedEcho = buildCommandToExecute('echo hello', false, '/tmp/shell.tmp');
 
 function terminalManager(
   connection: RecordingConnection,

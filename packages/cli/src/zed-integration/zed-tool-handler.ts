@@ -6,7 +6,6 @@
 
 import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-core';
 import {
-  Kind,
   ToolConfirmationOutcome,
   type ToolConfirmationPayload,
 } from '@vybestack/llxprt-code-tools';
@@ -404,7 +403,18 @@ export function inferToolKind(name: string): acp.ToolKind | undefined {
   return TOOL_KIND_BY_NAME.get(name);
 }
 
-const ACP_TOOL_KINDS: ReadonlySet<string> = new Set(Object.values(Kind));
+const ACP_TOOL_KINDS: ReadonlySet<string> = new Set<acp.ToolKind>([
+  'read',
+  'edit',
+  'delete',
+  'move',
+  'search',
+  'execute',
+  'think',
+  'fetch',
+  'switch_mode',
+  'other',
+]);
 
 export function toAcpToolKind(kind: string | undefined): acp.ToolKind {
   return kind !== undefined && ACP_TOOL_KINDS.has(kind)

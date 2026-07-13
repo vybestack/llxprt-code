@@ -306,9 +306,10 @@ export class SessionDiscovery {
   static async readSessionMetadataTitle(
     filePath: string,
   ): Promise<string | null | undefined> {
-    const stream = createReadStream(filePath, { encoding: 'utf8' });
+    let stream: ReturnType<typeof createReadStream> | undefined;
     let reader: readline.Interface | undefined;
     try {
+      stream = createReadStream(filePath, { encoding: 'utf8' });
       reader = readline.createInterface({
         input: stream,
         crlfDelay: Infinity,
@@ -329,7 +330,7 @@ export class SessionDiscovery {
       return undefined;
     } finally {
       reader?.close();
-      stream.destroy();
+      stream?.destroy();
     }
   }
 }

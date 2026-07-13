@@ -144,9 +144,7 @@ export class TerminalManager {
     this.pendingCalls.splice(0);
     const terminals = [...this.activeTerminals];
     this.activeTerminals.clear();
-    for (const terminal of terminals) {
-      await this.killAndRelease(terminal);
-    }
+    await Promise.allSettled(terminals.map((t) => this.killAndRelease(t)));
   }
 
   private claimPendingCall(command: string, cwd: string): string | undefined {
@@ -189,7 +187,7 @@ export class TerminalManager {
       });
     let previousOutput = '';
     let killed = false;
-    const killDeadline = Date.now() + KILL_GRACE_PERIOD_MS;
+    let killDeadline = 0;
     let done = false;
     while (!done) {
       if (exitError !== undefined) {
@@ -197,6 +195,7 @@ export class TerminalManager {
       }
       if (signal.aborted && !killed) {
         killed = true;
+        killDeadline = Date.now() + KILL_GRACE_PERIOD_MS;
         await this.kill(active);
       }
       done = exit !== undefined || (killed && Date.now() >= killDeadline);

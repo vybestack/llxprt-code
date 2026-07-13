@@ -52,7 +52,7 @@ describe('Zed Session - session_info_update findings (issue #1611 remediation)',
           ];
     });
     const connection = new RecordingConnection();
-    const gate = connection.armPermissionGate();
+    const permissionGate = connection.armPermissionGate();
     const session = createSession(agent, connection);
     createdSessions.push(session);
 
@@ -60,7 +60,7 @@ describe('Zed Session - session_info_update findings (issue #1611 remediation)',
       sessionId: 'test-session-id',
       prompt: [{ type: 'text', text: 'Prompt A title' }],
     });
-    await gate.arrived;
+    await permissionGate.arrived;
     const secondPrompt = session.prompt({
       sessionId: 'test-session-id',
       prompt: [{ type: 'text', text: 'Prompt B title' }],
