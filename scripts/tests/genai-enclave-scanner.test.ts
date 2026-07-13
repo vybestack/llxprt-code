@@ -331,6 +331,15 @@ describe('scanGeminiExports — export default', () => {
     ).toContain('geminiThing');
   });
 
+  it('detects parenthesized default class and function expressions', () => {
+    expect(scanExportsFor('export default (class GeminiHandler {})')).toContain(
+      'GeminiHandler',
+    );
+    expect(
+      scanExportsFor('export default (function geminiThing() {})'),
+    ).toContain('geminiThing');
+  });
+
   it('does NOT flag export default of a non-Gemini identifier', () => {
     expect(scanExportsFor('class Normal {}\nexport default Normal;')).toEqual(
       [],

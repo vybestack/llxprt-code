@@ -413,7 +413,10 @@ function checkExportAssignment(
   node: ts.ExportAssignment,
   violations: GeminiExportViolation[],
 ): void {
-  const expr = node.expression;
+  let expr = node.expression;
+  while (ts.isParenthesizedExpression(expr)) {
+    expr = expr.expression;
+  }
   if (ts.isIdentifier(expr) && containsGemini(expr.text)) {
     addExportViolation(
       sourceFile,

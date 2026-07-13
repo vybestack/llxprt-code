@@ -181,6 +181,7 @@ function discoverFiles(): {
       'git',
       [
         'ls-files',
+        '-z',
         'packages/**/*.ts',
         'packages/**/*.tsx',
         'packages/**/*.mts',
@@ -205,10 +206,9 @@ function discoverFiles(): {
   }
 
   const trackedFiles = tracked
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .map((line) => join(REPO_ROOT, line));
+    .split('\0')
+    .filter((path) => path.length > 0)
+    .map((path) => join(REPO_ROOT, path));
 
   // ── Untracked non-ignored files ───────────────────────────────────
   // `git status --porcelain` with `--untracked-files=all` lists untracked
@@ -230,15 +230,17 @@ function discoverFiles(): {
       .split('\0')
       .filter((entry) => entry.length > 0)
       .filter((entry) => entry.startsWith('?? '))
-      .map((entry) => entry.slice(3).trim())
+      .map((entry) => entry.slice(3))
       .filter(
         (relPath) =>
           relPath.startsWith('packages/') && isScannableFile(relPath),
       )
       .map((relPath) => join(REPO_ROOT, relPath));
-  } catch {
-    // If git status fails, we still scan tracked files. But record error.
-    errors.push({ message: 'git status failed — untracked files not checked' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    errors.push({
+      message: `git status failed — untracked files not checked: ${message}`,
+    });
   }
 
   const allFiles = dedupePaths([...trackedFiles, ...untrackedFiles]);
@@ -267,7 +269,11 @@ interface ManifestViolation {
  */
 function readPackageJson(filePath: string): PackageJsonMetadata {
   const content = readFileSync(filePath, 'utf8');
-  return JSON.parse(content) as PackageJsonMetadata;
+  const parsed: unknown = JSON.parse(content);
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('package.json must contain a JSON object');
+  }
+  return parsed as PackageJsonMetadata;
 }
 
 function getManifestViolation(
@@ -414,11 +420,14 @@ function checkManifests(): {
     violations.push(...result.violations);
     errors.push(...result.errors);
   }
-
   return { violations, errors };
 }
 
 // ─── Violation formatting ───────────────────────────────────────────────────
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled violation: ${JSON.stringify(value)}`);
+}
 
 function formatViolation(v: Violation): string {
   if (v.kind === 'genai-import') {
@@ -437,12 +446,15 @@ function formatViolation(v: Violation): string {
       'literal or move it into an enclave.'
     );
   }
-  return (
-    `  ${v.file}:${v.line}: ${v.exportForm} '${v.exportName}' — ` +
-    'exported identifiers containing "Gemini" are only allowed in ' +
-    'packages/providers/src/gemini/** and packages/core/src/code_assist/** ' +
-    '(or the explicit allowlist in scripts/genai-enclave/config.ts)'
-  );
+  if (v.kind === 'gemini-export') {
+    return (
+      `  ${v.file}:${v.line}: ${v.exportForm} '${v.exportName}' — ` +
+      'exported identifiers containing "Gemini" are only allowed in ' +
+      'packages/providers/src/gemini/** and packages/core/src/code_assist/** ' +
+      '(or the explicit allowlist in scripts/genai-enclave/config.ts)'
+    );
+  }
+  return assertNever(v);
 }
 
 function formatManifestViolation(v: ManifestViolation): string {
