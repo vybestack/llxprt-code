@@ -485,10 +485,11 @@ function buildProviderDisplayLabel(
   return modelName ?? 'unknown';
 }
 
-function safeCall<T>(fn: () => T): T | undefined {
+function safeCall<T>(operation: string, fn: () => T): T | undefined {
   try {
     return fn();
-  } catch {
+  } catch (error) {
+    logger.debug(() => `Unable to ${operation}: ${String(error)}`);
     return undefined;
   }
 }
@@ -509,7 +510,7 @@ function resolveProviderBaseURL(
   if (!provider || !isBaseURLProvider(provider)) {
     return undefined;
   }
-  return safeCall(() => provider.getBaseURL());
+  return safeCall('read provider base URL', () => provider.getBaseURL());
 }
 
 function resolveProviderIsPaidMode(
@@ -518,7 +519,9 @@ function resolveProviderIsPaidMode(
   if (!provider) {
     return undefined;
   }
-  return safeCall(() => provider.isPaidMode?.());
+  return safeCall('read provider paid-mode status', () =>
+    provider.isPaidMode?.(),
+  );
 }
 
 export function getActiveProviderStatus(): ProviderRuntimeStatus {
@@ -530,7 +533,7 @@ export function getActiveProviderStatus(): ProviderRuntimeStatus {
   const resolvedName = resolveActiveProviderName(settingsService, config);
 
   if (resolvedName && resolvedName.trim() !== '') {
-    const provider = safeCall(() =>
+    const provider = safeCall('resolve configured provider', () =>
       providerManager.getProviderByName(resolvedName),
     );
     return {
@@ -542,7 +545,9 @@ export function getActiveProviderStatus(): ProviderRuntimeStatus {
     };
   }
 
-  const activeProvider = safeCall(() => providerManager.getActiveProvider());
+  const activeProvider = safeCall('resolve active provider', () =>
+    providerManager.getActiveProvider(),
+  );
   const providerName = activeProvider?.name ?? null;
 
   return {
