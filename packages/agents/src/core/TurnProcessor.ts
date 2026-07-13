@@ -47,6 +47,7 @@ import {
   isThoughtPart,
   type UsageMetadataWithCache,
 } from './googlePartHelpers.js';
+import { recordActualTokenUsage } from './tokenUsageActualLogger.js';
 import {
   attachHookRestrictedAllowedTools,
   filterHookRestrictedContents,
@@ -899,18 +900,10 @@ export class TurnProcessor {
       await this.historyService.waitForTokenUpdates();
     }
 
-    const logger = this.compressionHandler.tokenUsageLogger;
-    if (
-      logger?.isEnabled() === true &&
-      usageMetadata?.promptTokenCount !== undefined
-    ) {
-      await logger.recordActual(promptId, {
-        actualPromptTokens: usageMetadata.promptTokenCount,
-        cachedTokens:
-          usageMetadata.cachedContentTokenCount ??
-          usageMetadata.cache_read_input_tokens ??
-          0,
-      });
-    }
+    await recordActualTokenUsage(
+      this.compressionHandler.tokenUsageLogger,
+      promptId,
+      usageMetadata,
+    );
   }
 }

@@ -21,15 +21,13 @@ import type { TodoContinuationService } from './TodoContinuationService.js';
 import type { IdeContextTracker } from './IdeContextTracker.js';
 import type { AgentHookManager } from './AgentHookManager.js';
 import type { AfterAgentHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
-import {
-  estimateRequestTokensStructured,
-  extractPromptText,
-} from './clientHelpers.js';
+import { extractPromptText } from './clientHelpers.js';
 import { getTokenLimitForConfiguredContext } from './contextLimitResolver.js';
 import { resolvePreflightOverflow } from './preflightRecovery.js';
 import {
   recordTokenEstimate,
   estimateRequestTokens,
+  estimateStructuredTokensOrZero,
 } from './tokenUsageEstimateLogger.js';
 import { buildModelInfo, modelIdentityKey } from './messageStreamModelInfo.js';
 import type { Todo } from '@vybestack/llxprt-code-tools';
@@ -138,7 +136,7 @@ export class MessageStreamOrchestrator {
     const request = yield* this._preflight(initialRequest, ctx);
     if (request instanceof Turn) return request;
 
-    const earlyTurn = yield* this._checkSessionLimits(initialRequest, ctx);
+    const earlyTurn = yield* this._checkSessionLimits(request, ctx);
     if (earlyTurn) return earlyTurn;
 
     await this._injectIdeContext();
@@ -269,7 +267,7 @@ export class MessageStreamOrchestrator {
       getTokenLimitForConfiguredContext(getEffectiveModel(), config) -
       chat.getLastPromptTokenCount();
 
-    const fallback = estimateRequestTokensStructured(initialRequest);
+    const fallback = estimateStructuredTokensOrZero(initialRequest);
 
     if (remainingTokenCount <= 0) {
       recordTokenEstimate(

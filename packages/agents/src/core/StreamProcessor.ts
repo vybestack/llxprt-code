@@ -41,6 +41,7 @@ import {
   AgentExecutionBlockedError,
 } from './chatSession.js';
 import { type UsageMetadataWithCache } from './googlePartHelpers.js';
+import { recordActualTokenUsage } from './tokenUsageActualLogger.js';
 import {
   attachHookRestrictedAllowedTools,
   filterHookRestrictedContent,
@@ -763,21 +764,11 @@ export class StreamProcessor {
         JSON.stringify(lastConvertedChunk),
       );
 
-      const logger = this.compressionHandler.tokenUsageLogger;
-      if (logger?.isEnabled() === true) {
-        const usage = lastConvertedChunk.usageMetadata as
-          | UsageMetadataWithCache
-          | undefined;
-        if (usage?.promptTokenCount !== undefined) {
-          await logger.recordActual(telemetryContext.promptId, {
-            actualPromptTokens: usage.promptTokenCount,
-            cachedTokens:
-              usage.cachedContentTokenCount ??
-              usage.cache_read_input_tokens ??
-              0,
-          });
-        }
-      }
+      await recordActualTokenUsage(
+        this.compressionHandler.tokenUsageLogger,
+        telemetryContext.promptId,
+        lastConvertedChunk.usageMetadata as UsageMetadataWithCache | undefined,
+      );
     }
   }
 

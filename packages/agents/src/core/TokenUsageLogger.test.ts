@@ -86,6 +86,7 @@ describe('TokenUsageLogger', () => {
     expect(record).toHaveProperty('actual_prompt_tokens', 250);
     expect(record).toHaveProperty('cached_tokens', 50);
     expect(record).toHaveProperty('effective_actual_tokens');
+    expect(record).toHaveProperty('tiktoken_estimation_failed', false);
   });
 
   it('computes effective_actual_tokens = actual - cached', async () => {
@@ -265,12 +266,19 @@ describe('TokenUsageLogger', () => {
       actualPromptTokens: 999,
       cachedTokens: 0,
     });
+    await logger.recordActual('prompt-50', {
+      actualPromptTokens: 500,
+      cachedTokens: 0,
+    });
 
     const overflowRecords = readJsonl(logFile) as Array<
       Record<string, unknown>
     >;
-    expect(overflowRecords).toHaveLength(1);
-    expect(overflowRecords[0].prompt_id).toBe('prompt-overflow');
+    expect(overflowRecords).toHaveLength(2);
+    expect(overflowRecords.map((record) => record.prompt_id)).toStrictEqual([
+      'prompt-overflow',
+      'prompt-50',
+    ]);
   });
 
   it('isEnabled returns the enabled state', async () => {
@@ -322,8 +330,17 @@ describe('TokenUsageLogger', () => {
     expect(() => new Date(ts).toISOString()).not.toThrow();
     expect(new Date(ts).toString()).not.toBe('Invalid Date');
   });
-  it('overwrites pending estimate when recordEstimate is called twice for same promptId', async () => {
+  it('overwrites a pending estimate at capacity without evicting another prompt', async () => {
     const logger = new TokenUsageLogger(true, logFile);
+    for (let i = 0; i < PENDING_CAP - 1; i++) {
+      logger.recordEstimate(`filler-${i}`, {
+        provider: 'openai',
+        model: 'gpt-4',
+        estimatedTokens: i,
+        estimator: 'openai-tiktoken',
+        tiktokenTokens: i,
+      });
+    }
     logger.recordEstimate('prompt-overwrite', {
       provider: 'openai',
       model: 'gpt-4',
@@ -342,11 +359,16 @@ describe('TokenUsageLogger', () => {
       actualPromptTokens: 250,
       cachedTokens: 0,
     });
+    await logger.recordActual('filler-0', {
+      actualPromptTokens: 10,
+      cachedTokens: 0,
+    });
 
     const records = readJsonl(logFile) as Array<Record<string, unknown>>;
-    expect(records).toHaveLength(1);
+    expect(records).toHaveLength(2);
     expect(records[0].estimated_tokens).toBe(200);
     expect(records[0].model).toBe('claude-3');
+    expect(records[1].prompt_id).toBe('filler-0');
   });
 
   it('enabled logger with undefined logFilePath writes nothing and does not crash', async () => {

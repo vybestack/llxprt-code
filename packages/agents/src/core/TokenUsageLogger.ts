@@ -66,7 +66,7 @@ export class TokenUsageLogger {
     data: Omit<PendingTokenEstimate, 'ts' | 'promptId'>,
   ): void {
     if (!this.enabled) return;
-    if (this.pending.size >= PENDING_CAP) {
+    if (!this.pending.has(promptId) && this.pending.size >= PENDING_CAP) {
       // Maps preserve insertion order, so this evicts only the oldest estimate.
       const oldestKey = this.pending.keys().next().value;
       if (oldestKey !== undefined) this.pending.delete(oldestKey);
@@ -114,7 +114,10 @@ export class TokenUsageLogger {
       await appendFile(logFilePath, line);
     });
     this.writeChain = write.catch((error: unknown) => {
-      this.errorLogger.error('Failed to write token usage record', error);
+      this.errorLogger.error(
+        `Failed to write token usage record for prompt ${record.promptId}`,
+        error,
+      );
     });
     await this.writeChain;
   }

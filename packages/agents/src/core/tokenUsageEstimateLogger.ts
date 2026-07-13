@@ -60,6 +60,10 @@ export function recordTokenEstimate(
   });
 }
 
+export function estimateStructuredTokensOrZero(request: PartListUnion): number {
+  return safeEstimateStructuredTokens(request).tokens ?? 0;
+}
+
 export async function estimateRequestTokens(
   chat: ChatTokenEstimator,
   initialRequest: PartListUnion,

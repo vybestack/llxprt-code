@@ -13,9 +13,16 @@ vi.mock('./clientHelpers.js', () => ({
   }),
 }));
 
-import { recordTokenEstimate } from './tokenUsageEstimateLogger.js';
+import {
+  estimateStructuredTokensOrZero,
+  recordTokenEstimate,
+} from './tokenUsageEstimateLogger.js';
 
 describe('recordTokenEstimate', () => {
+  it('provides a non-throwing numeric fallback for preflight', () => {
+    expect(estimateStructuredTokensOrZero([])).toBe(0);
+  });
+
   it('distinguishes a failed tiktoken baseline from a real zero-token estimate', () => {
     const recordEstimate = vi.fn();
     const usageLogger = {

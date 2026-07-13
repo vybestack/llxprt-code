@@ -23,6 +23,7 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createTokenSyncTestFixture } from './chatSession-tokenSync-helpers.js';
+import { TokenUsageLogger } from './TokenUsageLogger.js';
 
 describe('ChatSession Token Count Sync - Non-streaming responses', () => {
   let chat: ChatSession;
@@ -118,7 +119,9 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
       });
 
       chat = new ChatSession(view, mockContentGenerator, {}, []);
-      const recordActual = vi.spyOn(chat.getTokenUsageLogger(), 'recordActual');
+      const usageLogger = new TokenUsageLogger(true, undefined);
+      chat.setTokenUsageLoggerForTesting(usageLogger);
+      const recordActual = vi.spyOn(usageLogger, 'recordActual');
 
       await chat.sendMessage(
         { message: [{ text: 'What is quantum computing?' }] },

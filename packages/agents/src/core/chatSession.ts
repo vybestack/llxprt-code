@@ -543,7 +543,11 @@ export class ChatSession {
   }
 
   getTokenUsageLogger(): TokenUsageLogger {
-    return this.tokenUsageLogger;
+    return this.compressionHandler.tokenUsageLogger ?? this.tokenUsageLogger;
+  }
+
+  setTokenUsageLoggerForTesting(logger: TokenUsageLogger): void {
+    this.compressionHandler.tokenUsageLogger = logger;
   }
 
   private _createTokenUsageLogger(view: AgentRuntimeContext): TokenUsageLogger {
@@ -566,7 +570,10 @@ export class ChatSession {
         // Storage unavailable — logging disabled
       }
     }
-    return new TokenUsageLogger(tokenUsageEnabled, logFilePath);
+    return new TokenUsageLogger(
+      tokenUsageEnabled && logFilePath !== undefined,
+      logFilePath,
+    );
   }
 
   /**

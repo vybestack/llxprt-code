@@ -87,8 +87,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     } catch (error) {
       // Temp dir cleanup is best-effort; failure here does not affect test outcomes
-      process.stderr.write(`Failed to clean up temp dir: ${String(error)}
-`);
+      process.stderr.write(`Failed to clean up temp dir: ${String(error)}\n`);
     }
   });
 
@@ -166,7 +165,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     const chat = new ChatSession(view, mockContentGenerator, {}, []);
 
     const realLogger = new TokenUsageLogger(true, logFile);
-    chat.compressionHandler.tokenUsageLogger = realLogger;
+    chat.setTokenUsageLoggerForTesting(realLogger);
 
     const promptId = 'int-prompt-1';
     realLogger.recordEstimate(promptId, {
@@ -273,7 +272,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     const chat = new ChatSession(view, mockContentGenerator, {}, []);
 
     const realLogger = new TokenUsageLogger(true, logFile);
-    chat.compressionHandler.tokenUsageLogger = realLogger;
+    chat.setTokenUsageLoggerForTesting(realLogger);
 
     const promptId = 'int-prompt-2';
     realLogger.recordEstimate(promptId, {
