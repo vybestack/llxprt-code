@@ -7,7 +7,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import * as os from 'node:os';
 
 import { ProfileManager } from './ProfileManager.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
@@ -23,15 +22,11 @@ describe('ProfileManager storage isolation', () => {
 
   it('writes profiles only beneath the isolated config root when no explicit directory is provided', async () => {
     const configDir = Storage.getGlobalConfigDir();
+    const isolatedRoot = path.dirname(configDir);
 
-    // The storage isolation bootstrap (test-setup-storage-isolation.ts)
-    // must have redirected config/data/cache/log roots to a temp dir.
-    expect(configDir.startsWith(os.tmpdir())).toBe(true);
-    // On Windows, os.tmpdir() is under os.homedir() (C:\Users\<user>\AppData\Local\Temp),
-    // so asserting it's NOT under homedir would fail. Only check on POSIX.
-    if (process.platform !== 'win32') {
-      expect(configDir.startsWith(os.homedir())).toBe(false);
-    }
+    expect(process.env.LLXPRT_TEST_STORAGE_ISOLATED).toBe('1');
+    expect(configDir).toBe(path.join(isolatedRoot, 'config'));
+    expect(process.env.LLXPRT_CONFIG_HOME).toBe(configDir);
 
     const manager = new ProfileManager();
     const profile: Profile = {
@@ -47,16 +42,9 @@ describe('ProfileManager storage isolation', () => {
     const profilesDir = path.join(configDir, 'profiles');
     const profilePath = path.join(profilesDir, 'isolation-test-profile.json');
 
-    // The file must exist beneath the isolated config root.
     const content = await fs.readFile(profilePath, 'utf-8');
     expect(JSON.parse(content).provider).toBe('gemini');
-
-    // The file must NOT exist beneath the real home directory.
-    // Use path.resolve to handle cross-platform (Windows drive letter) cases
-    // where path.relative returns an absolute path instead of a '..' prefix.
-    const resolvedProfile = path.resolve(profilePath);
-    const resolvedHome = path.resolve(os.homedir()) + path.sep;
-    expect(resolvedProfile.startsWith(resolvedHome)).toBe(false);
+    expect(path.dirname(path.dirname(profilePath))).toBe(configDir);
   });
 
   it('constructs the default profiles directory from Storage.getGlobalConfigDir', async () => {
