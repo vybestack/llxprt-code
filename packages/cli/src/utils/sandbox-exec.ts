@@ -21,6 +21,7 @@ import type {
   SshAgentResult,
 } from './sandbox-ssh.js';
 import type { ContainerSandboxPrepared } from './sandbox-containers.js';
+import { runBestEffortSyncCleanup } from './cleanup.js';
 import {
   buildContainerRunArgs,
   addContainerVolumeMounts,
@@ -198,7 +199,7 @@ async function prepareContainerSandbox(
     credentialProxyBridgeResult = cpResult.credentialProxyBridgeResult;
     credentialProxyBridgeCleanup = cpResult.credentialProxyBridgeCleanup;
   } catch (err) {
-    credentialProxyBridgeResult?.cleanup?.();
+    runBestEffortSyncCleanup(credentialProxyBridgeResult?.cleanup);
     try {
       await stopProxy();
     } catch {

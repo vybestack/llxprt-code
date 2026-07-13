@@ -25,6 +25,14 @@ export function registerSyncCleanup(fn: () => void) {
   syncCleanupFunctions.push(fn);
 }
 
+export function runBestEffortSyncCleanup(cleanup: (() => void) | undefined) {
+  try {
+    cleanup?.();
+  } catch {
+    // Ignore errors during cleanup.
+  }
+}
+
 export async function runExitCleanup() {
   // Guard against concurrent cleanup if signal handlers fire multiple times
   if (cleanupInProgress) return;

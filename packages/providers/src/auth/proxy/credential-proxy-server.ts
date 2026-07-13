@@ -978,6 +978,7 @@ export class CredentialProxyServer {
    * graceful close to avoid dangling references.
    */
   private endAndDestroyAfter(socket: net.Socket, frame: Buffer): void {
+    if (socket.destroyed) return;
     socket.end(frame);
     const timer = setTimeout(
       () => socket.destroy(),

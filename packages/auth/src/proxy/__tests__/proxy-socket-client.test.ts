@@ -78,6 +78,7 @@ function createHandshakeCapturingServer(
   let resolveHandshake!: (frame: Record<string, unknown>) => void;
   let rejectHandshake!: (err: Error) => void;
   let timeoutHandle!: ReturnType<typeof setTimeout>;
+  let settled = false;
   const handshake = Promise.race([
     new Promise<Record<string, unknown>>((resolve, reject) => {
       resolveHandshake = (frame) => {
@@ -90,10 +91,12 @@ function createHandshakeCapturingServer(
       };
     }),
     new Promise<Record<string, unknown>>((_, reject) => {
-      timeoutHandle = setTimeout(
-        () => reject(new Error('Handshake capture timed out')),
-        5000,
-      );
+      timeoutHandle = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          reject(new Error('Handshake capture timed out'));
+        }
+      }, 5000);
       timeoutHandle.unref();
     }),
   ]);
@@ -101,7 +104,6 @@ function createHandshakeCapturingServer(
   handshake.catch(() => {});
   const srv = net.createServer((socket) => {
     const decoder = new FrameDecoder();
-    let settled = false;
     socket.on('data', (chunk) => {
       const frames = decoder.feed(chunk);
       for (const frame of frames) {
