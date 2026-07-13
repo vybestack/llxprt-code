@@ -67,6 +67,17 @@ describe('discoverBrowserProfiles', () => {
       expect(profiles).toStrictEqual([]);
     });
 
+    it('returns empty array when Local State JSON parses to a non-object value', () => {
+      const profiles = discoverBrowserProfiles('chrome', {
+        platform: 'darwin',
+        homeDir: '/home/user',
+        fileExists: () => true,
+        readFile: () => 'null',
+      });
+
+      expect(profiles).toStrictEqual([]);
+    });
+
     it('returns empty array when info_cache is missing', () => {
       const profiles = discoverBrowserProfiles('chrome', {
         platform: 'darwin',

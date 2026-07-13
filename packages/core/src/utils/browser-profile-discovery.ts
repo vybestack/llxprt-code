@@ -125,14 +125,20 @@ function discoverChromeProfiles(
     return [];
   }
 
-  let parsed: ChromeLocalState;
+  let parsed: unknown;
   try {
-    parsed = JSON.parse(raw) as ChromeLocalState;
+    parsed = JSON.parse(raw);
   } catch {
     return [];
   }
 
-  const infoCache = parsed.profile?.info_cache;
+  // JSON.parse can return null, primitives, or arrays for valid-but-unexpected
+  // content; only an object with a profile.info_cache shape is usable.
+  if (typeof parsed !== 'object' || parsed === null) {
+    return [];
+  }
+  const localState = parsed as ChromeLocalState;
+  const infoCache = localState.profile?.info_cache;
   if (!infoCache || typeof infoCache !== 'object') {
     return [];
   }

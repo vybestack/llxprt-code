@@ -507,7 +507,7 @@ describe('secure-browser-launcher', () => {
       ).rejects.toThrow('Invalid profile directory');
     });
 
-    it('rejects profile directory with shell metacharacters', async () => {
+    it('rejects profile directory containing path separators', async () => {
       setPlatform('darwin');
       await expect(
         openBrowserSecurely('https://example.com', {

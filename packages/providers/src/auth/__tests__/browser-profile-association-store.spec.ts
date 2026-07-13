@@ -32,11 +32,17 @@ function createStore(fs: InMemoryFs): BrowserProfileAssociationStore {
       writeFile: (p: string, c: string) => {
         fs.files.set(p, c);
       },
-      mkdir: () => {
+      mkdir: (_p: string, _opts?: { recursive?: boolean }) => {
         /* no-op for in-memory fs */
       },
     },
   );
+}
+
+function createInMemoryFsMalformed(): InMemoryFs {
+  return createInMemoryFs({
+    '/fake/path/oauth-browser-profiles.json': 'not valid json {{{',
+  });
 }
 
 describe('BrowserProfileAssociationStore', () => {
@@ -86,7 +92,7 @@ describe('BrowserProfileAssociationStore', () => {
   });
 
   describe('default bucket', () => {
-    it('defaults bucket to "default" when not specified', () => {
+    it('getAssociation returns the "default" bucket entry when no bucket is given', () => {
       const fs = createInMemoryFs();
       const store = createStore(fs);
 
@@ -279,9 +285,3 @@ describe('BrowserProfileAssociationStore', () => {
     });
   });
 });
-
-function createInMemoryFsMalformed(): InMemoryFs {
-  return createInMemoryFs({
-    '/fake/path/oauth-browser-profiles.json': 'not valid json {{{',
-  });
-}
