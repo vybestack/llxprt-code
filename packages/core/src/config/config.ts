@@ -9,7 +9,6 @@ import path from 'node:path';
 import { PromptRegistry } from '../prompts/prompt-registry.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { ActivateSkillTool } from '@vybestack/llxprt-code-tools/tools/activate-skill.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { CoreSkillServiceAdapter } from '../tools-adapters/CoreSkillServiceAdapter.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
@@ -167,15 +166,17 @@ export class Config extends ConfigBase {
       );
       this.getSkillManager().setDisabledSkills(this.disabledSkills);
 
-      // Re-register ActivateSkillTool to update its schema with the discovered enabled skill enums
+      // Re-register ActivateSkillTool via the injected registrar hook
+      // (eliminates the inverted core->tools dependency — issue #2417)
       if (this.getSkillManager().getSkills().length > 0) {
-        this.getToolRegistry().unregisterTool(ActivateSkillTool.Name);
-        this.getToolRegistry().registerTool(
-          new ActivateSkillTool(
+        const registrar = this.getPostSkillDiscoveryToolRegistrar();
+        if (registrar) {
+          registrar(
+            this.getToolRegistry(),
             new CoreSkillServiceAdapter(this),
             initializationMessageBus,
-          ),
-        );
+          );
+        }
       }
     }
 

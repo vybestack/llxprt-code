@@ -5,11 +5,13 @@
  */
 
 import type { Config, MessageBus } from '@vybestack/llxprt-code-core';
+import { PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-core';
 import {
   fromConfig,
   type Agent,
   type ProviderActivationIntent,
 } from '@vybestack/llxprt-code-agents';
+
 import { registerCleanup } from './utils/cleanup.js';
 import {
   hasProfileAuthEphemerals,
@@ -55,7 +57,7 @@ export async function createForegroundAgent({
   const activation: ProviderActivationIntent = {
     provider: provider ?? undefined,
     authMode: 'auto',
-    ...(model && model !== 'placeholder-model' ? { model } : {}),
+    ...(model && model !== PLACEHOLDER_MODEL ? { model } : {}),
     ...(hasProfileAuthEphemerals(profileAuthEphemerals)
       ? { cliOverrides: { keyName: undefined } }
       : {}),

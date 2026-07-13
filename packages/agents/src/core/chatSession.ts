@@ -36,11 +36,15 @@ import { ConversationManager } from './ConversationManager.js';
 import { TurnProcessor } from './TurnProcessor.js';
 import { StreamProcessor } from './StreamProcessor.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
+import { TokenUsageLogger } from './TokenUsageLogger.js';
+import * as nodePath from 'node:path';
 import {
   convertPartListUnionToIContent,
   convertIContentToResponse,
+  convertBlocksToParts,
   validateHistory,
 } from './MessageConverter.js';
+import { splitPartsByRole } from './agenticLoop/loopHelpers.js';
 import { resolveCompressionProvider } from './CompressionProfileResolver.js';
 import type { CompressionProfileResolverContext } from './CompressionProfileResolver.js';
 
@@ -139,6 +143,7 @@ export class ChatSession {
   private readonly turnProcessor: TurnProcessor;
   private readonly streamProcessor: StreamProcessor;
   private readonly directMessageProcessor: DirectMessageProcessor;
+  private readonly tokenUsageLogger: TokenUsageLogger;
   private readonly compressionLoadBalancerRoundRobinIndexes = new Map<
     string,
     number
@@ -194,6 +199,9 @@ export class ChatSession {
         }
       },
     );
+
+    this.tokenUsageLogger = this._createTokenUsageLogger(view);
+    this.compressionHandler.tokenUsageLogger = this.tokenUsageLogger;
 
     this.conversationManager = new ConversationManager(
       this.historyService,
@@ -534,6 +542,40 @@ export class ChatSession {
     return this.compressionHandler.lastPromptTokenCount ?? 0;
   }
 
+  getTokenUsageLogger(): TokenUsageLogger {
+    return this.compressionHandler.tokenUsageLogger ?? this.tokenUsageLogger;
+  }
+
+  setTokenUsageLoggerForTesting(logger: TokenUsageLogger): void {
+    this.compressionHandler.tokenUsageLogger = logger;
+  }
+
+  private _createTokenUsageLogger(view: AgentRuntimeContext): TokenUsageLogger {
+    const settingsService = view.providerRuntime.settingsService;
+    const tokenUsageEnabled = settingsService.get('token-usage-log') !== false;
+    const config = view.providerRuntime.config;
+    const sessionId = view.state.sessionId;
+    let logFilePath: string | undefined;
+    if (tokenUsageEnabled && config) {
+      try {
+        const tempDir = config.getProjectTempDir();
+        if (tempDir) {
+          logFilePath = nodePath.join(
+            tempDir,
+            'token-usage',
+            `${sessionId}.jsonl`,
+          );
+        }
+      } catch {
+        // Storage unavailable — logging disabled
+      }
+    }
+    return new TokenUsageLogger(
+      tokenUsageEnabled && logFilePath !== undefined,
+      logFilePath,
+    );
+  }
+
   /**
    * Baseline prompt tokens for projection: prefer the API-observed count,
    * falling back to the history-derived estimate. Mirrors
@@ -547,9 +589,43 @@ export class ChatSession {
 
   recordCompletedToolCalls(
     _model: string,
-    _toolCalls: CompletedToolCall[],
+    toolCalls: CompletedToolCall[],
   ): void {
-    // No-op stub for compatibility
+    const allParts = toolCalls.flatMap((toolCall) => {
+      // Defensive for deserialized/test-cast tool responses that bypass the
+      // static ToolCallResponseInfo contract.
+      const response = toolCall.response as
+        | { responseParts?: unknown }
+        | undefined;
+      const responseParts = response?.responseParts;
+      if (!Array.isArray(responseParts)) {
+        this.logger.warn(
+          () =>
+            `recordCompletedToolCalls: skipping tool call '${toolCall.request.callId}' because responseParts is not an array`,
+        );
+        return [];
+      }
+      return convertBlocksToParts(responseParts);
+    });
+    const { functionResponses } = splitPartsByRole(allParts);
+
+    // Only persist the tool-response side eagerly. The assistant tool_call is
+    // already recorded by the preceding model stream, and any non-tool-response
+    // continuation text can be recorded by the normal next-turn finalization
+    // path. Eagerly persisting only function responses makes tool outcomes
+    // durable across next-stream failures/retries without duplicating model
+    // turns or continuation text when the next stream succeeds.
+    if (functionResponses.length > 0) {
+      this.addHistory({
+        role: 'user',
+        parts: functionResponses,
+      });
+      const responseCallIds = functionResponses
+        .map((response) => response.functionResponse?.id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0);
+      this.turnProcessor.markToolResponsesRecorded(responseCallIds);
+      this.streamProcessor.markToolResponsesRecorded(responseCallIds);
+    }
   }
 
   // Public conversion methods — delegated to standalone functions

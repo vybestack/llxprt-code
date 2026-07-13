@@ -72,11 +72,13 @@ describe('providerCommand /provider save', () => {
   let originalHome: string | undefined;
   let originalUserProfile: string | undefined;
   let originalConfigHome: string | undefined;
+  let originalDataHome: string | undefined;
 
   beforeAll(() => {
     originalHome = process.env.HOME;
     originalUserProfile = process.env.USERPROFILE;
     originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
+    originalDataHome = process.env['LLXPRT_DATA_HOME'];
   });
 
   beforeEach(() => {
@@ -85,6 +87,10 @@ describe('providerCommand /provider save', () => {
     process.env.HOME = tempDir;
     process.env.USERPROFILE = tempDir;
     process.env['LLXPRT_CONFIG_HOME'] = path.join(tempDir, '.llxprt');
+    // Alias configs are written to <dataDir>/providers; the global
+    // test-storage isolation sets LLXPRT_DATA_HOME, so redirect it to this
+    // test's own root for the existsSync assertion below.
+    process.env['LLXPRT_DATA_HOME'] = path.join(tempDir, '.llxprt');
   });
 
   afterEach(() => {
@@ -106,6 +112,11 @@ describe('providerCommand /provider save', () => {
       delete process.env['LLXPRT_CONFIG_HOME'];
     } else {
       process.env['LLXPRT_CONFIG_HOME'] = originalConfigHome;
+    }
+    if (originalDataHome === undefined) {
+      delete process.env['LLXPRT_DATA_HOME'];
+    } else {
+      process.env['LLXPRT_DATA_HOME'] = originalDataHome;
     }
   });
 

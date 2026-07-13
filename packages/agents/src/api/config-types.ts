@@ -145,7 +145,7 @@ export interface AgentMcpServerConfig {
   readonly httpUrl?: string;
   readonly headers?: Readonly<Record<string, string>>;
   readonly tcp?: string;
-  readonly type?: 'sse' | 'http';
+  readonly type?: 'sse' | 'http' | 'streamable-http';
   readonly timeout?: number;
   readonly trust?: boolean;
   readonly description?: string;

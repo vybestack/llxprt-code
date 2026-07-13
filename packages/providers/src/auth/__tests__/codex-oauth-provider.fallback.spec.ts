@@ -10,8 +10,8 @@ vi.mock('../local-oauth-callback.js', () => ({
   startLocalOAuthCallback: vi.fn(),
 }));
 
-import * as coreModule from '@vybestack/llxprt-code-core';
-import type { TokenStore } from '@vybestack/llxprt-code-core';
+import * as secureBrowserModule from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
+import type { TokenStore } from '@vybestack/llxprt-code-auth';
 import { CodexOAuthProvider } from '../codex-oauth-provider.js';
 import { startLocalOAuthCallback } from '../local-oauth-callback.js';
 
@@ -48,8 +48,10 @@ describe('CodexOAuthProvider fallback behavior', () => {
     provider = new CodexOAuthProvider(mockTokenStore);
 
     // Mock shouldLaunchBrowser to return true (interactive mode)
-    vi.spyOn(coreModule, 'shouldLaunchBrowser').mockReturnValue(true);
-    vi.spyOn(coreModule, 'openBrowserSecurely').mockResolvedValue(undefined);
+    vi.spyOn(secureBrowserModule, 'shouldLaunchBrowser').mockReturnValue(true);
+    vi.spyOn(secureBrowserModule, 'openBrowserSecurely').mockResolvedValue(
+      undefined,
+    );
   });
 
   afterEach(() => {

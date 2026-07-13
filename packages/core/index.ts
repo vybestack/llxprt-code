@@ -10,6 +10,7 @@ export {
   DEFAULT_GEMINI_FLASH_MODEL,
   DEFAULT_GEMINI_FLASH_LITE_MODEL,
   DEFAULT_GEMINI_EMBEDDING_MODEL,
+  PLACEHOLDER_MODEL,
 } from './src/config/models.js';
 export {
   openBrowserSecurely,

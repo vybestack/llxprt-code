@@ -58,6 +58,28 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
     });
   });
 
+  it('parses a thinking event with optional stream identity fields', () => {
+    const parsed = AgentEventSchema.parse({
+      type: 'thinking',
+      thought: {
+        subject: '',
+        description: 'streaming thought',
+        streamId: 'anthropic-thinking:0',
+        streamStatus: 'delta',
+      },
+    });
+
+    expect(parsed).toStrictEqual({
+      type: 'thinking',
+      thought: {
+        subject: '',
+        description: 'streaming thought',
+        streamId: 'anthropic-thinking:0',
+        streamStatus: 'delta',
+      },
+    });
+  });
+
   it('parses a tool-call event preserving id/name/args @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', () => {
     const parsed = AgentEventSchema.parse({
       type: 'tool-call',
@@ -444,6 +466,28 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
     expect(ThoughtSummarySchema.safeParse({ subject: 's' }).success).toBe(
       false,
     );
+  });
+
+  it('ThoughtSummarySchema accepts optional stream identity without requiring it', () => {
+    expect(
+      ThoughtSummarySchema.parse({
+        subject: 's',
+        description: 'd',
+        streamId: 'anthropic-thinking:0',
+        streamStatus: 'complete',
+      }),
+    ).toStrictEqual({
+      subject: 's',
+      description: 'd',
+      streamId: 'anthropic-thinking:0',
+      streamStatus: 'complete',
+    });
+    expect(
+      ThoughtSummarySchema.parse({ subject: 's', description: 'd' }),
+    ).toStrictEqual({
+      subject: 's',
+      description: 'd',
+    });
   });
 
   it('UsageMetadataValueSchema accepts an empty object (all optional) @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', () => {

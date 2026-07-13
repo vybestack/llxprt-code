@@ -43,7 +43,9 @@ export interface UseInputHandlingResult {
 /**
  * Checks if any tool is currently executing in pending history items.
  */
-function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]): boolean {
+export function isToolExecuting(
+  pendingHistoryItems: HistoryItemWithoutId[],
+): boolean {
   return pendingHistoryItems.some((item) => {
     if (item.type === 'tool_group') {
       return item.tools.some(

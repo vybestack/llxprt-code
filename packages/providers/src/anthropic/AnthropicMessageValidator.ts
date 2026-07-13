@@ -413,6 +413,15 @@ function ensureNotEmpty(messages: AnthropicMessage[]): AnthropicMessage[] {
   return messages;
 }
 
+const ASSISTANT_EMPTY_PLACEHOLDER = '[No content generated]';
+const USER_EMPTY_PLACEHOLDER = '[Empty message]';
+
+function getEmptyMessagePlaceholder(role: AnthropicMessage['role']): string {
+  return role === 'assistant'
+    ? ASSISTANT_EMPTY_PLACEHOLDER
+    : USER_EMPTY_PLACEHOLDER;
+}
+
 function sanitizeEmptyMessages(
   messages: AnthropicMessage[],
 ): AnthropicMessage[] {
@@ -437,11 +446,10 @@ function sanitizeEmptyMessages(
     if (isLast || !isEmpty) {
       return message;
     }
-    const placeholder =
-      message.role === 'assistant'
-        ? '[No content generated]'
-        : '[Empty message]';
-    return { ...message, content: placeholder };
+    return {
+      ...message,
+      content: getEmptyMessagePlaceholder(message.role),
+    };
   });
 }
 
@@ -465,4 +473,62 @@ function ensureNoTrailingAssistant(
     ];
   }
   return messages;
+}
+
+/**
+ * Removes empty / whitespace-only text blocks from message content arrays.
+ *
+ * Strict Anthropic-compatible endpoints (e.g. z.ai) reject a request when a
+ * message content array contains a zero-length text block — z.ai returns 400
+ * code 1213 "The prompt parameter was not received normally" (Issue #2410).
+ * Empty text blocks can appear alongside a tool_result block in a user turn
+ * (an assistant tool-call turn with no accompanying prose still yields a text
+ * part downstream). They carry no information, so dropping them is safe.
+ *
+ * If removing empty text blocks would leave a message with no content blocks,
+ * the empty content is replaced with the same placeholder strings used by
+ * sanitizeEmptyMessages so strict endpoints never receive a zero-length text
+ * payload in the final message.
+ */
+export function stripEmptyTextBlocks(
+  messages: AnthropicMessage[],
+  logger: { debug: (fn: () => string) => void },
+): AnthropicMessage[] {
+  let strippedCount = 0;
+  const result = messages.map((message) => {
+    if (typeof message.content === 'string') {
+      if (message.content.trim() !== '') {
+        return message;
+      }
+      strippedCount += 1;
+      return {
+        ...message,
+        content: getEmptyMessagePlaceholder(message.role),
+      };
+    }
+    const filtered = message.content.filter((block: AnthropicMessageBlock) => {
+      if (block.type === 'text') {
+        return block.text.trim() !== '';
+      }
+      return true;
+    });
+    if (filtered.length === message.content.length) {
+      return message;
+    }
+    strippedCount += message.content.length - filtered.length;
+    if (filtered.length === 0) {
+      return {
+        ...message,
+        content: getEmptyMessagePlaceholder(message.role),
+      };
+    }
+    return { ...message, content: filtered };
+  });
+  if (strippedCount > 0) {
+    logger.debug(
+      () =>
+        `[AnthropicProvider] Stripped ${strippedCount} empty text block(s) from request messages`,
+    );
+  }
+  return result;
 }
