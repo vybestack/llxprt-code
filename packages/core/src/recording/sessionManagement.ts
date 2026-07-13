@@ -85,38 +85,54 @@ export async function deleteSession(
     return { ok: false, error: resolved.error };
   }
 
-  const target = resolved.session;
+  return deleteResolvedSession(resolved.session, chatsDir);
+}
 
-  const locked = await SessionLockManager.isLocked(chatsDir, target.sessionId);
-  if (locked) {
-    const stale = await SessionLockManager.isStale(chatsDir, target.sessionId);
-    if (stale) {
-      await SessionLockManager.removeStaleLock(chatsDir, target.sessionId);
-    } else {
+/** Delete a session only when the supplied identifier is an exact match. */
+export async function deleteSessionById(
+  sessionId: string,
+  chatsDir: string,
+  projectHash: string,
+): Promise<DeleteSessionResult | DeleteSessionError> {
+  const sessions = await SessionDiscovery.listSessions(chatsDir, projectHash);
+  const target = sessions.find((session) => session.sessionId === sessionId);
+  if (target === undefined) {
+    return { ok: false, error: `Session not found: ${sessionId}` };
+  }
+
+  return deleteResolvedSession(target, chatsDir);
+}
+
+async function deleteResolvedSession(
+  target: SessionSummary,
+  chatsDir: string,
+): Promise<DeleteSessionResult | DeleteSessionError> {
+  let lock;
+  try {
+    lock = await SessionLockManager.acquire(chatsDir, target.sessionId);
+  } catch (error: unknown) {
+    if ((error as Error).message === 'Session is in use by another process') {
       return {
         ok: false,
         error: 'Cannot delete: session is in use by another process',
       };
     }
+    return {
+      ok: false,
+      error: `Failed to lock session for deletion: ${(error as Error).message}`,
+    };
   }
 
   const { unlink } = await import('node:fs/promises');
-
   try {
     await unlink(target.filePath);
+    return { ok: true, deletedSessionId: target.sessionId };
   } catch (error: unknown) {
     return {
       ok: false,
       error: `Failed to delete session: ${(error as Error).message}`,
     };
+  } finally {
+    await lock.release();
   }
-
-  const lockPath = SessionLockManager.getLockPath(chatsDir, target.sessionId);
-  try {
-    await unlink(lockPath);
-  } catch {
-    // Lock file may not exist
-  }
-
-  return { ok: true, deletedSessionId: target.sessionId };
 }

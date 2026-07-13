@@ -21,7 +21,10 @@
  */
 
 export * from './types.js';
-export { SessionRecordingService } from './SessionRecordingService.js';
+export {
+  SessionRecordingService,
+  SESSION_FILE_ID_PREFIX_LENGTH,
+} from './SessionRecordingService.js';
 export { replaySession, readSessionHeader } from './ReplayEngine.js';
 export { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 export { RecordingIntegration } from './RecordingIntegration.js';
@@ -44,8 +47,17 @@ export {
   type ResumeError,
 } from './resumeSession.js';
 export {
+  RESUME_NO_SESSIONS_FOUND,
+  RESUME_SESSION_NOT_FOUND_PREFIX,
+  RESUME_SESSION_INDEX_OUT_OF_RANGE_PREFIX,
+  RESUME_SESSION_INDEX_OUT_OF_RANGE_RE,
+  resumeSessionNotFoundMessage,
+  resumeSessionIndexOutOfRangeMessage,
+} from './resumeNotFoundMessages.js';
+export {
   listSessions,
   deleteSession,
+  deleteSessionById,
   type ListSessionsResult,
   type DeleteSessionResult,
   type DeleteSessionError,

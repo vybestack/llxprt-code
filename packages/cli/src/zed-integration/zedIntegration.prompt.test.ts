@@ -11,6 +11,7 @@ import type { Config } from '@vybestack/llxprt-code-core';
 import { todoEvents } from '@vybestack/llxprt-code-core';
 
 import { Session } from './zedIntegration.js';
+import { STREAM_BLOCKED_MESSAGE } from './zed-stream-batcher.js';
 import {
   buildFakeAgent,
   buildScriptedAgent,
@@ -24,9 +25,9 @@ import {
 const createdSessions: Session[] = [];
 
 async function disposeCreatedSessions(): Promise<void> {
-  for (const session of createdSessions.splice(0)) {
-    await session.dispose();
-  }
+  await Promise.allSettled(
+    createdSessions.splice(0).map((session) => session.dispose()),
+  );
 }
 
 describe('Zed Session.prompt (Agent API) - streaming output', () => {
@@ -124,6 +125,36 @@ describe('Zed Session.prompt (Agent API) - streaming output', () => {
     };
     expect(update.content.text).toContain('blocked due to emoji detection');
   });
+
+  it('flushes the emoji buffer on a blocked chunk so a following clean chunk is emitted instead of re-blocked', async () => {
+    // Error mode: the first chunk carries an emoji and is blocked. The blocking
+    // content stays in the EmojiFilter's internal buffer; without flushing it on
+    // the blocked path, the NEXT (clean) chunk would be concatenated with the
+    // stale emoji buffer, re-detected, and blocked again — losing the clean text.
+    const { agent } = buildFakeAgent([
+      { type: 'text', text: 'blocked \u{1F600}' },
+      { type: 'text', text: 'all clean now.' },
+      { type: 'done', reason: 'stop' },
+    ]);
+    const connection = new RecordingConnection();
+    const config = {
+      ...buildMinimalConfig(),
+      getEphemeralSetting: (key: string) =>
+        key === 'emojifilter' ? 'error' : undefined,
+    } as unknown as Config;
+    const session = createSession(agent, connection, config);
+    createdSessions.push(session);
+
+    await runPrompt(session);
+
+    // Exactly ONE blocked error, THEN the clean follow-up text — proving the
+    // buffer was flushed so the clean chunk filtered cleanly instead of being
+    // re-blocked (which would produce a second error and drop 'all clean now.').
+    const texts = connection
+      .onlySessionUpdates()
+      .map((u) => (u as { content: { text: string } }).content.text);
+    expect(texts).toStrictEqual([STREAM_BLOCKED_MESSAGE, 'all clean now.']);
+  });
 });
 
 describe('Zed Session.prompt (Agent API) - tool-call status progression', () => {
@@ -165,13 +196,56 @@ describe('Zed Session.prompt (Agent API) - tool-call status progression', () => 
     const startUpdate = updates[0] as {
       locations: acp.ToolCallLocation[];
       status: string;
+      rawInput?: Record<string, unknown>;
     };
     expect(startUpdate.status).toBe('in_progress');
     expect(startUpdate.locations).toStrictEqual([
       { path: '/project/file.txt', line: 7 },
     ]);
+    // The live tool_call start carries rawInput for replay parity and ACP debugging.
+    expect(startUpdate.rawInput).toStrictEqual({
+      absolute_path: '/project/file.txt',
+      offset: 7,
+    });
     expect((updates[1] as { status: string }).status).toBe('in_progress');
     expect((updates[2] as { status: string }).status).toBe('completed');
+  });
+
+  it('uses the registered tool kind on every live tool notification', async () => {
+    const toolCallId = 'registry-kind';
+    const { agent } = buildFakeAgent(
+      [
+        {
+          type: 'tool-call',
+          call: { id: toolCallId, name: 'custom_lookup', args: {} },
+        },
+        {
+          type: 'tool-status',
+          update: {
+            id: toolCallId,
+            name: 'custom_lookup',
+            status: 'executing',
+          },
+        },
+        {
+          type: 'tool-result',
+          result: { id: toolCallId, name: 'custom_lookup', output: 'found' },
+        },
+        { type: 'done', reason: 'stop' },
+      ],
+      { custom_lookup: 'search' },
+    );
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    await runPrompt(session);
+
+    expect(
+      connection
+        .onlySessionUpdates()
+        .map((update) => (update as { kind?: acp.ToolKind }).kind),
+    ).toStrictEqual(['search', 'search', 'search']);
   });
 
   it('surfaces multiple path locations and known tool kinds', async () => {
@@ -384,6 +458,7 @@ describe('Zed Session.prompt (Agent API) - tool permission round-trip', () => {
     expect(connection.messages.map((m) => m.kind)).toStrictEqual([
       'sessionUpdate',
       'requestPermission',
+      'sessionUpdate',
       'sessionUpdate',
     ]);
     expect(confirmations).toStrictEqual([
@@ -698,5 +773,120 @@ describe('Zed Session (Agent API) - lifecycle', () => {
     });
     await new Promise((r) => setImmediate(r));
     expect(connection.sessionUpdateKinds()).not.toContain('plan');
+  });
+});
+
+describe('Zed Session.prompt (Agent API) - session_info_update (issue #1611)', () => {
+  afterEach(disposeCreatedSessions);
+
+  it('emits a session_info_update with a title derived from the first prompt', async () => {
+    const { agent } = buildFakeAgent([{ type: 'done', reason: 'stop' }]);
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    await session.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'text', text: 'Investigate session lifecycle' }],
+    });
+
+    const infoUpdates = connection.sessionInfoUpdates();
+    expect(infoUpdates).toHaveLength(1);
+    expect(infoUpdates[0].title).toBe('Investigate session lifecycle');
+    expect(infoUpdates[0].updatedAt).toStrictEqual(expect.any(String));
+  });
+
+  it('emits updatedAt on a subsequent prompt without regenerating the title', async () => {
+    const { agent } = buildFakeAgent([{ type: 'done', reason: 'stop' }]);
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    await session.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'text', text: 'First prompt here' }],
+    });
+    const firstInfoUpdates = connection.sessionInfoUpdates();
+
+    await session.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'text', text: 'Second prompt here' }],
+    });
+
+    const infoUpdates = connection.sessionInfoUpdates();
+    expect(firstInfoUpdates).toHaveLength(1);
+    expect(infoUpdates).toHaveLength(2);
+    expect(infoUpdates[1].updatedAt).toStrictEqual(expect.any(String));
+    expect(infoUpdates[1].title).toBeUndefined();
+  });
+
+  it('emits updatedAt after a cancelled turn', async () => {
+    const { agent } = buildFakeAgent([{ type: 'done', reason: 'aborted' }]);
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    const response = await session.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'text', text: 'A prompt that gets cancelled' }],
+    });
+
+    expect(response.stopReason).toBe('cancelled');
+    const infoUpdates = connection.sessionInfoUpdates();
+    expect(infoUpdates).toHaveLength(1);
+    expect(infoUpdates[0].updatedAt).toStrictEqual(expect.any(String));
+  });
+
+  it('emits updatedAt after a failed turn (error event)', async () => {
+    const { agent } = buildFakeAgent([
+      { type: 'error', error: { message: 'kaboom' } },
+    ]);
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    await expect(
+      session.prompt({
+        sessionId: 'test-session-id',
+        prompt: [{ type: 'text', text: 'A prompt that errors' }],
+      }),
+    ).rejects.toThrow(/kaboom/);
+
+    const infoUpdates = connection.sessionInfoUpdates();
+    expect(infoUpdates).toHaveLength(1);
+    expect(infoUpdates[0].updatedAt).toStrictEqual(expect.any(String));
+  });
+
+  it('does not emit a title when the first prompt has no text content', async () => {
+    const { agent } = buildFakeAgent([{ type: 'done', reason: 'stop' }]);
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    await session.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'resource_link', uri: 'file:///p', name: 'p.ts' }],
+    });
+
+    const infoUpdates = connection.sessionInfoUpdates();
+    expect(infoUpdates).toHaveLength(1);
+    expect(infoUpdates[0].updatedAt).toStrictEqual(expect.any(String));
+    expect(infoUpdates[0].title).toBeUndefined();
+  });
+
+  it('exposes the derived title and updatedAt via getLifecycleInfo for the session listing', async () => {
+    const { agent } = buildFakeAgent([{ type: 'done', reason: 'stop' }]);
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+
+    await session.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'text', text: 'Listing title here' }],
+    });
+
+    const info = session.getLifecycleInfo();
+    expect(info.title).toBe('Listing title here');
+    expect(info.updatedAt).toStrictEqual(expect.any(String));
   });
 });

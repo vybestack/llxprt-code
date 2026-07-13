@@ -69,7 +69,9 @@ export function extractToolResultText(
 export function extractTextFromPartList(
   llmContent: ContractPartListUnion | undefined,
 ): string | null {
-  if (llmContent === undefined) {
+  // Runtime callers can pass null (deserialized JSON); the type does not
+  // include it, so check explicitly.
+  if (llmContent === undefined || (llmContent as unknown) === null) {
     return null;
   }
 
