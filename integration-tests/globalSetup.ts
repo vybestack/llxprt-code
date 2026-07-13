@@ -23,17 +23,18 @@ const __dirname = import.meta?.url
 const rootDir = join(__dirname, '..');
 const integrationTestsDir = join(rootDir, '.integration-tests');
 let runDir = ''; // Make runDir accessible in teardown
+let integrationStorageRoot = ''; // Track temp storage root for cleanup
 
 export async function setup() {
   // Isolate ALL storage roots so spawned CLI subprocesses (which inherit
   // process.env) never write into the real user config/data/cache/log dirs.
-  const testStorageRoot = await mkdtemp(
+  integrationStorageRoot = await mkdtemp(
     path.join(os.tmpdir(), 'llxprt-integration-storage-'),
   );
-  process.env.LLXPRT_CONFIG_HOME = join(testStorageRoot, 'config');
-  process.env.LLXPRT_DATA_HOME = join(testStorageRoot, 'data');
-  process.env.LLXPRT_CACHE_HOME = join(testStorageRoot, 'cache');
-  process.env.LLXPRT_LOG_HOME = join(testStorageRoot, 'log');
+  process.env.LLXPRT_CONFIG_HOME = join(integrationStorageRoot, 'config');
+  process.env.LLXPRT_DATA_HOME = join(integrationStorageRoot, 'data');
+  process.env.LLXPRT_CACHE_HOME = join(integrationStorageRoot, 'cache');
+  process.env.LLXPRT_LOG_HOME = join(integrationStorageRoot, 'log');
 
   runDir = join(integrationTestsDir, `${Date.now()}`);
   await mkdir(runDir, { recursive: true });
@@ -77,6 +78,15 @@ export async function teardown() {
       await rm(runDir, { recursive: true, force: true });
     } catch (e) {
       console.warn('Failed to clean up test run directory:', e);
+    }
+  }
+
+  // Cleanup the isolated storage root.
+  if (integrationStorageRoot) {
+    try {
+      await rm(integrationStorageRoot, { recursive: true, force: true });
+    } catch (e) {
+      console.warn('Failed to clean up temporary storage root:', e);
     }
   }
 }

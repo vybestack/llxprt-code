@@ -23,17 +23,18 @@ const __dirname = import.meta?.url
 const rootDir = join(__dirname, '..');
 const evalsDir = join(rootDir, '.evals');
 let runDir = ''; // Make runDir accessible in teardown
+let evalsStorageRoot = ''; // Track temp storage root for cleanup
 
 export async function setup() {
   // Isolate ALL storage roots so spawned CLI subprocesses (which inherit
   // process.env) never write into the real user config/data/cache/log dirs.
-  const testStorageRoot = await mkdtemp(
+  evalsStorageRoot = await mkdtemp(
     path.join(os.tmpdir(), 'llxprt-evals-storage-'),
   );
-  process.env.LLXPRT_CONFIG_HOME = join(testStorageRoot, 'config');
-  process.env.LLXPRT_DATA_HOME = join(testStorageRoot, 'data');
-  process.env.LLXPRT_CACHE_HOME = join(testStorageRoot, 'cache');
-  process.env.LLXPRT_LOG_HOME = join(testStorageRoot, 'log');
+  process.env.LLXPRT_CONFIG_HOME = join(evalsStorageRoot, 'config');
+  process.env.LLXPRT_DATA_HOME = join(evalsStorageRoot, 'data');
+  process.env.LLXPRT_CACHE_HOME = join(evalsStorageRoot, 'cache');
+  process.env.LLXPRT_LOG_HOME = join(evalsStorageRoot, 'log');
 
   runDir = join(evalsDir, `${Date.now()}`);
   await mkdir(runDir, { recursive: true });
@@ -76,6 +77,15 @@ export async function teardown() {
       await rm(runDir, { recursive: true, force: true });
     } catch (e) {
       console.warn('Failed to clean up eval run directory:', e);
+    }
+  }
+
+  // Cleanup the isolated storage root.
+  if (evalsStorageRoot) {
+    try {
+      await rm(evalsStorageRoot, { recursive: true, force: true });
+    } catch (e) {
+      console.warn('Failed to clean up temporary storage root:', e);
     }
   }
 }

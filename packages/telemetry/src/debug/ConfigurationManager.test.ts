@@ -12,15 +12,15 @@ import type { DebugSettings } from './types.js';
 describe('ConfigurationManager', () => {
   let originalHome: string | undefined;
   let originalDebugSection: string | undefined;
+  let backupPath: string | undefined;
+  let tempHomeDir: string | undefined;
 
   beforeEach(() => {
     ConfigurationManager.resetForTesting();
 
     originalHome = process.env.HOME;
-    const tempHome = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'llxprt-config-test-'),
-    );
-    process.env.HOME = tempHome;
+    tempHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-config-test-'));
+    process.env.HOME = tempHomeDir;
 
     delete process.env.DEBUG;
     delete process.env.LLXPRT_DEBUG;
@@ -31,17 +31,19 @@ describe('ConfigurationManager', () => {
     // os.homedir() is cached in vitest worker threads and does NOT reflect
     // changes to process.env.HOME. We must clean the debug section from the
     // real settings.json (resolved by os.homedir()) to prevent cross-test
-    // contamination. We save the original debug section for restoration.
+    // contamination. We write a backup to disk for crash-safety recovery.
     const realSettingsPath = path.join(
       os.homedir(),
       '.llxprt',
       'settings.json',
     );
+    backupPath = realSettingsPath + '.test-backup';
     if (fs.existsSync(realSettingsPath)) {
       try {
         const content = JSON.parse(fs.readFileSync(realSettingsPath, 'utf8'));
         if (content.debug !== undefined) {
           originalDebugSection = JSON.stringify(content.debug);
+          fs.writeFileSync(backupPath, JSON.stringify(content, null, 2));
           delete content.debug;
           fs.writeFileSync(realSettingsPath, JSON.stringify(content, null, 2));
         }
@@ -73,16 +75,38 @@ describe('ConfigurationManager', () => {
       '.llxprt',
       'settings.json',
     );
-    if (originalDebugSection !== undefined && fs.existsSync(realSettingsPath)) {
-      try {
-        const content = JSON.parse(fs.readFileSync(realSettingsPath, 'utf8'));
-        content.debug = JSON.parse(originalDebugSection);
-        fs.writeFileSync(realSettingsPath, JSON.stringify(content, null, 2));
-      } catch {
-        // Best-effort restore.
+    if (originalDebugSection !== undefined && backupPath !== undefined) {
+      if (fs.existsSync(backupPath)) {
+        // Restore from disk backup for crash safety.
+        try {
+          fs.copyFileSync(backupPath, realSettingsPath);
+          fs.unlinkSync(backupPath);
+        } catch {
+          // Best-effort restore.
+        }
+      } else if (fs.existsSync(realSettingsPath)) {
+        // Fallback: restore debug section from memory.
+        try {
+          const content = JSON.parse(fs.readFileSync(realSettingsPath, 'utf8'));
+          content.debug = JSON.parse(originalDebugSection);
+          fs.writeFileSync(realSettingsPath, JSON.stringify(content, null, 2));
+        } catch {
+          // Best-effort restore.
+        }
       }
     }
     originalDebugSection = undefined;
+    backupPath = undefined;
+
+    // Clean up the temp home directory.
+    if (tempHomeDir !== undefined) {
+      try {
+        fs.rmSync(tempHomeDir, { recursive: true, force: true });
+      } catch {
+        // Best-effort cleanup.
+      }
+      tempHomeDir = undefined;
+    }
   });
 
   describe('Singleton Pattern', () => {

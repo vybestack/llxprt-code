@@ -48,13 +48,9 @@ describe('ProfileManager storage isolation', () => {
     expect(JSON.parse(content).provider).toBe('gemini');
 
     // The file must NOT exist beneath the real home directory.
-    const homeConfigPath = path.join(
-      os.homedir(),
-      '.llxprt',
-      'profiles',
-      'isolation-test-profile.json',
-    );
-    await expect(fs.access(homeConfigPath)).rejects.toThrow('ENOENT');
+    // Use os.homedir() to verify regardless of platform-specific config dir.
+    const profilePathRelativeToHome = path.relative(os.homedir(), profilePath);
+    expect(profilePathRelativeToHome.startsWith('..')).toBe(true);
   });
 
   it('constructs the default profiles directory from Storage.getGlobalConfigDir', async () => {

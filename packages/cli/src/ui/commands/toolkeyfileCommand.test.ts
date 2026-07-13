@@ -218,7 +218,11 @@ describe('toolkeyfileCommand', () => {
         expect(result.content).toContain(fakeHome);
         expect(result.content).not.toContain('~');
       } finally {
-        process.env.HOME = originalHome;
+        if (originalHome === undefined) {
+          delete process.env.HOME;
+        } else {
+          process.env.HOME = originalHome;
+        }
         await fs.rm(fakeHome, { recursive: true, force: true });
       }
     });

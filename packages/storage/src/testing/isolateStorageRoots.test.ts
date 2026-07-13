@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import * as os from 'node:os';
+import * as path from 'node:path';
 
 import { isolateStorageRoots } from './isolateStorageRoots.js';
 import { Storage } from '../config/storage.js';
@@ -24,7 +25,10 @@ describe('isolateStorageRoots', () => {
     const tempRoot = isolateStorageRoots();
     const home = os.homedir();
 
-    expect(tempRoot.startsWith(home)).toBe(false);
+    // On Windows, os.tmpdir() may return a path beneath the user profile.
+    // In that case, verify isolation via path.relative instead of startsWith.
+    const relative = path.relative(home, tempRoot);
+    expect(relative.startsWith('..') || path.isAbsolute(relative)).toBe(true);
   });
 
   it('is idempotent: calling twice returns the same root', () => {
@@ -35,6 +39,8 @@ describe('isolateStorageRoots', () => {
   });
 
   it('sets the LLXPRT_TEST_STORAGE_ISOLATED marker to "1"', () => {
+    // Clear the marker so we can verify the function actually sets it.
+    delete process.env.LLXPRT_TEST_STORAGE_ISOLATED;
     isolateStorageRoots();
 
     expect(process.env.LLXPRT_TEST_STORAGE_ISOLATED).toBe('1');
