@@ -23,7 +23,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { SANCTIONED_GENAI_VERSION } from '../genai-enclave/config.ts';
-import { REPO_ROOT, bunAvailable } from './genai-enclave-guard-helpers.ts';
+import { REPO_ROOT } from './genai-enclave-guard-helpers.ts';
 
 const GENAI_PACKAGE = '@google/genai';
 const REQUIRED_VERSION = SANCTIONED_GENAI_VERSION;
@@ -68,12 +68,19 @@ function isDependencyManifest(value: unknown): value is DependencyManifest {
     'optionalDependencies',
   ].every((key) => {
     const section = manifest[key];
-    return (
-      section === undefined ||
-      (typeof section === 'object' &&
-        section !== null &&
-        !Array.isArray(section))
-    );
+    if (section === undefined) return true;
+    if (
+      typeof section !== 'object' ||
+      section === null ||
+      Array.isArray(section)
+    ) {
+      return false;
+    }
+    // Only enforce that @google/genai (if present) is a string, so that
+    // valid manifests with object-style dependency specs in other entries
+    // are not rejected.
+    const genaiVersion = (section as Record<string, unknown>)[GENAI_PACKAGE];
+    return genaiVersion === undefined || typeof genaiVersion === 'string';
   });
 }
 
@@ -86,73 +93,67 @@ function getGenaiVersion(manifest: DependencyManifest): string | undefined {
   );
 }
 
-describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
-  'published-root packaging bridge regression (finding2)',
-  () => {
-    describe('exact dependency declarations exist', () => {
-      for (const workspace of REQUIRED_WORKSPACES) {
-        const label =
-          workspace === '.' ? 'root package.json' : `${workspace}/package.json`;
+describe('published-root packaging bridge regression (finding2)', () => {
+  describe('exact dependency declarations exist', () => {
+    for (const workspace of REQUIRED_WORKSPACES) {
+      const label =
+        workspace === '.' ? 'root package.json' : `${workspace}/package.json`;
 
-        it(`${label} declares ${GENAI_PACKAGE} at exactly ${REQUIRED_VERSION}`, () => {
-          const manifest = readManifest(workspace);
-          const version = getGenaiVersion(manifest);
-          expect(
-            version,
-            `${label} must declare ${GENAI_PACKAGE}`,
-          ).toBeDefined();
-          expect(version).toBe(REQUIRED_VERSION);
-        });
-      }
-
-      it('all three workspace versions are identical (no drift)', () => {
-        const versions = REQUIRED_WORKSPACES.map((ws) =>
-          getGenaiVersion(readManifest(ws)),
-        );
-        const uniqueVersions = new Set(versions);
-        expect(uniqueVersions.size).toBe(1);
-        expect([...uniqueVersions][0]).toBe(REQUIRED_VERSION);
+      it(`${label} declares ${GENAI_PACKAGE} at exactly ${REQUIRED_VERSION}`, () => {
+        const manifest = readManifest(workspace);
+        const version = getGenaiVersion(manifest);
+        expect(version, `${label} must declare ${GENAI_PACKAGE}`).toBeDefined();
+        expect(version).toBe(REQUIRED_VERSION);
       });
-    });
+    }
 
-    describe('root packaging bridge rationale', () => {
-      it('root package.json is the packaging bridge (private but declares deps)', () => {
-        // The root is "private": true (not published directly), but it
-        // declares @google/genai so workspace installs resolve the SDK.
-        const rootManifest = JSON.parse(
-          readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'),
-        ) as { private?: boolean };
-        expect(rootManifest.private).toBe(true);
-      });
+    it('all three workspace versions are identical (no drift)', () => {
+      const versions = REQUIRED_WORKSPACES.map((ws) =>
+        getGenaiVersion(readManifest(ws)),
+      );
+      const uniqueVersions = new Set(versions);
+      expect(uniqueVersions.size).toBe(1);
+      expect([...uniqueVersions][0]).toBe(REQUIRED_VERSION);
     });
+  });
 
-    describe('broad publish dependency invariant', () => {
-      // The package-tree invariant: @google/genai may appear only in core and
-      // providers. Root bridge coverage is handled by the focused checks above.
-      // The repository currently uses a flat packages/* workspace layout.
-      it('no workspace OTHER than root/core/providers declares @google/genai', () => {
-        const rogueWorkspaces: string[] = [];
-        const packagesDir = join(REPO_ROOT, 'packages');
-        for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {
-          const wsDir = `packages/${entry.name}`;
-          const manifestPath = join(packagesDir, entry.name, 'package.json');
-          const shouldCheck =
-            entry.isDirectory() &&
-            !(REQUIRED_WORKSPACES as readonly string[]).includes(wsDir) &&
-            existsSync(manifestPath);
-          if (shouldCheck) {
-            const version = getGenaiVersion(readManifest(wsDir));
-            if (version !== undefined) {
-              rogueWorkspaces.push(`${wsDir} (${version})`);
-            }
+  describe('root packaging bridge rationale', () => {
+    it('root package.json is the packaging bridge (private but declares deps)', () => {
+      // The root is "private": true (not published directly), but it
+      // declares @google/genai so workspace installs resolve the SDK.
+      const rootManifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'),
+      ) as { private?: boolean };
+      expect(rootManifest.private).toBe(true);
+    });
+  });
+
+  describe('broad publish dependency invariant', () => {
+    // The package-tree invariant: @google/genai may appear only in core and
+    // providers. Root bridge coverage is handled by the focused checks above.
+    // The repository currently uses a flat packages/* workspace layout.
+    it('no workspace OTHER than root/core/providers declares @google/genai', () => {
+      const rogueWorkspaces: string[] = [];
+      const packagesDir = join(REPO_ROOT, 'packages');
+      for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {
+        const wsDir = `packages/${entry.name}`;
+        const manifestPath = join(packagesDir, entry.name, 'package.json');
+        const shouldCheck =
+          entry.isDirectory() &&
+          !(REQUIRED_WORKSPACES as readonly string[]).includes(wsDir) &&
+          existsSync(manifestPath);
+        if (shouldCheck) {
+          const version = getGenaiVersion(readManifest(wsDir));
+          if (version !== undefined) {
+            rogueWorkspaces.push(`${wsDir} (${version})`);
           }
         }
-        expect(
-          rogueWorkspaces,
-          `Non-sanctioned workspaces declaring ${GENAI_PACKAGE}: ` +
-            rogueWorkspaces.join(', '),
-        ).toEqual([]);
-      });
+      }
+      expect(
+        rogueWorkspaces,
+        `Non-sanctioned workspaces declaring ${GENAI_PACKAGE}: ` +
+          rogueWorkspaces.join(', '),
+      ).toEqual([]);
     });
-  },
-);
+  });
+});

@@ -62,9 +62,7 @@ import {
   isInGeminiNameEnclave,
   isExplicitlyAllowedGeminiName,
   isTestFile,
-  GENAI_PACKAGE,
   getGenaiDependencyWorkspaceDirs,
-  getAllowedGenaiVersion,
 } from './genai-enclave/config.ts';
 import {
   scanGenaiImports,
@@ -249,107 +247,86 @@ function discoverFiles(): {
 
 // ─── Manifest checking ──────────────────────────────────────────────────────
 
-interface PackageJsonMetadata {
-  readonly dependencies?: Record<string, string>;
-  readonly devDependencies?: Record<string, string>;
-  readonly peerDependencies?: Record<string, string>;
-  readonly optionalDependencies?: Record<string, string>;
-}
+import {
+  validateManifestDependencies,
+  type ManifestDependencyViolation,
+  type ManifestOperationalError,
+  type RawManifest,
+} from './genai-enclave/manifest-enforcement.ts';
 
-interface ManifestViolation {
-  readonly workspaceDir: string;
-  readonly dependencyType: string;
-  readonly message: string;
+interface ManifestCheckResult {
+  readonly violations: ReadonlyArray<
+    ManifestDependencyViolation & {
+      readonly manifestPath: string;
+    }
+  >;
+  readonly errors: OperationalError[];
 }
 
 /**
  * Read and parse a package.json file. Throws on read or parse failure so
  * that manifest scanning fails closed on malformed/unreadable manifests
  * instead of silently skipping them (which could hide a genai dep).
- * Also validates that dependency sections (when present) are plain objects —
- * a non-object section could hide a genai declaration and must fail-closed.
  */
-function readPackageJson(filePath: string): PackageJsonMetadata {
+function readRawManifest(filePath: string): RawManifest {
   const content = readFileSync(filePath, 'utf8');
   const parsed: unknown = JSON.parse(content);
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     throw new Error('package.json must contain a JSON object');
   }
-  const manifest = parsed as Record<string, unknown>;
-  for (const depKey of [
-    'dependencies',
-    'devDependencies',
-    'peerDependencies',
-    'optionalDependencies',
-  ]) {
-    const section = manifest[depKey];
-    if (
-      section !== undefined &&
-      (typeof section !== 'object' ||
-        section === null ||
-        Array.isArray(section))
-    ) {
-      throw new Error(
-        `package.json "${depKey}" must be an object when present`,
-      );
-    }
-  }
-  return parsed as PackageJsonMetadata;
+  return parsed as RawManifest;
 }
 
-function getManifestViolation(
-  workspaceDir: string,
-  path: string,
-  dependencyType: string,
-  version: string,
-  allowedDirs: ReadonlySet<string>,
-): ManifestViolation | null {
-  if (!allowedDirs.has(workspaceDir)) {
-    return {
-      workspaceDir,
-      dependencyType,
-      message:
-        `${relRepo(path)}: ${GENAI_PACKAGE} found in "${dependencyType}" ` +
-        `(${version}) — not in the sanctioned workspace allowlist ` +
-        `(${Array.from(allowedDirs).join(', ')}). Remove it.`,
-    };
-  }
-
-  const allowedVersion = getAllowedGenaiVersion(workspaceDir);
-  if (allowedVersion !== undefined && version !== allowedVersion) {
-    return {
-      workspaceDir,
-      dependencyType,
-      message:
-        `${relRepo(path)}: ${GENAI_PACKAGE} version "${version}" ` +
-        `in "${dependencyType}" does not match the required exact version ` +
-        `"${allowedVersion}".`,
-    };
-  }
-  return null;
-}
+/**
+ * Check a single manifest for @google/genai dependency violations using the
+ * shared enforcement module (F1, F6, F9, F10).
+ */
+/**
+ * The set of workspace directories whose package.json MUST exist and be
+ * readable. These are the sanctioned genai-dependency workspaces; their
+ * absence means the guard cannot verify the dependency invariant, so it
+ * must fail closed (F4).
+ */
+const REQUIRED_MANIFEST_DIRS: ReadonlySet<string> = new Set(
+  getGenaiDependencyWorkspaceDirs(),
+);
 
 function checkManifest(
   workspaceDir: string,
   path: string,
-  allowedDirs: ReadonlySet<string>,
 ): {
-  violations: ManifestViolation[];
+  violations: Array<
+    ManifestDependencyViolation & {
+      readonly manifestPath: string;
+    }
+  >;
   errors: OperationalError[];
 } {
-  let pkg: PackageJsonMetadata;
+  let manifest: RawManifest;
   try {
-    pkg = readPackageJson(path);
+    manifest = readRawManifest(path);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    // ENOENT (no package.json) is acceptable: a missing manifest cannot
-    // declare a genai dependency. All other errors (malformed JSON, EACCES,
-    // etc.) fail closed.
     if (
       e instanceof Error &&
       'code' in e &&
       (e as { code?: string }).code === 'ENOENT'
     ) {
+      // F4: a required manifest (root/core/providers) being absent is an
+      // operational failure — the guard cannot verify the dependency
+      // invariant without it.
+      if (REQUIRED_MANIFEST_DIRS.has(workspaceDir)) {
+        return {
+          violations: [],
+          errors: [
+            {
+              message:
+                `Required manifest ${relRepo(path)} (workspace "${workspaceDir}") ` +
+                'is absent — fail-closed.',
+            },
+          ],
+        };
+      }
       return { violations: [], errors: [] };
     }
     return {
@@ -364,39 +341,30 @@ function checkManifest(
     };
   }
 
-  const depTypes: Array<{
-    key: keyof PackageJsonMetadata;
-    label: string;
-  }> = [
-    { key: 'dependencies', label: 'dependencies' },
-    { key: 'devDependencies', label: 'devDependencies' },
-    { key: 'peerDependencies', label: 'peerDependencies' },
-    { key: 'optionalDependencies', label: 'optionalDependencies' },
-  ];
-  const violations: ManifestViolation[] = [];
-  for (const { key, label } of depTypes) {
-    const version = pkg[key]?.[GENAI_PACKAGE];
-    const violation =
-      version === undefined
-        ? null
-        : getManifestViolation(workspaceDir, path, label, version, allowedDirs);
-    violations.push(...(violation === null ? [] : [violation]));
-  }
-  return { violations, errors: [] };
+  const result = validateManifestDependencies({ workspaceDir, manifest });
+  const violations = result.violations.map((v) => ({
+    ...v,
+    manifestPath: relRepo(path),
+  }));
+  const errors = result.errors.map(
+    (e: ManifestOperationalError): OperationalError => ({
+      message: `${relRepo(path)}: ${e.message}`,
+    }),
+  );
+  return { violations, errors };
 }
 
 /**
  * Check all package.json manifests (root + packages/*) for @google/genai
- * dependency declarations. The SDK must appear ONLY in the exact sanctioned
- * workspaces at the exact allowed version. Any other occurrence is a violation.
+ * dependency declarations via the shared enforcement module.
  */
-function checkManifests(): {
-  violations: ManifestViolation[];
-  errors: OperationalError[];
-} {
-  const violations: ManifestViolation[] = [];
+function checkManifests(): ManifestCheckResult {
+  const violations: Array<
+    ManifestDependencyViolation & {
+      manifestPath: string;
+    }
+  > = [];
   const errors: OperationalError[] = [];
-  const allowedDirs = new Set(getGenaiDependencyWorkspaceDirs());
 
   const manifestPaths: Array<{ workspaceDir: string; path: string }> = [
     { workspaceDir: '.', path: join(REPO_ROOT, 'package.json') },
@@ -431,8 +399,21 @@ function checkManifests(): {
 
   discoverManifests(PACKAGES_DIR);
 
+  // F4: explicitly ensure the required manifest paths are checked even if
+  // they were not discovered by the filesystem walk (i.e. they are absent).
+  // A required manifest's absence must be an operational failure.
+  for (const wsDir of REQUIRED_MANIFEST_DIRS) {
+    const manifestPath = join(REPO_ROOT, wsDir, 'package.json');
+    const alreadyListed = manifestPaths.some(
+      (entry) => entry.path === manifestPath,
+    );
+    if (!alreadyListed) {
+      manifestPaths.push({ workspaceDir: wsDir, path: manifestPath });
+    }
+  }
+
   for (const { workspaceDir, path } of manifestPaths) {
-    const result = checkManifest(workspaceDir, path, allowedDirs);
+    const result = checkManifest(workspaceDir, path);
     violations.push(...result.violations);
     errors.push(...result.errors);
   }
@@ -473,15 +454,28 @@ function formatViolation(v: Violation): string {
   return assertNever(v);
 }
 
-function formatManifestViolation(v: ManifestViolation): string {
-  return `  ${v.message}`;
+function formatManifestViolation(
+  v: ManifestDependencyViolation & { readonly manifestPath: string },
+): string {
+  return `  ${v.manifestPath}: ${v.message}`;
+}
+
+function isRuntimeExportSurface(relPath: string): boolean {
+  const fileName = relPath.slice(relPath.lastIndexOf('/') + 1);
+  return !/^(?:eslint|vitest|vite|webpack|rollup|jest)(?:[\w.-]*?)\.config\.[cm]?[jt]s$/.test(
+    fileName,
+  );
 }
 
 function collectGeminiExportViolations(
   sourceFile: ReturnType<typeof parseSourceFile>,
   relPath: string,
 ): Violation[] {
-  if (isInGeminiNameEnclave(relPath) || isTestFile(relPath)) {
+  if (
+    isInGeminiNameEnclave(relPath) ||
+    isTestFile(relPath) ||
+    !isRuntimeExportSurface(relPath)
+  ) {
     return [];
   }
   return scanGeminiExports(sourceFile, relPath).filter(

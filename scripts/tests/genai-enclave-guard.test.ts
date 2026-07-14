@@ -26,14 +26,12 @@
  */
 
 import { beforeAll, describe, expect, it } from 'vitest';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import {
-  REPO_ROOT,
   bunAvailable,
   runScript,
   runScriptRealRepo,
   withFixture,
+  writeRequiredManifests,
 } from './genai-enclave-guard-helpers.ts';
 
 const missingBunMessage =
@@ -69,6 +67,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
     describe('allowed enclaves (isolated positive cases)', () => {
       it('allows @google/genai import in packages/providers/src/gemini/', () => {
         const { code } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
           write(
             'packages/providers/src/gemini/geminiProvider.ts',
             GEMINI_IMPORT,
@@ -80,6 +79,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('allows @google/genai import in packages/core/src/code_assist/', () => {
         const { code } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
           write('packages/core/src/code_assist/codeAssist.ts', GEMINI_IMPORT);
           return runScript(root, 0);
         });
@@ -88,6 +88,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('allows a Gemini-named export inside the gemini enclave', () => {
         const { code } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
           write(
             'packages/providers/src/gemini/GeminiProvider.ts',
             'export class GeminiProvider {}\n',
@@ -99,6 +100,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('allows a Gemini-named export in code_assist enclave', () => {
         const { code } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
           write(
             'packages/core/src/code_assist/GeminiCredentialHelper.ts',
             'export class GeminiCredentialHelper {}\n',
@@ -265,6 +267,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('does NOT match @google/genai-utils (different package)', () => {
         const { code } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
           write(
             'packages/cli/src/utils-import.ts',
             "export { } from '@google/genai-utils';\n",
@@ -339,6 +342,32 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('computed-require.ts');
       });
 
+      it('FAILS a GenAI load through a bound createRequire alias', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/bound-require.ts',
+            "import { createRequire as makeRequire } from 'node:module';\nconst load = makeRequire(import.meta.url);\nexport const sdk = load('@google/genai');\n",
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('bound-require.ts');
+        expect(stdout).toContain('@google/genai');
+      });
+
+      it('FAILS a computed load through a bound createRequire alias', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/computed-bound-require.ts',
+            "import { createRequire } from 'node:module';\nconst load = createRequire(import.meta.url);\nconst specifier = 'anything';\nexport const value = load(specifier);\n",
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('computed-bound-require.ts');
+        expect(stdout).toContain('computed');
+      });
+
       it('FAILS a template-literal dynamic import() outside enclaves', () => {
         const { code, stdout } = withFixture(({ root, write }) => {
           write(
@@ -390,6 +419,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('does NOT flag computed imports in enclave files', () => {
         const { code } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
           write(
             'packages/providers/src/gemini/dynamic-loader.ts',
             "const pkg = '@google/genai'; export async function f() { return await import(pkg); }\n",
@@ -401,6 +431,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('does NOT flag string-literal dynamic imports of non-genai packages', () => {
         const { code } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
           write(
             'packages/cli/src/safe-dynamic.ts',
             "export async function f() { return await import('node:fs'); }\n",
@@ -448,8 +479,152 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('GeminiBar');
       });
 
+      it('FAILS a CommonJS defineProperty Gemini export', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/legacy.cjs',
+            "Object.defineProperty(exports, 'GeminiLegacy', { value: 1 });\n",
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('legacy.cjs');
+        expect(stdout).toContain('GeminiLegacy');
+      });
+
+      it('FAILS a CommonJS Object.assign Gemini export', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/assigned.cjs',
+            "Object.assign(module['exports'], { GeminiAssigned: 1 });\n",
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('assigned.cjs');
+        expect(stdout).toContain('GeminiAssigned');
+      });
+
+      it('FAILS a TypeScript export = object literal with a Gemini name', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/export-equals.ts',
+            'export = { GeminiTs: 1 };\n',
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('export-equals.ts');
+        expect(stdout).toContain('GeminiTs');
+      });
+
+      it('FAILS a chained CJS export assignment with a Gemini name', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/chained-exports.cjs',
+            'exports = module.exports = { GeminiCjs: 1 };\n',
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('chained-exports.cjs');
+        expect(stdout).toContain('GeminiCjs');
+      });
+
+      it('FAILS an inline spread with a Gemini name in module.exports', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/spread-export.cjs',
+            'module.exports = { ...{ GeminiLeak: 1 } };\n',
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('spread-export.cjs');
+        expect(stdout).toContain('GeminiLeak');
+      });
+
+      it('FAILS an inline spread with a Gemini name in TS export-equals', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/spread-export-equals.ts',
+            'export = { ...{ GeminiLeak: 1 } };\n',
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('spread-export-equals.ts');
+        expect(stdout).toContain('GeminiLeak');
+      });
+
+      it('FAILS a logical-assignment (||=) Gemini export', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/logical-or.cjs',
+            'exports.GeminiLeak ||= 1;\n',
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('logical-or.cjs');
+        expect(stdout).toContain('GeminiLeak');
+      });
+
+      it('FAILS a logical-assignment (??=) Gemini export', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/logical-coalesce.cjs',
+            'exports.GeminiLeak ??= 1;\n',
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('logical-coalesce.cjs');
+        expect(stdout).toContain('GeminiLeak');
+      });
+
+      it('FAILS a logical-assignment (&&=) Gemini export', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/logical-and.cjs',
+            'exports.GeminiLeak &&= 1;\n',
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('logical-and.cjs');
+        expect(stdout).toContain('GeminiLeak');
+      });
+
+      it('FAILS a bracket-access Object[defineProperty] Gemini export', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/bracket-odp.cjs',
+            "Object['defineProperty'](exports, 'GeminiLeak', { value: 1 });\n",
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('bracket-odp.cjs');
+        expect(stdout).toContain('GeminiLeak');
+      });
+
+      it('FAILS a bracket-access Object[assign] Gemini export', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/bracket-assign.cjs',
+            "Object['assign'](exports, { GeminiStatic: 1 });\n",
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('bracket-assign.cjs');
+        expect(stdout).toContain('GeminiStatic');
+      });
+
       it('allows non-Gemini-named exports outside enclaves', () => {
         const { code } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
           write('packages/cli/src/normal.ts', 'export class NormalClass {}\n');
           return runScript(root, 0);
         });
@@ -470,284 +645,79 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       });
     });
 
-    // ── Manifest violations ────────────────────────────────────────────
-    // Each fixture includes a minimal scannable source file so the guard
-    // reaches the manifest check and fails specifically on the manifest
-    // violation (not on "no scannable files found").
-    describe('manifest violations', () => {
-      it('allows the root packaging bridge at the sanctioned version', () => {
-        const { code } = withFixture(({ root, write }) => {
-          write(
-            'package.json',
-            JSON.stringify({
-              name: 'test-root',
-              dependencies: { '@google/genai': '1.30.0' },
-            }) + '\n',
-          );
-          write('packages/cli/src/index.ts', 'export const x = 1;\n');
-          return runScript(root, 0);
-        });
-        expect(code).toBe(0);
-      });
-
-      it('FAILS when packages/cli declares @google/genai', () => {
+    // ── Finding1: fail-closed violations are NOT filtered ──────────────
+    // Computed object keys and every unknown assign source must fail closed,
+    // even when the detail string does NOT contain "Gemini". The guard must
+    // NOT silently drop these — they could smuggle a Gemini-named export.
+    describe('fail-closed export violations (no guard filtering)', () => {
+      it('FAILS a computed-key module.exports assignment even without "Gemini"', () => {
         const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
           write(
-            'packages/cli/package.json',
-            JSON.stringify({
-              name: '@vybestack/llxprt-code-cli',
-              dependencies: { '@google/genai': '1.30.0' },
-            }) + '\n',
+            'packages/cli/src/computed-key.cjs',
+            'const key = "someDynamicName";\nmodule.exports[key] = 1;\n',
           );
-          write('packages/cli/src/index.ts', 'export const x = 1;\n');
           return runScript(root, 1);
         });
         expect(code).toBe(1);
-        expect(stdout).toContain('packages/cli');
-        expect(stdout).toContain('@google/genai');
-      });
-
-      it('FAILS when a nested package manifest declares @google/genai', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
-          write(
-            'packages/cli/examples/server/package.json',
-            JSON.stringify({
-              name: 'nested-server',
-              dependencies: { '@google/genai': '1.30.0' },
-            }) + '\n',
-          );
-          write('packages/cli/src/index.ts', 'export const x = 1;\n');
-          return runScript(root, 1);
-        });
-        expect(code).toBe(1);
-        expect(stdout).toContain('packages/cli/examples/server');
-        expect(stdout).toContain('@google/genai');
-      });
-
-      it('FAILS when packages/core declares wrong version of @google/genai', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
-          write(
-            'packages/core/package.json',
-            JSON.stringify({
-              name: '@vybestack/llxprt-code-core',
-              dependencies: { '@google/genai': '1.29.0' },
-            }) + '\n',
-          );
-          write('packages/core/src/index.ts', 'export const x = 1;\n');
-          return runScript(root, 1);
-        });
-        expect(code).toBe(1);
-        expect(stdout).toContain('does not match');
-        expect(stdout).toContain('1.30.0');
-      });
-
-      it('FAILS when packages/cli declares @google/genai in optionalDependencies', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
-          write(
-            'packages/cli/package.json',
-            JSON.stringify({
-              name: '@vybestack/llxprt-code-cli',
-              optionalDependencies: { '@google/genai': '1.30.0' },
-            }) + '\n',
-          );
-          write('packages/cli/src/index.ts', 'export const x = 1;\n');
-          return runScript(root, 1);
-        });
-        expect(code).toBe(1);
-        expect(stdout).toContain('optionalDependencies');
-        expect(stdout).toContain('@google/genai');
-      });
-
-      it('FAILS when root package.json is malformed JSON (fail-closed)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
-          write(
-            'package.json',
-            '{ "name": "broken", "dependencies": { "@google/genai": ',
-          );
-          write('packages/cli/src/index.ts', 'export const x = 1;\n');
-          return runScript(root, 1);
-        });
-        expect(code).toBe(1);
+        expect(stdout).toContain('computed-key.cjs');
         expect(stdout).toContain('fail-closed');
       });
 
-      it('allows packages/core to declare @google/genai at 1.30.0', () => {
-        const { code } = withFixture(({ root, write }) => {
-          write(
-            'packages/core/package.json',
-            JSON.stringify({
-              name: '@vybestack/llxprt-code-core',
-              dependencies: { '@google/genai': '1.30.0' },
-            }) + '\n',
-          );
-          write('packages/core/src/index.ts', 'export const x = 1;\n');
-          return runScript(root, 0);
-        });
-        expect(code).toBe(0);
-      });
-
-      it('allows packages/providers to declare @google/genai at 1.30.0', () => {
-        const { code } = withFixture(({ root, write }) => {
-          write(
-            'packages/providers/package.json',
-            JSON.stringify({
-              name: '@vybestack/llxprt-code-providers',
-              dependencies: { '@google/genai': '1.30.0' },
-            }) + '\n',
-          );
-          write('packages/providers/src/index.ts', 'export const x = 1;\n');
-          return runScript(root, 0);
-        });
-        expect(code).toBe(0);
-      });
-
-      it('FAILS when a dependency section is an array instead of an object (fail-closed)', () => {
+      it('FAILS Object.assign with a non-literal source even without "Gemini"', () => {
         const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
           write(
-            'package.json',
-            JSON.stringify({
-              name: 'bad-shape',
-              dependencies: ['@google/genai'],
-            }) + '\n',
-          );
-          write('packages/cli/src/index.ts', 'export const x = 1;\n');
-          return runScript(root, 1);
-        });
-        expect(code).toBe(1);
-        expect(stdout).toContain('fail-closed');
-        expect(stdout).toContain('dependencies');
-      });
-
-      it('FAILS when a dependency section is a string instead of an object (fail-closed)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
-          write(
-            'packages/core/package.json',
-            JSON.stringify({
-              name: 'bad-shape-pkg',
-              dependencies: '@google/genai',
-            }) + '\n',
-          );
-          write('packages/core/src/index.ts', 'export const x = 1;\n');
-          return runScript(root, 1);
-        });
-        expect(code).toBe(1);
-        expect(stdout).toContain('fail-closed');
-      });
-
-      it('FAILS when a dependency section is null instead of an object (fail-closed)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
-          write(
-            'packages/cli/package.json',
-            JSON.stringify({
-              name: 'null-deps',
-              dependencies: null,
-            }) + '\n',
-          );
-          write('packages/cli/src/index.ts', 'export const x = 1;\n');
-          return runScript(root, 1);
-        });
-        expect(code).toBe(1);
-        expect(stdout).toContain('fail-closed');
-      });
-    });
-
-    // ── Operational failures (fail-closed) ─────────────────────────────
-    describe('operational failures (fail-closed)', () => {
-      it('FAILS when zero TypeScript files are found (temp root with no packages)', () => {
-        // No files written — packages/ dir does not exist
-        const { code, stdout } = withFixture(({ root }) => runScript(root));
-        expect(code).toBe(1);
-        expect(stdout).toContain('no scannable files found');
-      });
-
-      it('FAILS on source with parse diagnostics (invalid syntax)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
-          write(
-            'packages/cli/src/broken-syntax.ts',
-            'export const x = ((((;\n',
+            'packages/cli/src/assign-src.cjs',
+            'const src = { normalName: 1 };\nObject.assign(exports, src);\n',
           );
           return runScript(root, 1);
         });
         expect(code).toBe(1);
-        expect(stdout).toContain('broken-syntax.ts');
+        expect(stdout).toContain('assign-src.cjs');
         expect(stdout).toContain('fail-closed');
       });
-    });
 
-    // ── Allowlist consistency ──────────────────────────────────────────
-    describe('allowlist consistency', () => {
-      it('GEMINI_NAME_EXPLICIT_ALLOWLIST has no duplicate path::name keys', async () => {
-        const { GEMINI_NAME_EXPLICIT_ALLOWLIST } = await import(
-          '../genai-enclave/config.ts'
-        );
-        const keys = GEMINI_NAME_EXPLICIT_ALLOWLIST.map(
-          (e) => `${e.path}::${e.name}`,
-        );
-        const seen = new Set<string>();
-        const dups = keys.filter((k) => {
-          if (seen.has(k)) return true;
-          seen.add(k);
-          return false;
+      it('FAILS export default with non-literal spread even without "Gemini"', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
+          write(
+            'packages/cli/src/spread-default.ts',
+            'const base = { foo: 1 };\nexport default { ...base };\n',
+          );
+          return runScript(root, 1);
         });
-        expect(dups, `Duplicate allowlist entries: ${dups.join(', ')}`).toEqual(
-          [],
-        );
+        expect(code).toBe(1);
+        expect(stdout).toContain('spread-default.ts');
+        expect(stdout).toContain('fail-closed');
       });
 
-      it('every allowlist entry has path, name, and justification', async () => {
-        const { GEMINI_NAME_EXPLICIT_ALLOWLIST } = await import(
-          '../genai-enclave/config.ts'
-        );
-        for (const entry of GEMINI_NAME_EXPLICIT_ALLOWLIST) {
-          expect(entry.path.length).toBeGreaterThan(0);
-          expect(entry.name.length).toBeGreaterThan(0);
-          expect(entry.justification.length).toBeGreaterThan(0);
-        }
+      it('FAILS Object.defineProperty with computed key even without "Gemini"', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
+          write(
+            'packages/cli/src/odp-computed.cjs',
+            'const key = "dynamicProp";\nObject.defineProperty(exports, key, {});\n',
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('odp-computed.cjs');
+        expect(stdout).toContain('fail-closed');
       });
 
-      it('GENAI_DEPENDENCY_MANIFESTS includes the packaging bridge and implementation workspaces', async () => {
-        const { GENAI_DEPENDENCY_MANIFESTS } = await import(
-          '../genai-enclave/config.ts'
-        );
-        const dirs = GENAI_DEPENDENCY_MANIFESTS.map(
-          (e) => e.workspaceDir,
-        ).sort();
-        expect(dirs).toEqual(['.', 'packages/core', 'packages/providers']);
-        for (const entry of GENAI_DEPENDENCY_MANIFESTS) {
-          expect(entry.version).toBe('1.30.0');
-          expect(entry.justification.length).toBeGreaterThan(0);
-        }
-      });
-
-      it('GENAI_IMPORT_ENCLAVES has exactly gemini and code_assist with justifications', async () => {
-        const { GENAI_IMPORT_ENCLAVES } = await import(
-          '../genai-enclave/config.ts'
-        );
-        const prefixes = GENAI_IMPORT_ENCLAVES.map((e) => e.prefix).sort();
-        expect(prefixes).toEqual([
-          'packages/core/src/code_assist/',
-          'packages/providers/src/gemini/',
-        ]);
-        for (const entry of GENAI_IMPORT_ENCLAVES) {
-          expect(entry.justification.length).toBeGreaterThan(0);
-        }
-      });
-
-      it('every allowlist path::name refers to a real file in the repo (liveness)', async () => {
-        const { GEMINI_NAME_EXPLICIT_ALLOWLIST } = await import(
-          '../genai-enclave/config.ts'
-        );
-        const stale: string[] = [];
-        for (const entry of GEMINI_NAME_EXPLICIT_ALLOWLIST) {
-          const abs = join(REPO_ROOT, entry.path);
-          if (!existsSync(abs)) {
-            stale.push(`${entry.path}::${entry.name} (file not found)`);
-          }
-        }
-        expect(
-          stale,
-          `Stale allowlist entries (file no longer exists): ${stale.join(', ')}`,
-        ).toEqual([]);
+      it('FAILS export = with non-literal spread even without "Gemini"', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
+          write(
+            'packages/cli/src/spread-export-equals.ts',
+            'const base = { foo: 1 };\nexport = { ...base };\n',
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('spread-export-equals.ts');
+        expect(stdout).toContain('fail-closed');
       });
     });
   },

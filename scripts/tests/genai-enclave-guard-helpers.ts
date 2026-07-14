@@ -21,7 +21,6 @@ export const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = join(SCRIPT_DIR, '..', '..');
 export const SCRIPT = join(REPO_ROOT, 'scripts', 'check-genai-enclave.ts');
 export const RUNTIME = process.env.BUN_EXECUTABLE || 'bun';
-
 let cachedBunAvailable: boolean | undefined;
 
 export function bunAvailable(): boolean {
@@ -152,6 +151,35 @@ function runGuard(
 export interface FixtureHelpers {
   readonly root: string;
   write(relPath: string, content: string): void;
+}
+
+/**
+ * The exact version string the guard requires for sanctioned workspaces.
+ * Imported from the source-of-truth config module to prevent drift between
+ * config and tests.
+ */
+import { SANCTIONED_GENAI_VERSION } from '../genai-enclave/config.ts';
+const SANCTIONED_VERSION = SANCTIONED_GENAI_VERSION;
+
+/**
+ * Write the three required `package.json` manifests (root, core, providers)
+ * with correct `@google/genai` dependency declarations so the guard's
+ * manifest enforcement (F4/F10) does not fail-closed on absent manifests.
+ *
+ * Positive tests that expect exit code 0 must call this before running the
+ * guard, because the guard treats a missing required manifest as an
+ * operational error (fail-closed).
+ */
+export function writeRequiredManifests(write: FixtureHelpers['write']): void {
+  const manifest = {
+    dependencies: { '@google/genai': SANCTIONED_VERSION },
+  };
+  write('package.json', JSON.stringify(manifest, null, 2) + '\n');
+  write('packages/core/package.json', JSON.stringify(manifest, null, 2) + '\n');
+  write(
+    'packages/providers/package.json',
+    JSON.stringify(manifest, null, 2) + '\n',
+  );
 }
 
 /**

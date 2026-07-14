@@ -8,6 +8,22 @@ import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, posix, resolve } from 'node:path';
+import {
+  type ManifestDependencies,
+  type RootManifest,
+  checkWorkspaceDependencies,
+  createRealProtocolResolver,
+  deriveShippedWorkspaceDirs,
+  detectRootDuplicateDependencies,
+  iterateWorkspaceDependencies,
+} from './publish-dependency-helpers.ts';
+import {
+  buildPackageNameToWorkspaceMap,
+  readWorkspaceManifest,
+  verifyInternalDependencySource,
+  verifyTransitiveSourceClosure,
+  verifyExportedSubpaths,
+} from './workspace-source-helpers.ts';
 
 const repoRoot = resolve(__dirname, '..', '..');
 
@@ -21,11 +37,8 @@ const repoRoot = resolve(__dirname, '..', '..');
  * the regression these tests guard against.
  */
 const LIFECYCLE_HOOKS = ['preinstall', 'postinstall'] as const;
-interface RootPackageMetadata {
+interface RootPackageMetadata extends RootManifest {
   bin?: Record<string, string>;
-  dependencies?: Record<string, string>;
-  files?: string[];
-  workspaces?: string[];
 }
 
 interface CliPackageMetadata {
@@ -443,18 +456,299 @@ describe('published package no-compile runtime contract (S6)', () => {
     expect(packed.has('packages/cli/src/generated/git-commit.json')).toBe(true);
   });
 
-  it('declares runtime dependencies on the actual published CLI workspace', () => {
+  it('declares runtime dependencies needed by shipped workspace source', () => {
+    // #2352: Refactored to distinguish mandatory dependencies vs
+    // optionalDependencies, use semver.subset for registry range containment,
+    // explicitly handle npm aliases and file/workspace protocols, and
+    // identify internal packages from a manifest-derived set.
+    const rootPackage = JSON.parse(
+      readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
+    ) as RootPackageMetadata;
+    const root: ManifestDependencies = {
+      dependencies: rootPackage.dependencies ?? {},
+      optionalDependencies: rootPackage.optionalDependencies ?? {},
+    };
+    const shippedWorkspaceDirs = deriveShippedWorkspaceDirs(rootPackage);
+    const globWorkspaces = (rootPackage.workspaces ?? []).filter((entry) =>
+      /[*?[\]{}]/.test(entry),
+    );
+    expect(globWorkspaces).toEqual([]);
+    const shippedWorkspacePackagePaths = (rootPackage.workspaces ?? [])
+      .filter((workspaceDir) => shippedWorkspaceDirs.has(workspaceDir))
+      .map((workspaceDir) => ({
+        workspaceDir,
+        packagePath: join(repoRoot, workspaceDir, 'package.json'),
+      }))
+      .filter(({ packagePath }) => existsSync(packagePath));
+    expect(shippedWorkspacePackagePaths.length).toBeGreaterThan(0);
+
+    // Build the manifest-derived internal package name set from ALL
+    // workspace manifests (not just shipped ones). This replaces the old
+    // naming-prefix convention for identifying internal packages.
+    const internalPackages = new Set<string>();
+    for (const workspaceDir of rootPackage.workspaces ?? []) {
+      const manifestPath = join(repoRoot, workspaceDir, 'package.json');
+      if (!existsSync(manifestPath)) continue;
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as {
+        name?: string;
+      };
+      if (manifest.name !== undefined) {
+        internalPackages.add(manifest.name);
+      }
+    }
+
+    // Build the package-name→workspace-directory map and a real protocol
+    // resolver (F5) so file:/workspace:/link: specifiers are validated
+    // against the actual workspace name→directory map, not just the name set.
+    const packageNameToDir = buildPackageNameToWorkspaceMap(
+      repoRoot,
+      rootPackage.workspaces ?? [],
+    );
+    const protocolResolver = createRealProtocolResolver(
+      repoRoot,
+      packageNameToDir,
+    );
+
+    const mismatches = shippedWorkspacePackagePaths.flatMap(
+      ({ workspaceDir, packagePath }) => {
+        const workspaceManifest = JSON.parse(
+          readFileSync(packagePath, 'utf-8'),
+        ) as ManifestDependencies;
+        return checkWorkspaceDependencies(
+          workspaceDir,
+          workspaceManifest,
+          root,
+          internalPackages,
+          protocolResolver,
+        );
+      },
+    );
+
+    expect(
+      mismatches.map((m) => m.message),
+      'Shipped workspaces declare external dependencies not covered by the ' +
+        'root manifest with compatible semver ranges:\n  - ' +
+        mismatches.map((m) => m.message).join('\n  - '),
+    ).toEqual([]);
+  });
+
+  it('keeps the published CLI workspace free of direct GenAI ownership', () => {
     const cliPackage = JSON.parse(
       readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf-8'),
-    ) as CliPackageMetadata;
-    const dependencies = cliPackage.dependencies ?? {};
+    ) as CliPackageMetadata & ManifestDependencies;
 
-    expect(dependencies).toMatchObject({
-      '@vybestack/llxprt-code-core': expect.any(String),
-      '@vybestack/llxprt-code-providers': expect.any(String),
-    });
-    expect(dependencies['@google/genai']).toBeUndefined();
+    expect(cliPackage.dependencies?.['@google/genai']).toBeUndefined();
+    expect(cliPackage.devDependencies?.['@google/genai']).toBeUndefined();
+    expect(cliPackage.optionalDependencies?.['@google/genai']).toBeUndefined();
+    expect(cliPackage.peerDependencies?.['@google/genai']).toBeUndefined();
   });
+
+  it(
+    'ships source for every internal workspace dependency of shipped workspaces',
+    { timeout: 60000 },
+    () => {
+      // #2352: Replaced convention-derived internal package source checks
+      // (which assumed the package name suffix maps to the workspace dir and
+      // that `index.ts` is always the entry) with a manifest-derived approach:
+      // a package-name-to-workspace map built from each workspace's package.json
+      // `name` field, and required source files derived from the dependency's
+      // manifest fields (`main`, `exports`, `module`, `types`).
+      const rootPackage = JSON.parse(
+        readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
+      ) as RootPackageMetadata;
+      const packed = getPackedPaths();
+      const shippedWorkspaceDirs = deriveShippedWorkspaceDirs(rootPackage);
+
+      // Build the authoritative package-name-to-workspace map from the root
+      // workspaces list. This replaces the old convention of deriving the
+      // sub-directory from the package name suffix.
+      const packageNameToWorkspace = buildPackageNameToWorkspaceMap(
+        repoRoot,
+        rootPackage.workspaces ?? [],
+      );
+
+      const shippedWorkspacePackagePaths = (rootPackage.workspaces ?? [])
+        .filter((workspaceDir) => shippedWorkspaceDirs.has(workspaceDir))
+        .map((workspaceDir) => ({
+          workspaceDir,
+          packagePath: join(repoRoot, workspaceDir, 'package.json'),
+        }))
+        .filter(({ packagePath }) => existsSync(packagePath));
+
+      const mismatches = shippedWorkspacePackagePaths.flatMap(
+        ({ workspaceDir, packagePath }) => {
+          const workspacePackage = JSON.parse(
+            readFileSync(packagePath, 'utf-8'),
+          ) as ManifestDependencies;
+          return Array.from(iterateWorkspaceDependencies(workspacePackage))
+            .filter(({ name }) => packageNameToWorkspace.has(name))
+            .map(({ name: dep }) => {
+              const depWorkspaceDir = packageNameToWorkspace.get(dep);
+              if (depWorkspaceDir === undefined) {
+                return {
+                  workspace: workspaceDir,
+                  dependency: dep,
+                  dependencyWorkspaceDir: '(not found)',
+                  missingPackedFiles: [],
+                  message:
+                    `${workspaceDir} → ${dep}: package name not found in ` +
+                    'the package-name-to-workspace map',
+                };
+              }
+              const depManifest = readWorkspaceManifest(
+                depWorkspaceDir,
+                repoRoot,
+              );
+              if (depManifest === null) {
+                return {
+                  workspace: workspaceDir,
+                  dependency: dep,
+                  dependencyWorkspaceDir: depWorkspaceDir,
+                  missingPackedFiles: [],
+                  message:
+                    `${workspaceDir} → ${dep} (${depWorkspaceDir}): ` +
+                    'no package.json found',
+                };
+              }
+              return verifyInternalDependencySource(
+                workspaceDir,
+                dep,
+                depWorkspaceDir,
+                depManifest,
+                packed,
+              );
+            })
+            .filter(
+              (entry): entry is NonNullable<typeof entry> => entry !== null,
+            );
+        },
+      );
+
+      expect(
+        mismatches.map((m) => m.message),
+        'Shipped workspaces depend on internal workspace packages whose ' +
+          'manifest-declared source is NOT in the published tarball:\n  - ' +
+          mismatches.map((m) => m.message).join('\n  - '),
+      ).toEqual([]);
+    },
+  );
+
+  it(
+    '#2352: ships the transitive source closure of every internal workspace dependency',
+    { timeout: 60000 },
+    () => {
+      // For each internal workspace dependency of shipped workspaces, verify
+      // that the transitive closure of static relative runtime imports from
+      // every entry point ships in the packed tarball. A missing transitive
+      // source file means the runtime would fail with MODULE_NOT_FOUND.
+      const rootPackage = JSON.parse(
+        readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
+      ) as RootPackageMetadata;
+      const packed = getPackedPaths();
+      const shippedWorkspaceDirs = deriveShippedWorkspaceDirs(rootPackage);
+
+      const packageNameToWorkspace = buildPackageNameToWorkspaceMap(
+        repoRoot,
+        rootPackage.workspaces ?? [],
+      );
+
+      const shippedWorkspacePackagePaths = (rootPackage.workspaces ?? [])
+        .filter((workspaceDir) => shippedWorkspaceDirs.has(workspaceDir))
+        .map((workspaceDir) => ({
+          workspaceDir,
+          packagePath: join(repoRoot, workspaceDir, 'package.json'),
+        }))
+        .filter(({ packagePath }) => existsSync(packagePath));
+
+      const allMissing = shippedWorkspacePackagePaths.flatMap(
+        ({ packagePath }) => {
+          const workspacePackage = JSON.parse(
+            readFileSync(packagePath, 'utf-8'),
+          ) as ManifestDependencies;
+          return Array.from(iterateWorkspaceDependencies(workspacePackage))
+            .filter(({ name }) => packageNameToWorkspace.has(name))
+            .flatMap(({ name: dep }) => {
+              const depWorkspaceDir = packageNameToWorkspace.get(dep)!;
+              const depManifest = readWorkspaceManifest(
+                depWorkspaceDir,
+                repoRoot,
+              );
+              if (depManifest === null) return [];
+              return verifyTransitiveSourceClosure(
+                depWorkspaceDir,
+                depManifest,
+                packed,
+                repoRoot,
+              );
+            });
+        },
+      );
+
+      expect(
+        allMissing.map((m) => m.message),
+        'Internal workspace dependencies have transitive source files NOT in ' +
+          'the published tarball:\n  - ' +
+          allMissing.map((m) => m.message).join('\n  - '),
+      ).toEqual([]);
+    },
+  );
+
+  it(
+    '#2352: ships every exported subpath entry of internal workspace dependencies',
+    { timeout: 60000 },
+    () => {
+      // For each internal workspace dependency of shipped workspaces, verify
+      // that every exported subpath entry file ships in the packed tarball.
+      const rootPackage = JSON.parse(
+        readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
+      ) as RootPackageMetadata;
+      const packed = getPackedPaths();
+      const shippedWorkspaceDirs = deriveShippedWorkspaceDirs(rootPackage);
+
+      const packageNameToWorkspace = buildPackageNameToWorkspaceMap(
+        repoRoot,
+        rootPackage.workspaces ?? [],
+      );
+
+      const shippedWorkspacePackagePaths = (rootPackage.workspaces ?? [])
+        .filter((workspaceDir) => shippedWorkspaceDirs.has(workspaceDir))
+        .map((workspaceDir) => ({
+          workspaceDir,
+          packagePath: join(repoRoot, workspaceDir, 'package.json'),
+        }))
+        .filter(({ packagePath }) => existsSync(packagePath));
+
+      const allMissing = shippedWorkspacePackagePaths.flatMap(
+        ({ packagePath }) => {
+          const workspacePackage = JSON.parse(
+            readFileSync(packagePath, 'utf-8'),
+          ) as ManifestDependencies;
+          return Array.from(iterateWorkspaceDependencies(workspacePackage))
+            .filter(({ name }) => packageNameToWorkspace.has(name))
+            .flatMap(({ name: dep }) => {
+              const depWorkspaceDir = packageNameToWorkspace.get(dep)!;
+              const depManifest = readWorkspaceManifest(
+                depWorkspaceDir,
+                repoRoot,
+              );
+              if (depManifest === null) return [];
+              return verifyExportedSubpaths(
+                depWorkspaceDir,
+                depManifest,
+                packed,
+              );
+            });
+        },
+      );
+
+      expect(
+        allMissing.map((m) => m.message),
+        'Internal workspace dependencies have exported subpath entry files ' +
+          'NOT in the published tarball:\n  - ' +
+          allMissing.map((m) => m.message).join('\n  - '),
+      ).toEqual([]);
+    },
+  );
 
   it('runs the checked-in Node launcher without a compiled CLI entry', () => {
     const stdout = execFileSync(
@@ -611,5 +905,22 @@ describe('findRelativeDependencySpecifiers (tarball-walker regex coverage)', () 
         './real-side-effect.js',
       ].sort(),
     );
+  });
+});
+
+describe('root duplicate dependency detection (F9)', () => {
+  it('the real root manifest has no duplicate dependencies across sections', () => {
+    // The root manifest must NOT declare any package in more than one
+    // dependency section (dependencies / optionalDependencies /
+    // peerDependencies). A duplicate creates ambiguity at install time
+    // and allows per-section version drift.
+    const rootPackage = JSON.parse(
+      readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
+    ) as RootManifest;
+    const dups = detectRootDuplicateDependencies(rootPackage);
+    expect(
+      dups,
+      `Duplicate root dependencies found: ${dups.map((d) => d.message).join('; ')}`,
+    ).toEqual([]);
   });
 });
