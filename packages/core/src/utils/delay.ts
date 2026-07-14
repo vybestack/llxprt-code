@@ -7,8 +7,11 @@
 /**
  * Factory to create a standard abort error for delay helpers.
  */
-export function createAbortError(): Error {
-  const abortError = new Error('Aborted');
+export function createAbortError(reason?: unknown): Error {
+  const abortError =
+    reason === undefined
+      ? new Error('Aborted')
+      : new Error('Aborted', { cause: reason });
   abortError.name = 'AbortError';
   (abortError as NodeJS.ErrnoException).code = 'ABORT_ERR';
   return abortError;

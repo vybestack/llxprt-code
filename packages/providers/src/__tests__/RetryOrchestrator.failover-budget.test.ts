@@ -74,9 +74,10 @@ describe('RetryOrchestrator failover transport budget', () => {
     });
   });
 
-  it('aborts a never-resolving bucket failover without another transport', async () => {
+  it('does not start a transport after aborting a never-resolving bucket failover', async () => {
     const controller = new AbortController();
     let transports = 0;
+    let transportsWhenFailoverStarted = 0;
     let notifyStarted!: () => void;
     const started = new Promise<void>((resolve) => {
       notifyStarted = resolve;
@@ -93,6 +94,7 @@ describe('RetryOrchestrator failover transport budget', () => {
             getBuckets: () => ['bucket1', 'bucket2'],
             getCurrentBucket: () => 'bucket1',
             tryFailover: async () => {
+              transportsWhenFailoverStarted = transports;
               notifyStarted();
               return new Promise<boolean>(() => {});
             },
@@ -109,6 +111,6 @@ describe('RetryOrchestrator failover transport budget', () => {
     controller.abort();
 
     await expect(consumption).rejects.toThrow(/abort/i);
-    expect(transports).toBe(2);
+    expect(transports).toBe(transportsWhenFailoverStarted);
   });
 });

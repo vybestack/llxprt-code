@@ -37,8 +37,6 @@ export type StreamProcessorOptions = {
   rateLimitLogger: { debug: (fn: () => string) => void };
 };
 
-type StreamState = { hasYieldedContent: boolean };
-
 // Global counter appended to tool call IDs so providers that reset indices per
 // API call (e.g. Kimi on Fireworks) never produce duplicates across turns.
 let toolCallSequence = 0;
@@ -46,7 +44,6 @@ let toolCallSequence = 0;
 async function* processStreamEvents(
   stream: AsyncIterable<Anthropic.MessageStreamEvent>,
   options: StreamProcessorOptions,
-  state: StreamState,
 ): AsyncGenerator<IContent> {
   const {
     isOAuth,
@@ -79,7 +76,6 @@ async function* processStreamEvents(
         currentThinkingBlock = blockResult.currentThinkingBlock;
       }
       if (blockResult.content) {
-        state.hasYieldedContent = true;
         yield blockResult.content;
       }
     } else if (chunk.type === 'content_block_delta') {
@@ -90,7 +86,6 @@ async function* processStreamEvents(
         logger,
       );
       if (deltaResult.textDelta) {
-        state.hasYieldedContent = true;
         yield {
           speaker: 'ai',
           blocks: [{ type: 'text', text: deltaResult.textDelta }],
@@ -107,13 +102,12 @@ async function* processStreamEvents(
         logger,
       );
       if (stopResult.content) {
-        state.hasYieldedContent = true;
         yield stopResult.content;
       }
       currentToolCall = stopResult.currentToolCall;
       currentThinkingBlock = stopResult.currentThinkingBlock;
     } else if (chunk.type === 'message_delta') {
-      yield* handleMessageDelta(chunk, logger, state);
+      yield* handleMessageDelta(chunk, logger);
     }
   }
 }
@@ -127,8 +121,7 @@ export async function* processAnthropicStream(
   options: StreamProcessorOptions,
 ): AsyncGenerator<IContent> {
   options.logger.debug(() => 'Processing streaming response');
-  const state: StreamState = { hasYieldedContent: false };
-  yield* processStreamEvents(response, options, state);
+  yield* processStreamEvents(response, options);
 }
 
 function* handleMessageStart(
@@ -439,7 +432,6 @@ function readMessageDeltaStopReason(
 function* handleMessageDelta(
   chunk: Anthropic.MessageStreamEvent & { type: 'message_delta' },
   logger: { debug: (fn: () => string) => void },
-  state: StreamState,
 ): Generator<IContent> {
   const usage = chunk.usage as
     | {
@@ -459,7 +451,6 @@ function* handleMessageDelta(
     );
 
     if (stopReason) {
-      state.hasYieldedContent = true;
       yield {
         speaker: 'ai',
         blocks: [],

@@ -1,7 +1,8 @@
 import {
   type Config,
-  type StructuredErrorCategory,
-  type StructuredErrorReason,
+  getSafeCategory,
+  getSafeReason,
+  getSafeStatus,
   parseAndFormatApiError,
   OutputFormat,
   JsonFormatter,
@@ -40,44 +41,6 @@ function normalizeErrorForJson(error: unknown): Error {
   return new Error(formatNonInteractiveError(error));
 }
 
-function getErrorCategory(error: unknown): StructuredErrorCategory | undefined {
-  if (typeof error !== 'object' || error === null || !('category' in error)) {
-    return undefined;
-  }
-  const category = error.category;
-  switch (category) {
-    case 'rate_limit':
-    case 'quota':
-    case 'authentication':
-    case 'server_error':
-    case 'network':
-    case 'client_error':
-      return category;
-    default:
-      return undefined;
-  }
-}
-
-function getErrorStatus(error: unknown): number | undefined {
-  if (typeof error !== 'object' || error === null || !('status' in error)) {
-    return undefined;
-  }
-  return typeof error.status === 'number' ? error.status : undefined;
-}
-
-function getErrorReason(error: unknown): StructuredErrorReason | undefined {
-  if (typeof error !== 'object' || error === null || !('reason' in error)) {
-    return undefined;
-  }
-  switch (error.reason) {
-    case 'retries_exhausted':
-    case 'all_buckets_exhausted':
-      return error.reason;
-    default:
-      return undefined;
-  }
-}
-
 /**
  * Format and report a non-interactive error to stderr, using JSON formatters
  * when JSON output is configured. Extracted so both the auth-validation catch
@@ -100,9 +63,9 @@ export function reportNonInteractiveError(
     writeToStderr(`${formatter.formatError(normalizedError)}\n`);
   } else if (outputFormat === OutputFormat.STREAM_JSON) {
     const streamFormatter = new StreamJsonFormatter();
-    const category = getErrorCategory(error);
-    const status = getErrorStatus(error);
-    const reason = getErrorReason(error);
+    const category = getSafeCategory(error);
+    const status = getSafeStatus(error);
+    const reason = getSafeReason(error);
     writeToStderr(
       streamFormatter.formatEvent({
         type: JsonStreamEventType.ERROR,

@@ -426,7 +426,7 @@ describe('RetryOrchestrator', () => {
       expect(result).toHaveLength(1);
     });
 
-    it('does not issue a later transport request after metadata aborts during backoff', async () => {
+    it('does not issue a later transport request when metadata aborts before retry transport', async () => {
       const controller = new AbortController();
       let transportCalls = 0;
       const provider = createTestProvider({

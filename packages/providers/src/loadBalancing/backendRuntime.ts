@@ -10,6 +10,7 @@ import type { GenerateChatOptions } from '../IProvider.js';
 import {
   claimProviderErrorObservation,
   classifyProviderError,
+  invokeProviderErrorObserver,
   toObservedProviderError,
 } from '../providerErrorObservation.js';
 
@@ -70,17 +71,17 @@ export function observeDelegateFailure(
 ): void {
   if (!claimProviderErrorObservation(options, error)) return;
   const status = getErrorStatus(error);
-  try {
-    options.onProviderError?.(
-      toObservedProviderError(
-        error,
-        status,
-        classifyProviderError(error, status),
-      ),
-    );
-  } catch (observerError) {
-    logger.debug(
-      () => `Provider error observer failed: ${String(observerError)}`,
-    );
-  }
+  invokeProviderErrorObserver(
+    options.onProviderError,
+    toObservedProviderError(
+      error,
+      status,
+      classifyProviderError(error, status),
+    ),
+    (observerError) => {
+      logger.debug(
+        () => `Provider error observer failed: ${String(observerError)}`,
+      );
+    },
+  );
 }

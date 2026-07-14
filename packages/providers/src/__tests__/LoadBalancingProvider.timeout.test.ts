@@ -142,8 +142,10 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       providerManager.registerProvider(mockProvider2);
 
       const chunks: IContent[] = [];
+      const observedErrors: unknown[] = [];
       const gen = lb.generateChatCompletion({
         contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        onProviderError: (error) => observedErrors.push(error),
       });
 
       for await (const chunk of gen) {
@@ -152,6 +154,12 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
 
       // Should have failed over to backend2 after timeout
       expect(chunks).toHaveLength(1);
+      expect(observedErrors).toStrictEqual([
+        {
+          message: 'Request timeout after 100ms',
+          category: 'network',
+        },
+      ]);
       const text = chunks[0].parts?.[0];
       expect(
         text != null && typeof text === 'object' && 'text' in text
@@ -368,6 +376,7 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
     vi.useRealTimers();
     const controller = new AbortController();
     let calls = 0;
+    const observedErrors: unknown[] = [];
     const stalledProvider: IProvider = {
       name: 'test-provider-1',
       async *generateChatCompletion(options): AsyncGenerator<IContent> {
@@ -398,6 +407,7 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       for await (const chunk of lb.generateChatCompletion({
         contents: [{ role: 'user', parts: [{ text: 'test' }] }],
         metadata: { abortSignal: controller.signal },
+        onProviderError: (error) => observedErrors.push(error),
       })) {
         chunks.push(chunk);
       }
@@ -409,6 +419,7 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
 
     await expect(promise).rejects.toThrow(/abort/i);
     expect(calls).toBe(1);
+    expect(observedErrors).toStrictEqual([]);
   });
   it('releases abort listeners and timeout timers after a successful first chunk', async () => {
     const parent = new AbortController();
@@ -425,9 +436,12 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
     providerManager.registerProvider({
       name: 'test-provider-1',
       async *generateChatCompletion(): AsyncGenerator<IContent> {
-        yield { role: 'assistant', parts: [{ text: 'ok' }] } as IContent;
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
       },
+      getModels: async () => [],
+      getDefaultModel: () => 'test-model',
       getServerTools: () => [],
+      invokeServerTool: async () => null,
     });
 
     const chunks: IContent[] = [];
@@ -447,13 +461,17 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
     const parent = new AbortController();
     const add = vi.spyOn(parent.signal, 'addEventListener');
     const remove = vi.spyOn(parent.signal, 'removeEventListener');
-    providerManager.registerProvider({
+    const throwingProvider: IProvider = {
       name: 'test-provider-1',
       generateChatCompletion() {
         throw new Error('synchronous construction failure');
       },
+      getModels: async () => [],
+      getDefaultModel: () => 'test-model',
       getServerTools: () => [],
-    } as unknown as IProvider);
+      invokeServerTool: async () => null,
+    };
+    providerManager.registerProvider(throwingProvider);
     const lb = new LoadBalancingProvider(
       {
         ...config,

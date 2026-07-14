@@ -536,7 +536,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       maxAttempts: 1,
       initialDelayMs: 0,
     });
-    manager.registerProvider(orchestrator as unknown as IProvider);
+    manager.registerProvider(orchestrator);
 
     const chat = buildChatSession();
     const stream = await chat.sendMessageStream(

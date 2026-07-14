@@ -15,7 +15,7 @@ export async function closeIteratorBeforeContinuing<T>(
 ): Promise<void> {
   if (iterator.return === undefined) return;
 
-  let timeoutId: NodeJS.Timeout | undefined;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const cleanup = Promise.resolve()
     .then(() => iterator.return?.())
     .then(() => 'closed' as const)

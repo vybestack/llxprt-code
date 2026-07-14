@@ -121,13 +121,17 @@ export type JsonStreamEvent =
   | ErrorEvent
   | ResultEvent;
 
-function getSafeStatus(error: Error): number | undefined {
-  return 'status' in error && typeof error.status === 'number'
-    ? error.status
-    : undefined;
+export function getSafeStatus(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null || !('status' in error)) {
+    return undefined;
+  }
+  return typeof error.status === 'number' ? error.status : undefined;
 }
 
-function getSafeCategory(error: Error): StructuredErrorCategory | undefined {
+export function getSafeCategory(
+  error: unknown,
+): StructuredErrorCategory | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
   if (!('category' in error)) return undefined;
   switch (error.category) {
     case 'rate_limit':
@@ -142,8 +146,12 @@ function getSafeCategory(error: Error): StructuredErrorCategory | undefined {
   }
 }
 
-function getSafeReason(error: Error): StructuredErrorReason | undefined {
-  if (!('reason' in error)) return undefined;
+export function getSafeReason(
+  error: unknown,
+): StructuredErrorReason | undefined {
+  if (typeof error !== 'object' || error === null || !('reason' in error)) {
+    return undefined;
+  }
   switch (error.reason) {
     case 'retries_exhausted':
     case 'all_buckets_exhausted':

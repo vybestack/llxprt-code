@@ -6,7 +6,9 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { GenerateChatOptions } from '../IProvider.js';
+import { permitsBucketFailover, RetriesExhaustedError } from '../errors.js';
 import { rethrowIfAborted } from '../loadBalancing/requestAbort.js';
+import { claimProviderErrorObservation } from '../providerErrorObservation.js';
 import {
   classifyRetryError,
   isTerminalRetryError,
@@ -17,6 +19,7 @@ import {
   attachTransportAttemptBudget,
   consumeTransportAttempt,
 } from '../transportAttemptBudget.js';
+import { raceWithAbort } from '../utils/abortSignal.js';
 import { closeIteratorBeforeContinuing } from '../utils/streamCleanup.js';
 
 const defaults = {
@@ -76,6 +79,20 @@ describe('request-scoped retry infrastructure', () => {
     },
   );
 
+  it('admits no more concurrent consumers than the shared budget limit', async () => {
+    const { options, budget } = attachTransportAttemptBudget(
+      { contents: [] },
+      2,
+    );
+
+    const admitted = await Promise.all(
+      Array.from({ length: 8 }, async () => consumeTransportAttempt(options)),
+    );
+
+    expect(admitted.filter(Boolean)).toHaveLength(2);
+    expect(budget.used).toBe(2);
+  });
+
   it('falls back from invalid retry counts and delay settings', () => {
     const request = resolveRetryRequestContext(
       optionsWithEphemerals({
@@ -130,6 +147,38 @@ describe('request-scoped retry infrastructure', () => {
     const wrappedPrimitive = markErrorAfterStreamOutput('primitive failure');
     expect(wrappedPrimitive).toMatchObject({ cause: 'primitive failure' });
     expect(isTerminalRetryError(wrappedPrimitive)).toBe(true);
+  });
+
+  it('prevents bucket failover after retry exhaustion', () => {
+    const cause = new Error('last transport failed');
+    const error = new RetriesExhaustedError(
+      'transport budget exhausted',
+      'server_error',
+      { cause },
+    );
+
+    expect(permitsBucketFailover(error)).toBe(false);
+  });
+
+  it('claims the same unscoped error only once', () => {
+    const options: GenerateChatOptions = {
+      contents: [],
+      onProviderError: () => undefined,
+    };
+    const error = new Error('delegate failure');
+
+    expect(claimProviderErrorObservation(options, error)).toBe(true);
+    expect(claimProviderErrorObservation(options, error)).toBe(false);
+  });
+
+  it('retains the abort reason when racing an operation', async () => {
+    const controller = new AbortController();
+    const reason = new Error('request deadline expired');
+    controller.abort(reason);
+
+    await expect(
+      raceWithAbort(new Promise<void>(() => {}), controller.signal),
+    ).rejects.toMatchObject({ name: 'AbortError', cause: reason });
   });
 
   it('converts request cancellation to AbortError while retaining the provider failure', () => {

@@ -49,6 +49,7 @@ import { AllBucketsExhaustedError, permitsBucketFailover } from './errors.js';
 import type { StructuredErrorCategory } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   claimProviderErrorObservation,
+  invokeProviderErrorObserver,
   toObservedProviderError,
 } from './providerErrorObservation.js';
 import type { OnAuthErrorHandler } from '@vybestack/llxprt-code-core/config/configTypes.js';
@@ -423,15 +424,15 @@ export class RetryOrchestrator implements IProvider {
     category: StructuredErrorCategory | undefined,
   ): void {
     if (!claimProviderErrorObservation(options, error)) return;
-    try {
-      options.onProviderError?.(
-        toObservedProviderError(error, status, category),
-      );
-    } catch (observerError) {
-      this.logger.debug(
-        () => `Provider error observer failed: ${String(observerError)}`,
-      );
-    }
+    invokeProviderErrorObserver(
+      options.onProviderError,
+      toObservedProviderError(error, status, category),
+      (observerError) => {
+        this.logger.debug(
+          () => `Provider error observer failed: ${String(observerError)}`,
+        );
+      },
+    );
   }
 
   private async handleRetryError(

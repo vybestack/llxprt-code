@@ -4,31 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import { TurnProcessor } from './TurnProcessor.js';
-import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
-
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
-  retryWithBackoff: vi.fn(
-    async <T>(
-      fn: () => Promise<T>,
-      options?: {
-        shouldRetryOnError?: (error: unknown) => boolean;
-        signal?: AbortSignal;
-      },
-    ): Promise<T> => {
-      if (options?.signal?.aborted === true) throw createAbortError();
-      try {
-        return await fn();
-      } catch (error) {
-        if (options?.shouldRetryOnError?.(error) === true) return fn();
-        throw error;
-      }
-    },
-  ),
-}));
 
 function terminalError(): Error & {
   readonly isRetryable: false;

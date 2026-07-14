@@ -76,10 +76,10 @@ export function raceWithAbort<T>(
   signal: AbortSignal | undefined,
 ): Promise<T> {
   if (signal === undefined) return operation;
-  if (signal.aborted) return Promise.reject(createAbortError());
+  if (signal.aborted) return Promise.reject(createAbortError(signal.reason));
 
   return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(createAbortError());
+    const onAbort = () => reject(createAbortError(signal.reason));
     const dispose = () => signal.removeEventListener('abort', onAbort);
     signal.addEventListener('abort', onAbort, { once: true });
     operation.then(

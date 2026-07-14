@@ -12,6 +12,11 @@ interface ProviderErrorObservationContext {
   readonly handledErrors: Set<unknown>;
 }
 
+const detachedObservationContexts = new WeakMap<
+  GenerateChatOptions,
+  ProviderErrorObservationContext
+>();
+
 function getProviderErrorObservationContext(
   options: GenerateChatOptions,
 ): ProviderErrorObservationContext | undefined {
@@ -44,8 +49,11 @@ export function claimProviderErrorObservation(
   error: unknown,
 ): boolean {
   if (options.onProviderError === undefined) return false;
-  const context = getProviderErrorObservationContext(options);
-  if (context === undefined) return true;
+  const context = getProviderErrorObservationContext(options) ??
+    detachedObservationContexts.get(options) ?? {
+      handledErrors: new Set<unknown>(),
+    };
+  detachedObservationContexts.set(options, context);
   if (context.handledErrors.has(error)) return false;
   context.handledErrors.add(error);
   return true;
@@ -56,13 +64,35 @@ export function markProviderErrorObservationHandled(
   error: unknown,
 ): void {
   if (options.onProviderError === undefined) return;
-  getProviderErrorObservationContext(options)?.handledErrors.add(error);
+  const context = getProviderErrorObservationContext(options) ??
+    detachedObservationContexts.get(options) ?? {
+      handledErrors: new Set<unknown>(),
+    };
+  detachedObservationContexts.set(options, context);
+  context.handledErrors.add(error);
+}
+
+export function invokeProviderErrorObserver(
+  observer: ((error: StructuredError) => unknown) | undefined,
+  error: StructuredError,
+  onFailure: (failure: unknown) => void,
+): void {
+  if (observer === undefined) return;
+  try {
+    const result = observer(error);
+    void Promise.resolve(result).catch(onFailure);
+  } catch (failure) {
+    onFailure(failure);
+  }
 }
 
 export const MAX_PUBLIC_PROVIDER_MESSAGE_LENGTH = 512;
 export const MAX_PUBLIC_PROVIDER_LABEL_LENGTH = 64;
 export const MAX_PUBLIC_PROVIDER_LABELS = 8;
 const FALLBACK_PROVIDER_MESSAGE = 'Provider request failed';
+const MAX_ASCII_CONTROL_CHARACTER_CODE = 31;
+const MIN_C1_CONTROL_CHARACTER_CODE = 127;
+const MAX_C1_CONTROL_CHARACTER_CODE = 159;
 
 function readStringProperty(
   value: unknown,
@@ -75,7 +105,7 @@ function readStringProperty(
   return typeof propertyValue === 'string' ? propertyValue : undefined;
 }
 
-function getProviderDetail(error: unknown): unknown {
+function unwrapTwoLevelProviderErrorEnvelope(error: unknown): unknown {
   if (typeof error !== 'object' || error === null || !('error' in error)) {
     return error;
   }
@@ -89,7 +119,9 @@ function getJsonDetail(message: string): unknown {
   const jsonStart = message.indexOf('{');
   if (jsonStart < 0) return undefined;
   try {
-    return getProviderDetail(JSON.parse(message.slice(jsonStart)));
+    return unwrapTwoLevelProviderErrorEnvelope(
+      JSON.parse(message.slice(jsonStart)),
+    );
   } catch {
     return undefined;
   }
@@ -103,7 +135,13 @@ export function normalizePublicProviderText(
   const normalized = Array.from(value)
     .map((character) => {
       const code = character.charCodeAt(0);
-      if (code <= 31 || (code >= 127 && code <= 159)) return ' ';
+      if (
+        code <= MAX_ASCII_CONTROL_CHARACTER_CODE ||
+        (code >= MIN_C1_CONTROL_CHARACTER_CODE &&
+          code <= MAX_C1_CONTROL_CHARACTER_CODE)
+      ) {
+        return ' ';
+      }
       return character;
     })
     .join('')
@@ -142,7 +180,7 @@ export function summarizeProviderLabels(values: readonly string[]): string {
 }
 
 export function getSafeProviderMessage(error: unknown): string {
-  const detail = getProviderDetail(error);
+  const detail = unwrapTwoLevelProviderErrorEnvelope(error);
   const detailMessage =
     detail === error ? undefined : readStringProperty(detail, 'message');
   if (detailMessage !== undefined)
@@ -166,7 +204,7 @@ export function getSafeProviderMessage(error: unknown): string {
 
 function getProviderType(error: unknown): string | undefined {
   return (
-    readStringProperty(getProviderDetail(error), 'type') ??
+    readStringProperty(unwrapTwoLevelProviderErrorEnvelope(error), 'type') ??
     readStringProperty(error, 'type')
   );
 }

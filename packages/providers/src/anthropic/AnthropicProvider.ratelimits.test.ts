@@ -505,7 +505,12 @@ describe('AnthropicProvider', () => {
           ...baseOptions,
           invocation: { ...baseOptions.invocation, signal: controller.signal },
         });
+        vi.useFakeTimers();
         const nextPromise = throttledCall.next();
+        await vi.waitFor(() => expect(vi.getTimerCount()).toBeGreaterThan(0), {
+          interval: 1,
+          timeout: 20,
+        });
         controller.abort();
 
         await expect(nextPromise).rejects.toThrow(/abort/i);

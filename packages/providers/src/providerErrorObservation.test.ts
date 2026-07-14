@@ -1,13 +1,31 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   classifyProviderError,
   getEffectiveProviderStatus,
   getSafeProviderMessage,
+  invokeProviderErrorObserver,
   normalizePublicProviderText,
   toObservedProviderError,
 } from './providerErrorObservation.js';
 
 describe('provider error observation', () => {
+  it('contains asynchronous observer rejection', async () => {
+    const observerFailure = new Error('observer failed asynchronously');
+    const onFailure = vi.fn();
+
+    invokeProviderErrorObserver(
+      async () => {
+        throw observerFailure;
+      },
+      { message: 'provider failed' },
+      onFailure,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onFailure).toHaveBeenCalledWith(observerFailure);
+  });
+
   it('uses the provider envelope message and removes unsafe control characters', () => {
     const observed = toObservedProviderError(
       {

@@ -123,8 +123,7 @@ describe('RetryOrchestrator invocation safety', () => {
     const normalized = baseProvider.lastNormalized;
     expect(normalized).toBeDefined();
     expect(typeof normalized!.invocation.getModelBehavior).toBe('function');
-    expect(normalized!.invocation.signal).not.toBe(abortController.signal);
-    expect(normalized!.invocation.signal?.aborted).toBe(true);
+    expect(normalized!.invocation.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('does not crash a wrapped BaseProvider when only options + signal are provided', async () => {

@@ -371,6 +371,7 @@ export class StreamCleanupTimeoutError extends ProviderError {
 export class RetriesExhaustedError extends ProviderError {
   readonly isRetryable = false;
   readonly shouldFailover = false;
+  readonly bucketFailoverPolicy = 'ineligible' as const;
   readonly reason = 'retries_exhausted' as const;
   readonly failures: readonly Error[];
 

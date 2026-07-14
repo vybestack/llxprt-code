@@ -9,6 +9,7 @@ const ITERATOR_CLEANUP_TIMEOUT_MS = 1_000;
 export async function closeIteratorBounded<T>(
   iterator: AsyncIterator<T> | undefined,
   abortSignal?: AbortSignal,
+  cleanupTimeoutMs = ITERATOR_CLEANUP_TIMEOUT_MS,
 ): Promise<void> {
   if (iterator?.return === undefined) return;
 
@@ -31,7 +32,7 @@ export async function closeIteratorBounded<T>(
           abortSignal.addEventListener('abort', onAbort, { once: true });
         });
   const timeout = new Promise<void>((resolve) => {
-    timeoutId = setTimeout(resolve, ITERATOR_CLEANUP_TIMEOUT_MS);
+    timeoutId = setTimeout(resolve, cleanupTimeoutMs);
   });
   try {
     await Promise.race(

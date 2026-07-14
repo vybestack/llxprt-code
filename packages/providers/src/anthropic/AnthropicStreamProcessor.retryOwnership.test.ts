@@ -5,7 +5,7 @@
  */
 
 import type Anthropic from '@anthropic-ai/sdk';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
@@ -37,6 +37,10 @@ async function collect(stream: AsyncIterable<IContent>): Promise<IContent[]> {
 }
 
 describe('Anthropic stream retry ownership', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('uses only the central transport attempt budget for stream network failures', async () => {
     let transportCalls = 0;
     const transport: IProvider = {
@@ -77,6 +81,7 @@ describe('Anthropic stream retry ownership', () => {
   });
 
   it('does not start another Anthropic transport after abort during backoff', async () => {
+    vi.useFakeTimers();
     const controller = new AbortController();
     let transportCalls = 0;
     const transport: IProvider = {
@@ -102,7 +107,11 @@ describe('Anthropic stream retry ownership', () => {
         metadata: { abortSignal: controller.signal },
       }),
     );
-    setTimeout(() => controller.abort(), 10);
+    await vi.waitFor(() => expect(vi.getTimerCount()).toBeGreaterThan(0), {
+      interval: 1,
+      timeout: 20,
+    });
+    controller.abort();
 
     await expect(result).rejects.toThrow(/abort/i);
     expect(transportCalls).toBe(1);
