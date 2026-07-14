@@ -22,14 +22,21 @@ describe('ModelLimitsCatalogSchema', () => {
     },
   );
 
-  it('rejects a catalog missing orderedRules', () => {
-    const bad = {
-      defaultLimit: 1000,
-      exactLimits: {},
-      prefixLimits: [],
-    };
-    expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
-  });
+  it.each(['exactLimits', 'prefixLimits', 'orderedRules'] as const)(
+    'rejects a catalog missing required field %s',
+    (field) => {
+      const valid = {
+        defaultLimit: 1000,
+        exactLimits: {},
+        prefixLimits: [],
+        orderedRules: [],
+      };
+      const bad = Object.fromEntries(
+        Object.entries(valid).filter(([key]) => key !== field),
+      );
+      expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
+    },
+  );
 
   it('rejects an ordered rule with an unknown type', () => {
     const bad = {

@@ -145,10 +145,9 @@ describe('model-limits package asset (@issue:2280)', () => {
       'model-limits.json',
     );
 
-    mkdirSync(stagedCoreDir, { recursive: true });
-    copyFileSync(sourceCatalog, join(stagedCoreDir, 'model-limits.json'));
-
     try {
+      mkdirSync(stagedCoreDir, { recursive: true });
+      copyFileSync(sourceCatalog, join(stagedCoreDir, 'model-limits.json'));
       execFileSync('bun', [copyScript], {
         cwd: tempPackage,
         stdio: 'pipe',
