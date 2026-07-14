@@ -26,7 +26,10 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { LoopDetectionService } from '@vybestack/llxprt-code-core/services/loopDetectionService.js';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
-import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
+import {
+  tokenLimit,
+  resolveEffectiveContextLimit,
+} from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import {
   buildEffectiveModelIdentity,
   type EffectiveModelIdentity,
@@ -34,12 +37,24 @@ import {
 
 const mockTurnRun = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
-  tokenLimit: vi.fn(
+vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
+  const tokenLimit = vi.fn(
     (_model: string, userContextLimit?: number) =>
       userContextLimit ?? 1_000_000,
-  ),
-}));
+  );
+  return {
+    tokenLimit,
+    resolveEffectiveContextLimit: vi.fn(
+      (model: string, userCtx?: number, provCtx?: number) => {
+        const ok = (v: unknown): v is number =>
+          typeof v === 'number' && Number.isFinite(v) && v > 0;
+        if (ok(userCtx)) return userCtx;
+        if (ok(provCtx)) return provCtx;
+        return tokenLimit(model);
+      },
+    ),
+  };
+});
 
 vi.mock('./turn.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./turn.js')>();
@@ -351,10 +366,13 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
 
     await collectModelInfos(orchestrator, 'prompt-context-limit');
 
-    expect(vi.mocked(tokenLimit).mock.calls).toContainEqual([
-      'claude-opus-4-8',
-      200_000,
-    ]);
+    expect(
+      vi
+        .mocked(resolveEffectiveContextLimit)
+        .mock.calls.some(
+          (call) => call[0] === 'claude-opus-4-8' && call[1] === 200_000,
+        ),
+    ).toBe(true);
   });
 
   it('B1: load-balancer profile reports the active sub-profile model, not the config default', async () => {

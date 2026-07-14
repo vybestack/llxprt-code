@@ -302,20 +302,6 @@ export async function main(
   rpcConnection.listen();
 
   let mcpServer: { close: () => Promise<void> } | null = null;
-  if (bootstrap.config.navigationTools !== false) {
-    try {
-      const mcpInput = createReadStreamFromFd(3);
-      const mcpOutput = createWriteStreamFromFd(4);
-      mcpServer = await dependencies.createMcpChannel(
-        orchestrator,
-        bootstrap.workspaceRoot,
-        mcpInput,
-        mcpOutput,
-      );
-    } catch (error) {
-      stderr.write(`MCP channel disabled: ${String(error)}\n`);
-    }
-  }
 
   let cleanupPromise: Promise<void> | null = null;
 
@@ -326,22 +312,8 @@ export async function main(
     process.off('unhandledRejection', onUnhandledRejection);
   };
 
-  const onSigterm = (): void => {
-    void cleanup().finally(() => process.exit(0));
-  };
-  const onSigint = (): void => {
-    void cleanup().finally(() => process.exit(0));
-  };
-  const onUncaughtException = (error: Error): void => {
-    stderr.write(`Uncaught exception in LSP service: ${String(error)}\n`);
-    void cleanup().finally(() => process.exit(1));
-  };
-  const onUnhandledRejection = (error: unknown): void => {
-    stderr.write(`Unhandled rejection in LSP service: ${String(error)}\n`);
-    void cleanup().finally(() => process.exit(1));
-  };
-
-  // Idempotent cleanup: concurrent/repeated calls execute resource disposal exactly once
+  // Idempotent cleanup: concurrent/repeated calls execute resource disposal exactly once.
+  // Established early (before MCP/sendNotification) so startup failures can await it.
   const cleanup = async (): Promise<void> => {
     if (cleanupPromise) {
       return cleanupPromise;
@@ -370,14 +342,48 @@ export async function main(
     return cleanupPromise;
   };
 
-  const dispose = (): Promise<void> => cleanup();
+  const onSigterm = (): Promise<void> =>
+    cleanup().finally(() => process.exit(0));
+  const onSigint = (): Promise<void> =>
+    cleanup().finally(() => process.exit(0));
+  const onUncaughtException = (error: Error): Promise<void> => {
+    stderr.write(`Uncaught exception in LSP service: ${String(error)}\n`);
+    return cleanup().finally(() => process.exit(1));
+  };
+  const onUnhandledRejection = (error: unknown): Promise<void> => {
+    stderr.write(`Unhandled rejection in LSP service: ${String(error)}\n`);
+    return cleanup().finally(() => process.exit(1));
+  };
 
   process.on('SIGTERM', onSigterm);
   process.on('SIGINT', onSigint);
   process.on('uncaughtException', onUncaughtException);
   process.on('unhandledRejection', onUnhandledRejection);
 
-  rpcConnection.sendNotification('lsp/ready');
+  const dispose = (): Promise<void> => cleanup();
+
+  try {
+    if (bootstrap.config.navigationTools !== false) {
+      try {
+        const mcpInput = createReadStreamFromFd(3);
+        const mcpOutput = createWriteStreamFromFd(4);
+        mcpServer = await dependencies.createMcpChannel(
+          orchestrator,
+          bootstrap.workspaceRoot,
+          mcpInput,
+          mcpOutput,
+        );
+      } catch (error) {
+        stderr.write(`MCP channel disabled: ${String(error)}\n`);
+      }
+    }
+
+    rpcConnection.sendNotification('lsp/ready');
+  } catch (error) {
+    await cleanup();
+    throw error;
+  }
+
   return { dispose };
 }
 

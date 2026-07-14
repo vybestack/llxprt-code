@@ -382,11 +382,12 @@ describe('main channel wiring', () => {
 
     const sigterm = onSpy.mock.calls.find(
       (call) => call[0] === 'SIGTERM',
-    )?.[1] as (() => void) | undefined;
+    )?.[1] as (() => Promise<void>) | undefined;
     expect(sigterm).toBeTypeOf('function');
 
-    sigterm?.();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    const cleanupPromise = sigterm?.();
+    expect(cleanupPromise).toBeInstanceOf(Promise);
+    await cleanupPromise;
 
     expect(orchestrator.shutdown).toHaveBeenCalledTimes(1);
     expect(exitSpy).toHaveBeenCalledWith(0);
@@ -533,11 +534,12 @@ describe('main channel wiring', () => {
 
     const sigint = onSpy.mock.calls.find(
       (call) => call[0] === 'SIGINT',
-    )?.[1] as (() => void) | undefined;
+    )?.[1] as (() => Promise<void>) | undefined;
     expect(sigint).toBeTypeOf('function');
 
-    sigint?.();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    const cleanupPromise = sigint?.();
+    expect(cleanupPromise).toBeInstanceOf(Promise);
+    await cleanupPromise;
 
     expect(orchestrator.shutdown).toHaveBeenCalledTimes(1);
     expect(exitSpy).toHaveBeenCalledWith(0);
@@ -561,11 +563,12 @@ describe('main channel wiring', () => {
 
     const handler = onSpy.mock.calls.find(
       (call) => call[0] === 'uncaughtException',
-    )?.[1] as ((error: Error) => void) | undefined;
+    )?.[1] as ((error: Error) => Promise<void>) | undefined;
     expect(handler).toBeTypeOf('function');
 
-    handler?.(new Error('boom'));
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    const cleanupPromise = handler?.(new Error('boom'));
+    expect(cleanupPromise).toBeInstanceOf(Promise);
+    await cleanupPromise;
 
     expect(stderrSpy).toHaveBeenCalledWith(
       expect.stringContaining('Uncaught exception in LSP service'),
@@ -592,17 +595,96 @@ describe('main channel wiring', () => {
 
     const handler = onSpy.mock.calls.find(
       (call) => call[0] === 'unhandledRejection',
-    )?.[1] as ((error: unknown) => void) | undefined;
+    )?.[1] as ((error: unknown) => Promise<void>) | undefined;
     expect(handler).toBeTypeOf('function');
 
-    handler?.('rejected');
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    const cleanupPromise = handler?.('rejected');
+    expect(cleanupPromise).toBeInstanceOf(Promise);
+    await cleanupPromise;
 
     expect(stderrSpy).toHaveBeenCalledWith(
       expect.stringContaining('Unhandled rejection in LSP service'),
     );
     expect(orchestrator.shutdown).toHaveBeenCalledTimes(1);
     expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('signal handler cleanup promise resolves before exit is called', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: { navigationTools: false },
+    });
+
+    let resolveShutdown: () => void = () => {};
+    const orchestrator = {
+      shutdown: vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveShutdown = resolve;
+          }),
+      ),
+    };
+
+    await runMain({
+      createOrchestrator: vi.fn(() => orchestrator),
+      setupRpcChannel: vi.fn(),
+      createMcpChannel: vi.fn(),
+      createRpcConnection,
+    });
+
+    const sigterm = onSpy.mock.calls.find(
+      (call) => call[0] === 'SIGTERM',
+    )?.[1] as (() => Promise<void>) | undefined;
+
+    const cleanupPromise = sigterm?.();
+    expect(exitSpy).not.toHaveBeenCalled();
+
+    resolveShutdown();
+    await cleanupPromise;
+
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('sendNotification failure cleans up resources and rethrows the same error', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: {},
+    });
+
+    const orchestratorShutdown = vi.fn().mockResolvedValue(undefined);
+    const mcpClose = vi.fn().mockResolvedValue(undefined);
+    const rpcDispose = vi.fn();
+    const startupError = new Error('sendNotification failed');
+
+    const events = [
+      'SIGTERM',
+      'SIGINT',
+      'uncaughtException',
+      'unhandledRejection',
+    ] as const;
+    const baseline = events.map((event) => process.listenerCount(event));
+
+    await expect(
+      main({
+        createOrchestrator: vi.fn(() => ({ shutdown: orchestratorShutdown })),
+        setupRpcChannel: vi.fn(),
+        createMcpChannel: vi.fn().mockResolvedValue({ close: mcpClose }),
+        createRpcConnection: () => ({
+          listen: vi.fn(),
+          dispose: rpcDispose,
+          sendNotification: vi.fn(() => {
+            throw startupError;
+          }),
+        }),
+      }),
+    ).rejects.toBe(startupError);
+
+    expect(orchestratorShutdown).toHaveBeenCalledTimes(1);
+    expect(mcpClose).toHaveBeenCalledTimes(1);
+    expect(rpcDispose).toHaveBeenCalledTimes(1);
+    expect(events.map((event) => process.listenerCount(event))).toEqual(
+      baseline,
+    );
   });
 });
 

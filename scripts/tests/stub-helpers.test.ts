@@ -142,6 +142,116 @@ describe('StubRegistry', () => {
     expect(target.temporary).toBe('value');
     expect(() => registry.restoreAll()).not.toThrow();
   });
+
+  it('resnapshots current state after a failed first defineProperty stub', () => {
+    const backing: Record<string, unknown> = {};
+    let rejectDefine = true;
+    const target = new Proxy(backing, {
+      defineProperty(object, key, descriptor) {
+        if (rejectDefine) {
+          throw new Error('blocked defineProperty');
+        }
+        return Reflect.defineProperty(object, key, descriptor);
+      },
+    });
+    const registry = new StubRegistry(target);
+
+    expect(() => registry.stub('newKey', 'failed')).toThrow(
+      'blocked defineProperty',
+    );
+
+    rejectDefine = false;
+    backing.newKey = 'intervening';
+    registry.stub('newKey', 'stubbed');
+    expect(target.newKey).toBe('stubbed');
+
+    registry.restoreAll();
+    expect(target.newKey).toBe('intervening');
+  });
+
+  it('resnapshots current state after a failed first assignment stub', () => {
+    const backing: Record<string, unknown> = {};
+    Object.defineProperty(backing, 'value', {
+      configurable: false,
+      enumerable: true,
+      writable: true,
+      value: 'original',
+    });
+    let rejectAssignment = true;
+    const target = new Proxy(backing, {
+      set(object, key, value) {
+        if (rejectAssignment) {
+          throw new Error('blocked assignment');
+        }
+        return Reflect.set(object, key, value);
+      },
+    });
+    const registry = new StubRegistry(target);
+
+    expect(() => registry.stub('value', 'failed')).toThrow(
+      'blocked assignment',
+    );
+
+    rejectAssignment = false;
+    backing.value = 'intervening';
+    registry.stub('value', 'stubbed');
+    expect(target.value).toBe('stubbed');
+
+    registry.restoreAll();
+    expect(target.value).toBe('intervening');
+  });
+
+  it('rolls back only the inserted snapshot when the first stub mutation fails, preserving other stubs', () => {
+    const backing: Record<string, unknown> = { safe: 'old' };
+    let rejectDefine = false;
+    const target = new Proxy(backing, {
+      defineProperty(object, key, descriptor) {
+        if (rejectDefine && key === 'blocked') {
+          throw new Error('blocked defineProperty');
+        }
+        return Reflect.defineProperty(object, key, descriptor);
+      },
+    });
+    const registry = new StubRegistry(target);
+
+    registry.stub('safe', 'new');
+    rejectDefine = true;
+    expect(() => registry.stub('blocked', 'temp')).toThrow(
+      'blocked defineProperty',
+    );
+    rejectDefine = false;
+
+    expect(target.safe).toBe('new');
+    registry.restoreAll();
+    expect(target.safe).toBe('old');
+    expect(Object.prototype.hasOwnProperty.call(target, 'blocked')).toBe(false);
+  });
+
+  it('preserves the original snapshot when a later restub mutation fails', () => {
+    const backing: Record<string, unknown> = { x: 'original' };
+    let rejectDefine = false;
+    const target = new Proxy(backing, {
+      defineProperty(object, key, descriptor) {
+        if (rejectDefine) {
+          throw new Error('blocked restub');
+        }
+        return Reflect.defineProperty(object, key, descriptor);
+      },
+    });
+    const registry = new StubRegistry(target);
+
+    registry.stub('x', 'first');
+    expect(target.x).toBe('first');
+
+    rejectDefine = true;
+    expect(() => registry.stub('x', 'second')).toThrow('blocked restub');
+    rejectDefine = false;
+
+    expect(target.x).toBe('first');
+
+    registry.restoreAll();
+    expect(target.x).toBe('original');
+  });
 });
 
 describe('waitFor', () => {

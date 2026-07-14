@@ -108,16 +108,16 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
     mockContentGenerator = buildMockContentGenerator();
   });
 
-  it('uses the provider-derived limit (200K), not DEFAULT_TOKEN_LIMIT, under LB with no explicit override', () => {
+  it('uses the provider-derived limit (150K), not DEFAULT_TOKEN_LIMIT, under LB with no explicit override', () => {
     const runtimeContext = buildLbRuntimeContext(historyService, {
-      providerContextLimit: 200_000,
+      providerContextLimit: 150_000,
     });
 
     const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
     const lbProvider = runtimeContext.provider.getActiveProvider();
 
     const limits = chat['compressionHandler'].computeContextLimits(lbProvider);
-    expect(limits.limit).toBe(200_000);
+    expect(limits.limit).toBe(150_000);
     expect(limits.limit).not.toBe(DEFAULT_TOKEN_LIMIT);
   });
 
@@ -144,9 +144,9 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
     const provider = runtimeContext.provider.getActiveProvider();
 
     const limits = chat['compressionHandler'].computeContextLimits(provider);
-    // gpt-4o resolves to 128K, distinct from DEFAULT_TOKEN_LIMIT (1M), so this
-    // genuinely proves the model-lookup path rather than coincidentally hitting
-    // the default constant.
+    // gpt-4o resolves to 128K, distinct from DEFAULT_TOKEN_LIMIT (200K), so
+    // this genuinely proves the model-lookup path rather than coincidentally
+    // hitting the default constant.
     expect(limits.limit).toBe(tokenLimit('gpt-4o'));
     expect(limits.limit).not.toBe(DEFAULT_TOKEN_LIMIT);
   });

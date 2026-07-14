@@ -31,28 +31,36 @@ export class StubRegistry {
   }
 
   stub(key: string | symbol, value: unknown): void {
-    if (!this.snapshots.has(key)) {
+    const isFirstStub = !this.snapshots.has(key);
+    if (isFirstStub) {
       this.snapshots.set(key, {
         descriptor: Object.getOwnPropertyDescriptor(this.target, key),
       });
     }
-    const descriptor = Object.getOwnPropertyDescriptor(this.target, key);
-    if (descriptor && !descriptor.configurable) {
-      if ('value' in descriptor && !descriptor.writable) {
-        throw new TypeError(`Cannot stub readonly property ${String(key)}`);
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(this.target, key);
+      if (descriptor && !descriptor.configurable) {
+        if ('value' in descriptor && !descriptor.writable) {
+          throw new TypeError(`Cannot stub readonly property ${String(key)}`);
+        }
+        if ('set' in descriptor && descriptor.set === undefined) {
+          throw new TypeError(`Cannot stub readonly property ${String(key)}`);
+        }
+        this.target[key] = value;
+        return;
       }
-      if ('set' in descriptor && descriptor.set === undefined) {
-        throw new TypeError(`Cannot stub readonly property ${String(key)}`);
+      Object.defineProperty(this.target, key, {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value,
+      });
+    } catch (error) {
+      if (isFirstStub) {
+        this.snapshots.delete(key);
       }
-      this.target[key] = value;
-      return;
+      throw error;
     }
-    Object.defineProperty(this.target, key, {
-      configurable: true,
-      enumerable: true,
-      writable: true,
-      value,
-    });
   }
 
   restoreAll(): void {
