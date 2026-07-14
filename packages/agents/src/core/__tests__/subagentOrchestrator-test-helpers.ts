@@ -76,8 +76,9 @@ export function createOrchestratorForTurns(options: {
     loadSubagent,
   } as unknown as SubagentManager;
 
-  const loadProfile =
-    options.loadProfile ?? vi.fn().mockResolvedValue(options.profile);
+  const loadProfile = vi.fn(
+    options.loadProfile ?? (async () => options.profile),
+  );
   const profileManager = {
     loadProfile,
   } as unknown as ProfileManager;
