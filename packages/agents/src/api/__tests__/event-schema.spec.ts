@@ -22,7 +22,7 @@ import * as fc from 'fast-check';
 import {
   STRUCTURED_ERROR_CATEGORIES,
   STRUCTURED_ERROR_REASONS,
-} from '@vybestack/llxprt-code-core/core/turn.js';
+} from '@vybestack/llxprt-code-core';
 import {
   AgentEventSchema,
   DoneReasonSchema,
