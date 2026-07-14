@@ -110,6 +110,147 @@ describe('Hook Re-Initialization (126c32ac)', () => {
 });
 
 describe('Hook Re-Initialization Disposal (126c32ac)', () => {
+  it('deduplicates concurrent initialization and supersedes it with one later generation', async () => {
+    const mockConfig = {
+      getEnableHooks: () => true,
+      getHooks: () => ({}),
+      getSessionId: () => 'test-session',
+      getWorkingDir: () => '/test',
+      getTargetDir: () => '/test',
+      getExtensions: () => [],
+      getDisabledHooks: () => [],
+      getModel: () => 'test-model',
+      isTrustedFolder: () => true,
+      getProjectHooks: () => null,
+      getSanitizationConfig: () => ({
+        enableEnvironmentVariableRedaction: false,
+        allowedEnvironmentVariables: [],
+        blockedEnvironmentVariables: [],
+      }),
+      getSessionRecordingService: () => null,
+    } as unknown as Config;
+    const hookSystem = new HookSystem(mockConfig);
+    const registry = hookSystem.getRegistry();
+    const originalInitialize = registry.initialize.bind(registry);
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const initialize = vi
+      .spyOn(registry, 'initialize')
+      .mockImplementationOnce(async (signal) => {
+        await gate;
+        await originalInitialize(signal);
+      })
+      .mockImplementation(originalInitialize);
+
+    const first = hookSystem.initialize();
+    const duplicate = hookSystem.initialize();
+    const superseding = hookSystem.initialize();
+    release?.();
+    await Promise.all([first, duplicate, superseding]);
+
+    expect(initialize).toHaveBeenCalledTimes(2);
+    expect(hookSystem.isInitialized()).toBe(true);
+  });
+
+  it('disposes an initialized handler when a queued generation supersedes it', async () => {
+    const unsubscribes: Array<ReturnType<typeof vi.fn>> = [];
+    const mockMessageBus = {
+      subscribe: vi.fn(() => {
+        const unsubscribe = vi.fn();
+        unsubscribes.push(unsubscribe);
+        return unsubscribe;
+      }),
+      publish: vi.fn(),
+    };
+    const mockConfig = {
+      getEnableHooks: () => true,
+      getHooks: () => ({}),
+      getSessionId: () => 'test-session',
+      getWorkingDir: () => '/test',
+      getTargetDir: () => '/test',
+      getExtensions: () => [],
+      getDisabledHooks: () => [],
+      getModel: () => 'test-model',
+      isTrustedFolder: () => true,
+      getProjectHooks: () => null,
+      getSanitizationConfig: () => ({
+        enableEnvironmentVariableRedaction: false,
+        allowedEnvironmentVariables: [],
+        blockedEnvironmentVariables: [],
+      }),
+      getSessionRecordingService: () => null,
+    } as unknown as Config;
+    const hookSystem = new HookSystem(mockConfig, mockMessageBus);
+    const registry = hookSystem.getRegistry();
+    const originalInitialize = registry.initialize.bind(registry);
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(registry, 'initialize')
+      .mockImplementationOnce(async (signal) => {
+        await gate;
+        await originalInitialize(signal);
+      })
+      .mockImplementation(originalInitialize);
+
+    const first = hookSystem.initialize();
+    const superseding = hookSystem.initialize();
+    release?.();
+    await Promise.all([first, superseding]);
+
+    expect(mockMessageBus.subscribe).toHaveBeenCalledTimes(2);
+    expect(unsubscribes[0]).toHaveBeenCalledOnce();
+    expect(unsubscribes[1]).not.toHaveBeenCalled();
+  });
+
+  it('invalidates in-flight initialization and remains terminal after disposal', async () => {
+    const subscribe = vi.fn(() => vi.fn());
+    const mockMessageBus = { subscribe, publish: vi.fn() };
+    const mockConfig = {
+      getEnableHooks: () => true,
+      getHooks: () => ({}),
+      getSessionId: () => 'test-session',
+      getWorkingDir: () => '/test',
+      getTargetDir: () => '/test',
+      getExtensions: () => [],
+      getDisabledHooks: () => [],
+      getModel: () => 'test-model',
+      isTrustedFolder: () => true,
+      getProjectHooks: () => null,
+      getSanitizationConfig: () => ({
+        enableEnvironmentVariableRedaction: false,
+        allowedEnvironmentVariables: [],
+        blockedEnvironmentVariables: [],
+      }),
+      getSessionRecordingService: () => null,
+    } as unknown as Config;
+    const hookSystem = new HookSystem(mockConfig, mockMessageBus);
+    const registry = hookSystem.getRegistry();
+    const originalInitialize = registry.initialize.bind(registry);
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(registry, 'initialize').mockImplementationOnce(async (signal) => {
+      await gate;
+      await originalInitialize(signal);
+    });
+
+    const initialization = hookSystem.initialize();
+    await vi.waitFor(() => expect(registry.initialize).toHaveBeenCalledOnce());
+    hookSystem.dispose();
+    release?.();
+
+    await expect(initialization).rejects.toThrow(/disposed/i);
+    expect(subscribe).not.toHaveBeenCalled();
+    expect(hookSystem.isInitialized()).toBe(false);
+    await expect(hookSystem.initialize()).rejects.toThrow(/disposed/i);
+    expect(subscribe).not.toHaveBeenCalled();
+  });
+
   it('should dispose old event handler before creating new one', async () => {
     const unsubscribeMock = vi.fn();
     const subscribeMock = vi.fn(() => unsubscribeMock);

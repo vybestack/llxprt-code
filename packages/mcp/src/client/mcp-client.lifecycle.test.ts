@@ -24,6 +24,20 @@ import { McpClient } from './mcp-client.js';
 import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from './mcp-errors.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
+function createDeferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+} {
+  let resolvePromise: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve: (value) => resolvePromise?.(value),
+  };
+}
+
 vi.mock('@modelcontextprotocol/sdk/client/stdio.js');
 vi.mock('@modelcontextprotocol/sdk/client/index.js');
 vi.mock('../auth/oauth-provider.js');
@@ -334,6 +348,47 @@ describe('mcp-client', () => {
         },
         ReadResourceResultSchema,
       );
+    });
+
+    it('discards a delayed resource result when authorization is revoked during the RPC', async () => {
+      let trusted = true;
+      const readStarted = createDeferred<void>();
+      const readResult = createDeferred<{ contents: never[] }>();
+      const mockedClient = {
+        connect: vi.fn(),
+        request: vi.fn().mockImplementation(() => {
+          readStarted.resolve(undefined);
+          return readResult.promise;
+        }),
+        registerCapabilities: vi.fn(),
+        setRequestHandler: vi.fn(),
+        getServerCapabilities: vi.fn().mockReturnValue({}),
+      };
+      vi.mocked(ClientLib.Client).mockReturnValue(
+        mockedClient as unknown as ClientLib.Client,
+      );
+      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+        {} as SdkClientStdioLib.StdioClientTransport,
+      );
+      const client = new McpClient(
+        'test-server',
+        { command: 'test-command' },
+        {} as ToolRegistry,
+        {} as PromptRegistry,
+        createMockResourceRegistry(),
+        workspaceContext,
+        createConfig(() => trusted),
+        false,
+        '0.0.1',
+      );
+      await client.connect();
+
+      const read = client.readResource('file:///tmp/readme.txt');
+      await readStarted.promise;
+      trusted = false;
+      readResult.resolve({ contents: [] });
+
+      await expect(read).rejects.toThrow(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
     });
 
     it('should throw if readResource is called while disconnected', async () => {

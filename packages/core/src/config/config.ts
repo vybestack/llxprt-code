@@ -594,21 +594,24 @@ export class Config extends ConfigBase {
    * Updates the local trust fallback. IDE trust remains authoritative, so this
    * only triggers a transition when the effective trust value changes.
    */
-  setTrustedFolderLive(trusted: boolean): void {
+  setTrustedFolderLive(trusted: boolean): Promise<void> {
     const previousEffectiveTrust = this.isTrustedFolder();
     this.trustedFolder = trusted;
     if (!this.initialized) {
-      return;
+      return Promise.resolve();
     }
-    this.reconcileEffectiveTrust(previousEffectiveTrust);
+    return this.reconcileEffectiveTrust(previousEffectiveTrust);
   }
 
-  private reconcileEffectiveTrust(previousEffectiveTrust: boolean): void {
+  private reconcileEffectiveTrust(
+    previousEffectiveTrust: boolean,
+  ): Promise<void> {
     const effectiveTrust = this.isTrustedFolder();
     this.cachedEffectiveTrust = effectiveTrust;
     if (previousEffectiveTrust !== effectiveTrust) {
-      this.liveTrustTransitionLifecycle.apply(effectiveTrust);
+      return this.liveTrustTransitionLifecycle.apply(effectiveTrust);
     }
+    return Promise.resolve();
   }
 
   setPtyTerminalSize(
@@ -889,11 +892,19 @@ export class Config extends ConfigBase {
     }
     const previousEffectiveTrust = this.cachedEffectiveTrust;
     this.ideTrust = ideContext.getIdeContext()?.workspaceState?.isTrusted;
-    this.reconcileEffectiveTrust(previousEffectiveTrust);
+    void this.reconcileEffectiveTrust(previousEffectiveTrust).catch((error) => {
+      Config.logger.error(
+        `IDE trust reconciliation failed: ${getErrorMessage(error)}`,
+      );
+    });
     this.ideTrustChangeListener = (isTrusted: boolean | undefined) => {
       const priorEffectiveTrust = this.cachedEffectiveTrust;
       this.ideTrust = isTrusted;
-      this.reconcileEffectiveTrust(priorEffectiveTrust);
+      void this.reconcileEffectiveTrust(priorEffectiveTrust).catch((error) => {
+        Config.logger.error(
+          `IDE trust reconciliation failed: ${getErrorMessage(error)}`,
+        );
+      });
     };
     client.addTrustChangeListener(this.ideTrustChangeListener);
   }
@@ -917,7 +928,20 @@ export class Config extends ConfigBase {
     }
     const client = this.agentClient as AgentClientContract | undefined;
     if (client !== undefined) {
-      client.dispose();
+      try {
+        client.dispose();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (this.hookSystem !== undefined) {
+      const hookSystem = this.hookSystem;
+      this.hookSystem = undefined;
+      try {
+        hookSystem.dispose();
+      } catch (error) {
+        failures.push(error);
+      }
     }
     if (this.mcpDiscoveryPromise !== undefined) {
       try {

@@ -158,4 +158,21 @@ describe('settingsLoader workspace trust provenance', () => {
 
     expect(settings.isTrusted).toBe(false);
   });
+
+  it('fails closed when the workspace canonical identity cannot be resolved', () => {
+    const workspace = '/trusted/workspace';
+    exposeTrustRules({ [workspace]: TrustLevel.TRUST_FOLDER });
+    (vi.mocked(fs.realpathSync) as Mock).mockImplementation(
+      (location: fs.PathLike) => {
+        if (location === path.resolve(workspace)) {
+          throw new Error('canonical identity unavailable');
+        }
+        return location;
+      },
+    );
+
+    const settings = loadSettings(workspace);
+
+    expect(settings.isTrusted).toBe(false);
+  });
 });

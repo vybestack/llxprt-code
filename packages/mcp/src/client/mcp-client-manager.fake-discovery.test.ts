@@ -101,6 +101,85 @@ describe('McpClientManager fake discovery lifecycle', () => {
     );
   });
 
+  it('publishes canonical MCP names and avoids collisions between servers', async () => {
+    fs.writeFileSync(
+      fixturePath,
+      JSON.stringify({
+        servers: {
+          [SERVER_NAME]: { tools: [{ name: 'shared-tool' }] },
+          'other-server': { tools: [{ name: 'shared-tool' }] },
+        },
+      }),
+    );
+    const promptRegistry = new PromptRegistry();
+    const resourceRegistry = new ResourceRegistry();
+    const config = {
+      isTrustedFolder: () => true,
+      getMcpServers: () => ({
+        [SERVER_NAME]: { command: 'unused' },
+        'other-server': { command: 'unused' },
+      }),
+      getMcpServerCommand: () => undefined,
+      getPromptRegistry: () => promptRegistry,
+      getResourceRegistry: () => resourceRegistry,
+      getDebugMode: () => false,
+      getWorkspaceContext: () => new WorkspaceContext(workspacePath),
+      getAllowedMcpServers: () => undefined,
+      getBlockedMcpServers: () => undefined,
+      getExtensions: () => [],
+      refreshMcpContext: async () => {},
+    } as unknown as Config;
+    const toolRegistry = new ToolRegistry(config, {
+      requestConfirmation: async () => false,
+    });
+    const manager = new McpClientManager('0.0.1', toolRegistry, config);
+
+    await manager.startConfiguredMcpServers();
+
+    expect(
+      toolRegistry.getTool('mcp__fixture-server__shared-tool'),
+    ).toBeDefined();
+    expect(
+      toolRegistry.getTool('mcp__other-server__shared-tool'),
+    ).toBeDefined();
+    expect(toolRegistry.getTool('shared-tool')).toBeUndefined();
+  });
+
+  it('aborts and drains long-latency fake discovery during stop', async () => {
+    const { manager } = createManager({
+      servers: {
+        [SERVER_NAME]: {
+          latencyMs: 60_000,
+          tools: [{ name: 'slow-tool' }],
+        },
+      },
+    });
+    const discovery = manager.startConfiguredMcpServers();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    const started = Date.now();
+
+    await manager.stop();
+    await discovery;
+
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(manager.getClient(SERVER_NAME)).toBeUndefined();
+    expect(getMCPServerStatus(SERVER_NAME)).toBe(MCPServerStatus.DISCONNECTED);
+  });
+
+  it('publishes disconnected status immediately when fake discovery is revoked', async () => {
+    const { manager } = createManager({
+      servers: {
+        [SERVER_NAME]: { tools: [{ name: 'connected-tool' }] },
+      },
+    });
+    await manager.startConfiguredMcpServers();
+    expect(getMCPServerStatus(SERVER_NAME)).toBe(MCPServerStatus.CONNECTED);
+
+    await manager.onFolderTrustRevoked();
+
+    expect(getMCPServerStatus(SERVER_NAME)).toBe(MCPServerStatus.DISCONNECTED);
+  });
+
   it('removes a client and partial artifacts when fake publication throws', async () => {
     const { manager, toolRegistry } = createManager({
       servers: {

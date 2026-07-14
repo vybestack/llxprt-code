@@ -34,8 +34,10 @@ export function useAutoAcceptIndicator({
   }, [currentMode]);
 
   useEffect(() => {
-    const handleFolderTrustChanged = (): void => {
-      setShowAutoAcceptIndicator(agent.getApprovalMode());
+    const handleFolderTrustChanged = (trusted: boolean): void => {
+      setShowAutoAcceptIndicator(
+        trusted ? agent.getApprovalMode() : ApprovalMode.DEFAULT,
+      );
     };
     coreEvents.on(CoreEvent.FolderTrustChanged, handleFolderTrustChanged);
     return () => {

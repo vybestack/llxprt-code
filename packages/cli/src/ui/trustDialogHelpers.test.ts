@@ -125,6 +125,31 @@ describe('trustDialogHelpers', () => {
         getTrustCommitErrorMessage('persistence', new Error('disk full')),
       ).toBe('Failed to save trust settings: disk full');
     });
+
+    it('flattens nested transition and rollback failures without claiming restoration', () => {
+      const error = new AggregateError(
+        [
+          new AggregateError(
+            [new Error('disconnect failed'), new Error('refresh failed')],
+            'transition failed',
+          ),
+          new Error('saved rollback failed'),
+          new AggregateError(
+            [new Error('policy rollback failed')],
+            'live rollback failed',
+          ),
+        ],
+        'Trust update and rollback failed',
+      );
+
+      const message = getTrustCommitErrorMessage('live', error, false);
+
+      expect(message).toContain('disconnect failed');
+      expect(message).toContain('refresh failed');
+      expect(message).toContain('saved rollback failed');
+      expect(message).toContain('policy rollback failed');
+      expect(message).not.toMatch(/setting was restored/i);
+    });
   });
 
   describe('shouldDismissTrustDialog', () => {

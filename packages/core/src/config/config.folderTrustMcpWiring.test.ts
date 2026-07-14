@@ -84,7 +84,7 @@ describe('Config MCP wiring on folder trust change', () => {
     const config = new Config({ ...baseParams, trustedFolder: false });
     await initializeTestConfig(config);
 
-    config.setTrustedFolderLive(true);
+    void config.setTrustedFolderLive(true);
     await config.whenTrustTransitionSettled();
 
     expect(instances[0].onFolderTrustGained).toHaveBeenCalledTimes(1);
@@ -94,7 +94,7 @@ describe('Config MCP wiring on folder trust change', () => {
     const config = new Config({ ...baseParams, trustedFolder: true });
     await initializeTestConfig(config);
 
-    config.setTrustedFolderLive(false);
+    void config.setTrustedFolderLive(false);
     await config.whenTrustTransitionSettled();
 
     expect(instances[0].onFolderTrustRevoked).toHaveBeenCalledTimes(1);
@@ -140,7 +140,7 @@ describe('Config MCP wiring on folder trust change', () => {
     const config = new Config({ ...baseParams, trustedFolder: true });
     await initializeTestConfig(config);
 
-    config.setTrustedFolderLive(true);
+    void config.setTrustedFolderLive(true);
     await config.whenTrustTransitionSettled();
 
     expect(instances[0].onFolderTrustGained).not.toHaveBeenCalled();
@@ -155,7 +155,7 @@ describe('Config MCP wiring on folder trust change', () => {
     });
     await initializeTestConfig(config);
 
-    config.setTrustedFolderLive(true);
+    void config.setTrustedFolderLive(true);
     await config.whenTrustTransitionSettled();
 
     expect(instances[0].onFolderTrustGained).toHaveBeenCalledTimes(1);
@@ -181,7 +181,7 @@ describe('Config MCP wiring on folder trust change', () => {
       const mockA = instances[0];
       const mockB = instances[1];
 
-      configA.setTrustedFolderLive(false);
+      void configA.setTrustedFolderLive(false);
       await configA.whenTrustTransitionSettled();
       await configB.whenTrustTransitionSettled();
 
@@ -207,7 +207,7 @@ describe('Config MCP wiring on folder trust change', () => {
       const mockA = instances[0];
       const mockB = instances[1];
 
-      configA.setTrustedFolderLive(true);
+      void configA.setTrustedFolderLive(true);
       await configA.whenTrustTransitionSettled();
       await configB.whenTrustTransitionSettled();
 
@@ -233,8 +233,8 @@ describe('Config MCP wiring on folder trust change', () => {
       const mockA = instances[0];
       const mockB = instances[1];
 
-      configA.setTrustedFolderLive(true);
-      configB.setTrustedFolderLive(false);
+      void configA.setTrustedFolderLive(true);
+      void configB.setTrustedFolderLive(false);
       await configA.whenTrustTransitionSettled();
       await configB.whenTrustTransitionSettled();
 
@@ -258,8 +258,8 @@ describe('Config MCP wiring on folder trust change', () => {
         await new Promise((r) => setTimeout(r, 50));
       });
 
-      config.setTrustedFolderLive(false);
-      config.setTrustedFolderLive(true);
+      void config.setTrustedFolderLive(false);
+      void config.setTrustedFolderLive(true);
       await config.whenTrustTransitionSettled();
 
       expect(mock.onFolderTrustRevoked).toHaveBeenCalledTimes(1);
@@ -281,8 +281,8 @@ describe('Config MCP wiring on folder trust change', () => {
         await new Promise((r) => setTimeout(r, 50));
       });
 
-      config.setTrustedFolderLive(false);
-      config.setTrustedFolderLive(false);
+      void config.setTrustedFolderLive(false);
+      void config.setTrustedFolderLive(false);
       await config.whenTrustTransitionSettled();
 
       expect(mock.onFolderTrustRevoked).toHaveBeenCalledTimes(1);
@@ -300,12 +300,12 @@ describe('Config MCP wiring on folder trust change', () => {
         new Error('disconnect failed'),
       );
 
-      config.setTrustedFolderLive(false);
+      void config.setTrustedFolderLive(false);
       await expect(config.whenTrustTransitionSettled()).rejects.toThrow(
         'disconnect failed',
       );
 
-      config.setTrustedFolderLive(true);
+      void config.setTrustedFolderLive(true);
       await expect(
         config.whenTrustTransitionSettled(),
       ).resolves.toBeUndefined();
@@ -322,7 +322,7 @@ describe('Config MCP wiring on folder trust change', () => {
       const failure = new Error('disconnect failed');
       instances[0].onFolderTrustRevoked.mockRejectedValueOnce(failure);
 
-      config.setTrustedFolderLive(false);
+      void config.setTrustedFolderLive(false);
       const firstObserver = config.whenTrustTransitionSettled();
       const secondObserver = config.whenTrustTransitionSettled();
 
@@ -340,7 +340,7 @@ describe('Config MCP wiring on folder trust change', () => {
       config.getHookSystem();
       hookInitializers[0].mockRejectedValueOnce(new Error('hooks failed'));
 
-      config.setTrustedFolderLive(true);
+      void config.setTrustedFolderLive(true);
 
       await expect(config.whenTrustTransitionSettled()).rejects.toThrow(
         'hooks failed',
@@ -359,7 +359,7 @@ describe('Config MCP wiring on folder trust change', () => {
       vi.useFakeTimers();
 
       try {
-        config.setTrustedFolderLive(true);
+        void config.setTrustedFolderLive(true);
         const outcome = config.whenTrustTransitionSettled().then(
           () => 'resolved',
           (error: unknown) => error,
@@ -389,7 +389,7 @@ describe('Config MCP wiring on folder trust change', () => {
       config.getHookSystem();
       hookInitializers[0].mockReturnValue(new Promise<void>(() => {}));
 
-      config.setTrustedFolderLive(true);
+      void config.setTrustedFolderLive(true);
       await vi.waitFor(() =>
         expect(hookInitializers[0]).toHaveBeenCalledOnce(),
       );
@@ -420,7 +420,7 @@ describe('Config MCP wiring on folder trust change', () => {
             }),
         );
 
-        config.setTrustedFolderLive(false);
+        void config.setTrustedFolderLive(false);
         await vi.waitFor(() =>
           expect(mock.onFolderTrustRevoked).toHaveBeenCalledOnce(),
         );
@@ -447,7 +447,7 @@ describe('Config MCP wiring on folder trust change', () => {
         );
 
         const getHookSystemSpy = vi.spyOn(config, 'getHookSystem');
-        config.setTrustedFolderLive(false);
+        void config.setTrustedFolderLive(false);
         await vi.waitFor(() =>
           expect(mock.onFolderTrustRevoked).toHaveBeenCalledOnce(),
         );
@@ -463,10 +463,64 @@ describe('Config MCP wiring on folder trust change', () => {
         await initializeTestConfig(config);
         await config.dispose();
 
-        config.setTrustedFolderLive(false);
+        void config.setTrustedFolderLive(false);
         await config.whenTrustTransitionSettled();
 
         expect(instances[0].onFolderTrustRevoked).not.toHaveBeenCalled();
+      });
+
+      it('continues hook and MCP cleanup when agent disposal fails', async () => {
+        const config = new Config({
+          ...baseParams,
+          trustedFolder: true,
+          enableHooks: true,
+        });
+        await initializeTestConfig(config);
+        const manager = instances[0];
+        const hookSystem = config.getHookSystem();
+        await hookSystem?.initialize();
+        const disposeHooks = vi.spyOn(hookSystem!, 'dispose');
+        const agentFailure = new Error('agent dispose failed');
+        const agent = {
+          dispose: vi.fn(() => {
+            throw agentFailure;
+          }),
+        };
+        Object.defineProperty(config, 'agentClient', { value: agent });
+
+        await expect(config.dispose()).rejects.toBe(agentFailure);
+
+        expect(disposeHooks).toHaveBeenCalledOnce();
+        expect(config.getHookSystem()).not.toBe(hookSystem);
+        expect(manager.stop).toHaveBeenCalledOnce();
+      });
+
+      it('aggregates agent, hook, and MCP cleanup failures', async () => {
+        const config = new Config({
+          ...baseParams,
+          trustedFolder: true,
+          enableHooks: true,
+        });
+        await initializeTestConfig(config);
+        const agentFailure = new Error('agent dispose failed');
+        const hookFailure = new Error('hook dispose failed');
+        const stopFailure = new Error('stop failed');
+        Object.defineProperty(config, 'agentClient', {
+          value: {
+            dispose: () => {
+              throw agentFailure;
+            },
+          },
+        });
+        const hookSystem = config.getHookSystem();
+        vi.spyOn(hookSystem!, 'dispose').mockImplementation(() => {
+          throw hookFailure;
+        });
+        instances[0].stop.mockRejectedValue(stopFailure);
+
+        await expect(config.dispose()).rejects.toMatchObject({
+          errors: [agentFailure, hookFailure, stopFailure],
+        });
       });
 
       it('reports both transition and manager stop failures', async () => {
@@ -477,7 +531,7 @@ describe('Config MCP wiring on folder trust change', () => {
         instances[0].onFolderTrustRevoked.mockRejectedValue(transitionError);
         instances[0].stop.mockRejectedValue(stopError);
 
-        config.setTrustedFolderLive(false);
+        void config.setTrustedFolderLive(false);
         await vi.waitFor(() =>
           expect(instances[0].onFolderTrustRevoked).toHaveBeenCalledOnce(),
         );
@@ -494,7 +548,7 @@ describe('Config MCP wiring on folder trust change', () => {
         instances[0].onFolderTrustRevoked.mockRejectedValue(undefined);
         instances[0].stop.mockRejectedValue(stopError);
 
-        config.setTrustedFolderLive(false);
+        void config.setTrustedFolderLive(false);
         await vi.waitFor(() =>
           expect(instances[0].onFolderTrustRevoked).toHaveBeenCalledOnce(),
         );
@@ -513,7 +567,7 @@ describe('Config MCP wiring on folder trust change', () => {
       mock.onFolderTrustRevoked.mockRejectedValue(new Error('revoke failed'));
 
       for (let index = 0; index < FAILED_TRANSITION_COUNT; index++) {
-        config.setTrustedFolderLive(index % 2 !== 0);
+        void config.setTrustedFolderLive(index % 2 !== 0);
       }
 
       let failure: unknown;

@@ -123,6 +123,58 @@ describe('McpClientManager', () => {
     expect(refreshMcpContext).toHaveBeenCalledOnce();
   });
 
+  it('cancels a debounced context refresh during stop and ignores later scheduling', async () => {
+    vi.useFakeTimers();
+    try {
+      const mockedMcpClient = {
+        connect: vi.fn(),
+        discover: vi.fn(),
+        disconnect: vi.fn(),
+        invalidateCapabilities: vi.fn(),
+        abortDiscovery: vi.fn(),
+        getStatus: vi.fn(),
+        getServerConfig: vi.fn().mockReturnValue({}),
+      };
+      vi.mocked(McpClient).mockReturnValue(
+        mockedMcpClient as unknown as McpClient,
+      );
+      const refreshMcpContext = vi.fn();
+      const mockConfig = {
+        isTrustedFolder: () => true,
+        getMcpServers: () => ({ 'test-server': {} }),
+        getMcpServerCommand: () => '',
+        getPromptRegistry: () => ({ removePromptsByServer: vi.fn() }),
+        getResourceRegistry: () => ({ removeResourcesByServer: vi.fn() }),
+        getDebugMode: () => false,
+        getWorkspaceContext: () => ({}) as WorkspaceContext,
+        getAllowedMcpServers: () => undefined,
+        getBlockedMcpServers: () => undefined,
+        refreshMcpContext,
+      } as unknown as Config;
+      const toolRegistry = {
+        removeMcpToolsByServer: vi.fn(),
+      } as unknown as ToolRegistry;
+      const manager = new McpClientManager('0.0.1', toolRegistry, mockConfig);
+      await manager.startConfiguredMcpServers();
+      refreshMcpContext.mockClear();
+      const onToolsUpdated = vi.mocked(McpClient).mock.calls[0][9];
+
+      const scheduledBeforeStop = onToolsUpdated?.();
+      const stopping = manager.stop();
+      await vi.advanceTimersByTimeAsync(300);
+      await Promise.all([scheduledBeforeStop, stopping]);
+
+      expect(refreshMcpContext).not.toHaveBeenCalled();
+
+      const scheduledAfterStop = onToolsUpdated?.();
+      await vi.advanceTimersByTimeAsync(300);
+      await scheduledAfterStop;
+      expect(refreshMcpContext).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('should not discover tools if folder is not trusted', async () => {
     const mockedMcpClient = {
       connect: vi.fn(),

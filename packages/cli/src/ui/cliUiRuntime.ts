@@ -403,7 +403,7 @@ export interface AppStateRuntime {
   getDebugMode(): boolean;
   isRestrictiveSandbox(): boolean;
   isTrustedFolder(): boolean;
-  setTrustedFolderLive(trusted: boolean): void;
+  setTrustedFolderLive(trusted: boolean): Promise<void>;
   getFolderTrust(): boolean;
   getQuestion(): string | undefined;
   getConversationLogPath(): string;

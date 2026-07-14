@@ -62,6 +62,27 @@ export interface TrustedFoldersFile {
   path: string;
 }
 
+export interface TrustedFolderSnapshot {
+  readonly canonicalPath: string;
+  readonly entries: ReadonlyArray<readonly [string, TrustLevel]>;
+}
+
+function resolveCanonicalPath(location: string): string | undefined {
+  try {
+    return fs.realpathSync(path.resolve(location));
+  } catch {
+    return undefined;
+  }
+}
+
+function requireCanonicalPath(location: string): string {
+  const canonicalPath = resolveCanonicalPath(location);
+  if (canonicalPath === undefined) {
+    throw new Error(`Unable to resolve canonical path for "${location}".`);
+  }
+  return canonicalPath;
+}
+
 export class LoadedTrustedFolders {
   constructor(
     readonly user: TrustedFoldersFile,
@@ -87,13 +108,19 @@ export class LoadedTrustedFolders {
   }
 
   resolvePathTrust(location: string): ResolvedTrustRule | undefined {
-    const resolvedLocation = path.resolve(location);
+    const resolvedLocation = resolveCanonicalPath(location);
+    if (resolvedLocation === undefined) {
+      return undefined;
+    }
     const matches = this.rules.flatMap((rule) => {
-      const effectivePath = path.resolve(
+      const canonicalRulePath = resolveCanonicalPath(rule.path);
+      if (canonicalRulePath === undefined) {
+        return [];
+      }
+      const effectivePath =
         rule.trustLevel === TrustLevel.TRUST_PARENT
-          ? path.dirname(rule.path)
-          : rule.path,
-      );
+          ? path.dirname(canonicalRulePath)
+          : canonicalRulePath;
       if (!isWithinRoot(resolvedLocation, effectivePath)) {
         return [];
       }
@@ -122,32 +149,75 @@ export class LoadedTrustedFolders {
     return matches[0];
   }
 
-  setValue(path: string, trustLevel: TrustLevel): void {
-    const hadOriginalTrustLevel = Object.hasOwn(this.user.config, path);
-    const originalTrustLevel = this.user.config[path];
-    this.user.config[path] = trustLevel;
+  getValue(location: string): TrustLevel | undefined {
+    const canonicalPath = resolveCanonicalPath(location);
+    return canonicalPath === undefined
+      ? undefined
+      : this.user.config[canonicalPath];
+  }
+
+  snapshotValue(location: string): TrustedFolderSnapshot {
+    const canonicalPath = requireCanonicalPath(location);
+    return {
+      canonicalPath,
+      entries: Object.entries(this.user.config).filter(
+        ([rulePath]) => resolveCanonicalPath(rulePath) === canonicalPath,
+      ),
+    };
+  }
+
+  restoreSnapshot(snapshot: TrustedFolderSnapshot): void {
+    const originalConfig = { ...this.user.config };
+    for (const rulePath of Object.keys(this.user.config)) {
+      if (resolveCanonicalPath(rulePath) === snapshot.canonicalPath) {
+        delete this.user.config[rulePath];
+      }
+    }
+    for (const [rulePath, trustLevel] of snapshot.entries) {
+      this.user.config[rulePath] = trustLevel;
+    }
     try {
       saveTrustedFolders(this.user);
     } catch (e) {
-      if (!hadOriginalTrustLevel) {
-        delete this.user.config[path];
-      } else {
-        this.user.config[path] = originalTrustLevel;
-      }
+      this.user.config = originalConfig;
       throw e;
     }
   }
 
-  deleteValue(path: string): void {
-    if (!Object.hasOwn(this.user.config, path)) {
-      return;
+  setValue(location: string, trustLevel: TrustLevel): void {
+    const canonicalPath = requireCanonicalPath(location);
+    const originalConfig = { ...this.user.config };
+    const aliases = Object.keys(this.user.config).filter(
+      (rulePath) => resolveCanonicalPath(rulePath) === canonicalPath,
+    );
+    for (const alias of aliases) {
+      delete this.user.config[alias];
     }
-    const originalTrustLevel = this.user.config[path];
-    delete this.user.config[path];
+    this.user.config[canonicalPath] = trustLevel;
     try {
       saveTrustedFolders(this.user);
     } catch (e) {
-      this.user.config[path] = originalTrustLevel;
+      this.user.config = originalConfig;
+      throw e;
+    }
+  }
+
+  deleteValue(location: string): void {
+    const canonicalPath = requireCanonicalPath(location);
+    const originalConfig = { ...this.user.config };
+    const aliases = Object.keys(this.user.config).filter(
+      (rulePath) => resolveCanonicalPath(rulePath) === canonicalPath,
+    );
+    if (aliases.length === 0) {
+      return;
+    }
+    for (const alias of aliases) {
+      delete this.user.config[alias];
+    }
+    try {
+      saveTrustedFolders(this.user);
+    } catch (e) {
+      this.user.config = originalConfig;
       throw e;
     }
   }

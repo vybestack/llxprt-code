@@ -17,6 +17,7 @@ import {
   resolveLocalWorkspaceTrust,
   TrustLevel,
 } from '../../config/trustedFolders.js';
+import { getTrustCommitErrorMessage } from '../trustDialogHelpers.js';
 
 const VALID_TRUST_LEVELS = [
   TrustLevel.TRUST_FOLDER,
@@ -84,7 +85,7 @@ export const permissionsCommand: SlashCommand = {
   name: 'permissions',
   description: 'manage folder trust settings',
   kind: CommandKind.BUILT_IN,
-  action: (context, args): OpenDialogActionReturn | MessageActionReturn => {
+  action: (context, args) => {
     const parsed = parsePermissionsArgs(
       args,
       context.services.config?.getWorkingDir() ?? process.cwd(),
@@ -109,34 +110,59 @@ export const permissionsCommand: SlashCommand = {
     // We have valid trust level and path, modify trust
     const { trustLevel, targetPath } = parsed;
 
-    try {
+    return (async (): Promise<OpenDialogActionReturn | MessageActionReturn> => {
       const trustedFolders = loadTrustedFolders();
-      trustedFolders.setValue(targetPath, trustLevel);
-
+      const savedSnapshot = trustedFolders.snapshotValue(targetPath);
       const config = context.services.config;
-      if (config) {
-        const cwd = config.getWorkingDir();
-        config.setTrustedFolderLive(
-          // An unmatched local rule means the active workspace is not trusted.
-          resolveLocalWorkspaceTrust(
-            { folderTrust: config.getFolderTrust() },
-            trustedFolders,
-            cwd,
-          ) ?? false,
-        );
+      const previousLiveTrust = config?.isTrustedFolder() ?? false;
+      try {
+        trustedFolders.setValue(targetPath, trustLevel);
+        if (config) {
+          const cwd = config.getWorkingDir();
+          await config.setTrustedFolderLive(
+            resolveLocalWorkspaceTrust(
+              { folderTrust: config.getFolderTrust() },
+              trustedFolders,
+              cwd,
+            ) ?? false,
+          );
+        }
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Trust level set to ${trustLevel} for: ${targetPath}`,
+        };
+      } catch (error) {
+        const rollbackFailures: unknown[] = [];
+        try {
+          trustedFolders.restoreSnapshot(savedSnapshot);
+        } catch (rollbackError) {
+          rollbackFailures.push(rollbackError);
+        }
+        if (config) {
+          try {
+            await config.setTrustedFolderLive(previousLiveTrust);
+          } catch (rollbackError) {
+            rollbackFailures.push(rollbackError);
+          }
+        }
+        const reportedError =
+          rollbackFailures.length === 0
+            ? error
+            : new AggregateError(
+                [error, ...rollbackFailures],
+                'Trust update and rollback failed',
+              );
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: getTrustCommitErrorMessage(
+            'persistence',
+            reportedError,
+            rollbackFailures.length === 0,
+          ),
+        };
       }
-
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Trust level set to ${trustLevel} for: ${targetPath}`,
-      };
-    } catch (error) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Failed to save trust settings: ${error instanceof Error ? error.message : String(error)}`,
-      };
-    }
+    })();
   },
 };

@@ -12,6 +12,8 @@ import {
   getMCPServerStatus,
   removeMCPStatusChangeListener,
 } from '../client/mcp-client.js';
+import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from '../client/mcp-errors.js';
+import { generateMcpToolName } from '../client/mcp-tool.js';
 import {
   applyFakeServerDiscovery,
   type FakeMcpFixture,
@@ -84,7 +86,7 @@ describe('applyFakeServerDiscovery authorization', () => {
 
   it('rolls back the tool whose publication revokes authorization', async () => {
     const name = 'tool-publication-revocation';
-    const toolName = `${name}_tool`;
+    const toolName = generateMcpToolName(name, `${name}_tool`);
     const registry = createToolRegistry();
 
     const outcome = await applyFakeServerDiscovery(
@@ -100,6 +102,31 @@ describe('applyFakeServerDiscovery authorization', () => {
     });
     expect(registry.getTool(toolName)).toBeUndefined();
     expect(getMCPServerStatus(name)).toBe(MCPServerStatus.DISCONNECTED);
+  });
+
+  it('denies invocation through a stale fake tool handle after authorization is revoked', async () => {
+    const name = 'stale-handle-revocation';
+    const toolName = generateMcpToolName(name, `${name}_tool`);
+    const registry = createToolRegistry();
+    let authorized = true;
+
+    await applyFakeServerDiscovery(
+      name,
+      registry,
+      fixtureWithTool(name),
+      () => authorized,
+    );
+    const staleInvocation = registry.getTool(toolName)?.build({});
+    expect(staleInvocation).toBeDefined();
+
+    authorized = false;
+    const result = await staleInvocation?.execute(new AbortController().signal);
+
+    expect(result).toMatchObject({
+      error: {
+        message: expect.stringContaining(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE),
+      },
+    });
   });
 
   it.each([MCPServerStatus.CONNECTING, MCPServerStatus.CONNECTED])(

@@ -60,6 +60,9 @@ export class McpCallableTool implements CallableTool {
         undefined,
         { timeout: this.timeout },
       );
+      if (!this.isAuthorized()) {
+        throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
+      }
 
       return [
         {

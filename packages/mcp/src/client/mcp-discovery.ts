@@ -652,6 +652,9 @@ export async function invokeMcpPrompt(
       name: promptName,
       arguments: sanitizedParams,
     });
+    if (!isAuthorized()) {
+      throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
+    }
 
     return response;
   } catch (error) {

@@ -41,6 +41,8 @@ import {
   MCPServerStatus,
   updateMCPServerStatus,
 } from '../client/mcp-client.js';
+import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from '../client/mcp-errors.js';
+import { generateMcpToolName } from '../client/mcp-tool.js';
 
 const FakeMcpFixtureToolSchema = z
   .object({
@@ -116,11 +118,31 @@ class FakeMcpToolInvocation extends BaseToolInvocation<
   Record<string, unknown>,
   ToolResult
 > {
+  constructor(
+    params: Record<string, unknown>,
+    private readonly isAuthorized: () => boolean,
+  ) {
+    super(params);
+  }
+
   getDescription(): string {
     return 'fake mcp tool invocation';
   }
 
   async execute(): Promise<ToolResult> {
+    let authorized = false;
+    try {
+      authorized = this.isAuthorized();
+    } catch {
+      authorized = false;
+    }
+    if (!authorized) {
+      return {
+        llmContent: MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE,
+        returnDisplay: MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE,
+        error: { message: MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE },
+      };
+    }
     return {
       llmContent: '',
       returnDisplay: '',
@@ -134,10 +156,15 @@ export class FakeMcpTool extends BaseDeclarativeTool<
 > {
   readonly serverName: string;
 
-  constructor(serverName: string, toolName: string, description: string) {
+  constructor(
+    serverName: string,
+    toolName: string,
+    description: string,
+    private readonly isAuthorized: () => boolean,
+  ) {
     super(
-      toolName,
-      toolName,
+      generateMcpToolName(serverName, toolName),
+      `${toolName} (${serverName} MCP Server)`,
       description,
       Kind.Other,
       { type: 'object', properties: {} },
@@ -150,7 +177,7 @@ export class FakeMcpTool extends BaseDeclarativeTool<
   protected createInvocation(
     params: Record<string, unknown>,
   ): ToolInvocation<Record<string, unknown>, ToolResult> {
-    return new FakeMcpToolInvocation(params);
+    return new FakeMcpToolInvocation(params, this.isAuthorized);
   }
 }
 
@@ -164,84 +191,113 @@ export class FakeMcpTool extends BaseDeclarativeTool<
  * error (DISCONNECTED) state, and returns the failure message so the manager
  * can surface it through the normal discovery-failure path.
  */
+function isAuthorizedSafely(isAuthorized: () => boolean): boolean {
+  try {
+    return isAuthorized();
+  } catch {
+    return false;
+  }
+}
+
+async function waitForLatency(
+  latencyMs: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (latencyMs <= 0) return;
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(resolve, latencyMs);
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timeout);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
+
+function disconnectFakeServer(
+  name: string,
+  toolRegistry: ToolRegistry,
+  failure?: string,
+): FakeMcpDiscoveryOutcome {
+  try {
+    toolRegistry.removeMcpToolsByServer(name);
+  } finally {
+    updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED);
+  }
+  return {
+    status: MCPServerStatus.DISCONNECTED,
+    registeredToolNames: [],
+    ...(failure === undefined ? {} : { failure }),
+  };
+}
+
 export async function applyFakeServerDiscovery(
   name: string,
   toolRegistry: ToolRegistry,
   fixture: FakeMcpFixture,
   isAuthorized: () => boolean,
+  signal?: AbortSignal,
 ): Promise<FakeMcpDiscoveryOutcome> {
-  const hasAuthorization = (): boolean => {
-    try {
-      return isAuthorized();
-    } catch {
-      return false;
-    }
-  };
-  const disconnect = (failure?: string): FakeMcpDiscoveryOutcome => {
-    try {
-      toolRegistry.removeMcpToolsByServer(name);
-    } finally {
-      updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED);
-    }
-    return {
-      status: MCPServerStatus.DISCONNECTED,
-      registeredToolNames: [],
-      ...(failure === undefined ? {} : { failure }),
-    };
-  };
-
+  const hasAuthorization = (): boolean =>
+    signal?.aborted !== true && isAuthorizedSafely(isAuthorized);
   if (!hasAuthorization()) {
-    return disconnect();
+    return disconnectFakeServer(name, toolRegistry);
   }
   if (!Object.prototype.hasOwnProperty.call(fixture.servers, name)) {
-    return disconnect();
+    return disconnectFakeServer(name, toolRegistry);
   }
   const server = fixture.servers[name];
 
   updateMCPServerStatus(name, MCPServerStatus.CONNECTING);
   if (!hasAuthorization()) {
-    return disconnect();
+    return disconnectFakeServer(name, toolRegistry);
   }
 
-  const latencyMs = server.latencyMs ?? 0;
-  if (latencyMs > 0) {
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, latencyMs);
-    });
-  }
+  await waitForLatency(server.latencyMs ?? 0, signal);
   if (!hasAuthorization()) {
-    return disconnect();
+    return disconnectFakeServer(name, toolRegistry);
   }
 
   if (typeof server.failure === 'string') {
-    return disconnect(server.failure);
+    return disconnectFakeServer(name, toolRegistry, server.failure);
   }
 
   toolRegistry.removeMcpToolsByServer(name);
   if (!hasAuthorization()) {
-    return disconnect();
+    return disconnectFakeServer(name, toolRegistry);
   }
   let registeredToolNames: readonly string[] = [];
   for (const tool of server.tools ?? []) {
     if (tool.enabled === false) continue;
     if (!hasAuthorization()) {
-      return disconnect();
+      return disconnectFakeServer(name, toolRegistry);
     }
     toolRegistry.registerTool(
-      new FakeMcpTool(name, tool.name, tool.description ?? ''),
+      new FakeMcpTool(
+        name,
+        tool.name,
+        tool.description ?? '',
+        hasAuthorization,
+      ),
     );
     if (!hasAuthorization()) {
-      return disconnect();
+      return disconnectFakeServer(name, toolRegistry);
     }
-    registeredToolNames = [...registeredToolNames, tool.name];
+    registeredToolNames = [
+      ...registeredToolNames,
+      generateMcpToolName(name, tool.name),
+    ];
   }
 
   if (!hasAuthorization()) {
-    return disconnect();
+    return disconnectFakeServer(name, toolRegistry);
   }
   updateMCPServerStatus(name, MCPServerStatus.CONNECTED);
   if (!hasAuthorization()) {
-    return disconnect();
+    return disconnectFakeServer(name, toolRegistry);
   }
   return {
     status: MCPServerStatus.CONNECTED,

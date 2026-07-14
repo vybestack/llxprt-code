@@ -15,6 +15,20 @@ import { FolderTrustDialog } from './FolderTrustDialog.js';
 const mockedExit = vi.hoisted(() => vi.fn());
 const mockedCwd = vi.hoisted(() => vi.fn());
 
+function createDeferred(): {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+} {
+  let resolvePromise: (() => void) | undefined;
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve: () => resolvePromise?.(),
+  };
+}
+
 vi.mock('node:process', async () => {
   const actual =
     await vi.importActual<typeof import('node:process')>('node:process');
@@ -82,6 +96,28 @@ describe('FolderTrustDialog', () => {
       expect(mockedExit).toHaveBeenCalledWith(ExitCodes.FATAL_CONFIG_ERROR);
     });
     expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('serializes an async selection and ignores Enter and Escape until it settles', async () => {
+    const selection = createDeferred();
+    const onSelect = vi.fn(() => selection.promise);
+    const { stdin } = renderWithProviders(
+      <FolderTrustDialog
+        workingDirectory="/home/user/project"
+        onSelect={onSelect}
+      />,
+    );
+
+    act(() => {
+      stdin.write('\r');
+      stdin.write('\r');
+      stdin.write('\u001b[27u');
+    });
+
+    await waitFor(() => expect(onSelect).toHaveBeenCalledOnce());
+    expect(mockedExit).not.toHaveBeenCalled();
+    selection.resolve();
+    await selection.promise;
   });
 
   describe('parentFolder display', () => {

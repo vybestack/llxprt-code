@@ -6,7 +6,7 @@
 
 import { Box, Text } from 'ink';
 import type React from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Colors } from '../colors.js';
 import { theme } from '../semantic-colors.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
@@ -16,11 +16,18 @@ import * as path from 'node:path';
 import { ExitCodes } from '@vybestack/llxprt-code-core';
 import { FolderTrustChoice, buildTrustOptions } from '../trustDialogHelpers.js';
 
+function isFolderTrustChoice(value: unknown): value is FolderTrustChoice {
+  return (
+    typeof value === 'string' &&
+    Object.values(FolderTrustChoice).includes(value as FolderTrustChoice)
+  );
+}
+
 export { FolderTrustChoice };
 
 interface FolderTrustDialogProps {
   workingDirectory: string;
-  onSelect: (choice: FolderTrustChoice) => void;
+  onSelect: (choice: FolderTrustChoice) => void | Promise<void>;
 }
 
 const TrustDialogHeader: React.FC = () => (
@@ -58,9 +65,14 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
   onSelect,
 }) => {
   const [exiting, setExiting] = useState(false);
+  const [isCommitting, setIsCommitting] = useState(false);
+  const committingRef = useRef(false);
 
   useKeypress(
     (key) => {
+      if (committingRef.current) {
+        return;
+      }
       if (key.name === 'escape') {
         setExiting(true);
         setTimeout(() => {
@@ -89,8 +101,22 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
 
         <RadioButtonSelect
           items={options}
-          onSelect={onSelect}
-          isFocused={true}
+          onSelect={(choice) => {
+            if (!isFolderTrustChoice(choice) || committingRef.current) {
+              return;
+            }
+            committingRef.current = true;
+            setIsCommitting(true);
+            void (async () => {
+              try {
+                await onSelect(choice);
+              } finally {
+                committingRef.current = false;
+                setIsCommitting(false);
+              }
+            })();
+          }}
+          isFocused={!isCommitting}
         />
       </Box>
       <ExitMessage exiting={exiting} />

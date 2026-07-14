@@ -37,9 +37,9 @@ export class LiveTrustTransitionLifecycle {
 
   constructor(private readonly dependencies: LiveTrustTransitionDependencies) {}
 
-  apply(trusted: boolean): void {
+  apply(trusted: boolean): Promise<void> {
     if (this.disposing) {
-      return;
+      return Promise.resolve();
     }
     const sequence = ++this.transitionSequence;
     if (!trusted) {
@@ -58,6 +58,9 @@ export class LiveTrustTransitionLifecycle {
       () => this.dependencies.emitTrustChanged(trusted),
       sequence,
     );
+    const settlement = this.reportTransition(sequence, this.transitionChain);
+    void settlement.catch(() => undefined);
+    return settlement;
   }
 
   private runSynchronousStep(step: () => void, sequence: number): void {
@@ -136,6 +139,22 @@ export class LiveTrustTransitionLifecycle {
       ...this.failures,
       ...failures.map((error) => ({ sequence, error })),
     ];
+  }
+
+  private async reportTransition(
+    sequence: number,
+    transition: Promise<void>,
+  ): Promise<void> {
+    await transition;
+    const failures = this.failures
+      .filter((failure) => failure.sequence === sequence)
+      .map((failure) => failure.error);
+    if (failures.length === 1) {
+      throw failures[0];
+    }
+    if (failures.length > 1) {
+      throw new AggregateError(failures, 'Trust transition failed');
+    }
   }
 
   async whenSettled(): Promise<void> {

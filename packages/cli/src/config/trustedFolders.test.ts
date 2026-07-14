@@ -57,6 +57,7 @@ vi.mock('fs', async (importOriginal) => {
     statSync: vi.fn(),
     unlinkSync: vi.fn(),
     mkdirSync: vi.fn(),
+    realpathSync: vi.fn((location: fs.PathLike) => location),
   };
 });
 
@@ -90,6 +91,9 @@ describe('Trusted Folders Loading', () => {
     );
     (mockFsExistsSync as Mock).mockReturnValue(false);
     (fs.readFileSync as Mock).mockReturnValue('{}');
+    vi.mocked(fs.realpathSync).mockImplementation((location) =>
+      typeof location === 'string' ? location : location.toString(),
+    );
   });
 
   afterEach(() => {

@@ -239,13 +239,14 @@ describe('useAutoAcceptIndicator', () => {
     expect(result.current).toBe(ApprovalMode.AUTO_EDIT);
   });
 
-  it('updates the indicator when folder trust revocation changes the agent mode', () => {
+  it('clears the indicator unconditionally when an untrusted event follows the mode downgrade', () => {
     agentStub.getApprovalMode.mockReturnValue(ApprovalMode.YOLO);
     const { result } = renderHook(() =>
       useAutoAcceptIndicator({ agent: agentStub as unknown as Agent }),
     );
 
-    agentStub.getApprovalMode.mockReturnValue(ApprovalMode.DEFAULT);
+    agentStub.setApprovalMode(ApprovalMode.DEFAULT);
+    agentStub.getApprovalMode.mockReturnValue(ApprovalMode.YOLO);
     act(() => {
       coreEvents.emitFolderTrustChanged(false);
     });

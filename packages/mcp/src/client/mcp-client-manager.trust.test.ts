@@ -426,11 +426,147 @@ describe('McpClientManager trust transitions', () => {
         );
         await manager.startConfiguredMcpServers();
 
-        await expect(manager.stop()).resolves.toBeUndefined();
+        await expect(manager.stop()).rejects.toMatchObject({
+          errors: [expect.objectContaining({ message: 'cleanup failed' })],
+        });
 
         expect(client.disconnect).toHaveBeenCalledOnce();
       },
     );
+
+    it('retries clients whose first stop disconnect failed', async () => {
+      const client = createMockMcpClient();
+      vi.mocked(client.disconnect)
+        .mockRejectedValueOnce(new Error('transient close failure'))
+        .mockResolvedValueOnce(undefined);
+      vi.mocked(McpClient).mockReturnValue(client);
+      const config = createMockConfig({
+        getMcpServers: () => ({ 'server-a': {} }),
+      });
+      const manager = new McpClientManager(
+        CLIENT_VERSION,
+        createToolRegistry(config),
+        config,
+      );
+      await manager.startConfiguredMcpServers();
+
+      await expect(manager.stop()).rejects.toMatchObject({
+        errors: [
+          expect.objectContaining({ message: 'transient close failure' }),
+        ],
+      });
+      await expect(manager.stop()).resolves.toBeUndefined();
+
+      expect(client.disconnect).toHaveBeenCalledTimes(2);
+    });
+
+    it('removes artifacts for every server name while disconnecting a shared client once', async () => {
+      const client = createMockMcpClient();
+      vi.mocked(McpClient).mockReturnValue(client);
+      const config = createMockConfig();
+      const toolRegistry = createToolRegistry(config);
+      const removeTools = vi.spyOn(toolRegistry, 'removeMcpToolsByServer');
+      const manager = new McpClientManager(
+        CLIENT_VERSION,
+        toolRegistry,
+        config,
+      );
+      await manager.startConfiguredMcpServers();
+      removeTools.mockClear();
+
+      await manager.stop();
+
+      expect(removeTools.mock.calls.map(([name]) => name)).toStrictEqual([
+        'server-a',
+        'server-b',
+      ]);
+      expect(client.disconnect).toHaveBeenCalledOnce();
+    });
+
+    it('disconnects an in-flight client exactly once when stop races connect completion', async () => {
+      const connectReleased = createDeferred<void>();
+      const client = createMockMcpClient();
+      vi.mocked(client.connect).mockReturnValueOnce(connectReleased.promise);
+      vi.mocked(McpClient).mockReturnValue(client);
+      const config = createMockConfig({
+        getMcpServers: () => ({ 'server-a': {} }),
+      });
+      const manager = new McpClientManager(
+        CLIENT_VERSION,
+        createToolRegistry(config),
+        config,
+      );
+
+      void manager.startConfiguredMcpServers();
+      await vi.waitFor(() => expect(client.connect).toHaveBeenCalledOnce());
+
+      const stop = manager.stop();
+      await vi.waitFor(() => expect(client.disconnect).toHaveBeenCalledOnce());
+      connectReleased.resolve(undefined);
+      await stop;
+
+      expect(client.discover).not.toHaveBeenCalled();
+      expect(client.disconnect).toHaveBeenCalledOnce();
+    });
+
+    it('attempts artifact cleanup, every disconnect, and discovery settlement before reporting all stop failures', async () => {
+      const discoveryReleased = createDeferred<void>();
+      const events: string[] = [];
+      const clientA = createMockMcpClient();
+      const clientB = createMockMcpClient();
+      vi.mocked(clientA.discover).mockImplementationOnce(async () => {
+        events.push('discover-a');
+        await discoveryReleased.promise;
+        events.push('discovery-settled');
+      });
+      vi.mocked(clientA.disconnect).mockImplementationOnce(async () => {
+        events.push('disconnect-a');
+        throw new Error('disconnect-a failed');
+      });
+      vi.mocked(clientB.disconnect).mockImplementationOnce(async () => {
+        events.push('disconnect-b');
+        throw new Error('disconnect-b failed');
+      });
+      vi.mocked(McpClient)
+        .mockReturnValueOnce(clientA)
+        .mockReturnValueOnce(clientB);
+      const promptRegistry = new PromptRegistry();
+      const resourceRegistry = new ResourceRegistry();
+      const config = createMockConfig({
+        getPromptRegistry: () => promptRegistry,
+        getResourceRegistry: () => resourceRegistry,
+      });
+      const toolRegistry = createToolRegistry(config);
+      const manager = new McpClientManager(
+        CLIENT_VERSION,
+        toolRegistry,
+        config,
+      );
+
+      void manager.startConfiguredMcpServers();
+      await vi.waitFor(() => expect(clientA.discover).toHaveBeenCalledOnce());
+      vi.spyOn(toolRegistry, 'removeMcpToolsByServer').mockImplementation(
+        (name) => {
+          events.push(`artifacts-${name}`);
+          if (name === 'server-a') {
+            throw new Error('artifact cleanup failed');
+          }
+        },
+      );
+
+      const stop = manager.stop();
+      await vi.waitFor(() => expect(clientB.disconnect).toHaveBeenCalledOnce());
+      discoveryReleased.resolve(undefined);
+
+      await expect(stop).rejects.toMatchObject({
+        errors: [
+          expect.objectContaining({ message: 'artifact cleanup failed' }),
+          expect.objectContaining({ message: 'disconnect-a failed' }),
+          expect.objectContaining({ message: 'disconnect-b failed' }),
+        ],
+      });
+      expect(events).toContain('discovery-settled');
+    });
   });
 
   describe('race: CONNECTING/discovery vs revoke', () => {
@@ -463,6 +599,30 @@ describe('McpClientManager trust transitions', () => {
 
       expect(client.disconnect).toHaveBeenCalledOnce();
       expect(manager.getMcpServerCount()).toBe(0);
+    });
+
+    it('retries a failed discovery disconnect during stop even when the client was never quarantined', async () => {
+      const client = createMockMcpClient();
+      vi.mocked(client.discover).mockRejectedValueOnce(
+        new Error('discovery failed'),
+      );
+      vi.mocked(client.disconnect)
+        .mockRejectedValueOnce(new Error('transient close failure'))
+        .mockResolvedValueOnce(undefined);
+      vi.mocked(McpClient).mockReturnValue(client);
+      const config = createMockConfig({
+        getMcpServers: () => ({ 'server-a': {} }),
+      });
+      const manager = new McpClientManager(
+        CLIENT_VERSION,
+        createToolRegistry(config),
+        config,
+      );
+
+      await manager.startConfiguredMcpServers();
+      await manager.stop();
+
+      expect(client.disconnect).toHaveBeenCalledTimes(2);
     });
 
     it('prevents a concurrent discovery from registering after revoke clears clients', async () => {

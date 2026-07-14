@@ -94,7 +94,7 @@ export interface UIActions {
   exitToolsDialog: () => void;
 
   // Folder trust dialog
-  handleFolderTrustSelect: (choice: FolderTrustChoice) => void;
+  handleFolderTrustSelect: (choice: FolderTrustChoice) => Promise<void>;
 
   // Welcome onboarding
   welcomeActions: {

@@ -18,6 +18,7 @@ import {
   invokeMcpPrompt,
   registerMcpPrompts,
 } from './mcp-discovery.js';
+import { McpCallableTool } from './mcp-callable-tool.js';
 import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from './mcp-errors.js';
 import { MCPServerStatus, updateMCPServerStatus } from './mcp-status.js';
 
@@ -125,6 +126,41 @@ describe('MCP capability authorization', () => {
     expect(callTool).not.toHaveBeenCalled();
   });
 
+  it('discards a delayed tool result when authorization is revoked during the RPC', async () => {
+    let trusted = true;
+    const callStarted = createDeferred<void>();
+    const callResult = createDeferred<{ content: never[] }>();
+    const client = {
+      callTool: vi.fn().mockImplementation(() => {
+        callStarted.resolve(undefined);
+        return callResult.promise;
+      }),
+    } as unknown as Client;
+    const callable = new McpCallableTool(
+      client,
+      { name: 'tool', inputSchema: { type: 'object' } },
+      1_000,
+      () => trusted,
+    );
+
+    const resultPromise = callable.callTool([{ name: 'tool', args: {} }]);
+    await callStarted.promise;
+    trusted = false;
+    callResult.resolve({ content: [] });
+
+    await expect(resultPromise).resolves.toMatchObject([
+      {
+        functionResponse: {
+          response: {
+            error: {
+              message: MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE,
+            },
+          },
+        },
+      },
+    ]);
+  });
+
   it('fails closed when prompt invocation has no authorization callback', async () => {
     const client = {
       getPrompt: vi.fn().mockResolvedValue({ messages: [] }),
@@ -134,6 +170,33 @@ describe('MCP capability authorization', () => {
       invokeMcpPrompt('server', client, 'prompt', {}, undefined),
     ).rejects.toThrow(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
     expect(client.getPrompt).not.toHaveBeenCalled();
+  });
+
+  it('discards a delayed prompt result when authorization is revoked during the RPC', async () => {
+    let trusted = true;
+    const promptStarted = createDeferred<void>();
+    const promptResult = createDeferred<{ messages: never[] }>();
+    const client = {
+      getPrompt: vi.fn().mockImplementation(() => {
+        promptStarted.resolve(undefined);
+        return promptResult.promise;
+      }),
+    } as unknown as Client;
+
+    const invocation = invokeMcpPrompt(
+      'server',
+      client,
+      'prompt',
+      {},
+      () => trusted,
+    );
+    await promptStarted.promise;
+    trusted = false;
+    promptResult.resolve({ messages: [] });
+
+    await expect(invocation).rejects.toThrow(
+      MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE,
+    );
   });
 
   it('forwards cancellation options to prompt discovery', async () => {

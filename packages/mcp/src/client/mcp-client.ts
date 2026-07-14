@@ -403,10 +403,12 @@ export class McpClient {
     }
     this.refreshAbortControllers.clear();
     const client = this.client;
-    this.client = undefined;
     try {
       if (client) {
         await client.close();
+        if (this.client === client) {
+          this.client = undefined;
+        }
       }
     } catch (error) {
       cleanupErrors.push(error);
@@ -502,16 +504,21 @@ export class McpClient {
 
   async readResource(uri: string): Promise<ReadResourceResult> {
     const client = this.getConnectedClient();
-    if (!this.createCapabilityAuthorization(client)()) {
+    const isAuthorized = this.createCapabilityAuthorization(client);
+    if (!isAuthorized()) {
       throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
     }
-    return client.request(
+    const result = await client.request(
       {
         method: 'resources/read',
         params: { uri },
       },
       ReadResourceResultSchema,
     );
+    if (!isAuthorized()) {
+      throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
+    }
+    return result;
   }
 
   getServerConfig(): MCPServerConfig {

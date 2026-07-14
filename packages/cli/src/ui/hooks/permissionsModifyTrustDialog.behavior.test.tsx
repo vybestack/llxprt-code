@@ -20,6 +20,11 @@ const mockedUserConfig = vi.hoisted<{
 const mockedResolvePathTrust = vi.hoisted<
   ReturnType<typeof vi.fn<() => ResolvedTrustRule | undefined>>
 >(() => vi.fn(() => undefined));
+const mockedGetValue = vi.hoisted(() =>
+  vi.fn((folderPath: string) => mockedUserConfig.value[folderPath]),
+);
+const mockedSnapshotValue = vi.hoisted(() => vi.fn());
+const mockedRestoreSnapshot = vi.hoisted(() => vi.fn());
 
 vi.mock('../../config/trustedFolders.js', async () => {
   const actual = await vi.importActual<
@@ -36,6 +41,9 @@ vi.mock('../../config/trustedFolders.js', async () => {
       rules: [],
       setValue: mockedSetValue,
       deleteValue: mockedDeleteValue,
+      getValue: mockedGetValue,
+      snapshotValue: mockedSnapshotValue,
+      restoreSnapshot: mockedRestoreSnapshot,
       resolvePathTrust: mockedResolvePathTrust,
       isPathTrusted: vi.fn(() => undefined),
     })),
@@ -48,11 +56,26 @@ vi.mock('./useIdeTrustListener.js', () => ({
 
 import { usePermissionsModifyTrust } from './usePermissionsModifyTrust.js';
 
-describe('PermissionsModifyTrustDialog trust provenance', () => {
+describe('PermissionsModifyTrustDialog trust provenance', async () => {
   beforeEach(() => {
     mockedSetValue.mockReset();
     mockedDeleteValue.mockReset();
+    mockedGetValue.mockReset();
+    mockedSnapshotValue.mockReset();
+    mockedRestoreSnapshot.mockReset();
     mockedUserConfig.value = {};
+    mockedGetValue.mockImplementation(
+      (folderPath: string) => mockedUserConfig.value[folderPath],
+    );
+    mockedSnapshotValue.mockImplementation((folderPath: string) => ({
+      canonicalPath: folderPath,
+      entries: Object.entries(mockedUserConfig.value),
+    }));
+    mockedRestoreSnapshot.mockImplementation(
+      (snapshot: { entries: ReadonlyArray<readonly [string, TrustLevel]> }) => {
+        mockedUserConfig.value = Object.fromEntries(snapshot.entries);
+      },
+    );
     mockedResolvePathTrust.mockReset();
     mockedResolvePathTrust.mockReturnValue(undefined);
     mockedSetValue.mockImplementation((folderPath, trustLevel) => {
@@ -63,7 +86,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     });
   });
 
-  it('reports a rolled-back live failure and remains usable after retry', () => {
+  it('reports a rolled-back live failure and remains usable after retry', async () => {
     const setTrustedFolderLive = vi
       .fn()
       .mockImplementationOnce(() => {
@@ -79,10 +102,13 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     };
     const { result } = renderHook(() => usePermissionsModifyTrust(config));
 
-    let firstResult: ReturnType<typeof result.current.commitTrustLevel> | null =
-      null;
-    act(() => {
-      firstResult = result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
+    let firstResult: Awaited<
+      ReturnType<typeof result.current.commitTrustLevel>
+    > | null = null;
+    await act(async () => {
+      firstResult = await result.current.commitTrustLevel(
+        TrustLevel.TRUST_FOLDER,
+      );
     });
 
     expect(firstResult).toMatchObject({ success: false, phase: 'live' });
@@ -92,22 +118,21 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
       TrustLevel.TRUST_FOLDER,
     );
     expect(result.current.committedTrustLevel).toBeUndefined();
-    expect(mockedDeleteValue).toHaveBeenCalledExactlyOnceWith(
-      '/configured/workspace',
-    );
+    expect(mockedRestoreSnapshot).toHaveBeenCalledOnce();
+    expect(mockedUserConfig.value).toStrictEqual({});
 
-    act(() => {
+    await act(async () => {
       expect(
-        result.current.commitTrustLevel(TrustLevel.DO_NOT_TRUST),
+        await result.current.commitTrustLevel(TrustLevel.DO_NOT_TRUST),
       ).toStrictEqual({ success: true });
     });
     expect(mockedSetValue).toHaveBeenCalledTimes(2);
-    expect(setTrustedFolderLive).toHaveBeenCalledTimes(2);
+    expect(setTrustedFolderLive).toHaveBeenCalledTimes(3);
     expect(result.current.committedTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
     expect(result.current.effectiveTrust).toBe(true);
   });
 
-  it('preserves the pending selection when persistence fails', () => {
+  it('preserves the pending selection when persistence fails', async () => {
     mockedUserConfig.value = {
       '/configured/workspace': TrustLevel.DO_NOT_TRUST,
     };
@@ -123,9 +148,9 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     };
     const { result } = renderHook(() => usePermissionsModifyTrust(config));
 
-    act(() => {
+    await act(async () => {
       expect(
-        result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER),
+        await result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER),
       ).toMatchObject({ success: false, phase: 'persistence' });
     });
 
@@ -133,7 +158,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     expect(result.current.committedTrustLevel).toBeUndefined();
   });
 
-  it('reads and persists the direct rule by normalized working directory', () => {
+  it('reads and persists the direct rule by normalized working directory', async () => {
     mockedUserConfig.value = {
       '/configured/workspace': TrustLevel.DO_NOT_TRUST,
     };
@@ -149,8 +174,8 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
 
     expect(result.current.pendingTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
     expect(result.current.workingDirectory).toBe('/configured/workspace');
-    act(() => {
-      result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
+    await act(async () => {
+      await result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
     });
     expect(mockedSetValue).toHaveBeenCalledWith(
       '/configured/workspace',
@@ -158,7 +183,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     );
   });
 
-  it('resets dialog trust state when the runtime working directory changes', () => {
+  it('resets dialog trust state when the runtime working directory changes', async () => {
     mockedUserConfig.value = {
       '/workspace/first': TrustLevel.TRUST_FOLDER,
       '/workspace/second': TrustLevel.DO_NOT_TRUST,
@@ -184,8 +209,8 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
 
     expect(result.current.pendingTrustLevel).toBe(TrustLevel.TRUST_FOLDER);
     expect(result.current.effectiveTrust).toBe(true);
-    act(() => {
-      result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
+    await act(async () => {
+      await result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
     });
     expect(result.current.committedTrustLevel).toBe(TrustLevel.TRUST_FOLDER);
 
@@ -197,7 +222,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     expect(result.current.committedTrustLevel).toBeUndefined();
   });
 
-  it('restores the exact saved rule when live application throws', () => {
+  it('restores the exact saved rule when live application throws', async () => {
     mockedUserConfig.value = {
       '/configured/workspace': TrustLevel.DO_NOT_TRUST,
     };
@@ -212,21 +237,22 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     };
     const { result } = renderHook(() => usePermissionsModifyTrust(config));
 
-    act(() => {
-      result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
+    await act(async () => {
+      await result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
     });
 
-    expect(mockedSetValue).toHaveBeenLastCalledWith(
+    expect(mockedSetValue).toHaveBeenCalledExactlyOnceWith(
       '/configured/workspace',
-      TrustLevel.DO_NOT_TRUST,
+      TrustLevel.TRUST_FOLDER,
     );
+    expect(mockedRestoreSnapshot).toHaveBeenCalledOnce();
     expect(mockedDeleteValue).not.toHaveBeenCalled();
     expect(mockedUserConfig.value['/configured/workspace']).toBe(
       TrustLevel.DO_NOT_TRUST,
     );
   });
 
-  it('saves a direct cwd rule when selecting the same level as inherited trust', () => {
+  it('saves a direct cwd rule when selecting the same level as inherited trust', async () => {
     mockedUserConfig.value = {
       '/workspace': TrustLevel.TRUST_FOLDER,
     };
@@ -251,8 +277,8 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
       TrustLevel.TRUST_FOLDER,
     );
 
-    act(() => {
-      result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
+    await act(async () => {
+      await result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
     });
 
     expect(mockedSetValue).toHaveBeenCalledWith(
@@ -261,7 +287,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     );
   });
 
-  it('reflects inherited DO_NOT_TRUST in effectiveLocalTrustLevel when the form opens', () => {
+  it('reflects inherited DO_NOT_TRUST in effectiveLocalTrustLevel when the form opens', async () => {
     mockedUserConfig.value = {
       '/workspace': TrustLevel.DO_NOT_TRUST,
     };

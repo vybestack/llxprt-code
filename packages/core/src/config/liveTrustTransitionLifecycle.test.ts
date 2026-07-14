@@ -67,12 +67,24 @@ function createDeferred<T>(): Deferred<T> {
 }
 
 describe('LiveTrustTransitionLifecycle', () => {
+  it('returns a settlement that rejects with its asynchronous transition failure', async () => {
+    const transitionFailure = new Error('transition failed');
+    const dependencies = createDependencies({
+      transitionMcp: vi.fn().mockRejectedValue(transitionFailure),
+    });
+    const lifecycle = new LiveTrustTransitionLifecycle(dependencies);
+
+    const settlement = lifecycle.apply(true);
+
+    await expect(settlement).rejects.toBe(transitionFailure);
+  });
+
   it('runs no transition side effects after disposal begins', async () => {
     const dependencies = createDependencies();
     const lifecycle = new LiveTrustTransitionLifecycle(dependencies);
     lifecycle.beginDisposal();
 
-    lifecycle.apply(false);
+    void lifecycle.apply(false);
     await lifecycle.whenSettled();
 
     expect(dependencies.downgradeApprovalMode).not.toHaveBeenCalled();
@@ -93,7 +105,7 @@ describe('LiveTrustTransitionLifecycle', () => {
     const lifecycle = new LiveTrustTransitionLifecycle(dependencies);
 
     for (let index = 0; index < transitionCount; index++) {
-      lifecycle.apply(true);
+      void lifecycle.apply(true);
     }
 
     const failure = await captureAggregateError(lifecycle.whenSettled());
@@ -112,9 +124,9 @@ describe('LiveTrustTransitionLifecycle', () => {
       }),
     });
     const lifecycle = new LiveTrustTransitionLifecycle(dependencies);
-    lifecycle.apply(true);
+    void lifecycle.apply(true);
     await firstTransitionStarted.promise;
-    lifecycle.apply(false);
+    void lifecycle.apply(false);
 
     lifecycle.beginDisposal();
     firstTransition.reject(transitionFailure);
@@ -135,7 +147,7 @@ describe('LiveTrustTransitionLifecycle', () => {
       }),
     });
     const lifecycle = new LiveTrustTransitionLifecycle(dependencies);
-    lifecycle.apply(true);
+    void lifecycle.apply(true);
     const firstWaiter = lifecycle.whenSettled();
     const secondWaiter = lifecycle.whenSettled();
     await transitionStarted.promise;
@@ -170,13 +182,13 @@ describe('LiveTrustTransitionLifecycle', () => {
     });
     const lifecycle = new LiveTrustTransitionLifecycle(dependencies);
 
-    lifecycle.apply(true);
+    void lifecycle.apply(true);
     await firstHooksStarted.promise;
 
-    lifecycle.apply(true);
+    void lifecycle.apply(true);
     const firstWaiter = captureAggregateError(lifecycle.whenSettled());
     const secondWaiter = captureAggregateError(lifecycle.whenSettled());
-    lifecycle.apply(true);
+    void lifecycle.apply(true);
     await secondTransitionStarted.promise;
 
     secondTransition.reject(secondFailure);

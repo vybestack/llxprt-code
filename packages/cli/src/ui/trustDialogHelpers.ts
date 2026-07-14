@@ -106,14 +106,25 @@ export function getTrustUpdateDisplay(
   };
 }
 
+function flattenErrorDetails(error: unknown): string[] {
+  if (error instanceof AggregateError) {
+    return error.errors.flatMap(flattenErrorDetails);
+  }
+  return [error instanceof Error ? error.message : String(error)];
+}
+
 export function getTrustCommitErrorMessage(
   phase: 'persistence' | 'live',
   error: unknown,
+  rollbackSucceeded = true,
 ): string {
-  const detail = error instanceof Error ? error.message : String(error);
-  return phase === 'live'
+  const detail = flattenErrorDetails(error).join('; ');
+  if (phase === 'persistence') {
+    return `Failed to save trust settings: ${detail}`;
+  }
+  return rollbackSucceeded
     ? `Trust settings could not be applied live, so the saved setting was restored: ${detail}`
-    : `Failed to save trust settings: ${detail}`;
+    : `Trust settings could not be applied live and rollback was incomplete: ${detail}`;
 }
 
 export function shouldDismissTrustDialog(

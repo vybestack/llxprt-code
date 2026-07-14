@@ -21,6 +21,9 @@ const mockedExit = vi.hoisted(() => vi.fn());
 const mockedCwd = vi.hoisted(() => vi.fn());
 const mockedSetValue = vi.hoisted(() => vi.fn());
 const mockedDeleteValue = vi.hoisted(() => vi.fn());
+const mockedGetValue = vi.hoisted(() => vi.fn());
+const mockedSnapshotValue = vi.hoisted(() => vi.fn());
+const mockedRestoreSnapshot = vi.hoisted(() => vi.fn());
 const mockedResolvePathTrust = vi.hoisted(() => vi.fn());
 const mockedTrustedConfig = vi.hoisted<Record<string, TrustLevel>>(() => ({}));
 
@@ -42,6 +45,9 @@ vi.mock('../../config/trustedFolders.js', async () => {
       rules: [],
       setValue: mockedSetValue,
       deleteValue: mockedDeleteValue,
+      getValue: mockedGetValue,
+      snapshotValue: mockedSnapshotValue,
+      restoreSnapshot: mockedRestoreSnapshot,
       user: { path: '/mock/path', config: mockedTrustedConfig },
       errors: [],
       isPathTrusted: vi.fn(() => undefined),
@@ -78,6 +84,20 @@ const Wrapper = ({ children }: { children: React.ReactNode }) => (
   </SettingsContext.Provider>
 );
 
+function createDeferred(): {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+} {
+  let resolvePromise: (() => void) | undefined;
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve: () => resolvePromise?.(),
+  };
+}
+
 describe('PermissionsModifyTrustDialog', () => {
   let mockConfig: PermissionsTrustRuntime & {
     setTrustedFolderLive: ReturnType<typeof vi.fn>;
@@ -93,6 +113,21 @@ describe('PermissionsModifyTrustDialog', () => {
     });
     mockedDeleteValue.mockImplementation((folderPath) => {
       delete mockedTrustedConfig[folderPath];
+    });
+    mockedGetValue.mockImplementation(
+      (folderPath) => mockedTrustedConfig[folderPath],
+    );
+    mockedSnapshotValue.mockImplementation((folderPath) => ({
+      canonicalPath: folderPath,
+      entries: Object.entries(mockedTrustedConfig),
+    }));
+    mockedRestoreSnapshot.mockImplementation((snapshot) => {
+      for (const key of Object.keys(mockedTrustedConfig)) {
+        delete mockedTrustedConfig[key];
+      }
+      for (const [folderPath, trustLevel] of snapshot.entries) {
+        mockedTrustedConfig[folderPath] = trustLevel;
+      }
     });
     ideContext.clearIdeContext();
     mockedResolvePathTrust.mockReturnValue(undefined);
@@ -369,6 +404,33 @@ describe('PermissionsModifyTrustDialog', () => {
     await waitFor(() => {
       expect(onExit).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('serializes an async commit and ignores repeat Enter and Escape until it settles', async () => {
+    const transition = createDeferred();
+    mockConfig.setTrustedFolderLive.mockReturnValueOnce(transition.promise);
+    const onExit = vi.fn();
+    const { stdin, lastFrame } = renderWithProviders(
+      <Wrapper>
+        <PermissionsModifyTrustDialog
+          onExit={onExit}
+          addItem={vi.fn()}
+          config={mockConfig}
+        />
+      </Wrapper>,
+    );
+
+    stdin.write('\r');
+    stdin.write('\r');
+    stdin.write('\u001B');
+    await waitFor(() => expect(mockedSetValue).toHaveBeenCalledOnce());
+    expect(onExit).not.toHaveBeenCalled();
+
+    transition.resolve();
+    await waitFor(() => {
+      expect(lastFrame()).toContain('Trust level updated');
+    });
+    expect(mockedSetValue).toHaveBeenCalledOnce();
   });
 
   it('changes the selection before applying it', async () => {

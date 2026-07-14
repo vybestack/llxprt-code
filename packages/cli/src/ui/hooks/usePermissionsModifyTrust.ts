@@ -11,6 +11,7 @@ import {
   resolveLocalWorkspaceTrust,
   type LoadedTrustedFolders,
   TrustLevel,
+  type TrustedFolderSnapshot,
 } from '../../config/trustedFolders.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useIdeTrustListener } from './useIdeTrustListener.js';
@@ -35,11 +36,15 @@ export interface UsePermissionsModifyTrustReturn {
   /** Set a pending trust level change */
   setPendingTrustLevel: (level: TrustLevel) => void;
   /** Commit the pending trust level change */
-  commitTrustLevel: (
-    level?: TrustLevel,
-  ) =>
+  commitTrustLevel: (level?: TrustLevel) => Promise<
     | { success: true }
-    | { success: false; phase: 'persistence' | 'live'; error: unknown };
+    | {
+        success: false;
+        phase: 'persistence' | 'live';
+        error: unknown;
+        rollbackSucceeded: boolean;
+      }
+  >;
   /** Effective local trust level, including inherited rules */
   effectiveLocalTrustLevel: TrustLevel | undefined;
   /** Whether the workspace is trusted through IDE */
@@ -62,27 +67,21 @@ export interface UsePermissionsModifyTrustReturn {
 
 function restoreSavedTrustLevel(
   trustedFolders: LoadedTrustedFolders,
-  folderPath: string,
-  hadSavedRule: boolean,
-  previousSavedLevel: TrustLevel,
+  snapshot: TrustedFolderSnapshot,
 ): void {
-  if (hadSavedRule) {
-    trustedFolders.setValue(folderPath, previousSavedLevel);
-  } else {
-    trustedFolders.deleteValue(folderPath);
-  }
+  trustedFolders.restoreSnapshot(snapshot);
 }
 
-function applyLiveTrustLevel(
+async function applyLiveTrustLevel(
   config: PermissionsTrustRuntime | undefined,
   trustedFolders: LoadedTrustedFolders,
   folderPath: string,
   nextLevel: TrustLevel,
-): boolean {
+): Promise<boolean> {
   if (config === undefined) {
     return nextLevel !== TrustLevel.DO_NOT_TRUST;
   }
-  config.setTrustedFolderLive(
+  await config.setTrustedFolderLive(
     resolveLocalWorkspaceTrust(
       { folderTrust: config.getFolderTrust() },
       trustedFolders,
@@ -94,25 +93,37 @@ function applyLiveTrustLevel(
 
 type TrustCommitResult =
   | { success: true }
-  | { success: false; phase: 'persistence' | 'live'; error: unknown };
+  | {
+      success: false;
+      phase: 'persistence' | 'live';
+      error: unknown;
+      rollbackSucceeded: boolean;
+    };
 
-function commitSavedTrustLevel(
+async function commitSavedTrustLevel(
   config: PermissionsTrustRuntime | undefined,
   trustedFolders: LoadedTrustedFolders,
   folderPath: string,
   nextLevel: TrustLevel,
-): { result: TrustCommitResult; effectiveTrust?: boolean } {
-  const hadSavedRule = Object.hasOwn(trustedFolders.user.config, folderPath);
-  const previousSavedLevel = trustedFolders.user.config[folderPath];
+): Promise<{ result: TrustCommitResult; effectiveTrust?: boolean }> {
+  const savedSnapshot = trustedFolders.snapshotValue(folderPath);
+  const previousLiveTrust = config?.isTrustedFolder() ?? false;
   try {
     trustedFolders.setValue(folderPath, nextLevel);
   } catch (error) {
-    return { result: { success: false, phase: 'persistence', error } };
+    return {
+      result: {
+        success: false,
+        phase: 'persistence',
+        error,
+        rollbackSucceeded: true,
+      },
+    };
   }
   try {
     return {
       result: { success: true },
-      effectiveTrust: applyLiveTrustLevel(
+      effectiveTrust: await applyLiveTrustLevel(
         config,
         trustedFolders,
         folderPath,
@@ -120,26 +131,33 @@ function commitSavedTrustLevel(
       ),
     };
   } catch (error) {
+    const rollbackFailures: unknown[] = [];
     try {
-      restoreSavedTrustLevel(
-        trustedFolders,
-        folderPath,
-        hadSavedRule,
-        previousSavedLevel,
-      );
+      restoreSavedTrustLevel(trustedFolders, savedSnapshot);
     } catch (rollbackError) {
-      return {
-        result: {
-          success: false,
-          phase: 'live',
-          error: new AggregateError(
-            [error, rollbackError],
-            'Live trust update and saved-state rollback both failed',
-          ),
-        },
-      };
+      rollbackFailures.push(rollbackError);
     }
-    return { result: { success: false, phase: 'live', error } };
+    if (config !== undefined) {
+      try {
+        await config.setTrustedFolderLive(previousLiveTrust);
+      } catch (rollbackError) {
+        rollbackFailures.push(rollbackError);
+      }
+    }
+    return {
+      result: {
+        success: false,
+        phase: 'live',
+        error:
+          rollbackFailures.length === 0
+            ? error
+            : new AggregateError(
+                [error, ...rollbackFailures],
+                'Live trust update and rollback failed',
+              ),
+        rollbackSucceeded: rollbackFailures.length === 0,
+      },
+    };
   }
 }
 
@@ -159,7 +177,7 @@ export function usePermissionsModifyTrust(
     () => trustedFolders.resolvePathTrust(normalizedCwd),
     [trustedFolders, normalizedCwd],
   );
-  const currentTrustLevel = trustedFolders.user.config[normalizedCwd];
+  const currentTrustLevel = trustedFolders.getValue(normalizedCwd);
   const effectiveLocalTrustLevel = winningRule?.rule.trustLevel;
   const { isIdeTrusted } = useIdeTrustListener(config ?? emptyIdeState);
   const isParentTrusted = winningRule?.provenance === 'inherited';
@@ -177,23 +195,19 @@ export function usePermissionsModifyTrust(
 
   useEffect(() => {
     const resolvedRule = trustedFolders.resolvePathTrust(normalizedCwd);
-    setPendingTrustLevel(trustedFolders.user.config[normalizedCwd]);
+    setPendingTrustLevel(trustedFolders.getValue(normalizedCwd));
     setCommittedLevel(undefined);
     setEffectiveTrust(config?.isTrustedFolder() ?? resolvedRule?.trusted);
   }, [config, normalizedCwd, trustedFolders]);
 
   const commitTrustLevel = useCallback(
-    (
-      level?: TrustLevel,
-    ):
-      | { success: true }
-      | { success: false; phase: 'persistence' | 'live'; error: unknown } => {
+    async (level?: TrustLevel): Promise<TrustCommitResult> => {
       const nextLevel = level ?? pendingTrustLevel;
       if (nextLevel === undefined) {
         return { success: true };
       }
 
-      const commit = commitSavedTrustLevel(
+      const commit = await commitSavedTrustLevel(
         config,
         trustedFolders,
         normalizedCwd,

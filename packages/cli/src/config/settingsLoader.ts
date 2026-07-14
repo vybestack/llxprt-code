@@ -101,12 +101,11 @@ function loadOptionalSettingsFile(
   }
 }
 
-function resolveRealWorkspaceDir(workspaceDir: string): string {
-  const resolvedWorkspaceDir = path.resolve(workspaceDir);
+function resolveRealWorkspaceDir(workspaceDir: string): string | undefined {
   try {
-    return fs.realpathSync(resolvedWorkspaceDir);
+    return fs.realpathSync(path.resolve(workspaceDir));
   } catch {
-    return resolvedWorkspaceDir;
+    return undefined;
   }
 }
 
@@ -116,7 +115,7 @@ function loadSettingsFiles(
 ): {
   settings: SettingsState;
   errors: SettingsError[];
-  realWorkspaceDir: string;
+  realWorkspaceDir: string | undefined;
   realHomeDir: string;
 } {
   const errors: SettingsError[] = [];
@@ -134,7 +133,7 @@ function loadSettingsFiles(
     legacyTheme: true,
   });
   const workspace =
-    realWorkspaceDir === realHomeDir
+    realWorkspaceDir === undefined || realWorkspaceDir === realHomeDir
       ? {}
       : loadOptionalSettingsFile(paths.workspace, errors, {
           legacyTheme: true,
@@ -159,7 +158,7 @@ function shouldCheckFolderTrust(settings: SettingsState): boolean {
 
 function resolveTrustedState(
   settings: SettingsState,
-  workspaceDir: string,
+  workspaceDir: string | undefined,
 ): boolean {
   const tempSettingsForTrust = mergeSettings(
     settings.system,
@@ -168,9 +167,12 @@ function resolveTrustedState(
     settings.workspace,
     true,
   );
-  return shouldCheckFolderTrust(settings)
-    ? (isWorkspaceTrusted(tempSettingsForTrust, workspaceDir) ?? true)
-    : true;
+  if (!shouldCheckFolderTrust(settings)) {
+    return true;
+  }
+  return workspaceDir === undefined
+    ? false
+    : (isWorkspaceTrusted(tempSettingsForTrust, workspaceDir) ?? false);
 }
 
 function loadEnvironmentAndResolveSettings(

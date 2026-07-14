@@ -109,6 +109,43 @@ describe('McpClient disconnect cleanup', () => {
     expect(client.getStatus()).toBe('disconnected');
   });
 
+  it('retains a failed SDK client close so disconnect can retry it', async () => {
+    const closeFailure = new Error('client close failed');
+    const sdkClient = {
+      connect: vi.fn(),
+      close: vi
+        .fn()
+        .mockRejectedValueOnce(closeFailure)
+        .mockResolvedValueOnce(undefined),
+      registerCapabilities: vi.fn(),
+      setRequestHandler: vi.fn(),
+      getServerCapabilities: vi.fn().mockReturnValue({}),
+    };
+    vi.mocked(ClientLib.Client).mockReturnValue(
+      sdkClient as unknown as ClientLib.Client,
+    );
+    vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+      {} as SdkClientStdioLib.StdioClientTransport,
+    );
+    const client = new McpClient(
+      'test-server',
+      { command: 'test-command' },
+      { removeMcpToolsByServer: vi.fn() } as unknown as ToolRegistry,
+      { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
+      createMockResourceRegistry(),
+      workspaceContext,
+      createTrustedConfig(),
+      false,
+      '0.0.1',
+    );
+    await client.connect();
+
+    await expect(client.disconnect()).rejects.toBe(closeFailure);
+    await expect(client.disconnect()).resolves.toBeUndefined();
+
+    expect(sdkClient.close).toHaveBeenCalledTimes(2);
+  });
+
   it('closes the SDK client and reaches disconnected when registry cleanup fails', async () => {
     const sdkClient = {
       connect: vi.fn(),
