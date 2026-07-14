@@ -31,7 +31,7 @@ describe('contextLimit helper (cli wrapper)', () => {
   });
 
   it('falls back to the model-name window when no context-limit is configured', () => {
-    // gpt-4o resolves to a 128K window, distinct from DEFAULT_TOKEN_LIMIT (1M),
+    // gpt-4o resolves to a 128K window, distinct from DEFAULT_TOKEN_LIMIT (200K),
     // so the model-lookup path is genuinely exercised.
     const configWithoutLimit = {
       getModel: vi.fn(() => 'gpt-4o'),

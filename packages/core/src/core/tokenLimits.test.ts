@@ -5,7 +5,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { tokenLimit, DEFAULT_TOKEN_LIMIT } from './tokenLimits.js';
+import {
+  tokenLimit,
+  DEFAULT_TOKEN_LIMIT,
+  resolveEffectiveContextLimit,
+} from './tokenLimits.js';
 
 describe('tokenLimit', () => {
   describe('Gemini models', () => {
@@ -177,6 +181,62 @@ describe('tokenLimit', () => {
     });
   });
 
+  describe('GLM (z.ai) models', () => {
+    it('should return 200K for glm-5.2', () => {
+      expect(tokenLimit('glm-5.2')).toBe(200_000);
+    });
+
+    it('should return 200K for glm-5.1', () => {
+      expect(tokenLimit('glm-5.1')).toBe(200_000);
+    });
+
+    it('should return 200K for glm-5', () => {
+      expect(tokenLimit('glm-5')).toBe(200_000);
+    });
+
+    it('should return 200K for future/dated glm-5 variants via prefix', () => {
+      expect(tokenLimit('glm-5.3')).toBe(200_000);
+      expect(tokenLimit('glm-5-air')).toBe(200_000);
+    });
+
+    it('should return 128K for glm-4.6', () => {
+      expect(tokenLimit('glm-4.6')).toBe(128_000);
+    });
+
+    it('should return 128K for glm-4.5', () => {
+      expect(tokenLimit('glm-4.5')).toBe(128_000);
+    });
+
+    it('should return 128K for glm-4', () => {
+      expect(tokenLimit('glm-4')).toBe(128_000);
+    });
+
+    it('should return 128K for future/dated glm-4 variants via prefix', () => {
+      expect(tokenLimit('glm-4-plus')).toBe(128_000);
+      expect(tokenLimit('glm-4-flash')).toBe(128_000);
+    });
+
+    it('should honor a user-supplied context limit override for glm-5.2', () => {
+      expect(tokenLimit('glm-5.2', 150_000)).toBe(150_000);
+    });
+  });
+
+  describe('Gemini variant prefix matching (issue #2527)', () => {
+    it('should return 1M for gemini-2.0-flash-exp via prefix', () => {
+      expect(tokenLimit('gemini-2.0-flash-exp')).toBe(1_048_576);
+    });
+
+    it('should still return 32K for the image-generation exact entry', () => {
+      expect(tokenLimit('gemini-2.0-flash-preview-image-generation')).toBe(
+        32_000,
+      );
+    });
+
+    it('should return 1M for future gemini-2.5-pro previews via prefix', () => {
+      expect(tokenLimit('gemini-2.5-pro-preview-07-07')).toBe(1_048_576);
+    });
+  });
+
   describe('Default behavior', () => {
     it('should return default limit for unknown models', () => {
       expect(tokenLimit('unknown-model')).toBe(DEFAULT_TOKEN_LIMIT);
@@ -198,5 +258,64 @@ describe('tokenLimit', () => {
       expect(tokenLimit('gemini:gemini-1.5-pro')).toBe(2_097_152);
       expect(tokenLimit('gemini:gemini-1.5-flash')).toBe(1_048_576);
     });
+  });
+});
+
+describe('resolveEffectiveContextLimit', () => {
+  it('prefers a positive user context limit over provider and model', () => {
+    expect(resolveEffectiveContextLimit('gpt-4o', 50_000, 200_000)).toBe(
+      50_000,
+    );
+  });
+
+  it('falls back to the provider limit when user limit is absent', () => {
+    expect(
+      resolveEffectiveContextLimit('load-balancer', undefined, 200_000),
+    ).toBe(200_000);
+  });
+
+  it('falls back to the model lookup when neither override is set', () => {
+    expect(resolveEffectiveContextLimit('gpt-4o')).toBe(128_000);
+  });
+
+  it('falls back to DEFAULT_TOKEN_LIMIT for an unrecognized model', () => {
+    expect(resolveEffectiveContextLimit('unknown-model')).toBe(
+      DEFAULT_TOKEN_LIMIT,
+    );
+  });
+
+  it('ignores a non-positive user limit and uses the provider limit', () => {
+    expect(resolveEffectiveContextLimit('gpt-4o', 0, 200_000)).toBe(200_000);
+  });
+
+  it('ignores NaN and Infinity values', () => {
+    expect(resolveEffectiveContextLimit('gpt-4o', NaN, 200_000)).toBe(200_000);
+    expect(resolveEffectiveContextLimit('gpt-4o', Infinity, 200_000)).toBe(
+      200_000,
+    );
+    expect(resolveEffectiveContextLimit('gpt-4o', undefined, NaN)).toBe(
+      128_000,
+    );
+    expect(resolveEffectiveContextLimit('gpt-4o', undefined, Infinity)).toBe(
+      128_000,
+    );
+  });
+
+  it('ignores a non-positive provider limit and uses the model lookup', () => {
+    expect(resolveEffectiveContextLimit('gpt-4o', undefined, 0)).toBe(128_000);
+  });
+
+  it('falls back to model default when both user and provider limits are invalid', () => {
+    expect(resolveEffectiveContextLimit('gpt-4o', 0, 0)).toBe(128_000);
+    expect(resolveEffectiveContextLimit('gpt-4o', -1, NaN)).toBe(128_000);
+    expect(resolveEffectiveContextLimit('gpt-4o', Infinity, Infinity)).toBe(
+      128_000,
+    );
+  });
+
+  it('respects a user override that is larger than the model default', () => {
+    expect(resolveEffectiveContextLimit('gpt-4o', 500_000, undefined)).toBe(
+      500_000,
+    );
   });
 });
