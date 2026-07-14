@@ -40,7 +40,10 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
   },
   {
     workspace: 'cli',
-    files: ['src/__tests__/cliSessionDispatch.characterization.test.tsx'],
+    files: [
+      'src/__tests__/cliSessionDispatch.characterization.test.tsx',
+      'test-utils/augment-bun-vi-cleanup.bun.ts',
+    ],
   },
   {
     workspace: 'core',

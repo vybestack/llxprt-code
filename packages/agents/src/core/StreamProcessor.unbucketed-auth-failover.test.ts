@@ -50,6 +50,7 @@ describe('StreamProcessor._handleBucketFailover', () => {
       logger: {
         debug: vi.fn(),
       },
+      flushAuthScope: flushRuntimeAuthScope,
     });
 
     const result = await (
