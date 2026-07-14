@@ -297,7 +297,7 @@ describe('ChatSession hook execution control', () => {
     });
   });
 
-  it('filters hook-disallowed tool calls from BeforeModel blocking synthetic responses', async () => {
+  it('emits a neutral blocked chunk carrying the reason when BeforeModel blocks (no tool calls leak)', async () => {
     (
       mockHookSystem.fireBeforeToolSelectionEvent as ReturnType<typeof vi.fn>
     ).mockResolvedValueOnce({
@@ -308,32 +308,6 @@ describe('ChatSession hook execution control', () => {
     const beforeModelOutput = new BeforeModelHookOutput({
       decision: 'block',
       reason: 'BeforeModel blocked execution',
-    });
-    vi.spyOn(beforeModelOutput, 'getSyntheticResponse').mockReturnValue({
-      candidates: [
-        {
-          content: {
-            role: 'model' as const,
-            parts: [
-              {
-                functionCall: {
-                  id: 'allowed-call',
-                  name: 'read_file',
-                  args: { file_path: 'file.txt' },
-                },
-              },
-              {
-                functionCall: {
-                  id: 'blocked-call',
-                  name: 'run_shell_command',
-                  args: { command: 'echo blocked' },
-                },
-              },
-            ],
-          },
-          finishReason: 'STOP' as const,
-        },
-      ],
     });
     (
       mockHookSystem.fireBeforeModelEvent as ReturnType<typeof vi.fn>
@@ -367,11 +341,17 @@ describe('ChatSession hook execution control', () => {
       events.push(event);
     }
 
+    // No tool-call request events fire when the BeforeModel hook blocks
+    // before the provider is ever called.
     expect(
       events.some((event) => event.type === AgentEventType.ToolCallRequest),
     ).toBe(false);
     const chunk = events.find((event) => event.type === StreamEventType.CHUNK);
-    expect(JSON.stringify(chunk)).toContain('read_file');
+    // The streaming BeforeModel blocking path yields a neutral ModelOutput
+    // built from the block reason — it carries no tool calls at all.
+    expect(chunk).toBeDefined();
+    expect(JSON.stringify(chunk)).toContain('BeforeModel blocked execution');
+    expect(JSON.stringify(chunk)).not.toContain('read_file');
     expect(JSON.stringify(chunk)).not.toContain('run_shell_command');
   });
 

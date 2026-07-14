@@ -6,7 +6,7 @@
 
 import type { CommandModule } from 'yargs';
 import { loadSettings, SettingScope } from '../../config/settings.js';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { exitCli } from '../utils.js';
 import { disableSkill } from '../../utils/skillSettings.js';
 import { renderSkillActionFeedback } from '../../utils/skillUtils.js';

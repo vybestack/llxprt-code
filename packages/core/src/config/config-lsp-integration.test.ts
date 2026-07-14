@@ -253,6 +253,7 @@ vi.mock('../utils/events.js', async (importOriginal) => {
 });
 
 describe('Config LSP Integration (P33)', () => {
+  const isWindows = process.platform === 'win32';
   const mockTargetDir = fileURLToPath(new URL('../../../../', import.meta.url));
   const mockSessionId = 'test-session-id';
 
@@ -445,49 +446,58 @@ describe('Config LSP Integration (P33)', () => {
       ).toBe(true);
     });
 
-    it('should register MCP navigation when navigationTools is true', async () => {
-      const params = createBaseConfigParams({
-        lsp: {
-          servers: [],
-          navigationTools: true,
-        },
-      });
-      const config = new Config(params);
-      await initializeTestConfig(config);
+    // Live MCP navigation registration depends on the Bun-backed LSP transport,
+    // which is not currently supported by these native Windows test runs (#2509).
+    it.skipIf(isWindows)(
+      'should register MCP navigation when navigationTools is true',
+      async () => {
+        const params = createBaseConfigParams({
+          lsp: {
+            servers: [],
+            navigationTools: true,
+          },
+        });
+        const config = new Config(params);
+        await initializeTestConfig(config);
 
-      const lspConfig = config.getLspConfig();
-      expect(lspConfig?.navigationTools).toBe(true);
+        const lspConfig = config.getLspConfig();
+        expect(lspConfig?.navigationTools).toBe(true);
 
-      await vi.waitFor(() => {
-        const tools = config.getToolRegistry().getAllTools();
-        const lspNavTools = tools.filter(
-          (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
-        );
-        expect(lspNavTools.length).toBeGreaterThan(0);
-      });
-    });
+        await vi.waitFor(() => {
+          const tools = config.getToolRegistry().getAllTools();
+          const lspNavTools = tools.filter(
+            (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+          );
+          expect(lspNavTools.length).toBeGreaterThan(0);
+        });
+      },
+    );
 
-    it('should default to enabled when navigationTools is absent', async () => {
-      const params = createBaseConfigParams({
-        lsp: {
-          servers: [],
-          // navigationTools omitted
-        },
-      });
-      const config = new Config(params);
-      await initializeTestConfig(config);
+    // Same transport limitation as the explicit navigationTools case above.
+    it.skipIf(isWindows)(
+      'should default to enabled when navigationTools is absent',
+      async () => {
+        const params = createBaseConfigParams({
+          lsp: {
+            servers: [],
+            // navigationTools omitted
+          },
+        });
+        const config = new Config(params);
+        await initializeTestConfig(config);
 
-      const lspConfig = config.getLspConfig();
-      expect(lspConfig?.navigationTools).toBeUndefined();
+        const lspConfig = config.getLspConfig();
+        expect(lspConfig?.navigationTools).toBeUndefined();
 
-      await vi.waitFor(() => {
-        const tools = config.getToolRegistry().getAllTools();
-        const lspNavTools = tools.filter(
-          (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
-        );
-        expect(lspNavTools.length).toBeGreaterThan(0);
-      });
-    });
+        await vi.waitFor(() => {
+          const tools = config.getToolRegistry().getAllTools();
+          const lspNavTools = tools.filter(
+            (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+          );
+          expect(lspNavTools.length).toBeGreaterThan(0);
+        });
+      },
+    );
   });
 
   describe('REQ-NAV-055: Register MCP only after service starts', () => {

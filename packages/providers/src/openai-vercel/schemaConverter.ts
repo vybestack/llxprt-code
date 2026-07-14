@@ -5,49 +5,33 @@
  */
 
 /**
- * Schema converter for OpenAI Vercel provider.
- * Converts tool schemas to OpenAI-compatible JSON Schema format for use with Vercel AI SDK.
+ * Schema converter for the OpenAI Vercel provider.
  *
- * Key requirements for OpenAI function calling:
- * - type: must be lowercase string ("object", "string", etc.)
- * - required: must always be present as an array (even if empty)
- * - properties: object describing each parameter
+ * The conversion logic lives in the shared
+ * `packages/providers/src/openai-shared/schemaConverter.ts` module so that the
+ * classic and Vercel providers cannot drift apart. This file is a thin
+ * provider-specific wrapper that narrows the shared types to the Vercel AI SDK
+ * tool shape (description and parameters are optional) and preserves the
+ * Vercel debug-logging namespace.
  */
 
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import {
+  convertToolDeclarations,
+  type OpenAIFunctionParameters,
+} from '../openai-shared/schemaConverter.js';
+
+export type {
+  OpenAIFunctionParameters,
+  OpenAIPropertySchema,
+  convertSchemaToOpenAI,
+} from '../openai-shared/schemaConverter.js';
 
 const logger = new DebugLogger('llxprt:provider:openai-vercel:schema');
 
 /**
- * OpenAI function parameter schema format
- */
-export interface OpenAIFunctionParameters {
-  type: 'object';
-  properties: Record<string, OpenAIPropertySchema>;
-  required: string[];
-  additionalProperties?: boolean;
-  [key: string]: unknown;
-}
-
-/**
- * OpenAI property schema (recursive for nested objects/arrays)
- */
-export interface OpenAIPropertySchema {
-  type: string;
-  description?: string;
-  enum?: string[];
-  items?: OpenAIPropertySchema;
-  properties?: Record<string, OpenAIPropertySchema>;
-  required?: string[];
-  minimum?: number;
-  maximum?: number;
-  minLength?: number;
-  maxLength?: number;
-  default?: unknown;
-}
-
-/**
- * OpenAI tool format for function calling (Vercel AI SDK compatible)
+ * OpenAI tool format for function calling (Vercel AI SDK compatible). The
+ * Vercel AI SDK treats description and parameters as optional.
  */
 export interface OpenAIVercelTool {
   type: 'function';
@@ -59,235 +43,35 @@ export interface OpenAIVercelTool {
 }
 
 /**
- * Input format from Gemini-style tool declarations
- */
-interface GeminiToolDeclaration {
-  name: string;
-  description?: string;
-  parametersJsonSchema?: unknown;
-}
-
-/**
- * Convert a Gemini-style schema to OpenAI JSON Schema format.
- * Handles:
- * - Uppercase type enums → lowercase strings
- * - Missing required fields → adds empty array
- * - String numeric values → proper numbers
- * - Recursive property/items conversion
- */
-export function convertSchemaToOpenAI(
-  schema: unknown,
-): OpenAIFunctionParameters {
-  if (schema === null || schema === undefined || typeof schema !== 'object') {
-    return {
-      type: 'object',
-      properties: {},
-      required: [],
-    };
-  }
-
-  const input = schema as Record<string, unknown>;
-  const result: OpenAIFunctionParameters = {
-    type: 'object',
-    properties: {},
-    required: [],
-  };
-
-  // Convert properties recursively
-  if (
-    input.properties !== null &&
-    input.properties !== undefined &&
-    typeof input.properties === 'object'
-  ) {
-    result.properties = convertProperties(
-      input.properties as Record<string, unknown>,
-    );
-  }
-
-  // Ensure required is always an array - CRITICAL for K2 and other models
-  if (Array.isArray(input.required)) {
-    result.required = input.required.map((r) => String(r));
-  } else {
-    // OpenAI requires the 'required' field to be present, even if empty
-    result.required = [];
-  }
-
-  // Handle additionalProperties if present
-  if (typeof input.additionalProperties === 'boolean') {
-    result.additionalProperties = input.additionalProperties;
-  }
-
-  return result;
-}
-
-/**
- * Convert properties object recursively
- */
-function convertProperties(
-  properties: Record<string, unknown>,
-): Record<string, OpenAIPropertySchema> {
-  const result: Record<string, OpenAIPropertySchema> = {};
-
-  for (const [key, value] of Object.entries(properties)) {
-    if (typeof value === 'object' && value !== null) {
-      result[key] = convertPropertySchema(value as Record<string, unknown>);
-    }
-  }
-
-  return result;
-}
-
-/**
- * Convert a single property schema
- */
-function convertPropertySchema(
-  prop: Record<string, unknown>,
-): OpenAIPropertySchema {
-  const result: OpenAIPropertySchema = {
-    type: normalizeType(prop.type),
-  };
-
-  // Copy description
-  if (typeof prop.description === 'string') {
-    result.description = prop.description;
-  }
-
-  // Handle enum values
-  if (Array.isArray(prop.enum)) {
-    result.enum = prop.enum.map((v) => String(v));
-  }
-
-  // Handle array items
-  if (Array.isArray(prop.items)) {
-    if (prop.items.length > 0) {
-      // Tuple type - use first item as representative
-      const firstItem = prop.items[0];
-      if (isSchemaObject(firstItem)) {
-        result.items = convertPropertySchema(firstItem);
-      }
-    }
-  } else if (isSchemaObject(prop.items)) {
-    result.items = convertPropertySchema(prop.items);
-  }
-
-  // Handle nested object properties
-  if (prop.properties != null && typeof prop.properties === 'object') {
-    result.properties = convertProperties(
-      prop.properties as Record<string, unknown>,
-    );
-    // Nested objects should also have required array
-    if (Array.isArray(prop.required)) {
-      result.required = prop.required.map((r) => String(r));
-    } else if (result.type === 'object') {
-      result.required = [];
-    }
-  }
-
-  // Handle numeric constraints (convert strings to numbers if needed)
-  if (prop.minimum !== undefined) {
-    result.minimum = toNumber(prop.minimum);
-  }
-  if (prop.maximum !== undefined) {
-    result.maximum = toNumber(prop.maximum);
-  }
-  if (prop.minLength !== undefined) {
-    result.minLength = toNumber(prop.minLength);
-  }
-  if (prop.maxLength !== undefined) {
-    result.maxLength = toNumber(prop.maxLength);
-  }
-
-  // Handle default value
-  if (prop.default !== undefined) {
-    result.default = prop.default;
-  }
-
-  return result;
-}
-
-function isSchemaObject(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
-
-/**
- * Normalize type value to lowercase string.
- * Handles Gemini's uppercase Type enum (e.g., "OBJECT" → "object")
- */
-function normalizeType(type: unknown): string {
-  if (typeof type === 'string') {
-    return type.toLowerCase();
-  }
-  if (typeof type === 'number') {
-    // Gemini Type enum values
-    const typeMap: Record<number, string> = {
-      1: 'string',
-      2: 'number',
-      3: 'integer',
-      4: 'boolean',
-      5: 'array',
-      6: 'object',
-    };
-    return typeMap[type] || 'string';
-  }
-  return 'string';
-}
-
-/**
- * Convert value to number, handling strings
- */
-function toNumber(value: unknown): number | undefined {
-  if (typeof value === 'number') {
-    return value;
-  }
-  if (typeof value === 'string') {
-    const num = parseFloat(value);
-    return isNaN(num) ? undefined : num;
-  }
-  return undefined;
-}
-
-/**
- * Convert an array of Gemini-style tool declarations to OpenAI Vercel format
+ * Convert an array of Gemini-style tool declarations to OpenAI Vercel format.
+ * Delegates to the shared converter with the preserve description strategy
+ * (missing descriptions stay undefined).
  */
 export function convertToolsToOpenAIVercel(
   geminiTools?: Array<{
-    functionDeclarations?: GeminiToolDeclaration[];
+    functionDeclarations?: Array<{
+      name: string;
+      description?: string;
+      parametersJsonSchema?: unknown;
+    }>;
   }>,
 ): OpenAIVercelTool[] | undefined {
-  if (!geminiTools || geminiTools.length === 0) {
+  const converted = convertToolDeclarations(geminiTools, {
+    descriptionStrategy: 'preserve',
+  });
+
+  if (converted === undefined) {
     return undefined;
   }
 
-  const openAITools: OpenAIVercelTool[] = [];
-
-  for (const toolGroup of geminiTools) {
-    if (!toolGroup.functionDeclarations) {
-      continue;
-    }
-
-    for (const decl of toolGroup.functionDeclarations) {
-      if (!isSchemaObject(decl.parametersJsonSchema)) {
-        throw new Error(
-          `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
-            `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
-        );
-      }
-      const parameters = convertSchemaToOpenAI(decl.parametersJsonSchema);
-
-      openAITools.push({
-        type: 'function',
-        function: {
-          name: decl.name,
-          description: decl.description,
-          parameters,
-        },
-      });
-    }
-  }
+  const openAITools: OpenAIVercelTool[] = converted.map((tool) => ({
+    type: 'function',
+    function: {
+      name: tool.function.name,
+      description: tool.function.description,
+      parameters: tool.function.parameters,
+    },
+  }));
 
   if (logger.enabled && openAITools.length > 0) {
     logger.debug(

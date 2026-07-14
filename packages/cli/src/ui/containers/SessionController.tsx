@@ -21,10 +21,10 @@ import { useRuntimeApi, getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   getErrorMessage,
   loadCoreMemoryContent,
-  debugLogger,
   coreEvents,
   CoreEvent,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js';
 import { loadSettings } from '../../config/settings.js';
 import { resolveModelIdentity } from '../utils/modelIdentity.js';

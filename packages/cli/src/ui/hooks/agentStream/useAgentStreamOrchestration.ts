@@ -11,7 +11,7 @@ import {
   type MessageBus,
   type RecordingIntegration,
   type ToolCall,
-  type ContractPartListUnion,
+  type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../../../config/settings.js';
@@ -34,6 +34,7 @@ import {
   useStreamingState,
   useToolSchedulerSetup,
 } from './useAgentStreamLifecycle.js';
+import type { QueuedSubmission } from './types.js';
 import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 export interface AgentStreamOrchestrationDeps {
@@ -43,7 +44,7 @@ export interface AgentStreamOrchestrationDeps {
   settings: LoadedSettings;
   onDebugMessage: (message: string) => void;
   handleSlashCommand: (
-    cmd: ContractPartListUnion,
+    cmd: AgentRequestInput,
   ) => Promise<SlashCommandProcessorResult | false>;
   shellModeActive: boolean;
   getPreferredEditor: () => EditorType | undefined;
@@ -71,6 +72,7 @@ export interface AgentStreamOrchestrationResult {
   interactiveRuntimeReady: boolean;
   cancelOngoingRequest: () => void;
   activeShellPtyId: number | null;
+  queuedSubmissions: readonly QueuedSubmission[];
 }
 
 interface ToolSchedulerState {
@@ -123,7 +125,7 @@ export function useAgentStreamOrchestration(
     st.setPendingHistoryItem,
     args.onCancelSubmit,
     st.setIsResponding,
-    st.queuedSubmissionsRef,
+    args.setShellInputFocused,
     cancelRunningAsyncTasks,
   );
   // Refs to break the circular dependency between useSubmitQuery (which
@@ -132,7 +134,7 @@ export function useAgentStreamOrchestration(
   const processAgentEventRef = useRef<AgentEventRouter | null>(null);
   const runStreamRef = useRef<
     | ((
-        message: ContractPartListUnion,
+        message: AgentRequestInput,
         signal: AbortSignal,
         promptId: string,
       ) => Promise<void>)
@@ -304,6 +306,7 @@ function buildResult(
     interactiveRuntimeReady: scheduler.interactiveRuntimeReady,
     cancelOngoingRequest,
     activeShellPtyId: shell.activeShellPtyId,
+    queuedSubmissions: st.queuedSubmissions,
   };
 }
 
@@ -341,6 +344,12 @@ function buildSubmitQueryDeps({
     thinkingBlocksRef: st.thinkingBlocksRef,
     turnCancelledRef: st.turnCancelledRef,
     queuedSubmissionsRef: st.queuedSubmissionsRef,
+    enqueueSubmission: st.enqueueSubmission,
+    requeueSubmission: st.requeueSubmission,
+    dequeueSubmission: st.dequeueSubmission,
+    clearSubmissions: st.clearSubmissions,
+    tryReserveDrain: st.tryReserveDrain,
+    releaseDrain: st.releaseDrain,
     setPendingHistoryItem: st.setPendingHistoryItem,
     setIsResponding: st.setIsResponding,
     setInitError: st.setInitError,

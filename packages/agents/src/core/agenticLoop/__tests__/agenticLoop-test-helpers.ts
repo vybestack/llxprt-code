@@ -44,43 +44,58 @@ import type {
   AgentClientContract,
 } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { Content, Part, PartListUnion } from '@google/genai';
+import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { AgentRequestInput } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type {
+  ContentBlock,
+  IContent,
+  TextBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
+import { emptyModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { convertPartListUnionToIContent } from '../../MessageConverter.js';
 /**
  * A single model turn script: a list of ServerAgentStreamEvents the fake
  * provider emits for that turn.
  */
 export type TurnScript = ServerAgentStreamEvent[];
 
-/** Converts a PartListUnion into a Part[] (string → [{text}]). */
-export function partListUnionToParts(req: PartListUnion): Part[] {
-  if (Array.isArray(req)) {
-    return req as Part[];
-  }
+/** Converts an AgentRequestInput into a ContentBlock[] (string → [{text}]). */
+export function partListUnionToParts(req: AgentRequestInput): ContentBlock[] {
   if (typeof req === 'string') {
-    return [{ text: req }];
+    return [{ type: 'text', text: req }];
   }
-  return [req];
+  if (Array.isArray(req)) {
+    if (req.length > 0 && typeof req[0] === 'object' && 'blocks' in req[0]) {
+      return (req as IContent[]).flatMap((c) => c.blocks);
+    }
+    return req as ContentBlock[];
+  }
+  // Single IContent — flatten to its blocks.
+  if (typeof req === 'object' && 'blocks' in req) {
+    return req.blocks;
+  }
+  return [];
 }
 
-/** True when a Part[] contains at least one functionResponse part. */
-export function hasFunctionResponsePart(parts: Part[]): boolean {
-  return parts.some((p) => 'functionResponse' in p);
+/** True when a ContentBlock[] contains at least one tool_response block. */
+export function hasFunctionResponsePart(parts: ContentBlock[]): boolean {
+  return parts.some((p) => p.type === 'tool_response');
 }
 
-/** Extracts the text from any { text: string } part in a Part[]. */
-export function textParts(parts: Part[]): string[] {
+/** Extracts the text from every TextBlock in a ContentBlock[]. */
+export function textParts(parts: ContentBlock[]): string[] {
   return parts
-    .filter((p): p is Part & { text: string } => 'text' in p)
+    .filter((p): p is TextBlock => p.type === 'text')
     .map((p) => p.text);
 }
 
 /** Shared mutable state for a scripted agent client. */
 interface ScriptedClientState {
   scriptQueue: TurnScript[];
-  history: Content[];
-  turnMessages: PartListUnion[];
+  history: IContent[];
+  turnMessages: AgentRequestInput[];
   promptIds: string[];
   recordedToolCalls: CompletedToolCall[][];
 }
@@ -89,12 +104,14 @@ interface ScriptedClientState {
 function buildScriptedChat(state: ScriptedClientState): AgentChatContract {
   const { history, recordedToolCalls } = state;
   return {
+    sendMessage: async () => emptyModelOutput(),
     sendMessageStream: async () => {
       async function* emptyStream() {}
       return emptyStream();
     },
+    generateDirectMessage: async () => emptyModelOutput(),
     getHistory: () => history,
-    setHistory: (nextHistory: Content[]) => {
+    setHistory: (nextHistory: IContent[]) => {
       history.splice(0, history.length, ...nextHistory);
     },
     clearHistory: () => {
@@ -123,12 +140,12 @@ function buildScriptedClient(state: ScriptedClientState): AgentClientContract {
     },
     getHistoryService: () => null,
     storeHistoryServiceForReuse: () => {},
-    storeHistoryForLaterUse: (h: Content[]) => history.push(...h),
+    storeHistoryForLaterUse: (h: IContent[]) => history.push(...h),
     dispose: () => {},
     setTools: async () => {},
     clearTools: () => {},
     updateSystemInstruction: async () => {},
-    addHistory: async (content: Content) => {
+    addHistory: async (content: IContent) => {
       history.push(content);
     },
     resetChat: async () => {},
@@ -151,13 +168,13 @@ function buildScriptedClient(state: ScriptedClientState): AgentClientContract {
     },
     generateEmbedding: async () => [],
     async *sendMessageStream(
-      req: PartListUnion,
+      req: AgentRequestInput,
       signal: AbortSignal,
       promptId: string,
     ): AsyncGenerator<ServerAgentStreamEvent> {
       turnMessages.push(req);
       promptIds.push(promptId);
-      history.push({ role: 'user', parts: partListUnionToParts(req) });
+      history.push(convertPartListUnionToIContent(req));
       const script = scriptQueue.shift();
       if (!script) {
         return;
@@ -183,8 +200,8 @@ function buildScriptedClient(state: ScriptedClientState): AgentClientContract {
  */
 export function createScriptedAgentClient(scripts: TurnScript[]): {
   client: AgentClientContract;
-  history: Content[];
-  turnMessages: PartListUnion[];
+  history: IContent[];
+  turnMessages: AgentRequestInput[];
   promptIds: string[];
   recordedToolCalls: CompletedToolCall[][];
 } {
@@ -366,7 +383,7 @@ export function createAskPolicyEngine(): PolicyEngine {
 /** Collects all events from running the loop to completion. */
 export async function collectEvents(
   loop: AgenticLoop,
-  message: PartListUnion,
+  message: AgentMessageInput,
   signal: AbortSignal,
   promptId?: string,
 ): Promise<AgenticLoopEvent[]> {
@@ -403,28 +420,27 @@ export function isAwaitingApproval(
   return e.kind === 'awaiting_approval';
 }
 
-/** Extracts the functionResponse parts from a Content[] history. */
-export function functionResponseParts(history: Content[]): Part[] {
+/** Extracts the tool-response blocks from an IContent[] history. */
+export function functionResponseParts(history: IContent[]): ContentBlock[] {
   return history
-    .filter((h) => h.role === 'user')
-    .flatMap((h) => h.parts)
-    .filter(
-      (p): p is Part & { functionResponse: unknown } =>
-        !!p && 'functionResponse' in p,
-    );
+    .filter((h) => h.speaker === 'tool')
+    .flatMap((h) => h.blocks)
+    .filter((b) => b.type === 'tool_response');
 }
 
-/** True when any part in history is a functionResponse. */
-export function hasFunctionResponse(history: Content[]): boolean {
-  return functionResponseParts(history).length > 0;
+/** True when any block in history is a tool response. */
+export function hasFunctionResponse(history: IContent[]): boolean {
+  return history.some(
+    (h) =>
+      h.speaker === 'tool' && h.blocks.some((b) => b.type === 'tool_response'),
+  );
 }
 
 // Re-export types used by test files for convenience.
 export type {
   ApprovalHandler,
   AgenticLoopEvent,
-  Content,
-  PartListUnion,
+  AgentRequestInput,
   Config,
   ToolRegistry,
   CompletedToolCall,

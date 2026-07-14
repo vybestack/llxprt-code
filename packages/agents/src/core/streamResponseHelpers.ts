@@ -7,63 +7,66 @@
 /**
  * @fileoverview Pure response-processing helpers extracted from StreamProcessor.
  *
- * These functions accumulate streamed chunk metadata, consolidate text parts,
+ * These functions accumulate streamed chunk metadata, consolidate text blocks,
  * validate stream completion, and record history with usage metadata. They
  * take explicit params (no shared mutable state) so they can be unit-tested
  * in isolation.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P15
+ * @requirement:REQ-005.3
  */
 
-import type { Content, GenerateContentResponse, Part } from '@google/genai';
-import { FinishReason } from '@google/genai';
 import type {
   IContent,
+  ContentBlock,
+  ThinkingBlock,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  ModelStreamChunk,
+  CanonicalFinishReason,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { ConversationManager } from './ConversationManager.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import {
-  isValidResponse,
-  isValidNonThoughtTextPart,
-} from './MessageConverter.js';
-import {
-  filterHookRestrictedParts,
-  getHookRestrictedFunctionCallsFromParts,
-  filterHookRestrictedFunctionCalls,
-  mergeHookRestrictedFunctionCalls,
-  getHookRestrictedAllowedTools,
-} from './hookToolRestrictions.js';
 import type { ResponseOutcome } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
-import { analyzeResponseOutcomeFromParts } from './googlePartHelpers.js';
-import { isFunctionResponse } from '@vybestack/llxprt-code-core/utils/messageInspectors.js';
 import { InvalidStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
-import { isThoughtPart, type ThoughtPart } from './googlePartHelpers.js';
-import { getResponseId, getResponsesStored } from './responseIdCarrier.js';
-import {
-  filterEagerlyRecordedToolResponses,
-  type FilteredEagerToolResponses,
-} from './agenticLoop/loopHelpers.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 /** Whether a finish reason is missing (null, undefined, or empty string). */
 export function isMissingFinishReason(
-  finishReason: FinishReason | null | undefined | '',
+  finishReason: string | null | undefined | '',
 ): boolean {
   return finishReason == null || finishReason === '';
 }
 
-/** Accumulator used while streaming chunks into a complete turn. */
+/**
+ * Accumulator used while streaming chunks into a complete turn.
+ *
+ * Block-based (P15): carries `ContentBlock[]` and `CanonicalFinishReason`
+ * from the neutral `ModelStreamChunk` — no Google-shaped `Part[]`/`FinishReason`.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P15
+ * @requirement:REQ-005.3
+ * @pseudocode lines 28-31
+ */
 export interface StreamAccumulator {
-  modelResponseParts: Part[];
+  modelBlocks: ContentBlock[];
   outcome: ResponseOutcome;
-  finishReason: FinishReason | undefined;
-  allChunks: GenerateContentResponse[];
+  finishReason: CanonicalFinishReason | undefined;
+  allChunks: ModelStreamChunk[];
 }
 
-/** Create a fresh stream accumulator. */
+/**
+ * Create a fresh stream accumulator.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P15
+ * @requirement:REQ-005.3
+ * @pseudocode lines 28-31
+ */
 export function createStreamAccumulator(): StreamAccumulator {
   return {
-    modelResponseParts: [],
+    modelBlocks: [],
     outcome: {
       hasVisibleText: false,
       hasThinking: false,
@@ -94,194 +97,231 @@ export function trackPromptTokens(
 }
 
 /**
- * Accumulate metadata from a single streamed chunk into the accumulator.
+ * Analyze a `ContentBlock[]` for outcome characteristics (visible text,
+ * thinking, tool calls, actionability).
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P15
+ * @requirement:REQ-005.3
+ * @pseudocode lines 28-31
+ */
+function analyzeBlocksOutcome(
+  blocks: ContentBlock[],
+  includeThoughts: boolean,
+): ResponseOutcome {
+  let hasVisibleText = false;
+  let hasThinking = false;
+  let hasToolCalls = false;
+  for (const block of blocks) {
+    if (block.type === 'text' && block.text !== '') {
+      hasVisibleText = true;
+    } else if (block.type === 'thinking' && includeThoughts) {
+      hasThinking = true;
+    } else if (block.type === 'tool_call') {
+      hasToolCalls = true;
+    }
+  }
+  return {
+    hasVisibleText,
+    hasThinking,
+    hasToolCalls,
+    isActionable: hasVisibleText || hasToolCalls,
+  };
+}
+
+/**
+ * Accumulate metadata from a single streamed neutral chunk into the
+ * accumulator. Reads `ContentBlock[]` and `CanonicalFinishReason` from the
+ * neutral `ModelStreamChunk` — no Google candidate/parts access.
+ *
+ * The legacy Google-response validity guard is replaced with a neutral
+ * block-presence check on the `ModelStreamChunk`.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P15
+ * @requirement:REQ-005.3
+ * @pseudocode lines 28-31
  */
 export function accumulateChunkMetadata(
-  chunk: GenerateContentResponse,
+  chunk: ModelStreamChunk,
   acc: StreamAccumulator,
   includeThoughts: boolean,
   logger: DebugLogger,
   compressionHandler: CompressionHandler,
 ): void {
-  const candidateWithReason = chunk.candidates?.find(
-    (c) => c.finishReason !== undefined,
-  );
-  if (candidateWithReason !== undefined)
-    acc.finishReason = candidateWithReason.finishReason as FinishReason;
+  if (chunk.finishReason !== undefined) {
+    acc.finishReason = chunk.finishReason;
+  }
 
-  const allowedTools = getHookRestrictedAllowedTools(chunk);
-  const parts = chunk.candidates?.[0]?.content?.parts ?? [];
-  const effectiveParts = isValidResponse(chunk)
-    ? filterHookRestrictedParts(parts, allowedTools)
-    : [];
-  const allowedPartCalls = getHookRestrictedFunctionCallsFromParts(
-    effectiveParts,
-    allowedTools,
-  );
-  const allowedMergedCalls = mergeHookRestrictedFunctionCalls(
-    allowedPartCalls,
-    filterHookRestrictedFunctionCalls(chunk.functionCalls ?? [], allowedTools),
-  );
-  const allowedTopLevelCallParts = allowedMergedCalls
-    .slice(allowedPartCalls.length)
-    .map((functionCall) => ({ functionCall }));
-  const outcomeParts = [...effectiveParts, ...allowedTopLevelCallParts];
+  // Neutral block-presence check replaces the legacy response-validity guard.
+  const effectiveBlocks =
+    chunk.content.blocks.length > 0 ? chunk.content.blocks : [];
 
-  if (outcomeParts.length > 0) {
-    const chunkOutcome = analyzeResponseOutcomeFromParts(outcomeParts);
+  if (effectiveBlocks.length > 0) {
+    const chunkOutcome = analyzeBlocksOutcome(effectiveBlocks, includeThoughts);
     acc.outcome = {
       hasVisibleText: acc.outcome.hasVisibleText || chunkOutcome.hasVisibleText,
       hasThinking: acc.outcome.hasThinking || chunkOutcome.hasThinking,
       hasToolCalls: acc.outcome.hasToolCalls || chunkOutcome.hasToolCalls,
       isActionable: acc.outcome.isActionable || chunkOutcome.isActionable,
     };
-    acc.modelResponseParts.push(
+    acc.modelBlocks.push(
       ...(includeThoughts
-        ? outcomeParts
-        : outcomeParts.filter((p) => !isThoughtPart(p))),
+        ? effectiveBlocks
+        : effectiveBlocks.filter((b) => b.type !== 'thinking')),
     );
   }
 
-  const chunkText = typeof chunk.text === 'string' ? chunk.text : '';
+  const chunkText = effectiveBlocks
+    .filter((b) => b.type === 'text')
+    .map((b) => (b as { text: string }).text)
+    .join('');
   logger.debug(() => `[stream:terminal] observed converted chunk`, {
-    chunkFinishReason: candidateWithReason?.finishReason,
-    partCount: effectiveParts.length,
-    toolCallCount: allowedMergedCalls.length,
+    chunkFinishReason: chunk.finishReason,
+    blockCount: effectiveBlocks.length,
+    toolCallCount: effectiveBlocks.filter((b) => b.type === 'tool_call').length,
     textLength: chunkText.length,
-    hasUsageMetadata: Boolean(chunk.usageMetadata),
+    hasUsage: Boolean(chunk.usage),
   });
 
-  if (chunk.usageMetadata?.promptTokenCount !== undefined) {
-    compressionHandler.lastPromptTokenCount =
-      chunk.usageMetadata.promptTokenCount;
+  if (chunk.usage?.promptTokens !== undefined) {
+    compressionHandler.lastPromptTokenCount = chunk.usage.promptTokens;
   }
   acc.allChunks.push(chunk);
 }
-type PreservedThoughtMetadataKey =
-  | 'thoughtSignature'
-  | 'llxprtSourceField'
-  | 'llxprtThoughtIsHidden';
 
-// Stream status is intentionally not preserved: it describes the current delta's
-// lifecycle role, not accumulated block metadata.
-const PRESERVED_THOUGHT_METADATA_KEYS = [
-  'thoughtSignature',
-  'llxprtSourceField',
-  'llxprtThoughtIsHidden',
-] as const satisfies readonly PreservedThoughtMetadataKey[];
+type PreservedThinkingMetadataKey = 'signature' | 'sourceField' | 'isHidden';
+
+const PRESERVED_THINKING_METADATA_KEYS = [
+  'signature',
+  'sourceField',
+  'isHidden',
+] as const satisfies readonly PreservedThinkingMetadataKey[];
 
 function preserveIncomingUndefinedFields(
-  previousThought: ThoughtPart,
-  incomingThought: ThoughtPart,
-): Partial<Pick<ThoughtPart, PreservedThoughtMetadataKey>> {
+  previous: ThinkingBlock,
+  incoming: ThinkingBlock,
+): Partial<Pick<ThinkingBlock, PreservedThinkingMetadataKey>> {
   return Object.fromEntries(
-    PRESERVED_THOUGHT_METADATA_KEYS.filter(
-      (key) =>
-        incomingThought[key] === undefined &&
-        previousThought[key] !== undefined,
-    ).map((key) => [key, previousThought[key]]),
-  ) as Partial<Pick<ThoughtPart, PreservedThoughtMetadataKey>>;
+    PRESERVED_THINKING_METADATA_KEYS.filter(
+      (key) => incoming[key] === undefined && previous[key] !== undefined,
+    ).map((key) => [key, previous[key]]),
+  ) as Partial<Pick<ThinkingBlock, PreservedThinkingMetadataKey>>;
 }
 
-function mergeIncrementalThought(
-  previousThought: ThoughtPart,
-  incomingThought: ThoughtPart,
-): ThoughtPart {
+function mergeIncrementalThinking(
+  previous: ThinkingBlock,
+  incoming: ThinkingBlock,
+): ThinkingBlock {
   return {
-    ...previousThought,
-    ...incomingThought,
-    text: incomingThought.text ?? previousThought.text,
-    thought: true,
-    ...preserveIncomingUndefinedFields(previousThought, incomingThought),
+    ...previous,
+    ...incoming,
+    thought: incoming.thought !== '' ? incoming.thought : previous.thought,
+    type: 'thinking',
+    ...preserveIncomingUndefinedFields(previous, incoming),
   };
 }
 
-function mergeTextParts(lastPart: Part, part: Part): Part {
-  return {
-    ...lastPart,
-    text: `${lastPart.text ?? ''}${part.text ?? ''}`,
-  };
+/**
+ * If `block` is a thinking update for an existing stream, merge it in-place
+ * and return `true`. Otherwise return `false` (caller should append).
+ */
+function tryMergeExistingThinking(
+  consolidated: ContentBlock[],
+  block: ThinkingBlock,
+  streamBlockIndexes: Map<string, number>,
+): boolean {
+  if (block.streamId === undefined) {
+    return false;
+  }
+  const existingIndex = streamBlockIndexes.get(block.streamId);
+  if (existingIndex === undefined) {
+    return false;
+  }
+  const previous = consolidated[existingIndex];
+  if (previous.type !== 'thinking') {
+    return false;
+  }
+  consolidated[existingIndex] = mergeIncrementalThinking(previous, block);
+  return true;
 }
 
-function consolidateTextPart(result: Part[], part: Part): void {
-  if (result.length === 0) {
-    result.push({ ...part });
-    return;
-  }
-
-  const lastPart = result[result.length - 1];
-  if (isValidNonThoughtTextPart(lastPart) && isValidNonThoughtTextPart(part)) {
-    result[result.length - 1] = mergeTextParts(lastPart, part);
-    return;
-  }
-  result.push({ ...part });
-}
-
-function consolidateThoughtPart(
-  result: Part[],
-  part: ThoughtPart,
-  streamPartIndexes: Map<string, number>,
+/** Append a text block, merging into the trailing text block when adjacent. */
+function appendTextOrBlock(
+  consolidated: ContentBlock[],
+  block: ContentBlock,
 ): void {
-  const streamId = part.llxprtThoughtBlockId;
-  if (streamId !== undefined) {
-    const existingIndex = streamPartIndexes.get(streamId);
-    if (existingIndex !== undefined) {
-      const previousPart = result[existingIndex];
-      if (isThoughtPart(previousPart)) {
-        result[existingIndex] = mergeIncrementalThought(previousPart, part);
-        return;
-      }
-      streamPartIndexes.delete(streamId);
-    }
+  const lastIndex = consolidated.length - 1;
+  const lastBlock = consolidated[lastIndex];
+  if (lastIndex >= 0 && lastBlock.type === 'text' && block.type === 'text') {
+    consolidated[lastIndex] = {
+      ...lastBlock,
+      text: `${lastBlock.text}${block.text}`,
+    };
+    return;
   }
+  consolidated.push(block);
+}
 
-  result.push({ ...part });
-  if (streamId !== undefined) {
-    streamPartIndexes.set(streamId, result.length - 1);
+/** Append a new thinking block and register its stream id if present. */
+function appendThinkingBlock(
+  consolidated: ContentBlock[],
+  block: ThinkingBlock,
+  streamBlockIndexes: Map<string, number>,
+): void {
+  consolidated.push({ ...block });
+  if (block.streamId !== undefined) {
+    streamBlockIndexes.set(block.streamId, consolidated.length - 1);
   }
 }
 
 /**
- * Consolidate adjacent text parts and stream-identified thinking updates.
+ * Consolidate adjacent text blocks and stream-identified thinking updates.
  *
- * #1723: A provider-owned stream id represents exactly one thinking block
- * lifecycle, from its first delta through its complete event. While a lifecycle
- * is open, later events with the same stream id replace that block even when
- * text or other thinking blocks are interleaved. A provider must mint a fresh
- * stream id for each distinct thinking block; text-prefix similarity is not
- * identity and is intentionally ignored.
+ * A provider-owned stream id represents one thinking-block lifecycle. Later
+ * updates with the same id replace that block even when other content is
+ * interleaved. Distinct stream ids are never merged based on text similarity.
  */
-export function consolidateTextParts(modelResponseParts: Part[]): Part[] {
-  const result: Part[] = [];
-  const streamPartIndexes = new Map<string, number>();
+export function consolidateTextBlocks(
+  modelBlocks: ContentBlock[],
+): ContentBlock[] {
+  const consolidated: ContentBlock[] = [];
+  const streamBlockIndexes = new Map<string, number>();
 
-  for (const part of modelResponseParts) {
-    if (isThoughtPart(part)) {
-      consolidateThoughtPart(result, part, streamPartIndexes);
-    } else {
-      consolidateTextPart(result, part);
+  for (const block of modelBlocks) {
+    if (block.type === 'thinking') {
+      if (!tryMergeExistingThinking(consolidated, block, streamBlockIndexes)) {
+        appendThinkingBlock(consolidated, block, streamBlockIndexes);
+      }
+      continue;
     }
+    appendTextOrBlock(consolidated, block);
   }
-
-  return result;
+  return consolidated;
 }
 
 /**
- * Extract response text from consolidated parts.
+ * Extract response text from consolidated blocks.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P15
+ * @requirement:REQ-005.3
+ * @pseudocode lines 28-31
  */
-export function extractResponseText(consolidatedParts: Part[]): string {
-  return consolidatedParts
-    .filter((part) => isValidNonThoughtTextPart(part))
-    .map((part) => part.text)
+export function extractResponseText(blocks: ContentBlock[]): string {
+  return blocks
+    .filter((block) => block.type === 'text' && block.text !== '')
+    .map((block) => (block as { text: string }).text)
     .join('')
     .trim();
 }
 
 /**
  * Throw the appropriate error for a missing/empty stream response.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P15
+ * @requirement:REQ-005.3
+ * @pseudocode lines 28-31
  */
 export function throwMissingResponseError(
-  finishReason: FinishReason | undefined,
+  finishReason: CanonicalFinishReason | undefined,
   hasTextResponse: boolean,
   validationContext: Record<string, unknown>,
   logger: DebugLogger,
@@ -309,17 +349,25 @@ export function throwMissingResponseError(
 
 /**
  * Validate stream completion and throw appropriate errors.
+ *
+ * Block-based reimplementation (P15): operates on neutral `IContent` and
+ * `CanonicalFinishReason` — no Google-shaped `Content`/`FinishReason` enum.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P15
+ * @requirement:REQ-005.3
+ * @pseudocode lines 28-31
  */
 export function validateStreamCompletion(
-  userInput: Content | Content[],
+  userInput: IContent | IContent[],
   outcome: ResponseOutcome,
-  finishReason: FinishReason | undefined,
+  finishReason: CanonicalFinishReason | undefined,
   responseText: string,
   logger: DebugLogger,
 ): void {
-  const isToolContinuationInput = Array.isArray(userInput)
-    ? userInput.some(isFunctionResponse)
-    : isFunctionResponse(userInput);
+  const inputArray = Array.isArray(userInput) ? userInput : [userInput];
+  const isToolContinuationInput = inputArray.some((content) =>
+    content.blocks.some((b) => b.type === 'tool_response'),
+  );
 
   const validationContext = {
     hasToolCall: outcome.hasToolCalls,
@@ -352,7 +400,7 @@ export function validateStreamCompletion(
     );
   }
 
-  if (finishReason === FinishReason.MALFORMED_FUNCTION_CALL) {
+  if (finishReason === 'error') {
     logger.warn(
       () =>
         `[stream:terminal] validation failed: malformed function call finishReason`,
@@ -368,16 +416,57 @@ export function validateStreamCompletion(
 interface UserInputFlags {
   readonly userInputWasArray?: boolean;
   readonly userInputWasFunctionResponse?: boolean;
+  readonly responseId?: string | null;
+  readonly responsesStored?: boolean | null;
+}
+
+export interface FilteredEagerToolResponses {
+  readonly content: IContent | null;
+  readonly matchedCallIds: readonly string[];
 }
 
 export interface PreparedHistoryUserInput {
-  readonly historyUserInput: Content | Content[];
+  readonly historyUserInput: IContent | IContent[];
   readonly filteredResults: readonly FilteredEagerToolResponses[];
   readonly userInputFlags: UserInputFlags | undefined;
 }
 
+export function filterEagerlyRecordedToolResponses(
+  content: IContent,
+  eagerlyRecordedToolResponseCallIds: ReadonlySet<string>,
+): FilteredEagerToolResponses {
+  if (eagerlyRecordedToolResponseCallIds.size === 0) {
+    return { content, matchedCallIds: [] };
+  }
+
+  const matchedCallIds: string[] = [];
+  const blocks = content.blocks.filter((block) => {
+    const callId = block.type === 'tool_response' ? block.callId : undefined;
+    if (
+      typeof callId === 'string' &&
+      eagerlyRecordedToolResponseCallIds.has(callId)
+    ) {
+      matchedCallIds.push(callId);
+      return false;
+    }
+    return true;
+  });
+
+  if (matchedCallIds.length === 0) {
+    return { content, matchedCallIds };
+  }
+  if (blocks.length === 0) {
+    return { content: null, matchedCallIds };
+  }
+
+  return {
+    content: { ...content, blocks },
+    matchedCallIds,
+  };
+}
+
 export function prepareHistoryUserInput(
-  userInput: Content | Content[],
+  userInput: IContent | IContent[],
   eagerlyRecordedToolResponseCallIds: ReadonlySet<string>,
 ): PreparedHistoryUserInput {
   const filteredResults = (
@@ -391,7 +480,7 @@ export function prepareHistoryUserInput(
   const filteredUserInput = filteredResults.flatMap(
     (result) => result.content ?? [],
   );
-  const allSingleUserInputPartsWereEagerlyRecorded =
+  const allSingleUserInputBlocksWereEagerlyRecorded =
     !Array.isArray(userInput) && filteredResults[0]?.content === null;
 
   return {
@@ -399,7 +488,7 @@ export function prepareHistoryUserInput(
       ? filteredUserInput
       : (filteredResults[0]?.content ?? filteredUserInput),
     filteredResults,
-    userInputFlags: allSingleUserInputPartsWereEagerlyRecorded
+    userInputFlags: allSingleUserInputBlocksWereEagerlyRecorded
       ? {
           // The filtered history input is now an empty array, so keep the shape
           // flags aligned with what ConversationManager will actually see.
@@ -422,9 +511,9 @@ export function clearMatchedEagerToolResponseCallIds(
 }
 
 interface RecordHistoryParams {
-  userInput: Content | Content[];
-  consolidatedParts: Part[];
-  allChunks: GenerateContentResponse[];
+  userInput: IContent | IContent[];
+  consolidatedBlocks: ContentBlock[];
+  allChunks: ModelStreamChunk[];
   conversationManager: ConversationManager;
   historyService: HistoryService;
   compressionHandler: CompressionHandler;
@@ -435,17 +524,22 @@ interface RecordHistoryParams {
 /**
  * Record history with usage metadata and sync token counts.
  *
- * `actualPromptTokens` is typed `number | null` (never `undefined`), so only
- * the null check is needed — the `!== undefined` comparison was a dead check.
+ * Block-based reimplementation (P15): records `IContent{speaker:'ai'}`
+ * directly — no manual Google Content builder. Usage derived from the
+ * neutral `UsageStats` on the `ModelStreamChunk`.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P15
+ * @requirement:REQ-005.3
+ * @pseudocode lines 28-31
  */
-function findLastChunkWithProviderMetadata(
-  chunks: GenerateContentResponse[],
-): GenerateContentResponse | undefined {
+function findLastChunkWithResponseMetadata(
+  chunks: ModelStreamChunk[],
+): ModelStreamChunk | undefined {
   for (let index = chunks.length - 1; index >= 0; index -= 1) {
     const chunk = chunks[index];
     if (
-      getResponseId(chunk) !== undefined ||
-      getResponsesStored(chunk) !== undefined
+      chunk.responseId !== undefined ||
+      chunk.content.metadata?.responsesStored !== undefined
     ) {
       return chunk;
     }
@@ -456,39 +550,35 @@ function findLastChunkWithProviderMetadata(
 export async function recordHistoryWithUsage(
   args: RecordHistoryParams,
 ): Promise<void> {
-  const modelOutput: Content[] = [
-    { role: 'model', parts: args.consolidatedParts },
-  ];
+  const modelIContent: IContent = {
+    speaker: 'ai',
+    blocks: args.consolidatedBlocks,
+  };
 
   let streamingUsageMetadata: UsageStats | null = null;
   let actualPromptTokens: number | null = null;
-  const lastChunkWithMetadata = args.allChunks
+  const lastChunkWithUsage = args.allChunks
     .slice()
     .reverse()
-    .find((chunk) => chunk.usageMetadata);
-  if (lastChunkWithMetadata?.usageMetadata) {
+    .find((chunk) => chunk.usage);
+  if (lastChunkWithUsage?.usage) {
     streamingUsageMetadata = {
-      promptTokens: lastChunkWithMetadata.usageMetadata.promptTokenCount ?? 0,
-      completionTokens:
-        lastChunkWithMetadata.usageMetadata.candidatesTokenCount ?? 0,
-      totalTokens: lastChunkWithMetadata.usageMetadata.totalTokenCount ?? 0,
+      promptTokens: lastChunkWithUsage.usage.promptTokens,
+      completionTokens: lastChunkWithUsage.usage.completionTokens,
+      totalTokens: lastChunkWithUsage.usage.totalTokens,
     };
     actualPromptTokens = streamingUsageMetadata.promptTokens;
   }
 
-  const providerMetadataChunk = findLastChunkWithProviderMetadata(
-    args.allChunks,
-  );
-  const responseId = providerMetadataChunk
-    ? (getResponseId(providerMetadataChunk) ?? null)
-    : null;
-  const responsesStored = providerMetadataChunk
-    ? (getResponsesStored(providerMetadataChunk) ?? null)
-    : null;
+  const metadataChunk = findLastChunkWithResponseMetadata(args.allChunks);
+  const responseId =
+    metadataChunk?.responseId ?? metadataChunk?.content.metadata?.id ?? null;
+  const responsesStored =
+    metadataChunk?.content.metadata?.responsesStored ?? null;
 
   args.conversationManager.recordHistory(
     args.userInput,
-    modelOutput,
+    [modelIContent],
     undefined,
     streamingUsageMetadata,
     {

@@ -14,7 +14,7 @@ import type {
 } from './types.js';
 import type { CommandContext } from '../types.js';
 import { filterCompletions } from '../../utils/fuzzyFilter.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   normalizeCompletionContext,
   buildArgumentTokenInfo,

@@ -7,7 +7,8 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { homedir } from 'node:os';
-import { type Config, debugLogger } from '@vybestack/llxprt-code-core';
+import { type Config } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { LLXPRT_DIR } from '@vybestack/llxprt-code-storage';
 import type { Settings, SessionRetentionSettings } from '../config/settings.js';
 import { getAllSessionFiles, type SessionFileEntry } from './sessionUtils.js';

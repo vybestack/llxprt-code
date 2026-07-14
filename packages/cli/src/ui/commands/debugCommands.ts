@@ -15,7 +15,7 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { ConfigurationManager } from '@vybestack/llxprt-code-core';
+import { ConfigurationManager } from '@vybestack/llxprt-code-telemetry';
 
 /**
  * Handle /debug enable command

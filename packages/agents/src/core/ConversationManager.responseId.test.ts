@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { Content } from '@google/genai';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -106,12 +106,12 @@ describe('ConversationManager records responseId into history @issue:207', () =>
   let conversationManager: ConversationManager;
   let historyService: HistoryService;
 
-  const USER_INPUT: Content = {
-    role: 'user',
-    parts: [{ text: 'Hello' }],
+  const USER_INPUT: IContent = {
+    speaker: 'human',
+    blocks: [{ type: 'text', text: 'Hello' }],
   };
-  const MODEL_OUTPUT: Content[] = [
-    { role: 'model', parts: [{ text: 'Hi there.' }] },
+  const MODEL_OUTPUT: IContent[] = [
+    { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi there.' }] },
   ];
 
   beforeEach(() => {

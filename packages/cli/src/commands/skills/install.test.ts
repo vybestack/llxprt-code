@@ -12,7 +12,7 @@ vi.mock('../../utils/skillUtils.js', () => ({
   installSkill: mockInstallSkill,
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...(actual as object),
@@ -20,7 +20,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { handleInstall, installCommand } from './install.js';
 
 describe('skill install command', () => {

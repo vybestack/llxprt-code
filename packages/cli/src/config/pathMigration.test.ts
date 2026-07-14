@@ -8,10 +8,11 @@
  * category directories: config, data, cache, and log/state.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'node:path';
 import * as os from 'os';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 import {
   shouldMigrate,
@@ -171,19 +172,78 @@ describe('migration-completion marker (#2237)', () => {
     expect(isMigrationComplete(destinations)).toBe(false);
   });
 
-  it('treats a marker with no numeric version as NOT complete', () => {
-    writeMarker(JSON.stringify({ completedAt: '2025-01-01T00:00:00.000Z' }));
-    expect(isMigrationComplete(destinations)).toBe(false);
-  });
+  it.each([
+    {
+      name: 'invalid-object JSON',
+      marker: JSON.stringify([]),
+      diagnostic: 'not a JSON object',
+    },
+    {
+      name: 'missing version',
+      marker: JSON.stringify({ completedAt: '2025-01-01T00:00:00.000Z' }),
+      diagnostic: 'missing the version field',
+    },
+    {
+      name: 'nonnumeric version',
+      marker: JSON.stringify({ version: '1' }),
+      diagnostic: 'non-numeric version',
+    },
+    {
+      name: 'older numeric version',
+      marker: JSON.stringify({ version: 0 }),
+      diagnostic: 'outdated (version 0)',
+    },
+  ])(
+    'treats a $name marker as incomplete and logs its rerun diagnostic',
+    ({ marker, diagnostic }) => {
+      writeMarker(marker);
+      const debugSpy = vi
+        .spyOn(DebugLogger.prototype, 'debug')
+        .mockImplementation(() => {});
+      try {
+        expect(isMigrationComplete(destinations)).toBe(false);
+        expect(debugSpy).toHaveBeenCalledWith(
+          expect.stringContaining(diagnostic),
+        );
+      } finally {
+        debugSpy.mockRestore();
+      }
+    },
+  );
 
-  it('treats a marker with an older scheme version as NOT complete', () => {
-    writeMarker(JSON.stringify({ version: 0 }));
-    expect(isMigrationComplete(destinations)).toBe(false);
-  });
+  it.each([
+    { name: 'current', marker: JSON.stringify({ version: 1 }) },
+    { name: 'newer', marker: JSON.stringify({ version: 999 }) },
+  ])(
+    'treats a $name marker as complete without a rerun diagnostic',
+    ({ marker }) => {
+      writeMarker(marker);
+      const debugSpy = vi
+        .spyOn(DebugLogger.prototype, 'debug')
+        .mockImplementation(() => {});
+      try {
+        expect(isMigrationComplete(destinations)).toBe(true);
+        expect(debugSpy).not.toHaveBeenCalled();
+      } finally {
+        debugSpy.mockRestore();
+      }
+    },
+  );
 
-  it('treats a marker with a newer scheme version as complete', () => {
-    writeMarker(JSON.stringify({ version: 999 }));
-    expect(isMigrationComplete(destinations)).toBe(true);
+  it('logs a malformed marker diagnostic without completing migration', () => {
+    const raw = '{ this is not valid json';
+    writeMarker(raw);
+    const debugSpy = vi
+      .spyOn(DebugLogger.prototype, 'debug')
+      .mockImplementation(() => {});
+    try {
+      expect(isMigrationComplete(destinations)).toBe(false);
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringContaining('is malformed (not valid JSON)'),
+      );
+    } finally {
+      debugSpy.mockRestore();
+    }
   });
 
   it('does not leave a temp file behind after writing the marker', () => {

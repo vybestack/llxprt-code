@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
 import type { ContractContent } from '../core/clientContract.js';
+import type { IContent } from '../services/history/IContent.js';
 import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from './config.js';
 import * as path from 'node:path';
 import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
@@ -366,16 +367,16 @@ describe('Server Config (config.ts)', () => {
         vertexai: true,
       });
 
-      const mockExistingHistory: ContractContent[] = [
+      const mockExistingHistory: IContent[] = [
         {
-          role: 'model',
-          parts: [
+          speaker: 'ai',
+          blocks: [
             {
-              text: 'Hidden reasoning',
-              thought: true,
-              thoughtSignature: 'genai-signature',
+              type: 'thinking',
+              thought: 'Hidden reasoning',
+              signature: 'genai-signature',
             },
-            { text: 'Visible response' },
+            { type: 'text', text: 'Visible response' },
           ],
         },
       ];
@@ -409,13 +410,13 @@ describe('Server Config (config.ts)', () => {
         mockNewClient.storeHistoryForLaterUse.mock.calls[0][0];
       expect(storedHistory).toStrictEqual([
         {
-          role: 'model',
-          parts: [
+          speaker: 'ai',
+          blocks: [
             {
-              text: 'Hidden reasoning',
-              thought: true,
+              type: 'thinking',
+              thought: 'Hidden reasoning',
             },
-            { text: 'Visible response' },
+            { type: 'text', text: 'Visible response' },
           ],
         },
       ]);

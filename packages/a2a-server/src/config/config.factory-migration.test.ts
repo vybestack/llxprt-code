@@ -209,7 +209,7 @@ describe('config factory migration — public factories produce real clients/sch
     // Drive the REAL dispatch method. Collect every emitted event.
     const collectedEvents: ServerAgentStreamEvent[] = [];
     const stream = client.sendMessageStream(
-      [{ text: 'factory-migration-probe' }],
+      [{ type: 'text', text: 'factory-migration-probe' }],
       new AbortController().signal,
       'factory-migration-prompt',
     );

@@ -108,9 +108,12 @@ describe('handleAtCommand', () => {
     expect(readResource).toHaveBeenCalledWith(resourceUri);
     expect(result).toStrictEqual({
       processedQuery: [
-        { text: query },
-        { text: `\nContent from @${serverName}:${resourceUri}:\n` },
-        { text: 'resource content from mcp' },
+        { type: 'text', text: query },
+        {
+          type: 'text',
+          text: `\nContent from @${serverName}:${resourceUri}:\n`,
+        },
+        { type: 'text', text: 'resource content from mcp' },
       ],
     });
     expect(mockAddItem).toHaveBeenCalledWith(
@@ -137,7 +140,7 @@ describe('handleAtCommand', () => {
     });
 
     expect(result).toStrictEqual({
-      processedQuery: [{ text: query }],
+      processedQuery: [{ type: 'text', text: query }],
     });
   });
 
@@ -155,7 +158,7 @@ describe('handleAtCommand', () => {
     });
 
     expect(result).toStrictEqual({
-      processedQuery: [{ text: queryWithSpaces }],
+      processedQuery: [{ type: 'text', text: queryWithSpaces }],
     });
     expect(mockOnDebugMessage).toHaveBeenCalledWith(
       'Lone @ detected, will be treated as text in the modified query.',
@@ -189,11 +192,11 @@ describe('handleAtCommand', () => {
 
     expect(result).toStrictEqual({
       processedQuery: [
-        { text: `@${relativePath}` },
-        { text: '\n--- Content from referenced files ---' },
-        { text: `\nContent from @${relativePath}:\n` },
-        { text: fileContent },
-        { text: '\n--- End of content ---' },
+        { type: 'text', text: `@${relativePath}` },
+        { type: 'text', text: '\n--- Content from referenced files ---' },
+        { type: 'text', text: `\nContent from @${relativePath}:\n` },
+        { type: 'text', text: fileContent },
+        { type: 'text', text: '\n--- End of content ---' },
       ],
     });
     expect(mockAddItem).toHaveBeenCalledWith(
@@ -226,11 +229,11 @@ describe('handleAtCommand', () => {
 
     expect(result).toStrictEqual({
       processedQuery: [
-        { text: `@${resolvedGlob}` },
-        { text: '\n--- Content from referenced files ---' },
-        { text: `\nContent from @${relativeFilePath}:\n` },
-        { text: fileContent },
-        { text: '\n--- End of content ---' },
+        { type: 'text', text: `@${resolvedGlob}` },
+        { type: 'text', text: '\n--- Content from referenced files ---' },
+        { type: 'text', text: `\nContent from @${relativeFilePath}:\n` },
+        { type: 'text', text: fileContent },
+        { type: 'text', text: '\n--- End of content ---' },
       ],
     });
     expect(mockOnDebugMessage).toHaveBeenCalledWith(
@@ -258,11 +261,11 @@ describe('handleAtCommand', () => {
 
     expect(result).toStrictEqual({
       processedQuery: [
-        { text: `${textBefore}@${relativePath}${textAfter}` },
-        { text: '\n--- Content from referenced files ---' },
-        { text: `\nContent from @${relativePath}:\n` },
-        { text: fileContent },
-        { text: '\n--- End of content ---' },
+        { type: 'text', text: `${textBefore}@${relativePath}${textAfter}` },
+        { type: 'text', text: '\n--- Content from referenced files ---' },
+        { type: 'text', text: `\nContent from @${relativePath}:\n` },
+        { type: 'text', text: fileContent },
+        { type: 'text', text: '\n--- End of content ---' },
       ],
     });
   });
@@ -286,11 +289,11 @@ describe('handleAtCommand', () => {
 
     expect(result).toStrictEqual({
       processedQuery: [
-        { text: `@${relativePath}` },
-        { text: '\n--- Content from referenced files ---' },
-        { text: `\nContent from @${relativePath}:\n` },
-        { text: fileContent },
-        { text: '\n--- End of content ---' },
+        { type: 'text', text: `@${relativePath}` },
+        { type: 'text', text: '\n--- Content from referenced files ---' },
+        { type: 'text', text: `\nContent from @${relativePath}:\n` },
+        { type: 'text', text: fileContent },
+        { type: 'text', text: '\n--- End of content ---' },
       ],
     });
     expect(mockAddItem).toHaveBeenCalledWith(
@@ -324,13 +327,13 @@ describe('handleAtCommand', () => {
 
     expect(result).toStrictEqual({
       processedQuery: [
-        { text: query },
-        { text: '\n--- Content from referenced files ---' },
-        { text: `\nContent from @${relativePath1}:\n` },
-        { text: content1 },
-        { text: `\nContent from @${relativePath2}:\n` },
-        { text: content2 },
-        { text: '\n--- End of content ---' },
+        { type: 'text', text: query },
+        { type: 'text', text: '\n--- Content from referenced files ---' },
+        { type: 'text', text: `\nContent from @${relativePath1}:\n` },
+        { type: 'text', text: content1 },
+        { type: 'text', text: `\nContent from @${relativePath2}:\n` },
+        { type: 'text', text: content2 },
+        { type: 'text', text: '\n--- End of content ---' },
       ],
     });
   });
@@ -359,13 +362,13 @@ describe('handleAtCommand', () => {
 
     expect(result).toStrictEqual({
       processedQuery: [
-        { text: query },
-        { text: '\n--- Content from referenced files ---' },
-        { text: `\nContent from @${relativePath1}:\n` },
-        { text: content1 },
-        { text: `\nContent from @${relativePath2}:\n` },
-        { text: content2 },
-        { text: '\n--- End of content ---' },
+        { type: 'text', text: query },
+        { type: 'text', text: '\n--- Content from referenced files ---' },
+        { type: 'text', text: `\nContent from @${relativePath1}:\n` },
+        { type: 'text', text: content1 },
+        { type: 'text', text: `\nContent from @${relativePath2}:\n` },
+        { type: 'text', text: content2 },
+        { type: 'text', text: '\n--- End of content ---' },
       ],
     });
   });
@@ -394,7 +397,10 @@ describe('handleAtCommand', () => {
     expect(result.error).toBeUndefined();
     expect(result.processedQuery).toBeDefined();
     const processedQuery = result.processedQuery!;
-    expect((processedQuery as Array<{ text: string }>)[0]).toStrictEqual({
+    expect(
+      (processedQuery as Array<{ type: 'text'; text: string }>)[0],
+    ).toStrictEqual({
+      type: 'text',
       text: `Look at @${relativePath1} then @${invalidFile} and also just @ symbol, then @${relativePath2}`,
     });
 
@@ -402,7 +408,7 @@ describe('handleAtCommand', () => {
     const queryText = (
       Array.isArray(processedQuery) ? processedQuery : [processedQuery]
     )
-      .map((p: unknown) => (p as { text: string }).text)
+      .map((p: unknown) => (p as { type: 'text'; text: string }).text)
       .join('');
     expect(queryText).toContain('--- Content from referenced files ---');
     expect(queryText).toContain(`Content from @${relativePath1}:`);
@@ -435,7 +441,9 @@ describe('handleAtCommand', () => {
     });
 
     expect(result).toStrictEqual({
-      processedQuery: [{ text: 'Check @nonexistent.txt and @ also' }],
+      processedQuery: [
+        { type: 'text', text: 'Check @nonexistent.txt and @ also' },
+      ],
     });
   });
 

@@ -16,11 +16,11 @@
  */
 
 import { useEffect, useRef, useMemo, useState } from 'react';
+import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
 import {
   DebugLogger,
   uiTelemetryService,
-  type RecordingIntegration,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-telemetry';
 import { useRuntimeApi } from '../../../contexts/RuntimeContext.js';
 import type { UiRuntime } from '../../../cliUiRuntime.js';
 import {

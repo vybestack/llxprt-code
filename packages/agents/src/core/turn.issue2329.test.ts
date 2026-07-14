@@ -21,25 +21,13 @@ import { StreamEventType } from './chatSession.js';
 import {
   findFinishedEvent,
   type MockedChatInstance,
-  mockResponseToChunk,
+  mockChunk,
 } from './turn-test-helpers.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
   mockGetHistory: vi.fn(),
 }));
-
-vi.mock('@google/genai', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@google/genai')>();
-  const MockChat = vi.fn().mockImplementation(() => ({
-    sendMessageStream: mockSendMessageStream,
-    getHistory: mockGetHistory,
-  }));
-  return {
-    ...actual,
-    Chat: MockChat,
-  };
-});
 
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
@@ -74,14 +62,10 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [
-            {
-              content: { parts: [{ text: 'I decline to answer.' }] },
-              finishReason: 'STOP',
-              providerStopReason: 'refusal',
-            },
-          ],
+        value: mockChunk({
+          text: 'I decline to answer.',
+          finishReason: 'STOP',
+          rawStopReason: 'refusal',
         }),
       };
     })();
@@ -106,14 +90,10 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [
-            {
-              content: { parts: [{ text: 'Normal answer.' }] },
-              finishReason: 'STOP',
-              providerStopReason: 'end_turn',
-            },
-          ],
+        value: mockChunk({
+          text: 'Normal answer.',
+          finishReason: 'STOP',
+          rawStopReason: 'end_turn',
         }),
       };
     })();
@@ -137,13 +117,9 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [
-            {
-              content: { parts: [{ text: 'answer' }] },
-              finishReason: 'STOP',
-            },
-          ],
+        value: mockChunk({
+          text: 'answer',
+          finishReason: 'STOP',
         }),
       };
     })();
@@ -168,14 +144,10 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [
-            {
-              content: { parts: [{ text: 'answer' }] },
-              finishReason: 'STOP',
-              providerStopReason: '',
-            },
-          ],
+        value: mockChunk({
+          text: 'answer',
+          finishReason: 'STOP',
+          rawStopReason: '',
         }),
       };
     })();
@@ -191,9 +163,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
 
     const finished = findFinishedEvent(events);
     expect(finished).toBeDefined();
-    // providerStopReason is '' but mockResponseToChunk uses `??` which treats
-    // '' as truthy, so rawStopReason = '' (empty). turn.ts omits stopReason
-    // when it's empty.
+    // rawStopReason is '' (empty). turn.ts omits stopReason when it's empty.
     expect(finished?.value).not.toHaveProperty('stopReason');
   });
 
@@ -201,24 +171,13 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [
-            {
-              content: { parts: [{ text: 'I decline to answer.' }] },
-            },
-          ],
-        }),
+        value: mockChunk({ text: 'I decline to answer.' }),
       };
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [
-            {
-              content: { parts: [] },
-              finishReason: 'STOP',
-              providerStopReason: 'refusal',
-            },
-          ],
+        value: mockChunk({
+          finishReason: 'STOP',
+          rawStopReason: 'refusal',
         }),
       };
     })();
@@ -243,14 +202,9 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [
-            {
-              content: { parts: [{ text: 'A normal answer.' }] },
-              finishReason: 'STOP',
-              finishMessage: 'completed successfully',
-            },
-          ],
+        value: mockChunk({
+          text: 'A normal answer.',
+          finishReason: 'STOP',
         }),
       };
     })();
@@ -267,8 +221,8 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
     const finished = findFinishedEvent(events);
     expect(finished).toBeDefined();
     expect(finished?.value.reason).toBe('stop');
-    // finishMessage was never read by the neutral pipeline; stopReason carries
-    // the raw Gemini finish reason string ('STOP'), NOT the finishMessage text.
+    // stopReason carries the raw Gemini finish reason string ('STOP'),
+    // NOT a finishMessage text (which the neutral pipeline never reads).
     expect(finished?.value.stopReason).not.toContain('completed successfully');
     expect(finished?.value.stopReason).toBe('STOP');
   });

@@ -28,10 +28,10 @@ import {
   type ToolSchedulerContract,
   hasInteractiveSubagentScheduler,
   DEFAULT_AGENT_ID,
-  DebugLogger,
   type AnsiOutput,
   type MessageBus,
 } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { useCallback, useEffect, useState } from 'react';
 import type React from 'react';
 

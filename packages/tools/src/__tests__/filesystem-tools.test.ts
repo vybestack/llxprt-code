@@ -326,7 +326,7 @@ describe('Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P
     });
 
     it('respects .llxprtignore by default and overrides via file_filtering_options', async () => {
-      writeFileSync(join(tempDir, 'keep.ts'), 'needle found', 'utf-8');
+      writeFileSync(join(tempDir, 'keep.ts'), 'needle: found', 'utf-8');
       writeFileSync(join(tempDir, 'skip.ts'), 'needle skip', 'utf-8');
       const ignoreFilePath = join(tempDir, '.llxprtignore');
       writeFileSync(ignoreFilePath, 'skip.ts', 'utf-8');
@@ -343,6 +343,7 @@ describe('Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P
       );
 
       expect(defaultResult.llmContent).toContain('keep.ts');
+      expect(defaultResult.llmContent).toContain('needle: found');
       expect(defaultResult.llmContent).not.toContain('skip.ts');
 
       const overriddenResult =

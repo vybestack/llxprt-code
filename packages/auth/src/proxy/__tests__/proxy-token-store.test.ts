@@ -19,6 +19,10 @@ import { PROTOCOL_VERSION } from '../proxy-socket-client.js';
 import type { OAuthToken, BucketStats } from '../../types.js';
 
 function createTempSocketPath(): string {
+  if (process.platform === 'win32') {
+    return `\\\\.\\pipe\\llxprt-proxy-test-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'proxy-ts-test-'));
   return path.join(tmpDir, 'test.sock');
 }

@@ -32,7 +32,7 @@ import type {
 import { logicalPosToOffset } from './shared/buffer-operations.js';
 import type { TextBuffer } from './shared/text-buffer.js';
 
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import clipboardy from 'clipboardy';

@@ -12,7 +12,7 @@ import {
   ToolConfirmationOutcome,
   type ToolResult,
 } from './tools.js';
-import type { FunctionDeclaration } from '@google/genai';
+import type { FunctionDeclaration } from '../types/wire-types.js';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';

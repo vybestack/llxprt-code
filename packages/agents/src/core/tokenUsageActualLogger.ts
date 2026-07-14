@@ -4,9 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { UsageMetadataWithCache } from './googlePartHelpers.js';
 import type { TokenUsageLogger } from './TokenUsageLogger.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+
+/**
+ * Neutral usage-metadata shape with optional cache fields. Adapted from the
+ * former Google `GenerateContentResponseUsageMetadata` so the agents package
+ * has zero `@google/genai` dependencies.
+ */
+export interface UsageMetadataWithCache {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  totalTokenCount?: number;
+  cachedContentTokenCount?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  toolUsePromptTokenCount?: number;
+}
 
 interface ActualTokenUsageRecorder {
   isEnabled(): boolean;

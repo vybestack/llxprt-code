@@ -145,7 +145,10 @@ describe('subagentExecution', () => {
       };
       const result = await checkGoalCompletion(ctx, 'Please finish todos', 0);
       expect(result).not.toBeNull();
-      expect(result![0].parts[0]).toHaveProperty('text', 'Please finish todos');
+      expect(result![0].blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'Please finish todos',
+      });
     });
 
     it('should return null when no outputs expected (GOAL)', async () => {
@@ -183,7 +186,8 @@ describe('subagentExecution', () => {
       };
       const result = await checkGoalCompletion(ctx, null, 0);
       expect(result).not.toBeNull();
-      const text = (result![0].parts[0] as { text: string }).text;
+      const text = (result![0].blocks[0] as { type: 'text'; text: string })
+        .text;
       expect(text).toContain('x');
       expect(text).toContain('y');
       expect(text).toContain('self_emitvalue');

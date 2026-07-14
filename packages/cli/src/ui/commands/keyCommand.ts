@@ -22,7 +22,8 @@ import { CommandKind } from './types.js';
 
 import type { CommandArgumentSchema, CompleterFn } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import { maskKeyForDisplay, debugLogger } from '@vybestack/llxprt-code-core';
+import { maskKeyForDisplay } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { SecureStoreError } from '@vybestack/llxprt-code-storage';
 import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';

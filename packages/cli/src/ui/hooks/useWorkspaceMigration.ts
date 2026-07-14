@@ -9,7 +9,7 @@ import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import { getWorkspaceExtensions } from '../../config/extension.js';
 import { type LoadedSettings, SettingScope } from '../../config/settings.js';
 import process from 'node:process';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 export function useWorkspaceMigration(settings: LoadedSettings) {
   const [showWorkspaceMigrationDialog, setShowWorkspaceMigrationDialog] =

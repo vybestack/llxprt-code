@@ -9,8 +9,6 @@ import { useCallback, useMemo, useRef } from 'react';
 import { useAgentStream } from '../../../hooks/agentStream/index.js';
 import { useAutoAcceptIndicator } from '../../../hooks/useAutoAcceptIndicator.js';
 import { useLoadingIndicator } from '../../../hooks/useLoadingIndicator.js';
-import { useMcpStatus } from '../../../hooks/useMcpStatus.js';
-import { useMessageQueue } from '../../../hooks/useMessageQueue.js';
 import { useSlashCommandProcessor } from '../../../hooks/slashCommandProcessor.js';
 import { useTerminalSize } from '../../../hooks/useTerminalSize.js';
 import { useVimMode } from '../../../contexts/VimModeContext.js';
@@ -372,6 +370,7 @@ function useInputStreamWiring(
   } = p;
   const { buffer, inputHistoryStore, lastSubmittedPromptRef, geminiResult } =
     setup;
+  const { submitQuery } = geminiResult;
   const pendingHistoryItems = useMemo(
     () => [
       ...(core.pendingHistoryItems as HistoryItem[]),
@@ -386,28 +385,14 @@ function useInputStreamWiring(
     setEmbeddedShellFocused,
   });
 
-  // MCP readiness: derives isMcpReady from discovery state via coreEvents.
-  const { isMcpReady } = useMcpStatus(p.streamRuntime.mcp);
-
-  // Message queue: holds prompts submitted while MCP init or streaming is in
-  // progress. Auto-flushes as a combined submission when all gates open.
-  const { messageQueue, addMessage } = useMessageQueue({
-    isConfigInitialized: true,
-    streamingState: geminiResult.streamingState,
-    submitQuery: geminiResult.submitQuery,
-    isMcpReady,
-  });
-
   const { handleFinalSubmit } = useInputHandling({
     buffer,
     inputHistoryStore,
-    submitQuery: geminiResult.submitQuery,
+    submitQuery,
     pendingHistoryItems,
     lastSubmittedPromptRef,
     hadToolCallsRef,
     todoContinuationRef,
-    isMcpReady,
-    addMessage,
     needsRelogin: p.appState.needsRelogin,
     appDispatch: p.appDispatch,
   });
@@ -417,16 +402,23 @@ function useInputStreamWiring(
     handleFinalSubmit,
     todos,
   });
+  const enqueueSteer = useCallback(
+    (message: string) => {
+      void submitQuery(message);
+    },
+    [submitQuery],
+  );
   const handleSteer = useSteer(
     p.agent,
     geminiResult.streamingState,
     geminiResult.sanitizeContent,
     pendingHistoryItems,
-    addMessage,
+    enqueueSteer,
   );
   const {
     activeShellPtyId: _ptyIdFromGemini,
     pendingHistoryItems: _pendingFromGemini,
+    queuedSubmissions,
     ...geminiRest
   } = geminiResult;
   return {
@@ -435,8 +427,7 @@ function useInputStreamWiring(
     handleSteer,
     pendingHistoryItems,
     activeShellPtyId,
-    messageQueue,
-    isMcpReady,
+    queuedSubmissions,
     ...geminiRest,
   };
 }

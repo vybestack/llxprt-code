@@ -9,7 +9,7 @@ import type { ArgumentsCamelCase, CommandModule } from 'yargs';
 import { loadSettings, SettingScope } from '../../config/settings.js';
 import type { Settings } from '../../config/settings.js';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { exitCli } from '../utils.js';
 
 type AddCommandArgs = {

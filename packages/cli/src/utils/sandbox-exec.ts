@@ -11,10 +11,10 @@ import fs from 'node:fs';
 import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
 import {
   FatalSandboxError,
-  debugLogger,
   getErrorMessage,
   isNodeError,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
   PortForwardingResult,
   CredentialProxyBridgeResult,

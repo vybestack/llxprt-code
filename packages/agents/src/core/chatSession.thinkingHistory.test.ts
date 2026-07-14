@@ -25,12 +25,41 @@ import type {
   ThinkingBlock,
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Part, Content } from '@google/genai';
+
+/**
+ * Local structural type mirroring the legacy Google Part shape used purely
+ * for test fixtures in this file (thought/text/functionCall/functionResponse).
+ */
+interface LegacyPart {
+  text?: string;
+  thought?: boolean;
+  thoughtSignature?: string;
+  llxprtSourceField?:
+    | 'reasoning_content'
+    | 'thinking'
+    | 'thought'
+    | 'think_tags';
+  functionCall?: { id?: string; name: string; args?: Record<string, unknown> };
+  functionResponse?: {
+    id?: string;
+    name?: string;
+    response?: unknown;
+  };
+}
+
+/**
+ * Local structural type mirroring the legacy Google Content shape (role+parts)
+ * used purely for test fixtures in this file.
+ */
+interface LegacyContent {
+  role: string;
+  parts: LegacyPart[];
+}
 
 /**
  * Type for thought parts (matches chatSession.ts ThoughtPart)
  */
-interface ThoughtPart extends Part {
+interface ThoughtPart extends LegacyPart {
   thought: true;
   text: string;
   thoughtSignature?: string;
@@ -45,11 +74,11 @@ interface ThoughtPart extends Part {
  * Helper to check if a part is a thought part (matches chatSession.ts isThoughtPart)
  */
 function isThoughtPart(part: Part | undefined): part is ThoughtPart {
-  return Boolean(
-    part &&
-      typeof part === 'object' &&
-      'thought' in part &&
-      part.thought === true,
+  return (
+    part !== undefined &&
+    typeof part === 'object' &&
+    'thought' in part &&
+    part.thought === true
   );
 }
 
@@ -86,10 +115,10 @@ describe('Issue #1150: Thinking blocks in history', () => {
      */
     it('isThoughtPart must recognize converted thinking parts', () => {
       // Simulate what convertIContentToResponse creates
-      const partFromThinkingBlock: Part = {
+      const partFromThinkingBlock: LegacyPart = {
         thought: true,
         text: 'Deep analysis here',
-      } as Part;
+      } as LegacyPart;
 
       expect(isThoughtPart(partFromThinkingBlock)).toBe(true);
     });
@@ -98,7 +127,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
      * Regular text parts should NOT be recognized as thought parts
      */
     it('isThoughtPart must NOT recognize regular text parts', () => {
-      const textPart: Part = {
+      const textPart: LegacyPart = {
         text: 'Hello world',
       };
 
@@ -113,7 +142,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
      */
     it('modelResponseParts should include thinking parts from stream', () => {
       // Simulate stream chunks converted to Content
-      const streamChunks: Content[] = [
+      const streamChunks: LegacyContent[] = [
         {
           role: 'model',
           parts: [
@@ -121,7 +150,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
               thought: true,
               text: 'Let me think about this...',
               thoughtSignature: 'sig123',
-            } as Part,
+            } as LegacyPart,
           ],
         },
         {
@@ -143,7 +172,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
       ];
 
       // Simulate processStreamResponse logic
-      const modelResponseParts: Part[] = [];
+      const modelResponseParts: LegacyPart[] = [];
       for (const chunk of streamChunks) {
         modelResponseParts.push(...chunk.parts);
       }
@@ -161,7 +190,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
     it('thinking from separate IContent yield must be preserved', () => {
       // This simulates AnthropicProvider yielding thinking as separate IContent
       // which gets converted via convertIContentToResponse
-      const thinkingChunk: Content = {
+      const thinkingChunk: LegacyContent = {
         role: 'model',
         parts: [
           {
@@ -169,11 +198,11 @@ describe('Issue #1150: Thinking blocks in history', () => {
             text: 'Analyzing the request...',
             thoughtSignature: 'sig_from_anthropic',
             llxprtSourceField: 'thinking',
-          } as Part,
+          } as LegacyPart,
         ],
       };
 
-      const toolCallChunk: Content = {
+      const toolCallChunk: LegacyContent = {
         role: 'model',
         parts: [
           { text: "I'll help you." },
@@ -187,7 +216,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
         ],
       };
 
-      const modelResponseParts: Part[] = [];
+      const modelResponseParts: LegacyPart[] = [];
 
       // Process thinking chunk
       modelResponseParts.push(...thinkingChunk.parts);
@@ -210,7 +239,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
      * to the first output content as ThinkingBlocks.
      */
     it('thoughtBlocks should be extracted from modelResponseParts', () => {
-      const modelOutput: Content[] = [
+      const modelOutput: LegacyContent[] = [
         {
           role: 'model',
           parts: [
@@ -219,7 +248,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
               text: 'Deep analysis...',
               thoughtSignature: 'sig_deep',
               llxprtSourceField: 'thinking',
-            } as Part,
+            } as LegacyPart,
             { text: 'Here is my response.' },
             {
               functionCall: {
@@ -317,7 +346,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
       };
 
       // Step 3: Convert to Content (simulating convertIContentToResponse)
-      const thinkingContent: Content = {
+      const thinkingContent: LegacyContent = {
         role: 'model',
         parts: [
           {
@@ -327,11 +356,11 @@ describe('Issue #1150: Thinking blocks in history', () => {
               .signature,
             llxprtSourceField: (thinkingIContent.blocks[0] as ThinkingBlock)
               .sourceField,
-          } as Part,
+          } as LegacyPart,
         ],
       };
 
-      const toolCallContent: Content = {
+      const toolCallContent: LegacyContent = {
         role: 'model',
         parts: [
           { text: 'I will help you.' },
@@ -346,7 +375,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
       };
 
       // Step 4: Accumulate in processStreamResponse
-      const modelResponseParts: Part[] = [];
+      const modelResponseParts: LegacyPart[] = [];
       modelResponseParts.push(...thinkingContent.parts);
       modelResponseParts.push(...toolCallContent.parts);
 
@@ -354,7 +383,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
       const consolidatedParts = [...modelResponseParts];
 
       // Step 6: Create modelOutput
-      const modelOutput: Content[] = [
+      const modelOutput: LegacyContent[] = [
         { role: 'model', parts: consolidatedParts },
       ];
 
@@ -385,7 +414,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
             return {
               type: 'tool_call' as const,
               id: part.functionCall.id ?? '',
-              name: part.functionCall.name ?? '',
+              name: part.functionCall.name,
               parameters: part.functionCall.args ?? {},
             } as ToolCallBlock;
           }

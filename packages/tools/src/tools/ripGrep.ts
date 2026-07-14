@@ -87,6 +87,7 @@ export function buildRipgrepArgs(
     '--line-number',
     '--no-heading',
     '--with-filename',
+    '--null',
     '--ignore-case',
     '--regexp',
     pattern,
@@ -644,24 +645,33 @@ export class RipGrepTool extends BaseDeclarativeTool<
  * Parses a single ripgrep output line into a GrepMatch, or returns null
  * if the line is blank or malformed.
  */
-function parseRipgrepLine(line: string, basePath: string): GrepMatch | null {
+export function parseRipgrepLine(
+  line: string,
+  basePath: string,
+): GrepMatch | null {
   if (!line.trim()) {
     return null;
   }
 
-  const firstColonIndex = line.indexOf(':');
-  if (firstColonIndex === -1) {
+  const nullSeparatorIndex = line.indexOf('\0');
+  const pathSeparatorIndex =
+    nullSeparatorIndex === -1 ? line.indexOf(':') : nullSeparatorIndex;
+  if (pathSeparatorIndex === -1) {
     return null;
   }
 
-  const secondColonIndex = line.indexOf(':', firstColonIndex + 1);
-  if (secondColonIndex === -1) {
+  const lineNumberStartIndex = pathSeparatorIndex + 1;
+  const contentSeparatorIndex = line.indexOf(':', lineNumberStartIndex);
+  if (contentSeparatorIndex === -1) {
     return null;
   }
 
-  const filePathRaw = line.substring(0, firstColonIndex);
-  const lineNumberStr = line.substring(firstColonIndex + 1, secondColonIndex);
-  const lineContent = line.substring(secondColonIndex + 1);
+  const filePathRaw = line.substring(0, pathSeparatorIndex);
+  const lineNumberStr = line.substring(
+    lineNumberStartIndex,
+    contentSeparatorIndex,
+  );
+  const lineContent = line.substring(contentSeparatorIndex + 1);
 
   const lineNumber = parseInt(lineNumberStr, 10);
   if (isNaN(lineNumber)) {

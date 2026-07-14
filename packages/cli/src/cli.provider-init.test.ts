@@ -84,6 +84,7 @@ vi.mock('./utils/cleanup.js', () => ({
 vi.mock('./cliAgentBootstrap.js', () => ({
   createForegroundAgent: vi.fn(async () => ({
     dispose: vi.fn().mockResolvedValue(undefined),
+    getMessageBus: vi.fn(() => ({ kind: 'session-bus' })),
   })),
 }));
 

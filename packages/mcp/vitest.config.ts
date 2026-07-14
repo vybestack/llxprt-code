@@ -119,5 +119,11 @@ export default defineConfig({
         ['json-summary', { outputFile: 'coverage-summary.json' }],
       ],
     },
+    typecheck: {
+      enabled: true,
+      checker: 'tsc',
+      include: ['src/**/*.test-d.ts'],
+      tsconfig: './tsconfig.typecheck.json',
+    },
   },
 });

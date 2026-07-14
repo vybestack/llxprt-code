@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { useStdin } from 'ink';
 import type React from 'react';
 import {
@@ -263,8 +263,14 @@ function applyKeyCodeModifier(
     if (codeNumber >= 'a'.charCodeAt(0) && codeNumber <= 'z'.charCodeAt(0)) {
       return { name: String.fromCharCode(codeNumber), shift, meta, ctrl };
     }
-    if (codeNumber === '\\'.charCodeAt(0))
-      return { name: '\\', shift, meta, ctrl };
+    if (
+      codeNumber === '\\'.charCodeAt(0) ||
+      codeNumber === ']'.charCodeAt(0) ||
+      codeNumber === '^'.charCodeAt(0) ||
+      codeNumber === '_'.charCodeAt(0)
+    ) {
+      return { name: String.fromCharCode(codeNumber), shift, meta, ctrl };
+    }
   }
   return { name: 'undefined', shift, meta, ctrl };
 }
@@ -299,6 +305,11 @@ function parseNonEscapeKey(
     insertable = true;
   } else if (!escaped && ch.charCodeAt(0) <= 0x1a) {
     name = String.fromCharCode(ch.charCodeAt(0) + 'a'.charCodeAt(0) - 1);
+    ctrl = true;
+  } else if (!escaped && ch.charCodeAt(0) >= 0x1c && ch.charCodeAt(0) <= 0x1f) {
+    // C0 control chars above Ctrl+Z map to the literal character on the key
+    // (ASCII offset 0x40): \x1c → \, \x1d → ], \x1e → ^, \x1f → _
+    name = String.fromCharCode(ch.charCodeAt(0) + 0x40);
     ctrl = true;
   } else if (/^[0-9A-Za-z]$/.test(ch)) {
     name = ch.toLowerCase();

@@ -23,6 +23,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import type { SlashCommandRuntime } from '../../../cliUiRuntime.js';
+import type { QueuedSubmission } from '../../../hooks/agentStream/types.js';
 import type { SlashCommand, CommandContext } from '../../../commands/types.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type {
@@ -143,6 +144,8 @@ export interface UIStateParams {
   showErrorDetails: boolean;
   showToolDescriptions: boolean;
   isTodoPanelCollapsed: boolean;
+  isQueuedMessagesPanelCollapsed: boolean;
+  queuedSubmissions: readonly QueuedSubmission[];
   isNarrow: boolean;
   vimModeEnabled: boolean;
   vimMode: string | undefined;
@@ -327,6 +330,8 @@ function buildDisplayAndContext(p: UIStateParams) {
     showErrorDetails: p.showErrorDetails,
     showToolDescriptions: p.showToolDescriptions,
     isTodoPanelCollapsed: p.isTodoPanelCollapsed,
+    isQueuedMessagesPanelCollapsed: p.isQueuedMessagesPanelCollapsed,
+    queuedSubmissions: p.queuedSubmissions,
     isNarrow: p.isNarrow,
     vimModeEnabled: p.vimModeEnabled,
     vimMode: p.vimMode,

@@ -87,8 +87,8 @@ describe('copyCommand', () => {
   it('should return info message when no AI messages are found in history', async () => {
     const historyWithUserOnly = [
       {
-        role: 'user',
-        parts: [{ text: 'Hello' }],
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hello' }],
       },
     ];
 
@@ -108,12 +108,12 @@ describe('copyCommand', () => {
   it('should copy last AI message to clipboard successfully', async () => {
     const historyWithAiMessage = [
       {
-        role: 'user',
-        parts: [{ text: 'Hello' }],
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hello' }],
       },
       {
-        role: 'model',
-        parts: [{ text: 'Hi there! How can I help you?' }],
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'Hi there! How can I help you?' }],
       },
     ];
 
@@ -136,8 +136,12 @@ describe('copyCommand', () => {
   it('should handle multiple text parts in AI message', async () => {
     const historyWithMultipleParts = [
       {
-        role: 'model',
-        parts: [{ text: 'Part 1: ' }, { text: 'Part 2: ' }, { text: 'Part 3' }],
+        speaker: 'ai',
+        blocks: [
+          { type: 'text', text: 'Part 1: ' },
+          { type: 'text', text: 'Part 2: ' },
+          { type: 'text', text: 'Part 3' },
+        ],
       },
     ];
 
@@ -157,11 +161,11 @@ describe('copyCommand', () => {
   it('should filter out non-text parts', async () => {
     const historyWithMixedParts = [
       {
-        role: 'model',
-        parts: [
-          { text: 'Text part' },
-          { image: 'base64data' }, // Non-text part
-          { text: ' more text' },
+        speaker: 'ai',
+        blocks: [
+          { type: 'text', text: 'Text part' },
+          { type: 'media', mediaType: 'image/jpeg', data: 'base64data' },
+          { type: 'text', text: ' more text' },
         ],
       },
     ];
@@ -182,16 +186,16 @@ describe('copyCommand', () => {
   it('should get the last AI message when multiple AI messages exist', async () => {
     const historyWithMultipleAiMessages = [
       {
-        role: 'model',
-        parts: [{ text: 'First AI response' }],
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'First AI response' }],
       },
       {
-        role: 'user',
-        parts: [{ text: 'User message' }],
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'User message' }],
       },
       {
-        role: 'model',
-        parts: [{ text: 'Second AI response' }],
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'Second AI response' }],
       },
     ];
 
@@ -211,8 +215,8 @@ describe('copyCommand', () => {
   it('should handle clipboard copy error', async () => {
     const historyWithAiMessage = [
       {
-        role: 'model',
-        parts: [{ text: 'AI response' }],
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'AI response' }],
       },
     ];
 
@@ -232,8 +236,8 @@ describe('copyCommand', () => {
   it('should handle non-Error clipboard errors', async () => {
     const historyWithAiMessage = [
       {
-        role: 'model',
-        parts: [{ text: 'AI response' }],
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'AI response' }],
       },
     ];
 
@@ -253,8 +257,10 @@ describe('copyCommand', () => {
   it('should return info message when no text parts found in AI message', async () => {
     const historyWithEmptyParts = [
       {
-        role: 'model',
-        parts: [{ image: 'base64data' }], // No text parts
+        speaker: 'ai',
+        blocks: [
+          { type: 'media', mediaType: 'image/jpeg', data: 'base64data' },
+        ], // No text blocks
       },
     ];
 

@@ -1,5 +1,5 @@
 import { loadSettings } from '../../config/settings.js';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { CommandModule } from 'yargs';
 import { exitCli } from '../utils.js';
 import { enableSkill } from '../../utils/skillSettings.js';

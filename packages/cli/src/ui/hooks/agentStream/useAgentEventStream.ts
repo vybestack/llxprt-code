@@ -31,10 +31,11 @@ import type {
   CompletedToolCall,
   EditorType,
   ToolCall,
-  ContractPartListUnion,
-  ContractPart,
+  AgentRequestInput,
+  ContentBlock,
+  IContent,
 } from '@vybestack/llxprt-code-core';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js';
 import {
@@ -88,7 +89,7 @@ export interface UseAgentEventStreamReturn {
    * Continuation is driven by the Agent; the CLI does not re-submit.
    */
   runStream: (
-    message: ContractPartListUnion,
+    message: AgentRequestInput,
     signal: AbortSignal,
     promptId: string,
   ) => Promise<void>;
@@ -190,7 +191,7 @@ export function useAgentEventStream(
 
   const runStream = useCallback(
     async (
-      message: ContractPartListUnion,
+      message: AgentRequestInput,
       signal: AbortSignal,
       promptId: string,
     ): Promise<void> => {
@@ -256,30 +257,38 @@ export function useAgentEventStream(
  * ends or the signal aborts.
  */
 /**
- * Normalizes a ContractPartListUnion to AgentInput without type escapes:
+ * Normalizes an AgentRequestInput (neutral AgentMessageInput) to AgentInput
+ * without type escapes:
  * - string passes through;
- * - arrays may contain string elements (ContractPartListUnion allows
- *   ContractPart | string), which AgentInput's readonly Part[] does not
- *   accept — convert them to text Parts;
- * - a bare single ContractPart is wrapped in an array (AgentInput has no
- *   single-Part variant), fixing a latent type gap for single-Part submissions.
+ * - ContentBlock[] passes through directly;
+ * - IContent passes through directly (preserving speaker);
+ * - IContent[] passes through directly (preserving speaker and turn
+ *   boundaries — no flattening, so the agent loop sees each turn as a
+ *   distinct IContent entry, not a single flat block array).
  */
-function toAgentInput(message: ContractPartListUnion): AgentInput {
+function toAgentInput(message: AgentRequestInput): AgentInput {
   if (typeof message === 'string') {
     return message;
   }
   if (Array.isArray(message)) {
-    return message.map(
-      (part): ContractPart =>
-        typeof part === 'string' ? { text: part } : part,
-    );
+    if (message.length === 0) {
+      return [];
+    }
+    const first = message[0];
+    if (typeof first === 'object' && 'speaker' in first && 'blocks' in first) {
+      // IContent[] — pass through directly to preserve turn boundaries.
+      return message as IContent[];
+    }
+    // ContentBlock[] — pass through directly.
+    return message as ContentBlock[];
   }
-  return [message];
+  // Single IContent — pass through directly to preserve speaker.
+  return message;
 }
 
 function iterateAgentStream(
   agent: Agent,
-  message: ContractPartListUnion,
+  message: AgentRequestInput,
   signal: AbortSignal,
   promptId: string,
   args: UseAgentEventStreamArgs,

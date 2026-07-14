@@ -1,89 +1,96 @@
-import { describe, it, expect } from 'vitest';
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { describe, expect, it } from 'vitest';
+import type {
+  ContentBlock,
+  IContent,
+  ThinkingBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
-  consolidateTextParts,
+  consolidateTextBlocks,
   prepareHistoryUserInput,
 } from './streamResponseHelpers.js';
-import type { Content, Part } from '@google/genai';
-import { isThoughtPart } from './googlePartHelpers.js';
 
-function thoughtPart(params: {
-  text: string;
+function thinkingBlock(params: {
+  thought: string;
   signature?: string;
   streamId?: string;
   streamStatus?: 'delta' | 'complete';
-}): Part {
+}): ThinkingBlock {
   return {
-    thought: true,
-    text: params.text,
-    ...(params.signature !== undefined
-      ? { thoughtSignature: params.signature }
-      : {}),
-    ...(params.streamId !== undefined
-      ? { llxprtThoughtBlockId: params.streamId }
-      : {}),
+    type: 'thinking',
+    thought: params.thought,
+    ...(params.signature !== undefined ? { signature: params.signature } : {}),
+    ...(params.streamId !== undefined ? { streamId: params.streamId } : {}),
     ...(params.streamStatus !== undefined
-      ? { llxprtThoughtBlockStatus: params.streamStatus }
+      ? { streamStatus: params.streamStatus }
       : {}),
-    llxprtSourceField: 'thinking',
+    sourceField: 'thinking',
   };
 }
 
-function textPart(text: string): Part {
-  return { text };
+function thinkingBlocks(blocks: ContentBlock[]): ThinkingBlock[] {
+  return blocks.filter(
+    (block): block is ThinkingBlock => block.type === 'thinking',
+  );
 }
 
-function thinkingTexts(parts: Part[]): string[] {
-  return parts.filter(isThoughtPart).map((part) => part.text ?? '');
+function thinkingTexts(blocks: ContentBlock[]): string[] {
+  return thinkingBlocks(blocks).map((block) => block.thought);
 }
 
-function thinkingSignatures(parts: Part[]): Array<string | undefined> {
-  return parts.filter(isThoughtPart).map((part) => part.thoughtSignature);
+function thinkingSignatures(blocks: ContentBlock[]): Array<string | undefined> {
+  return thinkingBlocks(blocks).map((block) => block.signature);
 }
 
-describe('consolidateTextParts identity-aware thinking consolidation', () => {
+describe('consolidateTextBlocks identity-aware thinking consolidation', () => {
   it('replaces incremental updates for the same stream id with the final signed block', () => {
-    const parts: Part[] = [
-      thoughtPart({
-        text: 'Analyzing',
+    const blocks: ContentBlock[] = [
+      thinkingBlock({
+        thought: 'Analyzing',
         streamId: 'thinking:0',
         streamStatus: 'delta',
       }),
-      thoughtPart({
-        text: 'Analyzing the data',
+      thinkingBlock({
+        thought: 'Analyzing the data',
         streamId: 'thinking:0',
         streamStatus: 'delta',
       }),
-      thoughtPart({
-        text: 'Analyzing the data',
+      thinkingBlock({
+        thought: 'Analyzing the data',
         signature: 'sig-final',
         streamId: 'thinking:0',
         streamStatus: 'complete',
       }),
     ];
 
-    const result = consolidateTextParts(parts);
+    const result = consolidateTextBlocks(blocks);
 
     expect(thinkingTexts(result)).toStrictEqual(['Analyzing the data']);
     expect(thinkingSignatures(result)).toStrictEqual(['sig-final']);
   });
 
   it('keeps prefix-overlapping signed blocks distinct when they have different stream ids', () => {
-    const parts: Part[] = [
-      thoughtPart({
-        text: 'Plan',
+    const blocks: ContentBlock[] = [
+      thinkingBlock({
+        thought: 'Plan',
         signature: 'sig-one',
         streamId: 'thinking:0',
         streamStatus: 'complete',
       }),
-      thoughtPart({
-        text: 'Plan the second step',
+      thinkingBlock({
+        thought: 'Plan the second step',
         signature: 'sig-two',
         streamId: 'thinking:1',
         streamStatus: 'complete',
       }),
     ];
 
-    const result = consolidateTextParts(parts);
+    const result = consolidateTextBlocks(blocks);
 
     expect(thinkingTexts(result)).toStrictEqual([
       'Plan',
@@ -92,207 +99,160 @@ describe('consolidateTextParts identity-aware thinking consolidation', () => {
     expect(thinkingSignatures(result)).toStrictEqual(['sig-one', 'sig-two']);
   });
 
-  it('does not use text prefixes to merge unsigned parts without stream identity', () => {
-    const parts: Part[] = [
-      thoughtPart({ text: 'I think', signature: 'sig-one' }),
-      thoughtPart({ text: 'I think this is separate', signature: 'sig-two' }),
+  it('does not use text prefixes to merge unsigned blocks without stream identity', () => {
+    const blocks: ContentBlock[] = [
+      thinkingBlock({ thought: 'I think', signature: 'sig-one' }),
+      thinkingBlock({
+        thought: 'I think this is separate',
+        signature: 'sig-two',
+      }),
     ];
 
-    const result = consolidateTextParts(parts);
+    const result = consolidateTextBlocks(blocks);
 
     expect(thinkingTexts(result)).toStrictEqual([
       'I think',
       'I think this is separate',
     ]);
-    expect(thinkingSignatures(result)).toStrictEqual(['sig-one', 'sig-two']);
   });
 
-  it('consolidates non-adjacent interleaved updates by stream id without merging distinct blocks', () => {
-    const parts: Part[] = [
-      thoughtPart({
-        text: 'First',
+  it('consolidates non-adjacent interleaved updates by stream id', () => {
+    const blocks: ContentBlock[] = [
+      thinkingBlock({
+        thought: 'First',
         signature: 'sig-first-delta',
         streamId: 'thinking:0',
         streamStatus: 'delta',
       }),
-      textPart('Answer '),
-      thoughtPart({
-        text: 'Second',
+      { type: 'text', text: 'Answer ' },
+      thinkingBlock({
+        thought: 'Second',
         signature: 'sig-second',
         streamId: 'thinking:1',
         streamStatus: 'complete',
       }),
-      textPart('text'),
-      thoughtPart({
-        text: 'First complete',
+      { type: 'text', text: 'text' },
+      thinkingBlock({
+        thought: 'First complete',
         streamId: 'thinking:0',
         streamStatus: 'delta',
       }),
-      thoughtPart({
-        text: 'First complete',
+      thinkingBlock({
+        thought: 'First complete',
         signature: 'sig-first-final',
         streamId: 'thinking:0',
         streamStatus: 'complete',
       }),
     ];
 
-    const result = consolidateTextParts(parts);
+    const result = consolidateTextBlocks(blocks);
 
-    expect(result.map((part) => part.text)).toStrictEqual([
-      'First complete',
-      'Answer ',
-      'Second',
-      'text',
-    ]);
-    expect(thinkingTexts(result)).toStrictEqual(['First complete', 'Second']);
+    expect(
+      result.map((block) => {
+        if (block.type === 'thinking') {
+          return block.thought;
+        }
+        if (block.type === 'text') {
+          return block.text;
+        }
+        return block.type;
+      }),
+    ).toStrictEqual(['First complete', 'Answer ', 'Second', 'text']);
     expect(thinkingSignatures(result)).toStrictEqual([
       'sig-first-final',
       'sig-second',
     ]);
   });
 
-  it('preserves a prior signature when a later same-stream delta omits it', () => {
-    const parts: Part[] = [
-      thoughtPart({
-        text: 'Signed partial',
-        signature: 'sig-prior',
-        streamId: 'thinking:0',
-        streamStatus: 'delta',
-      }),
-      thoughtPart({
-        text: 'Signed partial plus more',
-        streamId: 'thinking:0',
-        streamStatus: 'delta',
-      }),
-    ];
-
-    const result = consolidateTextParts(parts);
-
-    expect(thinkingTexts(result)).toStrictEqual(['Signed partial plus more']);
-    expect(thinkingSignatures(result)).toStrictEqual(['sig-prior']);
-  });
-
-  it('preserves a prior signature when a later same-stream delta explicitly clears it', () => {
-    const parts: Part[] = [
-      thoughtPart({
-        text: 'Signed partial',
-        signature: 'sig-prior',
-        streamId: 'thinking:0',
-        streamStatus: 'delta',
-      }),
+  it('preserves prior metadata when a same-stream update omits it', () => {
+    const blocks: ContentBlock[] = [
       {
-        ...thoughtPart({
-          text: 'Signed partial plus more',
+        ...thinkingBlock({
+          thought: 'Signed partial',
+          signature: 'sig-prior',
           streamId: 'thinking:0',
           streamStatus: 'delta',
         }),
-        thoughtSignature: undefined,
+        isHidden: true,
       },
+      thinkingBlock({
+        thought: 'Signed partial plus more',
+        streamId: 'thinking:0',
+        streamStatus: 'delta',
+      }),
     ];
 
-    const result = consolidateTextParts(parts);
+    const result = consolidateTextBlocks(blocks);
+    const [thinking] = thinkingBlocks(result);
 
-    expect(thinkingTexts(result)).toStrictEqual(['Signed partial plus more']);
-    expect(thinkingSignatures(result)).toStrictEqual(['sig-prior']);
+    expect(thinking.thought).toBe('Signed partial plus more');
+    expect(thinking.signature).toBe('sig-prior');
+    expect(thinking.isHidden).toBe(true);
+    expect(thinking.sourceField).toBe('thinking');
   });
 
-  it('preserves prior text when a same-stream metadata delta explicitly clears text', () => {
-    const parts: Part[] = [
-      thoughtPart({
-        text: 'Signed partial',
+  it('preserves prior thought text for an empty metadata-only update', () => {
+    const blocks: ContentBlock[] = [
+      thinkingBlock({
+        thought: 'Signed partial',
         signature: 'sig-prior',
         streamId: 'thinking:0',
         streamStatus: 'delta',
       }),
-      {
-        ...thoughtPart({
-          text: 'ignored by override',
-          streamId: 'thinking:0',
-          streamStatus: 'complete',
-        }),
-        text: undefined,
-      },
+      thinkingBlock({
+        thought: '',
+        streamId: 'thinking:0',
+        streamStatus: 'complete',
+      }),
     ];
 
-    const result = consolidateTextParts(parts);
+    const result = consolidateTextBlocks(blocks);
 
     expect(thinkingTexts(result)).toStrictEqual(['Signed partial']);
     expect(thinkingSignatures(result)).toStrictEqual(['sig-prior']);
   });
 
-  it('does not mutate input parts while consolidating text and thinking updates', () => {
-    const firstText = textPart('Hello');
-    const secondText = textPart(' world');
-    const firstThought = thoughtPart({
-      text: 'Partial',
+  it('does not mutate input blocks', () => {
+    const firstText: ContentBlock = { type: 'text', text: 'Hello' };
+    const secondText: ContentBlock = { type: 'text', text: ' world' };
+    const firstThought = thinkingBlock({
+      thought: 'Partial',
       streamId: 'thinking:0',
       streamStatus: 'delta',
     });
-    const finalThought = thoughtPart({
-      text: 'Partial thought',
+    const finalThought = thinkingBlock({
+      thought: 'Partial thought',
       signature: 'sig123',
       streamId: 'thinking:0',
       streamStatus: 'complete',
     });
-    const parts: Part[] = [firstText, secondText, firstThought, finalThought];
+    const blocks = [firstText, secondText, firstThought, finalThought];
 
-    const result = consolidateTextParts(parts);
+    const result = consolidateTextBlocks(blocks);
 
-    expect(parts).toStrictEqual([
-      firstText,
-      secondText,
-      firstThought,
-      finalThought,
-    ]);
-    expect(firstText.text).toBe('Hello');
-    expect(firstThought.text).toBe('Partial');
-    expect(firstThought.thoughtSignature).toBeUndefined();
-    expect(result.map((part) => part.text)).toStrictEqual([
-      'Hello world',
-      'Partial thought',
-    ]);
-    expect(thinkingSignatures(result)).toStrictEqual(['sig123']);
-  });
-
-  it('preserves text parts alongside consolidated thinking', () => {
-    const parts: Part[] = [
-      thoughtPart({
-        text: 'Thinking',
-        signature: 'sig1',
-        streamId: 'thinking:0',
-        streamStatus: 'complete',
-      }),
-      textPart('Hello'),
-      textPart(' world'),
-    ];
-
-    const result = consolidateTextParts(parts);
-
+    expect(firstText).toStrictEqual({ type: 'text', text: 'Hello' });
+    expect(firstThought.thought).toBe('Partial');
+    expect(firstThought.signature).toBeUndefined();
     expect(result).toHaveLength(2);
-    expect(thinkingTexts(result)).toStrictEqual(['Thinking']);
-    expect(thinkingSignatures(result)).toStrictEqual(['sig1']);
-    expect(
-      result.filter((part) => !isThoughtPart(part)).map((part) => part.text),
-    ).toStrictEqual(['Hello world']);
+    expect(result[0]).toStrictEqual({ type: 'text', text: 'Hello world' });
+    expect(thinkingTexts(result)).toStrictEqual(['Partial thought']);
   });
 
-  it('returns empty array for empty input', () => {
-    const result = consolidateTextParts([]);
-
-    expect(result).toStrictEqual([]);
+  it('returns an empty array for empty input', () => {
+    expect(consolidateTextBlocks([])).toStrictEqual([]);
   });
 });
+
 describe('prepareHistoryUserInput', () => {
-  it('keeps userInputWasArray aligned with filtered empty array history input when a single eager function response is fully removed', () => {
-    const userInput: Content = {
-      role: 'user',
-      parts: [
+  it('keeps userInputWasArray aligned with filtered empty array history input when a single eager tool response is fully removed', () => {
+    const userInput: IContent = {
+      speaker: 'tool',
+      blocks: [
         {
-          functionResponse: {
-            name: 'tool',
-            response: { output: 'ok' },
-            id: 'call-1',
-          },
+          type: 'tool_response',
+          callId: 'call-1',
+          toolName: 'tool',
+          result: { output: 'ok' },
         },
       ],
     };

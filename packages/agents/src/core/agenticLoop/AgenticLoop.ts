@@ -33,7 +33,9 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { Part, PartListUnion } from '@google/genai';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { iContentFromAgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   AgentEventType,
   type ToolCallRequestInfo,
@@ -266,19 +268,15 @@ export class AgenticLoop {
   }
 
   /**
-   * Normalizes a {@link PartListUnion} into a `Part[]` so steer text can be
-   * appended via spread. When `continueLoop` is true, `nextMessage` always
-   * comes from {@link buildNextMessage} which returns `Part[]`, but the type
-   * is the wider `PartListUnion`.
+   * Normalizes an {@link AgentMessageInput} into a `ContentBlock[]` so steer
+   * text can be appended via spread. When `continueLoop` is true,
+   * `nextMessage` always comes from {@link buildNextMessage} which returns
+   * `ContentBlock[]`, but the type is the wider `AgentMessageInput`.
    */
-  private toParts(message: PartListUnion): Part[] {
-    if (typeof message === 'string') {
-      return [{ text: message }];
-    }
-    if (Array.isArray(message)) {
-      return message as Part[];
-    }
-    return [message];
+  private toContentBlocks(message: AgentMessageInput): ContentBlock[] {
+    return iContentFromAgentMessageInput(message).flatMap(
+      (content) => content.blocks,
+    );
   }
 
   /**
@@ -287,8 +285,8 @@ export class AgenticLoop {
    * the steer text alone becomes the next turn's message. Returns null when
    * there is no steer to act on (normal loop exit).
    */
-  private steerWhenFinished(steerText: string | null): PartListUnion | null {
-    return steerText ? [{ text: steerText }] : null;
+  private steerWhenFinished(steerText: string | null): ContentBlock[] | null {
+    return steerText ? [{ type: 'text', text: steerText }] : null;
   }
 
   /**
@@ -361,7 +359,7 @@ export class AgenticLoop {
    * with CLI top-level prompt ids that use the session counter namespace.
    */
   async *run(
-    message: PartListUnion,
+    message: AgentMessageInput,
     signal: AbortSignal,
     promptId?: string,
   ): AsyncGenerator<AgenticLoopEvent> {
@@ -396,7 +394,10 @@ export class AgenticLoop {
         // parts. Shape-safe: result.nextMessage contains closed tool results,
         // and the steer text comes after them.
         currentMessage = steerText
-          ? [...this.toParts(result.nextMessage), { text: steerText }]
+          ? [
+              ...this.toContentBlocks(result.nextMessage),
+              { type: 'text' as const, text: steerText },
+            ]
           : result.nextMessage;
         currentPromptId = this.generateContinuationPromptId(initialPromptId);
       }
@@ -419,12 +420,12 @@ export class AgenticLoop {
    * next message to send (functionResponse parts) if so.
    */
   private async *runTurn(
-    message: PartListUnion,
+    message: AgentMessageInput,
     signal: AbortSignal,
     promptId: string,
   ): AsyncGenerator<
     AgenticLoopEvent,
-    { continueLoop: boolean; nextMessage: PartListUnion }
+    { continueLoop: boolean; nextMessage: AgentMessageInput }
   > {
     const toolCallRequests: ToolCallRequestInfo[] = [];
     const streamResult = yield* this.streamAndCollect(
@@ -505,7 +506,7 @@ export class AgenticLoop {
 
   /** Streams one model turn, yielding stream events and collecting tool requests. */
   private async *streamAndCollect(
-    message: PartListUnion,
+    message: AgentMessageInput,
     signal: AbortSignal,
     promptId: string,
     toolCallRequests: ToolCallRequestInfo[],
@@ -702,7 +703,7 @@ export class AgenticLoop {
   /** Builds the next message (functionResponse parts) from completed tools. */
   private async buildNextMessage(completed: CompletedToolCall[]): Promise<{
     continueLoop: boolean;
-    nextMessage: PartListUnion;
+    nextMessage: AgentMessageInput;
   }> {
     const { primaryTools } = classifyCompletedTools(completed);
     const geminiTools = primaryTools.filter(
