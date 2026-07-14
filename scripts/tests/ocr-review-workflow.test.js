@@ -82,7 +82,7 @@ describe('.github/workflows/ocr-review.yml', () => {
     const normalizedJobIf = normalize(codeReviewJob.if);
 
     expect(workflow.concurrency).toBeUndefined();
-    expect(codeReviewJob['timeout-minutes']).toBe(45);
+    expect(codeReviewJob['timeout-minutes']).toBe(60);
     expect(codeReviewJob.outputs?.infrastructure_failure).toBe(
       '${{ steps.ocr-classification.outputs.infrastructure_failure }}',
     );
