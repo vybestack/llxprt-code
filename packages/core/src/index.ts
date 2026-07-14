@@ -147,6 +147,7 @@ export {
 } from './utils/generateContentResponseUtilities.js';
 export * from './utils/filesearch/fileSearch.js';
 export * from './utils/secure-browser-launcher.js';
+export * from './utils/browser-profile-discovery.js';
 export * from './utils/errorParsing.js';
 export * from './utils/ignorePatterns.js';
 export { INITIAL_HISTORY_LENGTH } from './utils/environmentContext.js';
