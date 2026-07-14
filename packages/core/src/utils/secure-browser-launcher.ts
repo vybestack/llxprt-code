@@ -225,14 +225,18 @@ const FIREFOX_PROFILE_PATH_FORBIDDEN = /\p{Cc}/u;
 
 function isFirefoxProfilePath(
   browser: BrowserKind,
-  profileDirectory: string,
-): boolean {
-  return browser === 'firefox' && nodePath.isAbsolute(profileDirectory);
+  profileDirectory: unknown,
+): profileDirectory is string {
+  return (
+    browser === 'firefox' &&
+    typeof profileDirectory === 'string' &&
+    nodePath.isAbsolute(profileDirectory)
+  );
 }
 
 function validateBrowserProfileSelection(
   browser: BrowserKind,
-  profileDirectory: string,
+  profileDirectory: unknown,
 ): void {
   if (isFirefoxProfilePath(browser, profileDirectory)) {
     if (FIREFOX_PROFILE_PATH_FORBIDDEN.test(profileDirectory)) {
@@ -241,6 +245,13 @@ function validateBrowserProfileSelection(
       );
     }
     return;
+  }
+  if (typeof profileDirectory !== 'string') {
+    throw new Error(
+      `Invalid profile directory: "${String(
+        profileDirectory,
+      )}". Profile directory must be a string.`,
+    );
   }
   validateProfileDirectory(profileDirectory);
 }
@@ -280,7 +291,7 @@ export async function openBrowserSecurely(
   validateUrl(url);
 
   if (options?.browser) {
-    if (options.profileDirectory) {
+    if (options.profileDirectory !== undefined) {
       validateBrowserProfileSelection(
         options.browser,
         options.profileDirectory,
@@ -608,7 +619,7 @@ function buildChromeLaunchArgs(
   switch (platformName) {
     case 'darwin': {
       const args = ['-a', 'Google Chrome'];
-      if (profileDirectory) {
+      if (profileDirectory !== undefined) {
         args.push('--args', `--profile-directory=${profileDirectory}`);
       }
       args.push(url);
@@ -621,7 +632,7 @@ function buildChromeLaunchArgs(
       // argv element so spaces in the profile directory are preserved and
       // there is no command-string boundary to inject through.
       const args: string[] = [];
-      if (profileDirectory) {
+      if (profileDirectory !== undefined) {
         args.push(`--profile-directory=${profileDirectory}`);
       }
       args.push(url);
@@ -632,7 +643,7 @@ function buildChromeLaunchArgs(
     case 'freebsd':
     case 'openbsd': {
       const args: string[] = [];
-      if (profileDirectory) {
+      if (profileDirectory !== undefined) {
         args.push(`--profile-directory=${profileDirectory}`);
       }
       args.push(url);

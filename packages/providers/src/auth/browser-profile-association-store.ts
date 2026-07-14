@@ -45,6 +45,8 @@ export interface AssociationStoreFs {
   chmod?: (p: string, mode: number) => void;
   exists?: (p: string) => boolean;
   mkdir?: (p: string, opts?: { recursive?: boolean }) => void;
+  rename?: (oldPath: string, newPath: string) => void;
+  unlink?: (p: string) => void;
 }
 
 const DEFAULT_FILE_VERSION = 1;
@@ -234,6 +236,8 @@ export class BrowserProfileAssociationStore {
   private readonly chmodFn: (p: string, mode: number) => void;
   private readonly existsFn: (p: string) => boolean;
   private readonly mkdirFn: (p: string, opts?: { recursive?: boolean }) => void;
+  private readonly renameFn: (oldPath: string, newPath: string) => void;
+  private readonly unlinkFn: (p: string) => void;
 
   constructor(
     filePath: string = defaultFilePath(),
@@ -246,6 +250,8 @@ export class BrowserProfileAssociationStore {
     this.chmodFn = fsOpts?.chmod ?? fs.chmodSync;
     this.existsFn = fsOpts?.exists ?? fs.existsSync;
     this.mkdirFn = fsOpts?.mkdir ?? ((p, opts) => fs.mkdirSync(p, opts));
+    this.renameFn = fsOpts?.rename ?? fs.renameSync;
+    this.unlinkFn = fsOpts?.unlink ?? fs.unlinkSync;
   }
 
   /**
@@ -333,7 +339,10 @@ export class BrowserProfileAssociationStore {
     let raw: string;
     try {
       raw = this.readFileFn(this.filePath);
-    } catch {
+    } catch (error) {
+      if (this.existsFn(this.filePath)) {
+        throw error;
+      }
       return { data: emptyFileData(), writable: true };
     }
 
@@ -364,15 +373,30 @@ export class BrowserProfileAssociationStore {
    */
   private writeData(data: AssociationFileData): void {
     const dir = path.dirname(this.filePath);
+    const tempSuffix = `${process.pid}-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2)}`;
+    const tempPath = `${this.filePath}.tmp-${tempSuffix}`;
     // mkdir with recursive:true is a no-op when the directory already exists,
     // so no separate existence check is needed (and one would introduce a
     // TOCTOU window between check and write).
     this.mkdirFn(dir, { recursive: true });
-    this.writeFileFn(this.filePath, JSON.stringify(data, null, 2), {
-      mode: 0o600,
-    });
-    if (process.platform !== 'win32') {
-      this.chmodFn(this.filePath, 0o600);
+
+    try {
+      this.writeFileFn(tempPath, JSON.stringify(data, null, 2), {
+        mode: 0o600,
+      });
+      if (process.platform !== 'win32') {
+        this.chmodFn(tempPath, 0o600);
+      }
+      this.renameFn(tempPath, this.filePath);
+    } catch (error) {
+      try {
+        this.unlinkFn(tempPath);
+      } catch {
+        // Best-effort cleanup only; preserve the original write/rename error.
+      }
+      throw error;
     }
   }
 }

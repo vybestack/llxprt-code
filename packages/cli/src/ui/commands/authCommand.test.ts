@@ -594,8 +594,8 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const expectedContent = [
         'Discovered Chrome profiles for anthropic bucket "mybucket":',
         '',
-        '  1: Personal (directory: Default)',
-        '  2: Work (directory: Profile 1)',
+        '  1: Personal (profile: Default)',
+        '  2: Work (profile: Profile 1)',
         '',
         'To associate a profile, run:',
         '  /auth anthropic profile mybucket <number-or-directory>',

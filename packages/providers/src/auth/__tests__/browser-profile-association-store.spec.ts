@@ -5,18 +5,29 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { BrowserProfileAssociationStore } from '../browser-profile-association-store.js';
+import {
+  BrowserProfileAssociationStore,
+  type AssociationStoreFs,
+} from '../browser-profile-association-store.js';
 
 interface InMemoryFs {
   files: Map<string, string>;
   modes: Map<string, number>;
+  renamed: Array<{ oldPath: string; newPath: string }>;
 }
 
 function createInMemoryFs(initial: Record<string, string> = {}): InMemoryFs {
-  return { files: new Map(Object.entries(initial)), modes: new Map() };
+  return {
+    files: new Map(Object.entries(initial)),
+    modes: new Map(),
+    renamed: [],
+  };
 }
 
-function createStore(fs: InMemoryFs): BrowserProfileAssociationStore {
+function createStore(
+  fs: InMemoryFs,
+  overrides?: Partial<AssociationStoreFs>,
+): BrowserProfileAssociationStore {
   return new BrowserProfileAssociationStore(
     '/fake/path/oauth-browser-profiles.json',
     {
@@ -42,6 +53,28 @@ function createStore(fs: InMemoryFs): BrowserProfileAssociationStore {
       mkdir: (_p: string, _opts?: { recursive?: boolean }) => {
         /* no-op for in-memory fs */
       },
+      rename: (oldPath: string, newPath: string) => {
+        const content = fs.files.get(oldPath);
+        if (content === undefined) {
+          const err: NodeJS.ErrnoException = new Error(`ENOENT: ${oldPath}`);
+          err.code = 'ENOENT';
+          throw err;
+        }
+        // Match fs.renameSync file-target semantics: replace the destination.
+        fs.files.set(newPath, content);
+        fs.files.delete(oldPath);
+        const mode = fs.modes.get(oldPath);
+        if (mode !== undefined) {
+          fs.modes.set(newPath, mode);
+          fs.modes.delete(oldPath);
+        }
+        fs.renamed.push({ oldPath, newPath });
+      },
+      unlink: (p: string) => {
+        fs.files.delete(p);
+        fs.modes.delete(p);
+      },
+      ...overrides,
     },
   );
 }
@@ -107,13 +140,126 @@ describe('BrowserProfileAssociationStore', () => {
         profileDirectory: 'Default',
       });
       expect(fs.modes.get(filePath)).toBe(0o600);
-
+      expect([...fs.files.keys()].every((p) => !p.includes('.tmp-'))).toBe(
+        true,
+      );
       fs.modes.set(filePath, 0o644);
       store.setAssociation('anthropic', 'work', {
         browser: 'chrome',
         profileDirectory: 'Profile 1',
       });
       expect(fs.modes.get(filePath)).toBe(0o600);
+      expect([...fs.files.keys()].every((p) => !p.includes('.tmp-'))).toBe(
+        true,
+      );
+    });
+  });
+
+  describe('atomic writes', () => {
+    const path = '/fake/path/oauth-browser-profiles.json';
+
+    function recordUnlinks(fs: InMemoryFs): {
+      unlinked: string[];
+      unlink: NonNullable<AssociationStoreFs['unlink']>;
+    } {
+      const unlinked: string[] = [];
+      return {
+        unlinked,
+        unlink: (p: string) => {
+          unlinked.push(p);
+          fs.files.delete(p);
+          fs.modes.delete(p);
+        },
+      };
+    }
+
+    function expectSingleTempUnlink(unlinked: string[]): void {
+      expect(unlinked).toHaveLength(1);
+      expect(unlinked[0]).toContain(`${path}.tmp-`);
+    }
+
+    function expectNoTempFiles(fs: InMemoryFs): void {
+      expect(
+        [...fs.files.keys()].filter((p) => p.includes('.tmp-')),
+      ).toStrictEqual([]);
+    }
+
+    it('unlinks the temp path and rethrows when writeFile fails', () => {
+      const fs = createInMemoryFs();
+      const writeError = new Error('write failed');
+      const { unlinked, unlink } = recordUnlinks(fs);
+      const store = createStore(fs, {
+        writeFile: () => {
+          throw writeError;
+        },
+        unlink,
+      });
+
+      expect(() =>
+        store.setAssociation('anthropic', 'default', {
+          browser: 'chrome',
+          profileDirectory: 'Default',
+        }),
+      ).toThrow(writeError);
+      expectSingleTempUnlink(unlinked);
+      expect(fs.files.has(path)).toBe(false);
+      expectNoTempFiles(fs);
+    });
+
+    it.skipIf(process.platform === 'win32')(
+      'unlinks the temp file and rethrows when chmod fails',
+      () => {
+        const fs = createInMemoryFs();
+        const chmodError = new Error('chmod failed');
+        const { unlinked, unlink } = recordUnlinks(fs);
+        const store = createStore(fs, {
+          chmod: () => {
+            throw chmodError;
+          },
+          unlink,
+        });
+
+        expect(() =>
+          store.setAssociation('anthropic', 'default', {
+            browser: 'chrome',
+            profileDirectory: 'Default',
+          }),
+        ).toThrow(chmodError);
+        expectSingleTempUnlink(unlinked);
+        expect(fs.files.has(path)).toBe(false);
+        expectNoTempFiles(fs);
+      },
+    );
+
+    it('unlinks the temp file, preserves the original file, and rethrows when rename fails', () => {
+      const originalContent = JSON.stringify({
+        version: 1,
+        associations: {
+          'anthropic:default': {
+            browser: 'chrome',
+            profileDirectory: 'Default',
+          },
+        },
+      });
+      const fs = createInMemoryFs({ [path]: originalContent });
+      const renameError = new Error('rename failed');
+      const { unlinked, unlink } = recordUnlinks(fs);
+      const store = createStore(fs, {
+        rename: () => {
+          throw renameError;
+        },
+        unlink,
+      });
+
+      expect(() =>
+        store.setAssociation('anthropic', 'work', {
+          browser: 'chrome',
+          profileDirectory: 'Profile 1',
+        }),
+      ).toThrow(renameError);
+      expectSingleTempUnlink(unlinked);
+      expect(fs.files.get(path)).toBe(originalContent);
+      expectNoTempFiles(fs);
     });
   });
 
@@ -292,6 +438,39 @@ describe('BrowserProfileAssociationStore', () => {
         browser: 'chrome',
         profileDirectory: 'Default',
       });
+    });
+
+    it('does not treat an unreadable existing file as empty and writable', () => {
+      const path = '/fake/path/oauth-browser-profiles.json';
+      const originalContent = JSON.stringify({
+        version: 1,
+        associations: {
+          'anthropic:default': {
+            browser: 'chrome',
+            profileDirectory: 'Default',
+          },
+        },
+      });
+      const fs = createInMemoryFs({ [path]: originalContent });
+      const readError = new Error('EACCES: permission denied');
+      const store = createStore(fs, {
+        readFile: () => {
+          throw readError;
+        },
+      });
+
+      expect(() => store.getAssociation('anthropic')).toThrow(readError);
+      expect(() =>
+        store.setAssociation('anthropic', 'work', {
+          browser: 'chrome',
+          profileDirectory: 'Profile 1',
+        }),
+      ).toThrow(readError);
+      expect(fs.files.get(path)).toBe(originalContent);
+      expect(fs.renamed).toStrictEqual([]);
+      expect([...fs.files.keys()].every((p) => !p.includes('.tmp-'))).toBe(
+        true,
+      );
     });
 
     it('rejects persisted data missing the required version field', () => {

@@ -31,6 +31,7 @@ import {
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
 const logger = new DebugLogger('llxprt:ui:auth-command');
+const BROWSER_PROFILE_ASSOCIATION_BROWSER = 'chrome' as const;
 
 /**
  * Get the OAuth manager instance
@@ -166,8 +167,7 @@ const authCommandSchema: CommandArgumentSchema = [
       {
         kind: 'literal',
         value: 'create',
-        description:
-          'Discover browser profiles and create a bucket association',
+        description: 'Discover browser profiles for bucket association setup',
         next: [
           {
             kind: 'value',
@@ -276,8 +276,9 @@ function resolveProfileSelector(selector: string):
   const numericMatch = /^(\d+)$/.exec(selector);
   if (numericMatch) {
     const index = Number.parseInt(numericMatch[1], 10) - 1;
-    const profiles: DiscoveredBrowserProfile[] =
-      discoverBrowserProfiles('chrome');
+    const profiles: DiscoveredBrowserProfile[] = discoverBrowserProfiles(
+      BROWSER_PROFILE_ASSOCIATION_BROWSER,
+    );
     if (index < 0 || index >= profiles.length) {
       return undefined;
     }
@@ -359,7 +360,7 @@ export class AuthCommandExecutor {
     // Handle create action: discover browser profiles for a new bucket
     if (action === 'create') {
       const bucket = param && param.length > 0 ? param : 'default';
-      return this.createBucketWithBrowserProfile(provider, bucket);
+      return this.discoverBrowserProfilesForBucket(provider, bucket);
     }
 
     // Handle profile action: associate/clear a browser profile for a bucket
@@ -731,12 +732,14 @@ export class AuthCommandExecutor {
    * one with a bucket. The association controls which browser/profile opens
    * during the OAuth flow for that bucket.
    */
-  private async createBucketWithBrowserProfile(
+  private async discoverBrowserProfilesForBucket(
     provider: string,
     bucket: string,
   ): Promise<MessageActionReturn> {
     try {
-      const profiles = discoverBrowserProfiles('chrome');
+      const profiles = discoverBrowserProfiles(
+        BROWSER_PROFILE_ASSOCIATION_BROWSER,
+      );
 
       if (profiles.length === 0) {
         return {
@@ -755,7 +758,7 @@ export class AuthCommandExecutor {
         ...profiles.map(
           (profile, index) =>
             `  ${index + 1}: ${profile.displayName} ` +
-            `(directory: ${profile.directoryName})`,
+            `(profile: ${profile.directoryName})`,
         ),
         '',
         `To associate a profile, run:`,
@@ -831,7 +834,7 @@ export class AuthCommandExecutor {
       }
 
       this.oauthManager.setBrowserProfileAssociation(provider, bucket, {
-        browser: 'chrome',
+        browser: BROWSER_PROFILE_ASSOCIATION_BROWSER,
         profileDirectory: resolved.profileDirectory,
         ...(resolved.displayName !== undefined
           ? { displayName: resolved.displayName }

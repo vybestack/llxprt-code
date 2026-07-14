@@ -14,6 +14,10 @@ import { envOr } from './env.js';
  * A discovered browser profile.
  */
 export interface DiscoveredBrowserProfile {
+  /**
+   * Browser-specific profile selector: Chrome profile directory, Firefox
+   * profile name (for `-P`) or absolute profile path (for `-profile`).
+   */
   directoryName: string;
   displayName: string;
 }

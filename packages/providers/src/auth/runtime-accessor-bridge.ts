@@ -53,8 +53,8 @@ export interface OAuthRuntimeAccessors {
   getCurrentProfileName(): string | null;
   /**
    * Look up the browser profile association for a provider+bucket.
-   * MUST be safe to call even when runtime isn't fully up (providers call
-   * it during browser launch). Returns undefined when no association exists.
+   * MUST be safe to call during browser launch: returns undefined when no
+   * association exists or the association store is unavailable.
    * Optional: older accessor implementations need not provide it.
    */
   getBrowserProfileAssociation?(
@@ -138,10 +138,8 @@ class OAuthRuntimeBridge {
   /**
    * Look up a browser profile association.
    *
-   * Unlike the other accessors, this is SAFE to call when no accessor is
-   * registered — returns undefined instead of throwing. This is because
-   * providers call it during browser launch (an early code path) where the
-   * runtime may not yet be fully initialized.
+   * Unlike the other accessors, this is safe to call during browser launch:
+   * missing runtime/accessors and lookup failures all mean no association.
    */
   getBrowserProfileAssociation(
     provider: string,

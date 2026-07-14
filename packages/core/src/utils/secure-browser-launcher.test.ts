@@ -648,6 +648,17 @@ describe('secure-browser-launcher', () => {
       expect(args).not.toContain('--args');
     });
 
+    it('rejects an explicitly empty profile directory instead of defaulting silently', async () => {
+      setPlatform('darwin');
+      await expect(
+        openBrowserSecurely('https://example.com', {
+          browser: 'chrome',
+          profileDirectory: '',
+        }),
+      ).rejects.toThrow('Invalid profile directory');
+      expect(mockExecFile).not.toHaveBeenCalled();
+    });
+
     it('falls back to an alternate Chrome binary when google-chrome is missing on Linux', async () => {
       setPlatform('linux');
       // google-chrome fails, then google-chrome-stable fails; chromium

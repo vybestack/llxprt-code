@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { BrowserLaunchOptions } from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
 
 vi.mock('../local-oauth-callback.js', () => ({
   startLocalOAuthCallback: vi.fn(),
@@ -87,9 +88,14 @@ function stubDeviceFlow(provider: AnthropicOAuthProvider): void {
   }));
 }
 
+const LOCAL_CALLBACK_REDIRECT_URI = 'http://localhost:8765/callback';
+const LOCAL_CALLBACK_REDIRECT_URI_FRAGMENT = `redirect_uri=${encodeURIComponent(
+  LOCAL_CALLBACK_REDIRECT_URI,
+)}`;
+
 function configureSuccessfulLocalCallback(): void {
   startLocalOAuthCallbackMock.mockResolvedValue({
-    redirectUri: 'http://localhost:8765/callback',
+    redirectUri: LOCAL_CALLBACK_REDIRECT_URI,
     waitForCallback: vi
       .fn()
       .mockResolvedValue({ code: 'auth-code', state: 'generated-state' }),
@@ -102,6 +108,17 @@ function clearOAuthGlobals(): void {
   delete (global as { __oauth_provider?: string }).__oauth_provider;
   delete (global as { __oauth_browser_auth_complete?: boolean })
     .__oauth_browser_auth_complete;
+  delete (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete;
+}
+
+function expectBrowserLaunch(
+  openBrowserSpy: ReturnType<typeof vi.spyOn>,
+  options: BrowserLaunchOptions | undefined,
+): void {
+  expect(openBrowserSpy).toHaveBeenCalledWith(
+    expect.stringContaining(LOCAL_CALLBACK_REDIRECT_URI_FRAGMENT),
+    options === undefined ? undefined : expect.objectContaining(options),
+  );
 }
 
 describe('AnthropicOAuthProvider browser profile association', () => {
@@ -147,13 +164,10 @@ describe('AnthropicOAuthProvider browser profile association', () => {
     expect(result).toStrictEqual(
       expect.objectContaining({ token_type: 'Bearer' }),
     );
-    expect(openBrowserSpy).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        browser: 'chrome',
-        profileDirectory: 'Profile 1',
-      }),
-    );
+    expectBrowserLaunch(openBrowserSpy, {
+      browser: 'chrome',
+      profileDirectory: 'Profile 1',
+    });
   });
 
   it('launches the default browser when no association is set', async () => {
@@ -162,9 +176,12 @@ describe('AnthropicOAuthProvider browser profile association', () => {
 
     configureSuccessfulLocalCallback();
 
-    await provider.initiateAuth();
+    const result = await provider.initiateAuth();
 
-    expect(openBrowserSpy).toHaveBeenCalledWith(expect.any(String), undefined);
+    expect(result).toStrictEqual(
+      expect.objectContaining({ token_type: 'Bearer' }),
+    );
+    expectBrowserLaunch(openBrowserSpy, undefined);
   });
 
   it('falls back to the default browser when the association accessor throws', async () => {
@@ -182,9 +199,12 @@ describe('AnthropicOAuthProvider browser profile association', () => {
 
     configureSuccessfulLocalCallback();
 
-    await provider.initiateAuth();
+    const result = await provider.initiateAuth();
 
-    expect(openBrowserSpy).toHaveBeenCalledWith(expect.any(String), undefined);
+    expect(result).toStrictEqual(
+      expect.objectContaining({ token_type: 'Bearer' }),
+    );
+    expectBrowserLaunch(openBrowserSpy, undefined);
   });
 
   it('does not launch a browser when shouldLaunchBrowser returns false (headless/CI)', async () => {
@@ -203,23 +223,39 @@ describe('AnthropicOAuthProvider browser profile association', () => {
       },
     );
 
-    await provider.initiateAuth();
+    const result = await provider.initiateAuth();
 
+    expect(result).toStrictEqual(
+      expect.objectContaining({ token_type: 'Bearer' }),
+    );
     expect(openBrowserSpy).not.toHaveBeenCalled();
   });
 
   it('tolerates a browser launch failure and still completes auth (graceful degradation)', async () => {
-    // The provider intentionally swallows browser-launch errors (logging at
-    // debug) and falls back to the local callback / manual entry path, so a
-    // failed launch must NOT fail initiateAuth.
+    oauthRuntimeBridge.setAccessors({
+      getEphemeralSetting: () => undefined,
+      getProviderManager: () => undefined,
+      getRuntimeContext: () => undefined,
+      getCurrentProfileName: () => null,
+      getBrowserProfileAssociation: (_provider, _bucket) => ({
+        browser: 'chrome',
+        profileDirectory: 'Profile 1',
+        displayName: 'Work',
+      }),
+    });
     openBrowserSpy.mockRejectedValue(new Error('spawn chrome ENOENT'));
     provider.setAuthContext({ bucket: 'work' });
 
     configureSuccessfulLocalCallback();
 
-    await expect(provider.initiateAuth()).resolves.toStrictEqual(
+    const result = await provider.initiateAuth();
+
+    expect(result).toStrictEqual(
       expect.objectContaining({ token_type: 'Bearer' }),
     );
-    expect(openBrowserSpy).toHaveBeenCalled();
+    expectBrowserLaunch(openBrowserSpy, {
+      browser: 'chrome',
+      profileDirectory: 'Profile 1',
+    });
   });
 });
