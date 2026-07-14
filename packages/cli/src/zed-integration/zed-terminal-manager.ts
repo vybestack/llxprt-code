@@ -224,7 +224,7 @@ export class TerminalManager {
           this.logger.debug(
             () => `Terminal output poll failed: ${errorMessage(error)}`,
           );
-          break;
+          throw error;
         }
         const chunk = outputDelta(
           previousOutput,

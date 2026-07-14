@@ -180,7 +180,7 @@ export class SessionTitleTracker {
       return this.title;
     }
     this.titleEligibilityConsumed = true;
-    if (title !== null) {
+    if (title !== null && title.length > 0) {
       this.title = title;
     }
     return this.title;

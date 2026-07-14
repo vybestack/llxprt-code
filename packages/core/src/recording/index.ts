@@ -62,6 +62,7 @@ export {
   listSessions,
   deleteSession,
   deleteSessionById,
+  SESSION_NOT_FOUND_PREFIX,
   type ListSessionsResult,
   type DeleteSessionResult,
   type DeleteSessionError,

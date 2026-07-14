@@ -428,18 +428,33 @@ describe('Zed Session.prompt (Agent API) - previously-dropped event variants', (
     createdSessions.push(invalid);
     await expect(runPrompt(invalid)).rejects.toThrow(/invalid stream/i);
 
+    const hookConnection = new RecordingConnection();
     const hookBlocked = createSession(
       buildFakeAgent([
         {
           type: 'hook-blocked',
           info: { reason: 'hook', systemMessage: 'Blocked by pre-tool hook' },
         },
+        { type: 'text', text: 'continued response' },
+        { type: 'done', reason: 'stop' },
       ]).agent,
-      new RecordingConnection(),
+      hookConnection,
     );
     createdSessions.push(hookBlocked);
-    await expect(runPrompt(hookBlocked)).rejects.toThrow(
-      /Blocked by pre-tool hook/,
+    await expect(runPrompt(hookBlocked)).resolves.toStrictEqual({
+      stopReason: 'end_turn',
+    });
+    expect(hookConnection.onlySessionUpdates()).toContainEqual(
+      expect.objectContaining({
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'Blocked by pre-tool hook' },
+      }),
+    );
+    expect(hookConnection.onlySessionUpdates()).toContainEqual(
+      expect.objectContaining({
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'continued response' },
+      }),
     );
 
     const ignored = createSession(

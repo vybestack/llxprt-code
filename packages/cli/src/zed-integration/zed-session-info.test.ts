@@ -211,6 +211,12 @@ describe('buildSessionInfoUpdate (issue #1611: ACP session_info_update)', () => 
       updatedAt: '2026-07-12T00:00:00Z',
     });
   });
+
+  it('builds a bare update when no fields are provided', () => {
+    expect(buildSessionInfoUpdate({})).toStrictEqual<acp.SessionUpdate>({
+      sessionUpdate: 'session_info_update',
+    });
+  });
 });
 
 describe('SessionTitleTracker.consumeTitleEligibility (issue #1611 finding 1: synchronous, race-safe)', () => {
@@ -265,6 +271,26 @@ describe('SessionTitleTracker.consumeTitleEligibility (issue #1611 finding 1: sy
     expect(promptA.title).toBe('Prompt A');
     expect(promptB.wonTitle).toBe(false);
     expect(promptB.title).toBe('Prompt A');
+  });
+});
+
+describe('SessionTitleTracker.hydrateFromMetadata', () => {
+  it('hydrates a persisted title and consumes live title eligibility', () => {
+    const tracker = new SessionTitleTracker();
+    expect(tracker.hydrateFromMetadata('Persisted title')).toBe(
+      'Persisted title',
+    );
+    expect(
+      tracker.consumeTitleEligibility([{ type: 'text', text: 'Live title' }]),
+    ).toStrictEqual({ wonTitle: false, title: 'Persisted title' });
+  });
+
+  it.each([null, ''])('consumes eligibility without hydrating %j', (title) => {
+    const tracker = new SessionTitleTracker();
+    expect(tracker.hydrateFromMetadata(title)).toBeUndefined();
+    expect(
+      tracker.consumeTitleEligibility([{ type: 'text', text: 'Live title' }]),
+    ).toStrictEqual({ wonTitle: false, title: undefined });
   });
 });
 
@@ -336,6 +362,41 @@ describe('SessionTitleTracker.recordTurn (issue #1611: updatedAt-per-turn)', () 
       sessionUpdate: 'session_info_update',
       updatedAt: '2026-07-12T00:00:00Z',
     });
+  });
+
+  it('retries and clears a title pending after transport failure', () => {
+    const tracker = new SessionTitleTracker();
+    tracker.markPendingTitle('Pending title');
+    expect(tracker.getPendingTitle()).toBe('Pending title');
+
+    const result = tracker.recordTurn('2026-07-12T00:00:00Z');
+
+    expect(result.updates).toStrictEqual<acp.SessionUpdate[]>([
+      {
+        sessionUpdate: 'session_info_update',
+        title: 'Pending title',
+        updatedAt: '2026-07-12T00:00:00Z',
+      },
+      {
+        sessionUpdate: 'session_info_update',
+        updatedAt: '2026-07-12T00:00:00Z',
+      },
+    ]);
+    expect(tracker.getPendingTitle()).toBeUndefined();
+  });
+
+  it('can requeue the title when retry delivery fails again', () => {
+    const tracker = new SessionTitleTracker();
+    tracker.markPendingTitle('Pending title');
+    tracker.recordTurn('2026-07-12T00:00:00Z');
+    tracker.markPendingTitle('Pending title');
+
+    expect(tracker.recordTurn('2026-07-12T00:01:00Z').updates[0]).toMatchObject(
+      {
+        title: 'Pending title',
+        updatedAt: '2026-07-12T00:01:00Z',
+      },
+    );
   });
 
   it('advances updatedAt on each turn', () => {

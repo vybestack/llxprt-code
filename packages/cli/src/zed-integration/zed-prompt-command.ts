@@ -7,13 +7,12 @@
 import * as acp from '@agentclientprotocol/sdk';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-
-const logger = new DebugLogger('llxprt:zed-integration:prompt-command');
-
 import {
   executeZedCommand,
   type ZedCommandResult,
 } from './zed-command-registry.js';
+
+const logger = new DebugLogger('llxprt:zed-integration:prompt-command');
 
 /**
  * Extracts the first text content from an ACP prompt content-block array. A

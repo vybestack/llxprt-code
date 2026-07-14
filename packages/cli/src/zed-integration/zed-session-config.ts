@@ -67,8 +67,12 @@ export function createSessionScopedConfig(
   let fileSystemService = initialFileSystemService;
   let providerManager: RuntimeProviderManager | undefined =
     config.getProviderManager();
+  const propertyOverrides = new Map<PropertyKey, unknown>();
   return new Proxy(config, {
     get(target, property, receiver) {
+      if (propertyOverrides.has(property)) {
+        return propertyOverrides.get(property);
+      }
       if (property === 'getToolRegistry' && resolveToolRegistry !== undefined) {
         return () => resolveToolRegistry() ?? config.getToolRegistry();
       }
@@ -95,6 +99,10 @@ export function createSessionScopedConfig(
         return () => targetDir;
       }
       return Reflect.get(target, property, receiver);
+    },
+    set(_target, property, value) {
+      propertyOverrides.set(property, value);
+      return true;
     },
   });
 }

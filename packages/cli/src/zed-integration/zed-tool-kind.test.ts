@@ -14,23 +14,11 @@
 import { describe, it, expect } from 'vitest';
 import { Kind } from '@vybestack/llxprt-code-tools';
 import {
+  ACP_TOOL_KINDS,
   inferToolKind,
   TOOL_KIND_BY_NAME,
   toAcpToolKind,
 } from './zed-tool-handler.js';
-
-const ACP_TOOL_KINDS = [
-  'read',
-  'edit',
-  'delete',
-  'move',
-  'search',
-  'execute',
-  'think',
-  'fetch',
-  'switch_mode',
-  'other',
-] as const;
 
 describe('inferToolKind (issue #1605: ToolKind mapping)', () => {
   it.each([...TOOL_KIND_BY_NAME.entries()])(

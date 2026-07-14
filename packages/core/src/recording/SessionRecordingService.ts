@@ -494,8 +494,8 @@ export class SessionRecordingService {
     if (!this.active) {
       return;
     }
-    this.sessionTitle = title;
     this.enqueue('session_metadata', { title });
+    this.sessionTitle = title;
   }
 
   getSessionMetadataTitle(): string | null | undefined {

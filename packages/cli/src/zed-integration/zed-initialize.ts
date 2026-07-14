@@ -41,7 +41,14 @@ export async function authenticateZedAgent(
 ): Promise<void> {
   const profileNames = await getAvailableProfileNames(config);
   const profileName = parseZedAuthMethodId(methodId, profileNames);
-  await loadProfileByName(profileName);
+  try {
+    await loadProfileByName(profileName);
+  } catch (error) {
+    throw new Error(
+      `Failed to authenticate with profile "${profileName}": ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
 }
 
 async function getAvailableProfileNames(config: Config): Promise<string[]> {

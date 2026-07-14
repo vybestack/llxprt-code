@@ -68,5 +68,12 @@ describe('buildUsageUpdate (issue #1607: usage_update size/used semantics)', () 
         size: 200000,
       },
     );
+    expect(
+      buildUsageUpdate({ candidatesTokenCount: 200000 }, 128000),
+    ).toStrictEqual({
+      sessionUpdate: 'usage_update',
+      used: 200000,
+      size: 200000,
+    });
   });
 });

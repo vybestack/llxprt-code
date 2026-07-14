@@ -93,6 +93,8 @@ export async function deleteSession(
   return deleteResolvedSession(resolved.session, chatsDir);
 }
 
+export const SESSION_NOT_FOUND_PREFIX = 'Session not found:';
+
 /** Delete a session only when the supplied identifier is an exact match. */
 export async function deleteSessionById(
   sessionId: string,
@@ -102,7 +104,10 @@ export async function deleteSessionById(
   const sessions = await SessionDiscovery.listSessions(chatsDir, projectHash);
   const target = sessions.find((session) => session.sessionId === sessionId);
   if (target === undefined) {
-    return { ok: false, error: `Session not found: ${sessionId}` };
+    return {
+      ok: false,
+      error: `${SESSION_NOT_FOUND_PREFIX} ${sessionId}`,
+    };
   }
 
   return deleteResolvedSession(target, chatsDir);

@@ -46,8 +46,8 @@ import {
 function textMessage(role: 'user' | 'model', text: string): AgentMessage {
   return {
     speaker: role === 'user' ? 'human' : 'ai',
-    blocks: [{ type: 'text', text }],
-  } as unknown as AgentMessage;
+    blocks: [{ type: 'text' as const, text }],
+  } as AgentMessage;
 }
 
 /**

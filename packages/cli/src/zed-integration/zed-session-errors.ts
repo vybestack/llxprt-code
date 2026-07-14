@@ -204,7 +204,7 @@ async function probeMatchingSessionFile(
   ) {
     return {
       kind: 'probe-error',
-      message: 'session-file probe returned a non-string-array result',
+      message: `session-file probe returned a non-string-array result: ${summarizeProbeValue(entries)}`,
     };
   }
   const file = findMatchingSessionFile(sessionId, entries);
@@ -218,6 +218,14 @@ async function probeMatchingSessionFile(
  * re-attach probe (zed-session-loader.ts) classifies its probe failures with
  * the exact same rule instead of keeping a duplicate.
  */
+function summarizeProbeValue(value: unknown): string {
+  try {
+    return JSON.stringify(value).slice(0, 200);
+  } catch {
+    return String(value).slice(0, 200);
+  }
+}
+
 export function isEnoent(error: unknown): boolean {
   return (
     typeof error === 'object' &&

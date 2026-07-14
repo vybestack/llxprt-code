@@ -13,9 +13,7 @@ import type * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
 import { toPermissionOptions } from './zed-helpers.js';
 import type {
-  AgentEvent,
   AgentToolCall,
-  AgentToolControl,
   AgentToolResult,
   ToolUpdate,
 } from '@vybestack/llxprt-code-agents';
@@ -78,37 +76,6 @@ export async function emitToolResult(
     content,
     kind: resolveToolKind(result.name, registeredKind),
   });
-}
-
-export async function emitAgentToolEvent(
-  event: Extract<
-    AgentEvent,
-    { type: 'tool-call' | 'tool-status' | 'tool-result' }
-  >,
-  sendUpdate: SendUpdateFn,
-  tools: Pick<AgentToolControl, 'get'>,
-): Promise<void> {
-  if (event.type === 'tool-call') {
-    await emitToolCallStart(
-      event.call,
-      sendUpdate,
-      tools.get(event.call.name)?.kind,
-    );
-    return;
-  }
-  if (event.type === 'tool-status') {
-    await emitToolStatus(
-      event.update,
-      sendUpdate,
-      tools.get(event.update.name)?.kind,
-    );
-    return;
-  }
-  await emitToolResult(
-    event.result,
-    sendUpdate,
-    tools.get(event.result.name)?.kind,
-  );
 }
 
 function buildErrorContent(result: AgentToolResult): acp.ToolCallContent[] {
@@ -403,7 +370,7 @@ export function inferToolKind(name: string): acp.ToolKind | undefined {
   return TOOL_KIND_BY_NAME.get(name);
 }
 
-const ACP_TOOL_KINDS: ReadonlySet<string> = new Set<acp.ToolKind>([
+export const ACP_TOOL_KINDS: ReadonlySet<string> = new Set<acp.ToolKind>([
   'read',
   'edit',
   'delete',

@@ -81,13 +81,25 @@ export async function listRecordedSessions(
       ...(durable.createdAt !== undefined
         ? { createdAt: durable.createdAt }
         : {}),
-      updatedAt:
-        Date.parse(durable.updatedAt) >= Date.parse(live.updatedAt)
-          ? durable.updatedAt
-          : live.updatedAt,
+      updatedAt: resolveUpdatedAt(durable.updatedAt, live.updatedAt),
       ...(durable.title === undefined ? {} : { title: durable.title }),
     };
   }
+}
+
+function resolveUpdatedAt(
+  durableUpdatedAt: string,
+  liveUpdatedAt: string,
+): string {
+  const durableTimestamp = Date.parse(durableUpdatedAt);
+  const liveTimestamp = Date.parse(liveUpdatedAt);
+  if (Number.isNaN(liveTimestamp)) {
+    return durableUpdatedAt;
+  }
+  if (Number.isNaN(durableTimestamp)) {
+    return liveUpdatedAt;
+  }
+  return durableTimestamp >= liveTimestamp ? durableUpdatedAt : liveUpdatedAt;
 }
 
 /**

@@ -83,9 +83,13 @@ export async function handleZedAgentEvent(
       );
     case 'hook-blocked':
       await safeFlush(batcher);
-      throw new Error(
-        event.info.systemMessage ?? 'Agent stopped by a hook blocker.',
-      );
+      if (event.info.systemMessage !== undefined) {
+        await handlers.sendUpdate({
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: event.info.systemMessage },
+        });
+      }
+      return null;
     case 'loop-detected':
       await safeFlush(batcher);
       return 'end_turn';

@@ -13,6 +13,26 @@ import type { LoadedSettings } from '../config/settings.js';
 import { runExitCleanup } from '../utils/cleanup.js';
 import { ZedAgent } from './zedIntegration.js';
 
+async function cleanupAgents(
+  agents: readonly ZedAgent[],
+  logger: DebugLogger,
+): Promise<void> {
+  const disposalResults = await Promise.allSettled(
+    agents.map((agent) => agent.disposeAll()),
+  );
+  const rejected = disposalResults.filter(
+    (result): result is PromiseRejectedResult => result.status === 'rejected',
+  );
+  for (const result of rejected) {
+    logger.debug(() => `Zed agent cleanup failed: ${String(result.reason)}`);
+  }
+  try {
+    await runExitCleanup();
+  } catch (cleanupError) {
+    logger.debug(() => `Exit cleanup failed: ${String(cleanupError)}`);
+  }
+}
+
 export async function runZedIntegration(
   config: Config,
   settings: LoadedSettings,
@@ -27,18 +47,18 @@ export async function runZedIntegration(
     metadata: { source: 'zed-integration', stage: 'bootstrap' },
     allowDefaultHandoff: true,
   });
-  let zedAgent: ZedAgent | undefined;
+  const agents: ZedAgent[] = [];
   try {
     const stream = acp.ndJsonStream(stdout, stdin);
     const connection = new acp.AgentSideConnection((conn) => {
-      zedAgent = new ZedAgent(config, settings, conn);
-      return zedAgent;
+      const agent = new ZedAgent(config, settings, conn);
+      agents.push(agent);
+      return agent;
     }, stream);
     try {
       await connection.closed;
     } finally {
-      await zedAgent?.disposeAll();
-      await runExitCleanup();
+      await cleanupAgents(agents, logger);
     }
   } catch (error) {
     logger.debug(() => `ERROR: Failed to create AgentSideConnection: ${error}`);

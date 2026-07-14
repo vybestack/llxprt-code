@@ -110,11 +110,13 @@ export async function applyZedConfigOption(
 ): Promise<acp.SessionConfigOption[]> {
   if (configId === 'model') {
     const models = await availableModels(agent, config);
-    if (
-      models !== undefined &&
-      value !== agent.getModel() &&
-      !models.some(({ id }) => id === value)
-    ) {
+    if (models === undefined) {
+      throw acp.RequestError.internalError(
+        { configId },
+        'Unable to verify model availability.',
+      );
+    }
+    if (value !== agent.getModel() && !models.some(({ id }) => id === value)) {
       throw acp.RequestError.invalidParams({ value }, 'Unavailable model.');
     }
     try {

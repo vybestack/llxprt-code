@@ -78,6 +78,17 @@ describe('session lifecycle pagination', () => {
         }),
       ).toString('base64url'),
     ],
+    [
+      'v2 cursor with non-canonical timestamp',
+      Buffer.from(
+        JSON.stringify({
+          v: 2,
+          cwd: null,
+          createdAt: '2026-01-03T00:00:00Z',
+          sessionId: 'b',
+        }),
+      ).toString('base64url'),
+    ],
   ])('rejects a malformed %s cursor', (_label, cursor) => {
     expect(() => paginateSessions(sessions, { cwd: null, cursor }, 2)).toThrow(
       /cursor/i,

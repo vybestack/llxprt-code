@@ -75,6 +75,10 @@ describe('mapResumeError (issue #1604 FINDING 4)', () => {
     'Failed to replay session: session content not found in cache',
     'Failed to replay session: value out of range while decoding event',
     'Corrupt session: header not found in file',
+    'Failed to replay session: Missing or corrupt session_start event',
+    'Failed to replay session: Empty file',
+    'Failed to replay session: Invalid session_start: missing required fields',
+    'Failed to replay session: Failed to read file: EACCES',
   ])(
     'maps a corrupt/replay reason %j that merely CONTAINS "not found"/"out of range" to internalError (-32603), NOT resourceNotFound (FINDING F1)',
     (detail) => {

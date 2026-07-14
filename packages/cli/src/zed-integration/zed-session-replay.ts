@@ -144,6 +144,10 @@ function appendBlockUpdates(
       // an undefined toolCallId on the wire. Skip it entirely.
       if (speaker === 'ai' && isNonEmptyString(block.id)) {
         const kind = toolKindForRecordedCall(block);
+        const previousKind = pending.get(block.id);
+        if (previousKind !== undefined) {
+          out.push(buildSyntheticFailedUpdate(block.id, previousKind));
+        }
         out.push(buildToolCallStart(block, kind));
         pending.set(block.id, kind);
       }

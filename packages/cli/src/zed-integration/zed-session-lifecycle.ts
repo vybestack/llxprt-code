@@ -8,6 +8,7 @@ import * as acp from '@agentclientprotocol/sdk';
 import {
   deleteSessionById,
   getProjectHash,
+  SESSION_NOT_FOUND_PREFIX,
   SessionDiscovery,
   type ApprovalMode,
   type Config,
@@ -147,7 +148,7 @@ export class SessionLifecycle {
     if (result.ok) {
       return {};
     }
-    if (result.error.startsWith('Session not found:')) {
+    if (result.error.startsWith(SESSION_NOT_FOUND_PREFIX)) {
       if (hadLiveSession) {
         return {};
       }
