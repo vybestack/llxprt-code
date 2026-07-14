@@ -131,10 +131,9 @@ describe('exact-limit lookup safety (@issue:2280)', () => {
 describe('model-limits package asset (@issue:2280)', () => {
   it('copies the catalog beside the compiled core module', () => {
     const packageRoot = fileURLToPath(new URL('../..', import.meta.url));
+    const repositoryRoot = join(packageRoot, '..', '..');
     const sourceCatalog = join(packageRoot, 'src', 'core', 'model-limits.json');
-    const copyScript = fileURLToPath(
-      new URL('../../../../scripts/copy_files.ts', import.meta.url),
-    );
+    const copyScript = join(repositoryRoot, 'scripts', 'copy_files.ts');
     const tempPackage = mkdtempSync(join(tmpdir(), 'llxprt-model-limits-'));
     const stagedCoreDir = join(tempPackage, 'src', 'core');
     const builtCatalog = join(
