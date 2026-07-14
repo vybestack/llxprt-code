@@ -12,12 +12,27 @@ import { ProfileManager } from './ProfileManager.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import type { Profile } from './types.js';
 
+const PROFILES_DIRECTORY = 'profiles';
+
+function getIsolatedProfilesDirectory(): string {
+  const configHome = process.env.LLXPRT_CONFIG_HOME;
+  if (
+    process.env.LLXPRT_TEST_STORAGE_ISOLATED !== '1' ||
+    configHome === undefined ||
+    path.resolve(Storage.getGlobalConfigDir()) !== path.resolve(configHome)
+  ) {
+    throw new Error('ProfileManager tests require isolated storage');
+  }
+
+  return path.join(configHome, PROFILES_DIRECTORY);
+}
+
 describe('ProfileManager storage isolation', () => {
   afterEach(async () => {
-    // Clean up any profiles created during tests so subsequent tests see a
-    // fresh state within the shared isolated config root.
-    const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
-    await fs.rm(profilesDir, { recursive: true, force: true });
+    await fs.rm(getIsolatedProfilesDirectory(), {
+      recursive: true,
+      force: true,
+    });
   });
 
   it('writes profiles only beneath the isolated config root when no explicit directory is provided', async () => {
@@ -39,7 +54,7 @@ describe('ProfileManager storage isolation', () => {
 
     await manager.saveProfile('isolation-test-profile', profile);
 
-    const profilesDir = path.join(configDir, 'profiles');
+    const profilesDir = path.join(configDir, PROFILES_DIRECTORY);
     const profilePath = path.join(profilesDir, 'isolation-test-profile.json');
 
     const content = await fs.readFile(profilePath, 'utf-8');
@@ -54,7 +69,7 @@ describe('ProfileManager storage isolation', () => {
 
     // listProfiles creates the directory; verify it was created under the
     // isolated config root, not the real home directory.
-    const stat = await fs.stat(path.join(configDir, 'profiles'));
+    const stat = await fs.stat(path.join(configDir, PROFILES_DIRECTORY));
     expect(stat.isDirectory()).toBe(true);
 
     // listProfiles returns [] for a fresh isolated root.

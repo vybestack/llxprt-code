@@ -106,8 +106,6 @@ export async function setup() {
     restoreStorageEnv();
     const currentRunDir = runDir;
     const storageRoot = integrationStorageRoot;
-    runDir = '';
-    integrationStorageRoot = '';
     const cleanupErrors: unknown[] = [];
     for (const cleanupPath of [currentRunDir, storageRoot]) {
       if (cleanupPath === '') {
@@ -124,6 +122,8 @@ export async function setup() {
         cleanupErrors.push(cleanupError);
       }
     }
+    runDir = '';
+    integrationStorageRoot = '';
     if (cleanupErrors.length > 0) {
       throw new AggregateError(
         [setupError, ...cleanupErrors],
@@ -138,8 +138,6 @@ export async function teardown() {
   const cleanupErrors: unknown[] = [];
   const currentRunDir = runDir;
   const storageRoot = integrationStorageRoot;
-  runDir = '';
-  integrationStorageRoot = '';
   restoreStorageEnv();
 
   // Cleanup the test run directory unless KEEP_OUTPUT is set
@@ -168,6 +166,9 @@ export async function teardown() {
       cleanupErrors.push(error);
     }
   }
+
+  runDir = '';
+  integrationStorageRoot = '';
 
   if (cleanupErrors.length > 0) {
     throw new AggregateError(

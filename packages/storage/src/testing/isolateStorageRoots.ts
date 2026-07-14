@@ -53,9 +53,29 @@ export const STORAGE_ENV_SUBDIRECTORIES: Readonly<
 export function isolateStorageRoots(): string {
   if (process.env[ISOLATION_MARKER]) {
     const configHome = process.env.LLXPRT_CONFIG_HOME;
-    if (configHome && path.isAbsolute(configHome)) {
-      return path.dirname(configHome);
+    if (configHome === undefined || !path.isAbsolute(configHome)) {
+      throw new Error(
+        'Isolated test storage marker is set without an absolute LLXPRT_CONFIG_HOME',
+      );
     }
+
+    const testStorageRoot = path.dirname(configHome);
+    for (const key of STORAGE_ENV_KEYS) {
+      const value = process.env[key];
+      const expected = path.join(
+        testStorageRoot,
+        STORAGE_ENV_SUBDIRECTORIES[key],
+      );
+      if (
+        value === undefined ||
+        path.resolve(value) !== path.resolve(expected)
+      ) {
+        throw new Error(
+          `Isolated test storage marker is set with an inconsistent ${key}`,
+        );
+      }
+    }
+    return testStorageRoot;
   }
 
   let testStorageRoot: string;
