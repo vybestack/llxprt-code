@@ -91,15 +91,13 @@ describe('model-limits catalog exhaustive parity (@issue:2280)', () => {
 });
 
 describe('substringCaseInsensitive normalizes both sides (@issue:2280)', () => {
-  it('matches a mixed-case model against a lowercase catalog substring', () => {
-    const catalog = ModelLimitsCatalogSchema.parse(catalogData);
-    expect(
-      resolveOrderedRuleFromCatalog(catalog, 'Claude-Sonnet-5-20260630', ''),
-    ).toBe(200_000);
-    expect(
-      resolveOrderedRuleFromCatalog(catalog, 'CLAUDE-FABLE-5-20260701', ''),
-    ).toBe(200_000);
-  });
+  it.each(['Claude-Sonnet-5-20260630', 'CLAUDE-FABLE-5-20260701'])(
+    'matches mixed-case model %s against its lowercase catalog rule',
+    (model) => {
+      const catalog = ModelLimitsCatalogSchema.parse(catalogData);
+      expect(resolveOrderedRuleFromCatalog(catalog, model, '')).toBe(200_000);
+    },
+  );
 
   it('matches a mixed-case model against a mixed-case catalog substring', () => {
     // A catalog authored with mixed-case substring must still match after the

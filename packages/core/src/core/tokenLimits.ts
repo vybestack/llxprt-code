@@ -11,6 +11,8 @@ import catalogData from './model-limits.json' with { type: 'json' };
 type Model = string;
 type TokenCount = number;
 
+// Catalog corruption is a release/configuration error. Validate eagerly so an
+// invalid package fails deterministically instead of silently using stale limits.
 const CATALOG = ModelLimitsCatalogSchema.parse(catalogData);
 
 export const DEFAULT_TOKEN_LIMIT: TokenCount = CATALOG.defaultLimit;
