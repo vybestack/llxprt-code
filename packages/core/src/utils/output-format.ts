@@ -128,22 +128,45 @@ export function getSafeStatus(error: unknown): number | undefined {
   return typeof error.status === 'number' ? error.status : undefined;
 }
 
+const STRUCTURED_ERROR_CATEGORIES = {
+  rate_limit: true,
+  quota: true,
+  authentication: true,
+  server_error: true,
+  network: true,
+  client_error: true,
+} satisfies Readonly<Record<StructuredErrorCategory, true>>;
+
+const STRUCTURED_ERROR_REASONS = {
+  retries_exhausted: true,
+  all_buckets_exhausted: true,
+} satisfies Readonly<Record<StructuredErrorReason, true>>;
+
+function isStructuredErrorCategory(
+  value: unknown,
+): value is StructuredErrorCategory {
+  return (
+    typeof value === 'string' &&
+    Object.prototype.hasOwnProperty.call(STRUCTURED_ERROR_CATEGORIES, value)
+  );
+}
+
+function isStructuredErrorReason(
+  value: unknown,
+): value is StructuredErrorReason {
+  return (
+    typeof value === 'string' &&
+    Object.prototype.hasOwnProperty.call(STRUCTURED_ERROR_REASONS, value)
+  );
+}
+
 export function getSafeCategory(
   error: unknown,
 ): StructuredErrorCategory | undefined {
-  if (typeof error !== 'object' || error === null) return undefined;
-  if (!('category' in error)) return undefined;
-  switch (error.category) {
-    case 'rate_limit':
-    case 'quota':
-    case 'authentication':
-    case 'server_error':
-    case 'network':
-    case 'client_error':
-      return error.category;
-    default:
-      return undefined;
+  if (typeof error !== 'object' || error === null || !('category' in error)) {
+    return undefined;
   }
+  return isStructuredErrorCategory(error.category) ? error.category : undefined;
 }
 
 export function getSafeReason(
@@ -152,13 +175,7 @@ export function getSafeReason(
   if (typeof error !== 'object' || error === null || !('reason' in error)) {
     return undefined;
   }
-  switch (error.reason) {
-    case 'retries_exhausted':
-    case 'all_buckets_exhausted':
-      return error.reason;
-    default:
-      return undefined;
-  }
+  return isStructuredErrorReason(error.reason) ? error.reason : undefined;
 }
 
 /**

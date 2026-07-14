@@ -9,6 +9,21 @@ import {
 } from './providerErrorObservation.js';
 
 describe('provider error observation', () => {
+  it('contains synchronous observer failure', () => {
+    const observerFailure = new Error('observer failed synchronously');
+    const onFailure = vi.fn();
+
+    invokeProviderErrorObserver(
+      () => {
+        throw observerFailure;
+      },
+      { message: 'provider failed' },
+      onFailure,
+    );
+
+    expect(onFailure).toHaveBeenCalledWith(observerFailure);
+  });
+
   it('contains asynchronous observer rejection', async () => {
     const observerFailure = new Error('observer failed asynchronously');
     const onFailure = vi.fn();

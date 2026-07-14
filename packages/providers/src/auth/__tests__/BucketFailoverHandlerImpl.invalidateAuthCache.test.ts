@@ -21,6 +21,34 @@ import { BucketFailoverHandlerImpl } from '../BucketFailoverHandlerImpl.js';
 import type { BucketFailoverOAuthManagerLike } from '../types.js';
 
 describe('BucketFailoverHandlerImpl.invalidateAuthCache', () => {
+  it('rejects with cancellation when failover is pending and the request aborts', async () => {
+    const oauthManager: BucketFailoverOAuthManagerLike = {
+      getSessionBucket: vi.fn().mockReturnValue(undefined),
+      setSessionBucket: vi.fn(),
+      getTokenStore: vi.fn().mockReturnValue({
+        getToken: () => new Promise<never>(() => {}),
+      }),
+      getOAuthToken: vi.fn(),
+      authenticate: vi.fn(),
+      authenticateMultipleBuckets: vi.fn(),
+      forceRefreshToken: vi.fn(),
+    };
+    const controller = new AbortController();
+    const handler = new BucketFailoverHandlerImpl(
+      ['default'],
+      'anthropic',
+      oauthManager,
+    );
+
+    const failover = handler.tryFailover({
+      triggeringStatus: 500,
+      signal: controller.signal,
+    });
+    controller.abort(new Error('request deadline expired'));
+
+    await expect(failover).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
   it('flushes the runtime auth scope for unbucketed profiles', () => {
     const oauthManager: BucketFailoverOAuthManagerLike = {
       getSessionBucket: vi.fn().mockReturnValue(undefined),

@@ -46,9 +46,12 @@ export function createLinkedAbortController(
   } else {
     parent?.addEventListener('abort', onAbort, { once: true });
   }
+  let disposed = false;
   return {
     controller,
     dispose() {
+      if (disposed) return;
+      disposed = true;
       parent?.removeEventListener('abort', onAbort);
     },
   };

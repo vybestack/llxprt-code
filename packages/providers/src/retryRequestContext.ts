@@ -19,6 +19,12 @@ export interface RetryRequestContext {
   readonly authRetryTimeoutMs: number;
 }
 
+const RETRY_EPHEMERAL_KEYS = {
+  maxAttempts: 'retries',
+  initialDelayMs: 'retrywait',
+  authRetryTimeoutMs: 'auth-retry-timeout',
+};
+
 function positiveInteger(value: unknown, fallback: number): number {
   const defaultValue =
     Number.isFinite(fallback) && fallback > 0
@@ -47,7 +53,7 @@ export function resolveRetryRequestContext(
 ): RetryRequestContext {
   const ephemerals = options.invocation?.ephemerals;
   const maxAttempts = positiveInteger(
-    ephemerals?.['retries'],
+    ephemerals?.[RETRY_EPHEMERAL_KEYS.maxAttempts],
     defaults.maxAttempts,
   );
   const budgetContext = attachTransportAttemptBudget(options, maxAttempts);
@@ -59,11 +65,11 @@ export function resolveRetryRequestContext(
     budget: budgetContext.budget,
     maxAttempts,
     initialDelayMs: nonNegativeFiniteNumber(
-      ephemerals?.['retrywait'],
+      ephemerals?.[RETRY_EPHEMERAL_KEYS.initialDelayMs],
       defaults.initialDelayMs,
     ),
     authRetryTimeoutMs: nonNegativeFiniteNumber(
-      ephemerals?.['auth-retry-timeout'],
+      ephemerals?.[RETRY_EPHEMERAL_KEYS.authRetryTimeoutMs],
       defaults.authRetryTimeoutMs,
     ),
   };

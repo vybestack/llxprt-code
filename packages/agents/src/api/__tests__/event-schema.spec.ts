@@ -419,7 +419,10 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
     ).toBe(false);
   });
 
-  it('StructuredErrorSchema requires message and preserves an optional category @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', () => {
+  it('StructuredErrorSchema validates minimal and classified errors @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', () => {
+    expect(
+      StructuredErrorSchema.parse({ message: 'Provider failed' }),
+    ).toStrictEqual({ message: 'Provider failed' });
     expect(
       StructuredErrorSchema.parse({
         message: 'Rate limited',
@@ -436,6 +439,18 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
     expect(StructuredErrorSchema.safeParse({ status: 500 }).success).toBe(
       false,
     );
+    expect(
+      StructuredErrorSchema.safeParse({
+        message: 'Provider failed',
+        category: 'unknown',
+      }).success,
+    ).toBe(false);
+    expect(
+      StructuredErrorSchema.safeParse({
+        message: 'Provider failed',
+        reason: 'unknown',
+      }).success,
+    ).toBe(false);
   });
 
   it('AgentStopInfoSchema requires reason, message/contextCleared optional @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', () => {

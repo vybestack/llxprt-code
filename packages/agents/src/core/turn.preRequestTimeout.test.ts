@@ -14,12 +14,14 @@ import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
 import { DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { ProviderManager } from '../../../providers/src/ProviderManager.js';
-import { LoadBalancingProvider } from '../../../providers/src/LoadBalancingProvider.js';
 import type {
   GenerateChatOptions,
   IProvider,
-} from '../../../providers/src/IProvider.js';
+} from '@vybestack/llxprt-code-providers';
+import {
+  LoadBalancingProvider,
+  ProviderManager,
+} from '@vybestack/llxprt-code-providers';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
@@ -264,7 +266,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     mockSendMessageStream.mockImplementation(
       (params: {
         config: {
-          onProviderError: (error: typeof rateLimitError) => void;
+          onProviderError: (error: StructuredError) => void;
         };
       }) => {
         params.config.onProviderError(rateLimitError);
@@ -624,16 +626,24 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     const { turn } = buildTurn(0);
 
     let returnCalled = false;
+    const firstNextFailure = Object.assign(new Error('first next failed'), {
+      status: 502,
+      category: 'server_error',
+    });
+    const cleanupFailure = Object.assign(new Error('cleanup failed'), {
+      status: 504,
+      category: 'network',
+    });
     const throwingIterator: AsyncIterator<{
       type: StreamEventType;
       value: ModelStreamChunk;
     }> = {
       async next(): Promise<never> {
-        throw new Error('first next failed');
+        throw firstNextFailure;
       },
       async return() {
         returnCalled = true;
-        throw new Error('cleanup failed');
+        throw cleanupFailure;
       },
     };
     mockSendMessageStream.mockResolvedValue({
@@ -653,7 +663,12 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     expect(returnCalled).toBe(true);
     expect(events).toContainEqual({
       type: AgentEventType.Error,
-      value: { error: { message: 'first next failed' } },
+      value: {
+        error: expect.objectContaining({
+          status: 502,
+          category: 'server_error',
+        }),
+      },
     });
   });
 

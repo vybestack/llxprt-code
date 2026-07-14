@@ -22,6 +22,7 @@ import { CircuitBreakerManager } from '../loadBalancing/circuitBreakerManager.js
 import { buildExtendedStats } from '../loadBalancing/statsBuilder.js';
 import {
   isTimeoutError,
+  RequestTimeoutError,
   wrapWithTimeout,
 } from '../loadBalancing/streamTimeout.js';
 import { getBaseUrlFromProvider } from '../baseUrlResolver.js';
@@ -153,9 +154,11 @@ describe('extracted provider helper behavior', () => {
         ),
       ),
     ).rejects.toThrow('Request timeout after 1ms');
-    await new Promise((resolve) => setTimeout(resolve, 25));
     expect(closed).toBe(true);
     expect(isTimeoutError(new Error('Request timeout after 1ms'))).toBe(true);
+    const typedTimeout = new RequestTimeoutError(1);
+    typedTimeout.message = 'localized timeout text';
+    expect(isTimeoutError(typedTimeout)).toBe(true);
   });
 
   it('uses the attempt cancellation capability supplied by its owner', async () => {

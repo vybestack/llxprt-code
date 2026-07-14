@@ -20,6 +20,17 @@ export interface AttemptCancellation {
   cancel(): void;
 }
 
+const REQUEST_TIMEOUT_ERROR_CODE = 'LLXPRT_REQUEST_TIMEOUT';
+
+export class RequestTimeoutError extends Error {
+  readonly code = REQUEST_TIMEOUT_ERROR_CODE;
+
+  constructor(readonly timeoutMs: number) {
+    super(`Request timeout after ${timeoutMs}ms`);
+    this.name = 'RequestTimeoutError';
+  }
+}
+
 function createAttemptCancellation(): AttemptCancellation {
   const controller = new AbortController();
   return {
@@ -40,7 +51,7 @@ async function waitForFirstChunk(
       return await raceWithAbort(next, signal);
     }
     const timeout = delay(timeoutMs, waitController.signal).then(() => {
-      throw new Error(`Request timeout after ${timeoutMs}ms`);
+      throw new RequestTimeoutError(timeoutMs);
     });
     return await raceWithAbort(Promise.race([next, timeout]), signal);
   } finally {
@@ -97,5 +108,14 @@ export async function* wrapWithTimeout(
 }
 
 export function isTimeoutError(error: unknown): boolean {
+  if (error instanceof RequestTimeoutError) return true;
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === REQUEST_TIMEOUT_ERROR_CODE
+  ) {
+    return true;
+  }
   return error instanceof Error && error.message.includes('Request timeout');
 }

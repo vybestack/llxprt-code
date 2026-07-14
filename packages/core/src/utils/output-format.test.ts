@@ -34,6 +34,22 @@ describe('JsonFormatter', () => {
       },
     });
   });
+
+  it('omits unrecognized machine-readable provider classification', () => {
+    const formatter = new JsonFormatter();
+    const error: Error & { category?: string; reason?: string } = new Error(
+      'provider failed',
+    );
+    error.category = 'future_category';
+    error.reason = 'future_reason';
+
+    expect(JSON.parse(formatter.formatError(error))).toStrictEqual({
+      error: {
+        type: 'Error',
+        message: 'provider failed',
+      },
+    });
+  });
 });
 
 describe('StreamJsonFormatter', () => {

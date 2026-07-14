@@ -19,7 +19,10 @@ import {
   attachTransportAttemptBudget,
   consumeTransportAttempt,
 } from '../transportAttemptBudget.js';
-import { raceWithAbort } from '../utils/abortSignal.js';
+import {
+  createLinkedAbortController,
+  raceWithAbort,
+} from '../utils/abortSignal.js';
 import { closeIteratorBeforeContinuing } from '../utils/streamCleanup.js';
 
 const defaults = {
@@ -124,6 +127,16 @@ describe('request-scoped retry infrastructure', () => {
     expect(request.authRetryTimeoutMs).toBe(0);
   });
 
+  it('normalizes a fractional default attempt count to a whole transport budget', () => {
+    const request = resolveRetryRequestContext(optionsWithEphemerals({}), {
+      ...defaults,
+      maxAttempts: 3.9,
+    });
+
+    expect(request.maxAttempts).toBe(3);
+    expect(request.budget.limit).toBe(3);
+  });
+
   it('treats an explicit client status as authoritative for retry classification', () => {
     const error = Object.assign(new Error('socket hang up'), {
       status: 400,
@@ -179,6 +192,17 @@ describe('request-scoped retry infrastructure', () => {
     await expect(
       raceWithAbort(new Promise<void>(() => {}), controller.signal),
     ).rejects.toMatchObject({ name: 'AbortError', cause: reason });
+  });
+
+  it('allows linked attempt cleanup to be repeated and detaches from its parent', () => {
+    const parent = new AbortController();
+    const linked = createLinkedAbortController(parent.signal);
+
+    linked.dispose();
+    linked.dispose();
+    parent.abort(new Error('parent stopped'));
+
+    expect(linked.controller.signal.aborted).toBe(false);
   });
 
   it('converts request cancellation to AbortError while retaining the provider failure', () => {
