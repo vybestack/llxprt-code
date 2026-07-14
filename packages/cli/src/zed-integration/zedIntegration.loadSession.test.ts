@@ -145,13 +145,9 @@ function buildStubAgent(options: {
   return { agent, resume, setRecording, dispose, getHistory };
 }
 
-/**
- * Builds a live Gemini AgentMessage (Content) for the re-attach getHistory stub:
- * a model turn carrying a single text part. Used to prove the re-attach path
- * replays the live in-memory transcript (not the disk resume fixture).
- */
+/** Builds a neutral live agent message for the re-attach getHistory stub. */
 function modelMessage(text: string): AgentMessage {
-  return { role: 'model', parts: [{ text }] } as unknown as AgentMessage;
+  return { speaker: 'ai', blocks: [{ type: 'text', text }] };
 }
 
 function buildBaseConfig(): Config {
