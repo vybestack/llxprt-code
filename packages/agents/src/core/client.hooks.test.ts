@@ -174,11 +174,9 @@ vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
       (model: string, userCtx?: number, provCtx?: number) => {
         const ok = (v: unknown): v is number =>
           typeof v === 'number' && Number.isFinite(v) && v > 0;
-        return ok(userCtx)
-          ? userCtx
-          : ok(provCtx)
-            ? provCtx
-            : tokenLimit(model);
+        if (ok(userCtx)) return userCtx;
+        if (ok(provCtx)) return provCtx;
+        return tokenLimit(model);
       },
     ),
   };
