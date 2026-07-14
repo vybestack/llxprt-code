@@ -1,5 +1,7 @@
 import {
   type Config,
+  type StructuredErrorCategory,
+  type StructuredErrorReason,
   parseAndFormatApiError,
   OutputFormat,
   JsonFormatter,
@@ -7,10 +9,6 @@ import {
   JsonStreamEventType,
   writeToStderr,
 } from '@vybestack/llxprt-code-core';
-import type {
-  StructuredErrorCategory,
-  StructuredErrorReason,
-} from '@vybestack/llxprt-code-core/core/turn.js';
 import { wasMachineErrorReported } from './machineErrorReporting.js';
 
 export function formatNonInteractiveError(error: unknown): string {
