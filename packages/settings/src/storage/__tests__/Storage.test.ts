@@ -9,7 +9,7 @@
  * methods throw instead of returning path strings.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';

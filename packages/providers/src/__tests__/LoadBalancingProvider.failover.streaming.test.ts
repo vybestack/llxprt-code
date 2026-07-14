@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
@@ -447,13 +447,11 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         messages: [{ role: 'user' as const, content: 'test' }],
       };
 
-      const consumptionPromise = (async (): Promise<void> => {
+      await expect(async () => {
         for await (const _chunk of provider.generateChatCompletion(options)) {
           // consume
         }
-      })();
-      expect(consumptionPromise).rejects.toThrow(/failover/i);
-      await consumptionPromise.catch(() => undefined);
+      }).rejects.toThrow(/failover/i);
     });
 
     it('should not loop infinitely when all backends fail', async () => {
@@ -508,13 +506,11 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         messages: [{ role: 'user' as const, content: 'test' }],
       };
 
-      const consumptionPromise = (async (): Promise<void> => {
+      await expect(async () => {
         for await (const _chunk of provider.generateChatCompletion(options)) {
           // consume
         }
-      })();
-      expect(consumptionPromise).rejects.toThrow(Error);
-      await consumptionPromise.catch(() => undefined);
+      }).rejects.toThrow(Error);
 
       // Should try each backend exactly once (no infinite loop)
       expect(totalAttempts).toBe(3);

@@ -1,37 +1,61 @@
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const {
+  sanitizeForByteStringMock,
+  needsSanitizationMock,
+  updateActiveProviderApiKeyMock,
+  updateActiveProviderBaseUrlMock,
+} = vi.hoisted(() => ({
+  sanitizeForByteStringMock: vi.fn((value: string) => `sanitized-${value}`),
+  needsSanitizationMock: vi.fn(() => false),
+  updateActiveProviderApiKeyMock: vi.fn(async () => ({
+    message: 'API key set',
+    isPaidMode: true,
+  })),
+  updateActiveProviderBaseUrlMock: vi.fn(async () => ({
+    message: 'Base URL set',
+  })),
+}));
+
+vi.mock('@vybestack/llxprt-code-core', () => ({
+  sanitizeForByteString: sanitizeForByteStringMock,
+  needsSanitization: needsSanitizationMock,
+  DebugLogger: class {
+    warn = vi.fn();
+    debug = vi.fn();
+    error = vi.fn();
+  },
+}));
+
+vi.mock('./providerMutations.js', () => ({
+  updateActiveProviderApiKey: updateActiveProviderApiKeyMock,
+  updateActiveProviderBaseUrl: updateActiveProviderBaseUrlMock,
+}));
+
 import {
   setProviderApiKey,
   setProviderBaseUrl,
-  type ProviderConfigDependencies,
 } from './providerConfigUtils.js';
 
 describe('providerConfigUtils runtime wrappers', () => {
-  let dependencies: ProviderConfigDependencies;
-  let sanitizeApiKey: ReturnType<typeof vi.fn>;
-  let updateApiKey: ReturnType<typeof vi.fn>;
-  let updateBaseUrl: ReturnType<typeof vi.fn>;
-
   beforeEach(() => {
-    sanitizeApiKey = vi.fn((value: string) => `sanitized-${value}`);
-    updateApiKey = vi.fn(async () => ({
-      changed: true,
-      providerName: 'openai',
+    vi.clearAllMocks();
+    updateActiveProviderApiKeyMock.mockResolvedValue({
       message: 'API key set',
       isPaidMode: false,
-    }));
-    updateBaseUrl = vi.fn(async () => ({
-      changed: true,
-      providerName: 'openai',
+    });
+    updateActiveProviderBaseUrlMock.mockResolvedValue({
       message: 'Base URL set',
-    }));
-    dependencies = { sanitizeApiKey, updateApiKey, updateBaseUrl };
+    });
   });
 
   it('sanitizes API keys before delegating to runtime helper', async () => {
-    const result = await setProviderApiKey('  api-key  ', dependencies);
+    const result = await setProviderApiKey('  api-key  ');
 
-    expect(updateApiKey).toHaveBeenCalledTimes(1);
-    expect(updateApiKey).toHaveBeenCalledWith('sanitized-api-key');
+    expect(updateActiveProviderApiKeyMock).toHaveBeenCalledTimes(1);
+    expect(updateActiveProviderApiKeyMock).toHaveBeenCalledWith(
+      'sanitized-api-key',
+    );
     expect(result).toStrictEqual({
       success: true,
       message: 'API key set',
@@ -40,35 +64,39 @@ describe('providerConfigUtils runtime wrappers', () => {
   });
 
   it('passes null to runtime helper when removing API key', async () => {
-    await setProviderApiKey('none', dependencies);
+    await setProviderApiKey('none');
 
-    expect(updateApiKey).toHaveBeenCalledWith(null);
+    expect(updateActiveProviderApiKeyMock).toHaveBeenCalledWith(null);
   });
 
   it('propagates helper errors when API key update fails', async () => {
-    updateApiKey.mockRejectedValueOnce(new Error('boom'));
+    updateActiveProviderApiKeyMock.mockRejectedValueOnce(new Error('boom'));
 
-    const result = await setProviderApiKey('bad-key', dependencies);
+    const result = await setProviderApiKey('bad-key');
     expect(result.success).toBe(false);
     expect(result.message).toContain('boom');
   });
 
   it('normalizes base URL inputs before delegating', async () => {
-    await setProviderBaseUrl(' https://example.com ', dependencies);
+    await setProviderBaseUrl(' https://example.com ');
 
-    expect(updateBaseUrl).toHaveBeenCalledWith('https://example.com');
+    expect(updateActiveProviderBaseUrlMock).toHaveBeenCalledWith(
+      'https://example.com',
+    );
   });
 
   it('converts "none" base URL to null', async () => {
-    await setProviderBaseUrl('none', dependencies);
+    await setProviderBaseUrl('none');
 
-    expect(updateBaseUrl).toHaveBeenCalledWith(null);
+    expect(updateActiveProviderBaseUrlMock).toHaveBeenCalledWith(null);
   });
 
   it('propagates helper errors when base URL update fails', async () => {
-    updateBaseUrl.mockRejectedValueOnce(new Error('invalid url'));
+    updateActiveProviderBaseUrlMock.mockRejectedValueOnce(
+      new Error('invalid url'),
+    );
 
-    const result = await setProviderBaseUrl('https://bad', dependencies);
+    const result = await setProviderBaseUrl('https://bad');
     expect(result.success).toBe(false);
     expect(result.message).toContain('invalid url');
   });

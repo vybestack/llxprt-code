@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi } from 'vitest';
 import type { OAuthProvider } from './types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
 import {
@@ -66,7 +66,7 @@ describe('Issue #1468 getProfileBuckets case 4', () => {
       },
     };
 
-    expect(manager.getOAuthToken('anthropic', metadata)).rejects.toThrow(
+    await expect(manager.getOAuthToken('anthropic', metadata)).rejects.toThrow(
       'Unexpected profile lookup: missing-profile',
     );
   });

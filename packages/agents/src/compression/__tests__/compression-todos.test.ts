@@ -2,7 +2,7 @@
  * @plan PLAN-20260211-HIGHDENSITY.P22
  * @requirement REQ-HD-011.3, REQ-HD-011.4, REQ-HD-012.2
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { HighDensityStrategy } from '../HighDensityStrategy.js';
 import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';

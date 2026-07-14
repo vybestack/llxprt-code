@@ -10,8 +10,8 @@
 
 import type { Mock } from 'vitest';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import type { CreateChatSession } from './subagentRuntimeSetup.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
   SubagentTerminateMode,
@@ -19,7 +19,75 @@ import {
   type RunConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { ChatSession, StreamEventType } from './chatSession.js';
-import { mockResponseToChunk } from './turn-test-helpers.js';
+import { mockChunk } from './turn-test-helpers.js';
+import {
+  createContentGenerator,
+  type ContentGenerator,
+} from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
+const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
+  const mockReadTodos = vi.fn().mockResolvedValue([]);
+  const TodoStoreMock = vi
+    .fn()
+    .mockImplementation(() => ({ readTodos: mockReadTodos }));
+  return { mockReadTodos, TodoStoreMock };
+});
+
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  return {
+    ...actual,
+    LocalTodoStore: TodoStoreMock,
+  };
+});
+
+vi.mock('./chatSession.js');
+vi.mock(
+  '@vybestack/llxprt-code-core/core/contentGenerator.js',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@vybestack/llxprt-code-core/core/contentGenerator.js')
+      >();
+    return {
+      ...actual,
+      createContentGenerator: vi.fn(),
+    };
+  },
+);
+vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
+vi.mock('./nonInteractiveToolExecutor.js');
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    IdeClient: {
+      getInstance: vi.fn().mockResolvedValue({
+        getConnectionStatus: vi.fn(),
+        initialize: vi.fn(),
+        shutdown: vi.fn(),
+      }),
+    },
+  };
+});
+vi.mock(
+  '@vybestack/llxprt-code-core/core/prompts.js',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@vybestack/llxprt-code-core/core/prompts.js')
+      >();
+    return {
+      ...actual,
+      getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
+    };
+  },
+);
+
 import {
   createMockConfig,
   createMockStream,
@@ -29,29 +97,38 @@ import {
   createRuntimeOverrides,
 } from './subagent-test-helpers.js';
 
-const { SubAgentScope } = await import(
-  './subagent.ts?termination-recovery-behavior'
-);
-
 describe('subagent.ts', () => {
   let mockSendMessageStream: Mock;
 
-  const createChatSession: CreateChatSession = () =>
-    ({
-      sendMessageStream: mockSendMessageStream,
-      recordCompletedToolCalls: vi.fn(),
-      getHistory: () => [],
-      getHistoryService: () => ({
-        clear: vi.fn(),
-        findUnmatchedToolCalls: () => [],
-        getCurated: () => [],
-        getTotalTokens: () => 0,
-      }),
-      getConfig: () => undefined,
-    }) as unknown as ChatSession;
-
   beforeEach(() => {
+    vi.clearAllMocks();
+    mockReadTodos.mockReset();
+    mockReadTodos.mockResolvedValue([]);
+    TodoStoreMock.mockClear();
+
+    vi.mocked(getEnvironmentContext).mockResolvedValue([
+      { text: 'Env Context' },
+    ]);
+    vi.mocked(createContentGenerator).mockResolvedValue({
+      getGenerativeModel: vi.fn(),
+    } as unknown as ContentGenerator);
+
     mockSendMessageStream = vi.fn();
+    vi.mocked(ChatSession).mockImplementation(
+      () =>
+        ({
+          sendMessageStream: mockSendMessageStream,
+          recordCompletedToolCalls: vi.fn(),
+          getHistory: vi.fn().mockReturnValue([]),
+          getHistoryService: vi.fn().mockReturnValue({
+            clear: vi.fn(),
+            findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+            getCurated: vi.fn().mockReturnValue([]),
+            getTotalTokens: vi.fn().mockReturnValue(0),
+          }),
+          getConfig: vi.fn().mockReturnValue(undefined),
+        }) as unknown as ChatSession,
+    );
   });
 
   afterEach(() => {
@@ -100,8 +177,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         maxTurnOverrides,
-        undefined,
-        { createChatSession },
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -113,11 +188,11 @@ describe('subagent.ts', () => {
     });
 
     it('should terminate with TIMEOUT if the time limit is reached during an LLM call', async () => {
+      // Use fake timers to reliably test timeouts
+      vi.useFakeTimers();
+
       const { config } = await createMockConfig();
-      const runConfig: RunConfig = {
-        max_time_minutes: 0.001,
-        max_turns: 100,
-      };
+      const runConfig: RunConfig = { max_time_minutes: 5, max_turns: 100 };
 
       // We need to control the resolution of the sendMessageStream promise to advance the timer during execution.
       let resolveStream: (
@@ -142,30 +217,30 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         timeoutOverrides,
-        undefined,
-        { createChatSession },
       );
 
       const runPromise = scope.runNonInteractive(new ContextState());
 
-      while (mockSendMessageStream.mock.calls.length === 0) {
-        await new Promise((resolve) => setTimeout(resolve, 1));
-      }
-      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Advance time beyond the limit (6 minutes) while the agent is awaiting the LLM response.
+      await vi.advanceTimersByTimeAsync(6 * 60 * 1000);
 
-      // Resolve the provider promise after the timeout has aborted the run.
+      // Now resolve the stream. The model returns 'stop'.
+
       resolveStream!(createMockStream(['stop'])());
 
       await runPromise;
 
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
       expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+
+      vi.useRealTimers();
     });
 
     it('should actively abort a stalled non-interactive response stream before the overall run timeout expires', async () => {
+      vi.useFakeTimers();
+
       const { config } = await createMockConfig();
-      const testTimeoutMs = 20;
+      const testTimeoutMs = 30_000; // 30 second timeout for this test
       config.setEphemeralSetting('stream-idle-timeout-ms', testTimeoutMs);
 
       const runConfig: RunConfig = { max_time_minutes: 5, max_turns: 100 };
@@ -177,11 +252,7 @@ describe('subagent.ts', () => {
           return (async function* () {
             yield {
               type: StreamEventType.CHUNK,
-              value: mockResponseToChunk({
-                candidates: [
-                  { content: { parts: [{ text: 'partial output' }] } },
-                ],
-              }),
+              value: mockChunk({ text: 'partial output' }),
             };
 
             await new Promise<void>((_resolve, reject) => {
@@ -215,8 +286,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       const runPromise = scope.runNonInteractive(new ContextState());
@@ -231,12 +300,15 @@ describe('subagent.ts', () => {
         },
       );
 
+      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1_000);
+
       await runRejection;
 
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
       expect(capturedSignal?.aborted).toBe(true);
       expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
-      scope.dispose();
+
+      vi.useRealTimers();
     });
 
     it('should terminate with ERROR if the model call throws', async () => {
@@ -253,8 +325,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         errorOverrides,
-        undefined,
-        { createChatSession },
       );
 
       await expect(scope.runNonInteractive(new ContextState())).rejects.toThrow(
@@ -264,6 +334,8 @@ describe('subagent.ts', () => {
     });
 
     it('should actively abort a hung non-interactive model call when the time limit expires', async () => {
+      vi.useFakeTimers();
+
       const { config } = await createMockConfig();
       const runConfig: RunConfig = {
         max_time_minutes: 0.001,
@@ -307,8 +379,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       const runPromise = scope.runNonInteractive(new ContextState());
@@ -323,10 +393,14 @@ describe('subagent.ts', () => {
         },
       );
 
+      await vi.advanceTimersByTimeAsync(100);
+
       await runRejection;
 
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
       expect(capturedSignal?.aborted).toBe(true);
+
+      vi.useRealTimers();
     });
   });
 
@@ -334,6 +408,8 @@ describe('subagent.ts', () => {
     const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
 
     it('should time out while waiting for interactive tool completion', async () => {
+      vi.useFakeTimers();
+
       const { config } = await createMockConfig();
       const runConfig: RunConfig = {
         max_time_minutes: 0.001,
@@ -341,17 +417,6 @@ describe('subagent.ts', () => {
       };
       const schedulerFactory = vi.fn(() => ({
         schedule: vi.fn(),
-        awaitCompletedCalls: vi.fn(
-          (signal?: AbortSignal) =>
-            new Promise<never>((_resolve, reject) => {
-              const abort = () => reject(createAbortError());
-              if (signal?.aborted === true) {
-                abort();
-                return;
-              }
-              signal?.addEventListener('abort', abort, { once: true });
-            }),
-        ),
       }));
       const runtimeBundle = createStatelessRuntimeBundle({
         toolsView: {
@@ -374,42 +439,14 @@ describe('subagent.ts', () => {
         { tools: ['external_tool'] },
         undefined,
         overrides,
-        undefined,
-        {
-          createChatSession,
-          createTurn: () => ({
-            pendingToolCalls: [
-              {
-                callId: 'call-timeout',
-                name: 'external_tool',
-                args: {},
-                isClientInitiated: false,
-                promptId: 'interactive-timeout',
-              },
-            ],
-            run: () => interactiveResponseStream,
-          }),
-        },
       );
 
       const interactiveResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [
-              {
-                content: {
-                  parts: [
-                    {
-                      functionCall: {
-                        id: 'call-timeout',
-                        name: 'external_tool',
-                        args: {},
-                      },
-                    },
-                  ],
-                },
-              },
+          value: mockChunk({
+            toolCalls: [
+              { id: 'call-timeout', name: 'external_tool', args: {} },
             ],
           }),
         };
@@ -429,8 +466,12 @@ describe('subagent.ts', () => {
         },
       );
 
+      await vi.advanceTimersByTimeAsync(100);
+
       await runRejection;
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
+
+      vi.useRealTimers();
     });
   });
 
@@ -441,19 +482,21 @@ describe('subagent.ts', () => {
     const recordCompletedToolCalls = vi.fn(() => {
       throw new Error('history write failed');
     });
-    const createBestEffortChatSession: CreateChatSession = () =>
-      ({
-        sendMessageStream: mockSendMessageStream,
-        recordCompletedToolCalls,
-        getHistory: () => [],
-        getHistoryService: () => ({
-          clear: vi.fn(),
-          findUnmatchedToolCalls: () => [],
-          getCurated: () => [],
-          getTotalTokens: () => 0,
-        }),
-        getConfig: () => undefined,
-      }) as unknown as ChatSession;
+    vi.mocked(ChatSession).mockImplementationOnce(
+      () =>
+        ({
+          sendMessageStream: mockSendMessageStream,
+          recordCompletedToolCalls,
+          getHistory: vi.fn().mockReturnValue([]),
+          getHistoryService: vi.fn().mockReturnValue({
+            clear: vi.fn(),
+            findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+            getCurated: vi.fn().mockReturnValue([]),
+            getTotalTokens: vi.fn().mockReturnValue(0),
+          }),
+          getConfig: vi.fn().mockReturnValue(undefined),
+        }) as unknown as ChatSession,
+    );
 
     const runtimeBundle = createStatelessRuntimeBundle({
       toolsView: {
@@ -476,22 +519,6 @@ describe('subagent.ts', () => {
       { tools: ['external_tool'] },
       undefined,
       overrides,
-      undefined,
-      {
-        createChatSession: createBestEffortChatSession,
-        createTurn: () => ({
-          pendingToolCalls: [
-            {
-              callId: 'call-best-effort',
-              name: 'external_tool',
-              args: {},
-              isClientInitiated: false,
-              promptId: 'interactive-best-effort',
-            },
-          ],
-          run: async function* () {},
-        }),
-      },
     );
 
     mockSendMessageStream.mockImplementation(
@@ -548,6 +575,8 @@ describe('subagent.ts', () => {
 
   describe('interactive tool scheduling timeout', () => {
     it('should time out when scheduler.schedule() never resolves after emitting a tool call (#1872)', async () => {
+      vi.useFakeTimers();
+
       const { config } = await createMockConfig();
       const runConfig: RunConfig = {
         max_time_minutes: 0.001, // 0.06 seconds
@@ -616,44 +645,14 @@ describe('subagent.ts', () => {
         { tools: ['hanging_tool'] },
         undefined,
         overrides,
-        undefined,
-        {
-          createChatSession,
-          createTurn: () => ({
-            pendingToolCalls: [
-              {
-                callId: 'call-hang',
-                name: 'hanging_tool',
-                args: {},
-                isClientInitiated: false,
-                promptId: 'hanging-scheduler',
-              },
-            ],
-            run: () => interactiveResponseStream,
-          }),
-        },
       );
 
       // Stream yields a tool call then ends
       const interactiveResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [
-              {
-                content: {
-                  parts: [
-                    {
-                      functionCall: {
-                        id: 'call-hang',
-                        name: 'hanging_tool',
-                        args: {},
-                      },
-                    },
-                  ],
-                },
-              },
-            ],
+          value: mockChunk({
+            toolCalls: [{ id: 'call-hang', name: 'hanging_tool', args: {} }],
           }),
         };
       })();
@@ -676,8 +675,12 @@ describe('subagent.ts', () => {
         },
       );
 
+      await vi.advanceTimersByTimeAsync(100);
+
       await runRejection;
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
+
+      vi.useRealTimers();
     });
   });
 
@@ -697,8 +700,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       // Model returns stop immediately to complete normally
@@ -734,7 +735,6 @@ describe('subagent.ts', () => {
         undefined,
         overrides,
         parentAbortController.signal,
-        { createChatSession },
       );
 
       // Run the agent to bind the parent signal
@@ -763,8 +763,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       // Should not throw
@@ -790,8 +788,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       // Start an operation to create an abort controller

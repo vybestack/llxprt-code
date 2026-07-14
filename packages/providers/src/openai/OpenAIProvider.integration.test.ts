@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';

@@ -137,7 +137,7 @@ vi.mock('../utils/cleanup.js', () => ({
 
 // Recording Ink render fake: captures the call without touching a real TTY.
 // Uses the __setRenderForTesting seam in interactiveUI.tsx instead of
-// vi.spyOn, because ESM namespace objects may be frozen under Bun.
+// module mocking, which deadlocks during module evaluation under Bun.
 const renderCalls: unknown[] = [];
 
 // ---------------------------------------------------------------------------
@@ -185,15 +185,36 @@ function createMinimalSettings(options?: {
   };
 }
 
+// #2378: dispatch no longer constructs the Agent — the composition root builds
+// the single Agent and passes it in. The dispatch reads the session bus via
+// agent.getMessageBus(), so the minimal fake exposes that accessor. tools.get
+// is present for the non-interactive @-command fallback path.
+//
+// The non-interactive run drives SessionStart through the Agent's own hooks
+// surface (agent.hooks.triggerSessionStart()), so the fake exposes that hook
+// returning an empty output object ({} — no systemMessage/additionalContext).
+// Without it the runner throws before reaching runNonInteractive and the
+// dispatch-branch traces would never record the runner.
+function createFakeAgent(): unknown {
+  return {
+    getMessageBus: () => ({}) as never,
+    hooks: {
+      triggerSessionStart: vi.fn(async () => ({})),
+    },
+    tools: { get: () => undefined },
+    dispose: vi.fn(async () => {}),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Suite 1: Dispatch branch selection
 // ---------------------------------------------------------------------------
 
 describe('session-dispatch characterization', () => {
-  // Install the Ink render spy and writeToStderr mock for all suites.
-  // Uses dependency-injection seams (__setRenderForTesting,
-  // __setWriteToStderrForTesting) instead of vi.mock, which is unsupported
-  // for module-level mocking under Bun's native test runner.
+  beforeEach(() => {
+    mockWriteToStderr.mockClear();
+  });
+
   beforeAll(() => {
     __setWriteToStderrForTesting(mockWriteToStderr);
     __setRenderForTesting((...args: unknown[]) => {
@@ -201,6 +222,7 @@ describe('session-dispatch characterization', () => {
       return {
         waitUntilExit: vi.fn(async () => {}),
         clear: vi.fn(),
+        rerender: vi.fn(),
         unmount: vi.fn(),
       } as never;
     });
@@ -230,9 +252,9 @@ describe('session-dispatch characterization', () => {
 
       await dispatchInteractiveOrNonInteractive({
         config: config as never,
+        agent: createFakeAgent() as never,
         settings: settings as never,
         workspaceRoot: '/tmp/test',
-        sessionMessageBus: {} as never,
         recording: {
           recordingIntegration: undefined,
           resumedHistory: undefined,
@@ -243,9 +265,11 @@ describe('session-dispatch characterization', () => {
         readStdinData: async () => '',
       });
 
-      // Observable effect: the interactive branch called createForegroundAgent
-      // (NOT the non-interactive runner).
-      expect(dispatchTrace).toContain('createForegroundAgent');
+      // Observable effect: the interactive branch rendered the UI (Ink render was
+      // called) and did NOT reach the non-interactive runner. (#2378: dispatch
+      // no longer constructs the Agent — it is passed in — so the branch marker
+      // is the render call, not a createForegroundAgent trace.)
+      expect(renderCalls.length).toBeGreaterThanOrEqual(1);
       expect(dispatchTrace).not.toContain('runNonInteractive');
     });
 
@@ -262,9 +286,9 @@ describe('session-dispatch characterization', () => {
       await expect(
         dispatchInteractiveOrNonInteractive({
           config: config as never,
+          agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          sessionMessageBus: {} as never,
           recording: {
             recordingIntegration: undefined,
             resumedHistory: undefined,
@@ -277,9 +301,9 @@ describe('session-dispatch characterization', () => {
       ).rejects.toThrow('process.exit');
 
       // Observable effect: the non-interactive branch reached the runner (NOT
-      // the interactive createForegroundAgent).
+      // the interactive render path).
       expect(dispatchTrace).toContain('runNonInteractive');
-      expect(dispatchTrace).not.toContain('createForegroundAgent');
+      expect(renderCalls.length).toBe(0);
     });
   });
 
@@ -576,9 +600,9 @@ describe('session-dispatch characterization', () => {
       await expect(
         dispatchInteractiveOrNonInteractive({
           config: config as never,
+          agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          sessionMessageBus: {} as never,
           recording: {
             recordingIntegration: undefined,
             resumedHistory: undefined,
@@ -612,9 +636,9 @@ describe('session-dispatch characterization', () => {
       try {
         await dispatchInteractiveOrNonInteractive({
           config: config as never,
+          agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          sessionMessageBus: {} as never,
           recording: {
             recordingIntegration: undefined,
             resumedHistory: undefined,
@@ -651,9 +675,9 @@ describe('session-dispatch characterization', () => {
       await expect(
         dispatchInteractiveOrNonInteractive({
           config: config as never,
+          agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          sessionMessageBus: {} as never,
           recording: {
             recordingIntegration: undefined,
             resumedHistory: undefined,
@@ -770,10 +794,6 @@ describe('session-dispatch characterization', () => {
   // ---------------------------------------------------------------------------
 
   describe('session-dispatch characterization — non-interactive error output / formatNonInteractiveError', () => {
-    beforeEach(() => {
-      mockWriteToStderr.mockClear();
-    });
-
     afterEach(() => {
       vi.restoreAllMocks();
     });

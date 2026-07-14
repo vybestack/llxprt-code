@@ -1,19 +1,56 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
+import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
+
+const mockSettingsService = vi.hoisted(() => ({
+  set: vi.fn(),
+  get: vi.fn(),
+  setProviderSetting: vi.fn(),
+  getProviderSettings: vi.fn().mockReturnValue({}),
+  getSettings: vi.fn(),
+  updateSettings: vi.fn(),
+  getAllGlobalSettings: vi.fn().mockReturnValue({}),
+}));
+
+const parseResponsesStreamMock = vi.hoisted(() =>
+  vi.fn(async function* () {
+    // No streamed messages for these assertions
+  }),
+);
+
+const fetchMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
+  getSettingsService: () => mockSettingsService,
+  SETTINGS_REGISTRY: [],
+}));
+
+vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+  getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
+}));
+
+vi.mock('../openai/parseResponsesStream.js', () => ({
+  parseResponsesStream: parseResponsesStreamMock,
+}));
 
 describe('OpenAIResponsesProvider custom headers', () => {
-  const originalFetch = globalThis.fetch;
-  let fetchMock: ReturnType<typeof vi.fn>;
-
   beforeEach(() => {
-    fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
-    globalThis.fetch = fetchMock;
+    vi.clearAllMocks();
+    mockSettingsService.getSettings.mockResolvedValue({});
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock.mockResolvedValue({
+      ok: true,
+      body: undefined,
+    });
   });
 
   afterEach(() => {
-    globalThis.fetch = originalFetch;
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it('should merge custom headers from config and ephemeral settings into fetch request', async () => {

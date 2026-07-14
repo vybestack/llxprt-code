@@ -27,6 +27,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type IModel } from '../IModel.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
+import { OPENAI_TRANSPORT_SELECTOR_KEYS } from '../openai/openaiModelPolicy.js';
 import { BaseProvider, type BaseProviderConfig } from '../BaseProvider.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
@@ -42,8 +43,6 @@ import type { ResponsesInputItem } from './OpenAIResponsesTypes.js';
 export abstract class OpenAIResponsesProviderBase extends BaseProvider {
   protected logger: DebugLogger;
   protected _isCodexMode: boolean;
-  protected readonly fetchFn: typeof fetch;
-  protected readonly isTransientError: (error: unknown) => boolean;
   // @plan:PLAN-20251023-STATELESS-HARDENING.P08
   // @requirement:REQ-SP4-002/REQ-SP4-003
   // Removed static cache scope and conversation cache dependencies to achieve stateless operation
@@ -53,8 +52,6 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
     baseURL?: string,
     config?: IProviderConfig,
     oauthManager?: OAuthManager,
-    fetchFn: typeof fetch = fetch,
-    isTransientError: (error: unknown) => boolean = isNetworkTransientError,
   ) {
     // Detect Codex mode from baseURL at construction time
     const isCodex = baseURL?.includes('chatgpt.com/backend-api/codex') ?? false;
@@ -75,8 +72,6 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
     super(baseConfig, config);
 
     this._isCodexMode = isCodex;
-    this.fetchFn = fetchFn;
-    this.isTransientError = isTransientError;
     this.logger = new DebugLogger('llxprt:providers:openai-responses');
     this.logger.debug(
       () =>
@@ -121,7 +116,7 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
       return status === 429 || (status >= 500 && status < 600);
     }
 
-    return this.isTransientError(error);
+    return isNetworkTransientError(error);
   }
 
   /**
@@ -212,10 +207,10 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
 
   override getDefaultModel(): string {
     // @plan PLAN-20251213-ISSUE160.P04
-    // Return gpt-5.5 as default when in Codex mode (issue #1308 / #2037)
+    // Return gpt-5.6-sol as default when in Codex mode (issue #2483)
     const baseURL = this.getBaseURL();
     if (this.isCodexMode(baseURL)) {
-      return 'gpt-5.5';
+      return 'gpt-5.6-sol';
     }
     // Return the default model for responses API
     return 'o3-mini';
@@ -345,8 +340,18 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
         apiKey: _apiKey,
         baseUrl: _baseUrl,
         model: _model,
+        apiMode: _apiMode,
+        responsesMode: _responsesMode,
+        'responses-mode': _responsesModeGlobal,
+        openaiResponsesEnabled: _openaiResponsesEnabled,
         ...custom
       } = providerSettings;
+
+      // Defensive: strip any remaining selector keys that slipped through
+      // destructuring (e.g. future variants or aliases)
+      for (const selectorKey of OPENAI_TRANSPORT_SELECTOR_KEYS) {
+        delete (custom as Record<string, unknown>)[selectorKey];
+      }
 
       const params: Record<string, unknown> = { ...custom };
       if (temperature !== undefined) {

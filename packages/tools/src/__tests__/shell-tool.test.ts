@@ -21,7 +21,7 @@
  * moves real tool code and adapters are wired up.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { ShellTool } from '../index.js';
 import type {
   IShellExecutionService,

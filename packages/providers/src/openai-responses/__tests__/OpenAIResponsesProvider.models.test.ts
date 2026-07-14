@@ -28,7 +28,7 @@
  * RESPONSES_API_MODELS fallback when unauthenticated / fetch fails).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import { RESPONSES_API_MODELS } from '../../openai/RESPONSES_API_MODELS.js';
 import type { IModel } from '../../IModel.js';
@@ -57,33 +57,26 @@ function buildExpectedResponsesModels(provider: string): IModel[] {
 }
 
 describe('OpenAIResponsesProvider - Model Listing', () => {
-  const originalFetch = globalThis.fetch;
-  const originalApiKey = process.env.OPENAI_API_KEY;
-  const fetchMock = vi.fn<typeof fetch>();
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    process.env.OPENAI_API_KEY = '';
-    globalThis.fetch = fetchMock;
+    vi.stubEnv('OPENAI_API_KEY', '');
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
   });
 
   afterEach(() => {
-    globalThis.fetch = originalFetch;
-    if (originalApiKey === undefined) {
-      delete process.env.OPENAI_API_KEY;
-    } else {
-      process.env.OPENAI_API_KEY = originalApiKey;
-    }
-    fetchMock.mockReset();
+    fetchSpy.mockRestore();
+    vi.unstubAllEnvs();
   });
 
   describe('getDefaultModel', () => {
-    it('should return gpt-5.5 as default model when in Codex mode', () => {
+    it('should return gpt-5.6-sol as default model when in Codex mode', () => {
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
         CODEX_BASE_URL,
       );
       const defaultModel = provider.getDefaultModel();
-      expect(defaultModel).toBe('gpt-5.5');
+      expect(defaultModel).toBe('gpt-5.6-sol');
     });
 
     it('should return o3-mini as default model when in standard OpenAI mode', () => {
@@ -104,7 +97,7 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
 
   describe('getModels - standard OpenAI dynamic flow', () => {
     it('should return dynamically fetched chat models on /models success', async () => {
-      fetchMock.mockResolvedValue(
+      fetchSpy.mockResolvedValue(
         mockOkResponse({
           data: [
             { id: 'gpt-4o' },
@@ -122,8 +115,8 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
       const models = await provider.getModels();
       const modelIds = models.map((m) => m.id);
 
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(fetchMock).toHaveBeenCalledWith(
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledWith(
         `${STANDARD_BASE_URL}/models`,
         expect.objectContaining({
           method: 'GET',
@@ -140,7 +133,7 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
     });
 
     it('should fall back to RESPONSES_API_MODELS on non-OK response', async () => {
-      fetchMock.mockResolvedValue(mockNonOkResponse(401));
+      fetchSpy.mockResolvedValue(mockNonOkResponse(401));
 
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
@@ -157,7 +150,7 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
     });
 
     it('should fall back to RESPONSES_API_MODELS when fetch throws', async () => {
-      fetchMock.mockRejectedValue(new Error('network down'));
+      fetchSpy.mockRejectedValue(new Error('network down'));
 
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
@@ -173,7 +166,7 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
     });
 
     it('should fall back to RESPONSES_API_MODELS when dynamic list is empty', async () => {
-      fetchMock.mockResolvedValue(
+      fetchSpy.mockResolvedValue(
         mockOkResponse({
           data: [{ id: 'text-embedding-3-small' }],
         }),
@@ -187,7 +180,7 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
       const modelIds = models.map((m) => m.id);
 
       // Fetch was called, returned OK, but all models were non-chat → fallback list used.
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
       expect(modelIds).toStrictEqual([...RESPONSES_API_MODELS]);
     });
 
@@ -200,7 +193,7 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
       const modelIds = models.map((m) => m.id);
 
       expect(modelIds).toStrictEqual([...RESPONSES_API_MODELS]);
-      expect(fetchMock).not.toHaveBeenCalled();
+      expect(fetchSpy).not.toHaveBeenCalled();
       for (const model of models) {
         expect(model.provider).toBe('openai-responses');
       }
@@ -216,7 +209,7 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
     ];
 
     it('should follow the standard dynamic /models flow for a raw Codex-URL provider', async () => {
-      fetchMock.mockResolvedValue(
+      fetchSpy.mockResolvedValue(
         mockOkResponse({
           data: [{ id: 'gpt-4o' }, { id: 'o3-mini' }],
         }),
@@ -230,8 +223,8 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
       const modelIds = models.map((m) => m.id);
 
       // It does fetch against the Codex backend like any standard provider.
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(fetchMock).toHaveBeenCalledWith(
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledWith(
         `${CODEX_BASE_URL}/models`,
         expect.objectContaining({ method: 'GET' }),
       );
@@ -262,7 +255,7 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
     });
 
     it('should fall back to RESPONSES_API_MODELS when fetch fails for a Codex-URL provider', async () => {
-      fetchMock.mockRejectedValue(new Error('cloudflare blocked'));
+      fetchSpy.mockRejectedValue(new Error('cloudflare blocked'));
 
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
@@ -288,7 +281,7 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
       expect(models).toStrictEqual(
         buildExpectedResponsesModels('openai-responses'),
       );
-      expect(fetchMock).not.toHaveBeenCalled();
+      expect(fetchSpy).not.toHaveBeenCalled();
       for (const codexId of CODEX_ONLY_IDS) {
         expect(modelIds).not.toContain(codexId);
       }

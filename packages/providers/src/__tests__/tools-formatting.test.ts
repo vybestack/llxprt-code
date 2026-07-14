@@ -26,7 +26,7 @@
  * rules, this is the real formatter integration test path.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import {
   ToolFormatter,
   normalizeToOpenAIToolId,

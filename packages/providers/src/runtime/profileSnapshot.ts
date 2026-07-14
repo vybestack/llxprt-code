@@ -254,38 +254,8 @@ function buildLoadBalancerProfileSnapshot(
   };
 }
 
-export interface ProfileSnapshotDependencies {
-  getRuntimeServices: typeof getCliRuntimeServices;
-  getOAuthManager: typeof maybeGetCliOAuthManager;
-  applyProfile: typeof applyProfileWithGuards;
-  loadProfile: (profileName: string) => Promise<Profile>;
-  saveProfile: (profileName: string, profile: Profile) => Promise<void>;
-}
-
-const defaultProfileSnapshotDependencies: ProfileSnapshotDependencies = {
-  getRuntimeServices: getCliRuntimeServices,
-  getOAuthManager: maybeGetCliOAuthManager,
-  applyProfile: applyProfileWithGuards,
-  loadProfile: async (profileName) =>
-    new ProfileManager().loadProfile(profileName),
-  saveProfile: async (profileName, profile) => {
-    await new ProfileManager().saveProfile(profileName, profile);
-  },
-};
-
-export function buildRuntimeProfileSnapshot(
-  dependencies?: ProfileSnapshotDependencies,
-): Profile {
-  return buildRuntimeProfileSnapshotWithDependencies(
-    dependencies ?? defaultProfileSnapshotDependencies,
-  );
-}
-
-function buildRuntimeProfileSnapshotWithDependencies(
-  dependencies: ProfileSnapshotDependencies,
-): Profile {
-  const { config, settingsService, providerManager } =
-    dependencies.getRuntimeServices();
+export function buildRuntimeProfileSnapshot(): Profile {
+  const { config, settingsService, providerManager } = getCliRuntimeServices();
   const snapshotConfig = config as RuntimeSnapshotConfig;
   const snapshotProviderManager =
     providerManager as RuntimeSnapshotProviderManager;
@@ -648,14 +618,13 @@ export function buildModelProfileInfoPayload(
 export async function applyProfileSnapshot(
   profile: Profile,
   options: ProfileLoadOptions = {},
-  dependencies: ProfileSnapshotDependencies = defaultProfileSnapshotDependencies,
 ): Promise<ProfileLoadResult> {
-  const { settingsService, config } = dependencies.getRuntimeServices();
-  const applicationResult = await dependencies.applyProfile(profile, options);
+  const { settingsService, config } = getCliRuntimeServices();
+  const applicationResult = await applyProfileWithGuards(profile, options);
 
   setCurrentProfileName(settingsService, options.profileName);
 
-  const oauthManager = dependencies.getOAuthManager();
+  const oauthManager = maybeGetCliOAuthManager();
   if (oauthManager != null) {
     scheduleProactiveRenewals(oauthManager, profile);
     clearProfileFailoverOnBucketChanges(oauthManager, config, profile);
@@ -681,9 +650,9 @@ export async function applyProfileSnapshot(
 export async function saveProfileSnapshot(
   profileName: string,
   additionalConfig?: Partial<Profile>,
-  dependencies: ProfileSnapshotDependencies = defaultProfileSnapshotDependencies,
 ): Promise<Profile> {
-  const snapshot = buildRuntimeProfileSnapshot(dependencies);
+  const manager = new ProfileManager();
+  const snapshot = buildRuntimeProfileSnapshot();
 
   let finalProfile: Profile = snapshot;
   if (additionalConfig) {
@@ -705,7 +674,7 @@ export async function saveProfileSnapshot(
     );
   }
 
-  await dependencies.saveProfile(profileName, finalProfile);
+  await manager.saveProfile(profileName, finalProfile);
   return finalProfile;
 }
 
@@ -801,16 +770,13 @@ export async function listSavedProfiles(): Promise<string[]> {
   return manager.listProfiles();
 }
 
-export async function getProfileByName(
-  profileName: string,
-  dependencies: ProfileSnapshotDependencies = defaultProfileSnapshotDependencies,
-): Promise<Profile> {
-  const profile = await dependencies.loadProfile(profileName);
+export async function getProfileByName(profileName: string): Promise<Profile> {
+  const manager = new ProfileManager();
+  const profile = await manager.loadProfile(profileName);
   if (!isLoadBalancerProfile(profile)) {
     return profile;
   }
 
-  const manager = { loadProfile: dependencies.loadProfile } as ProfileManager;
   return addLoadBalancerProfileDetails(profile, manager);
 }
 

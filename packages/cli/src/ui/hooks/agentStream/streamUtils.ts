@@ -25,8 +25,8 @@ import {
   type ToolCallRequestInfo,
   DEFAULT_AGENT_ID,
   type ThinkingBlock,
-  type ContractPart,
-  type ContractPartListUnion,
+  type AgentRequestInput,
+  type ContentBlock,
 } from '@vybestack/llxprt-code-core';
 import {
   AllBucketsExhaustedError,
@@ -65,26 +65,87 @@ export { REFUSAL_NOTICE_MESSAGE } from '../../../utils/refusalNotice.js';
 // ─── Pure utility functions ───────────────────────────────────────────────────
 
 /**
- * Adds a part (string or ContractPart object) to the result array.
+ * Adds a part (string, legacy {text}, ContentBlock, or IContent/IContent[])
+ * to the result array, normalizing every element to a neutral ContentBlock.
+ *
+ * Deliberately flattens IContent/IContent[] by extracting their blocks,
+ * preserving all valid ContentBlock variants (text, thinking, tool_call,
+ * tool_response, media, code) without data loss or order loss.
  */
-function addPartToResult(
-  part: string | ContractPart,
-  resultParts: ContractPart[],
-): void {
+function addPartToResult(part: unknown, resultParts: ContentBlock[]): void {
   if (typeof part === 'string') {
-    resultParts.push({ text: part });
-  } else {
+    resultParts.push({ type: 'text', text: part });
+    return;
+  }
+  if (typeof part !== 'object' || part === null) return;
+
+  // IContent with a `blocks` array — flatten by extracting each block.
+  if ('blocks' in part && Array.isArray(part.blocks)) {
+    for (const block of part.blocks) {
+      if (isValidContentBlock(block)) {
+        resultParts.push(block);
+      }
+    }
+    return;
+  }
+
+  // Already a neutral ContentBlock — pass through directly.
+  if ('type' in part && isValidContentBlock(part)) {
     resultParts.push(part);
+    return;
+  }
+
+  // Legacy { text } shape — normalize to ContentBlock.
+  if ('text' in part) {
+    resultParts.push({
+      type: 'text',
+      text: String((part as { text: unknown }).text),
+    });
   }
 }
 
 /**
- * Merges an array of ContractPartListUnions into a single flat ContractPart[].
+ * Type guard: checks that a value structurally matches a valid ContentBlock
+ * variant with its required fields. Used by addPartToResult to preserve all
+ * valid variants without data loss.
  */
-export function mergePartListUnions(
-  list: ContractPartListUnion[],
-): ContractPartListUnion {
-  const resultParts: ContractPart[] = [];
+function isValidContentBlock(value: unknown): value is ContentBlock {
+  if (typeof value !== 'object' || value === null) return false;
+  const block = value as Record<string, unknown>;
+  if (typeof block.type !== 'string') return false;
+  switch (block.type) {
+    case 'text':
+      return typeof block.text === 'string';
+    case 'tool_call':
+      return typeof block.id === 'string' && typeof block.name === 'string';
+    case 'tool_response':
+      return (
+        typeof block.callId === 'string' && typeof block.toolName === 'string'
+      );
+    case 'media':
+      return (
+        typeof block.mimeType === 'string' &&
+        typeof block.data === 'string' &&
+        (block.encoding === 'url' || block.encoding === 'base64')
+      );
+    case 'thinking':
+      return typeof block.thought === 'string';
+    case 'code':
+      return typeof block.code === 'string';
+    default:
+      return false;
+  }
+}
+
+/**
+ * Merges an array of AgentRequestInputs into a single flat ContentBlock[]
+ * (neutral AgentMessageInput). Legacy { text } objects, bare strings,
+ * IContent/IContent[] blocks, and all valid ContentBlock variants (text,
+ * thinking, tool_call, tool_response, media, code) are normalized/flattened
+ * to ContentBlock at this boundary without data loss or order loss.
+ */
+export function mergePartListUnions(list: AgentRequestInput[]): ContentBlock[] {
+  const resultParts: ContentBlock[] = [];
   for (const item of list) {
     if (Array.isArray(item)) {
       for (const part of item) {
@@ -398,7 +459,7 @@ export async function processSlashCommandResult(
   prompt_id: string,
   abortSignal: AbortSignal,
 ): Promise<{
-  queryToSend: ContractPartListUnion | null;
+  queryToSend: AgentRequestInput | null;
   shouldProceed: boolean;
 }> {
   switch (result.type) {

@@ -84,6 +84,13 @@ export function buildToolsMockBody(actual: typeof ToolsModule) {
     getTool: vi.fn(),
     getFunctionDeclarations: vi.fn(() => []),
   }));
+  ToolRegistryMock.prototype.registerTool = registerToolMock;
+  ToolRegistryMock.prototype.unregisterTool = vi.fn();
+  ToolRegistryMock.prototype.discoverAllTools = vi.fn();
+  ToolRegistryMock.prototype.sortTools = vi.fn();
+  ToolRegistryMock.prototype.getAllTools = vi.fn(() => []);
+  ToolRegistryMock.prototype.getTool = vi.fn();
+  ToolRegistryMock.prototype.getFunctionDeclarations = vi.fn(() => []);
   return {
     ...actual,
     ToolRegistry: ToolRegistryMock,
@@ -136,17 +143,16 @@ export function buildTelemetryMockBody() {
   };
 }
 
-export const gitServiceInitializeMock = vi.fn();
-
 export function buildGitServiceMockBody() {
-  return {
-    GitService: vi.fn().mockImplementation(() => ({
-      initialize: gitServiceInitializeMock,
-    })),
-  };
+  const GitServiceMock = vi.fn();
+  GitServiceMock.prototype.initialize = vi.fn();
+  return { GitService: GitServiceMock };
 }
 
-export function buildSettingsMockBody(actual: typeof SettingsModule) {
+export async function buildSettingsMockBody() {
+  const actual = await vi.importActual<typeof SettingsModule>(
+    '@vybestack/llxprt-code-settings',
+  );
   const mockSettingsService = {
     get: vi.fn(),
     set: vi.fn(),

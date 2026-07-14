@@ -2,10 +2,23 @@
  * Integration tests for Phase 12: Provider Settings Integration
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { BaseProvider } from '@vybestack/llxprt-code-providers/BaseProvider.js';
+import { getSettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderWithRuntime } from '../test-utils/runtime.js';
+
+// Mock the settings service instance
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
+  getSettingsService: vi.fn(),
+}));
+
+const mockGetSettingsService = getSettingsService as vi.MockedFunction<
+  typeof getSettingsService
+>;
 
 // Mock provider for testing
 class TestProvider extends BaseProvider {
@@ -37,6 +50,9 @@ describe('Provider Settings Integration', () => {
   beforeEach(async () => {
     // Create settings service without repository (in-memory only)
     settingsService = new SettingsService();
+
+    // Mock getSettingsService to return our test instance
+    mockGetSettingsService.mockReturnValue(settingsService);
 
     instantiateProvider = (name: string) =>
       createProviderWithRuntime<TestProvider>(
@@ -107,18 +123,18 @@ describe('Provider Settings Integration', () => {
     const providerWithGlobalSettings = instantiateProvider('test-global');
 
     // These should work with global SettingsService
-    expect(
-      await providerWithGlobalSettings.setModelInSettings('test-model'),
-    ).toBeUndefined();
-    expect(await providerWithGlobalSettings.getModelFromSettings()).toBe(
-      'test-model',
-    );
-    expect(
-      await providerWithGlobalSettings.setApiKeyInSettings('test-key'),
-    ).toBeUndefined();
-    expect(await providerWithGlobalSettings.getApiKeyFromSettings()).toBe(
-      'test-key',
-    );
+    await expect(
+      providerWithGlobalSettings.setModelInSettings('test-model'),
+    ).resolves.toBeUndefined();
+    await expect(
+      providerWithGlobalSettings.getModelFromSettings(),
+    ).resolves.toBe('test-model');
+    await expect(
+      providerWithGlobalSettings.setApiKeyInSettings('test-key'),
+    ).resolves.toBeUndefined();
+    await expect(
+      providerWithGlobalSettings.getApiKeyFromSettings(),
+    ).resolves.toBe('test-key');
   });
 
   it('should use SettingsService for provider switching', async () => {
@@ -141,9 +157,9 @@ describe('Provider Settings Integration', () => {
     const provider = instantiateProvider('test-compat');
 
     // These should work with SettingsService integration
-    await provider.getModelFromSettings();
-    await provider.getApiKeyFromSettings();
-    await provider.getBaseUrlFromSettings();
-    await provider.getModelParamsFromSettings();
+    await expect(provider.getModelFromSettings()).resolves.not.toThrow();
+    await expect(provider.getApiKeyFromSettings()).resolves.not.toThrow();
+    await expect(provider.getBaseUrlFromSettings()).resolves.not.toThrow();
+    await expect(provider.getModelParamsFromSettings()).resolves.not.toThrow();
   });
 });

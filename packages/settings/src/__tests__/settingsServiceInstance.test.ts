@@ -11,7 +11,7 @@
  * Context creation/clearing assertions belong in core adapter tests (P06).
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   getSettingsService,
   registerSettingsService,

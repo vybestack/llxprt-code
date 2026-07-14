@@ -16,11 +16,11 @@
  *    available, not just config.getModel.
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
-import { vi } from 'vitest';
-import type { Content, PartListUnion } from '@google/genai';
-import type { ServerAgentStreamEvent, ModelInfo, Turn } from './turn.js';
-import { AgentEventType, MODEL_INFO_EVENT_TYPE } from './agentEventProtocol.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ServerAgentStreamEvent, ModelInfo } from './turn.js';
+import { AgentEventType } from './turn.js';
 import type { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -28,12 +28,26 @@ import type { LoopDetectionService } from '@vybestack/llxprt-code-core/services/
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 
+const mockTurnRun = vi.fn();
+
 vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
   tokenLimit: vi.fn(
     (_model: string, userContextLimit?: number) =>
       userContextLimit ?? 1_000_000,
   ),
 }));
+
+vi.mock('./turn.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./turn.js')>();
+  class MockTurn {
+    pendingToolCalls: unknown[] = [];
+    run = mockTurnRun;
+  }
+  return {
+    ...actual,
+    Turn: MockTurn as unknown as typeof actual.Turn,
+  };
+});
 
 import {
   MessageStreamOrchestrator,
@@ -115,7 +129,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
       };
     })();
 
-  const turnRun = vi.fn().mockReturnValue(stream);
+  mockTurnRun.mockReturnValue(stream);
 
   const deps: MessageStreamDeps = {
     config,
@@ -140,7 +154,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
       recordModelActivity: vi.fn(),
       isTodoPauseResponse: vi.fn().mockReturnValue(false),
       isTodoToolCall: vi.fn().mockReturnValue(false),
-      applyPendingReminder: vi.fn((r: PartListUnion) => Promise.resolve(r)),
+      applyPendingReminder: vi.fn((r: AgentMessageInput) => Promise.resolve(r)),
       getTodoReminderForCurrentState: vi.fn().mockResolvedValue({
         todos: [],
         activeTodos: [],
@@ -197,8 +211,6 @@ function buildOrchestrator(options: BuildOptions = {}): {
     },
     updateTelemetryTokenCount: vi.fn(),
     sendMessageStream: vi.fn(),
-    createTurn: () =>
-      ({ pendingToolCalls: [], run: turnRun }) as unknown as Turn,
   };
 
   return {
@@ -214,7 +226,7 @@ async function collectModelInfos(
 ): Promise<ModelInfo[]> {
   const events: ServerAgentStreamEvent[] = [];
   for await (const event of orchestrator.execute(
-    [{ text: 'test' }] as PartListUnion,
+    [{ text: 'test' }] as AgentMessageInput,
     new AbortController().signal,
     promptId,
     1,
@@ -224,8 +236,8 @@ async function collectModelInfos(
   }
   return events
     .filter(
-      (e): e is { type: typeof MODEL_INFO_EVENT_TYPE; value: ModelInfo } =>
-        e.type === MODEL_INFO_EVENT_TYPE,
+      (e): e is { type: typeof AgentEventType.ModelInfo; value: ModelInfo } =>
+        e.type === AgentEventType.ModelInfo,
     )
     .map((e) => e.value);
 }
@@ -233,7 +245,7 @@ async function collectModelInfos(
 describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (tokenLimit as ReturnType<typeof vi.fn>).mockImplementation(
+    vi.mocked(tokenLimit).mockImplementation(
       (_model: string, userContextLimit?: number) =>
         userContextLimit ?? 1_000_000,
     );
@@ -310,7 +322,7 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
 
     expect(infos).toHaveLength(1);
     expect(infos[0]?.profileName).toBe('profile-b');
-    expect(infos[0]?.displayLabel).toBe('profile-b');
+    expect(infos[0]?.displayLabel).toBe('profile-b:gpt-4');
   });
 
   it('prefers provider manager active model over config.getModel', async () => {
@@ -346,18 +358,28 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
   });
 
   it('restores all committed previous history when initializing the next chat', async () => {
-    const previousHistory: Content[] = [
-      { role: 'user', parts: [{ text: 'first user turn' }] },
-      { role: 'model', parts: [{ text: 'first model response' }] },
-      { role: 'user', parts: [{ text: 'second user turn' }] },
-      { role: 'model', parts: [{ text: 'second model response' }] },
+    const previousHistory: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'first user turn' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'first model response' }],
+      },
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'second user turn' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'second model response' }],
+      },
     ];
     const { orchestrator } = buildOrchestrator();
     const deps = orchestrator['deps'];
-    (deps.hasChat as ReturnType<typeof vi.fn>).mockReturnValue(false);
-    (deps.getPreviousHistory as ReturnType<typeof vi.fn>).mockReturnValue(
-      previousHistory,
-    );
+    vi.mocked(deps.hasChat).mockReturnValue(false);
+    vi.mocked(deps.getPreviousHistory).mockReturnValue(previousHistory);
 
     await collectModelInfos(orchestrator, 'prompt-restore-history');
 
@@ -374,7 +396,7 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
 
     await collectModelInfos(orchestrator, 'prompt-context-limit');
 
-    expect((tokenLimit as ReturnType<typeof vi.fn>).mock.calls).toContainEqual([
+    expect(vi.mocked(tokenLimit).mock.calls).toContainEqual([
       'claude-opus-4-8',
       200_000,
     ]);
@@ -394,7 +416,7 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     expect(infos[0]?.model).toBe('glm-5.2');
     expect(infos[0]?.providerName).toBe('load-balancer');
     expect(infos[0]?.profileName).toBe('glm');
-    expect(infos[0]?.displayLabel).toBe('glm');
+    expect(infos[0]?.displayLabel).toBe('glm:glm-5.2');
   });
 
   it('B2: load-balancer profile with no active selection falls back to the provider default model, never the config Gemini default', async () => {
@@ -410,7 +432,37 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
 
     expect(infos).toHaveLength(1);
     expect(infos[0]?.model).toBe('glm-5.2');
-    expect(infos[0]?.displayLabel).toBe('glm');
+    expect(infos[0]?.displayLabel).toBe('glm:glm-5.2');
     expect(infos[0]?.model).not.toBe('gemini-2.5-pro');
+  });
+
+  it('displayLabel shows profile:model when a profile is active (issue #2501)', async () => {
+    const { orchestrator } = buildOrchestrator({
+      model: 'gpt-5.6-sol',
+      providerName: 'codex',
+      profileName: 'gpt56solhigh',
+    });
+
+    const infos = await collectModelInfos(orchestrator, 'prompt-2501');
+
+    expect(infos).toHaveLength(1);
+    expect(infos[0]?.model).toBe('gpt-5.6-sol');
+    expect(infos[0]?.displayLabel).toBe('gpt56solhigh:gpt-5.6-sol');
+  });
+
+  it('displayLabel shows just the model when no profile is active (issue #2501)', async () => {
+    const { orchestrator } = buildOrchestrator({
+      model: 'gpt-5.6-sol',
+      providerName: 'codex',
+      profileName: null,
+    });
+
+    const infos = await collectModelInfos(
+      orchestrator,
+      'prompt-2501-noprofile',
+    );
+
+    expect(infos).toHaveLength(1);
+    expect(infos[0]?.displayLabel).toBe('gpt-5.6-sol');
   });
 });

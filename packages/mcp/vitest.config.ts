@@ -79,11 +79,6 @@ const shouldUseForkPool = isWindows || isMacCi;
 
 export default defineConfig({
   plugins: [workspaceDependencyAliasPlugin],
-  resolve: {
-    alias: {
-      'bun:test': 'vitest',
-    },
-  },
   test: {
     passWithNoTests: true,
     reporters: ['default', 'junit'],
@@ -123,6 +118,12 @@ export default defineConfig({
         'cobertura',
         ['json-summary', { outputFile: 'coverage-summary.json' }],
       ],
+    },
+    typecheck: {
+      enabled: true,
+      checker: 'tsc',
+      include: ['src/**/*.test-d.ts'],
+      tsconfig: './tsconfig.typecheck.json',
     },
   },
 });

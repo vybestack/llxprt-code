@@ -6,6 +6,10 @@
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
+import type {
+  IContent,
+  TextBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentInputs } from './types.js';
 import { templateString } from './utils.js';
 
@@ -18,15 +22,12 @@ export async function buildAgentSystemPrompt(
   inputs: AgentInputs,
   runtimeContext: Config,
   systemPromptTemplate: string,
-  loadDirectoryContext: (
-    runtimeContext: Config,
-  ) => Promise<string> = getDirectoryContextString,
 ): Promise<string> {
   // Inject user inputs into the prompt template.
   let finalPrompt = templateString(systemPromptTemplate, inputs);
 
   // Append environment context (CWD and folder structure).
-  const dirContext = await loadDirectoryContext(runtimeContext);
+  const dirContext = await getDirectoryContextString(runtimeContext);
   finalPrompt += `\n\n# Environment Context\n${dirContext}`;
 
   // Append standard rules for non-interactive execution.
@@ -46,17 +47,25 @@ Important Rules:
 
 /**
  * Apply template strings to initial messages.
+ *
+ * Substitutes `${input_name}` placeholders inside every `TextBlock` within
+ * each `IContent` message. Non-text blocks are passed through unchanged.
  */
-export function applyTemplateToInitialMessages<
-  T extends { parts?: Array<{ text?: string } | object> },
->(initialMessages: T[], inputs: AgentInputs): T[] {
+export function applyTemplateToInitialMessages(
+  initialMessages: IContent[],
+  inputs: AgentInputs,
+): IContent[] {
   return initialMessages.map((content) => {
-    const newParts = (content.parts ?? []).map((part) => {
-      if ('text' in part && part.text !== undefined) {
-        return { text: templateString(part.text, inputs) };
+    const newBlocks = content.blocks.map((block) => {
+      if (block.type === 'text') {
+        const textBlock: TextBlock = {
+          ...block,
+          text: templateString(block.text, inputs),
+        };
+        return textBlock;
       }
-      return part;
+      return block;
     });
-    return { ...content, parts: newParts } as T;
+    return { ...content, blocks: newBlocks };
   });
 }

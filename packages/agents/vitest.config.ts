@@ -227,11 +227,6 @@ const coverageReporter = isWindows
 
 export default defineConfig({
   plugins: [workspaceAliasPlugin],
-  resolve: {
-    alias: {
-      'bun:test': 'vitest',
-    },
-  },
   test: {
     passWithNoTests: false,
     // Never discover test files inside Stryker's sandbox/backup tree. The B8

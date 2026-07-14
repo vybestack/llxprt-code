@@ -9,9 +9,9 @@
  * REPRO/root-cause scenarios live in chatSession.thinking-toolcalls.repro.test.ts.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { ChatSession } from './chatSession.ts?thinking-toolcalls-behavior';
-import { HistoryService } from '../../../core/src/services/history/HistoryService.ts?thinking-toolcalls-behavior';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ChatSession } from './chatSession.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
@@ -19,21 +19,25 @@ import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
-} from '../../../core/src/runtime/providerRuntimeContext.ts?thinking-toolcalls-behavior';
+} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { createAgentRuntimeState } from '../../../core/src/runtime/AgentRuntimeState.ts?thinking-toolcalls-behavior';
-import { createAgentRuntimeContext } from '../../../core/src/runtime/createAgentRuntimeContext.ts?thinking-toolcalls-behavior';
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapterFromConfig,
   createToolRegistryViewFromRegistry,
-} from '../../../core/src/runtime/runtimeAdapters.ts?thinking-toolcalls-behavior';
+} from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type {
   IContent,
   ThinkingBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createConfigParams } from './chatSession-thinking-helpers.js';
+
+vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+  retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
+}));
 
 describe('Issue #1150: Thinking blocks must be attached to tool call messages', () => {
   let settingsService: SettingsService;

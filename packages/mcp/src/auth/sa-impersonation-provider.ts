@@ -20,46 +20,10 @@ function createIamApiUrl(targetSA: string): string {
   return `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${encodeURIComponent(targetSA)}:generateIdToken`;
 }
 
-/**
- * Minimal structural view of the Google auth client used by
- * {@link ServiceAccountImpersonationProvider}. Only the {@link request} method
- * this provider calls is captured, so tests can supply a fake client.
- */
-export interface ImpersonationAuthClientLike {
-  request<T>(options: {
-    url: string;
-    method: 'POST';
-    data: { audience: string; includeEmail: boolean };
-  }): Promise<{ data: T }>;
-}
-
-/**
- * Minimal structural view of {@link GoogleAuth} used by the provider.
- */
-export interface ImpersonationGoogleAuthLike {
-  getClient(): Promise<ImpersonationAuthClientLike>;
-}
-
-/**
- * Factory for the Google auth client. Injectable so tests replace the
- * network-backed client with a fake instead of mocking `google-auth-library`.
- */
-export type ImpersonationGoogleAuthFactory = () => ImpersonationGoogleAuthLike;
-
-/**
- * Optional dependencies for {@link ServiceAccountImpersonationProvider}.
- */
-export interface ServiceAccountImpersonationProviderDependencies {
-  createGoogleAuth?: ImpersonationGoogleAuthFactory;
-}
-
-const defaultImpersonationGoogleAuthFactory: ImpersonationGoogleAuthFactory =
-  () => new GoogleAuth();
-
 export class ServiceAccountImpersonationProvider implements McpAuthProvider {
   private readonly targetServiceAccount: string;
   private readonly targetAudience: string; // OAuth Client Id
-  private readonly auth: ImpersonationGoogleAuthLike;
+  private readonly auth: GoogleAuth;
   private cachedToken?: OAuthTokens;
   private tokenExpiryTime?: number;
 
@@ -74,10 +38,7 @@ export class ServiceAccountImpersonationProvider implements McpAuthProvider {
   };
   private _clientInformation?: OAuthClientInformationFull;
 
-  constructor(
-    private readonly config: MCPServerConfig,
-    dependencies: ServiceAccountImpersonationProviderDependencies = {},
-  ) {
+  constructor(private readonly config: MCPServerConfig) {
     // This check is done in mcp-client.ts. This is just an additional check.
     if (!this.config.httpUrl && !this.config.url) {
       throw new Error(
@@ -99,9 +60,7 @@ export class ServiceAccountImpersonationProvider implements McpAuthProvider {
     }
     this.targetServiceAccount = config.targetServiceAccount;
 
-    const createGoogleAuth =
-      dependencies.createGoogleAuth ?? defaultImpersonationGoogleAuthFactory;
-    this.auth = createGoogleAuth();
+    this.auth = new GoogleAuth();
   }
 
   clientInformation(): OAuthClientInformation | undefined {

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import {
   resetCliRuntimeRegistryForTesting,
   runtimeRegistry,

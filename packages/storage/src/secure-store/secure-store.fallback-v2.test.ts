@@ -13,7 +13,7 @@
  * decryptable for backwards compatibility.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -310,13 +310,9 @@ describe('SecureStore — No v:2 downgrade on overwrite with unavailable secret'
         machineSecretPath,
       });
 
-      let thrownError: unknown;
-      try {
-        await degradedWriter.set('read-error', 'new-value');
-      } catch (error) {
-        thrownError = error;
-      }
-      expect(thrownError).toBe(readFailure);
+      await expect(
+        degradedWriter.set('read-error', 'new-value'),
+      ).rejects.toThrow('permission denied');
     } finally {
       readFileSpy.mockRestore();
     }

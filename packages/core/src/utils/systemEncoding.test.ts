@@ -11,17 +11,9 @@ import { detect as chardetDetect } from 'chardet';
 import { debugLogger } from '../utils/debugLogger.js';
 
 // Mock dependencies
-const mockPlatform = vi.hoisted(() => vi.fn());
-vi.mock('child_process', () => ({
-  execSync: vi.fn(),
-}));
-vi.mock('os', () => ({
-  default: { platform: mockPlatform },
-  platform: mockPlatform,
-}));
-vi.mock('chardet', () => ({
-  detect: vi.fn(),
-}));
+vi.mock('child_process');
+vi.mock('node:os');
+vi.mock('chardet');
 
 // Import the functions we want to test after refactoring
 import {
@@ -43,9 +35,6 @@ describe('Shell Command Processor - Encoding Functions', () => {
     mockedExecSync = vi.mocked(execSync);
     mockedOsPlatform = vi.mocked(os.platform);
     mockedChardetDetect = vi.mocked(chardetDetect);
-    mockedExecSync.mockReset();
-    mockedOsPlatform.mockReset();
-    mockedChardetDetect.mockReset();
 
     // Reset the encoding cache before each test
     resetEncodingCache();

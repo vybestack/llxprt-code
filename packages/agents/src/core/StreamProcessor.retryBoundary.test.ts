@@ -11,22 +11,26 @@
  * @issue #1750 — Stream retry boundary
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
-import { vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StreamProcessor } from './StreamProcessor.js';
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateContentResponse } from '@google/genai';
-import type { Content, SendMessageParameters } from '@google/genai';
+import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { SendMessageParams } from './chatSession.js';
 
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
-  retryWithBackoff: vi.fn(),
-  isRetryableError: (error: unknown): boolean =>
-    error instanceof Error &&
-    (error.message.includes('fetch failed') ||
-      error.message.includes('Connection reset') ||
-      error.message.includes('ECONNRESET')),
-}));
+// Import retry utility types
+import type * as retryModule from '@vybestack/llxprt-code-core/utils/retry.js';
+
+// Mock the retry utility
+vi.mock('@vybestack/llxprt-code-core/utils/retry.js', async () => {
+  const actual = await vi.importActual<typeof retryModule>(
+    '@vybestack/llxprt-code-core/utils/retry.js',
+  );
+  return {
+    ...actual,
+    retryWithBackoff: vi.fn(),
+  };
+});
 
 // Mock turnLogging
 vi.mock('./turnLogging.js', () => ({
@@ -42,10 +46,8 @@ import { logApiResponse } from './turnLogging.js';
 // Helper to create valid IContent with blocks
 function createIContent(text: string): IContent {
   return {
-    role: 'model',
-    parts: [{ text }],
+    speaker: 'ai',
     blocks: [{ type: 'text', text }],
-    metadata: {},
   };
 }
 
@@ -242,14 +244,17 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
           _buildAndSendStreamRequest: (
             params: unknown,
             promptId: string,
-            userContent: Content | Content[],
+            userContent: IContent,
             provider: typeof mockProvider,
-          ) => Promise<AsyncGenerator<GenerateContentResponse>>;
+          ) => Promise<AsyncGenerator<ModelStreamChunk>>;
         }
       )._buildAndSendStreamRequest;
 
       const params = { contents: [] };
-      const userContent: Content = { role: 'user', parts: [{ text: 'test' }] };
+      const userContent: IContent = {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'test' }],
+      };
 
       // Call the method directly (this will be wrapped by retryWithBackoff in real usage)
       const result = await buildAndSend.call(
@@ -294,14 +299,17 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
           _buildAndSendStreamRequest: (
             params: unknown,
             promptId: string,
-            userContent: Content | Content[],
+            userContent: IContent,
             provider: typeof mockProvider,
-          ) => Promise<AsyncGenerator<GenerateContentResponse>>;
+          ) => Promise<AsyncGenerator<ModelStreamChunk>>;
         }
       )._buildAndSendStreamRequest;
 
       const params = { contents: [] };
-      const userContent: Content = { role: 'user', parts: [{ text: 'test' }] };
+      const userContent: IContent = {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'test' }],
+      };
 
       // Should throw EmptyStreamError since stream is empty
       await expect(
@@ -339,9 +347,9 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
           _executeStreamApiCall: (
             params: { config?: { abortSignal?: AbortSignal } },
             promptId: string,
-            userContent: Content | Content[],
+            userContent: IContent,
             provider: { name: string },
-          ) => Promise<AsyncGenerator<GenerateContentResponse>>;
+          ) => Promise<AsyncGenerator<ModelStreamChunk>>;
         }
       )._executeStreamApiCall;
 
@@ -351,7 +359,7 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
           processor,
           { config: {} },
           'test-prompt',
-          { role: 'user', parts: [{ text: 'test' }] },
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
           providerStub,
         )
         .catch(() => {
@@ -388,9 +396,9 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
           _executeStreamApiCall: (
             params: { config?: { abortSignal?: AbortSignal } },
             promptId: string,
-            userContent: Content | Content[],
+            userContent: IContent,
             provider: { name: string },
-          ) => Promise<AsyncGenerator<GenerateContentResponse>>;
+          ) => Promise<AsyncGenerator<ModelStreamChunk>>;
         }
       )._executeStreamApiCall;
 
@@ -400,7 +408,7 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
           processor,
           { config: {} },
           'test-prompt',
-          { role: 'user', parts: [{ text: 'test' }] },
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
           providerStub,
         )
         .catch(() => {
@@ -437,14 +445,17 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
           _buildAndSendStreamRequest: (
             params: unknown,
             promptId: string,
-            userContent: Content | Content[],
+            userContent: IContent,
             provider: typeof mockProvider,
-          ) => Promise<AsyncGenerator<GenerateContentResponse>>;
+          ) => Promise<AsyncGenerator<ModelStreamChunk>>;
         }
       )._buildAndSendStreamRequest;
 
       const params = { contents: [] };
-      const userContent: Content = { role: 'user', parts: [{ text: 'test' }] };
+      const userContent: IContent = {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'test' }],
+      };
 
       // First chunk succeeds, but the error during iteration should be handled
       const result = await buildAndSend.call(
@@ -485,14 +496,17 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
           _buildAndSendStreamRequest: (
             params: unknown,
             promptId: string,
-            userContent: Content | Content[],
+            userContent: IContent,
             provider: typeof mockProvider,
-          ) => Promise<AsyncGenerator<GenerateContentResponse>>;
+          ) => Promise<AsyncGenerator<ModelStreamChunk>>;
         }
       )._buildAndSendStreamRequest;
 
       const params = { contents: [] };
-      const userContent: Content = { role: 'user', parts: [{ text: 'test' }] };
+      const userContent: IContent = {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'test' }],
+      };
 
       // The error should occur during _buildAndSendStreamRequest
       // (inside the retry boundary), not when the caller later iterates
@@ -525,11 +539,14 @@ describe('StreamProcessor.makeApiCallAndProcessStream — cancellation before fi
   it('should forward return to the preloaded stream without creating the processed stream', async () => {
     let sourceClosed = false;
 
-    async function* source(): AsyncGenerator<GenerateContentResponse> {
+    async function* source(): AsyncGenerator<ModelStreamChunk> {
       try {
         yield {
-          candidates: [{ content: { parts: [{ text: 'prefetched' }] } }],
-        } as GenerateContentResponse;
+          content: {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'prefetched' }],
+          },
+        } as ModelStreamChunk;
         await new Promise<void>(() => {
           // Keep source pending to mimic an active stream.
         });
@@ -548,10 +565,13 @@ describe('StreamProcessor.makeApiCallAndProcessStream — cancellation before fi
     );
 
     const processStreamResponse = vi.fn(() => {
-      async function* processed(): AsyncGenerator<GenerateContentResponse> {
+      async function* processed(): AsyncGenerator<ModelStreamChunk> {
         yield {
-          candidates: [{ content: { parts: [{ text: 'processed' }] } }],
-        } as GenerateContentResponse;
+          content: {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'processed' }],
+          },
+        } as ModelStreamChunk;
       }
       return processed();
     });
@@ -581,9 +601,9 @@ describe('StreamProcessor.makeApiCallAndProcessStream — cancellation before fi
     });
 
     const stream = await processor.makeApiCallAndProcessStream(
-      { config: {} } as SendMessageParameters,
+      { config: {} } as SendMessageParams,
       'test-prompt',
-      { role: 'user', parts: [{ text: 'hello' }] },
+      { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
     );
 
     const returnResult = await stream.return();
@@ -598,9 +618,9 @@ describe('StreamProcessor.makeApiCallAndProcessStream — cancellation before fi
 describe('StreamProcessor._executeStreamApiCall — retry integration (#1750)', () => {
   it('should have API call errors caught by retryWithBackoff', async () => {
     // Import the actual retryWithBackoff to test integration
-    const { retryWithBackoff: actualRetry } = await import(
-      '@vybestack/llxprt-code-core/utils/retry.ts?stream-retry-integration'
-    );
+    const { retryWithBackoff: actualRetry } = await vi.importActual<
+      typeof import('@vybestack/llxprt-code-core/utils/retry.js')
+    >('@vybestack/llxprt-code-core/utils/retry.js');
 
     // Track retry attempts
     let _attemptCount = 0;
@@ -614,10 +634,13 @@ describe('StreamProcessor._executeStreamApiCall — retry integration (#1750)', 
         throw error;
       }
       // Return a generator on success
-      async function* successStream(): AsyncGenerator<GenerateContentResponse> {
+      async function* successStream(): AsyncGenerator<ModelStreamChunk> {
         yield {
-          candidates: [{ content: { parts: [{ text: 'success' }] } }],
-        } as GenerateContentResponse;
+          content: {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'success' }],
+          },
+        } as ModelStreamChunk;
       }
       return successStream();
     });
@@ -640,9 +663,9 @@ describe('StreamProcessor._executeStreamApiCall — retry integration (#1750)', 
   });
 
   it('should trigger bucket failover on persistent 429 errors', async () => {
-    const { retryWithBackoff: actualRetry } = await import(
-      '@vybestack/llxprt-code-core/utils/retry.ts?stream-retry-integration'
-    );
+    const { retryWithBackoff: actualRetry } = await vi.importActual<
+      typeof import('@vybestack/llxprt-code-core/utils/retry.js')
+    >('@vybestack/llxprt-code-core/utils/retry.js');
 
     let _failoverCalled = false;
     const mockOnPersistent429 = vi.fn().mockResolvedValue(true); // Simulate successful failover
@@ -657,10 +680,13 @@ describe('StreamProcessor._executeStreamApiCall — retry integration (#1750)', 
         error.status = 429;
         throw error;
       }
-      async function* successStream(): AsyncGenerator<GenerateContentResponse> {
+      async function* successStream(): AsyncGenerator<ModelStreamChunk> {
         yield {
-          candidates: [{ content: { parts: [{ text: 'after failover' }] } }],
-        } as GenerateContentResponse;
+          content: {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'after failover' }],
+          },
+        } as ModelStreamChunk;
       }
       return successStream();
     });

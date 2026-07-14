@@ -3,9 +3,8 @@
  * @requirement REQ-003.1, REQ-003.2, REQ-003.3
  * @pseudocode lines 40-53
  */
-import { describe, expect } from 'bun:test';
-import { it } from 'bun:test';
-import { propertyTest } from '../test-utils/propertyTest.js';
+import { describe, expect } from 'vitest';
+import { it } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import {
   toolDeclarationsFromLegacyToolset,
@@ -230,14 +229,13 @@ describe('ToolChoice orthogonality', () => {
 // ============================================================================
 
 describe('toolDeclaration property-based', () => {
-  propertyTest(
-    [
-      fc.record({
-        name: fc.string({ minLength: 1, maxLength: 20 }),
-        description: fc.option(fc.string({ maxLength: 30 })),
-        schema: fc.object({ maxDepth: 3 }),
-      }),
-    ],
+  it.prop([
+    fc.record({
+      name: fc.string({ minLength: 1, maxLength: 20 }),
+      description: fc.option(fc.string({ maxLength: 30 })),
+      schema: fc.object({ maxDepth: 3 }),
+    }),
+  ])(
     'preserves parametersJsonSchema byte-identically when present and valid',
     ({ name, description, schema }) => {
       const toolset = [
@@ -261,17 +259,16 @@ describe('toolDeclaration property-based', () => {
     },
   );
 
-  propertyTest(
-    [
-      fc.array(
-        fc.record({
-          functionDeclarations: fc.array(
-            fc.record({ name: fc.string({ minLength: 1 }) }),
-          ),
-        }),
-        { minLength: 0, maxLength: 5 },
-      ),
-    ],
+  it.prop([
+    fc.array(
+      fc.record({
+        functionDeclarations: fc.array(
+          fc.record({ name: fc.string({ minLength: 1 }) }),
+        ),
+      }),
+      { minLength: 0, maxLength: 5 },
+    ),
+  ])(
     'produces one ToolDeclaration per functionDeclaration across multiple groups',
     (toolset) => {
       const expectedCount = toolset.reduce(
@@ -290,14 +287,13 @@ describe('toolDeclaration property-based', () => {
     },
   );
 
-  propertyTest(
-    [
-      fc.record({
-        name: fc.string({ minLength: 1, maxLength: 20 }),
-        description: fc.string({ maxLength: 50 }),
-        parameters: fc.object({ maxDepth: 2 }),
-      }),
-    ],
+  it.prop([
+    fc.record({
+      name: fc.string({ minLength: 1, maxLength: 20 }),
+      description: fc.string({ maxLength: 50 }),
+      parameters: fc.object({ maxDepth: 2 }),
+    }),
+  ])(
     'legacy parameters fallback schema is preserved byte-identically',
     ({ name, description, parameters }) => {
       const toolset = [
@@ -313,13 +309,12 @@ describe('toolDeclaration property-based', () => {
     },
   );
 
-  propertyTest(
-    [
-      fc.array(fc.record({ name: fc.string({ minLength: 1 }) }), {
-        minLength: 1,
-        maxLength: 10,
-      }),
-    ],
+  it.prop([
+    fc.array(fc.record({ name: fc.string({ minLength: 1 }) }), {
+      minLength: 1,
+      maxLength: 10,
+    }),
+  ])(
     'every declaration without schema gets empty object {} as parametersJsonSchema',
     (decls) => {
       const toolset = [{ functionDeclarations: decls }];
@@ -332,14 +327,13 @@ describe('toolDeclaration property-based', () => {
     },
   );
 
-  propertyTest(
-    [
-      fc.record({
-        name: fc.string({ minLength: 1 }),
-        description: fc.string({ maxLength: 30 }),
-        schema: fc.boolean(),
-      }),
-    ],
+  it.prop([
+    fc.record({
+      name: fc.string({ minLength: 1 }),
+      description: fc.string({ maxLength: 30 }),
+      schema: fc.boolean(),
+    }),
+  ])(
     'boolean schema is preserved as parametersJsonSchema',
     ({ name, description, schema }) => {
       const toolset = [

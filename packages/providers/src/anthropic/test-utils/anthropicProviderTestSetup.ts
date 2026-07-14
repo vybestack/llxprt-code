@@ -8,10 +8,7 @@
  */
 
 import type { vi } from 'vitest';
-import {
-  AnthropicProvider,
-  type AnthropicProviderDependencies,
-} from '../AnthropicProvider.js';
+import { AnthropicProvider } from '../AnthropicProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { TEST_PROVIDER_CONFIG } from '../../test-utils/providerTestConfig.js';
 import {
@@ -78,9 +75,7 @@ export interface AnthropicTestSetup {
   ) => ReturnType<typeof createProviderCallOptions>;
 }
 
-export function setupAnthropicProvider(
-  dependencies?: Partial<AnthropicProviderDependencies>,
-): AnthropicTestSetup {
+export function setupAnthropicProvider(): AnthropicTestSetup {
   const result = createProviderWithRuntime<AnthropicProvider>(
     ({ settingsService: svc }) => {
       svc.set('auth-key', 'test-api-key');
@@ -90,8 +85,6 @@ export function setupAnthropicProvider(
         'test-api-key',
         undefined,
         TEST_PROVIDER_CONFIG,
-        undefined,
-        dependencies,
       );
     },
     {

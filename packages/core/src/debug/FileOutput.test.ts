@@ -2,19 +2,11 @@
  * @plan PLAN-20250120-DEBUGLOGGING.P10
  * @requirement REQ-005
  */
-import {
-  describe,
-  it,
-  expect,
-  beforeAll,
-  beforeEach,
-  afterEach,
-  vi,
-} from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import type { FileOutput as FileOutputType } from './FileOutput.js';
+import { FileOutput } from './FileOutput.js';
 import type { LogEntry } from './types.js';
 
 function isDigit(ch: string): boolean {
@@ -87,16 +79,10 @@ vi.mock('path', () => ({
   join: vi.fn((...args) => args.join('/')),
 }));
 
-let FileOutput: typeof FileOutputType;
-
 describe('FileOutput', () => {
-  let fileOutput: FileOutputType | undefined;
+  let fileOutput: FileOutput | undefined;
   const mockHomedir = '/test/home';
   const mockDebugDir = '/test/home/.llxprt/debug';
-
-  beforeAll(async () => {
-    ({ FileOutput } = await import('./FileOutput.js'));
-  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -118,6 +104,7 @@ describe('FileOutput', () => {
     if (fileOutput) {
       await fileOutput.dispose();
     }
+    vi.clearAllTimers();
   });
 
   /**
@@ -386,7 +373,7 @@ describe('FileOutput', () => {
     await fileOutput.write(logEntry);
 
     // Dispose should complete without errors
-    await expect(fileOutput.dispose()).resolves.toBeUndefined();
+    await expect(fileOutput.dispose()).resolves.not.toThrow();
 
     // Verify that appendFile was called during the write operation
     expect(fs.appendFile).toHaveBeenCalled();
@@ -470,7 +457,7 @@ describe('FileOutput', () => {
     };
 
     // Should not throw
-    await expect(fileOutput.write(logEntry)).resolves.toBeUndefined();
+    await expect(fileOutput.write(logEntry)).resolves.not.toThrow();
 
     // Should log error to console
     expect(consoleSpy).toHaveBeenCalledWith(

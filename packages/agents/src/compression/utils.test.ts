@@ -13,7 +13,7 @@
  * call/response pairs by finding valid split points in conversation history.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type {
   IContent,
   MediaBlock,

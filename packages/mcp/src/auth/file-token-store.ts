@@ -45,49 +45,6 @@ const safeOsUsername = (): string => {
 };
 
 /**
- * Minimal async filesystem surface used by {@link FileTokenStore}. Injectable
- * so tests can deterministically exercise ENOENT / write-error / mkdir-error
- * branches without module-level `node:fs` mocking. Defaults to `node:fs`'s
- * promise API in production.
- */
-export interface FileTokenStoreFileSystem {
-  readFile(path: string, encoding: 'utf-8'): Promise<string>;
-  writeFile(
-    path: string,
-    data: string,
-    options: { mode: number },
-  ): Promise<void>;
-  mkdir(
-    path: string,
-    options: { recursive: boolean; mode: number },
-  ): Promise<string | undefined>;
-  unlink(path: string): Promise<void>;
-}
-
-/**
- * Options for {@link FileTokenStore}.
- */
-export interface FileTokenStoreOptions {
-  serviceName?: string;
-  encryptionKey?: Buffer;
-  /**
-   * Injectable async filesystem. Defaults to `node:fs` promises. Exposed so
-   * tests can drive filesystem edge cases without global module mocking.
-   */
-  fileSystem?: FileTokenStoreFileSystem;
-}
-
-/**
- * Production-default filesystem adapter that forwards to `node:fs` promises.
- */
-const defaultFileTokenStoreFileSystem: FileTokenStoreFileSystem = {
-  readFile: (filePath, encoding) => fs.readFile(filePath, encoding),
-  writeFile: (filePath, data, options) => fs.writeFile(filePath, data, options),
-  mkdir: (dirPath, options) => fs.mkdir(dirPath, options),
-  unlink: (filePath) => fs.unlink(filePath),
-};
-
-/**
  * File-based implementation of the BaseTokenStore.
  * Stores MCP OAuth tokens in a JSON file in the user's configuration directory.
  *
@@ -103,9 +60,14 @@ export class FileTokenStore extends BaseTokenStore {
   private readonly tokenFilePath: string;
   private readonly encryptionKey: Buffer;
   private readonly serviceName: string;
-  private readonly fileSystem: FileTokenStoreFileSystem;
 
-  constructor(tokenFilePath?: string, options: FileTokenStoreOptions = {}) {
+  constructor(
+    tokenFilePath?: string,
+    options: {
+      serviceName?: string;
+      encryptionKey?: Buffer;
+    } = {},
+  ) {
     super();
     this.tokenFilePath = firstTruthyString(
       tokenFilePath,
@@ -114,7 +76,6 @@ export class FileTokenStore extends BaseTokenStore {
     this.serviceName = options.serviceName ?? 'llxprt-cli-mcp-oauth';
     this.encryptionKey =
       options.encryptionKey ?? this.deriveEncryptionKey(this.serviceName);
-    this.fileSystem = options.fileSystem ?? defaultFileTokenStoreFileSystem;
   }
 
   /**
@@ -123,7 +84,7 @@ export class FileTokenStore extends BaseTokenStore {
   private async ensureConfigDir(): Promise<void> {
     const configDir = path.dirname(this.tokenFilePath);
     try {
-      await this.fileSystem.mkdir(configDir, { recursive: true, mode: 0o700 });
+      await fs.mkdir(configDir, { recursive: true, mode: 0o700 });
     } catch (error) {
       debugLogger.error(
         `Failed to create config directory ${configDir}: ${getErrorMessage(error)}`,
@@ -188,7 +149,7 @@ export class FileTokenStore extends BaseTokenStore {
 
   private async readTokenPayload(): Promise<string | null> {
     try {
-      return await this.fileSystem.readFile(this.tokenFilePath, 'utf-8');
+      return await fs.readFile(this.tokenFilePath, 'utf-8');
     } catch (error) {
       const err = error as NodeJS.ErrnoException;
       if (err.code === 'ENOENT') {
@@ -210,9 +171,7 @@ export class FileTokenStore extends BaseTokenStore {
     const payload = JSON.stringify(tokens, null, 2);
     const encrypted = this.encrypt(payload);
 
-    await this.fileSystem.writeFile(this.tokenFilePath, encrypted, {
-      mode: 0o600,
-    });
+    await fs.writeFile(this.tokenFilePath, encrypted, { mode: 0o600 });
   }
 
   /**
@@ -328,7 +287,7 @@ export class FileTokenStore extends BaseTokenStore {
       try {
         if (tokens.size === 0) {
           // Remove file if no tokens left
-          await this.fileSystem.unlink(this.tokenFilePath);
+          await fs.unlink(this.tokenFilePath);
           // Token file removed successfully
         } else {
           await this.writeTokenPayload(Array.from(tokens.values()));
@@ -350,7 +309,7 @@ export class FileTokenStore extends BaseTokenStore {
    */
   async clearAllTokens(): Promise<void> {
     try {
-      await this.fileSystem.unlink(this.tokenFilePath);
+      await fs.unlink(this.tokenFilePath);
       // All tokens cleared successfully
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {

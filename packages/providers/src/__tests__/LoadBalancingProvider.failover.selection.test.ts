@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';

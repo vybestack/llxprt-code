@@ -33,7 +33,7 @@
  * OMITS abortController, and is undefined-safe on every method.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { buildAgent, internalConfig } from './helpers/agentHarness.js';
 

@@ -126,9 +126,8 @@ export async function fetchAnthropicUsage(
  * Format a usage period for display
  */
 export function formatUsagePeriod(
-  period: UsagePeriod | null | undefined,
+  period: UsagePeriod,
   label: string,
-  now = new Date(),
 ): string | null {
   if (!period || typeof period.utilization !== 'number') {
     return null;
@@ -139,6 +138,7 @@ export function formatUsagePeriod(
 
   let timeUntilReset: string;
   if (resetDate) {
+    const now = new Date();
     const diffMs = resetDate.getTime() - now.getTime();
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMins / 60);
@@ -187,10 +187,7 @@ function isValidUsagePeriod(
  * Format all available usage periods for display
  * Handles both known and unknown quota types from the API
  */
-export function formatAllUsagePeriods(
-  usage: AnthropicUsageInfo,
-  now = new Date(),
-): string[] {
+export function formatAllUsagePeriods(usage: AnthropicUsageInfo): string[] {
   const lines: string[] = [];
 
   // Process all fields in the usage object, not just known ones
@@ -200,7 +197,7 @@ export function formatAllUsagePeriods(
       const label =
         KNOWN_PERIOD_LABELS[key] ||
         key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-      const formatted = formatUsagePeriod(value as UsagePeriod, label, now);
+      const formatted = formatUsagePeriod(value as UsagePeriod, label);
       if (formatted) lines.push(formatted);
     }
   }

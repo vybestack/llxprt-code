@@ -12,16 +12,6 @@ import {
   isRetryableError,
 } from './retry.js';
 import { setSimulate429 } from './testUtils.js';
-import { delay } from './delay.js';
-
-vi.mock('./delay.js', () => ({
-  createAbortError: () => {
-    const error = new Error('Aborted');
-    error.name = 'AbortError';
-    return error;
-  },
-  delay: vi.fn().mockResolvedValue(undefined),
-}));
 
 // Helper to create a mock function that fails a certain number of times
 const createFailingFunction = (
@@ -52,7 +42,6 @@ class NonRetryableError extends Error {
 describe('retryWithBackoff', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.mocked(delay).mockReset().mockResolvedValue(undefined);
     // Disable 429 simulation for tests
     setSimulate429(false);
     // Suppress unhandled promise rejection warnings for tests that expect errors
@@ -78,7 +67,7 @@ describe('retryWithBackoff', () => {
       initialDelayMs: 10,
     });
 
-    await Promise.resolve(); // Ensure all delays and retries complete
+    await vi.runAllTimersAsync(); // Ensure all delays and retries complete
 
     const result = await promise;
     expect(result).toBe('success');
@@ -97,7 +86,7 @@ describe('retryWithBackoff', () => {
     // 2. Run timers and await expectation in parallel.
     await Promise.all([
       expect(promise).rejects.toThrow('Simulated error attempt 3'),
-      Promise.resolve(),
+      vi.runAllTimersAsync(),
     ]);
 
     // 3. Finally, assert the number of calls.
@@ -113,7 +102,7 @@ describe('retryWithBackoff', () => {
     // Expect it to fail with the error from the 5th attempt.
     await Promise.all([
       expect(promise).rejects.toThrow('Simulated error attempt 5'),
-      Promise.resolve(),
+      vi.runAllTimersAsync(),
     ]);
 
     expect(mockFn).toHaveBeenCalledTimes(5);
@@ -128,7 +117,7 @@ describe('retryWithBackoff', () => {
     // Expect it to fail with the error from the 5th attempt.
     await Promise.all([
       expect(promise).rejects.toThrow('Simulated error attempt 5'),
-      Promise.resolve(),
+      vi.runAllTimersAsync(),
     ]);
 
     expect(mockFn).toHaveBeenCalledTimes(5);
@@ -176,7 +165,7 @@ describe('retryWithBackoff', () => {
 
     await Promise.all([
       expect(promise).rejects.toThrow('Too Many Requests'),
-      Promise.resolve(),
+      vi.runAllTimersAsync(),
     ]);
 
     expect(mockFn).toHaveBeenCalledTimes(2);
@@ -213,7 +202,7 @@ describe('retryWithBackoff', () => {
     // Run timers and await expectation in parallel.
     await Promise.all([
       expect(promise).rejects.toThrow('Too Many Requests'),
-      Promise.resolve(),
+      vi.runAllTimersAsync(),
     ]);
 
     expect(mockFn).toHaveBeenCalledTimes(2);
@@ -319,7 +308,7 @@ describe('retryWithBackoff', () => {
         initialDelayMs: 10,
       });
 
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       const result = await promise;
 
       expect(result).toBe('success');
@@ -341,7 +330,7 @@ describe('retryWithBackoff', () => {
         initialDelayMs: 10,
       });
 
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       const result = await promise;
 
       expect(result).toBe('success');
@@ -366,7 +355,7 @@ describe('retryWithBackoff', () => {
         initialDelayMs: 10,
       });
 
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       const result = await promise;
 
       expect(result).toBe('success');
@@ -388,7 +377,7 @@ describe('retryWithBackoff', () => {
         initialDelayMs: 10,
       });
 
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       const result = await promise;
 
       expect(result).toBe('success');
@@ -410,7 +399,7 @@ describe('retryWithBackoff', () => {
         initialDelayMs: 10,
       });
 
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       const result = await promise;
 
       expect(result).toBe('success');
@@ -434,7 +423,7 @@ describe('retryWithBackoff', () => {
         initialDelayMs: 10,
       });
 
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       const result = await promise;
 
       expect(result).toBe('success');
@@ -489,7 +478,7 @@ describe('retryWithBackoff', () => {
         onPersistent429: failoverCallback,
       });
 
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       await expect(promise).resolves.toBe('success after bucket switch');
 
       // onPersistent429 should be called after the first 429 error
@@ -537,7 +526,7 @@ describe('retryWithBackoff', () => {
         onPersistent429: failoverCallback,
       });
 
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       await expect(promise).resolves.toBe('success after bucket switch');
 
       // onPersistent429 should be called after the first overloaded_error
@@ -575,7 +564,7 @@ describe('retryWithBackoff', () => {
         onPersistent429: failoverCallback,
       });
 
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       await expect(promise).resolves.toBe('success after bucket switch');
       expect(failoverCallback).toHaveBeenCalledWith(expect.any(Error));
       expect(mockFn).toHaveBeenCalledTimes(2);
@@ -612,7 +601,7 @@ describe('retryWithBackoff', () => {
         onPersistent429: failoverCallback,
       });
 
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       await expect(promise).resolves.toBe('success after bucket switch');
       expect(failoverCallback).toHaveBeenCalledTimes(1);
       expect(mockFn).toHaveBeenCalledTimes(3);
@@ -644,7 +633,7 @@ describe('retryWithBackoff', () => {
 
       // Properly handle the rejection
       const resultPromise = promise.catch((error) => error);
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       const result = await resultPromise;
 
       expect(result).toBeInstanceOf(Error);
@@ -690,7 +679,7 @@ describe('retryWithBackoff', () => {
         onPersistent429: failoverCallback,
       });
 
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       await expect(promise).resolves.toBe('success after bucket switch');
 
       // onPersistent429 should be called after the first overloaded_error
@@ -737,7 +726,7 @@ describe('retryWithBackoff', () => {
         onPersistent429: failoverCallback,
       });
 
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       await expect(promise).resolves.toBe('success after bucket switch');
 
       // onPersistent429 should be called after the first rate_limit_error
@@ -779,7 +768,7 @@ describe('retryWithBackoff', () => {
         onPersistent429: failoverCallback,
       });
 
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       await expect(promise).resolves.toBe('success after bucket switch');
       expect(failoverCallback).toHaveBeenCalledTimes(1);
       // Should retry once for refresh attempt, then failover, then succeed
@@ -795,28 +784,12 @@ describe('retryWithBackoff', () => {
       throw error;
     });
 
-    vi.mocked(delay).mockImplementationOnce(
-      (_ms: number, signal?: AbortSignal) =>
-        new Promise((_resolve, reject) => {
-          signal?.addEventListener(
-            'abort',
-            () => {
-              const error = new Error('Aborted');
-              error.name = 'AbortError';
-              reject(error);
-            },
-            { once: true },
-          );
-        }),
-    );
     const promise = retryWithBackoff(mockFn, {
       maxAttempts: 5,
       initialDelayMs: 100,
       signal: abortController.signal,
     });
-    while (vi.mocked(delay).mock.calls.length === 0) {
-      await Promise.resolve();
-    }
+    await vi.advanceTimersByTimeAsync(50);
     abortController.abort();
 
     await expect(promise).rejects.toThrow(
@@ -866,7 +839,7 @@ describe('retryWithBackoff', () => {
       initialDelayMs: 100,
     });
 
-    await Promise.resolve();
+    await vi.runAllTimersAsync();
     await expect(promise).resolves.toBe('success after api_error retry');
     expect(mockFn).toHaveBeenCalledTimes(2);
   });

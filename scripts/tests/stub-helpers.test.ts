@@ -84,13 +84,54 @@ describe('StubRegistry', () => {
     expect(target.a).toBe(1);
   });
 
-  it('throws on non-finite interval or timeout', () => {
-    expect(() => waitFor(() => 1, { interval: NaN })).toThrow(TypeError);
-    expect(() => waitFor(() => 1, { timeout: Infinity })).toThrow(TypeError);
+  it('stubs a non-configurable accessor with a setter', () => {
+    let current = 'original';
+    const target: Record<string, unknown> = {};
+    Object.defineProperty(target, 'value', {
+      configurable: false,
+      enumerable: true,
+
+      get: () => current,
+      set: (value: unknown) => {
+        current = String(value);
+      },
+    });
+    const registry = new StubRegistry(target);
+
+    registry.stub('value', 'stubbed');
+
+    expect(target.value).toBe('stubbed');
+  });
+
+  it('restores remaining keys and clears snapshots after one restore fails', () => {
+    const backing: Record<string, unknown> = { blocked: 'old', safe: 'old' };
+    let rejectBlockedRestore = false;
+    const target = new Proxy(backing, {
+      defineProperty(object, key, descriptor) {
+        if (rejectBlockedRestore && key === 'blocked') {
+          throw new Error('blocked restore');
+        }
+        return Reflect.defineProperty(object, key, descriptor);
+      },
+    });
+    const registry = new StubRegistry(target);
+
+    registry.stub('blocked', 'new');
+    registry.stub('safe', 'new');
+    rejectBlockedRestore = true;
+
+    expect(() => registry.restoreAll()).toThrow('Failed to restore all');
+    expect(target.safe).toBe('old');
+    expect(() => registry.restoreAll()).not.toThrow();
   });
 });
 
 describe('waitFor', () => {
+  it('throws on non-finite interval or timeout', () => {
+    expect(() => waitFor(() => 1, { interval: NaN })).toThrow(TypeError);
+    expect(() => waitFor(() => 1, { timeout: Infinity })).toThrow(TypeError);
+  });
+
   it('resolves immediately when the callback succeeds on the first try', async () => {
     const result = await waitFor(() => 42);
     expect(result).toBe(42);

@@ -4,134 +4,150 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
-const aliasEntries: Array<Record<string, unknown>> = [];
+const { aliasEntries } = vi.hoisted(() => ({
+  aliasEntries: [] as Array<Record<string, unknown>>,
+}));
 
-class StubSettingsService {
-  providers: Record<string, Record<string, unknown>> = {};
-  global: Record<string, unknown> = {};
+const {
+  StubSettingsService: StubSettingsServiceClass,
+  StubConfig: StubConfigClass,
+  StubProvider: StubProviderClass,
+} = vi.hoisted(() => {
+  class StubSettingsService {
+    providers: Record<string, Record<string, unknown>> = {};
+    global: Record<string, unknown> = {};
 
-  set(key: string, value: unknown): void {
-    this.global[key] = value;
-  }
-
-  get(key: string): unknown {
-    return this.global[key];
-  }
-
-  getAllGlobalSettings(): Record<string, unknown> {
-    return { ...this.global };
-  }
-
-  setProviderSetting(provider: string, key: string, value: unknown): void {
-    this.providers[provider] ??= {};
-    if (value === undefined) {
-      delete this.providers[provider][key];
-    } else {
-      this.providers[provider][key] = value;
+    set(key: string, value: unknown): void {
+      this.global[key] = value;
     }
-  }
 
-  getProviderSettings(provider: string): Record<string, unknown> {
-    return this.providers[provider] ?? {};
-  }
+    get(key: string): unknown {
+      return this.global[key];
+    }
 
-  switchProvider = vi.fn(async (provider: string) => {
-    this.set('activeProvider', provider);
-  });
+    getAllGlobalSettings(): Record<string, unknown> {
+      return { ...this.global };
+    }
 
-  async updateSettings(
-    providerOrChanges?: string | Record<string, unknown>,
-    changes?: Record<string, unknown>,
-  ): Promise<void> {
-    if (typeof providerOrChanges === 'string') {
-      for (const [key, value] of Object.entries(changes!)) {
-        this.setProviderSetting(providerOrChanges, key, value);
-      }
-    } else if (typeof providerOrChanges === 'object') {
-      for (const [key, value] of Object.entries(providerOrChanges)) {
-        this.set(key, value);
+    setProviderSetting(provider: string, key: string, value: unknown): void {
+      this.providers[provider] ??= {};
+      if (value === undefined) {
+        delete this.providers[provider][key];
+      } else {
+        this.providers[provider][key] = value;
       }
     }
-  }
-}
 
-class StubConfig {
-  private model: string | undefined = undefined;
-  private provider = 'openai';
-  private ephemeral: Record<string, unknown> = {};
-  private providerManager: unknown;
-  private settingsService: InstanceType<typeof StubSettingsService>;
-  initializeContentGeneratorConfig = vi.fn(async () => {});
+    getProviderSettings(provider: string): Record<string, unknown> {
+      return this.providers[provider] ?? {};
+    }
 
-  constructor(settingsService: InstanceType<typeof StubSettingsService>) {
-    this.settingsService = settingsService;
-  }
+    switchProvider = vi.fn(async (provider: string) => {
+      this.set('activeProvider', provider);
+    });
 
-  getSettingsService(): unknown {
-    return this.settingsService;
-  }
-
-  setEphemeralSetting(key: string, value: unknown): void {
-    if (value === undefined) {
-      delete this.ephemeral[key];
-    } else {
-      this.ephemeral[key] = value;
+    async updateSettings(
+      providerOrChanges?: string | Record<string, unknown>,
+      changes?: Record<string, unknown>,
+    ): Promise<void> {
+      if (typeof providerOrChanges === 'string') {
+        for (const [key, value] of Object.entries(changes!)) {
+          this.setProviderSetting(providerOrChanges, key, value);
+        }
+      } else if (typeof providerOrChanges === 'object') {
+        for (const [key, value] of Object.entries(providerOrChanges)) {
+          this.set(key, value);
+        }
+      }
     }
   }
 
-  getEphemeralSetting(key: string): unknown {
-    return this.ephemeral[key];
+  class StubConfig {
+    private model: string | undefined = undefined;
+    private provider = 'openai';
+    private ephemeral: Record<string, unknown> = {};
+    private providerManager: unknown;
+    private settingsService: InstanceType<typeof StubSettingsService>;
+    initializeContentGeneratorConfig = vi.fn(async () => {});
+
+    constructor(settingsService: InstanceType<typeof StubSettingsService>) {
+      this.settingsService = settingsService;
+    }
+
+    getSettingsService(): unknown {
+      return this.settingsService;
+    }
+
+    setEphemeralSetting(key: string, value: unknown): void {
+      if (value === undefined) {
+        delete this.ephemeral[key];
+      } else {
+        this.ephemeral[key] = value;
+      }
+    }
+
+    getEphemeralSetting(key: string): unknown {
+      return this.ephemeral[key];
+    }
+
+    getEphemeralSettings(): Record<string, unknown> {
+      return { ...this.ephemeral };
+    }
+
+    getModel(): string | undefined {
+      return this.model;
+    }
+
+    setModel(model: string | undefined): void {
+      this.model = model;
+    }
+
+    setProvider(provider: string): void {
+      this.provider = provider;
+    }
+
+    getProvider(): string {
+      return this.provider;
+    }
+
+    setProviderManager(manager: unknown): void {
+      this.providerManager = manager;
+    }
+
+    getProviderManager(): unknown {
+      return this.providerManager;
+    }
   }
 
-  getEphemeralSettings(): Record<string, unknown> {
-    return { ...this.ephemeral };
+  class StubProvider {
+    name: string;
+    defaultModel = 'gpt-4o';
+    providerConfig: { baseUrl?: string } = {};
+
+    constructor(name: string) {
+      this.name = name;
+    }
+
+    getDefaultModel(): string {
+      return this.defaultModel;
+    }
   }
 
-  getModel(): string | undefined {
-    return this.model;
-  }
+  return { StubSettingsService, StubConfig, StubProvider };
+});
 
-  setModel(model: string | undefined): void {
-    this.model = model;
-  }
+type StubSettingsServiceInstance = InstanceType<
+  typeof StubSettingsServiceClass
+>;
+type StubConfigInstance = InstanceType<typeof StubConfigClass>;
+type StubProviderInstance = InstanceType<typeof StubProviderClass>;
 
-  setProvider(provider: string): void {
-    this.provider = provider;
-  }
-
-  getProvider(): string {
-    return this.provider;
-  }
-
-  setProviderManager(manager: unknown): void {
-    this.providerManager = manager;
-  }
-
-  getProviderManager(): unknown {
-    return this.providerManager;
-  }
-}
-
-class StubProvider {
-  name: string;
-  defaultModel = 'gpt-4o';
-  providerConfig: { baseUrl?: string } = {};
-
-  constructor(name: string) {
-    this.name = name;
-  }
-
-  getDefaultModel(): string {
-    return this.defaultModel;
-  }
-}
-
-type StubSettingsServiceInstance = InstanceType<typeof StubSettingsService>;
-type StubConfigInstance = InstanceType<typeof StubConfig>;
-type StubProviderInstance = InstanceType<typeof StubProvider>;
+const StubSettingsService = StubSettingsServiceClass;
+const StubConfig = StubConfigClass;
+const StubProvider = StubProviderClass;
 
 const providers: Record<string, StubProviderInstance> = {
   openai: new StubProvider('openai'),
@@ -159,6 +175,55 @@ const mockProviderManager = {
 
 let stubSettingsService: StubSettingsServiceInstance;
 let stubConfig: StubConfigInstance;
+
+vi.mock('../composition/providerAliases.js', () => ({
+  loadProviderAliasEntries: () => aliasEntries,
+}));
+
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
+
+  let activeContext: {
+    settingsService: StubSettingsServiceInstance;
+    config?: StubConfigInstance;
+    runtimeId?: string;
+    metadata?: Record<string, unknown>;
+  } | null = null;
+
+  return {
+    ...actual,
+    SettingsService: StubSettingsServiceClass,
+    Config: StubConfigClass,
+    createProviderRuntimeContext: (context: {
+      settingsService: StubSettingsServiceInstance;
+      config?: StubConfigInstance;
+      runtimeId?: string;
+      metadata?: Record<string, unknown>;
+    }) => {
+      activeContext = context;
+      return context;
+    },
+    getActiveProviderRuntimeContext: () => {
+      if (!activeContext) {
+        throw new Error(
+          'MissingProviderRuntimeError(provider-runtime): runtime registration missing',
+        );
+      }
+      return activeContext;
+    },
+    setActiveProviderRuntimeContext: (context: {
+      settingsService: StubSettingsServiceInstance;
+      config?: StubConfigInstance;
+      runtimeId?: string;
+      metadata?: Record<string, unknown>;
+    }) => {
+      activeContext = context;
+    },
+    peekActiveProviderRuntimeContext: () => activeContext,
+    getCurrentRuntimeScope: () => undefined,
+  };
+});
 
 const {
   switchActiveProvider,
@@ -277,9 +342,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
   // --- Existing alias default tests (non-model-defaults) ---
 
   it('applies alias defaultModel + alias ephemeralSettings on switch', async () => {
-    await switchActiveProvider('qwenvercel', {
-      loadAliasEntries: () => aliasEntries,
-    });
+    await switchActiveProvider('qwenvercel');
 
     expect(stubConfig.getModel()).toBe('qwen3-coder-plus');
     expect(stubConfig.getEphemeralSetting('context-limit')).toBe(200000);
@@ -297,9 +360,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       throw initError;
     });
 
-    await switchActiveProvider('gemini', {
-      loadAliasEntries: () => aliasEntries,
-    });
+    await switchActiveProvider('gemini');
 
     expect(stubConfig.initializeContentGeneratorConfig).toHaveBeenCalledTimes(
       1,
@@ -311,7 +372,6 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     stubConfig.setEphemeralSetting('max_tokens', 8192);
 
     await switchActiveProvider('qwenvercel', {
-      loadAliasEntries: () => aliasEntries,
       preserveEphemerals: ['max_tokens'],
     });
 
@@ -328,9 +388,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       max_tokens: 50000,
     };
 
-    await switchActiveProvider('qwenvercel', {
-      loadAliasEntries: () => aliasEntries,
-    });
+    await switchActiveProvider('qwenvercel');
 
     expect(stubConfig.getEphemeralSetting('api-key')).toBeUndefined();
     expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(50000);
@@ -348,9 +406,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       },
     });
 
-    await switchActiveProvider('gemini', {
-      loadAliasEntries: () => aliasEntries,
-    });
+    await switchActiveProvider('gemini');
 
     expect(stubConfig.getModel()).toBe('gemini-2.5-pro');
     expect(stubSettingsService.getProviderSettings('gemini').model).toBe(
@@ -368,9 +424,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       max_tokens: 50000,
     };
 
-    await switchActiveProvider('qwenvercel', {
-      loadAliasEntries: () => aliasEntries,
-    });
+    await switchActiveProvider('qwenvercel');
 
     expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
     expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(50000);
@@ -382,9 +436,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     it('applies all model defaults for claude-opus-4-6 from alias config modelDefaults', async () => {
       pushAnthropicAlias();
 
-      await switchActiveProvider('anthropic', {
-        loadAliasEntries: () => aliasEntries,
-      });
+      await switchActiveProvider('anthropic');
 
       expect(stubConfig.getModel()).toBe('claude-opus-4-6');
       expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBe(true);
@@ -400,9 +452,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     it('applies broad-pattern defaults but not effort for claude-sonnet-4-5-20250929', async () => {
       pushAnthropicAlias({ defaultModel: 'claude-sonnet-4-5-20250929' });
 
-      await switchActiveProvider('anthropic', {
-        loadAliasEntries: () => aliasEntries,
-      });
+      await switchActiveProvider('anthropic');
 
       expect(stubConfig.getModel()).toBe('claude-sonnet-4-5-20250929');
       expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBe(true);
@@ -431,9 +481,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
         },
       });
 
-      await switchActiveProvider('openrouter', {
-        loadAliasEntries: () => aliasEntries,
-      });
+      await switchActiveProvider('openrouter');
 
       expect(
         stubConfig.getEphemeralSetting('reasoning.enabled'),
@@ -452,10 +500,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     it('skips model defaults when skipModelDefaults is true (profile path)', async () => {
       pushAnthropicAlias();
 
-      await switchActiveProvider('anthropic', {
-        loadAliasEntries: () => aliasEntries,
-        skipModelDefaults: true,
-      });
+      await switchActiveProvider('anthropic', { skipModelDefaults: true });
 
       expect(
         stubConfig.getEphemeralSetting('reasoning.enabled'),
@@ -482,9 +527,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
         },
       });
 
-      await switchActiveProvider('anthropic', {
-        loadAliasEntries: () => aliasEntries,
-      });
+      await switchActiveProvider('anthropic');
 
       // Model default "high" overrides alias "medium"
       expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('high');
@@ -504,7 +547,6 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       pushAnthropicAlias();
 
       await switchActiveProvider('anthropic', {
-        loadAliasEntries: () => aliasEntries,
         preserveEphemerals: ['reasoning.effort'],
       });
 
@@ -538,9 +580,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
         ],
       });
 
-      await switchActiveProvider('anthropic', {
-        loadAliasEntries: () => aliasEntries,
-      });
+      await switchActiveProvider('anthropic');
 
       // Broad rule sets base, specific rule overrides effort
       expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBe(true);
@@ -565,7 +605,6 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       pushAnthropicAlias();
 
       await switchActiveProvider('anthropic', {
-        loadAliasEntries: () => aliasEntries,
         preserveEphemerals: ['reasoning.effort'],
       });
 
@@ -576,9 +615,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     it('--set reasoning.effort=low AFTER provider switch overrides model default', async () => {
       pushAnthropicAlias();
 
-      await switchActiveProvider('anthropic', {
-        loadAliasEntries: () => aliasEntries,
-      });
+      await switchActiveProvider('anthropic');
 
       // Model default applied reasoning.effort: "high"
       expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('high');
@@ -593,10 +630,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       pushAnthropicAlias();
 
       // Profile load path: skipModelDefaults: true
-      await switchActiveProvider('anthropic', {
-        loadAliasEntries: () => aliasEntries,
-        skipModelDefaults: true,
-      });
+      await switchActiveProvider('anthropic', { skipModelDefaults: true });
 
       // Model defaults NOT applied (profile path)
       expect(
@@ -618,10 +652,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
       // applyProfileWithGuards internally calls switchActiveProvider with
       // skipModelDefaults: true. We simulate the same call here.
-      await switchActiveProvider('anthropic', {
-        loadAliasEntries: () => aliasEntries,
-        skipModelDefaults: true,
-      });
+      await switchActiveProvider('anthropic', { skipModelDefaults: true });
 
       expect(
         stubConfig.getEphemeralSetting('reasoning.enabled'),
@@ -636,10 +667,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
       // applyProfileSnapshot → applyProfileWithGuards → switchActiveProvider
       // with skipModelDefaults: true. Same end result.
-      await switchActiveProvider('anthropic', {
-        loadAliasEntries: () => aliasEntries,
-        skipModelDefaults: true,
-      });
+      await switchActiveProvider('anthropic', { skipModelDefaults: true });
 
       expect(
         stubConfig.getEphemeralSetting('reasoning.enabled'),
@@ -657,9 +685,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
   describe('aliases without modelDefaults', () => {
     it('works normally when alias has no modelDefaults field', async () => {
       // qwenvercel has no modelDefaults — should work fine
-      await switchActiveProvider('qwenvercel', {
-        loadAliasEntries: () => aliasEntries,
-      });
+      await switchActiveProvider('qwenvercel');
 
       expect(stubConfig.getModel()).toBe('qwen3-coder-plus');
       expect(stubConfig.getEphemeralSetting('context-limit')).toBe(200000);
@@ -694,9 +720,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     });
 
     it('pins the qwen base-url ephemeral to the DashScope compatible-mode endpoint', async () => {
-      await switchActiveProvider('qwen', {
-        loadAliasEntries: () => aliasEntries,
-      });
+      await switchActiveProvider('qwen');
 
       expect(stubConfig.getEphemeralSetting('base-url')).toBe(
         DASHSCOPE_BASE_URL,
@@ -707,9 +731,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     });
 
     it('applies the qwen alias default model on switch', async () => {
-      await switchActiveProvider('qwen', {
-        loadAliasEntries: () => aliasEntries,
-      });
+      await switchActiveProvider('qwen');
 
       expect(stubConfig.getModel()).toBe('qwen3-coder-plus');
       expect(stubSettingsService.getProviderSettings('qwen').model).toBe(
@@ -719,4 +741,61 @@ describe('Provider alias defaults (model + ephemerals)', () => {
   });
 
   // --- Model defaults in setActiveModel (stateless recomputation) ---
+
+  // --- Session identity preservation (issue #2501) ---
+
+  describe('currentProfile survives provider switch (issue #2501)', () => {
+    it('preserves currentProfile ephemeral when switching providers', async () => {
+      pushAnthropicAlias();
+
+      // Simulate applyProfileSnapshot having set the active profile name.
+      stubConfig.setEphemeralSetting('currentProfile', 'gpt56solhigh');
+
+      await switchActiveProvider('anthropic');
+
+      // currentProfile is session-level identity state; it must survive the
+      // ephemeral clear so the UI can show the profile-qualified model label.
+      expect(stubConfig.getEphemeralSetting('currentProfile')).toBe(
+        'gpt56solhigh',
+      );
+    });
+
+    it('preserves currentProfile when not included in preserveEphemerals list', async () => {
+      pushAnthropicAlias();
+
+      stubConfig.setEphemeralSetting('currentProfile', 'work-profile');
+      // executeAutoProvider switches with a limited preserveEphemerals list
+      // that does NOT include currentProfile.
+      await switchActiveProvider('anthropic', {
+        preserveEphemerals: [
+          'auth-key',
+          'auth-keyfile',
+          'auth-key-name',
+          'base-url',
+        ],
+      });
+
+      expect(stubConfig.getEphemeralSetting('currentProfile')).toBe(
+        'work-profile',
+      );
+    });
+
+    it('clears non-identity ephemerals while preserving currentProfile and activeProvider', async () => {
+      pushAnthropicAlias();
+
+      stubConfig.setEphemeralSetting('currentProfile', 'my-profile');
+      stubConfig.setEphemeralSetting('temperature', 0.7);
+
+      await switchActiveProvider('anthropic');
+
+      expect(stubConfig.getEphemeralSetting('currentProfile')).toBe(
+        'my-profile',
+      );
+      expect(stubConfig.getEphemeralSetting('activeProvider')).toBe(
+        'anthropic',
+      );
+      // Per-provider ephemerals are still cleared.
+      expect(stubConfig.getEphemeralSetting('temperature')).toBeUndefined();
+    });
+  });
 });

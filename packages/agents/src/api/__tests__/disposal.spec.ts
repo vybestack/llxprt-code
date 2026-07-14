@@ -57,7 +57,7 @@
  * `toBe(0)` after `await agent.dispose()`).
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import {
   buildAgent,
   drain,

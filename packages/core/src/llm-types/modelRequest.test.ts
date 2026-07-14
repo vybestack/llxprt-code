@@ -3,9 +3,8 @@
  * @requirement REQ-006.1, REQ-006.2, REQ-006.3
  * @pseudocode lines 60-64
  */
-import { describe, expect } from 'bun:test';
-import { it } from 'bun:test';
-import { propertyTest } from '../test-utils/propertyTest.js';
+import { describe, expect } from 'vitest';
+import { it } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import type {
   ReasoningConfig,
@@ -162,8 +161,7 @@ describe('ModelGenerationSettings additive fields', () => {
 // ---------------------------------------------------------------------------
 
 describe('modelRequest property-based', () => {
-  propertyTest(
-    [fc.nat({ max: 100000 })],
+  it.prop([fc.nat({ max: 100000 })])(
     'ReasoningConfig budgetTokens round-trips through JSON',
     (budgetTokens: number) => {
       const rc: ReasoningConfig = { budgetTokens };
@@ -172,30 +170,29 @@ describe('modelRequest property-based', () => {
     },
   );
 
-  propertyTest(
-    [
-      fc.record({
-        temperature: fc.float({ min: 0, max: 2, noNaN: true }),
-        maxOutputTokens: fc.nat({ max: 100000 }),
-        systemInstruction: fc.string({ maxLength: 100 }),
-        reasoning: fc.oneof(
-          fc.constant(undefined),
-          fc.record({ budgetTokens: fc.nat({ max: 100000 }) }),
-        ),
-        toolChoice: fc.oneof(
-          fc.constant(undefined),
-          fc.record({
-            mode: fc.constantFrom('auto', 'none', 'required'),
-            allowedToolNames: fc.oneof(
-              fc.constant(undefined),
-              fc.array(fc.string({ minLength: 1, maxLength: 20 }), {
-                maxLength: 5,
-              }),
-            ),
-          }),
-        ),
-      }),
-    ],
+  it.prop([
+    fc.record({
+      temperature: fc.float({ min: 0, max: 2, noNaN: true }),
+      maxOutputTokens: fc.nat({ max: 100000 }),
+      systemInstruction: fc.string({ maxLength: 100 }),
+      reasoning: fc.oneof(
+        fc.constant(undefined),
+        fc.record({ budgetTokens: fc.nat({ max: 100000 }) }),
+      ),
+      toolChoice: fc.oneof(
+        fc.constant(undefined),
+        fc.record({
+          mode: fc.constantFrom('auto', 'none', 'required'),
+          allowedToolNames: fc.oneof(
+            fc.constant(undefined),
+            fc.array(fc.string({ minLength: 1, maxLength: 20 }), {
+              maxLength: 5,
+            }),
+          ),
+        }),
+      ),
+    }),
+  ])(
     'ModelGenerationSettings round-trips through JSON preserving fields',
     (fields) => {
       const settings: ModelGenerationSettings = fields;
@@ -214,44 +211,43 @@ describe('modelRequest property-based', () => {
     },
   );
 
-  propertyTest(
-    [
-      fc.array(
-        fc.record({
-          speaker: fc.constantFrom('human', 'ai', 'tool'),
-          blocks: fc.array(
-            fc.oneof(
-              fc.record({
-                type: fc.constant('text' as const),
-                text: fc.string({ minLength: 1, maxLength: 30 }),
-              }),
-              fc
-                .record({
-                  type: fc.constant('tool_call' as const),
-                  id: fc.string({ minLength: 1, maxLength: 10 }),
-                  name: fc.string({ minLength: 1, maxLength: 15 }),
-                  parameters: fc.dictionary(
-                    fc.string({ minLength: 1, maxLength: 5 }),
-                    fc.string({ maxLength: 10 }),
-                  ),
-                })
-                .map((b): ToolCallBlock => b),
-              fc
-                .record({
-                  type: fc.constant('thinking' as const),
-                  thought: fc.string({ minLength: 1, maxLength: 30 }),
-                  signature: fc.option(
-                    fc.string({ minLength: 1, maxLength: 20 }),
-                  ),
-                })
-                .map((b): ThinkingBlock => b),
-            ),
-            { minLength: 1, maxLength: 3 },
+  it.prop([
+    fc.array(
+      fc.record({
+        speaker: fc.constantFrom('human', 'ai', 'tool'),
+        blocks: fc.array(
+          fc.oneof(
+            fc.record({
+              type: fc.constant('text' as const),
+              text: fc.string({ minLength: 1, maxLength: 30 }),
+            }),
+            fc
+              .record({
+                type: fc.constant('tool_call' as const),
+                id: fc.string({ minLength: 1, maxLength: 10 }),
+                name: fc.string({ minLength: 1, maxLength: 15 }),
+                parameters: fc.dictionary(
+                  fc.string({ minLength: 1, maxLength: 5 }),
+                  fc.string({ maxLength: 10 }),
+                ),
+              })
+              .map((b): ToolCallBlock => b),
+            fc
+              .record({
+                type: fc.constant('thinking' as const),
+                thought: fc.string({ minLength: 1, maxLength: 30 }),
+                signature: fc.option(
+                  fc.string({ minLength: 1, maxLength: 20 }),
+                ),
+              })
+              .map((b): ThinkingBlock => b),
           ),
-        }),
-        { minLength: 1, maxLength: 5 },
-      ),
-    ],
+          { minLength: 1, maxLength: 3 },
+        ),
+      }),
+      { minLength: 1, maxLength: 5 },
+    ),
+  ])(
     'ModelGenerationRequest contents deep-equal after JSON round-trip',
     (contents) => {
       const req: ModelGenerationRequest = { contents };
@@ -260,8 +256,7 @@ describe('modelRequest property-based', () => {
     },
   );
 
-  propertyTest(
-    [fc.constantFrom('low', 'medium', 'high')],
+  it.prop([fc.constantFrom('low', 'medium', 'high')])(
     'ReasoningConfig effort round-trips through JSON',
     (effort) => {
       const rc: ReasoningConfig = { effort };
@@ -270,8 +265,7 @@ describe('modelRequest property-based', () => {
     },
   );
 
-  propertyTest(
-    [fc.boolean()],
+  it.prop([fc.boolean()])(
     'ReasoningConfig includeInOutput round-trips through JSON',
     (includeInOutput) => {
       const rc: ReasoningConfig = { includeInOutput };
@@ -280,24 +274,23 @@ describe('modelRequest property-based', () => {
     },
   );
 
-  propertyTest(
-    [
-      fc.record({
-        contents: fc.array(
-          fc.record({
-            speaker: fc.constantFrom('human', 'ai', 'tool'),
-            blocks: fc.array(
-              fc.record({
-                type: fc.constant('text' as const),
-                text: fc.string({ minLength: 1, maxLength: 20 }),
-              }),
-              { minLength: 1, maxLength: 3 },
-            ),
-          }),
-          { minLength: 0, maxLength: 3 },
-        ),
-      }),
-    ],
+  it.prop([
+    fc.record({
+      contents: fc.array(
+        fc.record({
+          speaker: fc.constantFrom('human', 'ai', 'tool'),
+          blocks: fc.array(
+            fc.record({
+              type: fc.constant('text' as const),
+              text: fc.string({ minLength: 1, maxLength: 20 }),
+            }),
+            { minLength: 1, maxLength: 3 },
+          ),
+        }),
+        { minLength: 0, maxLength: 3 },
+      ),
+    }),
+  ])(
     'ModelGenerationRequest with only contents deep-equal after JSON round-trip',
     ({ contents }) => {
       const req: ModelGenerationRequest = { contents };

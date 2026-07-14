@@ -107,7 +107,7 @@ vi.mock('../profileBootstrap.js', async () => {
         listProviders: vi.fn(() => []),
         getActiveProviderName: vi.fn(() => null),
         setActiveProvider: vi.fn(),
-        getActiveProvider: vi.fn(() => null),
+        getActiveProvider: vi.fn(() => undefined),
         getAvailableModels: vi.fn(async () => []),
       },
       oauthManager: undefined,
@@ -136,7 +136,7 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
       listProviders: vi.fn(() => []),
       getActiveProviderName: vi.fn(() => null),
       setActiveProvider: vi.fn(),
-      getActiveProvider: vi.fn(() => null),
+      getActiveProvider: vi.fn(() => undefined),
       getAvailableModels: vi.fn(async () => []),
     } as unknown as ProviderManager);
 
@@ -235,6 +235,24 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
     getLoadBalancerStats: vi.fn(() => undefined),
     getLoadBalancerLastSelected: vi.fn(() => undefined),
     getAllLoadBalancerStats: vi.fn(() => ({})),
+    assembleCliProviderRuntime: vi.fn(
+      (input: {
+        settingsService: unknown;
+        config: unknown;
+        runtimeId: string;
+        metadata?: Record<string, unknown>;
+      }) => ({
+        runtime: {
+          settingsService: input.settingsService,
+          config: input.config,
+          runtimeId: input.runtimeId,
+          metadata: input.metadata,
+        },
+        runtimeMessageBus: { kind: 'session-bus' },
+        providerManager: getProviderManager(),
+        oauthManager: { id: 'oauth-manager' },
+      }),
+    ),
   };
 });
 

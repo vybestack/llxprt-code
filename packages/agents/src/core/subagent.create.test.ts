@@ -17,11 +17,77 @@ import {
   type ToolConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { SubagentExecuteToolCall } from './subagentToolProcessing.js';
+import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
+import { executeToolCall } from './nonInteractiveToolExecutor.js';
 import { ChatSession } from './chatSession.js';
-import type { Content, GenerateContentConfig } from '@google/genai';
-import { Type } from '@google/genai';
-import type { CreateChatSession } from './subagentRuntimeSetup.js';
+import {
+  createContentGenerator,
+  type ContentGenerator,
+} from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import type { ChatSessionConfig } from './chatSession.js';
+const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
+  const mockReadTodos = vi.fn().mockResolvedValue([]);
+  const TodoStoreMock = vi
+    .fn()
+    .mockImplementation(() => ({ readTodos: mockReadTodos }));
+  return { mockReadTodos, TodoStoreMock };
+});
+
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  return {
+    ...actual,
+    LocalTodoStore: TodoStoreMock,
+  };
+});
+
+vi.mock('./chatSession.js');
+vi.mock(
+  '@vybestack/llxprt-code-core/core/contentGenerator.js',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@vybestack/llxprt-code-core/core/contentGenerator.js')
+      >();
+    return {
+      ...actual,
+      createContentGenerator: vi.fn(),
+    };
+  },
+);
+vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
+vi.mock('./nonInteractiveToolExecutor.js');
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    IdeClient: {
+      getInstance: vi.fn().mockResolvedValue({
+        getConnectionStatus: vi.fn(),
+        initialize: vi.fn(),
+        shutdown: vi.fn(),
+      }),
+    },
+  };
+});
+vi.mock(
+  '@vybestack/llxprt-code-core/core/prompts.js',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@vybestack/llxprt-code-core/core/prompts.js')
+      >();
+    return {
+      ...actual,
+      getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
+    };
+  },
+);
+
 import {
   createCompletedToolCallResponse,
   createMockConfig,
@@ -55,7 +121,7 @@ describe('subagent.ts', () => {
 
     it('does not preflight tools even when they request confirmation', async () => {
       const mockTool = {
-        schema: { parameters: { type: Type.OBJECT, properties: {} } },
+        schema: { parameters: { type: 'object', properties: {} } },
         build: vi.fn().mockReturnValue({
           shouldConfirmExecute: vi.fn().mockResolvedValue({
             type: 'exec',
@@ -75,7 +141,7 @@ describe('subagent.ts', () => {
           getToolMetadata: () => ({
             name: 'risky_tool',
             description: 'Risky tool',
-            parameterSchema: { type: Type.OBJECT, properties: {} },
+            parameterSchema: { type: 'object', properties: {} },
           }),
         },
       });
@@ -103,7 +169,7 @@ describe('subagent.ts', () => {
 
     it('avoids eagerly building tools when confirmation is not required', async () => {
       const mockTool = {
-        schema: { parameters: { type: Type.OBJECT, properties: {} } },
+        schema: { parameters: { type: 'object', properties: {} } },
         build: vi.fn().mockReturnValue({
           shouldConfirmExecute: vi.fn().mockResolvedValue(null),
         }),
@@ -118,7 +184,7 @@ describe('subagent.ts', () => {
           getToolMetadata: () => ({
             name: 'safe_tool',
             description: 'Safe tool',
-            parameterSchema: { type: Type.OBJECT, properties: {} },
+            parameterSchema: { type: 'object', properties: {} },
           }),
         },
       });
@@ -152,9 +218,9 @@ describe('subagent.ts', () => {
       const mockToolWithParams = {
         schema: {
           parameters: {
-            type: Type.OBJECT,
+            type: 'object',
             properties: {
-              path: { type: Type.STRING },
+              path: { type: 'string' },
             },
             required: ['path'],
           },
@@ -174,9 +240,9 @@ describe('subagent.ts', () => {
             name: 'tool_with_params',
             description: 'Tool with params',
             parameterSchema: {
-              type: Type.OBJECT,
+              type: 'object',
               properties: {
-                path: { type: Type.STRING },
+                path: { type: 'string' },
               },
             },
           }),
@@ -214,42 +280,42 @@ describe('subagent.ts', () => {
   });
 
   describe('stateless runtime enforcement', () => {
-    let generationConfigs: GenerateContentConfig[];
-    let mockSendMessageStream: Mock;
-    const executeToolCall = vi.fn<SubagentExecuteToolCall>();
-    const createChatSession: CreateChatSession = (
-      _runtimeContext,
-      _contentGenerator,
-      generationConfig,
-    ) => {
-      generationConfigs.push(generationConfig);
-      return {
-        sendMessageStream: mockSendMessageStream,
-        getHistory: () => [],
-        getHistoryService: () => ({
-          clear: vi.fn(),
-          findUnmatchedToolCalls: () => [],
-          getCurated: () => [],
-          getTotalTokens: () => 0,
-        }),
-        getConfig: () => undefined,
-      } as unknown as ChatSession;
-    };
-    const getGenerationConfigFromMock = (
-      callIndex = 0,
-    ): GenerateContentConfig & { systemInstruction?: string | Content } => {
-      const generationConfig = generationConfigs[callIndex];
+    const getGenerationConfigFromMock = (callIndex = 0): ChatSessionConfig => {
+      const callArgs = vi.mocked(ChatSession).mock.calls[callIndex];
+      const generationConfig = callArgs[2];
       expect(generationConfig).toBeDefined();
       if (!generationConfig) throw new Error('generationConfig is undefined');
-      return generationConfig as GenerateContentConfig & {
-        systemInstruction?: string | Content;
-      };
+      return generationConfig;
     };
 
     beforeEach(() => {
-      generationConfigs = [];
+      vi.clearAllMocks();
+      mockReadTodos.mockReset();
+      mockReadTodos.mockResolvedValue([]);
+      TodoStoreMock.mockClear();
+
+      vi.mocked(getEnvironmentContext).mockResolvedValue([
+        { text: 'Env Context' },
+      ]);
+      vi.mocked(createContentGenerator).mockResolvedValue({
+        getGenerativeModel: vi.fn(),
+      } as unknown as ContentGenerator);
+
       mockSendMessageStream = vi.fn();
-      executeToolCall.mockReset();
+      vi.mocked(ChatSession).mockImplementation(
+        () =>
+          ({
+            sendMessageStream: mockSendMessageStream,
+            getHistory: vi.fn().mockReturnValue([]),
+            getHistoryService: vi.fn().mockReturnValue({
+              clear: vi.fn(),
+              findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+              getCurated: vi.fn().mockReturnValue([]),
+              getTotalTokens: vi.fn().mockReturnValue(0),
+            }),
+            getConfig: vi.fn().mockReturnValue(undefined),
+          }) as unknown as ChatSession,
+      );
     });
 
     it('does not access foreground Config tool registry when runtime bundle provided', async () => {
@@ -288,8 +354,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession, executeToolCall },
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -305,7 +369,7 @@ describe('subagent.ts', () => {
           {
             name: 'stateless.tool',
             description: 'Foreground registry description',
-            parameters: { type: Type.OBJECT, properties: {} },
+            parameters: { type: 'object', properties: {} },
           },
         ]),
       });
@@ -339,8 +403,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         createRuntimeOverrides({ runtimeBundle }).overrides,
-        undefined,
-        { createChatSession, executeToolCall },
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -358,6 +420,10 @@ describe('subagent.ts', () => {
 
     it('prefers injected environment context loader over foreground Config', async () => {
       const { config } = await createMockConfig();
+
+      vi.mocked(getEnvironmentContext).mockImplementation(() => {
+        throw new Error('REGRESSION: getEnvironmentContext should not be used');
+      });
 
       const runtimeBundle = createStatelessRuntimeBundle();
       const environmentLoader = vi.fn(async (_runtime: AgentRuntimeContext) => [
@@ -379,8 +445,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession, executeToolCall },
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -428,7 +492,7 @@ describe('subagent.ts', () => {
         ]),
       );
 
-      executeToolCall.mockResolvedValue({
+      vi.mocked(executeToolCall).mockResolvedValue({
         ...createCompletedToolCallResponse({
           callId: 'call1',
           responseParts: [{ text: 'file content' }],
@@ -462,13 +526,11 @@ describe('subagent.ts', () => {
         toolConfig,
         undefined,
         overrides,
-        undefined,
-        { createChatSession, executeToolCall },
       );
 
       await scope.runNonInteractive(new ContextState());
 
-      const [toolExecutorConfig] = executeToolCall.mock.calls[0];
+      const [toolExecutorConfig] = vi.mocked(executeToolCall).mock.calls[0];
       const ephemerals = toolExecutorConfig.getEphemeralSettings();
       expect(ephemerals['tools.allowed']).toStrictEqual(['read_file']);
     });
@@ -487,8 +549,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession, executeToolCall },
       );
 
       mockSendMessageStream.mockImplementation(
@@ -498,7 +558,7 @@ describe('subagent.ts', () => {
         ]),
       );
 
-      executeToolCall.mockResolvedValue({
+      vi.mocked(executeToolCall).mockResolvedValue({
         ...createCompletedToolCallResponse({
           callId: 'call-1',
           responseParts: [{ text: 'ok' }],
@@ -508,7 +568,7 @@ describe('subagent.ts', () => {
 
       await scope.runNonInteractive(new ContextState());
 
-      for (const call of executeToolCall.mock.calls) {
+      for (const call of vi.mocked(executeToolCall).mock.calls) {
         expect(call[0]).not.toBe(config);
       }
     });

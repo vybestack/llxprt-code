@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import type { ToolCall, WaitingToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -16,8 +16,6 @@ import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import type { ToolCallBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { type Content } from '@google/genai';
-import type { Part } from '@google/genai';
 import {
   createMockMessageBus,
   createMockPolicyEngine,

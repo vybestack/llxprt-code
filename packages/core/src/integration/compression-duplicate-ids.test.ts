@@ -2,7 +2,7 @@
  * Test to reproduce duplicate tool call IDs during compression
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
 

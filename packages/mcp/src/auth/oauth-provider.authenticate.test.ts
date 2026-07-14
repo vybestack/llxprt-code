@@ -7,16 +7,25 @@
  * Split from oauth-provider.test.ts during #2092 lint hardening.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi } from 'vitest';
 
-const mockOpenBrowserSecurely = vi.fn();
-const mockHttpServer = {
+const mockOpenBrowserSecurely = vi.hoisted(() => vi.fn());
+const mockHttpServer = vi.hoisted(() => ({
   listen: vi.fn(),
   close: vi.fn(),
   on: vi.fn(),
   address: vi.fn(() => ({ address: 'localhost', family: 'IPv4', port: 7777 })),
-};
+}));
 
+vi.mock('@vybestack/llxprt-code-core/utils/secure-browser-launcher.js', () => ({
+  openBrowserSecurely: mockOpenBrowserSecurely,
+}));
+vi.mock('node:crypto');
+vi.mock('node:http', () => ({
+  createServer: vi.fn(() => mockHttpServer),
+}));
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as http from 'node:http';
 import { MCPOAuthProvider } from './oauth-provider.js';
 import {
@@ -27,36 +36,10 @@ import {
   setupOAuthTestSpies,
 } from './oauthProviderTestSetup.js';
 
-const mockRandomBytes = vi.fn((size: number) =>
-  size === 16 ? Buffer.from('mock_state_16_bytes') : Buffer.alloc(size),
-);
-const mockCreateHash = vi.fn(() => ({
-  update: vi.fn().mockReturnThis(),
-  digest: vi.fn().mockReturnValue('code_challenge_mock'),
-}));
-let callbackServerFactory: typeof http.createServer = () =>
-  mockHttpServer as unknown as http.Server;
-
-const authenticate = (
-  serverName: string,
-  config: Parameters<typeof MCPOAuthProvider.authenticate>[1],
-  mcpServerUrl?: string,
-  events?: Parameters<typeof MCPOAuthProvider.authenticate>[3],
-  createServer: typeof http.createServer = callbackServerFactory,
-) =>
-  MCPOAuthProvider.authenticate(serverName, config, mcpServerUrl, events, {
-    createServer,
-    openBrowser: mockOpenBrowserSecurely,
-    randomBytes: mockRandomBytes as typeof import('node:crypto').randomBytes,
-    createHash:
-      mockCreateHash as unknown as typeof import('node:crypto').createHash,
-  });
-
 describe('MCPOAuthProvider', () => {
   let saveTokenSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    callbackServerFactory = () => mockHttpServer as unknown as http.Server;
     const spies = setupOAuthTestSpies(mockOpenBrowserSecurely);
     saveTokenSpy = spies.saveTokenSpy;
   });
@@ -69,12 +52,10 @@ describe('MCPOAuthProvider', () => {
     it('should perform complete OAuth flow with PKCE', async () => {
       // Mock HTTP server callback
       let callbackHandler: unknown;
-      callbackServerFactory = vi.fn(
-        (handler: Parameters<typeof http.createServer>[0]) => {
-          callbackHandler = handler;
-          return mockHttpServer as unknown as http.Server;
-        },
-      );
+      vi.mocked(http.createServer).mockImplementation((handler) => {
+        callbackHandler = handler;
+        return mockHttpServer as unknown as http.Server;
+      });
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -104,7 +85,10 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      const result = await authenticate('test-server', mockConfig);
+      const result = await MCPOAuthProvider.authenticate(
+        'test-server',
+        mockConfig,
+      );
 
       expect(result).toStrictEqual({
         accessToken: 'access_token_123',
@@ -174,12 +158,10 @@ describe('MCPOAuthProvider', () => {
 
       // Setup callback handler
       let callbackHandler: unknown;
-      callbackServerFactory = vi.fn(
-        (handler: Parameters<typeof http.createServer>[0]) => {
-          callbackHandler = handler;
-          return mockHttpServer as unknown as http.Server;
-        },
-      );
+      vi.mocked(http.createServer).mockImplementation((handler) => {
+        callbackHandler = handler;
+        return mockHttpServer as unknown as http.Server;
+      });
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -208,7 +190,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      const result = await authenticate(
+      const result = await MCPOAuthProvider.authenticate(
         'test-server',
         configWithoutAuth,
         'https://api.example.com',
@@ -253,12 +235,10 @@ describe('MCPOAuthProvider', () => {
 
       // Setup callback handler
       let callbackHandler: unknown;
-      callbackServerFactory = vi.fn(
-        (handler: Parameters<typeof http.createServer>[0]) => {
-          callbackHandler = handler;
-          return mockHttpServer as unknown as http.Server;
-        },
-      );
+      vi.mocked(http.createServer).mockImplementation((handler) => {
+        callbackHandler = handler;
+        return mockHttpServer as unknown as http.Server;
+      });
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -287,7 +267,10 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      const result = await authenticate('test-server', configWithoutClient);
+      const result = await MCPOAuthProvider.authenticate(
+        'test-server',
+        configWithoutClient,
+      );
 
       expect(result).toBeDefined();
       expect(mockFetch).toHaveBeenCalledWith(
@@ -339,12 +322,10 @@ describe('MCPOAuthProvider', () => {
 
       // Setup callback handler
       let callbackHandler: unknown;
-      callbackServerFactory = vi.fn(
-        (handler: Parameters<typeof http.createServer>[0]) => {
-          callbackHandler = handler;
-          return mockHttpServer as unknown as http.Server;
-        },
-      );
+      vi.mocked(http.createServer).mockImplementation((handler) => {
+        callbackHandler = handler;
+        return mockHttpServer as unknown as http.Server;
+      });
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -373,7 +354,10 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      const result = await authenticate('test-server', configWithoutClient);
+      const result = await MCPOAuthProvider.authenticate(
+        'test-server',
+        configWithoutClient,
+      );
 
       expect(result).toBeDefined();
       expect(mockFetch).toHaveBeenCalledWith(
@@ -447,12 +431,10 @@ describe('MCPOAuthProvider', () => {
 
       // Setup callback handler
       let callbackHandler: unknown;
-      callbackServerFactory = vi.fn(
-        (handler: Parameters<typeof http.createServer>[0]) => {
-          callbackHandler = handler;
-          return mockHttpServer as unknown as http.Server;
-        },
-      );
+      vi.mocked(http.createServer).mockImplementation((handler) => {
+        callbackHandler = handler;
+        return mockHttpServer as unknown as http.Server;
+      });
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -481,7 +463,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      const result = await authenticate(
+      const result = await MCPOAuthProvider.authenticate(
         'test-server',
         configWithoutClientAndAuthorizationUrl,
         'https://api.example.com',
@@ -499,12 +481,10 @@ describe('MCPOAuthProvider', () => {
 
     it('should handle OAuth callback errors', async () => {
       let callbackHandler: unknown;
-      callbackServerFactory = vi.fn(
-        (handler: Parameters<typeof http.createServer>[0]) => {
-          callbackHandler = handler;
-          return mockHttpServer as unknown as http.Server;
-        },
-      );
+      vi.mocked(http.createServer).mockImplementation((handler) => {
+        callbackHandler = handler;
+        return mockHttpServer as unknown as http.Server;
+      });
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -523,19 +503,17 @@ describe('MCPOAuthProvider', () => {
         }, 10);
       });
 
-      expect(authenticate('test-server', mockConfig)).rejects.toThrow(
-        'OAuth error: access_denied',
-      );
+      await expect(
+        MCPOAuthProvider.authenticate('test-server', mockConfig),
+      ).rejects.toThrow('OAuth error: access_denied');
     });
 
     it('should handle state mismatch in callback', async () => {
       let callbackHandler: unknown;
-      callbackServerFactory = vi.fn(
-        (handler: Parameters<typeof http.createServer>[0]) => {
-          callbackHandler = handler;
-          return mockHttpServer as unknown as http.Server;
-        },
-      );
+      vi.mocked(http.createServer).mockImplementation((handler) => {
+        callbackHandler = handler;
+        return mockHttpServer as unknown as http.Server;
+      });
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -554,19 +532,17 @@ describe('MCPOAuthProvider', () => {
         }, 10);
       });
 
-      expect(authenticate('test-server', mockConfig)).rejects.toThrow(
-        'State mismatch - possible CSRF attack',
-      );
+      await expect(
+        MCPOAuthProvider.authenticate('test-server', mockConfig),
+      ).rejects.toThrow('State mismatch - possible CSRF attack');
     });
 
     it('should handle token exchange failure', async () => {
       let callbackHandler: unknown;
-      callbackServerFactory = vi.fn(
-        (handler: Parameters<typeof http.createServer>[0]) => {
-          callbackHandler = handler;
-          return mockHttpServer as unknown as http.Server;
-        },
-      );
+      vi.mocked(http.createServer).mockImplementation((handler) => {
+        callbackHandler = handler;
+        return mockHttpServer as unknown as http.Server;
+      });
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -594,13 +570,13 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      expect(authenticate('test-server', mockConfig)).rejects.toThrow(
-        'Token exchange failed: invalid_grant - Invalid grant',
-      );
+      await expect(
+        MCPOAuthProvider.authenticate('test-server', mockConfig),
+      ).rejects.toThrow('Token exchange failed: invalid_grant - Invalid grant');
     });
 
     it('should handle callback timeout', async () => {
-      callbackServerFactory = vi.fn(
+      vi.mocked(http.createServer).mockImplementation(
         () => mockHttpServer as unknown as http.Server,
       );
 
@@ -619,15 +595,11 @@ describe('MCPOAuthProvider', () => {
         return originalSetTimeout(callback, 0);
       }) as unknown as typeof setTimeout;
 
-      try {
-        await authenticate('test-server', mockConfig);
-        throw new Error('Expected OAuth callback timeout');
-      } catch (error) {
-        expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('OAuth callback timeout');
-      } finally {
-        global.setTimeout = originalSetTimeout;
-      }
+      await expect(
+        MCPOAuthProvider.authenticate('test-server', mockConfig),
+      ).rejects.toThrow('OAuth callback timeout');
+
+      global.setTimeout = originalSetTimeout;
     });
 
     it('should use port from redirectUri if provided', async () => {
@@ -637,12 +609,10 @@ describe('MCPOAuthProvider', () => {
       };
 
       let callbackHandler: unknown;
-      callbackServerFactory = vi.fn(
-        (handler: Parameters<typeof http.createServer>[0]) => {
-          callbackHandler = handler;
-          return mockHttpServer as unknown as http.Server;
-        },
-      );
+      vi.mocked(http.createServer).mockImplementation((handler) => {
+        callbackHandler = handler;
+        return mockHttpServer as unknown as http.Server;
+      });
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -675,7 +645,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await authenticate('test-server', configWithPort);
+      await MCPOAuthProvider.authenticate('test-server', configWithPort);
 
       expect(mockHttpServer.listen).toHaveBeenCalledWith(
         12345,
@@ -690,12 +660,10 @@ describe('MCPOAuthProvider', () => {
       };
 
       let callbackHandler: unknown;
-      callbackServerFactory = vi.fn(
-        (handler: Parameters<typeof http.createServer>[0]) => {
-          callbackHandler = handler;
-          return mockHttpServer as unknown as http.Server;
-        },
-      );
+      vi.mocked(http.createServer).mockImplementation((handler) => {
+        callbackHandler = handler;
+        return mockHttpServer as unknown as http.Server;
+      });
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -723,7 +691,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await authenticate('test-server', configWithInvalidPort);
+      await MCPOAuthProvider.authenticate('test-server', configWithInvalidPort);
 
       // Should be called with 0 (OS assigned) because the port was invalid
       expect(mockHttpServer.listen).toHaveBeenCalledWith(
@@ -739,12 +707,10 @@ describe('MCPOAuthProvider', () => {
       };
 
       let callbackHandler: unknown;
-      callbackServerFactory = vi.fn(
-        (handler: Parameters<typeof http.createServer>[0]) => {
-          callbackHandler = handler;
-          return mockHttpServer as unknown as http.Server;
-        },
-      );
+      vi.mocked(http.createServer).mockImplementation((handler) => {
+        callbackHandler = handler;
+        return mockHttpServer as unknown as http.Server;
+      });
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -772,7 +738,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await authenticate('test-server', configNoPort);
+      await MCPOAuthProvider.authenticate('test-server', configNoPort);
 
       // Should be called with 0 (OS assigned), not 80
       expect(mockHttpServer.listen).toHaveBeenCalledWith(

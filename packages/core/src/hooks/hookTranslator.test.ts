@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   HookTranslatorGenAIv1,
   defaultHookTranslator,

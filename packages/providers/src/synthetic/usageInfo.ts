@@ -127,8 +127,9 @@ export async function fetchSyntheticUsage(
 /**
  * Format a reset time from ISO string for display
  */
-function formatResetTime(renewsAt: string, now: Date): string {
+function formatResetTime(renewsAt: string): string {
   const resetDate = new Date(renewsAt);
+  const now = new Date();
   const diffMs = resetDate.getTime() - now.getTime();
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMins / 60);
@@ -148,16 +149,13 @@ function formatResetTime(renewsAt: string, now: Date): string {
 function formatBucket(
   bucket: SyntheticQuotaBucket,
   label: string,
-  now: Date,
 ): string | null {
   if (typeof bucket.limit !== 'number' || typeof bucket.requests !== 'number') {
     return null;
   }
 
   const remaining = Math.max(0, bucket.limit - bucket.requests);
-  const resetStr = bucket.renewsAt
-    ? formatResetTime(bucket.renewsAt, now)
-    : 'N/A';
+  const resetStr = bucket.renewsAt ? formatResetTime(bucket.renewsAt) : 'N/A';
   const remainingStr =
     remaining === Math.floor(remaining)
       ? String(remaining)
@@ -169,24 +167,21 @@ function formatBucket(
 /**
  * Format all available Synthetic usage information for display
  */
-export function formatSyntheticUsage(
-  usage: SyntheticUsageInfo,
-  now: Date = new Date(),
-): string[] {
+export function formatSyntheticUsage(usage: SyntheticUsageInfo): string[] {
   const lines: string[] = [];
 
   if (usage.subscription) {
-    const formatted = formatBucket(usage.subscription, 'Subscription', now);
+    const formatted = formatBucket(usage.subscription, 'Subscription');
     if (formatted) lines.push(formatted);
   }
 
   if (usage.toolCallDiscounts) {
-    const formatted = formatBucket(usage.toolCallDiscounts, 'Tool calls', now);
+    const formatted = formatBucket(usage.toolCallDiscounts, 'Tool calls');
     if (formatted) lines.push(formatted);
   }
 
   if (usage.search?.hourly) {
-    const formatted = formatBucket(usage.search.hourly, 'Search (hourly)', now);
+    const formatted = formatBucket(usage.search.hourly, 'Search (hourly)');
     if (formatted) lines.push(formatted);
   }
 

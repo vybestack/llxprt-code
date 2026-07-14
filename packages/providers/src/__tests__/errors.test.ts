@@ -9,7 +9,7 @@
  * BEHAVIORAL TESTS - Testing error construction and message formatting
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import {
   AllBucketsExhaustedError,
   type BucketFailureReason,

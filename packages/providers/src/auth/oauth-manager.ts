@@ -16,7 +16,8 @@ import {
 } from './types.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import { ProviderRegistry } from './provider-registry.js';
-import { type MessageBus, type Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type {
   OAuthManager as AuthOAuthManagerInterface,
   OAuthTokenRequestMetadata as AuthOAuthTokenRequestMetadata,
@@ -32,69 +33,6 @@ import {
   getAllCodexUsageInfo,
   getHigherPriorityAuth,
 } from './provider-usage-info.js';
-import type { ProfileBucketResolverDependencies } from './token-profile-resolver.js';
-import type { FetchAnthropicUsage } from './provider-usage-info.js';
-
-export interface OAuthManagerUsageDependencies {
-  getAnthropicUsageInfo: typeof getAnthropicUsageInfo;
-  getAllAnthropicUsageInfo: typeof getAllAnthropicUsageInfo;
-  getAllCodexUsageInfo: typeof getAllCodexUsageInfo;
-  getHigherPriorityAuth: typeof getHigherPriorityAuth;
-}
-
-export const defaultOAuthManagerUsageDependencies: OAuthManagerUsageDependencies =
-  {
-    getAnthropicUsageInfo,
-    getAllAnthropicUsageInfo,
-    getAllCodexUsageInfo,
-    getHigherPriorityAuth,
-  };
-
-export interface OAuthManagerComponentFactories {
-  createProviderRegistry(settings?: IOAuthSettingsProvider): ProviderRegistry;
-  createBucketManager(tokenStore: TokenStore): OAuthBucketManager;
-  createProactiveRenewalManager(
-    tokenStore: TokenStore,
-    getProvider: (name: string) => OAuthProvider | undefined,
-    isOAuthEnabled: (name: string) => boolean,
-  ): ProactiveRenewalManager;
-  createAuthFlowOrchestrator(
-    tokenStore: TokenStore,
-    providerRegistry: ProviderRegistry,
-    facade: BucketFailoverOAuthManagerLike,
-    config?: Config,
-    messageBus?: MessageBus,
-  ): AuthFlowOrchestrator;
-  createTokenAccessCoordinator(
-    tokenStore: TokenStore,
-    providerRegistry: ProviderRegistry,
-    proactiveRenewalManager: ProactiveRenewalManager,
-    bucketManager: OAuthBucketManager,
-    facade: BucketFailoverOAuthManagerLike,
-    settings: IOAuthSettingsProvider | undefined,
-    getConfig: () => Config | undefined,
-    profileBucketDependencies?: ProfileBucketResolverDependencies,
-  ): TokenAccessCoordinator;
-  createAuthStatusService(
-    tokenStore: TokenStore,
-    providerRegistry: ProviderRegistry,
-    proactiveRenewalManager: ProactiveRenewalManager,
-    bucketManager: OAuthBucketManager,
-    tokenAccessCoordinator: TokenAccessCoordinator,
-  ): AuthStatusService;
-}
-
-export const defaultOAuthManagerComponentFactories: OAuthManagerComponentFactories =
-  {
-    createProviderRegistry: (settings) => new ProviderRegistry(settings),
-    createBucketManager: (tokenStore) => new OAuthBucketManager(tokenStore),
-    createProactiveRenewalManager: (...args) =>
-      new ProactiveRenewalManager(...args),
-    createAuthFlowOrchestrator: (...args) => new AuthFlowOrchestrator(...args),
-    createTokenAccessCoordinator: (...args) =>
-      new TokenAccessCoordinator(...args),
-    createAuthStatusService: (...args) => new AuthStatusService(...args),
-  };
 
 /**
  * Compile-time structural compatibility marker: ensures the auth package's
@@ -124,8 +62,6 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
   private readonly authStatusService: AuthStatusService;
   private _runtimeMessageBus: MessageBus | undefined;
   private readonly config?: Config;
-  private readonly fetchAnthropicUsage?: FetchAnthropicUsage;
-  private readonly usageDependencies: OAuthManagerUsageDependencies;
 
   /**
    * Getter/setter for runtimeMessageBus.
@@ -155,25 +91,18 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     tokenStore: TokenStore,
     settings?: IOAuthSettingsProvider,
     runtimeDeps?: OAuthManagerRuntimeMessageBusDeps,
-    profileBucketDependencies?: ProfileBucketResolverDependencies,
-    fetchAnthropicUsage?: FetchAnthropicUsage,
-    componentFactories: OAuthManagerComponentFactories = defaultOAuthManagerComponentFactories,
-    usageDependencies: OAuthManagerUsageDependencies = defaultOAuthManagerUsageDependencies,
   ) {
-    this.usageDependencies = usageDependencies;
-    this.providerRegistry = componentFactories.createProviderRegistry(settings);
-    this.fetchAnthropicUsage = fetchAnthropicUsage;
+    this.providerRegistry = new ProviderRegistry(settings);
     this.tokenStore = tokenStore;
     this.settings = settings;
     this.config = runtimeDeps?.config;
-    this.bucketManager = componentFactories.createBucketManager(tokenStore);
-    this.proactiveRenewalManager =
-      componentFactories.createProactiveRenewalManager(
-        tokenStore,
-        (name: string) => this.providerRegistry.getProvider(name),
-        (name: string) => this.isOAuthEnabled(name),
-      );
-    this.authFlowOrchestrator = componentFactories.createAuthFlowOrchestrator(
+    this.bucketManager = new OAuthBucketManager(tokenStore);
+    this.proactiveRenewalManager = new ProactiveRenewalManager(
+      tokenStore,
+      (name: string) => this.providerRegistry.getProvider(name),
+      (name: string) => this.isOAuthEnabled(name),
+    );
+    this.authFlowOrchestrator = new AuthFlowOrchestrator(
       tokenStore,
       this.providerRegistry,
       this, // facadeRef — satisfies BucketFailoverOAuthManagerLike
@@ -184,19 +113,17 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     // bus to the orchestrator. Idempotent with the constructor argument above,
     // and keeps propagation correct if that argument is ever dropped.
     this.runtimeMessageBus = runtimeDeps?.messageBus;
-    this.tokenAccessCoordinator =
-      componentFactories.createTokenAccessCoordinator(
-        tokenStore,
-        this.providerRegistry,
-        this.proactiveRenewalManager,
-        this.bucketManager,
-        this, // facadeRef — satisfies BucketFailoverOAuthManagerLike
-        settings,
-        // Pass a getter so the coordinator always reads the live config value,
-        // even if tests mutate manager.config after construction.
-        () => this.config,
-        profileBucketDependencies,
-      );
+    this.tokenAccessCoordinator = new TokenAccessCoordinator(
+      tokenStore,
+      this.providerRegistry,
+      this.proactiveRenewalManager,
+      this.bucketManager,
+      this, // facadeRef — satisfies BucketFailoverOAuthManagerLike
+      settings,
+      // Pass a getter so the coordinator always reads the live config value,
+      // even if tests mutate manager.config after construction.
+      () => this.config,
+    );
     // Wire getProfileBuckets delegate so that test spies on the private
     // manager.getProfileBuckets method correctly intercept internal calls
     // made by the coordinator (coordinator calls the delegate → facade method
@@ -208,7 +135,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     // Wire authenticator to the AuthFlowOrchestrator instance
     this.tokenAccessCoordinator.setAuthenticator(this.authFlowOrchestrator);
     // AuthStatusService owns auth-status checking, logout, and cache invalidation
-    this.authStatusService = componentFactories.createAuthStatusService(
+    this.authStatusService = new AuthStatusService(
       tokenStore,
       this.providerRegistry,
       this.proactiveRenewalManager,
@@ -394,10 +321,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * @returns String describing higher priority auth method, null if none
    */
   async getHigherPriorityAuth(providerName: string): Promise<string | null> {
-    return this.usageDependencies.getHigherPriorityAuth(
-      providerName,
-      this.settings,
-    );
+    return getHigherPriorityAuth(providerName, this.settings);
   }
 
   /**
@@ -515,16 +439,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       )) ??
       'default';
 
-    return this.fetchAnthropicUsage
-      ? this.usageDependencies.getAnthropicUsageInfo(
-          this.tokenStore,
-          bucketToUse,
-          this.fetchAnthropicUsage,
-        )
-      : this.usageDependencies.getAnthropicUsageInfo(
-          this.tokenStore,
-          bucketToUse,
-        );
+    return getAnthropicUsageInfo(this.tokenStore, bucketToUse);
   }
 
   /**
@@ -534,7 +449,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
   async getAllAnthropicUsageInfo(): Promise<
     Map<string, Record<string, unknown>>
   > {
-    return this.usageDependencies.getAllAnthropicUsageInfo(this.tokenStore);
+    return getAllAnthropicUsageInfo(this.tokenStore);
   }
 
   /**
@@ -542,10 +457,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * Returns a map of bucket name to usage info for all buckets that have valid OAuth tokens with account_id.
    */
   async getAllCodexUsageInfo(): Promise<Map<string, Record<string, unknown>>> {
-    return this.usageDependencies.getAllCodexUsageInfo(
-      this.tokenStore,
-      this.config,
-    );
+    return getAllCodexUsageInfo(this.tokenStore, this.config);
   }
 
   private async getCurrentProfileSessionMetadata(

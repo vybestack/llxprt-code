@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, afterEach } from 'bun:test';
+import { vi, describe, it, expect, afterEach } from 'vitest';
 import { getCoreVersion } from './version.js';
 import * as packageModule from './package.js';
 

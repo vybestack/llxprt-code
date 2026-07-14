@@ -52,7 +52,6 @@ export interface ProviderSelectionResult {
 export interface ProfileApplicationOptions {
   profileName?: string;
   profileManager?: ProfileManager;
-  getRuntimeServices?: typeof getCliRuntimeServices;
 }
 
 export interface ProfileApplicationResult {
@@ -644,6 +643,7 @@ const PRESERVED_PROFILE_EPHEMERALS = [
   'reasoning.budgetTokens',
   'reasoning.stripFromContext',
   'reasoning.includeInContext',
+  'reasoning.fieldName',
   'task-default-timeout-seconds',
   'task-max-timeout-seconds',
   'shell-default-timeout-seconds',
@@ -805,9 +805,7 @@ export async function applyProfileWithGuards(
   profileInput: Profile,
   options: ProfileApplicationOptions = {},
 ): Promise<ProfileApplicationResult> {
-  const runtimeServices = (
-    options.getRuntimeServices ?? getCliRuntimeServices
-  )();
+  const runtimeServices = getCliRuntimeServices();
   const servicesForProfileApplication = {
     ...runtimeServices,
     profileManager: options.profileManager ?? runtimeServices.profileManager,

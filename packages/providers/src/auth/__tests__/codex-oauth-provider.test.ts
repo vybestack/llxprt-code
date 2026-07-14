@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { CodexOAuthProvider } from '../codex-oauth-provider.js';
 import { CodexOAuthTokenSchema } from '@vybestack/llxprt-code-auth';
 import {

@@ -10,7 +10,7 @@
  * the provider's default model.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import {
   SettingsService,

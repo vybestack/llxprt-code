@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MessageBus } from '@vybestack/llxprt-code-core';
 import {
   createProviderManager,

@@ -13,18 +13,6 @@ interface QueuedEntry {
   timestamp: number;
 }
 
-export interface FileOutputDependencies {
-  fs: Pick<typeof fs, 'access' | 'appendFile' | 'mkdir' | 'stat'>;
-  homedir: () => string;
-  join: typeof join;
-}
-
-const DEFAULT_DEPENDENCIES: FileOutputDependencies = {
-  fs,
-  homedir,
-  join,
-};
-
 const LOG_FILE_DATE_LENGTH = 10;
 
 function firstNonEmpty(...values: Array<string | undefined>): string {
@@ -50,14 +38,12 @@ export class FileOutput {
   private flushInterval = 1000; // 1 second
   private debugRunId: string;
 
-  private constructor(
-    private readonly dependencies: FileOutputDependencies = DEFAULT_DEPENDENCIES,
-  ) {
-    const home = dependencies.homedir();
+  private constructor() {
+    const home = homedir();
     // Handle test environments where homedir might not be available
     this.debugDir = home
-      ? dependencies.join(home, LLXPRT_DIR, 'debug')
-      : dependencies.join(process.cwd(), LLXPRT_DIR, 'debug');
+      ? join(home, LLXPRT_DIR, 'debug')
+      : join(process.cwd(), LLXPRT_DIR, 'debug');
     // Env vars may be empty strings; fall through to pid.
     this.debugRunId = firstNonEmpty(
       process.env.LLXPRT_DEBUG_RUN_ID,
@@ -71,10 +57,8 @@ export class FileOutput {
     return this.debugRunId;
   }
 
-  static getInstance(
-    dependencies: FileOutputDependencies = DEFAULT_DEPENDENCIES,
-  ): FileOutput {
-    FileOutput.instance ??= new FileOutput(dependencies);
+  static getInstance(): FileOutput {
+    FileOutput.instance ??= new FileOutput();
     return FileOutput.instance;
   }
 
@@ -195,7 +179,7 @@ export class FileOutput {
         '\n';
 
       // Write to file with proper permissions
-      await this.dependencies.fs.appendFile(this.currentLogFile, jsonlData, {
+      await fs.appendFile(this.currentLogFile, jsonlData, {
         encoding: 'utf8',
         mode: 0o600,
       });
@@ -218,9 +202,9 @@ export class FileOutput {
 
   private async ensureDirectoryExists(): Promise<void> {
     try {
-      await this.dependencies.fs.access(this.debugDir);
+      await fs.access(this.debugDir);
     } catch {
-      await this.dependencies.fs.mkdir(this.debugDir, {
+      await fs.mkdir(this.debugDir, {
         recursive: true,
         mode: 0o700,
       });
@@ -229,7 +213,7 @@ export class FileOutput {
 
   private async checkFileRotation(): Promise<void> {
     try {
-      const stats = await this.dependencies.fs.stat(this.currentLogFile);
+      const stats = await fs.stat(this.currentLogFile);
 
       // Rotate by size
       if (stats.size >= this.maxFileSize) {
@@ -252,7 +236,7 @@ export class FileOutput {
     const now = new Date();
     const datePart = now.toISOString().slice(0, LOG_FILE_DATE_LENGTH);
     const timePart = now.toTimeString().slice(0, 8).replace(/:/g, '-');
-    return this.dependencies.join(
+    return join(
       this.debugDir,
       `llxprt-debug-${this.debugRunId}-${datePart}-${timePart}.jsonl`,
     );

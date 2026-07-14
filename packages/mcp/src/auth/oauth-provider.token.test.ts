@@ -7,17 +7,27 @@
  * Split from oauth-provider.test.ts during #2092 lint hardening.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi } from 'vitest';
 
-const mockOpenBrowserSecurely = vi.fn();
-const mockHttpServer = {
+const mockOpenBrowserSecurely = vi.hoisted(() => vi.fn());
+const mockHttpServer = vi.hoisted(() => ({
   listen: vi.fn(),
   close: vi.fn(),
   on: vi.fn(),
   address: vi.fn(() => ({ address: 'localhost', family: 'IPv4', port: 7777 })),
-};
+}));
 
+vi.mock('@vybestack/llxprt-code-core/utils/secure-browser-launcher.js', () => ({
+  openBrowserSecurely: mockOpenBrowserSecurely,
+}));
+vi.mock('node:crypto');
+vi.mock('node:http', () => ({
+  createServer: vi.fn(() => mockHttpServer),
+}));
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as http from 'node:http';
+import * as crypto from 'node:crypto';
 import { MCPOAuthProvider } from './oauth-provider.js';
 import {
   OAuthUtils,
@@ -33,31 +43,6 @@ import {
   setupOAuthTestSpies,
 } from './oauthProviderTestSetup.js';
 
-const mockRandomBytes = vi.fn((size: number) =>
-  size === 16 ? Buffer.from('mock_state_16_bytes') : Buffer.alloc(size),
-);
-const mockCreateHash = vi.fn(() => ({
-  update: vi.fn().mockReturnThis(),
-  digest: vi.fn().mockReturnValue('code_challenge_mock'),
-}));
-let callbackServerFactory: typeof http.createServer = () =>
-  mockHttpServer as unknown as http.Server;
-
-const authenticate = (
-  serverName: string,
-  config: Parameters<typeof MCPOAuthProvider.authenticate>[1],
-  mcpServerUrl?: string,
-  events?: Parameters<typeof MCPOAuthProvider.authenticate>[3],
-  createServer: typeof http.createServer = callbackServerFactory,
-) =>
-  MCPOAuthProvider.authenticate(serverName, config, mcpServerUrl, events, {
-    createServer,
-    openBrowser: mockOpenBrowserSecurely,
-    randomBytes: mockRandomBytes as typeof import('node:crypto').randomBytes,
-    createHash:
-      mockCreateHash as unknown as typeof import('node:crypto').createHash,
-  });
-
 describe('MCPOAuthProvider', () => {
   let saveTokenSpy: ReturnType<typeof vi.spyOn>;
   let getCredentialsSpy: ReturnType<typeof vi.spyOn>;
@@ -65,7 +50,6 @@ describe('MCPOAuthProvider', () => {
   let isTokenExpiredSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    callbackServerFactory = () => mockHttpServer as unknown as http.Server;
     const spies = setupOAuthTestSpies(mockOpenBrowserSecurely);
     saveTokenSpy = spies.saveTokenSpy;
     getCredentialsSpy = spies.getCredentialsSpy;
@@ -145,7 +129,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      expect(
+      await expect(
         MCPOAuthProvider.refreshAccessToken(
           mockConfig,
           'invalid_refresh_token',
@@ -296,12 +280,10 @@ describe('MCPOAuthProvider', () => {
       // Test is implicit in the authenticate flow tests, but we can verify
       // the crypto mocks are called correctly
       let callbackHandler: unknown;
-      callbackServerFactory = vi.fn(
-        (handler: Parameters<typeof http.createServer>[0]) => {
-          callbackHandler = handler;
-          return mockHttpServer as unknown as http.Server;
-        },
-      );
+      vi.mocked(http.createServer).mockImplementation((handler) => {
+        callbackHandler = handler;
+        return mockHttpServer as unknown as http.Server;
+      });
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -329,11 +311,11 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await authenticate('test-server', mockConfig);
+      await MCPOAuthProvider.authenticate('test-server', mockConfig);
 
-      expect(mockRandomBytes).toHaveBeenCalledWith(64); // code verifier
-      expect(mockRandomBytes).toHaveBeenCalledWith(16); // state
-      expect(mockCreateHash).toHaveBeenCalledWith('sha256');
+      expect(crypto.randomBytes).toHaveBeenCalledWith(64); // code verifier
+      expect(crypto.randomBytes).toHaveBeenCalledWith(16); // state
+      expect(crypto.createHash).toHaveBeenCalledWith('sha256');
     });
   });
 
@@ -347,12 +329,10 @@ describe('MCPOAuthProvider', () => {
       });
 
       let callbackHandler: unknown;
-      callbackServerFactory = vi.fn(
-        (handler: Parameters<typeof http.createServer>[0]) => {
-          callbackHandler = handler;
-          return mockHttpServer as unknown as http.Server;
-        },
-      );
+      vi.mocked(http.createServer).mockImplementation((handler) => {
+        callbackHandler = handler;
+        return mockHttpServer as unknown as http.Server;
+      });
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -380,7 +360,11 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await authenticate('test-server', mockConfig, 'https://auth.example.com');
+      await MCPOAuthProvider.authenticate(
+        'test-server',
+        mockConfig,
+        'https://auth.example.com',
+      );
 
       expect(capturedUrl).toBeDefined();
       expect(capturedUrl!).toContain('response_type=code');
@@ -401,12 +385,10 @@ describe('MCPOAuthProvider', () => {
       });
 
       let callbackHandler: unknown;
-      callbackServerFactory = vi.fn(
-        (handler: Parameters<typeof http.createServer>[0]) => {
-          callbackHandler = handler;
-          return mockHttpServer as unknown as http.Server;
-        },
-      );
+      vi.mocked(http.createServer).mockImplementation((handler) => {
+        callbackHandler = handler;
+        return mockHttpServer as unknown as http.Server;
+      });
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -439,7 +421,7 @@ describe('MCPOAuthProvider', () => {
         authorizationUrl: 'https://auth.example.com/authorize?audience=1234',
       };
 
-      await authenticate('test-server', configWithParamsInUrl);
+      await MCPOAuthProvider.authenticate('test-server', configWithParamsInUrl);
 
       const url = new URL(capturedUrl!);
       expect(url.searchParams.get('audience')).toBe('1234');
@@ -456,12 +438,10 @@ describe('MCPOAuthProvider', () => {
       });
 
       let callbackHandler: unknown;
-      callbackServerFactory = vi.fn(
-        (handler: Parameters<typeof http.createServer>[0]) => {
-          callbackHandler = handler;
-          return mockHttpServer as unknown as http.Server;
-        },
-      );
+      vi.mocked(http.createServer).mockImplementation((handler) => {
+        callbackHandler = handler;
+        return mockHttpServer as unknown as http.Server;
+      });
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -494,7 +474,7 @@ describe('MCPOAuthProvider', () => {
         authorizationUrl: 'https://auth.example.com/authorize#login',
       };
 
-      await authenticate('test-server', configWithFragment);
+      await MCPOAuthProvider.authenticate('test-server', configWithFragment);
 
       const url = new URL(capturedUrl!);
       expect(url.searchParams.get('client_id')).toBe('test-client-id');
@@ -550,12 +530,10 @@ describe('MCPOAuthProvider', () => {
 
       // Setup callback handler
       let callbackHandler: unknown;
-      callbackServerFactory = vi.fn(
-        (handler: Parameters<typeof http.createServer>[0]) => {
-          callbackHandler = handler;
-          return mockHttpServer as unknown as http.Server;
-        },
-      );
+      vi.mocked(http.createServer).mockImplementation((handler) => {
+        callbackHandler = handler;
+        return mockHttpServer as unknown as http.Server;
+      });
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -581,7 +559,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await authenticate(
+      await MCPOAuthProvider.authenticate(
         'test-server',
         configWithUserScopes,
         'https://api.example.com',
@@ -640,12 +618,10 @@ describe('MCPOAuthProvider', () => {
 
       // Setup callback handler
       let callbackHandler: unknown;
-      callbackServerFactory = vi.fn(
-        (handler: Parameters<typeof http.createServer>[0]) => {
-          callbackHandler = handler;
-          return mockHttpServer as unknown as http.Server;
-        },
-      );
+      vi.mocked(http.createServer).mockImplementation((handler) => {
+        callbackHandler = handler;
+        return mockHttpServer as unknown as http.Server;
+      });
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -671,7 +647,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await authenticate(
+      await MCPOAuthProvider.authenticate(
         'test-server',
         configWithoutScopes,
         'https://api.example.com',
@@ -707,21 +683,24 @@ describe('MCPOAuthProvider', () => {
         }>;
       };
 
-      const discoverMetadataSpy = vi
-        .spyOn(OAuthUtils, 'discoverAuthorizationServerMetadata')
-        .mockImplementation(async (issuer) => {
-          if (issuer === 'http://localhost:8888/realms/my-realm') {
-            return registrationMetadata;
-          }
-          return null;
-        });
+      vi.spyOn(
+        OAuthUtils,
+        'discoverAuthorizationServerMetadata',
+      ).mockImplementation(async (issuer) => {
+        if (issuer === 'http://localhost:8888/realms/my-realm') {
+          return registrationMetadata;
+        }
+        return null;
+      });
 
       const result =
         await providerWithAccess.discoverAuthServerMetadataForRegistration(
           'http://localhost:8888/realms/my-realm/protocol/openid-connect/auth',
         );
 
-      expect(discoverMetadataSpy.mock.calls).toStrictEqual([
+      expect(
+        vi.mocked(OAuthUtils.discoverAuthorizationServerMetadata).mock.calls,
+      ).toStrictEqual([
         ['http://localhost:8888'],
         ['http://localhost:8888/realms/my-realm'],
       ]);

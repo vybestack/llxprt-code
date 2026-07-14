@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect, describe, it } from 'bun:test';
-import { splitCommands, splitCommandsFallback } from './shell-utils.js';
+import { expect, describe, it, beforeEach, afterEach, vi } from 'vitest';
+import { splitCommands } from './shell-utils.js';
 
 describe('splitCommands', () => {
   it('should keep 2>&1 redirection within a single command segment', () => {
@@ -118,59 +118,105 @@ describe('splitCommands', () => {
 });
 
 describe('splitCommands regex fallback', () => {
+  // Test the regex fallback path by mocking isParserAvailable to return false
+  beforeEach(() => {
+    vi.doMock('./shell-parser.js', () => ({
+      isParserAvailable: () => false,
+      parseShellCommand: () => null,
+      extractCommandNames: () => [],
+      hasCommandSubstitution: () => false,
+      splitCommandsWithTree: () => [],
+      parseCommandDetails: () => null,
+    }));
+  });
+
+  afterEach(() => {
+    vi.doUnmock('./shell-parser.js');
+  });
+
   it('should keep 2>&1 redirection within a single command segment (regex path)', async () => {
-    const result = splitCommandsFallback('ls nonexistent 2>&1');
+    const { splitCommands: splitCommandsRegex } = await import(
+      './shell-utils.js'
+    );
+    const result = splitCommandsRegex('ls nonexistent 2>&1');
     expect(result).toStrictEqual(['ls nonexistent 2>&1']);
   });
 
   it('should split && chains while preserving 2>&1 (regex path)', async () => {
-    const result = splitCommandsFallback('ls nonexistent 2>&1 && echo done');
+    const { splitCommands: splitCommandsRegex } = await import(
+      './shell-utils.js'
+    );
+    const result = splitCommandsRegex('ls nonexistent 2>&1 && echo done');
     expect(result).toStrictEqual(['ls nonexistent 2>&1', 'echo done']);
   });
 
   it('should keep &>file within a single command segment (regex path)', async () => {
-    const result = splitCommandsFallback('cmd1 &>output.log && cmd2');
+    const { splitCommands: splitCommandsRegex } = await import(
+      './shell-utils.js'
+    );
+    const result = splitCommandsRegex('cmd1 &>output.log && cmd2');
     expect(result).toStrictEqual(['cmd1 &>output.log', 'cmd2']);
   });
 
   it('should keep &>>file within a single command segment (regex path)', async () => {
-    const result = splitCommandsFallback('cmd1 &>>output.log && cmd2');
+    const { splitCommands: splitCommandsRegex } = await import(
+      './shell-utils.js'
+    );
+    const result = splitCommandsRegex('cmd1 &>>output.log && cmd2');
     expect(result).toStrictEqual(['cmd1 &>>output.log', 'cmd2']);
   });
 
   it('should still split on standalone & (regex path)', async () => {
-    const result = splitCommandsFallback('cmd1 & cmd2');
+    const { splitCommands: splitCommandsRegex } = await import(
+      './shell-utils.js'
+    );
+    const result = splitCommandsRegex('cmd1 & cmd2');
     expect(result).toStrictEqual(['cmd1', 'cmd2']);
   });
 
   // Default behavior: split on pipes (for security)
   it('should split on pipes by default (regex path)', async () => {
-    const result = splitCommandsFallback('cat file | grep foo');
+    const { splitCommands: splitCommandsRegex } = await import(
+      './shell-utils.js'
+    );
+    const result = splitCommandsRegex('cat file | grep foo');
     expect(result).toStrictEqual(['cat file', 'grep foo']);
   });
 
   it('should split complex pipelines by default (regex path)', async () => {
-    const result = splitCommandsFallback('cat file | grep foo | sort | uniq');
+    const { splitCommands: splitCommandsRegex } = await import(
+      './shell-utils.js'
+    );
+    const result = splitCommandsRegex('cat file | grep foo | sort | uniq');
     expect(result).toStrictEqual(['cat file', 'grep foo', 'sort', 'uniq']);
   });
 
   // With splitOnPipes: false (for instrumentation)
   it('should keep pipe operator within a single command when splitOnPipes: false (regex path)', async () => {
-    const result = splitCommandsFallback('cat file | grep foo', {
+    const { splitCommands: splitCommandsRegex } = await import(
+      './shell-utils.js'
+    );
+    const result = splitCommandsRegex('cat file | grep foo', {
       splitOnPipes: false,
     });
     expect(result).toStrictEqual(['cat file | grep foo']);
   });
 
   it('should keep complex pipelines as a single command when splitOnPipes: false (regex path)', async () => {
-    const result = splitCommandsFallback('cat file | grep foo | sort | uniq', {
+    const { splitCommands: splitCommandsRegex } = await import(
+      './shell-utils.js'
+    );
+    const result = splitCommandsRegex('cat file | grep foo | sort | uniq', {
       splitOnPipes: false,
     });
     expect(result).toStrictEqual(['cat file | grep foo | sort | uniq']);
   });
 
   it('should split on && but preserve pipes within each segment when splitOnPipes: false (regex path)', async () => {
-    const result = splitCommandsFallback('cat file | grep foo && echo done', {
+    const { splitCommands: splitCommandsRegex } = await import(
+      './shell-utils.js'
+    );
+    const result = splitCommandsRegex('cat file | grep foo && echo done', {
       splitOnPipes: false,
     });
     expect(result).toStrictEqual(['cat file | grep foo', 'echo done']);

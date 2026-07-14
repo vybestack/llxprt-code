@@ -151,11 +151,8 @@ function detectMarkdownBlockquote(content: string): boolean {
  * Service for detecting and preventing infinite loops in AI responses.
  * Monitors tool call repetitions and content sentence repetitions.
  */
-export type LoopDetectedLogger = typeof logLoopDetected;
-
 export class LoopDetectionService {
   private readonly config: Config;
-  private readonly logDetected: LoopDetectedLogger;
   private promptId = '';
 
   // Tool call tracking
@@ -172,12 +169,8 @@ export class LoopDetectionService {
   // Turn tracking for potential future rule-based checks
   private turnsInCurrentPrompt = 0;
 
-  constructor(
-    config: Config,
-    logDetected: LoopDetectedLogger = logLoopDetected,
-  ) {
+  constructor(config: Config) {
     this.config = config;
-    this.logDetected = logDetected;
   }
 
   private getToolCallKey(toolCall: { name: string; args: object }): string {
@@ -251,7 +244,7 @@ export class LoopDetectionService {
       maxTurnsPerPrompt > 0 &&
       this.turnsInCurrentPrompt >= maxTurnsPerPrompt
     ) {
-      this.logDetected(
+      logLoopDetected(
         this.config,
         new LoopDetectedEvent(LoopType.MAX_TURNS_EXCEEDED, this.promptId),
       );
@@ -277,7 +270,7 @@ export class LoopDetectionService {
       this.toolCallRepetitionCount = 1;
     }
     if (this.toolCallRepetitionCount >= threshold) {
-      this.logDetected(
+      logLoopDetected(
         this.config,
         new LoopDetectedEvent(
           LoopType.CONSECUTIVE_IDENTICAL_TOOL_CALLS,
@@ -391,7 +384,7 @@ export class LoopDetectionService {
       const chunkHash = createHash('sha256').update(currentChunk).digest('hex');
 
       if (this.isLoopDetectedForChunk(currentChunk, chunkHash)) {
-        this.logDetected(
+        logLoopDetected(
           this.config,
           new LoopDetectedEvent(
             LoopType.CHANTING_IDENTICAL_SENTENCES,

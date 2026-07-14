@@ -10,7 +10,7 @@
  * real filesystem operations.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -85,7 +85,7 @@ describe('ProfileManager — saveProfile and loadProfile', () => {
   });
 
   it('throws when loading a nonexistent profile', async () => {
-    expect(pm.loadProfile('nonexistent')).rejects.toThrow('not found');
+    await expect(pm.loadProfile('nonexistent')).rejects.toThrow('not found');
   });
 
   it('persists JSON with pretty-printed formatting', async () => {
@@ -182,11 +182,11 @@ describe('ProfileManager — deleteProfile', () => {
     await pm.deleteProfile('to-delete');
 
     const filePath = path.join(tempDir, 'to-delete.json');
-    expect(fs.access(filePath)).rejects.toThrow('ENOENT');
+    await expect(fs.access(filePath)).rejects.toThrow('ENOENT');
   });
 
   it('throws when deleting a nonexistent profile', async () => {
-    expect(pm.deleteProfile('nonexistent')).rejects.toThrow('not found');
+    await expect(pm.deleteProfile('nonexistent')).rejects.toThrow('not found');
   });
 });
 
@@ -428,7 +428,7 @@ describe('ProfileManager — corrupted and malformed profile JSON', () => {
     const filePath = path.join(tempDir, 'null-profile.json');
     await fs.writeFile(filePath, 'null', 'utf8');
 
-    expect(pm.loadProfile('null-profile')).rejects.toThrow(
+    await expect(pm.loadProfile('null-profile')).rejects.toThrow(
       "Profile 'null-profile' is invalid: missing required fields",
     );
   });
@@ -437,7 +437,7 @@ describe('ProfileManager — corrupted and malformed profile JSON', () => {
     const filePath = path.join(tempDir, 'array-profile.json');
     await fs.writeFile(filePath, '[1, 2, 3]', 'utf8');
 
-    expect(pm.loadProfile('array-profile')).rejects.toThrow(
+    await expect(pm.loadProfile('array-profile')).rejects.toThrow(
       'missing required fields',
     );
   });
@@ -446,7 +446,7 @@ describe('ProfileManager — corrupted and malformed profile JSON', () => {
     const filePath = path.join(tempDir, 'number-profile.json');
     await fs.writeFile(filePath, '42', 'utf8');
 
-    expect(pm.loadProfile('number-profile')).rejects.toThrow(
+    await expect(pm.loadProfile('number-profile')).rejects.toThrow(
       'missing required fields',
     );
   });
@@ -455,7 +455,7 @@ describe('ProfileManager — corrupted and malformed profile JSON', () => {
     const filePath = path.join(tempDir, 'empty-profile.json');
     await fs.writeFile(filePath, '{}', 'utf8');
 
-    expect(pm.loadProfile('empty-profile')).rejects.toThrow(
+    await expect(pm.loadProfile('empty-profile')).rejects.toThrow(
       'missing required fields',
     );
   });
@@ -482,7 +482,7 @@ describe('ProfileManager — malformed loadbalancer profile shapes', () => {
       'utf8',
     );
 
-    expect(pm.loadProfile('lb-v2')).rejects.toThrow(
+    await expect(pm.loadProfile('lb-v2')).rejects.toThrow(
       'unsupported profile version',
     );
   });
@@ -499,7 +499,7 @@ describe('ProfileManager — malformed loadbalancer profile shapes', () => {
       'utf8',
     );
 
-    expect(pm.loadProfile('lb-v2-profiles')).rejects.toThrow(
+    await expect(pm.loadProfile('lb-v2-profiles')).rejects.toThrow(
       'unsupported profile version',
     );
   });
@@ -512,7 +512,7 @@ describe('ProfileManager — malformed loadbalancer profile shapes', () => {
       'utf8',
     );
 
-    expect(pm.loadProfile('lb-no-profiles')).rejects.toThrow(
+    await expect(pm.loadProfile('lb-no-profiles')).rejects.toThrow(
       /must reference at least one profile/,
     );
   });
@@ -529,7 +529,7 @@ describe('ProfileManager — malformed loadbalancer profile shapes', () => {
       'utf8',
     );
 
-    expect(pm.loadProfile('lb-empty-profiles')).rejects.toThrow(
+    await expect(pm.loadProfile('lb-empty-profiles')).rejects.toThrow(
       /must reference at least one profile/,
     );
   });
@@ -542,7 +542,7 @@ describe('ProfileManager — malformed loadbalancer profile shapes', () => {
       'utf8',
     );
 
-    expect(pm.loadProfile('lb-v2-missing-profiles')).rejects.toThrow(
+    await expect(pm.loadProfile('lb-v2-missing-profiles')).rejects.toThrow(
       'unsupported profile version',
     );
   });
@@ -575,7 +575,7 @@ describe('ProfileManager — malformed standard profile modelParams/ephemeralSet
       'utf8',
     );
 
-    expect(pm.loadProfile('primitive-modelparams')).rejects.toThrow(
+    await expect(pm.loadProfile('primitive-modelparams')).rejects.toThrow(
       'missing required fields',
     );
   });
@@ -594,7 +594,7 @@ describe('ProfileManager — malformed standard profile modelParams/ephemeralSet
       'utf8',
     );
 
-    expect(pm.loadProfile('array-modelparams')).rejects.toThrow(
+    await expect(pm.loadProfile('array-modelparams')).rejects.toThrow(
       'missing required fields',
     );
   });
@@ -613,7 +613,7 @@ describe('ProfileManager — malformed standard profile modelParams/ephemeralSet
       'utf8',
     );
 
-    expect(pm.loadProfile('null-modelparams')).rejects.toThrow(
+    await expect(pm.loadProfile('null-modelparams')).rejects.toThrow(
       'missing required fields',
     );
   });
@@ -632,7 +632,7 @@ describe('ProfileManager — malformed standard profile modelParams/ephemeralSet
       'utf8',
     );
 
-    expect(pm.loadProfile('primitive-ephemeral')).rejects.toThrow(
+    await expect(pm.loadProfile('primitive-ephemeral')).rejects.toThrow(
       'missing required fields',
     );
   });
@@ -651,7 +651,7 @@ describe('ProfileManager — malformed standard profile modelParams/ephemeralSet
       'utf8',
     );
 
-    expect(pm.loadProfile('array-ephemeral')).rejects.toThrow(
+    await expect(pm.loadProfile('array-ephemeral')).rejects.toThrow(
       'missing required fields',
     );
   });
@@ -670,7 +670,7 @@ describe('ProfileManager — malformed standard profile modelParams/ephemeralSet
       'utf8',
     );
 
-    expect(pm.loadProfile('null-ephemeral')).rejects.toThrow(
+    await expect(pm.loadProfile('null-ephemeral')).rejects.toThrow(
       'missing required fields',
     );
   });
@@ -738,7 +738,7 @@ describe('ProfileManager — parse boundary rejects unsafe object shapes', () =>
       'utf8',
     );
 
-    expect(pm.loadProfile('polluted-modelparams')).rejects.toThrow(
+    await expect(pm.loadProfile('polluted-modelparams')).rejects.toThrow(
       'missing required fields',
     );
   });
@@ -751,7 +751,7 @@ describe('ProfileManager — parse boundary rejects unsafe object shapes', () =>
       'utf8',
     );
 
-    expect(pm.loadProfile('polluted-ephemeral')).rejects.toThrow(
+    await expect(pm.loadProfile('polluted-ephemeral')).rejects.toThrow(
       'missing required fields',
     );
   });
@@ -781,7 +781,7 @@ describe('ProfileManager — saveLoadBalancerProfile type discriminant validatio
       ephemeralSettings: {},
     };
 
-    expect(pm.saveLoadBalancerProfile('bad', profile)).rejects.toThrow(
+    await expect(pm.saveLoadBalancerProfile('bad', profile)).rejects.toThrow(
       /must reference at least one profile/,
     );
   });
@@ -798,7 +798,7 @@ describe('ProfileManager — saveLoadBalancerProfile type discriminant validatio
       ephemeralSettings: {},
     };
 
-    expect(pm.saveLoadBalancerProfile('bad', profile)).rejects.toThrow(
+    await expect(pm.saveLoadBalancerProfile('bad', profile)).rejects.toThrow(
       /must reference at least one profile/,
     );
   });
@@ -814,12 +814,12 @@ describe('ProfileManager — saveLoadBalancerProfile type discriminant validatio
       ephemeralSettings: {},
     };
 
-    expect(pm.saveLoadBalancerProfile('no-write', profile)).rejects.toThrow(
-      'must reference at least one profile',
-    );
+    await expect(
+      pm.saveLoadBalancerProfile('no-write', profile),
+    ).rejects.toThrow('must reference at least one profile');
 
     const filePath = path.join(tempDir, 'no-write.json');
-    expect(fs.access(filePath)).rejects.toThrow('ENOENT');
+    await expect(fs.access(filePath)).rejects.toThrow('ENOENT');
   });
 });
 
@@ -853,7 +853,7 @@ describe('ProfileManager — loadbalancer profile entry validation', () => {
       'utf8',
     );
 
-    expect(pm.loadProfile('lb-non-string-profile')).rejects.toThrow(
+    await expect(pm.loadProfile('lb-non-string-profile')).rejects.toThrow(
       /must reference at least one profile/,
     );
   });
@@ -875,7 +875,7 @@ describe('ProfileManager — loadbalancer profile entry validation', () => {
       'utf8',
     );
 
-    expect(pm.loadProfile('lb-empty-profile-name')).rejects.toThrow(
+    await expect(pm.loadProfile('lb-empty-profile-name')).rejects.toThrow(
       /must reference at least one profile/,
     );
   });

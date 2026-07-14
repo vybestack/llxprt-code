@@ -4,10 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect, describe, it, vi, beforeEach } from 'bun:test';
+import { expect, describe, it, beforeEach, afterEach, vi } from 'vitest';
 import { escapeShellArg, getShellConfiguration } from './shell-utils.js';
 
-const mockQuote = vi.fn<(args: string[]) => string>();
+const mockQuote = vi.hoisted(() => vi.fn());
+vi.mock('shell-quote', () => ({
+  quote: mockQuote,
+}));
 
 describe('escapeShellArg', () => {
   beforeEach(() => {
@@ -19,14 +22,14 @@ describe('escapeShellArg', () => {
   describe('POSIX (bash)', () => {
     it('should use shell-quote for escaping', () => {
       mockQuote.mockReturnValueOnce("'escaped value'");
-      const result = escapeShellArg('raw value', 'bash', mockQuote);
+      const result = escapeShellArg('raw value', 'bash');
       expect(mockQuote).toHaveBeenCalledWith(['raw value']);
       expect(result).toBe("'escaped value'");
     });
 
     it('should handle empty strings', () => {
       mockQuote.mockClear();
-      const result = escapeShellArg('', 'bash', mockQuote);
+      const result = escapeShellArg('', 'bash');
       expect(result).toBe('');
       expect(mockQuote).not.toHaveBeenCalled();
     });
@@ -75,23 +78,42 @@ describe('escapeShellArg', () => {
 });
 
 describe('getShellConfiguration', () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = originalEnv;
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
   it('should return bash configuration on Linux', () => {
-    const config = getShellConfiguration(false);
+    vi.stubGlobal('process', { ...process, platform: 'linux' });
+    const config = getShellConfiguration();
     expect(config.executable).toBe('bash');
     expect(config.argsPrefix).toStrictEqual(['-c']);
     expect(config.shell).toBe('bash');
   });
 
   it('should return bash configuration on macOS (darwin)', () => {
-    const config = getShellConfiguration(false);
+    vi.stubGlobal('process', { ...process, platform: 'darwin' });
+    const config = getShellConfiguration();
     expect(config.executable).toBe('bash');
     expect(config.argsPrefix).toStrictEqual(['-c']);
     expect(config.shell).toBe('bash');
   });
 
   describe('on Windows', () => {
+    beforeEach(() => {
+      vi.stubGlobal('process', {
+        ...process,
+        platform: 'win32',
+        env: { ...process.env },
+      });
+    });
+
     it('should return PowerShell configuration by default', () => {
-      const config = getShellConfiguration(true, undefined);
+      delete process.env['ComSpec'];
+      const config = getShellConfiguration();
       expect(config.executable).toBe('powershell.exe');
       expect(config.argsPrefix).toStrictEqual(['-NoProfile', '-Command']);
       expect(config.shell).toBe('powershell');
@@ -99,7 +121,8 @@ describe('getShellConfiguration', () => {
 
     it('should ignore ComSpec when pointing to cmd.exe', () => {
       const cmdPath = 'C:\\WINDOWS\\system32\\cmd.exe';
-      const config = getShellConfiguration(true, cmdPath);
+      process.env['ComSpec'] = cmdPath;
+      const config = getShellConfiguration();
       expect(config.executable).toBe('powershell.exe');
       expect(config.argsPrefix).toStrictEqual(['-NoProfile', '-Command']);
       expect(config.shell).toBe('powershell');
@@ -108,7 +131,8 @@ describe('getShellConfiguration', () => {
     it('should return PowerShell configuration if ComSpec points to powershell.exe', () => {
       const psPath =
         'C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
-      const config = getShellConfiguration(true, psPath);
+      process.env['ComSpec'] = psPath;
+      const config = getShellConfiguration();
       expect(config.executable).toBe(psPath);
       expect(config.argsPrefix).toStrictEqual(['-NoProfile', '-Command']);
       expect(config.shell).toBe('powershell');
@@ -116,17 +140,16 @@ describe('getShellConfiguration', () => {
 
     it('should return PowerShell configuration if ComSpec points to pwsh.exe', () => {
       const pwshPath = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe';
-      const config = getShellConfiguration(true, pwshPath);
+      process.env['ComSpec'] = pwshPath;
+      const config = getShellConfiguration();
       expect(config.executable).toBe(pwshPath);
       expect(config.argsPrefix).toStrictEqual(['-NoProfile', '-Command']);
       expect(config.shell).toBe('powershell');
     });
 
     it('should be case-insensitive when checking ComSpec', () => {
-      const config = getShellConfiguration(
-        true,
-        'C:\\Path\\To\\POWERSHELL.EXE',
-      );
+      process.env['ComSpec'] = 'C:\\Path\\To\\POWERSHELL.EXE';
+      const config = getShellConfiguration();
       expect(config.executable).toBe('C:\\Path\\To\\POWERSHELL.EXE');
       expect(config.argsPrefix).toStrictEqual(['-NoProfile', '-Command']);
       expect(config.shell).toBe('powershell');

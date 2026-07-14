@@ -35,115 +35,6 @@ export function findFinishedEvent(
   );
 }
 
-/**
- * Converts a legacy mock GenerateContentResponse shape (with candidates/parts)
- * into a neutral ModelStreamChunk for test stream events.
- *
- * This lets turn test files keep their existing part-based mock data while
- * the StreamEvent.CHUNK boundary now carries ModelStreamChunk.
- */
-export function mockResponseToChunk(response: {
-  candidates?: Array<{
-    content?: { parts?: Array<Record<string, unknown>> };
-    finishReason?: string;
-    finishMessage?: string;
-    providerStopReason?: string;
-  }>;
-  usageMetadata?: Record<string, number | undefined>;
-  responseId?: string;
-}): ModelStreamChunk {
-  const candidate = response.candidates?.[0];
-  const parts = candidate?.content?.parts ?? [];
-  const blocks = partsToBlocks(parts);
-  const finishReason = candidate?.finishReason;
-  const providerStopReason = candidate?.providerStopReason;
-
-  const chunk: ModelStreamChunk = {
-    content: { speaker: 'ai', blocks },
-  };
-
-  if (finishReason !== undefined) {
-    chunk.finishReason = mapMockFinishReason(finishReason);
-    // providerStopReason wins over the Gemini finishReason string when present,
-    // matching the production boundary (streamChunkWrapper.responseToModelStreamChunk).
-    chunk.rawStopReason = providerStopReason ?? finishReason;
-  } else if (providerStopReason !== undefined) {
-    chunk.rawStopReason = providerStopReason;
-  }
-
-  const u = response.usageMetadata;
-  if (u) {
-    const usage: UsageStats = {
-      promptTokens: u.promptTokenCount ?? 0,
-      completionTokens: u.candidatesTokenCount ?? 0,
-      totalTokens: u.totalTokenCount ?? 0,
-    };
-    if (u.cachedContentTokenCount !== undefined) {
-      usage.cachedTokens = u.cachedContentTokenCount;
-    }
-    if (u.thoughtsTokenCount !== undefined) {
-      usage.reasoningTokens = u.thoughtsTokenCount;
-    }
-    chunk.usage = usage;
-  }
-
-  if (response.responseId !== undefined) {
-    chunk.responseId = response.responseId;
-  }
-
-  return chunk;
-}
-
-function partsToBlocks(parts: Array<Record<string, unknown>>): ContentBlock[] {
-  const blocks: ContentBlock[] = [];
-  for (const part of parts) {
-    const block = partToBlock(part);
-    if (block !== null) {
-      blocks.push(block);
-    }
-  }
-  return blocks;
-}
-
-function partToBlock(part: Record<string, unknown>): ContentBlock | null {
-  const thought = part['thought'];
-  if (thought === true || thought === 'true') {
-    const text = typeof part['text'] === 'string' ? part['text'] : '';
-    return {
-      type: 'thinking',
-      thought: text,
-      isHidden: true,
-      sourceField: 'thought',
-    };
-  }
-  if (typeof part['text'] === 'string') {
-    return { type: 'text', text: part['text'] };
-  }
-  const fc = part['functionCall'];
-  if (isRecord(fc)) {
-    return {
-      type: 'tool_call',
-      id: (fc['id'] ?? '') as string,
-      name: (fc['name'] ?? '') as string,
-      parameters: fc['args'] ?? {},
-    };
-  }
-  const fr = part['functionResponse'];
-  if (isRecord(fr)) {
-    return {
-      type: 'tool_response',
-      callId: (fr['id'] ?? '') as string,
-      toolName: (fr['name'] ?? '') as string,
-      result: fr['response'] ?? {},
-    };
-  }
-  return null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
 function mapMockFinishReason(raw: string): ModelStreamChunk['finishReason'] {
   const map: Record<string, ModelStreamChunk['finishReason']> = {
     STOP: 'stop',
@@ -166,4 +57,111 @@ function mapMockFinishReason(raw: string): ModelStreamChunk['finishReason'] {
     tool_use: 'tool_calls',
   };
   return map[raw] ?? 'other';
+}
+
+/**
+ * Neutral builder for ModelStreamChunk test fixtures. Takes NEUTRAL
+ * parameters (no candidates/parts shape) to avoid Google-shaped fixture
+ * data.
+ */
+export function mockChunk(opts: {
+  text?: string;
+  thought?: string;
+  thoughtSignature?: string;
+  toolCalls?: Array<{
+    id?: string;
+    name?: string;
+    args?: Record<string, unknown>;
+  }>;
+  toolResponses?: Array<{
+    id?: string;
+    name?: string;
+    response?: unknown;
+  }>;
+  finishReason?: string;
+  /** Overrides rawStopReason; when omitted, rawStopReason = finishReason string. */
+  rawStopReason?: string;
+  usage?: Partial<UsageStats>;
+  responseId?: string;
+  hookRestrictions?: { allowedToolNames?: string[] };
+}): ModelStreamChunk {
+  const chunk: ModelStreamChunk = {
+    content: { speaker: 'ai', blocks: buildMockBlocks(opts) },
+  };
+
+  if (opts.finishReason !== undefined) {
+    chunk.finishReason = mapMockFinishReason(opts.finishReason);
+    chunk.rawStopReason = opts.rawStopReason ?? opts.finishReason;
+  }
+  if (opts.usage !== undefined) {
+    chunk.usage = {
+      promptTokens: opts.usage.promptTokens ?? 0,
+      completionTokens: opts.usage.completionTokens ?? 0,
+      totalTokens: opts.usage.totalTokens ?? 0,
+      ...(opts.usage.cachedTokens !== undefined
+        ? { cachedTokens: opts.usage.cachedTokens }
+        : {}),
+      ...(opts.usage.reasoningTokens !== undefined
+        ? { reasoningTokens: opts.usage.reasoningTokens }
+        : {}),
+    };
+  }
+  if (opts.responseId !== undefined) {
+    chunk.responseId = opts.responseId;
+  }
+  if (opts.hookRestrictions !== undefined) {
+    chunk.hookRestrictions = {
+      allowedToolNames: [...(opts.hookRestrictions.allowedToolNames ?? [])],
+    };
+  }
+  return chunk;
+}
+
+function buildMockBlocks(opts: {
+  thought?: string;
+  thoughtSignature?: string;
+  text?: string;
+  toolCalls?: Array<{
+    id?: string;
+    name?: string;
+    args?: Record<string, unknown>;
+  }>;
+  toolResponses?: Array<{
+    id?: string;
+    name?: string;
+    response?: unknown;
+  }>;
+}): ContentBlock[] {
+  const blocks: ContentBlock[] = [];
+  if (opts.thought !== undefined) {
+    blocks.push({
+      type: 'thinking',
+      thought: opts.thought,
+      isHidden: true,
+      sourceField: 'thinking',
+      ...(opts.thoughtSignature !== undefined
+        ? { signature: opts.thoughtSignature }
+        : {}),
+    });
+  }
+  if (opts.text !== undefined) {
+    blocks.push({ type: 'text', text: opts.text });
+  }
+  for (const tc of opts.toolCalls ?? []) {
+    blocks.push({
+      type: 'tool_call',
+      id: tc.id ?? '',
+      name: tc.name ?? '',
+      parameters: tc.args ?? {},
+    });
+  }
+  for (const tr of opts.toolResponses ?? []) {
+    blocks.push({
+      type: 'tool_response',
+      callId: tr.id ?? '',
+      toolName: tr.name ?? '',
+      result: tr.response ?? {},
+    });
+  }
+  return blocks;
 }

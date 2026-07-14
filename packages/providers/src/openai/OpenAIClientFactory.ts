@@ -27,6 +27,7 @@ import * as http from 'http';
 import * as https from 'https';
 import * as net from 'net';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import { OPENAI_TRANSPORT_SELECTOR_KEYS } from './openaiModelPolicy.js';
 
 /**
  * Create HTTP/HTTPS agents with socket configuration for local AI servers
@@ -113,6 +114,11 @@ export function extractModelParamsFromOptions(
 ): Record<string, unknown> | undefined {
   const modelParams = { ...options.invocation.modelParams };
 
+  // Transport-selector keys are control-plane settings, not model params
+  for (const selectorKey of OPENAI_TRANSPORT_SELECTOR_KEYS) {
+    delete modelParams[selectorKey];
+  }
+
   // Translate generic maxOutputTokens ephemeral to OpenAI's max_tokens
   const rawMaxOutput = options.settings.get('maxOutputTokens');
   const genericMaxOutput =
@@ -161,19 +167,11 @@ export function resolveRuntimeKey(
  * @requirement:REQ-SP4-002
  * Instantiates a fresh OpenAI client per call to preserve stateless behaviour.
  */
-export type OpenAIClientConstructor = (
-  options: ConstructorParameters<typeof OpenAI>[0],
-) => OpenAI;
-
-export const createOpenAIClient: OpenAIClientConstructor = (options) =>
-  new OpenAI(options);
-
 export function instantiateClient(
   authToken: string,
   baseURL?: string,
   agents?: { httpAgent: http.Agent; httpsAgent: https.Agent },
   headers?: Record<string, string>,
-  constructClient: OpenAIClientConstructor = createOpenAIClient,
 ): OpenAI {
   const clientOptions: Record<string, unknown> = {
     apiKey: authToken || '',
@@ -195,7 +193,7 @@ export function instantiateClient(
     clientOptions.httpsAgent = agents.httpsAgent;
   }
 
-  return constructClient(
+  return new OpenAI(
     clientOptions as unknown as ConstructorParameters<typeof OpenAI>[0],
   );
 }

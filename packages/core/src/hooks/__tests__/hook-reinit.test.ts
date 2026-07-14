@@ -9,7 +9,7 @@
  * @requirement R2 R4
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HookSystem } from '../hookSystem.js';
 import type { Config } from '../../config/config.js';
 import type { LlxprtExtension } from '../../config/config.js';

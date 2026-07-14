@@ -10,7 +10,7 @@
  * These tests verify bucket failover behavior when rate limits or quota errors occur.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'vitest';
 import {
   shouldFailover,
   executeWithBucketFailover,
@@ -212,7 +212,7 @@ describe('executeWithBucketFailover - failover execution', () => {
       throw new Error('Request failed with status code 400: Invalid parameter');
     };
 
-    expect(
+    await expect(
       executeWithBucketFailover(request, buckets, executor),
     ).rejects.toThrow('400');
 
@@ -227,7 +227,7 @@ describe('executeWithBucketFailover - failover execution', () => {
       throw new Error(`Rate limit exceeded for ${bucket}`);
     };
 
-    expect(
+    await expect(
       executeWithBucketFailover(request, buckets, executor),
     ).rejects.toThrow(/all buckets exhausted/i);
   });
@@ -240,7 +240,7 @@ describe('executeWithBucketFailover - failover execution', () => {
       throw new Error('Quota exceeded - specific error message');
     };
 
-    expect(
+    await expect(
       executeWithBucketFailover(request, buckets, executor),
     ).rejects.toThrow(/Quota exceeded - specific error message/i);
   });

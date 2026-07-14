@@ -9,7 +9,7 @@
  * @requirement:REQ-019
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import { classifyString } from '../quality-gate-smoke.js';
 

@@ -4,16 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { patchStdio, createInkStdio } from './stdio.js';
+import { coreEvents } from './events.js';
+
+vi.mock('./events.js', () => ({
+  coreEvents: {
+    emitOutput: vi.fn(),
+  },
+}));
 
 describe('stdio utils', () => {
   let originalStdoutWrite: typeof process.stdout.write;
   let originalStderrWrite: typeof process.stderr.write;
-  let emitOutput: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    emitOutput = vi.fn();
+    vi.clearAllMocks();
     originalStdoutWrite = process.stdout.write;
     originalStderrWrite = process.stderr.write;
   });
@@ -25,17 +31,17 @@ describe('stdio utils', () => {
   });
 
   it('patchStdio redirects stdout and stderr to coreEvents', () => {
-    const cleanup = patchStdio(emitOutput);
+    const cleanup = patchStdio();
 
     process.stdout.write('test stdout');
-    expect(emitOutput).toHaveBeenCalledWith({
+    expect(coreEvents.emitOutput).toHaveBeenCalledWith({
       chunk: 'test stdout',
       encoding: undefined,
       isStderr: false,
     });
 
     process.stderr.write('test stderr');
-    expect(emitOutput).toHaveBeenCalledWith({
+    expect(coreEvents.emitOutput).toHaveBeenCalledWith({
       chunk: 'test stderr',
       encoding: undefined,
       isStderr: true,
@@ -49,14 +55,14 @@ describe('stdio utils', () => {
   });
 
   it('createInkStdio writes to real stdout/stderr bypassing patch', () => {
-    const cleanup = patchStdio(emitOutput);
+    const cleanup = patchStdio();
     const { stdout: inkStdout, stderr: inkStderr } = createInkStdio();
 
     inkStdout.write('ink stdout');
-    expect(emitOutput).not.toHaveBeenCalled();
+    expect(coreEvents.emitOutput).not.toHaveBeenCalled();
 
     inkStderr.write('ink stderr');
-    expect(emitOutput).not.toHaveBeenCalled();
+    expect(coreEvents.emitOutput).not.toHaveBeenCalled();
 
     cleanup();
   });

@@ -7,11 +7,14 @@
  * Phase 01 & Phase 02 of the modeldefaults plan
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
+
+// This test needs real config files plus temp dirs, not the global mock
+vi.unmock('./providerAliases.js');
 
 import {
   loadProviderAliasEntries,
@@ -40,7 +43,7 @@ async function loadWithTempConfig(
   try {
     return loadProviderAliasEntries();
   } finally {
-    Storage.getGlobalDataDir.mockRestore();
+    vi.mocked(Storage.getGlobalDataDir).mockRestore();
   }
 }
 
@@ -50,7 +53,9 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alias-test-'));
-    warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
+    warnSpy = vi
+      .spyOn(DebugLogger.prototype, 'warn')
+      .mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -459,7 +464,9 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alias-test-'));
-    warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
+    warnSpy = vi
+      .spyOn(DebugLogger.prototype, 'warn')
+      .mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -645,7 +652,7 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
         ],
       ).toBe(true);
     } finally {
-      Storage.getGlobalDataDir.mockRestore();
+      vi.mocked(Storage.getGlobalDataDir).mockRestore();
     }
   });
 });
@@ -656,7 +663,9 @@ describe('providerAliases sandbox field validation', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alias-sandbox-test-'));
-    warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
+    warnSpy = vi
+      .spyOn(DebugLogger.prototype, 'warn')
+      .mockImplementation(() => {});
   });
 
   afterEach(() => {

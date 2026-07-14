@@ -12,8 +12,6 @@ import type { TaskStore } from '@a2a-js/sdk/server';
 
 import { GCSTaskStore, NoOpTaskStore } from './gcs.js';
 import { METADATA_KEY } from '../types.js';
-
-const TEST_METADATA_KEY = METADATA_KEY;
 const mockPathExists = vi.fn();
 const mockRemove = vi.fn();
 const mockEnsureDir = vi.fn();
@@ -63,6 +61,23 @@ type MockStorageInstance = {
   createBucket: Mock<(name: string) => Promise<[MockBucket]>>;
 };
 
+async function expectRejection(
+  promise: Promise<unknown>,
+  expectedMessage: string,
+): Promise<void> {
+  try {
+    await promise;
+  } catch (error: unknown) {
+    expect(error).toBeInstanceOf(Error);
+    if (error instanceof Error) {
+      expect(error.message).toContain(expectedMessage);
+    }
+    return;
+  }
+
+  throw new Error('Expected promise to reject');
+}
+
 describe('GCSTaskStore', () => {
   let bucketName: string;
   let mockBucket: MockBucket;
@@ -93,7 +108,7 @@ describe('GCSTaskStore', () => {
 
     mockWriteStream = {
       emit: vi.fn().mockReturnValue(true),
-      removeListener: vi.fn().mockReturnValue(mockWriteStream),
+      removeListener: vi.fn(() => mockWriteStream),
       on: vi.fn((event, cb) => {
         if (event === 'finish') setTimeout(cb, 0); // Simulate async finish
         return mockWriteStream;
@@ -161,7 +176,8 @@ describe('GCSTaskStore', () => {
         new Error('Create failed'),
       );
       const store = createStore();
-      await expect(store['ensureBucketInitialized']()).rejects.toThrow(
+      await expectRejection(
+        store['ensureBucketInitialized'](),
         'Failed to create GCS bucket test-bucket: Error: Create failed',
       );
     });
@@ -191,7 +207,8 @@ describe('GCSTaskStore', () => {
           !path.includes('task-task1-workspace-test-uuid.tar.gz'),
       );
       const store = createStore();
-      await expect(store.save(mockTask)).rejects.toThrow(
+      await expectRejection(
+        store.save(mockTask),
         'tar.c command failed to create',
       );
     });
@@ -220,7 +237,8 @@ describe('GCSTaskStore', () => {
         history: [],
         artifacts: [],
       };
-      await expect(store.save(maliciousTask)).rejects.toThrow(
+      await expectRejection(
+        store.save(maliciousTask),
         'Invalid taskId: ../../../malicious-task',
       );
     });
@@ -231,7 +249,7 @@ describe('GCSTaskStore', () => {
       mockGunzip.mockReturnValue(
         Buffer.from(
           JSON.stringify({
-            [TEST_METADATA_KEY]: {
+            [METADATA_KEY]: {
               _agentSettings: {},
               _taskState: 'submitted',
             },
@@ -239,10 +257,6 @@ describe('GCSTaskStore', () => {
           }),
         ),
       );
-      mockFile.download.mockResolvedValue([Buffer.from('compressed metadata')]);
-      mockFile.download.mockResolvedValueOnce([
-        Buffer.from('compressed metadata'),
-      ]);
       mockBucket.file = vi.fn((path) => {
         const newMockFile = { ...mockFile };
         if (path.includes('metadata')) {
@@ -288,7 +302,7 @@ describe('GCSTaskStore', () => {
       mockGunzip.mockReturnValue(
         Buffer.from(
           JSON.stringify({
-            [TEST_METADATA_KEY]: {
+            [METADATA_KEY]: {
               _agentSettings: {},
               _taskState: 'submitted',
             },
@@ -321,7 +335,8 @@ describe('GCSTaskStore', () => {
   it('should throw an error if taskId contains path traversal sequences', async () => {
     const store = createStore();
     const maliciousTaskId = '../../../malicious-task';
-    await expect(store.load(maliciousTaskId)).rejects.toThrow(
+    await expectRejection(
+      store.load(maliciousTaskId),
       `Invalid taskId: ${maliciousTaskId}`,
     );
   });

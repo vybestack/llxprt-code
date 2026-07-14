@@ -12,7 +12,7 @@
  * These tests enforce that runtime state remains the authoritative source.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import {
   createAgentRuntimeState,
   updateAgentRuntimeState,
@@ -41,7 +41,7 @@ describe('Runtime State Regression Guards', () => {
       const mutableState = state as { provider: string };
       expect(() => {
         mutableState.provider = 'anthropic';
-      }).toThrow(/read ?only property/i);
+      }).toThrow(/Cannot assign to read only property/);
 
       // State remains unchanged (runtime enforcement confirmed)
       expect(state.provider).toBe(originalProvider);
@@ -77,7 +77,7 @@ describe('Runtime State Regression Guards', () => {
       const mutableState = state as { model: string };
       expect(() => {
         mutableState.model = 'new-model';
-      }).toThrow(/read ?only property/i); // Runtime immutability enforced!
+      }).toThrow(/Cannot assign to read only property/); // Runtime immutability enforced!
 
       // Verify state unchanged
       expect(state.model).toBe('gemini-2.0-flash');
@@ -124,11 +124,11 @@ describe('Runtime State Regression Guards', () => {
       // Attempt to mutate snapshot (should throw - snapshots are frozen)
       expect(() => {
         snapshot.provider = 'anthropic';
-      }).toThrow(/read ?only property/i);
+      }).toThrow(/Cannot assign to read only property/);
 
       expect(() => {
         snapshot.model = 'claude-3-5-sonnet';
-      }).toThrow(/read ?only property/i);
+      }).toThrow(/Cannot assign to read only property/);
 
       // Original state unchanged (and snapshot unchanged due to immutability)
       expect(state.provider).toBe('gemini');

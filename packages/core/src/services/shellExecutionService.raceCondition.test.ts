@@ -6,7 +6,6 @@
 
 import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 import EventEmitter from 'events';
-import * as actualChildProcess from 'node:child_process';
 import type { ShellOutputEvent } from './shellExecutionService.js';
 import { ShellExecutionService } from './shellExecutionService.js';
 
@@ -21,10 +20,13 @@ const mockGetPty = vi.hoisted(() => vi.fn());
 vi.mock('@lydell/node-pty', () => ({
   spawn: mockPtySpawn,
 }));
-vi.mock('child_process', () => ({
-  ...actualChildProcess,
-  spawn: mockCpSpawn,
-}));
+vi.mock('child_process', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    spawn: mockCpSpawn,
+  };
+});
 vi.mock('../utils/textUtils.js', () => ({
   isBinary: mockIsBinary,
 }));
@@ -183,8 +185,10 @@ describe('ShellExecutionService - Issue #983 Race Condition Tests', () => {
 
   describe('Processing Chain Timeout Protection', () => {
     it('should not wait indefinitely for processing chain after exit', async () => {
+      vi.useFakeTimers();
+
       const abortController = new AbortController();
-      const handle = await ShellExecutionService.execute(
+      const handlePromise = ShellExecutionService.execute(
         'test-command',
         '/test/dir',
         onOutputEventMock,
@@ -192,17 +196,24 @@ describe('ShellExecutionService - Issue #983 Race Condition Tests', () => {
         true,
       );
 
-      await new Promise((resolve) => setImmediate(resolve));
+      await vi.advanceTimersByTimeAsync(0);
+      const handle = await handlePromise;
+
+      // Send data
       mockPtyProcess.onData.mock.calls[0][0]('output\n');
+
+      // Exit while processing might still be pending
       mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
 
-      const result = await Promise.race([
-        handle.result,
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
-      ]);
+      // Advance time past the finalization timeout
+      await vi.advanceTimersByTimeAsync(1000);
 
-      expect(result).not.toBeNull();
-      expect(result?.exitCode).toBe(0);
+      // The result should be available (not hanging)
+      const result = await handle.result;
+
+      vi.useRealTimers();
+
+      expect(result.exitCode).toBe(0);
     });
   });
 });

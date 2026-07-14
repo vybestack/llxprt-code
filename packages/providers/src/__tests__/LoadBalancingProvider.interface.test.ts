@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -245,9 +245,7 @@ describe('LoadBalancingProvider', () => {
         ],
       });
 
-      const nextPromise = iterator.next();
-      expect(nextPromise).rejects.toThrow(/context limit exceeded/);
-      await nextPromise.catch(() => undefined);
+      await expect(iterator.next()).rejects.toThrow(/context limit exceeded/);
       expect(delegateProvider.calls).toBe(0);
     });
 

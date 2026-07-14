@@ -4,10 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import fetch from 'node-fetch';
+
 import { ExaWebSearchTool } from './exa-web-search.js';
 
-const mockedFetch = vi.fn();
+vi.mock('node-fetch');
+const mockedFetch = fetch as unknown as ReturnType<typeof vi.fn>;
 
 describe('ExaWebSearchTool', () => {
   const keyStorage = { resolveKey: vi.fn() };
@@ -16,7 +19,7 @@ describe('ExaWebSearchTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     keyStorage.resolveKey.mockResolvedValue(null);
-    tool = new ExaWebSearchTool({ fetch: mockedFetch, keyStorage });
+    tool = new ExaWebSearchTool({ keyStorage });
   });
 
   it('has correct name and description', () => {

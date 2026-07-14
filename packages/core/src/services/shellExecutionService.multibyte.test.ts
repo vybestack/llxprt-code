@@ -5,13 +5,14 @@
  */
 
 import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
-import * as actualChildProcess from 'node:child_process';
-
 const mockSpawn = vi.hoisted(() => vi.fn());
-vi.mock('child_process', () => ({
-  ...actualChildProcess,
-  spawn: mockSpawn,
-}));
+vi.mock('child_process', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    spawn: mockSpawn,
+  };
+});
 
 import EventEmitter from 'events';
 import type { Readable } from 'stream';

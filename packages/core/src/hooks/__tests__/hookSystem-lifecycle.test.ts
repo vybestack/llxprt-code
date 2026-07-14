@@ -17,25 +17,9 @@
  * No reverse tests (no `.not.toThrow()`) except for idempotency cases.
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, expect, beforeEach, vi, afterEach } from 'vitest';
+import { it as itProp } from '@fast-check/vitest';
 import * as fc from 'fast-check';
-
-const property =
-  <Values extends unknown[]>(arbitraries: {
-    [Index in keyof Values]: fc.Arbitrary<Values[Index]>;
-  }) =>
-  (
-    name: string,
-    predicate: (...values: Values) => Promise<void> | void,
-    timeout?: number,
-  ) =>
-    it(
-      name,
-      () => fc.assert(fc.asyncProperty(...arbitraries, predicate)),
-      timeout,
-    );
-
-const itProp = Object.assign(it, { prop: property });
 import { HookSystem } from '../hookSystem.js';
 import { HookEventHandler } from '../hookEventHandler.js';
 import { SessionStartSource, SessionEndReason } from '../types.js';
@@ -61,6 +45,7 @@ vi.mock('../debug/index.js', () => ({
 vi.mock('fs', () => ({
   existsSync: vi.fn().mockReturnValue(false),
   readFileSync: vi.fn(),
+  promises: {},
 }));
 
 // ---------------------------------------------------------------------------

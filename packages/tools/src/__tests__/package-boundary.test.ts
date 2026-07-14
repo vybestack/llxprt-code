@@ -18,7 +18,7 @@
  * - Package is self-contained as a leaf dependency
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 

@@ -108,18 +108,6 @@ class InMemoryTokenStore implements TokenStore {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async function drainMicrotasks(): Promise<void> {
-  for (let iteration = 0; iteration < 10; iteration++) {
-    await Promise.resolve();
-  }
-}
-
-async function advanceTime(ms: number): Promise<void> {
-  await drainMicrotasks();
-  vi.advanceTimersByTime(ms);
-  await drainMicrotasks();
-}
-
 function makeToken(overrides: Partial<OAuthToken> = {}): OAuthToken {
   return {
     access_token: 'test-access-token',
@@ -492,8 +480,8 @@ describe('RefreshCoordinator', () => {
       const resultPromise = coordinator.refresh('anthropic');
 
       // Advance through retry delays (1s + 3s)
-      await advanceTime(1_000);
-      await advanceTime(3_000);
+      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.advanceTimersByTimeAsync(3_000);
 
       const result = await resultPromise;
 
@@ -534,7 +522,7 @@ describe('RefreshCoordinator', () => {
       const resultPromise = retryCoordinator.refresh('anthropic');
 
       // Advance past first retry delay
-      await advanceTime(1_000);
+      await vi.advanceTimersByTimeAsync(1_000);
 
       const result = await resultPromise;
 

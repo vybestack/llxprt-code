@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type FunctionDeclaration } from '@google/genai';
+import { type FunctionDeclaration } from '../types/wire-types.js';
 import {
   type AnyDeclarativeTool,
   Kind,

@@ -15,7 +15,7 @@
  * exactly the surface #1595 will hold.
  */
 
-import { describe, expect, it, afterEach } from 'bun:test';
+import { describe, expect, it, afterEach } from 'vitest';
 import * as fc from 'fast-check';
 import { ApprovalMode, PolicyDecision } from '@vybestack/llxprt-code-agents';
 import type {

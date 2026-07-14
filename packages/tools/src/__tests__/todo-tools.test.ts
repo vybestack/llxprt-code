@@ -20,7 +20,7 @@
  * moves real tool code and adapters are wired up.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { TodoPauseTool, TodoReadTool, TodoWriteTool } from '../index.js';
 import type { ITodoService, TodoStore } from '../interfaces/index.js';
 import type { ToolContext } from '../types/tool-context.js';

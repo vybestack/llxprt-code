@@ -15,7 +15,7 @@
  * temporary prompts directory so that observable behavior is asserted.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -54,7 +54,7 @@ describe('PromptServiceManager', () => {
     expect(manager.isInitialized()).toBe(true);
 
     // A second initialize() must not throw and must remain initialized.
-    await manager.initialize();
+    await expect(manager.initialize()).resolves.not.toThrow();
     expect(manager.isInitialized()).toBe(true);
   });
 

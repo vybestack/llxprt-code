@@ -21,6 +21,7 @@ import { createIsolatedRuntimeContext } from '@vybestack/llxprt-code-providers/r
 import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime.js';
 import {
   switchActiveProvider,
+  setActiveModel,
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
   getActiveProviderName,
@@ -131,15 +132,7 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
     model: parsed.model,
     messageBus,
     prepare: (ctx) => {
-      registerProvidersOntoManager(
-        ctx.providerManager,
-        {
-          settingsService,
-          runtimeId: ctx.runtimeId,
-          metadata: ctx.metadata,
-        },
-        ctx.config,
-      );
+      registerProvidersOntoManager(ctx.providerManager, ctx, ctx.config);
     },
   });
   const manager = handle.providerManager;
@@ -179,7 +172,7 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
 
   // @pseudocode createAgent.md steps 105-166: finalize agent (runtime state,
   // client bind, loop build, ownership, facade, session-start hook)
-  return finalizeAgent(
+  const agent = await finalizeAgent(
     finalizedParsed,
     resolvedAuth,
     config,
@@ -195,6 +188,8 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
     injectedSchedulerHandles,
     'agent',
   );
+  await agent.hooks.triggerSessionStart();
+  return agent;
 }
 
 /**
@@ -404,11 +399,8 @@ async function assembleFacade(deps: AssembleFacadeDeps): Promise<Agent> {
       : {}),
   });
 
-  // @plan:PLAN-20260617-COREAPI.P23 @requirement:REQ-015
-  // @pseudocode createAgent.md steps 165-166: fire SessionStart now that the
-  // facade is built (observable via agent.hooks.onHookExecution; safe when
-  // hooks are off — the core lifecycle trigger short-circuits).
-  await agent.hooks.triggerSessionStart();
+  // SessionStart is driven by the frontend after it has installed observers
+  // and is ready to consume the hook's system message and additional context.
   return agent;
 }
 
@@ -601,10 +593,8 @@ async function applyInitialProviderModelAuth(
   }
   const activeModel = safeActiveModelName();
   if (parsed.model !== activeModel) {
-    // Keep the adopted Config authoritative. The ambient CLI mutation helpers
-    // may point at another runtime in an aggregate process, so model bootstrap
-    // must not depend on that mutable default pointer.
-    config.setModel(parsed.model);
+    // setActiveModel does NOT rebuild — explicit initializeContentGeneratorConfig required.
+    await setActiveModel(parsed.model);
     await config.initializeContentGeneratorConfig();
   }
   if (resolvedAuth.apiKey !== undefined) {
@@ -666,9 +656,6 @@ export function registerProvidersOntoManager(
   const { manager: registered } = createProviderManager(
     context as Parameters<typeof createProviderManager>[0],
     { config, oauthSettings: createFileOAuthSettingsProvider() },
-  );
-  isolatedManager.setRuntimeContext(
-    context as Parameters<typeof isolatedManager.setRuntimeContext>[0],
   );
   for (const name of registered.listProviders()) {
     const provider = registered.getProviderByName(name);

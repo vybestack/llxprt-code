@@ -4,9 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IdeContextTracker } from './IdeContextTracker.js';
 import type { IdeContext } from '@vybestack/llxprt-code-ide-integration';
+
+// Mock the ideContext singleton from the ide-integration package
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    ideContext: {
+      getIdeContext: vi.fn(),
+    },
+  };
+});
+
+import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 
 function makeConfig(debugMode = false): { getDebugMode: () => boolean } {
   return { getDebugMode: () => debugMode };
@@ -42,13 +58,14 @@ function makeIdeContext(
 
 describe('IdeContextTracker', () => {
   let tracker: IdeContextTracker;
-  const mockGetIdeContext = vi.fn<() => IdeContext | undefined>();
+  const mockGetIdeContext = ideContext.getIdeContext as ReturnType<
+    typeof vi.fn
+  >;
 
   beforeEach(() => {
     vi.clearAllMocks();
     tracker = new IdeContextTracker(
       makeConfig() as ConstructorParameters<typeof IdeContextTracker>[0],
-      mockGetIdeContext,
     );
   });
 

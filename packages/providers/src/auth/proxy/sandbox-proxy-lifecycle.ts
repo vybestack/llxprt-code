@@ -24,7 +24,7 @@ import {
   CodexDeviceFlow,
   type OAuthToken,
 } from '@vybestack/llxprt-code-auth';
-import { createKeyringTokenStore } from '@vybestack/llxprt-code-core';
+import { createKeyringTokenStore } from '@vybestack/llxprt-code-core/auth-factories.js';
 import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 import path from 'node:path';
 import {

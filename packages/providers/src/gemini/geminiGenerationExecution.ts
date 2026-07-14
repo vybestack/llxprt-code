@@ -124,8 +124,6 @@ export async function executeNonOAuthGeneration(
   reasoningIncludeInResponse: boolean,
   createContentGenerator: () => Promise<NonOAuthContentGenerator>,
   baseURL: string | undefined,
-  buildCorePrompt?: Parameters<typeof buildSystemInstruction>[4],
-  resolveMemory?: Parameters<typeof buildSystemInstruction>[5],
 ): Promise<GeminiGenerationResult> {
   const contentGenerator = await createContentGenerator();
   const coreSystemInstruction = await buildSystemInstruction(
@@ -133,8 +131,6 @@ export async function executeNonOAuthGeneration(
     globalConfig,
     toolNamesForPrompt,
     currentModel,
-    buildCorePrompt,
-    resolveMemory,
   );
   // Issue #2410: Merge caller-supplied system instruction (e.g. subagent
   // persona) with the core system prompt so task directives reach the model.

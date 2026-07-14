@@ -9,7 +9,7 @@
  * OpenAI schema converter should consume `parametersJsonSchema` directly.
  */
 
-import { describe, it, expect, beforeAll } from 'bun:test';
+import { describe, it, expect, beforeAll } from 'vitest';
 
 let convertToolsToOpenAI: typeof import('./schemaConverter.js').convertToolsToOpenAI;
 

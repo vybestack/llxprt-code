@@ -12,6 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as compressionFactory from '../compressionStrategyFactory.js';
 import { ChatSession } from '../../core/chatSession.js';
 import { PerformCompressionResult } from '../../core/turn.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
@@ -26,7 +27,15 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
-import { retryWithoutDelay } from './compression-retry-helpers.js';
+vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
+  delay: vi.fn().mockResolvedValue(undefined),
+  createAbortError: () => {
+    const err = new Error('Aborted');
+    err.name = 'AbortError';
+    return err;
+  },
+}));
+
 function makeHttpError(status: number): Error {
   const err = new Error(`HTTP error ${status}`);
   (err as { status?: number }).status = status;
@@ -38,7 +47,7 @@ function makeChatSession(
   providerRuntimeSnapshot: ProviderRuntimeContext,
 ): ChatSession {
   const runtimeState = createAgentRuntimeState({
-    runtimeId: runtimeSetup.runtime.runtimeId ?? 'compression-recency-runtime',
+    runtimeId: runtimeSetup.runtime.runtimeId,
     provider: runtimeSetup.provider.name,
     model: 'test-model',
     sessionId: 'test-session-id',
@@ -57,8 +66,8 @@ function makeChatSession(
   vi.spyOn(historyService, 'startCompression').mockImplementation(() => {});
   vi.spyOn(historyService, 'endCompression').mockImplementation(() => {});
   vi.spyOn(historyService, 'getCurated').mockReturnValue([
-    { role: 'user', parts: [{ text: 'hello' }] },
-    { role: 'model', parts: [{ text: 'hi' }] },
+    { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+    { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
   ]);
   vi.spyOn(historyService, 'clear').mockImplementation(() => {});
   vi.spyOn(historyService, 'add').mockImplementation(() => {});
@@ -91,24 +100,15 @@ function makeChatSession(
     embedContent: vi.fn(),
   };
 
-  return new ChatSession(
-    view,
-    mockContentGenerator,
-    {},
-    [],
-    undefined,
-    retryWithoutDelay,
-  );
+  return new ChatSession(view, mockContentGenerator, {}, []);
 }
 
 describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
   let runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
   let providerRuntimeSnapshot: ProviderRuntimeContext;
-  let previousProviderRuntime: ProviderRuntimeContext | null;
 
   beforeEach(() => {
-    previousProviderRuntime =
-      providerRuntime.peekActiveProviderRuntimeContext();
+    vi.clearAllMocks();
     runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
@@ -118,7 +118,7 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
   });
 
   afterEach(() => {
-    providerRuntime.setActiveProviderRuntimeContext(previousProviderRuntime);
+    vi.restoreAllMocks();
   });
 
   it('returns false before any compression has run', () => {
@@ -129,9 +129,8 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
   it('returns true after a successful compression', async () => {
     const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation(() => ({
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
         name: 'middle-out' as const,
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
@@ -144,20 +143,19 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
             llmCallMade: true,
           },
         }),
-      }));
+      }),
+    );
 
     await chat.performCompression('test-prompt');
     expect(chat.wasRecentlyCompressed()).toBe(true);
   });
 
   it('returns false after the recency window expires', async () => {
-    let now = Date.now();
-    const dateNowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    vi.useFakeTimers();
     const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation(() => ({
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
         name: 'middle-out' as const,
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
@@ -170,27 +168,29 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
             llmCallMade: true,
           },
         }),
-      }));
+      }),
+    );
 
     await chat.performCompression('test-prompt');
     expect(chat.wasRecentlyCompressed()).toBe(true);
 
-    now += 61_000;
+    vi.advanceTimersByTime(61_000);
     expect(chat.wasRecentlyCompressed()).toBe(false);
-    dateNowSpy.mockRestore();
+
+    vi.useRealTimers();
   });
 
   it('returns false when both primary and fallback compression fail', async () => {
     const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation(() => ({
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
         name: 'middle-out' as const,
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
         compress: vi.fn().mockRejectedValue(makeHttpError(500)),
-      }));
+      }),
+    );
 
     // Trigger 3+ failures so fallback also fails, entering cooldown
     await chat.performCompression('test-prompt');
@@ -206,7 +206,9 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
 
     const primaryCompress = vi.fn().mockRejectedValue(makeHttpError(500));
     const fallbackCompress = vi.fn().mockResolvedValue({
-      newHistory: [{ role: 'user', parts: [{ text: 'truncated' }] }],
+      newHistory: [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'truncated' }] },
+      ],
       metadata: {
         originalMessageCount: 10,
         compressedMessageCount: 2,
@@ -215,9 +217,8 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
       },
     });
 
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation((name) => {
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
         if (name === 'top-down-truncation') {
           return {
             name: 'top-down-truncation' as const,
@@ -233,7 +234,8 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
           trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
           compress: primaryCompress,
         };
-      });
+      },
+    );
 
     const result = await chat.performCompression('test-prompt');
 
@@ -247,11 +249,9 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
 describe('CompressionHandler performCompression result (issue #1792)', () => {
   let runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
   let providerRuntimeSnapshot: ProviderRuntimeContext;
-  let previousProviderRuntime: ProviderRuntimeContext | null;
 
   beforeEach(() => {
-    previousProviderRuntime =
-      providerRuntime.peekActiveProviderRuntimeContext();
+    vi.clearAllMocks();
     runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
@@ -269,14 +269,15 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
       }
     ).compressionHandler.lastPromptTokenCount = 95_000;
 
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation(() => ({
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
         name: 'middle-out' as const,
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
         compress: vi.fn().mockResolvedValue({
-          newHistory: [{ role: 'user', parts: [{ text: 'summary' }] }],
+          newHistory: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
+          ],
           metadata: {
             originalMessageCount: 10,
             compressedMessageCount: 1,
@@ -284,7 +285,8 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
             llmCallMade: true,
           },
         }),
-      }));
+      }),
+    );
 
     const result = await chat.performCompression('test-prompt');
 
@@ -299,20 +301,21 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
   });
 
   afterEach(() => {
-    providerRuntime.setActiveProviderRuntimeContext(previousProviderRuntime);
+    vi.restoreAllMocks();
   });
 
   it('returns COMPRESSED when primary strategy succeeds', async () => {
     const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation(() => ({
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
         name: 'middle-out' as const,
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
         compress: vi.fn().mockResolvedValue({
-          newHistory: [{ role: 'user', parts: [{ text: 'summary' }] }],
+          newHistory: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
+          ],
           metadata: {
             originalMessageCount: 10,
             compressedMessageCount: 1,
@@ -320,7 +323,8 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
             llmCallMade: true,
           },
         }),
-      }));
+      }),
+    );
 
     const result = await chat.performCompression('test-prompt');
     expect(result).toBe(PerformCompressionResult.COMPRESSED);
@@ -329,16 +333,20 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
   it('returns COMPRESSED when fallback succeeds after primary failure', async () => {
     const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation((name) => {
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
         if (name === 'top-down-truncation') {
           return {
             name: 'top-down-truncation' as const,
             requiresLLM: false,
             trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
             compress: vi.fn().mockResolvedValue({
-              newHistory: [{ role: 'user', parts: [{ text: 'truncated' }] }],
+              newHistory: [
+                {
+                  speaker: 'human',
+                  blocks: [{ type: 'text', text: 'truncated' }],
+                },
+              ],
               metadata: {
                 originalMessageCount: 10,
                 compressedMessageCount: 2,
@@ -354,7 +362,8 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
           trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
           compress: vi.fn().mockRejectedValue(makeHttpError(500)),
         };
-      });
+      },
+    );
 
     const result = await chat.performCompression('test-prompt');
     expect(result).toBe(PerformCompressionResult.COMPRESSED);
@@ -363,14 +372,14 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
   it('returns FAILED when both primary and fallback strategies fail', async () => {
     const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation(() => ({
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
         name: 'middle-out' as const,
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
         compress: vi.fn().mockRejectedValue(makeHttpError(500)),
-      }));
+      }),
+    );
 
     const result = await chat.performCompression('test-prompt');
     expect(result).toBe(PerformCompressionResult.FAILED);
@@ -379,14 +388,14 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
   it('returns SKIPPED_COOLDOWN when compression is in cooldown', async () => {
     const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation(() => ({
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
         name: 'middle-out' as const,
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
         compress: vi.fn().mockRejectedValue(makeHttpError(500)),
-      }));
+      }),
+    );
 
     // Trigger 3 failures to enter cooldown
     await chat.performCompression('test-prompt');
@@ -411,14 +420,14 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
   it('updates wasRecentlyCompressed only on COMPRESSED result', async () => {
     const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation(() => ({
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
         name: 'middle-out' as const,
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
         compress: vi.fn().mockRejectedValue(makeHttpError(500)),
-      }));
+      }),
+    );
 
     // Failing compression should NOT set wasRecentlyCompressed
     const result = await chat.performCompression('test-prompt');
@@ -426,9 +435,8 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
     expect(chat.wasRecentlyCompressed()).toBe(false);
 
     // Now make it succeed
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation(() => ({
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
         name: 'middle-out' as const,
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
@@ -441,7 +449,8 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
             llmCallMade: true,
           },
         }),
-      }));
+      }),
+    );
 
     const result2 = await chat.performCompression('test-prompt');
     expect(result2).toBe(PerformCompressionResult.COMPRESSED);

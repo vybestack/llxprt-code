@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import type { Mock } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   MemoryTool,
   setLlxprtMdFilename,
@@ -12,10 +13,28 @@ import {
   getAllLlxprtMdFilenames,
   DEFAULT_CONTEXT_FILENAME,
 } from './memoryTool.js';
+import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 import { ToolConfirmationOutcome } from '../types/tool-confirmation-types.js';
 import { ToolErrorType } from '../types/tool-error.js';
 import type { IStorageService } from '../interfaces/index.js';
+
+// Mock dependencies
+vi.mock(import('fs/promises'), async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    mkdir: vi.fn(),
+    readFile: vi.fn(),
+  };
+});
+
+vi.mock('fs', () => ({
+  mkdirSync: vi.fn(),
+}));
+
+vi.mock('os');
 
 const MEMORY_SECTION_HEADER = '## LLxprt Code Added Memories';
 
@@ -32,7 +51,6 @@ interface FsAdapter {
 describe('MemoryTool', () => {
   const mockAbortSignal = new AbortController().signal;
   const mockWorkingDir = '/mock/project';
-  const mockHomeDir = path.join('/mock', 'home');
 
   const mockFsAdapter: {
     readFile: Mock<FsAdapter['readFile']>;
@@ -44,14 +62,14 @@ describe('MemoryTool', () => {
     mkdir: vi.fn(),
   };
 
-  const storageReadFile = vi.fn<IStorageService['readFile']>();
-  const storageWriteFile = vi.fn<IStorageService['writeFile']>();
-  const storageEnsureDir = vi.fn<IStorageService['ensureDir']>();
   const mockStorageService: IStorageService = {
-    getLLXPRTDir: () => path.join(mockHomeDir, '.llxprt'),
-    readFile: storageReadFile,
-    writeFile: storageWriteFile,
-    ensureDir: storageEnsureDir,
+    getLLXPRTDir: () => path.join(os.homedir(), '.llxprt'),
+    readFile: (filePath: string) => fs.readFile(filePath, 'utf-8'),
+    writeFile: (filePath: string, content: string) =>
+      fs.writeFile(filePath, content, 'utf-8'),
+    ensureDir: async (dirPath: string) => {
+      await fs.mkdir(dirPath, { recursive: true });
+    },
   };
 
   const mockSettingsService = {
@@ -63,13 +81,10 @@ describe('MemoryTool', () => {
       storageService: mockStorageService,
       settingsService: mockSettingsService,
       getWorkingDir,
-      getHomeDir: () => mockHomeDir,
     });
 
   beforeEach(() => {
-    storageReadFile.mockReset().mockResolvedValue('');
-    storageWriteFile.mockReset().mockResolvedValue(undefined);
-    storageEnsureDir.mockReset().mockResolvedValue(undefined);
+    vi.mocked(os.homedir).mockReturnValue(path.join('/mock', 'home'));
     mockFsAdapter.readFile.mockReset();
     mockFsAdapter.writeFile.mockReset().mockResolvedValue(undefined);
     mockFsAdapter.mkdir
@@ -112,7 +127,7 @@ describe('MemoryTool', () => {
 
     beforeEach(() => {
       testFilePath = path.join(
-        mockHomeDir,
+        os.homedir(),
         '.llxprt',
         DEFAULT_CONTEXT_FILENAME,
       );
@@ -196,7 +211,7 @@ describe('MemoryTool', () => {
       mockFsAdapter.readFile.mockResolvedValue('');
       mockFsAdapter.writeFile.mockRejectedValue(new Error('Disk full'));
       const fact = 'This will fail';
-      expect(
+      await expect(
         MemoryTool.performAddMemoryEntry(fact, testFilePath, mockFsAdapter),
       ).rejects.toThrow('[MemoryTool] Failed to add memory entry: Disk full');
     });
@@ -204,14 +219,16 @@ describe('MemoryTool', () => {
 
   describe('execute (instance method)', () => {
     let memoryTool: MemoryTool;
-    let performAddMemoryEntrySpy: ReturnType<typeof vi.spyOn>;
+    let performAddMemoryEntrySpy: Mock<typeof MemoryTool.performAddMemoryEntry>;
 
     beforeEach(() => {
       memoryTool = createMemoryTool();
       // Spy on the static method for these tests
       performAddMemoryEntrySpy = vi
         .spyOn(MemoryTool, 'performAddMemoryEntry')
-        .mockResolvedValue(undefined);
+        .mockResolvedValue(undefined) as Mock<
+        typeof MemoryTool.performAddMemoryEntry
+      >;
       // Cast needed as spyOn returns MockInstance
     });
 
@@ -248,7 +265,7 @@ describe('MemoryTool', () => {
       // Without working directory, it should default to global
       const result = await invocation.execute(mockAbortSignal);
       const expectedGlobalPath = path.join(
-        mockHomeDir,
+        os.homedir(),
         '.llxprt',
         getCurrentLlxprtMdFilename(),
       );
@@ -317,7 +334,7 @@ describe('MemoryTool', () => {
         }
       ).allowlist.clear();
       // Mock fs.readFile to return empty string (file doesn't exist)
-      storageReadFile.mockResolvedValue('');
+      vi.mocked(fs.readFile).mockResolvedValue('');
     });
 
     it('should return confirmation details when memory file is not allowlisted', async () => {
@@ -356,7 +373,7 @@ describe('MemoryTool', () => {
     it('should return false when memory file is already allowlisted', async () => {
       const params = { fact: 'Test fact' };
       const memoryFilePath = path.join(
-        mockHomeDir,
+        os.homedir(),
         '.llxprt',
         getCurrentLlxprtMdFilename(),
       );
@@ -377,7 +394,7 @@ describe('MemoryTool', () => {
     it('should add memory file to allowlist when ProceedAlways is confirmed', async () => {
       const params = { fact: 'Test fact' };
       const memoryFilePath = path.join(
-        mockHomeDir,
+        os.homedir(),
         '.llxprt',
         getCurrentLlxprtMdFilename(),
       );
@@ -413,7 +430,7 @@ describe('MemoryTool', () => {
     it('should not add memory file to allowlist when other outcomes are confirmed', async () => {
       const params = { fact: 'Test fact' };
       const memoryFilePath = path.join(
-        mockHomeDir,
+        os.homedir(),
         '.llxprt',
         getCurrentLlxprtMdFilename(),
       );
@@ -452,7 +469,7 @@ describe('MemoryTool', () => {
         'Some existing content.\n\n## LLxprt Code Added Memories\n- Old fact\n';
 
       // Mock fs.readFile to return existing content
-      storageReadFile.mockResolvedValue(existingContent);
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent);
 
       const invocation = memoryTool.build(params);
       const result = await invocation.shouldConfirmExecute(mockAbortSignal);
@@ -505,7 +522,9 @@ describe('MemoryTool', () => {
     it('should save to project directory when scope is "project"', async () => {
       const performAddMemoryEntrySpy = vi
         .spyOn(MemoryTool, 'performAddMemoryEntry')
-        .mockResolvedValue(undefined);
+        .mockResolvedValue(undefined) as Mock<
+        typeof MemoryTool.performAddMemoryEntry
+      >;
 
       const params = {
         fact: 'Project-specific fact',
@@ -536,7 +555,9 @@ describe('MemoryTool', () => {
     it('should save to project directory by default (when scope is undefined and workingDir is set)', async () => {
       const performAddMemoryEntrySpy = vi
         .spyOn(MemoryTool, 'performAddMemoryEntry')
-        .mockResolvedValue(undefined);
+        .mockResolvedValue(undefined) as Mock<
+        typeof MemoryTool.performAddMemoryEntry
+      >;
 
       const params = { fact: 'Project fact by default' };
       const invocation = memoryTool.build(params);
@@ -562,7 +583,9 @@ describe('MemoryTool', () => {
     it('should save to global directory when scope is explicitly "global"', async () => {
       const performAddMemoryEntrySpy = vi
         .spyOn(MemoryTool, 'performAddMemoryEntry')
-        .mockResolvedValue(undefined);
+        .mockResolvedValue(undefined) as Mock<
+        typeof MemoryTool.performAddMemoryEntry
+      >;
 
       const params = { fact: 'Global fact', scope: 'global' as const };
       const invocation = memoryTool.build(params);
@@ -570,7 +593,7 @@ describe('MemoryTool', () => {
       await invocation.execute(mockAbortSignal);
 
       const expectedGlobalPath = path.join(
-        mockHomeDir,
+        os.homedir(),
         '.llxprt',
         getCurrentLlxprtMdFilename(),
       );
@@ -587,7 +610,9 @@ describe('MemoryTool', () => {
     it('should fallback to global when scope is "project" but no working directory is set', async () => {
       const performAddMemoryEntrySpy = vi
         .spyOn(MemoryTool, 'performAddMemoryEntry')
-        .mockResolvedValue(undefined);
+        .mockResolvedValue(undefined) as Mock<
+        typeof MemoryTool.performAddMemoryEntry
+      >;
 
       const params = { fact: 'Project fact without workdir', scope: 'project' };
       const invocation = memoryTool.build(params);
@@ -595,7 +620,7 @@ describe('MemoryTool', () => {
       await invocation.execute(mockAbortSignal);
 
       const expectedGlobalPath = path.join(
-        mockHomeDir,
+        os.homedir(),
         '.llxprt',
         getCurrentLlxprtMdFilename(),
       );
@@ -610,7 +635,7 @@ describe('MemoryTool', () => {
     });
 
     it('should show correct file path in confirmation for project scope', async () => {
-      storageReadFile.mockResolvedValue('');
+      vi.mocked(fs.readFile).mockResolvedValue('');
 
       const params = { fact: 'Test fact', scope: 'project' };
       const invocation = memoryTool.build(params);
@@ -662,7 +687,7 @@ describe('MemoryTool', () => {
 
     it('should resolve core.global file path to .LLXPRT_SYSTEM in global dir', () => {
       mockSettingsService.getSetting.mockReturnValue(true);
-      storageReadFile.mockResolvedValue('');
+      vi.mocked(fs.readFile).mockResolvedValue('');
 
       const params = {
         fact: 'Test core directive',
@@ -676,7 +701,7 @@ describe('MemoryTool', () => {
 
     it('should resolve core.project file path to .LLXPRT_SYSTEM in project dir', () => {
       mockSettingsService.getSetting.mockReturnValue(true);
-      storageReadFile.mockResolvedValue('');
+      vi.mocked(fs.readFile).mockResolvedValue('');
 
       const params = {
         fact: 'Test core directive',

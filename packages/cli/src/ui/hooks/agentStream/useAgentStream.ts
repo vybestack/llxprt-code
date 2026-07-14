@@ -17,7 +17,7 @@ import {
   type EditorType,
   type MessageBus,
   type RecordingIntegration,
-  type ContractPartListUnion,
+  type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../../../config/settings.js';
@@ -42,7 +42,7 @@ export const useAgentStream = (
   settings: LoadedSettings,
   onDebugMessage: (message: string) => void,
   handleSlashCommand: (
-    cmd: ContractPartListUnion,
+    cmd: AgentRequestInput,
   ) => Promise<SlashCommandProcessorResult | false>,
   shellModeActive: boolean,
   getPreferredEditor: () => EditorType | undefined,

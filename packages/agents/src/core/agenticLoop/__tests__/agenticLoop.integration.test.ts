@@ -31,7 +31,14 @@ import {
   hasFunctionResponse,
 } from './agenticLoop-test-helpers.js';
 
-const modifyWithEditorMock = vi.fn();
+const { modifyWithEditorMock } = vi.hoisted(() => ({
+  modifyWithEditorMock: vi.fn(),
+}));
+vi.mock('@vybestack/llxprt-code-tools', async (importActual) => {
+  const actual =
+    await importActual<typeof import('@vybestack/llxprt-code-tools')>();
+  return { ...actual, modifyWithEditor: modifyWithEditorMock };
+});
 
 describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
   beforeEach(() => {
@@ -122,7 +129,7 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     expect(turnMessages).toHaveLength(2);
     const turn2Parts = partListUnionToParts(turnMessages[1]);
     const hasFnResponseInTurn2 = turn2Parts.some(
-      (p) => 'functionResponse' in p,
+      (p) => p.type === 'tool_response',
     );
     expect(hasFnResponseInTurn2).toBe(true);
     expect(hasFunctionResponse(history)).toBe(true);
@@ -309,9 +316,6 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
       policyEngine: createAskPolicyEngine(),
       interactive: true,
       approvalMode: ApprovalMode.DEFAULT,
-      confirmationDependencies: {
-        modifyWithEditor: modifyWithEditorMock,
-      },
     });
 
     let confirmationCount = 0;

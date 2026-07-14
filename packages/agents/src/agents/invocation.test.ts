@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
-import { vi, type Mocked } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mocked } from 'vitest';
 import { SubagentInvocation } from './invocation.js';
 import { AgentExecutor } from './executor.js';
 import type {
@@ -20,15 +19,9 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { type z } from 'zod';
 
-vi.mock('./executor.js', () => ({
-  AgentExecutor: {
-    create: vi.fn(),
-  },
-}));
+vi.mock('./executor.js');
 
-const MockAgentExecutor = AgentExecutor as unknown as {
-  create: ReturnType<typeof vi.fn>;
-};
+const MockAgentExecutor = vi.mocked(AgentExecutor);
 
 let mockConfig: Config;
 

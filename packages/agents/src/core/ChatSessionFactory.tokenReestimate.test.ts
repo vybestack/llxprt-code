@@ -26,19 +26,23 @@ vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () => ({
   getEnvironmentContext: vi.fn().mockResolvedValue([]),
 }));
 
-const loadRuntime = vi.fn(
-  async ({ overrides }: { overrides: Record<string, unknown> }) => ({
-    runtimeContext: {
-      history: overrides['historyService'],
-      contentGenerator: overrides['contentGenerator'],
-    },
-    contentGenerator: overrides['contentGenerator'],
+vi.mock('./chatSession.js', () => ({
+  ChatSession: vi.fn().mockImplementation(() => ({
+    setActiveTodosProvider: vi.fn(),
+    getHistoryService: vi.fn().mockReturnValue(null),
+  })),
+}));
+
+vi.mock('@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js', () => ({
+  loadAgentRuntime: vi.fn().mockResolvedValue({
+    runtimeContext: {},
+    contentGenerator: {},
     toolsView: { listToolNames: () => [] },
-    history: overrides['historyService'],
+    history: {},
     providerAdapter: {},
     telemetryAdapter: {},
   }),
-);
+}));
 
 vi.mock(
   '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js',
@@ -48,9 +52,37 @@ vi.mock(
   }),
 );
 
+vi.mock(
+  '@vybestack/llxprt-code-core/services/history/ContentConverters.js',
+  () => ({
+    ContentConverters: {
+      toIContent: vi.fn().mockReturnValue({ speaker: 'human', blocks: [] }),
+    },
+  }),
+);
+
 vi.mock('@vybestack/llxprt-code-core/utils/toolOutputLimiter.js', () => ({
   estimateTokens: vi.fn().mockReturnValue(50),
 }));
+
+vi.mock(
+  '@vybestack/llxprt-code-core/services/history/HistoryService.js',
+  () => ({
+    HistoryService: vi.fn().mockImplementation(() => ({
+      add: vi.fn(),
+      generateTurnKey: vi.fn().mockReturnValue('turn-1'),
+      setBaseTokenOffset: vi.fn(),
+      estimateTokensForText: vi.fn().mockResolvedValue(100),
+      setTokenizerFactory: vi.fn(),
+      resetTokenAccounting: vi.fn(),
+      recalculateTotalTokens: vi.fn().mockResolvedValue(undefined),
+      getTotalTokens: vi.fn().mockReturnValue(0),
+      waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
+      isEmpty: vi.fn().mockReturnValue(false),
+      getAll: vi.fn().mockReturnValue([]),
+    })),
+  }),
+);
 
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn().mockResolvedValue(undefined),
@@ -122,6 +154,8 @@ function makeReusedHistoryService(): HistoryService & {
     recalculateTotalTokens: vi.fn().mockResolvedValue(undefined),
     getTotalTokens: vi.fn().mockReturnValue(0),
     waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
+    isEmpty: vi.fn().mockReturnValue(false),
+    getAll: vi.fn().mockReturnValue([]),
   } as unknown as HistoryService & {
     resetTokenAccounting: ReturnType<typeof vi.fn>;
     recalculateTotalTokens: ReturnType<typeof vi.fn>;
@@ -152,9 +186,6 @@ describe('createChatSession - token re-estimation on HistoryService reuse', () =
       generateContentConfig: {},
       todoContinuationService,
       toolRegistry: undefined,
-      loadRuntime,
-      createChatSessionInstance: () =>
-        ({ setActiveTodosProvider: vi.fn() }) as never,
     });
 
     expect(reusedHistory.resetTokenAccounting).toHaveBeenCalledTimes(1);
@@ -165,6 +196,9 @@ describe('createChatSession - token re-estimation on HistoryService reuse', () =
   });
 
   it('does NOT reset token accounting when creating a new HistoryService', async () => {
+    const { HistoryService } = await import(
+      '@vybestack/llxprt-code-core/services/history/HistoryService.js'
+    );
     const newHistoryInstance = {
       add: vi.fn(),
       generateTurnKey: vi.fn().mockReturnValue('turn-1'),
@@ -175,7 +209,11 @@ describe('createChatSession - token re-estimation on HistoryService reuse', () =
       recalculateTotalTokens: vi.fn().mockResolvedValue(undefined),
       getTotalTokens: vi.fn().mockReturnValue(0),
       waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
-    } as unknown as HistoryService;
+    };
+    vi.mocked(HistoryService).mockImplementationOnce(
+      () => newHistoryInstance as unknown as HistoryService,
+    );
+
     const config = makeConfig();
     const runtimeState = makeRuntimeState();
     const todoContinuationService = makeTodoContinuationService();
@@ -189,10 +227,6 @@ describe('createChatSession - token re-estimation on HistoryService reuse', () =
       generateContentConfig: {},
       todoContinuationService,
       toolRegistry: undefined,
-      loadRuntime,
-      createHistoryService: () => newHistoryInstance,
-      createChatSessionInstance: () =>
-        ({ setActiveTodosProvider: vi.fn() }) as never,
     });
 
     expect(newHistoryInstance.resetTokenAccounting).not.toHaveBeenCalled();

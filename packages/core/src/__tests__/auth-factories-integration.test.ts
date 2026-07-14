@@ -25,7 +25,7 @@
  * No reverse testing: no assertions on internal error messages.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import {
   createAuthPrecedenceResolver,
   createKeyringTokenStore,

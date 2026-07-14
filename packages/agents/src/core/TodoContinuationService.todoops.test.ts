@@ -4,22 +4,44 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
-import { vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TodoContinuationService } from './TodoContinuationService.js';
 import { AgentEventType } from './turn.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { Todo } from '@vybestack/llxprt-code-tools';
 
-const todoStoreReadMock = vi.fn();
-const todoStoreReadPausedMock = vi.fn();
-const todoStoreWritePausedMock = vi.fn();
-const mockTodoStoreConstructor = vi.fn(() => ({
-  readTodos: todoStoreReadMock,
-  readPausedState: todoStoreReadPausedMock,
-  writePausedState: todoStoreWritePausedMock,
-}));
+// Mock TodoStore so persisted todo state doesn't hit the filesystem
+const {
+  todoStoreReadMock,
+  todoStoreReadPausedMock,
+  todoStoreWritePausedMock,
+  mockTodoStoreConstructor,
+} = vi.hoisted(() => {
+  const readMock = vi.fn();
+  const readPausedMock = vi.fn();
+  const writePausedMock = vi.fn();
+  const constructorMock = vi.fn().mockImplementation(() => ({
+    readTodos: readMock,
+    readPausedState: readPausedMock,
+    writePausedState: writePausedMock,
+  }));
+  return {
+    todoStoreReadMock: readMock,
+    todoStoreReadPausedMock: readPausedMock,
+    todoStoreWritePausedMock: writePausedMock,
+    mockTodoStoreConstructor: constructorMock,
+  };
+});
+
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  return {
+    ...actual,
+    LocalTodoStore: mockTodoStoreConstructor,
+  };
+});
 
 vi.mock(
   '@vybestack/llxprt-code-core/services/todo-reminder-service.js',
@@ -63,7 +85,6 @@ function makeService(
       overrides.todoReminderService ?? new TodoReminderService(),
     complexitySuggestionCooldown:
       overrides.complexitySuggestionCooldown ?? 300000,
-    createTodoStore: mockTodoStoreConstructor,
   });
 }
 
@@ -100,9 +121,7 @@ describe('TodoContinuationService', () => {
       writePausedState: todoStoreWritePausedMock,
     }));
 
-    (
-      TodoReminderService as unknown as ReturnType<typeof vi.fn>
-    ).mockImplementation(
+    vi.mocked(TodoReminderService).mockImplementation(
       () =>
         ({
           getComplexTaskSuggestion: vi

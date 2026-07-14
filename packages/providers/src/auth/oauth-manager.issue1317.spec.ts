@@ -15,7 +15,7 @@
  * that could be retried.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OAuthManager } from './oauth-manager.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from './types.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';

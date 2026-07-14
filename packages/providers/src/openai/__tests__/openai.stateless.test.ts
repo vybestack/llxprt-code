@@ -2,7 +2,7 @@
  * @plan PLAN-20251018-STATELESSPROVIDER2.P08
  * @requirement REQ-SP2-001
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '../OpenAIProvider.js';
 import OpenAI from 'openai';
@@ -18,61 +18,64 @@ import {
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-class FakeOpenAI {
-  static instances: Set<symbol> = new Set();
-  static created: symbol[] = [];
-  static requests: Array<{ request: Record<string, unknown> }> = [];
+vi.mock('openai', () => {
+  class FakeOpenAI {
+    static instances: Set<symbol> = new Set();
+    static created: symbol[] = [];
+    static requests: Array<{ request: Record<string, unknown> }> = [];
 
-  static reset(): void {
-    FakeOpenAI.instances.clear();
-    FakeOpenAI.created = [];
-    FakeOpenAI.requests = [];
-  }
+    static reset(): void {
+      FakeOpenAI.instances.clear();
+      FakeOpenAI.created = [];
+      FakeOpenAI.requests = [];
+    }
 
-  readonly instanceId: symbol;
-  options: Record<string, unknown>;
+    readonly instanceId: symbol;
+    options: Record<string, unknown>;
 
-  constructor(opts: Record<string, unknown>) {
-    this.instanceId = Symbol('openai-client');
-    FakeOpenAI.instances.add(this.instanceId);
-    FakeOpenAI.created.push(this.instanceId);
-    this.options = opts;
-  }
+    constructor(opts: Record<string, unknown>) {
+      this.instanceId = Symbol('openai-client');
+      FakeOpenAI.instances.add(this.instanceId);
+      FakeOpenAI.created.push(this.instanceId);
+      this.options = opts;
+    }
 
-  chat = {
-    completions: {
-      create: vi.fn(async (request: Record<string, unknown>) => {
-        FakeOpenAI.requests.push({ request });
-        return {
-          async *[Symbol.asyncIterator]() {
-            yield {
-              choices: [
-                {
-                  delta: { content: 'stateless-mock-response' },
-                  finish_reason: 'stop',
-                  index: 0,
+    chat = {
+      completions: {
+        create: vi.fn(async (request: Record<string, unknown>) => {
+          FakeOpenAI.requests.push({ request });
+          return {
+            async *[Symbol.asyncIterator]() {
+              yield {
+                choices: [
+                  {
+                    delta: { content: 'stateless-mock-response' },
+                    finish_reason: 'stop',
+                    index: 0,
+                  },
+                ],
+                usage: {
+                  prompt_tokens: 0,
+                  completion_tokens: 0,
+                  total_tokens: 0,
                 },
-              ],
-              usage: {
-                prompt_tokens: 0,
-                completion_tokens: 0,
-                total_tokens: 0,
-              },
-            };
-          },
-        };
-      }),
-    },
-  };
-}
+              };
+            },
+          };
+        }),
+      },
+    };
+  }
 
-const FakeOpenAIClass = FakeOpenAI;
-const constructFakeClient = (
-  options: ConstructorParameters<typeof OpenAI>[0],
-): OpenAI =>
-  new FakeOpenAI(
-    options as unknown as Record<string, unknown>,
-  ) as unknown as OpenAI;
+  return { default: FakeOpenAI };
+});
+
+const FakeOpenAIClass = OpenAI as unknown as {
+  instances: Set<symbol>;
+  created: symbol[];
+  requests: Array<{ request: Record<string, unknown> }>;
+  reset(): void;
+};
 
 class TestOpenAIProvider extends OpenAIProvider {
   private nextAuthToken = 'token-A';
@@ -128,8 +131,6 @@ describe('OpenAI provider stateless contract tests', () => {
     const provider = new TestOpenAIProvider(
       'token-A',
       'https://api.openai.com/v1',
-      undefined,
-      { constructClient: constructFakeClient },
     );
     const settingsA = createSettings({ callId: 'runtime-A' });
     const settingsB = createSettings({ callId: 'runtime-B' });
@@ -158,8 +159,6 @@ describe('OpenAI provider stateless contract tests', () => {
     const provider = new TestOpenAIProvider(
       'token-A',
       'https://api.openai.com/v1',
-      undefined,
-      { constructClient: constructFakeClient },
     );
     const settings = createSettings({
       callId: 'runtime-C',
@@ -186,8 +185,6 @@ describe('OpenAI provider stateless contract tests', () => {
     const provider = new TestOpenAIProvider(
       'token-runner',
       'https://api.openai.com/v1',
-      undefined,
-      { constructClient: constructFakeClient },
     );
     const settingsPrimary = createSettings({ callId: 'runtime-config' });
     settingsPrimary.setProviderSetting('openai', 'temperature', 0.42);
@@ -241,12 +238,7 @@ describe('OpenAI provider stateless contract tests', () => {
   });
 
   it('relies on invocation ephemerals instead of config when provided', async () => {
-    const provider = new TestOpenAIProvider(
-      'token-invocation',
-      undefined,
-      undefined,
-      { constructClient: constructFakeClient },
-    );
+    const provider = new TestOpenAIProvider('token-invocation');
     const settings = createSettings({ callId: 'invocation-only' });
     const getEphemerals = vi.fn(() => {
       throw new Error('config.getEphemeralSettings should not be used');

@@ -9,20 +9,21 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { vi } from 'vitest';
-import type { Content } from '@google/genai';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AgentClient } from './client.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   getEnabledToolNamesForPrompt,
   shouldIncludeSubagentDelegationForConfig,
 } from './clientToolGovernance.js';
-import { setupGeminiClient } from './client-test-helpers.js';
+import {
+  setupGeminiClient,
+  type MockResponseShape,
+} from './client-test-helpers.js';
 
 // Mock prompts module before imports
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -55,19 +56,19 @@ const {
   mockGenerateContentFn,
   mockEmbedContentFn,
   mockTurnRunFn,
-} = {
+} = vi.hoisted(() => ({
   mockChatCreateFn: vi.fn(),
   mockGenerateContentFn: vi.fn(),
   mockEmbedContentFn: vi.fn(),
   mockTurnRunFn: vi.fn(),
-};
+}));
 
 const {
   todoStoreReadMock,
   todoStoreReadPausedMock,
   todoStoreWritePausedMock,
   mockTodoStoreConstructor,
-} = (() => {
+} = vi.hoisted(() => {
   const readMock = vi.fn();
   const readPausedMock = vi.fn();
   const writePausedMock = vi.fn();
@@ -82,11 +83,8 @@ const {
     todoStoreWritePausedMock: writePausedMock,
     mockTodoStoreConstructor: constructorMock,
   };
-})();
+});
 
-vi.mock('@google/genai', () => ({
-  GoogleGenAI: vi.fn(),
-}));
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -111,14 +109,28 @@ vi.mock(
     })),
   }),
 );
-vi.mock('@vybestack/llxprt-code-tools', () => ({
-  LocalTodoStore: vi.fn().mockImplementation(() => ({
-    readTodos: todoStoreReadMock,
-    readPausedState: todoStoreReadPausedMock,
-    writePausedState: todoStoreWritePausedMock,
-  })),
-}));
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  return {
+    ...actual,
+    LocalTodoStore: mockTodoStoreConstructor,
+  };
+});
+vi.mock('./turn', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./turn.js')>();
+  class MockTurn {
+    pendingToolCalls = [];
+    run = mockTurnRunFn;
+    constructor() {}
+  }
+  return {
+    ...actual,
+    Turn: MockTurn,
+  };
+});
 
+vi.mock('@vybestack/llxprt-code-core/config/config.js');
 vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));
@@ -128,22 +140,38 @@ vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
-    getResponseText: (result: GenerateContentResponse) =>
+    getResponseText: (result: MockResponseShape) =>
       result.candidates?.[0]?.content?.parts
         ?.map((part) => part.text)
         .join('') ?? undefined,
   }),
 );
+vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
+  logApiRequest: vi.fn(),
+  logApiResponse: vi.fn(),
+  logApiError: vi.fn(),
+}));
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ideContext: {
-    getIdeContext: vi.fn(),
-    subscribeToIdeContext: vi.fn(),
-    setIdeContext: vi.fn(),
-    clearIdeContext: vi.fn(),
-  },
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    ideContext: {
+      ...actual.ideContext,
+      getIdeContext: vi.fn(),
+      subscribeToIdeContext: vi.fn(),
+      setIdeContext: vi.fn(),
+      clearIdeContext: vi.fn(),
+    },
+  };
+});
+vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
+  tokenLimit: vi.fn(),
 }));
 vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
@@ -152,7 +180,7 @@ vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   },
 }));
 
-describe('Gemini Client (client.ts)', () => {
+describe('AgentClient (client.ts)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
@@ -160,7 +188,6 @@ describe('Gemini Client (client.ts)', () => {
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,
-      createTurn: () => ({ run: mockTurnRunFn }) as never,
     });
     client = ctx.client;
 
@@ -186,18 +213,24 @@ describe('Gemini Client (client.ts)', () => {
       };
       client['chat'] = mockChat as unknown as ChatSession;
 
-      const historyWithThoughts: Content[] = [
+      const historyWithThoughts: IContent[] = [
         {
-          role: 'user',
-          parts: [{ text: 'hello' }],
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'hello' }],
         },
         {
-          role: 'model',
-          parts: [
-            { text: 'thinking...', thoughtSignature: 'thought-123' },
+          speaker: 'ai',
+          blocks: [
             {
-              functionCall: { name: 'test', args: {} },
-              thoughtSignature: 'thought-456',
+              type: 'thinking',
+              thought: 'thinking...',
+              signature: 'thought-123',
+            },
+            {
+              type: 'tool_call',
+              id: '',
+              name: 'test',
+              parameters: {},
             },
           ],
         },
@@ -205,16 +238,16 @@ describe('Gemini Client (client.ts)', () => {
 
       await client.setHistory(historyWithThoughts, { stripThoughts: true });
 
-      const expectedHistory: Content[] = [
+      const expectedHistory: IContent[] = [
         {
-          role: 'user',
-          parts: [{ text: 'hello' }],
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'hello' }],
         },
         {
-          role: 'model',
-          parts: [
-            { text: 'thinking...' },
-            { functionCall: { name: 'test', args: {} } },
+          speaker: 'ai',
+          blocks: [
+            { type: 'thinking', thought: 'thinking...' },
+            { type: 'tool_call', id: '', name: 'test', parameters: {} },
           ],
         },
       ];
@@ -228,16 +261,24 @@ describe('Gemini Client (client.ts)', () => {
       };
       client['chat'] = mockChat as unknown as ChatSession;
 
-      const historyWithThoughts: Content[] = [
+      const historyWithThoughts: IContent[] = [
         {
-          role: 'user',
-          parts: [{ text: 'hello' }],
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'hello' }],
         },
         {
-          role: 'model',
-          parts: [
-            { text: 'thinking...', thoughtSignature: 'thought-123' },
-            { text: 'ok', thoughtSignature: 'thought-456' },
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'thinking...',
+              signature: 'thought-123',
+            },
+            {
+              type: 'thinking',
+              thought: 'ok',
+              signature: 'thought-456',
+            },
           ],
         },
       ];
@@ -252,10 +293,10 @@ describe('Gemini Client (client.ts)', () => {
       client['chat'] = undefined; // Chat not initialized
       vi.spyOn(client, 'hasChatInitialized').mockReturnValue(false);
 
-      const history: Content[] = [
+      const history: IContent[] = [
         {
-          role: 'user',
-          parts: [{ text: 'hello' }],
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'hello' }],
         },
       ];
 
@@ -268,20 +309,33 @@ describe('Gemini Client (client.ts)', () => {
     });
 
     it('returns history from a stored history service after profile invalidation', async () => {
-      const history: Content[] = [
-        { role: 'user', parts: [{ text: 'remember issue 2049' }] },
-        { role: 'model', parts: [{ text: 'we are preserving history' }] },
+      const history: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'remember issue 2049' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'we are preserving history' }],
+        },
       ];
       const historyService = new HistoryService();
       for (const content of history) {
-        historyService.add(ContentConverters.toIContent(content), 'test-model');
+        historyService.add(content, 'test-model');
       }
       client['_storedHistoryService'] = historyService;
       client['_previousHistory'] = undefined;
       client['chat'] = undefined;
       client.getHistory = AgentClient.prototype.getHistory.bind(client);
 
-      await expect(client.getHistory()).resolves.toStrictEqual(history);
+      const result = await client.getHistory();
+      // Compare block-level content, ignoring metadata (turnId etc.) added by
+      // the HistoryService that are not part of the test's input data.
+      expect(result).toHaveLength(history.length);
+      for (let i = 0; i < history.length; i++) {
+        expect(result[i].speaker).toBe(history[i].speaker);
+        expect(result[i].blocks).toStrictEqual(history[i].blocks);
+      }
     });
 
     it('should update chat immediately when chat is initialized', async () => {
@@ -292,10 +346,10 @@ describe('Gemini Client (client.ts)', () => {
       client['chat'] = mockChat as unknown as ChatSession;
       vi.spyOn(client, 'hasChatInitialized').mockReturnValue(true);
 
-      const history: Content[] = [
+      const history: IContent[] = [
         {
-          role: 'user',
-          parts: [{ text: 'hello' }],
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'hello' }],
         },
       ];
 
@@ -316,10 +370,10 @@ describe('Gemini Client (client.ts)', () => {
       client['chat'] = mockChat as unknown as ChatSession;
       vi.spyOn(client, 'hasChatInitialized').mockReturnValue(true);
 
-      const history: Content[] = [
+      const history: IContent[] = [
         {
-          role: 'user',
-          parts: [{ text: 'hello' }],
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'hello' }],
         },
       ];
 
@@ -365,10 +419,12 @@ describe('Gemini Client (client.ts)', () => {
       vi.spyOn(config, 'getMcpClientManager').mockReturnValue(undefined);
       vi.spyOn(config, 'isInteractive').mockReturnValue(true);
 
-      getEnabledToolNamesForPrompt.mockReturnValue([]);
-      shouldIncludeSubagentDelegationForConfig.mockResolvedValue(false);
+      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
+      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
+        false,
+      );
 
-      getCoreSystemPromptAsync.mockResolvedValue('prompt');
+      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt');
 
       await client.updateSystemInstruction();
 
@@ -409,10 +465,12 @@ describe('Gemini Client (client.ts)', () => {
       vi.spyOn(config, 'getMcpClientManager').mockReturnValue(undefined);
       vi.spyOn(config, 'isInteractive').mockReturnValue(false);
 
-      getEnabledToolNamesForPrompt.mockReturnValue([]);
-      shouldIncludeSubagentDelegationForConfig.mockResolvedValue(false);
+      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
+      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
+        false,
+      );
 
-      getCoreSystemPromptAsync.mockResolvedValue('prompt');
+      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt');
 
       await client.updateSystemInstruction();
 

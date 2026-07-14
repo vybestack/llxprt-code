@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
@@ -15,26 +15,6 @@ import {
   createMockMessageBus,
   createMockPolicyEngine,
 } from './coreToolScheduler-test-helpers.js';
-async function waitForCounts(
-  completionOrder: readonly number[],
-  publishOrder: readonly number[],
-  expectedCount: number,
-  timeoutMs = 5000,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (
-      completionOrder.length === expectedCount &&
-      publishOrder.length === expectedCount
-    ) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error(
-    `Timed out waiting for ${expectedCount} completions and publications; received ${completionOrder.length}/${publishOrder.length}`,
-  );
-}
 
 describe('CoreToolScheduler Buffered Parallel Execution', () => {
   it('should execute tool calls in parallel but publish results in order', async () => {
@@ -151,9 +131,10 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
     );
 
     // Wait for all calls to complete
-    await waitForCounts(completionOrder, publishOrder, 3);
-    expect(completionOrder.length).toBe(3);
-    expect(publishOrder.length).toBe(3);
+    await vi.waitFor(() => {
+      expect(completionOrder.length).toBe(3);
+      expect(publishOrder.length).toBe(3);
+    });
 
     // Verify parallel execution (completion order != request order)
     expect(completionOrder).toStrictEqual([2, 3, 1]); // Fastest to slowest
@@ -272,9 +253,10 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
     );
 
     // Wait for all calls to complete
-    await waitForCounts(completionOrder, publishOrder, 3);
-    expect(completionOrder.length).toBe(3);
-    expect(publishOrder.length).toBe(3);
+    await vi.waitFor(() => {
+      expect(completionOrder.length).toBe(3);
+      expect(publishOrder.length).toBe(3);
+    });
 
     // Verify parallel execution
     expect(completionOrder).toStrictEqual([2, 3, 1]); // Fastest to slowest

@@ -4,16 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mocked } from 'bun:test';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import type { Mocked } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { safeJsonStringify } from '@vybestack/llxprt-code-core/utils/safeJsonStringify.js';
 import {
   DiscoveredMCPTool,
   generateValidName,
   generateMcpToolName,
-} from './mcp-tool.js'; // Added getStringifiedResultForDisplayimport type { ToolResult } from'@vybestack/llxprt-code-tools';
-import type { CallableTool, Part } from '@google/genai';
-import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+} from './mcp-tool.js';
+import {
+  ToolErrorType,
+  type CallableTool,
+  type ContentPart as Part,
+  type ToolResult,
+} from '@vybestack/llxprt-code-tools';
 
 // DiscoveredMCPToolInvocation stores an allowlist on its constructor (static).
 // This type centralizes the one unavoidable internal-state access for tests.
@@ -171,9 +175,9 @@ describe('DiscoveredMCPTool', () => {
       mockCallTool.mockRejectedValue(expectedError);
 
       const invocation = tool.build(params);
-      expect(invocation.execute(new AbortController().signal)).rejects.toThrow(
-        expectedError,
-      );
+      await expect(
+        invocation.execute(new AbortController().signal),
+      ).rejects.toThrow(expectedError);
     });
 
     it.each([
@@ -628,7 +632,7 @@ describe('DiscoveredMCPTool', () => {
 
         const invocation = tool.build(params);
 
-        expect(invocation.execute(controller.signal)).rejects.toThrow(
+        await expect(invocation.execute(controller.signal)).rejects.toThrow(
           'Tool call aborted',
         );
 
@@ -665,7 +669,7 @@ describe('DiscoveredMCPTool', () => {
         // Abort after a short delay to simulate cancellation during execution
         setTimeout(() => controller.abort(), 50);
 
-        expect(promise).rejects.toThrow('Tool call aborted');
+        await expect(promise).rejects.toThrow('Tool call aborted');
       });
 
       it('should complete successfully if not aborted', async () => {
@@ -726,7 +730,7 @@ describe('DiscoveredMCPTool', () => {
 
         const invocation = tool.build(params);
 
-        expect(invocation.execute(controller.signal)).rejects.toThrow(
+        await expect(invocation.execute(controller.signal)).rejects.toThrow(
           expectedError,
         );
       });
@@ -763,7 +767,7 @@ describe('DiscoveredMCPTool', () => {
 
         const invocation = tool.build(params);
 
-        expect(invocation.execute(controller.signal)).rejects.toThrow(
+        await expect(invocation.execute(controller.signal)).rejects.toThrow(
           'Tool execution failed',
         );
 

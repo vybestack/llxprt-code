@@ -27,9 +27,9 @@
  * - Every line of production code is written in response to a failing test
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ToolCall, SuccessfulToolCall } from './coreToolScheduler.js';
-import { CoreToolScheduler } from './coreToolScheduler.ts?hooks-caller-application-suite';
+import { CoreToolScheduler } from './coreToolScheduler.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
@@ -44,7 +44,7 @@ import {
   triggerBeforeToolHook,
   triggerAfterToolHook,
 } from '@vybestack/llxprt-code-core/core/coreToolHookTriggers.js';
-import { HookSystem } from '../../../core/src/hooks/hookSystem.js?hooks-caller-application-suite';
+import { HookSystem } from '@vybestack/llxprt-code-core/hooks/hookSystem.js';
 import type {
   HookDefinition,
   HookType,

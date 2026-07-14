@@ -269,9 +269,13 @@ const defaultMainDependencies: MainDependencies = {
   createMcpChannel,
 };
 
+export interface MainLifecycle {
+  dispose(): void;
+}
+
 export async function main(
   dependencies: MainDependencies = defaultMainDependencies,
-): Promise<void> {
+): Promise<MainLifecycle> {
   const bootstrap = parseBootstrapFromEnv();
   const builtins = getBuiltinServers();
   const bootstrapServerEntries = toServerRegistryEntries(
@@ -314,11 +318,40 @@ export async function main(
   }
 
   let shuttingDown = false;
+  let handlersAttached = true;
+
+  const onSigterm = (): void => {
+    void shutdown();
+  };
+  const onSigint = (): void => {
+    void shutdown();
+  };
+  const onUncaughtException = (error: Error): void => {
+    stderr.write(`Uncaught exception in LSP service: ${String(error)}\n`);
+    shutdown().finally(() => process.exit(1));
+  };
+  const onUnhandledRejection = (error: unknown): void => {
+    stderr.write(`Unhandled rejection in LSP service: ${String(error)}\n`);
+    shutdown().finally(() => process.exit(1));
+  };
+
+  const dispose = (): void => {
+    if (!handlersAttached) {
+      return;
+    }
+    handlersAttached = false;
+    process.off('SIGTERM', onSigterm);
+    process.off('SIGINT', onSigint);
+    process.off('uncaughtException', onUncaughtException);
+    process.off('unhandledRejection', onUnhandledRejection);
+  };
+
   const shutdown = async (): Promise<void> => {
     if (shuttingDown) {
       return;
     }
     shuttingDown = true;
+    dispose();
 
     try {
       await orchestrator.shutdown();
@@ -343,25 +376,13 @@ export async function main(
     process.exit(0);
   };
 
-  process.on('SIGTERM', () => {
-    void shutdown();
-  });
-
-  process.on('SIGINT', () => {
-    void shutdown();
-  });
-
-  process.on('uncaughtException', (error) => {
-    stderr.write(`Uncaught exception in LSP service: ${String(error)}\n`);
-    shutdown().finally(() => process.exit(1));
-  });
-
-  process.on('unhandledRejection', (error) => {
-    stderr.write(`Unhandled rejection in LSP service: ${String(error)}\n`);
-    shutdown().finally(() => process.exit(1));
-  });
+  process.on('SIGTERM', onSigterm);
+  process.on('SIGINT', onSigint);
+  process.on('uncaughtException', onUncaughtException);
+  process.on('unhandledRejection', onUnhandledRejection);
 
   rpcConnection.sendNotification('lsp/ready');
+  return { dispose };
 }
 
 const isMainModule = (): boolean => {

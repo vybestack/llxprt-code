@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { buildResponsesRequest } from './buildResponsesRequest.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 describe('buildResponsesRequest - undefined message handling', () => {

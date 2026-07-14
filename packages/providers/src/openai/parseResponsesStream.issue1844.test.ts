@@ -10,7 +10,7 @@
  * so downstream telemetry and turn handling work.
  */
 
-import { describe, it, expect, beforeAll } from 'bun:test';
+import { describe, it, expect, beforeAll } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 let parseResponsesStream: typeof import('./parseResponsesStream.js').parseResponsesStream;

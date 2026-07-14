@@ -71,12 +71,10 @@ import {
   handleStreamingResponse,
   invokeStreamText,
   createStreamingState,
-  type StreamTextFunction,
 } from './vercelStreamHandler.js';
 import {
   handleNonStreamingResponse,
   invokeGenerateText,
-  type GenerateTextFunction,
 } from './vercelNonStreamingHandler.js';
 import {
   logRequestContext,
@@ -91,14 +89,7 @@ import {
 /**
  * Vercel OpenAI-based provider using AI SDK v5.
  */
-export interface OpenAIVercelProviderDependencies {
-  generateText?: GenerateTextFunction;
-  streamText?: StreamTextFunction;
-}
-
 export class OpenAIVercelProvider extends BaseProvider implements IProvider {
-  private readonly dependencies: OpenAIVercelProviderDependencies;
-
   private getLogger(): DebugLogger {
     return new DebugLogger('llxprt:provider:openaivercel');
   }
@@ -112,7 +103,6 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     apiKey: string | undefined,
     baseURL?: string,
     config?: IProviderConfig,
-    dependencies: OpenAIVercelProviderDependencies = {},
   ) {
     const normalizedApiKey =
       apiKey && apiKey.trim() !== '' ? apiKey : undefined;
@@ -127,7 +117,6 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       },
       config,
     );
-    this.dependencies = dependencies;
   }
 
   protected override supportsOAuth(): boolean {
@@ -201,7 +190,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
     const aiTools = buildVercelTools(formattedTools);
     const params = resolveModelCallParams(options, metadata, this);
-    const captureBuffer: CaptureBuffer = createCaptureBuffer();
+    const rawFieldName = options.settings.get('reasoning.fieldName') as
+      | string
+      | undefined;
+    const captureBuffer: CaptureBuffer = createCaptureBuffer(rawFieldName);
     const { model } = await createConfiguredModel(
       options,
       this.getClientConfig(options),
@@ -272,7 +264,6 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       abortSignal,
       logger,
       this.name,
-      this.dependencies.streamText,
     );
     const state = createStreamingState();
     yield* handleStreamingResponse(
@@ -307,7 +298,6 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       formattedTools,
       logger,
       this.name,
-      this.dependencies.generateText,
     );
     yield* handleNonStreamingResponse(result, rs, logger);
   }

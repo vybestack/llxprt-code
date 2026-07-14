@@ -25,14 +25,25 @@
  * @requirement REQ-OAV-007 - Chat Completion Generation
  */
 
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-const generateTextMock = vi.fn();
+// Mock the 'ai' module
+vi.mock('ai', () => ({
+  generateText: vi.fn(),
+  streamText: vi.fn(),
+  extractReasoningMiddleware: vi.fn(() => ({})),
+  wrapLanguageModel: vi.fn((model) => model),
+}));
+
+// Mock @ai-sdk/openai
+vi.mock('@ai-sdk/openai', () => ({
+  createOpenAI: vi.fn(() => vi.fn((modelId: string) => ({ modelId }))),
+}));
 
 describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
   let provider: OpenAIVercelProvider;
@@ -40,10 +51,14 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
   let config: ReturnType<typeof createRuntimeConfigStub>;
 
   beforeEach(() => {
-    generateTextMock.mockReset();
+    vi.clearAllMocks();
     settingsService = new SettingsService();
     settingsService.set('activeProvider', 'openaivercel');
     config = createRuntimeConfigStub(settingsService);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   async function collectResults(
@@ -58,19 +73,19 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
 
   describe('Message Conversion', () => {
     it('should convert human messages correctly', async () => {
-      generateTextMock.mockResolvedValue({
+      const { generateText } = await import('ai');
+      const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
+
+      mockGenerateText.mockResolvedValue({
         text: 'Response',
         toolCalls: [],
         finishReason: 'stop',
         usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
       });
 
-      provider = new OpenAIVercelProvider(
-        'test-api-key',
-        undefined,
-        { settingsService },
-        { generateText: generateTextMock },
-      );
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {
+        settingsService,
+      });
 
       const messages: IContent[] = [
         {
@@ -92,7 +107,7 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
       const iterator = provider.generateChatCompletion(options);
       await collectResults(iterator);
 
-      expect(generateTextMock).toHaveBeenCalledWith(
+      expect(mockGenerateText).toHaveBeenCalledWith(
         expect.objectContaining({
           messages: expect.arrayContaining([
             expect.objectContaining({
@@ -104,19 +119,19 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
     });
 
     it('should convert AI messages correctly', async () => {
-      generateTextMock.mockResolvedValue({
+      const { generateText } = await import('ai');
+      const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
+
+      mockGenerateText.mockResolvedValue({
         text: 'Response',
         toolCalls: [],
         finishReason: 'stop',
         usage: { promptTokens: 20, completionTokens: 5, totalTokens: 25 },
       });
 
-      provider = new OpenAIVercelProvider(
-        'test-api-key',
-        undefined,
-        { settingsService },
-        { generateText: generateTextMock },
-      );
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {
+        settingsService,
+      });
 
       const messages: IContent[] = [
         {
@@ -146,7 +161,7 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
       const iterator = provider.generateChatCompletion(options);
       await collectResults(iterator);
 
-      expect(generateTextMock).toHaveBeenCalledWith(
+      expect(mockGenerateText).toHaveBeenCalledWith(
         expect.objectContaining({
           messages: expect.arrayContaining([
             expect.objectContaining({ role: 'user' }),
@@ -158,19 +173,19 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
     });
 
     it('should handle tool response messages', async () => {
-      generateTextMock.mockResolvedValue({
+      const { generateText } = await import('ai');
+      const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
+
+      mockGenerateText.mockResolvedValue({
         text: 'The weather in San Francisco is sunny.',
         toolCalls: [],
         finishReason: 'stop',
         usage: { promptTokens: 50, completionTokens: 10, totalTokens: 60 },
       });
 
-      provider = new OpenAIVercelProvider(
-        'test-api-key',
-        undefined,
-        { settingsService },
-        { generateText: generateTextMock },
-      );
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {
+        settingsService,
+      });
 
       const messages: IContent[] = [
         {
@@ -214,7 +229,7 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
       const iterator = provider.generateChatCompletion(options);
       await collectResults(iterator);
 
-      expect(generateTextMock).toHaveBeenCalledWith(
+      expect(mockGenerateText).toHaveBeenCalledWith(
         expect.objectContaining({
           messages: expect.arrayContaining([
             expect.objectContaining({ role: 'tool' }),
@@ -226,19 +241,19 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
 
   describe('Finish Reasons', () => {
     it('should handle stop finish reason', async () => {
-      generateTextMock.mockResolvedValue({
+      const { generateText } = await import('ai');
+      const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
+
+      mockGenerateText.mockResolvedValue({
         text: 'Complete response',
         toolCalls: [],
         finishReason: 'stop',
         usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
       });
 
-      provider = new OpenAIVercelProvider(
-        'test-api-key',
-        undefined,
-        { settingsService },
-        { generateText: generateTextMock },
-      );
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {
+        settingsService,
+      });
 
       const messages: IContent[] = [
         {
@@ -264,7 +279,10 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
     });
 
     it('should handle tool-calls finish reason', async () => {
-      generateTextMock.mockResolvedValue({
+      const { generateText } = await import('ai');
+      const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
+
+      mockGenerateText.mockResolvedValue({
         text: '',
         toolCalls: [
           {
@@ -277,12 +295,9 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
         usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
       });
 
-      provider = new OpenAIVercelProvider(
-        'test-api-key',
-        undefined,
-        { settingsService },
-        { generateText: generateTextMock },
-      );
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {
+        settingsService,
+      });
 
       const messages: IContent[] = [
         {
@@ -311,19 +326,19 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
     });
 
     it('should handle length finish reason', async () => {
-      generateTextMock.mockResolvedValue({
+      const { generateText } = await import('ai');
+      const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
+
+      mockGenerateText.mockResolvedValue({
         text: 'Truncated response due to length...',
         toolCalls: [],
         finishReason: 'length',
         usage: { promptTokens: 10, completionTokens: 100, totalTokens: 110 },
       });
 
-      provider = new OpenAIVercelProvider(
-        'test-api-key',
-        undefined,
-        { settingsService },
-        { generateText: generateTextMock },
-      );
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {
+        settingsService,
+      });
 
       const messages: IContent[] = [
         {

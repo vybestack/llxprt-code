@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AgenticLoop } from '../AgenticLoop.js';
 import type { AgenticLoopEvent } from '../types.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
@@ -200,7 +200,7 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
       );
     });
     try {
-      expect(await Promise.race([run, timeout])).toBeUndefined();
+      await expect(Promise.race([run, timeout])).resolves.toBeUndefined();
     } finally {
       if (timeoutId !== undefined) {
         clearTimeout(timeoutId);
@@ -325,7 +325,7 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
     }
 
     expect(sawRunningTool).toBe(true);
-    expect(await iterator.return(undefined)).toBeDefined();
+    await expect(iterator.return(undefined)).resolves.toBeDefined();
     expect(disposedSessionIds.some((id) => id.includes('#agentic-loop#'))).toBe(
       true,
     );

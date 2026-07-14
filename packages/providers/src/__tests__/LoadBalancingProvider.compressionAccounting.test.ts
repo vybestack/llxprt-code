@@ -7,7 +7,7 @@
  * provider tokenizers (issue #2207).
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
@@ -325,7 +325,7 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
 
     const provider = new LoadBalancingProvider(lbConfig, providerManager);
 
-    expect(
+    await expect(
       consumeIterator(provider, [
         createTextContent(
           'this is a very long message that will exceed the tiny limit',
@@ -368,7 +368,7 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
       providerManager,
     );
 
-    expect(
+    await expect(
       consumeIterator(provider, [createTextContent('too large everywhere')]),
     ).rejects.toThrow(LoadBalancerAllContextLimitsExceededError);
   });

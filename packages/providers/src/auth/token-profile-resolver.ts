@@ -13,29 +13,12 @@
  * without instantiating the full coordinator.
  */
 
-import {
-  DebugLogger,
-  type OAuthTokenRequestMetadata,
-} from '@vybestack/llxprt-code-core';
+import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { createProfileManager } from './profile-utils.js';
 import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 
 const logger = new DebugLogger('llxprt:oauth:token');
-
-type LoadedProfile = Awaited<
-  ReturnType<Awaited<ReturnType<typeof createProfileManager>>['loadProfile']>
->;
-
-export interface ProfileBucketResolverDependencies {
-  loadProfile: (profileName: string) => Promise<LoadedProfile>;
-}
-
-const defaultDependencies: ProfileBucketResolverDependencies = {
-  loadProfile: async (profileName) => {
-    const profileManager = await createProfileManager();
-    return profileManager.loadProfile(profileName);
-  },
-};
 
 /**
  * Resolve the current profile name from metadata or runtime settings.
@@ -68,11 +51,13 @@ export async function loadProfileBuckets(
   providerName: string,
   currentProfileName: string,
   requestedProfileName: string | null,
-  dependencies: ProfileBucketResolverDependencies = defaultDependencies,
 ): Promise<string[]> {
-  let profile: LoadedProfile;
+  let profile: Awaited<
+    ReturnType<Awaited<ReturnType<typeof createProfileManager>>['loadProfile']>
+  >;
   try {
-    profile = await dependencies.loadProfile(currentProfileName);
+    const profileManager = await createProfileManager();
+    profile = await profileManager.loadProfile(currentProfileName);
   } catch (error) {
     logger.debug(`Could not load profile buckets for ${providerName}:`, error);
     if (requestedProfileName) {
@@ -115,7 +100,6 @@ export async function loadProfileBuckets(
 export async function resolveProfileBuckets(
   providerName: string,
   metadata?: OAuthTokenRequestMetadata,
-  dependencies: ProfileBucketResolverDependencies = defaultDependencies,
 ): Promise<string[]> {
   const requestedProfileName =
     typeof metadata?.profileId === 'string' && metadata.profileId.trim() !== ''
@@ -134,7 +118,6 @@ export async function resolveProfileBuckets(
     providerName,
     currentProfileName,
     requestedProfileName,
-    dependencies,
   );
 }
 

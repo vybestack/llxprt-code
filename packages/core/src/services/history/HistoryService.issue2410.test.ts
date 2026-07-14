@@ -21,7 +21,7 @@
  * history (z.ai rejects these with HTTP 400 error 1213).
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 

@@ -11,9 +11,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import * as actualTools from '../../../../tools/index.ts';
-import * as actualContentGenerator from '../../core/contentGenerator.js';
-import { coreEvents } from '../../utils/events.js';
 
 import type { ConfigParameters } from '../../config/config.js';
 import { Config } from '../../config/config.js';
@@ -23,7 +20,9 @@ import { initializeTestConfig } from '../../test-utils/config.js';
 import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
 import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
 
-vi.mock('@vybestack/llxprt-code-tools', () => {
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
   const ToolRegistryMock = vi.fn().mockImplementation(() => {
     const tools: Array<{
       serverName?: string;
@@ -53,11 +52,9 @@ vi.mock('@vybestack/llxprt-code-tools', () => {
     };
   });
   return {
-    ...actualTools,
+    ...actual,
     ToolRegistry: ToolRegistryMock,
-    MemoryTool: vi
-      .fn()
-      .mockReturnValue({ name: 'save_memory', displayName: 'save_memory' }),
+    MemoryTool: vi.fn(),
     setLlxprtMdFilename: vi.fn(),
     getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'),
     DEFAULT_CONTEXT_FILENAME: 'LLXPRT.md',
@@ -80,10 +77,14 @@ vi.mock('@vybestack/llxprt-code-tools', () => {
       ),
   };
 });
-vi.mock('../../core/contentGenerator.js', () => ({
-  ...actualContentGenerator,
-  createContentGeneratorConfig: vi.fn(),
-}));
+vi.mock('../../core/contentGenerator.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../core/contentGenerator.js')>();
+  return {
+    ...actual,
+    createContentGeneratorConfig: vi.fn(),
+  };
+});
 
 vi.mock('../../telemetry/index.js', () => ({
   initializeTelemetry: vi.fn(),
@@ -92,6 +93,22 @@ vi.mock('../../telemetry/index.js', () => ({
   logCliConfiguration: vi.fn(),
   StartSessionEvent: vi.fn(),
 }));
+
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    IdeClient: {
+      getInstance: vi.fn().mockResolvedValue({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      }),
+    },
+  };
+});
 
 vi.mock('../../services/fileDiscoveryService.js', () => ({
   FileDiscoveryService: vi.fn().mockImplementation(() => ({
@@ -213,7 +230,13 @@ vi.mock('../../utils/memoryDiscovery.js', () => ({
   getAllLlxprtMdFilenames: vi.fn().mockReturnValue([]),
 }));
 
-vi.spyOn(coreEvents, 'emit').mockReturnValue(true);
+vi.mock('../../utils/events.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/events.js')>();
+  // Spy on emit rather than replacing the whole object — spreading loses the
+  // EventEmitter prototype chain (on, listenerCount, emitFeedback, etc.)
+  vi.spyOn(actual.coreEvents, 'emit').mockReturnValue(true);
+  return actual;
+});
 
 describe('LSP system integration (P35)', () => {
   const repoRoot = fileURLToPath(new URL('../../../../../', import.meta.url));

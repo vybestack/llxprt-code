@@ -8,21 +8,28 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ContextManager } from './contextManager.js';
 import * as memoryDiscovery from '../utils/memoryDiscovery.js';
-import { concatenateInstructions as actualConcatenateInstructions } from '../utils/memoryDiscovery.ts';
 import type { Config } from '../config/config.js';
 import { coreEvents, CoreEvent } from '../utils/events.js';
 
 // Mock memoryDiscovery module
-vi.mock('../utils/memoryDiscovery.js', () => ({
-  loadGlobalMemory: vi.fn(),
-  loadEnvironmentMemory: vi.fn(),
-  loadJitSubdirectoryMemory: vi.fn(),
-  loadCoreMemory: vi.fn(),
-  concatenateInstructions: vi.fn(actualConcatenateInstructions),
-}));
+vi.mock('../utils/memoryDiscovery.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../utils/memoryDiscovery.js')>();
+  return {
+    ...actual,
+    loadGlobalMemory: vi.fn(),
+    loadEnvironmentMemory: vi.fn(),
+    loadJitSubdirectoryMemory: vi.fn(),
+    loadCoreMemory: vi.fn(),
+    concatenateInstructions: vi
+      .fn()
+      .mockImplementation(actual.concatenateInstructions),
+  };
+});
 
 describe('ContextManager', () => {
   let contextManager: ContextManager;
@@ -88,7 +95,7 @@ describe('ContextManager', () => {
         false,
       );
       expect(contextManager.getEnvironmentMemory()).toContain(
-        '--- Context from: .llxprt/LLXPRT.md ---',
+        `--- Context from: ${path.join('.llxprt', 'LLXPRT.md')} ---`,
       );
       expect(contextManager.getEnvironmentMemory()).toContain('Env Content');
       expect(contextManager.getEnvironmentMemory()).toContain(

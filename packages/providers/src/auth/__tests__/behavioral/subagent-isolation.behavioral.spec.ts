@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   MemoryTokenStore,
   makeToken,
@@ -12,7 +12,7 @@ import {
   createTestOAuthManager,
   createBucketFailoverHandler,
 } from './test-utils.js';
-import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
+import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
 
 const PROVIDER = 'anthropic';
 

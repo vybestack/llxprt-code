@@ -12,7 +12,7 @@
  * @plan PLAN-20250217-CREDPROXY-REMEDIATION.P06
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type {
   TokenStore,
   OAuthToken,

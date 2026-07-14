@@ -4,13 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type PartListUnion, type Part, type Content } from '@google/genai';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { AgentRequestInput } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
 export function isThinkingSupported(model: string) {
   return !model.startsWith('gemini-2.0');
 }
 
-function getLastContent(contents: Content[]): Content | undefined {
+function getLastContent(contents: IContent[]): IContent | undefined {
   return contents.length > 0 ? contents[contents.length - 1] : undefined;
 }
 
@@ -20,7 +22,7 @@ function getLastContent(contents: Content[]): Content | undefined {
  * Exported for testing purposes.
  */
 export function findCompressSplitPoint(
-  contents: Content[],
+  contents: IContent[],
   fraction: number,
 ): number {
   if (fraction <= 0 || fraction >= 1) {
@@ -38,18 +40,18 @@ export function findCompressSplitPoint(
   for (let i = 0; i < contents.length; i++) {
     const content = contents[i];
 
-    const hasFunctionResponse =
-      content.parts?.some((part) => Boolean(part.functionResponse)) === true;
+    const hasFunctionResponse = content.blocks.some(
+      (b) => b.type === 'tool_response',
+    );
 
-    const hasFunctionCall =
-      content.parts?.some((part) => Boolean(part.functionCall)) === true;
-    if (content.role === 'user' && !hasFunctionResponse) {
+    const hasFunctionCall = content.blocks.some((b) => b.type === 'tool_call');
+    if (content.speaker === 'human' && !hasFunctionResponse) {
       if (cumulativeCharCount >= targetCharCount) {
         return i;
       }
       lastSplitPoint = i;
     }
-    if (content.role === 'model' && hasFunctionCall) {
+    if (content.speaker === 'ai' && hasFunctionCall) {
       if (
         cumulativeCharCount >= targetCharCount &&
         toolCallSplitPointAfterTarget === null
@@ -62,14 +64,14 @@ export function findCompressSplitPoint(
   }
 
   const lastContent = getLastContent(contents);
-  const hasNoFunctionCall = (content: Content | undefined): boolean => {
-    const parts = content?.parts;
+  const hasNoFunctionCall = (content: IContent | undefined): boolean => {
+    const blocks = content?.blocks;
 
-    return parts?.some((part) => Boolean(part.functionCall)) !== true;
+    return blocks?.some((b) => b.type === 'tool_call') !== true;
   };
 
   if (lastSplitPoint > 0) {
-    if (lastContent?.role === 'model' && hasNoFunctionCall(lastContent)) {
+    if (lastContent?.speaker === 'ai' && hasNoFunctionCall(lastContent)) {
       return contents.length;
     }
 
@@ -84,7 +86,7 @@ export function findCompressSplitPoint(
     return lastToolCallSplitPoint;
   }
 
-  if (lastContent?.role === 'model' && hasNoFunctionCall(lastContent)) {
+  if (lastContent?.speaker === 'ai' && hasNoFunctionCall(lastContent)) {
     return contents.length;
   }
 
@@ -95,7 +97,7 @@ function hasTextProperty(value: unknown): value is { text: string } {
   return typeof value === 'object' && value !== null && 'text' in value;
 }
 
-export function extractPromptText(request: PartListUnion): string {
+export function extractPromptText(request: AgentRequestInput): string {
   if (typeof request === 'string') return request;
   if (Array.isArray(request)) {
     return request
@@ -128,43 +130,52 @@ export function extractPromptText(request: PartListUnion): string {
  * false-positive overflow estimates.
  */
 export function estimateRequestTokensStructured(
-  request: PartListUnion,
+  request: AgentMessageInput,
 ): number {
-  const parts = normalizeToParts(request);
+  const parts = normalizeToBlocks(request);
   let charLength = 0;
   for (const part of parts) {
-    charLength += charLengthForPart(part);
+    charLength += charLengthForBlock(part);
   }
   return Math.floor(charLength / 4);
 }
 
-/**
- * Computes the character length contribution of a single part for the
- * structured fallback. Returns 0 for binary payloads (inlineData/fileData)
- * so large base64 blobs do not inflate the estimate.
- */
-function charLengthForPart(part: Part | string): number {
+type RequestBlock = IContent['blocks'][number] | string;
+
+function charLengthForBlock(part: RequestBlock): number {
   if (typeof part === 'string') {
     return part.length;
   }
-  if ('inlineData' in part || 'fileData' in part) {
+  if (part.type === 'media') {
     return 0;
   }
-  if ('text' in part && typeof part.text === 'string') {
+  if (part.type === 'text') {
     return part.text.length;
   }
-  if ('functionResponse' in part && part.functionResponse != null) {
-    return safeJsonLength(part.functionResponse);
+  if (part.type === 'tool_response') {
+    return safeJsonLength(part.result);
   }
-  if ('functionCall' in part && part.functionCall != null) {
-    return safeJsonLength(part.functionCall);
+  if (part.type === 'tool_call') {
+    return safeJsonLength(part.parameters);
+  }
+  // Legacy Part shapes without a `type` field (e.g. { text: "..." })
+  // fall through to text-length estimation when a `text` property exists.
+  if ('text' in part && typeof (part as { text?: unknown }).text === 'string') {
+    return (part as { text: string }).text.length;
   }
   return 0;
 }
 
-function normalizeToParts(request: PartListUnion): Array<Part | string> {
+function normalizeToBlocks(request: AgentMessageInput): RequestBlock[] {
   if (typeof request === 'string') return [request];
-  return Array.isArray(request) ? request : [request];
+  if (Array.isArray(request)) {
+    return request as RequestBlock[];
+  }
+  // Single IContent — return its blocks
+  if ('blocks' in request && Array.isArray(request.blocks)) {
+    return request.blocks as RequestBlock[];
+  }
+  return [];
 }
 
 function safeJsonLength(value: unknown): number {

@@ -144,22 +144,6 @@ function isConfirmationDetails(
  * - Auto-approving compatible pending tools after ProceedAlways
  * - Stale correlation ID grace-period management
  */
-export interface ConfirmationCoordinatorDependencies {
-  isModifiableDeclarativeTool?: typeof isModifiableDeclarativeTool;
-  modifyWithEditor?: (
-    originalParams: Record<string, unknown>,
-    modifyContext: ModifyContext<Record<string, unknown>>,
-    editorType: EditorType,
-    signal: AbortSignal,
-    onEditorClose: () => void,
-    onEditorOpen?: () => void,
-    overrides?: Parameters<typeof modifyWithEditor>[6],
-  ) => Promise<{
-    updatedParams: Record<string, unknown>;
-    updatedDiff: string;
-  }>;
-}
-
 export class ConfirmationCoordinator {
   /** correlationId → callId */
   private readonly pendingConfirmations: Map<string, string> = new Map();
@@ -190,7 +174,6 @@ export class ConfirmationCoordinator {
       config: Config,
       details: ToolCallConfirmationDetails,
     ) => Promise<unknown>,
-    private readonly dependencies: ConfirmationCoordinatorDependencies = {},
   ) {}
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -642,10 +625,7 @@ export class ConfirmationCoordinator {
     waitingToolCall: WaitingToolCall,
     signal: AbortSignal,
   ): Promise<void> {
-    const isModifiable =
-      this.dependencies.isModifiableDeclarativeTool ??
-      isModifiableDeclarativeTool;
-    if (!isModifiable(waitingToolCall.tool)) {
+    if (!isModifiableDeclarativeTool(waitingToolCall.tool)) {
       return;
     }
 
@@ -668,8 +648,9 @@ export class ConfirmationCoordinator {
           }
         : undefined;
 
-    const modify = this.dependencies.modifyWithEditor ?? modifyWithEditor;
-    const { updatedParams, updatedDiff } = await modify(
+    const { updatedParams, updatedDiff } = await modifyWithEditor<
+      typeof waitingToolCall.request.args
+    >(
       waitingToolCall.request.args,
       modifyContext as ModifyContext<typeof waitingToolCall.request.args>,
       editorType,

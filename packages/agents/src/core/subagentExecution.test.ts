@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import {
   checkTerminationConditions,
   filterTextWithEmoji,
@@ -145,7 +145,10 @@ describe('subagentExecution', () => {
       };
       const result = await checkGoalCompletion(ctx, 'Please finish todos', 0);
       expect(result).not.toBeNull();
-      expect(result![0].parts[0]).toHaveProperty('text', 'Please finish todos');
+      expect(result![0].blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'Please finish todos',
+      });
     });
 
     it('should return null when no outputs expected (GOAL)', async () => {
@@ -183,7 +186,8 @@ describe('subagentExecution', () => {
       };
       const result = await checkGoalCompletion(ctx, null, 0);
       expect(result).not.toBeNull();
-      const text = (result![0].parts[0] as { text: string }).text;
+      const text = (result![0].blocks[0] as { type: 'text'; text: string })
+        .text;
       expect(text).toContain('x');
       expect(text).toContain('y');
       expect(text).toContain('self_emitvalue');
@@ -368,7 +372,7 @@ describe('subagentExecution', () => {
 
       abortController.abort();
 
-      expect(completionPromise).rejects.toMatchObject({
+      await expect(completionPromise).rejects.toMatchObject({
         name: 'AbortError',
       });
     });
@@ -381,13 +385,13 @@ describe('subagentExecution', () => {
         abortController.signal,
       );
       abortController.abort();
-      expect(abortedPromise).rejects.toMatchObject({
+      await expect(abortedPromise).rejects.toMatchObject({
         name: 'AbortError',
       });
 
       await channel.handleCompletion([]);
 
-      expect(await channel.awaitCompletedCalls()).toStrictEqual([]);
+      await expect(channel.awaitCompletedCalls()).resolves.toStrictEqual([]);
     });
   });
 });

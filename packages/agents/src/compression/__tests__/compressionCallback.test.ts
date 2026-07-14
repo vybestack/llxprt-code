@@ -7,7 +7,7 @@
  * CompressionHandler.enforceProviderContents (issue #2207).
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   makeUserMessage,
@@ -136,7 +136,7 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
       setCompressionCallback,
     };
 
-    expect(
+    await expect(
       chat['compressionHandler'].enforceProviderContents(
         {
           contents: historyService.getCuratedForProvider(),
@@ -170,13 +170,13 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
     };
 
     const expectedContents = historyService.getCuratedForProvider();
-    expect(
-      await chat['compressionHandler'].enforceProviderContents(
+    await expect(
+      chat['compressionHandler'].enforceProviderContents(
         { contents: expectedContents, pendingContents: [] },
         'test-prompt',
         providerWithoutCallback as unknown as IProvider,
       ),
-    ).toStrictEqual(expectedContents);
+    ).resolves.toStrictEqual(expectedContents);
   });
 
   it('ignores non-callable setCompressionCallback properties', async () => {
@@ -196,13 +196,13 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
     };
 
     const expectedContents = historyService.getCuratedForProvider();
-    expect(
-      await chat['compressionHandler'].enforceProviderContents(
+    await expect(
+      chat['compressionHandler'].enforceProviderContents(
         { contents: expectedContents, pendingContents: [] },
         'test-prompt',
         providerWithNonCallableCallback as unknown as IProvider,
       ),
-    ).toStrictEqual(expectedContents);
+    ).resolves.toStrictEqual(expectedContents);
   });
 
   it('attached callback runs compression machinery and returns history contents', async () => {

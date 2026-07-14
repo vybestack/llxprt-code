@@ -113,32 +113,6 @@ export interface ApiKeyQuotaResult {
   lines: string[];
 }
 
-export interface ApiKeyQuotaDependencies {
-  fetchZaiUsage: typeof fetchZaiUsage;
-  formatZaiUsage: typeof formatZaiUsage;
-  fetchSyntheticUsage: typeof fetchSyntheticUsage;
-  formatSyntheticUsage: typeof formatSyntheticUsage;
-  fetchChutesUsage: typeof fetchChutesUsage;
-  formatChutesUsage: typeof formatChutesUsage;
-  fetchKimiUsage: typeof fetchKimiUsage;
-  formatKimiUsage: typeof formatKimiUsage;
-  fetchKimiCodeUsage: typeof fetchKimiCodeUsage;
-  formatKimiCodeUsage: typeof formatKimiCodeUsage;
-}
-
-const defaultDependencies: ApiKeyQuotaDependencies = {
-  fetchZaiUsage,
-  formatZaiUsage,
-  fetchSyntheticUsage,
-  formatSyntheticUsage,
-  fetchChutesUsage,
-  formatChutesUsage,
-  fetchKimiUsage,
-  formatKimiUsage,
-  fetchKimiCodeUsage,
-  formatKimiCodeUsage,
-};
-
 /**
  * Fetch and format quota information for an API-key-based provider.
  *
@@ -151,7 +125,6 @@ export async function fetchApiKeyQuota(
   provider: ApiKeyQuotaProvider,
   apiKey: string,
   baseUrl?: string,
-  dependencies: ApiKeyQuotaDependencies = defaultDependencies,
 ): Promise<ApiKeyQuotaResult | null> {
   if (!apiKey || typeof apiKey !== 'string') {
     logger.debug(() => `No API key available for ${provider}`);
@@ -161,31 +134,25 @@ export async function fetchApiKeyQuota(
   try {
     switch (provider) {
       case 'zai': {
-        const usage = await dependencies.fetchZaiUsage(apiKey, baseUrl);
+        const usage = await fetchZaiUsage(apiKey, baseUrl);
         if (!usage) return null;
-        return { provider: 'Z.ai', lines: dependencies.formatZaiUsage(usage) };
+        return { provider: 'Z.ai', lines: formatZaiUsage(usage) };
       }
 
       case 'synthetic': {
-        const usage = await dependencies.fetchSyntheticUsage(apiKey);
+        const usage = await fetchSyntheticUsage(apiKey);
         if (!usage) return null;
-        return {
-          provider: 'Synthetic',
-          lines: dependencies.formatSyntheticUsage(usage),
-        };
+        return { provider: 'Synthetic', lines: formatSyntheticUsage(usage) };
       }
 
       case 'chutes': {
-        const usage = await dependencies.fetchChutesUsage(apiKey);
+        const usage = await fetchChutesUsage(apiKey);
         if (!usage) return null;
-        return {
-          provider: 'Chutes',
-          lines: dependencies.formatChutesUsage(usage),
-        };
+        return { provider: 'Chutes', lines: formatChutesUsage(usage) };
       }
 
       case 'kimi':
-        return await fetchKimiQuota(apiKey, baseUrl, dependencies);
+        return await fetchKimiQuota(apiKey, baseUrl);
 
       default:
         logger.debug(() => `Unknown API key provider: ${provider}`);
@@ -209,18 +176,14 @@ export async function fetchApiKeyQuota(
 async function fetchKimiQuota(
   apiKey: string,
   baseUrl?: string,
-  dependencies: ApiKeyQuotaDependencies = defaultDependencies,
 ): Promise<ApiKeyQuotaResult | null> {
   if (apiKey.startsWith('sk-kimi-')) {
-    const usage = await dependencies.fetchKimiCodeUsage(apiKey, baseUrl);
+    const usage = await fetchKimiCodeUsage(apiKey, baseUrl);
     if (!usage) return null;
-    return {
-      provider: 'Kimi Code',
-      lines: dependencies.formatKimiCodeUsage(usage),
-    };
+    return { provider: 'Kimi Code', lines: formatKimiCodeUsage(usage) };
   }
 
-  const usage = await dependencies.fetchKimiUsage(apiKey, baseUrl);
+  const usage = await fetchKimiUsage(apiKey, baseUrl);
   if (!usage) return null;
-  return { provider: 'Kimi', lines: dependencies.formatKimiUsage(usage) };
+  return { provider: 'Kimi', lines: formatKimiUsage(usage) };
 }

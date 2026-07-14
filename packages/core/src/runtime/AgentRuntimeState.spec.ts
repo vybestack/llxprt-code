@@ -14,7 +14,7 @@
  * GREEN phase: Phase 05 implements the actual runtime state.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   createAgentRuntimeState,
   updateAgentRuntimeState,

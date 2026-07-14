@@ -9,14 +9,17 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { vi } from 'vitest';
-import type { PartListUnion } from '@google/genai';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType } from './turn.js';
-import { fromAsync, setupGeminiClient } from './client-test-helpers.js';
+import {
+  fromAsync,
+  setupGeminiClient,
+  type MockResponseShape,
+} from './client-test-helpers.js';
 
 // Mock prompts module before imports
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -49,19 +52,19 @@ const {
   mockGenerateContentFn,
   mockEmbedContentFn,
   mockTurnRunFn,
-} = {
+} = vi.hoisted(() => ({
   mockChatCreateFn: vi.fn(),
   mockGenerateContentFn: vi.fn(),
   mockEmbedContentFn: vi.fn(),
   mockTurnRunFn: vi.fn(),
-};
+}));
 
 const {
   todoStoreReadMock,
   todoStoreReadPausedMock,
   todoStoreWritePausedMock,
   mockTodoStoreConstructor,
-} = (() => {
+} = vi.hoisted(() => {
   const readMock = vi.fn();
   const readPausedMock = vi.fn();
   const writePausedMock = vi.fn();
@@ -76,11 +79,8 @@ const {
     todoStoreWritePausedMock: writePausedMock,
     mockTodoStoreConstructor: constructorMock,
   };
-})();
+});
 
-vi.mock('@google/genai', () => ({
-  GoogleGenAI: vi.fn(),
-}));
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -105,14 +105,28 @@ vi.mock(
     })),
   }),
 );
-vi.mock('@vybestack/llxprt-code-tools', () => ({
-  LocalTodoStore: vi.fn().mockImplementation(() => ({
-    readTodos: vi.fn().mockResolvedValue([]),
-    readPausedState: vi.fn().mockResolvedValue(false),
-    writePausedState: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  return {
+    ...actual,
+    LocalTodoStore: mockTodoStoreConstructor,
+  };
+});
+vi.mock('./turn', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./turn.js')>();
+  class MockTurn {
+    pendingToolCalls = [];
+    run = mockTurnRunFn;
+    constructor() {}
+  }
+  return {
+    ...actual,
+    Turn: MockTurn,
+  };
+});
 
+vi.mock('@vybestack/llxprt-code-core/config/config.js');
 vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));
@@ -122,22 +136,38 @@ vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
-    getResponseText: (result: GenerateContentResponse) =>
+    getResponseText: (result: MockResponseShape) =>
       result.candidates?.[0]?.content?.parts
         ?.map((part) => part.text)
         .join('') ?? undefined,
   }),
 );
+vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
+  logApiRequest: vi.fn(),
+  logApiResponse: vi.fn(),
+  logApiError: vi.fn(),
+}));
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ideContext: {
-    getIdeContext: vi.fn(),
-    subscribeToIdeContext: vi.fn(),
-    setIdeContext: vi.fn(),
-    clearIdeContext: vi.fn(),
-  },
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    ideContext: {
+      ...actual.ideContext,
+      getIdeContext: vi.fn(),
+      subscribeToIdeContext: vi.fn(),
+      setIdeContext: vi.fn(),
+      clearIdeContext: vi.fn(),
+    },
+  };
+});
+vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
+  tokenLimit: vi.fn(),
 }));
 vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
@@ -150,12 +180,10 @@ describe('Gemini Client (client.ts)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
-    mockTurnRunFn.mockReset();
     const ctx = await setupGeminiClient({
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,
-      createTurn: () => ({ run: mockTurnRunFn }) as never,
     });
     client = ctx.client;
 
@@ -179,9 +207,13 @@ describe('Gemini Client (client.ts)', () => {
       // This test verifies Gap 1: BeforeAgent hook blocking behavior
       // Currently the hook result is IGNORED - this test should FAIL initially
 
+      // Import and mock the hook trigger
+      const lifecycleHookTriggers = await import(
+        '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js'
+      );
       const mockTriggerBeforeAgentHook = vi.spyOn(
-        client['agentHookManager'],
-        'fireBeforeAgentHookSafe',
+        lifecycleHookTriggers,
+        'triggerBeforeAgentHook',
       );
 
       // Create a mock BeforeAgentHookOutput that blocks execution
@@ -212,7 +244,6 @@ describe('Gemini Client (client.ts)', () => {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
-      const turnRunCallsBeforeExecution = mockTurnRunFn.mock.calls.length;
 
       // Act
       const stream = client.sendMessageStream(
@@ -231,20 +262,21 @@ describe('Gemini Client (client.ts)', () => {
       );
       expect(errorEvent?.value.error.message).toContain('Blocked by test hook');
 
-      // The hook path returns a Turn for the generator's final value but must
-      // not execute its stream.
-      expect(mockTurnRunFn).toHaveBeenCalledTimes(
-        turnRunCallsBeforeExecution + 1,
-      );
+      // Turn.run should NOT have been called because we blocked early
+      expect(mockTurnRunFn).not.toHaveBeenCalled();
     });
 
     it('should append additional context from BeforeAgent hook to request', async () => {
       // This test verifies Gap 1: BeforeAgent hook additional context
       // Currently the hook result is IGNORED - this test should FAIL initially
 
+      // Import and mock the hook trigger
+      const lifecycleHookTriggers = await import(
+        '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js'
+      );
       const mockTriggerBeforeAgentHook = vi.spyOn(
-        client['agentHookManager'],
-        'fireBeforeAgentHookSafe',
+        lifecycleHookTriggers,
+        'triggerBeforeAgentHook',
       );
 
       // Create a mock BeforeAgentHookOutput that provides additional context
@@ -262,12 +294,12 @@ describe('Gemini Client (client.ts)', () => {
       mockTriggerBeforeAgentHook.mockResolvedValue(contextOutput);
 
       // Track what request was passed to turn.run
-      const capturedRequests: PartListUnion[] = [];
+      const capturedRequests: AgentMessageInput[] = [];
       const mockStream = (async function* () {
         yield { type: AgentEventType.Content, value: 'Response' };
         yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
       })();
-      mockTurnRunFn.mockImplementation((req: PartListUnion) => {
+      mockTurnRunFn.mockImplementation((req: AgentMessageInput) => {
         capturedRequests.push(req);
         return mockStream;
       });
@@ -299,12 +331,15 @@ describe('Gemini Client (client.ts)', () => {
       // The request should include the additional context
       expect(capturedRequests.length).toBeGreaterThan(0);
       const request = capturedRequests[0];
-      const requestParts = Array.isArray(request) ? request : [request];
-      const hasAdditionalContext = requestParts.some(
-        (part) =>
-          typeof part === 'object' &&
-          'text' in part &&
-          part.text === 'Additional context from hook',
+      const requestContents = Array.isArray(request) ? request : [request];
+      const hasAdditionalContext = requestContents.some(
+        (content) =>
+          'blocks' in content &&
+          content.blocks.some(
+            (block) =>
+              block.type === 'text' &&
+              block.text === 'Additional context from hook',
+          ),
       );
       expect(hasAdditionalContext).toBe(true);
     });

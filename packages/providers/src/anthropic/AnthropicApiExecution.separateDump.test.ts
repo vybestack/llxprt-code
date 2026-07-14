@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as dumpSDKContextModule from '../utils/dumpSDKContext.js';
 import {
   executeAnthropicApiCall,
@@ -137,9 +137,9 @@ describe('AnthropicApiExecution separate request/response dump', () => {
       rateLimitLogger: { debug: vi.fn() },
     };
 
-    const executionPromise = executeAnthropicApiCall(params);
-    expect(executionPromise).rejects.toThrow('Rate limit exceeded');
-    await executionPromise.catch(() => undefined);
+    await expect(executeAnthropicApiCall(params)).rejects.toThrow(
+      'Rate limit exceeded',
+    );
 
     expect(callOrder).toStrictEqual([
       'apiCall',
@@ -228,19 +228,15 @@ describe('AnthropicApiExecution separate request/response dump', () => {
 
     const result = await executeAnthropicApiCall(params);
     const received: unknown[] = [];
-    const consumeResponse = async (): Promise<void> => {
+    await expect(async () => {
       for await (const chunk of result.response as AsyncIterable<unknown>) {
         received.push(chunk);
       }
-    };
-    const consumptionPromise = consumeResponse();
-    expect(consumptionPromise).rejects.toThrow('Anthropic stream failed');
-    await consumptionPromise.catch(() => undefined);
+    }).rejects.toThrow('Anthropic stream failed');
 
     expect(received).toStrictEqual(chunks);
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
       '20260101-120000-anthropic-test12',
       'anthropic',
       {

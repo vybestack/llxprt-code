@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 
 // Since formatArrayResponse is not exported, we need to extract it from the file
 // This is a workaround for testing internal functions

@@ -5,25 +5,7 @@
  */
 
 import { EventEmitter } from 'node:events';
-
-/**
- * The real ink-testing-library imports ink's internal render.js to create
- * test render instances. For the Bun test environment (and Vitest with the
- * ink stub), we provide a stub render that mimics the shape without touching
- * the real Ink runtime. This avoids pulling in the real Ink ESM module
- * graph, which triggers Bun parsing errors during mock validation.
- */
-type InkInstance = {
-  rerender: (node: unknown) => void;
-  unmount: () => void;
-  cleanup: () => void;
-};
-
-const stubInkRender = (_node: unknown, _options?: unknown): InkInstance => ({
-  rerender: () => {},
-  unmount: () => {},
-  cleanup: () => {},
-});
+import inkRender from '../../../node_modules/ink/build/render.js';
 
 class Stdout extends EventEmitter {
   get columns() {
@@ -99,6 +81,7 @@ class Stdin extends EventEmitter {
   };
 }
 
+type InkInstance = ReturnType<typeof inkRender>;
 export interface InkRenderResult {
   rerender: InkInstance['rerender'];
   unmount: InkInstance['unmount'];
@@ -113,12 +96,12 @@ export interface InkRenderResult {
 const activeInstances = new Set<InkInstance>();
 
 export const render = (
-  tree: Parameters<typeof stubInkRender>[0],
+  tree: Parameters<typeof inkRender>[0],
 ): InkRenderResult => {
   const stdout = new Stdout();
   const stderr = new Stderr();
   const stdin = new Stdin();
-  const instance = stubInkRender(tree, {
+  const instance = inkRender(tree, {
     stdout,
     stderr,
     stdin,

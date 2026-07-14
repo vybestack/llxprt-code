@@ -153,14 +153,6 @@ const coverageReporter = isWindows
 
 export default defineConfig({
   plugins: [workspaceDependencyAliasPlugin],
-  resolve: {
-    alias: {
-      // Test files migrated to Bun import from 'bun:test'. Under Vitest, alias
-      // that specifier back to 'vitest' so the same source runs on both
-      // runners (the shared compat shim provides the missing helpers).
-      'bun:test': 'vitest',
-    },
-  },
   test: {
     passWithNoTests: true,
     reporters: ['default', 'junit'],

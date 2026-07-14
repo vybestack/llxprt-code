@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { CodexOAuthProvider } from './codex-oauth-provider.js';
 import type { TokenStore } from '@vybestack/llxprt-code-core';
 
@@ -99,9 +99,9 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
           }
         });
 
-      const firstAuth = provider.initiateAuth();
-      expect(firstAuth).rejects.toThrow('First call failed');
-      await firstAuth.catch(() => undefined);
+      await expect(provider.initiateAuth()).rejects.toThrow(
+        'First call failed',
+      );
       await provider.initiateAuth();
 
       expect(callCount).toBe(2);
@@ -140,11 +140,11 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
         )
         .mockRejectedValue(new Error('Init failed'));
 
-      const initialization = (
-        provider as unknown as { ensureInitialized: () => Promise<void> }
-      )['ensureInitialized']();
-      expect(initialization).rejects.toThrow('Init failed');
-      await initialization.catch(() => undefined);
+      await expect(
+        (provider as unknown as { ensureInitialized: () => Promise<void> })[
+          'ensureInitialized'
+        ](),
+      ).rejects.toThrow('Init failed');
 
       expect(
         (
@@ -170,11 +170,11 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
           }
         });
 
-      const firstInitialization = (
-        provider as unknown as { ensureInitialized: () => Promise<void> }
-      )['ensureInitialized']();
-      expect(firstInitialization).rejects.toThrow('Init failed');
-      await firstInitialization.catch(() => undefined);
+      await expect(
+        (provider as unknown as { ensureInitialized: () => Promise<void> })[
+          'ensureInitialized'
+        ](),
+      ).rejects.toThrow('Init failed');
 
       await (provider as unknown as { ensureInitialized: () => Promise<void> })[
         'ensureInitialized'

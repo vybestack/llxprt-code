@@ -34,7 +34,7 @@
  * snapshot array every call.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { buildAgent } from './helpers/agentHarness.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core';

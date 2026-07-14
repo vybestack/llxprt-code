@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { executeAnthropicApiCall } from './AnthropicApiExecution.js';
 import * as dumpSDKContextModule from '../utils/dumpSDKContext.js';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -269,13 +269,11 @@ describe('executeAnthropicApiCall dumpContext behavior', () => {
         result.response as AsyncIterable<Anthropic.MessageStreamEvent>;
 
       const received: Anthropic.MessageStreamEvent[] = [];
-      const consumptionPromise = (async (): Promise<void> => {
+      await expect(async () => {
         for await (const chunk of stream) {
           received.push(chunk);
         }
-      })();
-      expect(consumptionPromise).rejects.toThrow('Stream interrupted');
-      await consumptionPromise.catch(() => undefined);
+      }).rejects.toThrow('Stream interrupted');
 
       expect(received).toHaveLength(1);
       // Response dump should still be written with accumulated chunks
@@ -325,20 +323,19 @@ describe('executeAnthropicApiCall dumpContext behavior', () => {
         throw new Error('API Error: Rate limit exceeded');
       });
 
-      const executionPromise = executeAnthropicApiCall({
-        apiCallFn,
-        dumpMode: 'error',
-        baseURL,
-        requestBody,
-        streamingEnabled: false,
-        rateLimitLogger,
-      });
-      expect(executionPromise).rejects.toThrow('API Error');
-      await executionPromise.catch(() => undefined);
+      await expect(
+        executeAnthropicApiCall({
+          apiCallFn,
+          dumpMode: 'error',
+          baseURL,
+          requestBody,
+          streamingEnabled: false,
+          rateLimitLogger,
+        }),
+      ).rejects.toThrow('API Error');
 
       expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
-      expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
-      expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
+      expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
         '20260101-120000-anthropic-test12',
         'anthropic',
         { error: 'API Error: Rate limit exceeded' },

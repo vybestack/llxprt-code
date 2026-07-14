@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi } from 'vitest';
 import type { OAuthProvider } from './types.js';
 import {
   mockGetCurrentProfileName,
@@ -65,6 +65,8 @@ describe('Issue #1468 getProfileBuckets case 12', () => {
     await manager.logout('anthropic');
 
     expect(logout).toHaveBeenCalledTimes(1);
-    expect(await tokenStore.getToken('anthropic', 'named-bucket')).toBeNull();
+    await expect(
+      tokenStore.getToken('anthropic', 'named-bucket'),
+    ).resolves.toBeNull();
   });
 });

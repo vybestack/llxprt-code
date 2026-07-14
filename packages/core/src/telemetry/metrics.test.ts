@@ -14,7 +14,6 @@ import type {
 } from '@opentelemetry/api';
 import type { Config } from '../config/config.js';
 import { FileOperation } from './metrics.js';
-import { resetMetricsForTesting } from '../../../telemetry/src/telemetry/metrics.ts';
 
 const mockCounterAddFn: Mock<
   (value: number, attributes?: Attributes, context?: Context) => void
@@ -45,7 +44,7 @@ const mockMeterInstance = {
 function originalOtelMockFactory() {
   return {
     metrics: {
-      getMeter: vi.fn().mockReturnValue(mockMeterInstance),
+      getMeter: vi.fn(),
     },
     ValueType: {
       INT: 1,
@@ -61,7 +60,13 @@ describe('Telemetry Metrics', () => {
   let recordFileOperationMetricModule: typeof import('./metrics.js').recordFileOperationMetric;
 
   beforeEach(async () => {
-    resetMetricsForTesting();
+    vi.resetModules();
+    vi.doMock('@opentelemetry/api', () => {
+      const actualApi = originalOtelMockFactory();
+      actualApi.metrics.getMeter.mockReturnValue(mockMeterInstance);
+      return actualApi;
+    });
+
     const metricsJsModule = await import('./metrics.js');
     initializeMetricsModule = metricsJsModule.initializeMetrics;
     recordTokenUsageMetricsModule = metricsJsModule.recordTokenUsageMetrics;

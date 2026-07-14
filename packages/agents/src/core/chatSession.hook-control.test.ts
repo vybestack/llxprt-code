@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ChatSession, StreamEventType } from './chatSession.js';
 import type { HookSystem } from '@vybestack/llxprt-code-core/hooks/HookSystem.js';
 import {
@@ -96,8 +96,8 @@ describe('ChatSession hook execution control', () => {
 
     // Create runtime state and context
     const runtimeState = createAgentRuntimeState({
-      runtimeId: 'chat-session-hook-control',
-      provider: mockProvider.name,
+      runtimeId: runtimeSetup.runtime.runtimeId,
+      provider: runtimeSetup.provider.name,
       model: 'test-model',
       sessionId: 'test-session',
     });
@@ -108,7 +108,7 @@ describe('ChatSession hook execution control', () => {
       history: historyService,
       settings: {
         compressionThreshold: 0.8,
-        contextLimit: 1_000_000,
+        contextLimit: undefined,
         preserveThreshold: 0.2,
         telemetry: {
           enabled: true,
@@ -297,7 +297,7 @@ describe('ChatSession hook execution control', () => {
     });
   });
 
-  it('filters hook-disallowed tool calls from BeforeModel blocking synthetic responses', async () => {
+  it('emits a neutral blocked chunk carrying the reason when BeforeModel blocks (no tool calls leak)', async () => {
     (
       mockHookSystem.fireBeforeToolSelectionEvent as ReturnType<typeof vi.fn>
     ).mockResolvedValueOnce({
@@ -308,32 +308,6 @@ describe('ChatSession hook execution control', () => {
     const beforeModelOutput = new BeforeModelHookOutput({
       decision: 'block',
       reason: 'BeforeModel blocked execution',
-    });
-    vi.spyOn(beforeModelOutput, 'getSyntheticResponse').mockReturnValue({
-      candidates: [
-        {
-          content: {
-            role: 'model' as const,
-            parts: [
-              {
-                functionCall: {
-                  id: 'allowed-call',
-                  name: 'read_file',
-                  args: { file_path: 'file.txt' },
-                },
-              },
-              {
-                functionCall: {
-                  id: 'blocked-call',
-                  name: 'run_shell_command',
-                  args: { command: 'echo blocked' },
-                },
-              },
-            ],
-          },
-          finishReason: 'STOP' as const,
-        },
-      ],
     });
     (
       mockHookSystem.fireBeforeModelEvent as ReturnType<typeof vi.fn>
@@ -367,11 +341,17 @@ describe('ChatSession hook execution control', () => {
       events.push(event);
     }
 
+    // No tool-call request events fire when the BeforeModel hook blocks
+    // before the provider is ever called.
     expect(
       events.some((event) => event.type === AgentEventType.ToolCallRequest),
     ).toBe(false);
     const chunk = events.find((event) => event.type === StreamEventType.CHUNK);
-    expect(JSON.stringify(chunk)).toContain('read_file');
+    // The streaming BeforeModel blocking path yields a neutral ModelOutput
+    // built from the block reason — it carries no tool calls at all.
+    expect(chunk).toBeDefined();
+    expect(JSON.stringify(chunk)).toContain('BeforeModel blocked execution');
+    expect(JSON.stringify(chunk)).not.toContain('read_file');
     expect(JSON.stringify(chunk)).not.toContain('run_shell_command');
   });
 

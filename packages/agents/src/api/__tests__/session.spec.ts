@@ -31,7 +31,7 @@
  * suite leaves no stray artifacts under the repo or the shared global temp dir.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
@@ -39,18 +39,38 @@ import { createHash } from 'node:crypto';
 import type {
   Agent,
   AgentMessage,
+  AgentHistoryItem,
   SessionCheckpoint,
 } from '@vybestack/llxprt-code-agents';
 import { buildAgent } from './helpers/agentHarness.js';
 
 /** Builds a public AgentMessage (Content) with role + a single text part. */
 function textMessage(role: 'user' | 'model', text: string): AgentMessage {
-  return { role, parts: [{ text }] };
+  // Post-P21: produce neutral IContent shape { speaker, blocks }.
+  // AgentMessage is the public type but runtime objects are IContent.
+  return {
+    speaker: role === 'user' ? 'human' : 'ai',
+    blocks: [{ type: 'text', text }],
+  } as unknown as AgentMessage;
 }
 
-/** Extracts the concatenated text of a message's parts. */
-function messageText(msg: AgentMessage): string {
-  return msg.parts.map((p) => ('text' in p ? p.text : '')).join('');
+/**
+ * Extracts the concatenated text of a message's blocks (neutral IContent).
+ * Post-P21, getHistory() returns IContent at runtime (typed as AgentMessage).
+ * Reads .blocks (neutral) and falls back to .parts (legacy Content) so the
+ * helper works regardless of which shape the runtime carries.
+ */
+function messageText(msg: AgentMessage | AgentHistoryItem): string {
+  const blocks = (msg as unknown as AgentHistoryItem).blocks;
+  if (Array.isArray(blocks)) {
+    return blocks.map((b) => (b.type === 'text' ? b.text : '')).join('');
+  }
+  // Legacy Content shape fallback
+  const parts = msg.parts;
+  if (Array.isArray(parts)) {
+    return parts.map((p) => ('text' in p ? p.text : '')).join('');
+  }
+  return '';
 }
 
 /**

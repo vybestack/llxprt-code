@@ -335,7 +335,7 @@ export function getShellToolDescription(): string {
   const returnedInfo = `\n\n      The following information is returned:\n\n      Command: Executed command.\n      Directory: Directory (relative to project root) where command was executed, or \`(root)\`.\n      Stdout: Output on stdout stream. Can be \`(empty)\` or partial on error and for any unwaited background processes.\n      Stderr: Output on stderr stream. Can be \`(empty)\` or partial on error and for any unwaited background processes.\n      Error: Error or \`(none)\` if no error was reported for the subprocess.\n      Exit Code: Exit code or \`(none)\` if terminated by signal.\n      Signal: Signal number or \`(none)\` if no signal was received.\n      Background PIDs: List of background processes started or \`(none)\`.\n      Process Group PGID: Process group started or \`(none)\``;
 
   if (os.platform() === 'win32') {
-    return `This tool executes a given shell command as \`cmd.exe /c <command>\`. Command can start background processes using \`start /b\`.${returnedInfo}`;
+    return `This tool executes a given shell command using PowerShell (\`powershell.exe\` or \`pwsh\`) with \`-NoProfile -Command <command>\`. Use PowerShell-compatible syntax: quote paths containing spaces with single quotes (for example, \`New-Item -ItemType Directory -Force -Path 'C:\\My Folder'\`) and represent an apostrophe inside a single-quoted path with two single quotes. Independent background processes can be started with \`Start-Process\`.${returnedInfo}`;
   }
   return `This tool executes a given shell command as \`bash -c <command>\`. Command can start background processes using \`&\`. Command is executed as a subprocess that leads its own process group. Command process group can be terminated as \`kill -- -PGID\` or signaled as \`kill -s SIGNAL -- -PGID\`.${returnedInfo}`;
 }
@@ -345,7 +345,7 @@ export function getCommandDescription(): string {
     '\n*** WARNING: Command substitution using $(), `` ` ``, <(), or >() is not allowed for security reasons.';
   if (os.platform() === 'win32') {
     return (
-      'Exact command to execute as `cmd.exe /c <command>`' +
+      'Exact PowerShell command to execute with `-NoProfile -Command <command>` using `powershell.exe` or `pwsh`' +
       cmd_substitution_warning
     );
   }

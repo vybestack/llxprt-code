@@ -371,12 +371,8 @@ export function getProjectHash(projectRoot: string): string {
  * @param childPath The child path.
  * @returns True if childPath is a subpath of parentPath, false otherwise.
  */
-export function isSubpath(
-  parentPath: string,
-  childPath: string,
-  platform: NodeJS.Platform = os.platform(),
-): boolean {
-  const isWindows = platform === 'win32';
+export function isSubpath(parentPath: string, childPath: string): boolean {
+  const isWindows = os.platform() === 'win32';
   const pathModule = isWindows ? path.win32 : path;
 
   // On Windows, path.relative is case-insensitive. On POSIX, it's case-sensitive.

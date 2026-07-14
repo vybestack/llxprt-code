@@ -215,9 +215,6 @@ vi.mock('../runtimeSettings.js', () => ({
   getActiveProviderOrThrow: getActiveProviderOrThrowMock,
   isCliStatelessProviderModeEnabled: isCliStatelessProviderModeEnabledMock,
   isCliRuntimeStatelessReady: isCliRuntimeStatelessReadyMock,
-  createProviderKeyStorage: vi.fn(() => ({
-    getKey: vi.fn().mockResolvedValue(null),
-  })),
 }));
 
 const { applyProfileWithGuards } = await import('../profileApplication.js');

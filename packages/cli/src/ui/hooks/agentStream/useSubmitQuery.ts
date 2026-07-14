@@ -6,13 +6,12 @@
 
 /**
  * useSubmitQuery — extracted submit query orchestration from useAgentStream.
- * Contains the submitQuery callback, the MCP discovery gate, queued-submission
- * scheduling, submitQueryRef update effect, idle-queue-drain effect, and
+ * Contains the submitQuery callback, queued-submission scheduling,
+ * submitQueryRef update effect, idle-queue-drain effect, and
  * async-task-auto-trigger effect.
  */
 
 import { useCallback, useEffect, useRef } from 'react';
-import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   type MessageSenderType,
@@ -20,7 +19,7 @@ import {
   type ThinkingBlock,
   type ThoughtSummary,
   type ToolCallRequestInfo,
-  type ContractPartListUnion,
+  type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
 import {
   StreamingState,
@@ -91,7 +90,7 @@ export interface UseSubmitQueryDeps {
   abortActiveStream: (reason?: unknown) => void;
   handleShellCommand: (query: string, signal: AbortSignal) => boolean;
   handleSlashCommand: (
-    cmd: ContractPartListUnion,
+    cmd: AgentRequestInput,
   ) => Promise<SlashCommandProcessorResult | false>;
   logger:
     | { logMessage: (sender: MessageSenderType, text: string) => Promise<void> }
@@ -111,7 +110,7 @@ export interface UseSubmitQueryDeps {
    */
   runStreamRef: React.MutableRefObject<
     | ((
-        message: ContractPartListUnion,
+        message: AgentRequestInput,
         signal: AbortSignal,
         promptId: string,
       ) => Promise<void>)
@@ -119,7 +118,7 @@ export interface UseSubmitQueryDeps {
   >;
   submitQueryRef: React.MutableRefObject<
     | ((
-        query: ContractPartListUnion,
+        query: AgentRequestInput,
         options?: { isContinuation: boolean },
         prompt_id?: string,
       ) => Promise<void>)
@@ -131,7 +130,7 @@ export interface UseSubmitQueryDeps {
 
 export interface UseSubmitQueryReturn {
   submitQuery: (
-    query: ContractPartListUnion,
+    query: AgentRequestInput,
     options?: { isContinuation: boolean },
     prompt_id?: string,
   ) => Promise<void>;
@@ -143,12 +142,12 @@ export interface UseSubmitQueryReturn {
     userMessageTimestamp: number,
   ) => void;
   prepareQueryForAgent: (
-    query: ContractPartListUnion,
+    query: AgentRequestInput,
     userMessageTimestamp: number,
     abortSignal: AbortSignal,
     promptId: string,
   ) => Promise<{
-    queryToSend: ContractPartListUnion | null;
+    queryToSend: AgentRequestInput | null;
     shouldProceed: boolean;
   }>;
   handleLoopDetectedEvent: () => void;
@@ -277,7 +276,9 @@ function useSubmitQueryEffects(
   useEffect(() => {
     const isAgentBusy = () => deps.streamingState !== StreamingState.Idle;
     const triggerAgentTurn = async (message: string) => {
-      deps.queuedSubmissionsRef.current.push({ query: [{ text: message }] });
+      deps.queuedSubmissionsRef.current.push({
+        query: [{ type: 'text', text: message }],
+      });
       scheduleNextQueuedSubmission();
     };
 
@@ -321,12 +322,12 @@ function useScheduleNext(deps: UseSubmitQueryDeps) {
 interface SubmitQueryCallbackDeps extends UseSubmitQueryDeps {
   displayUserMessage: (q: string, t: number) => void;
   prepareQueryForAgent: (
-    query: ContractPartListUnion,
+    query: AgentRequestInput,
     userMessageTimestamp: number,
     abortSignal: AbortSignal,
     promptId: string,
   ) => Promise<{
-    queryToSend: ContractPartListUnion | null;
+    queryToSend: AgentRequestInput | null;
     shouldProceed: boolean;
   }>;
   handleLoopDetectedEvent: () => void;
@@ -338,7 +339,7 @@ interface SubmitQueryCallbackDeps extends UseSubmitQueryDeps {
 function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
   return useCallback(
     async (
-      query: ContractPartListUnion,
+      query: AgentRequestInput,
       options?: { isContinuation: boolean },
       prompt_id?: string,
     ) => {
@@ -356,17 +357,6 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
 
       const turn = initTurn(cbd, query, prompt_id, cbd.getPromptCount);
 
-      if (isMcpDiscoveryBlocking(cbd.runtime, turn.trimmedStr)) {
-        cbd.addItem(
-          {
-            type: 'info' as const,
-            text: 'Waiting for MCP servers to initialize... Slash commands are still available.',
-          },
-          Date.now(),
-        );
-        return;
-      }
-
       if (shouldDisplayUserMessage(turn.trimmedStr)) {
         cbd.displayUserMessage(turn.trimmedStr, turn.userMessageTimestamp);
       }
@@ -379,7 +369,7 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
 
 async function runSubmitQueryCore(
   cbd: SubmitQueryCallbackDeps,
-  query: ContractPartListUnion,
+  query: AgentRequestInput,
   turn: TurnInit,
 ): Promise<void> {
   const { queryToSend, shouldProceed } = await cbd.prepareQueryForAgent(
@@ -448,25 +438,6 @@ function shouldDisplayUserMessage(trimmedStr: string): boolean {
   return !!trimmedStr && !isSlashCommand(trimmedStr);
 }
 
-function isMcpDiscoveryBlocking(
-  runtime: StreamRuntime,
-  trimmedStr: string,
-): boolean {
-  if (!trimmedStr) return false;
-  if (isSlashCommand(trimmedStr)) return false;
-
-  const mcpManager = runtime.mcp.getMcpClientManager();
-  const discoveryState = mcpManager?.getDiscoveryState();
-  const configuredMcpServers =
-    mcpManager !== undefined
-      ? Object.keys(runtime.mcp.getMcpServers() ?? {}).length
-      : 0;
-
-  return (
-    configuredMcpServers > 0 && discoveryState !== MCPDiscoveryState.COMPLETED
-  );
-}
-
 interface TurnInit {
   userMessageTimestamp: number;
   abortSignal: AbortSignal;
@@ -476,7 +447,7 @@ interface TurnInit {
 
 function initTurn(
   deps: UseSubmitQueryDeps,
-  query: ContractPartListUnion,
+  query: AgentRequestInput,
   promptId: string | undefined,
   getPromptCount: () => number,
 ): TurnInit {
@@ -502,7 +473,7 @@ function initTurn(
 async function executeStream(
   deps: UseSubmitQueryDeps,
   handleLoopDetectedEvent: () => void,
-  queryToSend: ContractPartListUnion,
+  queryToSend: AgentRequestInput,
   turn: TurnInit,
 ): Promise<void> {
   const runStream = deps.runStreamRef.current;

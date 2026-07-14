@@ -4,12 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { CodeAssistServer } from './server.js';
 import { OAuth2Client } from 'google-auth-library';
 import { UserTierId } from './types.js';
 
+vi.mock('google-auth-library');
+
 describe('CodeAssistServer', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
   it('should be able to be constructed', () => {
     const auth = new OAuth2Client();
     const server = new CodeAssistServer(
@@ -202,7 +208,7 @@ describe('CodeAssistServer', () => {
       'test-session',
       UserTierId.FREE,
     );
-    expect(
+    await expect(
       server.embedContent({
         model: 'test-model',
         contents: [{ role: 'user', parts: [{ text: 'request' }] }],

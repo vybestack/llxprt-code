@@ -76,11 +76,9 @@ export interface ShellConfiguration {
  *
  * @returns The ShellConfiguration for the current environment.
  */
-export function getShellConfiguration(
-  platformIsWindows: boolean = isWindows(),
-  comSpec: string | undefined = process.env['ComSpec'],
-): ShellConfiguration {
-  if (platformIsWindows) {
+export function getShellConfiguration(): ShellConfiguration {
+  if (isWindows()) {
+    const comSpec = process.env['ComSpec'];
     if (comSpec) {
       const executable = comSpec.toLowerCase();
       if (
@@ -115,11 +113,7 @@ export function getShellConfiguration(
  * @param shell The type of shell the argument is for.
  * @returns The shell-escaped string.
  */
-export function escapeShellArg(
-  arg: string,
-  shell: ShellType,
-  quoteArgument: typeof quote = quote,
-): string {
+export function escapeShellArg(arg: string, shell: ShellType): string {
   if (!arg) {
     return '';
   }
@@ -134,7 +128,7 @@ export function escapeShellArg(
     case 'bash':
     default:
       // POSIX shell escaping using shell-quote.
-      return quoteArgument([arg]);
+      return quote([arg]);
   }
 }
 
@@ -180,7 +174,7 @@ export function splitCommands(
   }
 
   // Fall back to regex-based parsing
-  return splitCommandsFallback(command, { splitOnPipes });
+  return splitCommandsRegex(command, { splitOnPipes });
 }
 
 type SplitState = {
@@ -245,7 +239,7 @@ function handleSingleOperator(
  * - Process substitution `<()`, `>()` is not tracked
  * - The `&` redirection heuristic (prevChar/nextChar `>`) is fragile
  */
-export function splitCommandsFallback(
+function splitCommandsRegex(
   command: string,
   options?: SplitCommandsOptions,
 ): string[] {
@@ -482,14 +476,14 @@ export function detectCommandSubstitution(command: string): boolean {
   }
 
   // Fall back to regex-based detection
-  return detectCommandSubstitutionFallback(command);
+  return detectCommandSubstitutionRegex(command);
 }
 
 /**
  * Regex-based fallback for detecting command substitution.
  * Used only when tree-sitter WASM failed to load at startup.
  */
-export function detectCommandSubstitutionFallback(command: string): boolean {
+function detectCommandSubstitutionRegex(command: string): boolean {
   let inSingleQuotes = false;
   let inDoubleQuotes = false;
   let inBackticks = false;

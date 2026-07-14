@@ -3,9 +3,8 @@
  * @requirement REQ-008.1, REQ-008.2
  * @pseudocode lines 100-103
  */
-import { describe, expect } from 'bun:test';
-import { it } from 'bun:test';
-import { propertyTest } from '../test-utils/propertyTest.js';
+import { describe, expect } from 'vitest';
+import { it } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import type {
   CountTokensRequest,
@@ -78,8 +77,7 @@ describe('integration with IContent', () => {
 // ============================================================================
 
 describe('tokensAndEmbeddings property-based', () => {
-  propertyTest(
-    [fc.nat({ max: 1000000 })],
+  it.prop([fc.nat({ max: 1000000 })])(
     'CountTokensResult totalTokens round-trips through JSON unchanged',
     (totalTokens: number) => {
       const result: CountTokensResult = { totalTokens };
@@ -90,13 +88,12 @@ describe('tokensAndEmbeddings property-based', () => {
     },
   );
 
-  propertyTest(
-    [
-      fc.array(fc.string({ minLength: 1, maxLength: 50 }), {
-        minLength: 0,
-        maxLength: 10,
-      }),
-    ],
+  it.prop([
+    fc.array(fc.string({ minLength: 1, maxLength: 50 }), {
+      minLength: 0,
+      maxLength: 10,
+    }),
+  ])(
     'EmbedContentRequest texts round-trip preserving order and content',
     (texts: string[]) => {
       const req: EmbedContentRequest = { texts };
@@ -108,26 +105,25 @@ describe('tokensAndEmbeddings property-based', () => {
     },
   );
 
-  propertyTest(
-    [
+  it.prop([
+    fc.array(
       fc.array(
-        fc.array(
-          // Exclude -0: JSON.stringify(-0) → "0" → JSON.parse → +0, so -0 is
-          // not losslessly round-trippable. Object.is (below) would correctly
-          // flag it; filtering it scopes the property to JSON-lossless doubles.
-          // Exclude ±Infinity: JSON.stringify(Infinity) → "null". noNaN:true
-          // does NOT exclude Infinity, so Number.isFinite is required.
-          fc
-            .double({ noNaN: true })
-            .filter((v) => Number.isFinite(v) && !Object.is(v, -0)),
-          {
-            minLength: 1,
-            maxLength: 10,
-          },
-        ),
-        { minLength: 0, maxLength: 5 },
+        // Exclude -0: JSON.stringify(-0) → "0" → JSON.parse → +0, so -0 is
+        // not losslessly round-trippable. Object.is (below) would correctly
+        // flag it; filtering it scopes the property to JSON-lossless doubles.
+        // Exclude ±Infinity: JSON.stringify(Infinity) → "null". noNaN:true
+        // does NOT exclude Infinity, so Number.isFinite is required.
+        fc
+          .double({ noNaN: true })
+          .filter((v) => Number.isFinite(v) && !Object.is(v, -0)),
+        {
+          minLength: 1,
+          maxLength: 10,
+        },
       ),
-    ],
+      { minLength: 0, maxLength: 5 },
+    ),
+  ])(
     'EmbedContentResult embeddings preserve dimensions through JSON round-trip',
     (embeddings: number[][]) => {
       const result: EmbedContentResult = { embeddings };
@@ -145,23 +141,22 @@ describe('tokensAndEmbeddings property-based', () => {
     },
   );
 
-  propertyTest(
-    [
-      fc.array(
-        fc.oneof(
-          fc.record({
-            type: fc.constant('text' as const),
-            text: fc.string({ minLength: 1, maxLength: 30 }),
-          }),
-          fc.record({
-            type: fc.constant('code' as const),
-            code: fc.string({ minLength: 1, maxLength: 30 }),
-            language: fc.option(fc.string()),
-          }),
-        ),
-        { minLength: 0, maxLength: 5 },
+  it.prop([
+    fc.array(
+      fc.oneof(
+        fc.record({
+          type: fc.constant('text' as const),
+          text: fc.string({ minLength: 1, maxLength: 30 }),
+        }),
+        fc.record({
+          type: fc.constant('code' as const),
+          code: fc.string({ minLength: 1, maxLength: 30 }),
+          language: fc.option(fc.string()),
+        }),
       ),
-    ],
+      { minLength: 0, maxLength: 5 },
+    ),
+  ])(
     'CountTokensRequest contents length is preserved through JSON round-trip',
     (blocks: ContentBlock[]) => {
       const contents: IContent[] = [{ speaker: 'human' as const, blocks }];

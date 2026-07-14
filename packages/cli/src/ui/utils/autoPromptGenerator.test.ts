@@ -25,7 +25,12 @@ const { generateAutoPrompt } = await import('./autoPromptGenerator.js');
 
 function makeClient(text = 'generated prompt'): AgentClientContract {
   return {
-    generateDirectMessage: vi.fn(async () => ({ text })),
+    generateDirectMessage: vi.fn(async () => ({
+      content: {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text }],
+      },
+    })),
     clearTools: vi.fn(),
     dispose: vi.fn(),
   } as unknown as AgentClientContract;

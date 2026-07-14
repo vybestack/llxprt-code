@@ -11,7 +11,7 @@
  * value symbols (functions, constants, classes) are compared.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'vitest';
 import * as llmTypes from './index.js';
 import * as icontent from '../services/history/IContent.js';
 

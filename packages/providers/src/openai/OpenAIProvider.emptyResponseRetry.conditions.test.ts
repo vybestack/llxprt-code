@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import type { IMessage } from '../IMessage.js';
 import type { ITool } from '../ITool.js';
@@ -14,16 +14,15 @@ import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '../IMessage.js';
 
-const originalFetch = globalThis.fetch;
-const fetchMock = vi.fn<typeof fetch>();
+// Mock fetch globally
+global.fetch = vi.fn();
 
 describe('OpenAIProvider empty response retry conditions (issue #584)', () => {
   let provider: OpenAIProvider;
   let settingsService: SettingsService;
 
   beforeEach(() => {
-    fetchMock.mockReset();
-    globalThis.fetch = fetchMock;
+    vi.clearAllMocks();
     resetSettingsService();
     const runtime = initializeTestProviderRuntime({
       runtimeId: `openai-provider.emptyResponseRetry.${Math.random()
@@ -49,10 +48,6 @@ describe('OpenAIProvider empty response retry conditions (issue #584)', () => {
       'openai/gpt-oss-120b',
     );
     settingsService.set('reasoning.includeInContext', false);
-  });
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
   });
 
   function createStreamingResponse(chunks: string[]): Response {
@@ -136,7 +131,9 @@ describe('OpenAIProvider empty response retry conditions (issue #584)', () => {
       }),
     ];
 
-    fetchMock.mockResolvedValueOnce(createStreamingResponse(responseChunks));
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      createStreamingResponse(responseChunks),
+    );
 
     const messages: IMessage[] = [
       {
@@ -186,7 +183,7 @@ describe('OpenAIProvider empty response retry conditions (issue #584)', () => {
     ).toBe(true);
 
     // Verify fetch was called only once (no retry)
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
   });
 
   it('should not retry on finish_reason=length', async () => {
@@ -237,7 +234,9 @@ describe('OpenAIProvider empty response retry conditions (issue #584)', () => {
       }),
     ];
 
-    fetchMock.mockResolvedValueOnce(createStreamingResponse(responseChunks));
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      createStreamingResponse(responseChunks),
+    );
 
     const messages: IMessage[] = [
       {
@@ -284,6 +283,6 @@ describe('OpenAIProvider empty response retry conditions (issue #584)', () => {
     ).toBe(true);
 
     // Verify fetch was called only once (no retry for length)
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
   });
 });

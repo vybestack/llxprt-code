@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ContractContent } from '@vybestack/llxprt-code-core';
+import type { IContent } from '@vybestack/llxprt-code-core';
 
 import { vi } from 'vitest';
 import type {
@@ -185,7 +185,7 @@ function createHistoryControl(mockClient: Record<string, unknown>) {
       const fn = mockClient.getHistory as
         | (() => Promise<readonly unknown[]>)
         | undefined;
-      return fn ? ((await fn()) as unknown as readonly ContractContent[]) : [];
+      return fn ? ((await fn()) as unknown as readonly IContent[]) : [];
     },
     async setHistory() {},
     async addHistory(message: unknown) {

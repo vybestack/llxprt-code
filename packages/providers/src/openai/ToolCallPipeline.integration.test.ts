@@ -27,7 +27,7 @@
  * - Verify pipeline output format matches Core layer expectations
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ToolCallPipeline } from './ToolCallPipeline.js';
 
 describe('ToolCallPipeline Integration Tests (New Architecture)', () => {

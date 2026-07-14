@@ -26,8 +26,8 @@
  * the Phase 03 stub — that is correct TDD.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { asyncPropertyTestWithOptions } from '../test-utils/propertyTest.js';
+import { describe, expect, beforeEach, afterEach } from 'vitest';
+import { it } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -753,7 +753,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-003.3
      */
-    asyncPropertyTestWithOptions([
+    it.prop([
       fc.record({
         speaker: fc.constantFrom('human' as const, 'ai' as const),
         text: fc.string({ minLength: 1, maxLength: 200 }),
@@ -803,7 +803,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-001.2
      */
-    asyncPropertyTestWithOptions([
+    it.prop([
       fc.array(
         fc.constantFrom(
           'content' as const,
@@ -873,10 +873,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-005
      */
-    asyncPropertyTestWithOptions([
-      fc.integer({ min: 1, max: 5 }),
-      fc.integer({ min: 1, max: 10 }),
-    ])(
+    it.prop([fc.integer({ min: 1, max: 5 }), fc.integer({ min: 1, max: 10 })])(
       'multiple flush calls produce same file content @requirement:REQ-REC-005 @plan:PLAN-20260211-SESSIONRECORDING.P04',
       async (flushCount, eventCount) => {
         const localTempDir = await fs.mkdtemp(
@@ -915,7 +912,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-001
      */
-    asyncPropertyTestWithOptions([fc.uuid()])(
+    it.prop([fc.uuid()])(
       'session_start payload always contains matching sessionId @requirement:REQ-REC-001 @plan:PLAN-20260211-SESSIONRECORDING.P04',
       async (sessionId) => {
         const localTempDir = await fs.mkdtemp(
@@ -950,7 +947,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-003.2
      */
-    asyncPropertyTestWithOptions([fc.integer({ min: 1, max: 30 })])(
+    it.prop([fc.integer({ min: 1, max: 30 })])(
       'N content events produce exactly N+1 lines (session_start + N) @requirement:REQ-REC-003.2 @plan:PLAN-20260211-SESSIONRECORDING.P04',
       async (eventCount) => {
         const localTempDir = await fs.mkdtemp(
@@ -984,7 +981,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-001.3
      */
-    asyncPropertyTestWithOptions([fc.integer({ min: 1, max: 15 })])(
+    it.prop([fc.integer({ min: 1, max: 15 })])(
       'all events have valid ISO-8601 timestamps @requirement:REQ-REC-001.3 @plan:PLAN-20260211-SESSIONRECORDING.P04',
       async (eventCount) => {
         const localTempDir = await fs.mkdtemp(
@@ -1020,7 +1017,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-001
      */
-    asyncPropertyTestWithOptions([
+    it.prop([
       fc.constantFrom(
         'content' as const,
         'compressed' as const,
@@ -1099,7 +1096,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-004, REQ-REC-001.2
      */
-    asyncPropertyTestWithOptions([
+    it.prop([
       fc.array(
         fc.constantFrom(
           'provider_switch' as const,
@@ -1177,7 +1174,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-001
      */
-    asyncPropertyTestWithOptions([
+    it.prop([
       fc.record({
         sessionId: fc.uuid(),
         provider: fc.constantFrom('anthropic', 'openai', 'google'),

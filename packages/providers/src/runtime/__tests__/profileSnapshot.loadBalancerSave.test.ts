@@ -4,53 +4,90 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import {
-  isLoadBalancerProfile,
-  type LoadBalancerProfile,
-  type Profile,
-} from '@vybestack/llxprt-code-settings';
-import {
-  buildRuntimeProfileSnapshot,
-  saveProfileSnapshot,
-  type ProfileSnapshotDependencies,
-} from '../profileSnapshot.js';
+/**
+ * Regression tests for issue #2479 (save side): saving a profile while a
+ * load balancer is the active provider must produce a genuine
+ * type:'loadbalancer' profile (or fail loudly) — never a standard profile
+ * with provider:'load-balancer'. That corrupt shape can never be re-applied
+ * because 'load-balancer' is not a registered provider at load time, and it
+ * previously produced dead sessions via the silent gemini fallback.
+ */
 
-const saveProfile = vi.fn<(name: string, profile: Profile) => Promise<void>>();
-const state = {
-  activeProviderName: 'load-balancer',
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings';
+import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';
+
+const saveProfileMock = vi.hoisted(() => vi.fn());
+
+const runtimeServicesState = vi.hoisted(() => ({
+  activeProviderName: 'load-balancer' as string,
   lbConfig: null as unknown,
   ephemerals: {} as Record<string, unknown>,
-};
+}));
 
-const dependencies: ProfileSnapshotDependencies = {
-  getRuntimeServices: () => ({
+vi.mock('../runtimeAccessors.js', () => ({
+  getCliRuntimeServices: vi.fn(() => ({
     config: {
-      getEphemeralSettings: () => state.ephemerals,
-      getProvider: () => state.activeProviderName,
+      getEphemeralSettings: () => runtimeServicesState.ephemerals,
+      getProvider: () => runtimeServicesState.activeProviderName,
       getModel: () => 'whatever-model',
     },
     settingsService: {
-      get: () => undefined,
-      getProviderSettings: () => ({}),
+      setCurrentProfileName: vi.fn(),
+      set: vi.fn(),
+      get: vi.fn(),
     },
     providerManager: {
-      getActiveProviderName: () => state.activeProviderName,
+      getActiveProviderName: () => runtimeServicesState.activeProviderName,
       getProviderByName: (name: string) =>
-        name === 'load-balancer' && state.lbConfig !== null
-          ? { getLoadBalancerConfig: () => state.lbConfig }
+        name === 'load-balancer' && runtimeServicesState.lbConfig !== null
+          ? {
+              getLoadBalancerConfig: () => runtimeServicesState.lbConfig,
+            }
           : null,
     },
-  }),
-  saveProfile,
-};
+  })),
+  maybeGetCliOAuthManager: vi.fn(() => null),
+  getActiveModelName: vi.fn(() => 'test-model'),
+  getActiveModelParams: vi.fn(() => ({})),
+  _internal: {
+    resolveActiveProviderName: vi.fn(
+      () => runtimeServicesState.activeProviderName,
+    ),
+    getProviderSettingsSnapshot: vi.fn(() => ({})),
+    getActiveProviderOrThrow: vi.fn(),
+    extractModelParams: vi.fn(() => ({})),
+  },
+}));
+
+vi.mock('../profileApplication.js', () => ({
+  applyProfileWithGuards: vi.fn(),
+}));
+
+vi.mock('@vybestack/llxprt-code-settings', async () => {
+  const actual = await vi.importActual<
+    typeof import('@vybestack/llxprt-code-settings')
+  >('@vybestack/llxprt-code-settings');
+  return {
+    ...actual,
+    ProfileManager: vi.fn(() => ({
+      saveProfile: saveProfileMock,
+      loadProfile: vi.fn(),
+      listProfiles: vi.fn(),
+    })),
+  };
+});
+
+const { buildRuntimeProfileSnapshot, saveProfileSnapshot } = await import(
+  '../profileSnapshot.js'
+);
 
 describe('profile save while load balancer is active (issue #2479)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    state.activeProviderName = 'load-balancer';
-    state.ephemerals = {};
-    state.lbConfig = {
+    runtimeServicesState.activeProviderName = 'load-balancer';
+    runtimeServicesState.ephemerals = {};
+    runtimeServicesState.lbConfig = {
       profileName: 'glm',
       strategy: 'round-robin',
       subProfiles: [
@@ -61,77 +98,72 @@ describe('profile save while load balancer is active (issue #2479)', () => {
       lbProfileEphemeralSettings: { 'context-limit': 200000 },
       lbProfileModelParams: {},
     };
-    saveProfile.mockResolvedValue(undefined);
   });
 
   it('serializes the active load balancer as a genuine loadbalancer profile', () => {
-    const snapshot = buildRuntimeProfileSnapshot(
-      dependencies,
-    ) as LoadBalancerProfile;
+    const snapshot = buildRuntimeProfileSnapshot() as LoadBalancerProfile;
 
     expect(isLoadBalancerProfile(snapshot)).toBe(true);
     expect(snapshot.type).toBe('loadbalancer');
     expect(snapshot.policy).toBe('roundrobin');
     expect(snapshot.profiles).toStrictEqual(['glm-a', 'glm-b']);
     expect(snapshot.contextLimit).toBe(200000);
+    // The corrupt field-shape from the field must never be produced:
     expect(snapshot.provider).not.toBe('load-balancer');
   });
 
   it('maps failover strategy to failover policy', () => {
-    state.lbConfig = {
-      ...(state.lbConfig as Record<string, unknown>),
+    runtimeServicesState.lbConfig = {
+      ...(runtimeServicesState.lbConfig as Record<string, unknown>),
       strategy: 'failover',
     };
 
-    const snapshot = buildRuntimeProfileSnapshot(
-      dependencies,
-    ) as LoadBalancerProfile;
+    const snapshot = buildRuntimeProfileSnapshot() as LoadBalancerProfile;
     expect(isLoadBalancerProfile(snapshot)).toBe(true);
     expect(snapshot.policy).toBe('failover');
   });
 
-  it('saves a snapshot that passes load-balancer validation', async () => {
-    const saved = await saveProfileSnapshot('glm', undefined, dependencies);
+  it('the saved loadbalancer snapshot passes isLoadBalancerProfile validation', async () => {
+    const saved = await saveProfileSnapshot('glm');
 
-    expect(saveProfile).toHaveBeenCalledTimes(1);
-    const [, persisted] = saveProfile.mock.calls[0];
+    expect(saveProfileMock).toHaveBeenCalledTimes(1);
+    const [, persisted] = saveProfileMock.mock.calls[0];
     expect(isLoadBalancerProfile(persisted)).toBe(true);
     expect(isLoadBalancerProfile(saved)).toBe(true);
   });
 
   it('throws instead of writing a corrupt file when the LB config is unreadable', () => {
-    state.lbConfig = null;
+    runtimeServicesState.lbConfig = null;
 
-    expect(() => buildRuntimeProfileSnapshot(dependencies)).toThrow(
+    expect(() => buildRuntimeProfileSnapshot()).toThrow(
       /load balancer is active but its configuration could not be read/,
     );
   });
 
-  it('refuses to persist provider load-balancer as a standard profile', () => {
-    state.lbConfig = null;
+  it('saveProfileSnapshot refuses to persist provider load-balancer as a standard profile', async () => {
+    runtimeServicesState.lbConfig = null;
 
-    expect(saveProfileSnapshot('zai', undefined, dependencies)).rejects.toThrow(
+    await expect(saveProfileSnapshot('zai')).rejects.toThrow(
       /could not be read|corrupt profile/,
     );
-    expect(saveProfile).not.toHaveBeenCalled();
+    expect(saveProfileMock).not.toHaveBeenCalled();
   });
 
-  it('additional config cannot strip the load-balancer profile type', () => {
-    expect(
-      saveProfileSnapshot(
-        'zai',
-        { type: undefined, provider: 'load-balancer' } as never,
-        dependencies,
-      ),
+  it('additionalConfig cannot strip the loadbalancer type into a corrupt standard profile', async () => {
+    await expect(
+      saveProfileSnapshot('zai', {
+        type: undefined,
+        provider: 'load-balancer',
+      } as never),
     ).rejects.toThrow(/corrupt profile/);
-    expect(saveProfile).not.toHaveBeenCalled();
+    expect(saveProfileMock).not.toHaveBeenCalled();
   });
 
-  it('leaves standard-provider saves unaffected', async () => {
-    state.activeProviderName = 'anthropic';
+  it('standard-provider saves are unaffected', async () => {
+    runtimeServicesState.activeProviderName = 'anthropic';
 
-    const saved = await saveProfileSnapshot('zai', undefined, dependencies);
-    expect(saveProfile).toHaveBeenCalledTimes(1);
+    const saved = await saveProfileSnapshot('zai');
+    expect(saveProfileMock).toHaveBeenCalledTimes(1);
     expect(saved.provider).toBe('anthropic');
     expect(isLoadBalancerProfile(saved)).toBe(false);
   });

@@ -18,9 +18,13 @@ import {
   type PromptConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { ChatSession } from './chatSession.js';
+import {
+  createContentGenerator,
+  type ContentGenerator,
+} from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { Content, GenerateContentConfig } from '@google/genai';
-import type { CreateChatSession } from './subagentRuntimeSetup.js';
+import type { ChatSessionConfig } from './chatSession.js';
+import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import {
   createMockConfig,
   createMockStream,
@@ -29,6 +33,69 @@ import {
   createStatelessRuntimeBundle,
   createRuntimeOverrides,
 } from './subagent-test-helpers.js';
+
+const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
+  const mockReadTodos = vi.fn().mockResolvedValue([]);
+  const TodoStoreMock = vi
+    .fn()
+    .mockImplementation(() => ({ readTodos: mockReadTodos }));
+  return { mockReadTodos, TodoStoreMock };
+});
+
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  return {
+    ...actual,
+    LocalTodoStore: TodoStoreMock,
+  };
+});
+
+vi.mock('./chatSession.js');
+vi.mock(
+  '@vybestack/llxprt-code-core/core/contentGenerator.js',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@vybestack/llxprt-code-core/core/contentGenerator.js')
+      >();
+    return {
+      ...actual,
+      createContentGenerator: vi.fn(),
+    };
+  },
+);
+vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
+vi.mock('./nonInteractiveToolExecutor.js');
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    IdeClient: {
+      getInstance: vi.fn().mockResolvedValue({
+        getConnectionStatus: vi.fn(),
+        initialize: vi.fn(),
+        shutdown: vi.fn(),
+      }),
+    },
+  };
+});
+vi.mock(
+  '@vybestack/llxprt-code-core/core/prompts.js',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@vybestack/llxprt-code-core/core/prompts.js')
+      >();
+    return {
+      ...actual,
+      getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
+    };
+  },
+);
 
 describe('subagent.ts', () => {
   let mockSendMessageStream: Mock;
@@ -51,6 +118,21 @@ describe('subagent.ts', () => {
 
       mockSendMessageStream = vi.fn();
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
+      vi.mocked(ChatSession).mockImplementation(
+        () =>
+          ({
+            sendMessageStream: mockSendMessageStream,
+            getHistory: vi.fn().mockReturnValue([]),
+            getHistoryService: vi.fn().mockReturnValue({
+              clear: vi.fn(),
+              findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+              getCurated: vi.fn().mockReturnValue([]),
+              getTotalTokens: vi.fn().mockReturnValue(0),
+            }),
+            getConfig: vi.fn().mockReturnValue(undefined),
+          }) as unknown as ChatSession,
+      );
+
       const scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -60,8 +142,6 @@ describe('subagent.ts', () => {
         { tools: [] },
         { outputs: {} },
         overrides,
-        undefined,
-        { createChatSession: () => ({}) as ChatSession },
       );
 
       expect(scope).toBeDefined();
@@ -84,6 +164,21 @@ describe('subagent.ts', () => {
 
       mockSendMessageStream = vi.fn();
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
+      vi.mocked(ChatSession).mockImplementation(
+        () =>
+          ({
+            sendMessageStream: mockSendMessageStream,
+            getHistory: vi.fn().mockReturnValue([]),
+            getHistoryService: vi.fn().mockReturnValue({
+              clear: vi.fn(),
+              findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+              getCurated: vi.fn().mockReturnValue([]),
+              getTotalTokens: vi.fn().mockReturnValue(0),
+            }),
+            getConfig: vi.fn().mockReturnValue(undefined),
+          }) as unknown as ChatSession,
+      );
+
       const scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -93,8 +188,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession: () => ({}) as ChatSession },
       );
 
       expect(scope).toBeDefined();
@@ -102,48 +195,46 @@ describe('subagent.ts', () => {
   });
 
   describe('runNonInteractive - Initialization and Prompting', () => {
-    let generationConfigs: GenerateContentConfig[];
-    let startHistories: Content[][];
-    const createChatSession: CreateChatSession = (
-      _runtimeContext,
-      _contentGenerator,
-      generationConfig,
-      startHistory,
-    ) => {
-      generationConfigs.push(generationConfig);
-      startHistories.push(startHistory);
-      return {
-        sendMessageStream: mockSendMessageStream,
-        getHistory: () => [],
-        getHistoryService: () => ({
-          clear: vi.fn(),
-          findUnmatchedToolCalls: () => [],
-          getCurated: () => [],
-          getTotalTokens: () => 0,
-        }),
-        getConfig: () => undefined,
-      } as unknown as ChatSession;
-    };
+    beforeEach(async () => {
+      vi.clearAllMocks();
+      mockReadTodos.mockReset();
+      mockReadTodos.mockResolvedValue([]);
+      TodoStoreMock.mockClear();
 
-    beforeEach(() => {
-      generationConfigs = [];
-      startHistories = [];
+      vi.mocked(getEnvironmentContext).mockResolvedValue([
+        { text: 'Env Context' },
+      ]);
+      vi.mocked(createContentGenerator).mockResolvedValue({
+        getGenerativeModel: vi.fn(),
+      } as unknown as ContentGenerator);
+
       mockSendMessageStream = vi.fn();
+      vi.mocked(ChatSession).mockImplementation(
+        () =>
+          ({
+            sendMessageStream: mockSendMessageStream,
+            getHistory: vi.fn().mockReturnValue([]),
+            getHistoryService: vi.fn().mockReturnValue({
+              clear: vi.fn(),
+              findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+              getCurated: vi.fn().mockReturnValue([]),
+              getTotalTokens: vi.fn().mockReturnValue(0),
+            }),
+            getConfig: vi.fn().mockReturnValue(undefined),
+          }) as unknown as ChatSession,
+      );
     });
 
     afterEach(() => {
       vi.restoreAllMocks();
     });
 
-    const getGenerationConfigFromMock = (
-      callIndex = 0,
-    ): GenerateContentConfig & { systemInstruction?: string | Content } => {
-      const generationConfig = generationConfigs[callIndex];
+    const getGenerationConfigFromMock = (callIndex = 0): ChatSessionConfig => {
+      const callArgs = vi.mocked(ChatSession).mock.calls[callIndex];
+      const generationConfig = callArgs[2];
       expect(generationConfig).toBeDefined();
       if (!generationConfig) throw new Error('generationConfig is undefined');
-      return generationConfig as GenerateContentConfig & {
-        systemInstruction?: string | Content;
-      };
+      return generationConfig;
     };
 
     it('should correctly template the system prompt and initialize ChatSession', async () => {
@@ -169,13 +260,11 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       await scope.runNonInteractive(context);
 
-      expect(generationConfigs).toHaveLength(1);
+      expect(vi.mocked(ChatSession)).toHaveBeenCalledTimes(1);
       const generationConfig = getGenerationConfigFromMock();
       expect(generationConfig.systemInstruction).toContain('Env Context');
       expect(generationConfig.systemInstruction).toContain(
@@ -201,8 +290,6 @@ describe('subagent.ts', () => {
         undefined,
         { outputs: { result: 'The result' } },
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -228,15 +315,13 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       await scope.runNonInteractive(new ContextState());
 
-      expect(generationConfigs).toHaveLength(1);
-      const generationConfig = generationConfigs[0];
-      const history = startHistories[0];
+      expect(vi.mocked(ChatSession)).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(ChatSession).mock.calls[0];
+      const history = callArgs[3];
       expect(history).toStrictEqual([]);
     });
 
@@ -255,8 +340,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       await expect(scope.runNonInteractive(new ContextState())).rejects.toThrow(
@@ -283,8 +366,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -312,8 +393,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -338,8 +417,6 @@ describe('subagent.ts', () => {
         undefined,
         { outputs: { required_output: 'Must produce this' } },
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -364,13 +441,11 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       await scope.runNonInteractive(new ContextState());
 
-      expect(generationConfigs).toHaveLength(1);
+      expect(vi.mocked(ChatSession)).toHaveBeenCalledTimes(1);
       const generationConfig = getGenerationConfigFromMock();
       expect(generationConfig.systemInstruction).toBeDefined();
     });

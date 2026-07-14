@@ -4,7 +4,7 @@
  * SPDX-License-Identifier:Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 
 /**
  * @plan PLAN-20250822-GEMINIFALLBACK.P16

@@ -27,7 +27,7 @@
  *     across generated tool names and answer texts.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

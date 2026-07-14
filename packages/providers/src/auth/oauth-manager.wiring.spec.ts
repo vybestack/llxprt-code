@@ -4,9 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
-import type { Config } from '@vybestack/llxprt-code-core';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   BucketFailoverOAuthManagerLike,
   OAuthManagerRuntimeMessageBusDeps,
@@ -14,15 +12,8 @@ import type {
   OAuthToken,
   TokenStore,
 } from './types.js';
-import {
-  OAuthManager,
-  type OAuthManagerComponentFactories,
-  type OAuthManagerUsageDependencies,
-} from './oauth-manager.js';
-import type { ProfileBucketResolverDependencies } from './token-profile-resolver.js';
-import type { FetchAnthropicUsage } from './provider-usage-info.js';
 
-const wiring = (() => {
+const wiring = vi.hoisted(() => {
   const state = {
     providerRegistry: {} as Record<string, unknown>,
     proactiveRenewalManager: {} as Record<string, unknown>,
@@ -57,7 +48,34 @@ const wiring = (() => {
     getAllCodexUsageInfo,
     getHigherPriorityAuth,
   };
-})();
+});
+
+vi.mock('./provider-registry.js', () => ({
+  ProviderRegistry: wiring.ProviderRegistry,
+}));
+vi.mock('./proactive-renewal-manager.js', () => ({
+  ProactiveRenewalManager: wiring.ProactiveRenewalManager,
+}));
+vi.mock('./OAuthBucketManager.js', () => ({
+  OAuthBucketManager: wiring.OAuthBucketManager,
+}));
+vi.mock('./token-access-coordinator.js', () => ({
+  TokenAccessCoordinator: wiring.TokenAccessCoordinator,
+}));
+vi.mock('./auth-flow-orchestrator.js', () => ({
+  AuthFlowOrchestrator: wiring.AuthFlowOrchestrator,
+}));
+vi.mock('./auth-status-service.js', () => ({
+  AuthStatusService: wiring.AuthStatusService,
+}));
+vi.mock('./provider-usage-info.js', () => ({
+  getAnthropicUsageInfo: wiring.getAnthropicUsageInfo,
+  getAllAnthropicUsageInfo: wiring.getAllAnthropicUsageInfo,
+  getAllCodexUsageInfo: wiring.getAllCodexUsageInfo,
+  getHigherPriorityAuth: wiring.getHigherPriorityAuth,
+}));
+
+import { OAuthManager } from './oauth-manager.js';
 
 function createTokenStore(): TokenStore {
   return {
@@ -88,38 +106,6 @@ function createProvider(name: string): OAuthProvider {
     getToken: vi.fn(async () => null),
     refreshToken: vi.fn(async () => null),
   };
-}
-
-function createManager(
-  tokenStore: TokenStore,
-  settings?: IOAuthSettingsProvider,
-  runtimeDeps?: OAuthManagerRuntimeMessageBusDeps,
-  profileBucketDependencies?: ProfileBucketResolverDependencies,
-  fetchAnthropicUsage?: FetchAnthropicUsage,
-): OAuthManager {
-  const componentFactories = {
-    createProviderRegistry: wiring.ProviderRegistry,
-    createProactiveRenewalManager: wiring.ProactiveRenewalManager,
-    createBucketManager: wiring.OAuthBucketManager,
-    createTokenAccessCoordinator: wiring.TokenAccessCoordinator,
-    createAuthFlowOrchestrator: wiring.AuthFlowOrchestrator,
-    createAuthStatusService: wiring.AuthStatusService,
-  } as unknown as OAuthManagerComponentFactories;
-  const usageDependencies: OAuthManagerUsageDependencies = {
-    getAnthropicUsageInfo: wiring.getAnthropicUsageInfo,
-    getAllAnthropicUsageInfo: wiring.getAllAnthropicUsageInfo,
-    getAllCodexUsageInfo: wiring.getAllCodexUsageInfo,
-    getHigherPriorityAuth: wiring.getHigherPriorityAuth,
-  };
-  return new OAuthManager(
-    tokenStore,
-    settings,
-    runtimeDeps,
-    profileBucketDependencies,
-    fetchAnthropicUsage,
-    componentFactories,
-    usageDependencies,
-  );
 }
 
 describe('OAuthManager wiring', () => {
@@ -204,14 +190,14 @@ describe('OAuthManager wiring', () => {
     const tokenStore = createTokenStore();
     const config = {
       getEphemeralSetting: vi.fn(),
-    } as unknown as Config;
+    } as unknown as import('@vybestack/llxprt-code-core').Config;
     const messageBus = {} as import('@vybestack/llxprt-code-core').MessageBus;
     const runtimeDeps: OAuthManagerRuntimeMessageBusDeps = {
       config,
       messageBus,
     };
 
-    const manager = createManager(tokenStore, undefined, runtimeDeps);
+    const manager = new OAuthManager(tokenStore, undefined, runtimeDeps);
 
     const providerRegistry = wiring.state.providerRegistry;
     const proactiveRenewalManager = wiring.state.proactiveRenewalManager;
@@ -235,7 +221,6 @@ describe('OAuthManager wiring', () => {
       manager,
       undefined,
       expect.any(Function),
-      undefined,
     );
 
     expect(wiring.AuthFlowOrchestrator).toHaveBeenCalledWith(
@@ -269,7 +254,7 @@ describe('OAuthManager wiring', () => {
       'authenticateMultipleBuckets',
     );
 
-    createManager(createTokenStore());
+    new OAuthManager(createTokenStore());
 
     expect(getOAuthTokenSpy).not.toHaveBeenCalled();
     expect(authenticateMultipleBucketsSpy).not.toHaveBeenCalled();
@@ -277,7 +262,7 @@ describe('OAuthManager wiring', () => {
 
   it('delegates provider registry methods', async () => {
     const tokenStore = createTokenStore();
-    const manager = createManager(tokenStore);
+    const manager = new OAuthManager(tokenStore);
     const provider = createProvider('anthropic');
 
     const providerRegistry = wiring.state.providerRegistry as {
@@ -319,7 +304,7 @@ describe('OAuthManager wiring', () => {
       merged: {},
     } as unknown as import('@vybestack/llxprt-code-auth').IOAuthSettingsProvider;
 
-    const manager = createManager(tokenStore, settings, { config });
+    const manager = new OAuthManager(tokenStore, settings, { config });
 
     const tokenAccessCoordinator = wiring.state.tokenAccessCoordinator as {
       getToken: ReturnType<typeof vi.fn>;
@@ -484,7 +469,7 @@ describe('OAuthManager wiring', () => {
 
   it('returns null for anthropic usage when anthropic provider is not registered', async () => {
     const tokenStore = createTokenStore();
-    const manager = createManager(tokenStore);
+    const manager = new OAuthManager(tokenStore);
 
     const providerRegistry = wiring.state.providerRegistry as {
       getProvider: ReturnType<typeof vi.fn>;
@@ -496,7 +481,7 @@ describe('OAuthManager wiring', () => {
   });
 
   it('satisfies BucketFailoverOAuthManagerLike at compile-time', () => {
-    const manager = createManager(createTokenStore());
+    const manager = new OAuthManager(createTokenStore());
     const managerLike: BucketFailoverOAuthManagerLike = manager;
     expect(managerLike).toBeDefined();
   });

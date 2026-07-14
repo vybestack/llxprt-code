@@ -21,8 +21,6 @@ interface InputHandlingHarness {
   hadToolCallsRef: { current: boolean };
   clearPause: ReturnType<typeof vi.fn>;
   todoContinuationRef: { current: { clearPause: () => void } | null };
-  isMcpReady: boolean;
-  addMessage: ReturnType<typeof vi.fn>;
   needsRelogin: boolean;
   appDispatch: ReturnType<typeof vi.fn>;
 }
@@ -45,13 +43,26 @@ const createHarness = (
     hadToolCallsRef: { current: true },
     clearPause,
     todoContinuationRef: { current: { clearPause } },
-    isMcpReady: true,
-    addMessage: vi.fn(),
     needsRelogin: false,
     appDispatch: vi.fn(),
     ...overrides,
   };
 };
+
+const renderInputHandling = (harness: InputHandlingHarness) =>
+  renderHook(() =>
+    useInputHandling({
+      buffer: harness.buffer,
+      inputHistoryStore: { addInput: harness.addInput },
+      submitQuery: harness.submitQuery,
+      pendingHistoryItems: harness.pendingHistoryItems,
+      lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
+      hadToolCallsRef: harness.hadToolCallsRef,
+      todoContinuationRef: harness.todoContinuationRef,
+      needsRelogin: harness.needsRelogin,
+      appDispatch: harness.appDispatch,
+    }),
+  );
 
 describe('useInputHandling', () => {
   beforeEach(() => {
@@ -60,22 +71,7 @@ describe('useInputHandling', () => {
 
   it('restores the last prompt when user cancel requests restore', () => {
     const harness = createHarness();
-
-    const { result } = renderHook(() =>
-      useInputHandling({
-        buffer: harness.buffer,
-        inputHistoryStore: { addInput: harness.addInput },
-        submitQuery: harness.submitQuery,
-        pendingHistoryItems: harness.pendingHistoryItems,
-        lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
-        hadToolCallsRef: harness.hadToolCallsRef,
-        todoContinuationRef: harness.todoContinuationRef,
-        isMcpReady: harness.isMcpReady,
-        addMessage: harness.addMessage,
-        needsRelogin: harness.needsRelogin,
-        appDispatch: harness.appDispatch,
-      }),
-    );
+    const { result } = renderInputHandling(harness);
 
     act(() => {
       result.current.handleUserCancel(true);
@@ -86,22 +82,7 @@ describe('useInputHandling', () => {
 
   it('clears the buffer when user cancel does not request restore', () => {
     const harness = createHarness();
-
-    const { result } = renderHook(() =>
-      useInputHandling({
-        buffer: harness.buffer,
-        inputHistoryStore: { addInput: harness.addInput },
-        submitQuery: harness.submitQuery,
-        pendingHistoryItems: harness.pendingHistoryItems,
-        lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
-        hadToolCallsRef: harness.hadToolCallsRef,
-        todoContinuationRef: harness.todoContinuationRef,
-        isMcpReady: harness.isMcpReady,
-        addMessage: harness.addMessage,
-        needsRelogin: harness.needsRelogin,
-        appDispatch: harness.appDispatch,
-      }),
-    );
+    const { result } = renderInputHandling(harness);
 
     act(() => {
       result.current.handleUserCancel(false);
@@ -129,21 +110,7 @@ describe('useInputHandling', () => {
       ],
     });
 
-    const { result } = renderHook(() =>
-      useInputHandling({
-        buffer: harness.buffer,
-        inputHistoryStore: { addInput: harness.addInput },
-        submitQuery: harness.submitQuery,
-        pendingHistoryItems: harness.pendingHistoryItems,
-        lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
-        hadToolCallsRef: harness.hadToolCallsRef,
-        todoContinuationRef: harness.todoContinuationRef,
-        isMcpReady: harness.isMcpReady,
-        addMessage: harness.addMessage,
-        needsRelogin: harness.needsRelogin,
-        appDispatch: harness.appDispatch,
-      }),
-    );
+    const { result } = renderInputHandling(harness);
 
     act(() => {
       result.current.cancelHandlerRef.current?.(true);
@@ -160,22 +127,7 @@ describe('useInputHandling', () => {
       lastSubmittedPromptRef: { current: null },
       hadToolCallsRef: { current: true },
     });
-
-    const { result } = renderHook(() =>
-      useInputHandling({
-        buffer: harness.buffer,
-        inputHistoryStore: { addInput: harness.addInput },
-        submitQuery: harness.submitQuery,
-        pendingHistoryItems: harness.pendingHistoryItems,
-        lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
-        hadToolCallsRef: harness.hadToolCallsRef,
-        todoContinuationRef: harness.todoContinuationRef,
-        isMcpReady: harness.isMcpReady,
-        addMessage: harness.addMessage,
-        needsRelogin: harness.needsRelogin,
-        appDispatch: harness.appDispatch,
-      }),
-    );
+    const { result } = renderInputHandling(harness);
 
     act(() => {
       result.current.handleFinalSubmit('   run tests   ');
@@ -193,22 +145,7 @@ describe('useInputHandling', () => {
       lastSubmittedPromptRef: { current: 'keep me' },
       hadToolCallsRef: { current: true },
     });
-
-    const { result } = renderHook(() =>
-      useInputHandling({
-        buffer: harness.buffer,
-        inputHistoryStore: { addInput: harness.addInput },
-        submitQuery: harness.submitQuery,
-        pendingHistoryItems: harness.pendingHistoryItems,
-        lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
-        hadToolCallsRef: harness.hadToolCallsRef,
-        todoContinuationRef: harness.todoContinuationRef,
-        isMcpReady: harness.isMcpReady,
-        addMessage: harness.addMessage,
-        needsRelogin: harness.needsRelogin,
-        appDispatch: harness.appDispatch,
-      }),
-    );
+    const { result } = renderInputHandling(harness);
 
     act(() => {
       result.current.handleFinalSubmit('   ');
@@ -221,65 +158,32 @@ describe('useInputHandling', () => {
     expect(harness.submitQuery).not.toHaveBeenCalled();
   });
 
-  it('queues non-slash prompt when MCP is not ready', () => {
+  it('submits non-slash prompt immediately regardless of MCP discovery state', () => {
     const harness = createHarness({
-      isMcpReady: false,
+      lastSubmittedPromptRef: { current: null },
+      hadToolCallsRef: { current: true },
     });
-
-    const { result } = renderHook(() =>
-      useInputHandling({
-        buffer: harness.buffer,
-        inputHistoryStore: { addInput: harness.addInput },
-        submitQuery: harness.submitQuery,
-        pendingHistoryItems: harness.pendingHistoryItems,
-        lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
-        hadToolCallsRef: harness.hadToolCallsRef,
-        todoContinuationRef: harness.todoContinuationRef,
-        isMcpReady: harness.isMcpReady,
-        addMessage: harness.addMessage,
-        needsRelogin: harness.needsRelogin,
-        appDispatch: harness.appDispatch,
-      }),
-    );
+    const { result } = renderInputHandling(harness);
 
     act(() => {
       result.current.handleFinalSubmit('search my files');
     });
 
-    // Should be queued, not submitted
-    expect(harness.addMessage).toHaveBeenCalledWith('search my files');
+    expect(harness.submitQuery).toHaveBeenCalledWith('search my files');
     expect(harness.addInput).toHaveBeenCalledWith('search my files');
-    expect(harness.submitQuery).not.toHaveBeenCalled();
-    // Should not reset tool call ref since submission is deferred
-    expect(harness.hadToolCallsRef.current).toBe(true);
+    expect(harness.lastSubmittedPromptRef.current).toBe('search my files');
+    expect(harness.hadToolCallsRef.current).toBe(false);
+    expect(harness.clearPause).toHaveBeenCalledTimes(1);
   });
 
-  it('lets slash commands through even when MCP is not ready', () => {
-    const harness = createHarness({
-      isMcpReady: false,
-    });
-
-    const { result } = renderHook(() =>
-      useInputHandling({
-        buffer: harness.buffer,
-        inputHistoryStore: { addInput: harness.addInput },
-        submitQuery: harness.submitQuery,
-        pendingHistoryItems: harness.pendingHistoryItems,
-        lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
-        hadToolCallsRef: harness.hadToolCallsRef,
-        todoContinuationRef: harness.todoContinuationRef,
-        isMcpReady: harness.isMcpReady,
-        addMessage: harness.addMessage,
-        needsRelogin: harness.needsRelogin,
-        appDispatch: harness.appDispatch,
-      }),
-    );
+  it('lets slash commands through to submitQuery', () => {
+    const harness = createHarness();
+    const { result } = renderInputHandling(harness);
 
     act(() => {
       result.current.handleFinalSubmit('/help');
     });
 
-    // Slash commands bypass MCP gate
     expect(harness.submitQuery).toHaveBeenCalledWith('/help');
   });
 
@@ -287,22 +191,7 @@ describe('useInputHandling', () => {
     const harness = createHarness({
       needsRelogin: true,
     });
-
-    const { result } = renderHook(() =>
-      useInputHandling({
-        buffer: harness.buffer,
-        inputHistoryStore: { addInput: harness.addInput },
-        submitQuery: harness.submitQuery,
-        pendingHistoryItems: harness.pendingHistoryItems,
-        lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
-        hadToolCallsRef: harness.hadToolCallsRef,
-        todoContinuationRef: harness.todoContinuationRef,
-        isMcpReady: harness.isMcpReady,
-        addMessage: harness.addMessage,
-        needsRelogin: harness.needsRelogin,
-        appDispatch: harness.appDispatch,
-      }),
-    );
+    const { result } = renderInputHandling(harness);
 
     act(() => {
       result.current.handleFinalSubmit('search my files');
@@ -322,22 +211,7 @@ describe('useInputHandling', () => {
       needsRelogin: true,
     });
     harness.lastSubmittedPromptRef.current = 'search my files';
-
-    const { result } = renderHook(() =>
-      useInputHandling({
-        buffer: harness.buffer,
-        inputHistoryStore: { addInput: harness.addInput },
-        submitQuery: harness.submitQuery,
-        pendingHistoryItems: harness.pendingHistoryItems,
-        lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
-        hadToolCallsRef: harness.hadToolCallsRef,
-        todoContinuationRef: harness.todoContinuationRef,
-        isMcpReady: harness.isMcpReady,
-        addMessage: harness.addMessage,
-        needsRelogin: harness.needsRelogin,
-        appDispatch: harness.appDispatch,
-      }),
-    );
+    const { result } = renderInputHandling(harness);
 
     act(() => {
       result.current.handleFinalSubmit('search my files');
@@ -355,22 +229,7 @@ describe('useInputHandling', () => {
     const harness = createHarness({
       needsRelogin: true,
     });
-
-    const { result } = renderHook(() =>
-      useInputHandling({
-        buffer: harness.buffer,
-        inputHistoryStore: { addInput: harness.addInput },
-        submitQuery: harness.submitQuery,
-        pendingHistoryItems: harness.pendingHistoryItems,
-        lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
-        hadToolCallsRef: harness.hadToolCallsRef,
-        todoContinuationRef: harness.todoContinuationRef,
-        isMcpReady: harness.isMcpReady,
-        addMessage: harness.addMessage,
-        needsRelogin: harness.needsRelogin,
-        appDispatch: harness.appDispatch,
-      }),
-    );
+    const { result } = renderInputHandling(harness);
 
     act(() => {
       result.current.handleFinalSubmit('/help');

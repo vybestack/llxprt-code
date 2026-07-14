@@ -15,7 +15,7 @@
  * Anthropic-API-permitted sampling params through to the request body.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'vitest';
 import { buildAnthropicRequestBody } from './AnthropicRequestBuilder.js';
 
 describe('buildAnthropicRequestBody model-param sanitization (Issue #2410)', () => {

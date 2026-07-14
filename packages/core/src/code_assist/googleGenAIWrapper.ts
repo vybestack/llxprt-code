@@ -45,11 +45,8 @@ export class GoogleGenAIWrapper implements ContentGenerator {
   constructor(
     config: ContentGeneratorConfig,
     httpOptions: { headers: Record<string, string> },
-    createGoogleGenAI: (
-      options: ConstructorParameters<typeof GoogleGenAIClass>[0],
-    ) => GoogleGenAI = (options) => new GoogleGenAIClass(options),
   ) {
-    const googleGenAI = createGoogleGenAI({
+    const googleGenAI: GoogleGenAI = new GoogleGenAIClass({
       apiKey: config.apiKey === '' ? undefined : config.apiKey,
       vertexai: config.vertexai,
       httpOptions,

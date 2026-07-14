@@ -18,7 +18,7 @@ import type {
 } from '../state/extensions.js';
 import type { SubagentView } from '../components/SubagentManagement/types.js';
 import { useSlashCommandProcessorCore } from './useSlashCommandProcessorCore.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 export const confirmationLogger = new DebugLogger('llxprt:ui:selection');
 export const slashCommandLogger = new DebugLogger('llxprt:ui:slash-commands');

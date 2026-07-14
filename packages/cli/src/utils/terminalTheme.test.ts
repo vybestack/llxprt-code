@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { Config, coreEvents, DebugLogger } from '@vybestack/llxprt-code-core';
+import { Config, coreEvents } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestConfig } from '../integration-tests/test-utils.js';
 

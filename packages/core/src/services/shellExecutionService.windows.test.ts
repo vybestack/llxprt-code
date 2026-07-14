@@ -7,14 +7,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as os from 'os';
 import { spawn } from 'child_process';
-import * as actualChildProcess from 'node:child_process';
 
-const mockPlatform = vi.hoisted(() => vi.fn());
-
-vi.mock('os', () => ({
-  platform: mockPlatform,
-  default: { platform: mockPlatform },
-}));
+vi.mock('os');
 
 // create a controllable fake child each time spawn is called
 type Listener = (...args: unknown[]) => void;
@@ -31,10 +25,13 @@ const fakeChildFactory = () => {
   return child;
 };
 
-vi.mock('child_process', () => ({
-  ...actualChildProcess,
-  spawn: vi.fn(() => fakeChildFactory()),
-}));
+vi.mock('child_process', async (orig) => {
+  const mod = await orig();
+  return {
+    ...mod,
+    spawn: vi.fn(() => fakeChildFactory()),
+  };
+});
 
 vi.mock('../utils/systemEncoding.js', () => ({
   getSystemEncoding: vi.fn().mockReturnValue('shift_jis'),

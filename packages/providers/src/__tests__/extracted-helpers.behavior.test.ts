@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -142,16 +142,16 @@ describe('extracted provider helper behavior', () => {
       }
     }
 
-    const collectionPromise = collectChunks(
-      wrapWithTimeout(
-        delayedFirstChunk(),
-        1,
-        'timeout-profile',
-        debugLoggerStub(),
+    await expect(
+      collectChunks(
+        wrapWithTimeout(
+          delayedFirstChunk(),
+          1,
+          'timeout-profile',
+          debugLoggerStub(),
+        ),
       ),
-    );
-    expect(collectionPromise).rejects.toThrow('Request timeout after 1ms');
-    await collectionPromise.catch(() => undefined);
+    ).rejects.toThrow('Request timeout after 1ms');
     expect(closed).toBe(true);
     expect(isTimeoutError(new Error('Request timeout after 1ms'))).toBe(true);
   });

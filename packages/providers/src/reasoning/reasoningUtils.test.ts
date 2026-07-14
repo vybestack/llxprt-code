@@ -6,7 +6,7 @@
  * @requirement REQ-THINK-002.1, REQ-THINK-002.2, REQ-THINK-002.3, REQ-THINK-002.4
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type {
   IContent,
   ThinkingBlock,

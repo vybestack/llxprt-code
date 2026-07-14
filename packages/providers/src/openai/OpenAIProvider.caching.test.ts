@@ -5,18 +5,28 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-const mockChatCreate = vi.fn();
-const mockOpenAIConstructor = vi.fn().mockImplementation(() => ({
-  chat: {
-    completions: {
-      create: mockChatCreate,
+const { mockChatCreate, mockOpenAIConstructor } = vi.hoisted(() => {
+  const chatCreate = vi.fn();
+  const openAIConstructorMock = vi.fn().mockImplementation(() => ({
+    chat: {
+      completions: {
+        create: chatCreate,
+      },
     },
-  },
-}));
+  }));
+  return {
+    mockChatCreate: chatCreate,
+    mockOpenAIConstructor: openAIConstructorMock,
+  };
+});
 
 let settingsServiceRef: { current: SettingsService } = {
   current: new SettingsService(),
 };
+
+vi.mock('openai', () => ({
+  default: mockOpenAIConstructor,
+}));
 
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
@@ -25,6 +35,14 @@ vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 // REQ-RETRY-001: retryWithBackoff removed from providers
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   isNetworkTransientError: vi.fn(() => false),
+}));
+
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
+  getSettingsService: () => settingsServiceRef.current,
+  SETTINGS_REGISTRY: [],
 }));
 
 describe('OpenAIProvider cache metrics extraction', () => {
@@ -84,14 +102,9 @@ describe('OpenAIProvider cache metrics extraction', () => {
     settingsService.set('streaming', 'enabled');
     settingsService.setProviderSetting('openai', 'streaming', 'enabled');
 
-    const provider = new OpenAIProvider(
-      'test-key',
-      undefined,
-      {
-        getEphemeralSettings: () => ({ streaming: 'enabled' }),
-      },
-      { constructClient: mockOpenAIConstructor },
-    );
+    const provider = new OpenAIProvider('test-key', undefined, {
+      getEphemeralSettings: () => ({ streaming: 'enabled' }),
+    });
     provider.setRuntimeSettingsService(settingsService);
 
     const results: IContent[] = [];

@@ -23,7 +23,7 @@
  * - Interface barrels export every required contract
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { hasPublishSubscribe } from '../interfaces/index.js';
 import { ToolConfirmationOutcome } from '../types/tool-confirmation-types.js';
 import type {

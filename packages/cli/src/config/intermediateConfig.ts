@@ -9,8 +9,8 @@ import {
   isRipgrepAvailable,
   type ApprovalMode,
   type PolicyEngineConfig,
-  DebugLogger,
 } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { createPolicyEngineConfig } from './policy.js';
 import {
   resolveNonInteractiveExcludes,

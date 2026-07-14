@@ -3,7 +3,6 @@
  * Split from profileApplication.test.ts during #2092 lint hardening.
  */
 
-import { createRequire } from 'node:module';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import {
@@ -28,14 +27,13 @@ import {
   restoreGcpEnvVars,
 } from './profileApplicationTestSetup.js';
 
-const require = createRequire(import.meta.url);
-const actualFs =
-  require('node:fs/promises') as typeof import('node:fs/promises');
-
-vi.mock('node:fs/promises', () => ({
-  ...actualFs,
-  readFile: vi.fn(),
-}));
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    readFile: vi.fn(),
+  };
+});
 
 const mockFs = await import('node:fs/promises');
 
@@ -71,7 +69,7 @@ describe('STEP 2 workflow: pre-switch auth wiring', () => {
     vi.clearAllMocks();
   });
   it('sets auth-keyfile ephemeral and provider setting from keyfile before switch', async () => {
-    mockFs.readFile.mockResolvedValue('keyfile-api-key');
+    vi.mocked(mockFs.readFile).mockResolvedValue('keyfile-api-key');
 
     providerManagerStub.available = ['anthropic'];
     providerManagerStub.providerLookup = new Map([
@@ -151,6 +149,44 @@ describe('STEP 2 workflow: pre-switch auth wiring', () => {
     expect(configStub.getEphemeralSetting('auth-key')).toBeUndefined();
   });
 
+  it('applies the exact issue 2477 Z.ai profile without Gemini fallback', async () => {
+    keyStorageStub.getKey.mockResolvedValueOnce('resolved-zai-key');
+    providerManagerStub.available = ['anthropic'];
+    providerManagerStub.providerLookup = new Map([
+      ['anthropic', { name: 'anthropic' }],
+    ]);
+    setActiveModelMock.mockResolvedValueOnce({ nextModel: 'glm-5.2' });
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'anthropic',
+      model: 'glm-5.2',
+      modelParams: {},
+      ephemeralSettings: {
+        'auth-key-name': 'zai',
+        'base-url': 'https://api.z.ai/api/anthropic',
+        'context-limit': 200000,
+      },
+    };
+
+    const result = await applyProfileWithGuards(profile);
+
+    expect(result.providerName).toBe('anthropic');
+    expect(result.modelName).toBe('glm-5.2');
+    expect(result.baseUrl).toBe('https://api.z.ai/api/anthropic');
+    expect(settingsServiceStub.getProviderSettings('anthropic')).toMatchObject({
+      'base-url': 'https://api.z.ai/api/anthropic',
+      'auth-key': 'resolved-zai-key',
+    });
+    expect(configStub.getEphemeralSetting('auth-key-name')).toBe('zai');
+    expect(keyStorageStub.getKey).toHaveBeenCalledWith('zai');
+    expect(updateActiveProviderApiKeyMock).toHaveBeenCalledWith(
+      'resolved-zai-key',
+    );
+    expect(setActiveModelMock).toHaveBeenCalledWith('glm-5.2');
+    expect(setActiveModelMock).not.toHaveBeenCalledWith('gemini-2.5-pro');
+  });
+
   it('adds warning when auth-key-name is missing from secure storage', async () => {
     keyStorageStub.getKey.mockResolvedValueOnce(null);
 
@@ -212,7 +248,7 @@ describe('STEP 2 workflow: pre-switch auth wiring', () => {
   });
 
   it('falls back to direct auth-key when keyfile read returns empty content', async () => {
-    mockFs.readFile.mockResolvedValue('   ');
+    vi.mocked(mockFs.readFile).mockResolvedValue('   ');
 
     providerManagerStub.available = ['openai'];
     providerManagerStub.providerLookup = new Map([

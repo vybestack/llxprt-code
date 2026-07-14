@@ -42,7 +42,7 @@ import {
 } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
 import * as metrics from '@vybestack/llxprt-code-telemetry/telemetry/metrics.js';
 import * as sdk from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
-import { vi, describe, beforeEach, afterEach, it, expect } from 'bun:test';
+import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
 import * as uiTelemetry from './uiTelemetry.js';
 
 // Mock ClearcutLogger to avoid import errors
@@ -250,7 +250,7 @@ describe('loggers', () => {
     } as unknown as Config;
 
     beforeEach(() => {
-      vi.spyOn(metrics, 'recordModelRoutingMetrics').mockClear();
+      vi.spyOn(metrics, 'recordModelRoutingMetrics');
     });
 
     it('should log the event to OTEL and record metrics', () => {

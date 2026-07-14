@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import {
   coerceMessageContentToString,
   sanitizeToolArgumentsString,

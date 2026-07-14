@@ -166,8 +166,8 @@ export class ProviderManager implements IProviderManager {
   setConfig(config: Config): void {
     const hadConfig = Boolean(this.config);
     const oldLoggingEnabled =
-      this.config?.getConversationLoggingEnabled?.() ?? false;
-    const newLoggingEnabled = config.getConversationLoggingEnabled?.() ?? false;
+      this.config?.getConversationLoggingEnabled() ?? false;
+    const newLoggingEnabled = config.getConversationLoggingEnabled();
 
     this.config = config;
     this.runtime = this.runtime
@@ -193,9 +193,7 @@ export class ProviderManager implements IProviderManager {
    * @requirement REQ-SP4-004
    */
   setRuntimeContext(runtime: ProviderRuntimeContext): void {
-    const currentActiveProvider = this.settingsService
-      ? this.getActiveProviderName()
-      : '';
+    const currentActiveProvider = this.getActiveProviderName();
     this.runtime = runtime;
     this.settingsService = asSettingsService(runtime.settingsService);
     this.config = runtime.config ?? this.config;
@@ -436,7 +434,7 @@ export class ProviderManager implements IProviderManager {
     this.providerCapabilities.set(provider.name, capabilities);
 
     // Log provider capability information if logging enabled
-    if (this.config?.getConversationLoggingEnabled?.() === true) {
+    if (this.config?.getConversationLoggingEnabled() === true) {
       const context = this.capabilitiesService.createProviderContext(
         provider,
         capabilities,

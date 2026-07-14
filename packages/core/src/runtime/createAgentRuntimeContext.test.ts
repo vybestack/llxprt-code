@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createAgentRuntimeContext } from './createAgentRuntimeContext.js';
 import type {
   AgentRuntimeContextFactoryOptions,
@@ -422,6 +422,22 @@ describe('createAgentRuntimeContext', () => {
 
       const context = createAgentRuntimeContext(options);
       expect(context.ephemerals.reasoning.stripFromContext()).toBe('none');
+    });
+
+    it('should default reasoning.fieldName to "reasoning_content" when not set', () => {
+      const options: AgentRuntimeContextFactoryOptions = {
+        state: mockState,
+        settings: {},
+        provider: mockProviderAdapter,
+        telemetry: mockTelemetryAdapter,
+        tools: mockToolsView,
+        providerRuntime: mockProviderRuntime,
+      };
+
+      const context = createAgentRuntimeContext(options);
+      expect(context.ephemerals.reasoning.fieldName()).toBe(
+        'reasoning_content',
+      );
     });
   });
 

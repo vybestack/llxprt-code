@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import {
   BaseToolInvocation,
   normalizeConfirmationOutcome,
@@ -297,7 +297,7 @@ describe('BaseToolInvocation message bus capabilities', () => {
         'test-tool',
       );
 
-      expect(
+      await expect(
         invocation.callPublishPolicyUpdate(
           ToolConfirmationOutcome.ProceedAlways,
         ),

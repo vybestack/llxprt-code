@@ -12,7 +12,7 @@
  * These tests verify the components work together correctly.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AsyncTaskManager } from '../asyncTaskManager.js';
 import { AsyncTaskReminderService } from '../asyncTaskReminderService.js';
 import { AsyncTaskAutoTrigger } from '../asyncTaskAutoTrigger.js';

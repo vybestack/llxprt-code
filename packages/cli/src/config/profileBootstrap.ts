@@ -11,21 +11,16 @@
  */
 
 import {
-  MessageBus,
+  type MessageBus,
   type ProviderRuntimeContext,
+  resolveRuntimeSettingsService,
 } from '@vybestack/llxprt-code-core';
-import { resolveRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
 import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
-import {
-  disposeCliRuntime,
-  registerCliProviderInfrastructure,
-  setCliRuntimeContext,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 export const DEFAULT_RUNTIME_ID = 'cli.runtime.bootstrap';
 
@@ -408,67 +403,29 @@ export async function prepareRuntimeForProfile(
   };
 
   // Config may not exist yet during early CLI bootstrap (chicken-and-egg:
-  // Config is created later in loadCliConfig after profile resolution).
-  // Both createProviderManager and registerCliProviderInfrastructure
-  // already guard against undefined config.
+  // Config is created later in loadCliConfig after profile resolution). The
+  // providers assembly helper guards against undefined config.
   const runtimeConfig = runtimeInit.config;
 
-  try {
-    // Bind the CLI runtime identity BEFORE creating/registering infrastructure
-    // so resolution is deterministic (issue #2300).
-    setCliRuntimeContext(settingsService, runtimeConfig, {
-      runtimeId,
-      metadata,
-    });
+  // Delegate the ordered provider-runtime assembly (identity binding, session
+  // MessageBus construction, provider/OAuth manager creation, and CLI infra
+  // registration) to the providers package. Bus ownership lives inside that
+  // helper (#2378) — the CLI supplies declarative context only and never
+  // constructs a MessageBus itself.
+  const assembled = assembleCliProviderRuntime({
+    settingsService,
+    config: runtimeConfig,
+    runtimeId,
+    metadata,
+    oauthSettings: createOAuthSettingsAdapter(),
+  });
 
-    const runtime = {
-      settingsService,
-      config: runtimeConfig,
-      runtimeId,
-      metadata,
-    } as ProviderRuntimeContext;
-    const runtimeMessageBus =
-      runtimeInit.messageBus ??
-      (runtimeConfig
-        ? new MessageBus(
-            runtimeConfig.getPolicyEngine(),
-            runtimeConfig.getDebugMode(),
-          )
-        : new MessageBus());
-
-    const { manager: providerManager, oauthManager } = createProviderManager(
-      runtime,
-      {
-        config: runtime.config,
-        runtimeMessageBus,
-        oauthSettings: createOAuthSettingsAdapter(),
-      },
-    );
-
-    registerCliProviderInfrastructure(providerManager, oauthManager, {
-      messageBus: runtimeMessageBus,
-      runtimeId,
-      metadata,
-    });
-
-    return {
-      runtime,
-      runtimeMessageBus,
-      providerManager,
-      oauthManager,
-    };
-  } catch (error) {
-    try {
-      disposeCliRuntime(runtimeId);
-    } catch (cleanupError) {
-      // Preserve the original bootstrap failure; cleanup errors are secondary.
-      logger.debug(
-        () =>
-          `[profileBootstrap] disposeCliRuntime('${runtimeId}') failed during error recovery: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
-      );
-    }
-    throw error;
-  }
+  return {
+    runtime: assembled.runtime,
+    runtimeMessageBus: assembled.runtimeMessageBus,
+    providerManager: assembled.providerManager as ProviderManager,
+    oauthManager: assembled.oauthManager,
+  };
 }
 
 function isProfileValidationResult(

@@ -11,14 +11,16 @@
  */
 
 import {
-  type BucketFailoverHandler,
-  DebugLogger,
   flushRuntimeAuthScope,
-  type FailoverContext,
-  type BucketFailureReason,
   type OAuthToken,
   type OAuthTokenRequestMetadata,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-auth';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type {
+  BucketFailoverHandler,
+  FailoverContext,
+} from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { BucketFailureReason } from '@vybestack/llxprt-code-core/runtime/contracts/index.js';
 import type { BucketFailoverOAuthManagerLike } from './types.js';
 
 const logger = new DebugLogger('llxprt:bucket:failover:handler');
@@ -64,7 +66,6 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   private lastFailoverReasons: Record<string, BucketFailureReason> = {};
 
   private readonly configuredAuthRetryTimeoutMs: number;
-  private readonly flushAuthScope: (runtimeId: string) => void;
 
   static readonly DEFAULT_AUTH_RETRY_TIMEOUT_MS = 30000;
 
@@ -73,10 +74,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     provider: string,
     oauthManager: BucketFailoverOAuthManagerLike,
     metadata?: OAuthTokenRequestMetadata,
-    options?: {
-      authRetryTimeoutMs?: number;
-      flushAuthScope?: (runtimeId: string) => void;
-    },
+    options?: { authRetryTimeoutMs?: number },
   ) {
     this.buckets = buckets;
     this.currentBucketIndex = 0;
@@ -87,7 +85,6 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     this.configuredAuthRetryTimeoutMs =
       options?.authRetryTimeoutMs ??
       BucketFailoverHandlerImpl.DEFAULT_AUTH_RETRY_TIMEOUT_MS;
-    this.flushAuthScope = options?.flushAuthScope ?? flushRuntimeAuthScope;
 
     // Align the handler state with any existing session override.
     const sessionBucket = this.oauthManager.getSessionBucket(
@@ -737,7 +734,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
    * Called at turn boundaries and after auth errors.
    */
   invalidateAuthCache(runtimeId: string): void {
-    this.flushAuthScope(runtimeId);
+    flushRuntimeAuthScope(runtimeId);
     logger.debug('Auth cache invalidated for runtime', { runtimeId });
   }
 }

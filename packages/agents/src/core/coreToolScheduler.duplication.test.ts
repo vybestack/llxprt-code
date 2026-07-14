@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
@@ -196,20 +196,6 @@ async function waitForStatus(
   return undefined;
 }
 
-async function waitForCall(
-  callback: ReturnType<typeof vi.fn>,
-  timeoutMs = 5000,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (callback.mock.calls.length > 0) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error('Timed out waiting for tool completion callback');
-}
-
 describe('CoreToolScheduler Duplication Prevention', () => {
   it('should prevent duplicate confirmation processing for the same callId', async () => {
     const mockMessageBus = createMockMessageBus();
@@ -321,8 +307,9 @@ describe('CoreToolScheduler Duplication Prevention', () => {
 
     // Wait for completion
     await schedulePromise;
-    await waitForCall(onAllToolCallsComplete);
-    expect(onAllToolCallsComplete).toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(onAllToolCallsComplete).toHaveBeenCalled();
+    });
 
     // Verify the tool executed only once
     expect(ExecutionTrackingTool.executionCount).toBe(1);
@@ -430,8 +417,9 @@ describe('CoreToolScheduler Duplication Prevention', () => {
 
     // Wait for completion
     await schedulePromise;
-    await waitForCall(onAllToolCallsComplete);
-    expect(onAllToolCallsComplete).toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(onAllToolCallsComplete).toHaveBeenCalled();
+    });
 
     // Verify the tool executed only once
     expect(ExecutionTrackingTool.executionCount).toBe(1);
@@ -545,8 +533,9 @@ describe('CoreToolScheduler Duplication Prevention', () => {
 
     // Wait for completion on scheduler1
     await schedulePromise;
-    await waitForCall(onAllToolCallsComplete1);
-    expect(onAllToolCallsComplete1).toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(onAllToolCallsComplete1).toHaveBeenCalled();
+    });
 
     // Verify the tool executed only once (scheduler1 handled it)
     expect(ExecutionTrackingTool.executionCount).toBe(1);
@@ -656,8 +645,9 @@ describe('BUG: Tool executing before user approval in DEFAULT mode', () => {
 
     // Wait for completion
     await schedulePromise;
-    await waitForCall(onAllToolCallsComplete);
-    expect(onAllToolCallsComplete).toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(onAllToolCallsComplete).toHaveBeenCalled();
+    });
 
     // Tool should execute exactly ONCE after confirmation
     expect(ExecutionTrackingTool.executionCount).toBe(1);

@@ -11,7 +11,7 @@
  * "options.invocation.getModelBehavior is not a function".
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BaseProvider,
   type NormalizedGenerateChatOptions,

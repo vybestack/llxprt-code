@@ -24,14 +24,21 @@ import {
 } from './LoggingProviderWrapper.test-helpers.js';
 
 // Mock the loggers module
-vi.mock('@vybestack/llxprt-code-core/telemetry/loggers.js', () => ({
-  logApiResponse: vi.fn(),
-  logApiError: vi.fn(),
-  logApiRequest: vi.fn(),
-  logConversationRequest: vi.fn(),
-  logConversationResponse: vi.fn(),
-  logTokenUsage: vi.fn(),
-}));
+vi.mock(
+  '@vybestack/llxprt-code-core/telemetry/loggers.js',
+  async (importOriginal) => {
+    const actual = await importOriginal<typeof loggers>();
+    return {
+      ...actual,
+      logApiResponse: vi.fn(),
+      logApiError: vi.fn(),
+      logApiRequest: vi.fn(),
+      logConversationRequest: vi.fn(),
+      logConversationResponse: vi.fn(),
+      logTokenUsage: vi.fn(),
+    };
+  },
+);
 
 describe('LoggingProviderWrapper API Telemetry', () => {
   beforeEach(() => {
@@ -69,7 +76,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       }
 
       expect(loggers.logApiResponse).toHaveBeenCalled();
-      const call = loggers.logApiResponse.mock.calls[0];
+      const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
       expect(call[0]).toBe(config);
       expect(call[1]).toMatchObject({
         model: 'stub-model',
@@ -134,7 +141,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       }
 
       expect(loggers.logApiResponse).toHaveBeenCalled();
-      const call = loggers.logApiResponse.mock.calls[0];
+      const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
       const event = call[1];
 
       expect(event.input_token_count).toBe(100);
@@ -163,15 +170,14 @@ describe('LoggingProviderWrapper API Telemetry', () => {
         }),
       );
 
-      const consume = async (): Promise<void> => {
+      await expect(async () => {
         for await (const _chunk of iterator) {
           // Consume
         }
-      };
-      await expect(consume()).rejects.toThrow('Simulated API error');
+      }).rejects.toThrow('Simulated API error');
 
       expect(loggers.logApiError).toHaveBeenCalled();
-      const call = loggers.logApiError.mock.calls[0];
+      const call = vi.mocked(loggers.logApiError).mock.calls[0];
       expect(call[0]).toBe(config);
       expect(call[1]).toMatchObject({
         model: 'error-model',
@@ -207,7 +213,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       }
 
       expect(loggers.logApiResponse).toHaveBeenCalled();
-      const call = loggers.logApiResponse.mock.calls[0];
+      const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
       // Use resolved model name for accurate /stats model tracking
       expect(call[1].model).toBe('custom-model-name');
     });
@@ -235,7 +241,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       }
 
       expect(loggers.logApiResponse).toHaveBeenCalled();
-      const call = loggers.logApiResponse.mock.calls[0];
+      const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
       expect(call[1].model).toBe('stub-model');
     });
 
@@ -272,7 +278,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
 
       // logApiResponse should be called with the resolved model name, not the default
       expect(loggers.logApiResponse).toHaveBeenCalled();
-      const call = loggers.logApiResponse.mock.calls[0];
+      const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
       // Bug: Before fix, this would be 'stub-model' (the default)
       // After fix: should be 'explicitly-requested-model' (the resolved model)
       expect(call[1].model).toBe('explicitly-requested-model');
@@ -308,7 +314,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       }
 
       expect(loggers.logApiResponse).toHaveBeenCalled();
-      const call = loggers.logApiResponse.mock.calls[0];
+      const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
       expect(call[1].finish_reasons).toStrictEqual(['stop']);
     });
 
@@ -340,7 +346,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       }
 
       expect(loggers.logApiResponse).toHaveBeenCalled();
-      const call = loggers.logApiResponse.mock.calls[0];
+      const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
       expect(call[1].finish_reasons).toStrictEqual([]);
     });
 
@@ -367,7 +373,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       }
 
       expect(loggers.logApiResponse).toHaveBeenCalled();
-      const call = loggers.logApiResponse.mock.calls[0];
+      const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
       expect(call[1].finish_reasons).toStrictEqual(['length']);
     });
 
@@ -430,7 +436,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       }
 
       expect(loggers.logApiResponse).toHaveBeenCalled();
-      const call = loggers.logApiResponse.mock.calls[0];
+      const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
       expect(call[1].finish_reasons).toStrictEqual(['end_turn']);
     });
 
@@ -491,7 +497,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       }
 
       expect(loggers.logApiResponse).toHaveBeenCalled();
-      const call = loggers.logApiResponse.mock.calls[0];
+      const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
       expect(call[1].finish_reasons).toStrictEqual(['completed']);
     });
   });

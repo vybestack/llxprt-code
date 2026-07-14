@@ -12,7 +12,7 @@
  * not mock call verification.
  */
 
-import { describe, it, expect, afterEach, vi } from 'bun:test';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';

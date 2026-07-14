@@ -17,7 +17,7 @@
  * the existing structural compatibility established in P12.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { OAuthManager } from '../oauth-manager.js';
 import type {
   OAuthManager as AuthOAuthManagerInterface,

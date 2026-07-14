@@ -13,24 +13,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { test } from '@fast-check/vitest';
 import * as fc from 'fast-check';
-
-const propertyTest = {
-  prop:
-    <Values extends unknown[]>(arbitraries: {
-      [Index in keyof Values]: fc.Arbitrary<Values[Index]>;
-    }) =>
-    (
-      name: string,
-      predicate: (...values: Values) => Promise<void> | void,
-      timeout?: number,
-    ) =>
-      it(
-        name,
-        () => fc.assert(fc.asyncProperty(...arbitraries, predicate)),
-        timeout,
-      ),
-};
 import { EventEmitter } from 'events';
 import { HookEventHandler } from '../hookEventHandler.js';
 import { HookEventName } from '../types.js';
@@ -352,7 +336,7 @@ describe('Correlated responses (DELTA-HEVT-002)', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P07
    * @requirement DELTA-HEVT-002
    */
-  propertyTest.prop([
+  test.prop([
     fc
       .string({ minLength: 1, maxLength: 128 })
       .filter((s) => s.trim().length > 0),
@@ -466,7 +450,7 @@ describe('Unsupported event name (DELTA-HEVT-003)', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P07
    * @requirement DELTA-HEVT-003
    */
-  propertyTest.prop([
+  test.prop([
     fc
       .string({ minLength: 1, maxLength: 64 })
       .filter(
@@ -637,7 +621,7 @@ describe('correlationId generation (DELTA-HBUS-003)', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P07
    * @requirement DELTA-HBUS-003
    */
-  propertyTest.prop([fc.constantFrom(...Object.values(HookEventName))])(
+  test.prop([fc.constantFrom(...Object.values(HookEventName))])(
     'METAMORPHIC: response always has non-empty correlationId @plan:PLAN-20250218-HOOKSYSTEM.P07',
     async (eventName) => {
       const localBus = new FakeMessageBus();
@@ -732,7 +716,7 @@ describe('Model translation (DELTA-HPAY-003)', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P07
    * @requirement DELTA-HEVT-002
    */
-  propertyTest.prop([
+  test.prop([
     fc.constantFrom(...Object.values(HookEventName)),
     fc.string({ minLength: 1, maxLength: 64 }),
   ])(

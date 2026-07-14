@@ -10,7 +10,6 @@ import { Storage } from '@vybestack/llxprt-code-settings';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
-import * as actualOs from 'node:os';
 import type { ChildProcess } from 'node:child_process';
 import { getProjectHash, LLXPRT_DIR } from '../utils/paths.js';
 
@@ -44,10 +43,13 @@ vi.mock('../utils/gitUtils.js', () => ({
 }));
 
 const hoistedMockHomedir = vi.hoisted(() => vi.fn());
-vi.mock('os', () => ({
-  ...actualOs,
-  homedir: hoistedMockHomedir,
-}));
+vi.mock('os', async (importOriginal) => {
+  const actual = await importOriginal<typeof os>();
+  return {
+    ...actual,
+    homedir: hoistedMockHomedir,
+  };
+});
 
 const hoistedMockDebugLogger = vi.hoisted(() => ({
   debug: vi.fn(),

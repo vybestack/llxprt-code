@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi } from 'vitest';
 import type {
   ContractContent,
   ContractGenerateContentResponse,
@@ -144,7 +144,7 @@ describe('P01 construction inversion contracts', () => {
       config.getDebugMode(),
     );
 
-    expect(config.initialize({ messageBus })).rejects.toThrow(
+    await expect(config.initialize({ messageBus })).rejects.toThrow(
       'agentClientFactory is required before Config.initialize() can create an AgentClient',
     );
   });

@@ -16,7 +16,7 @@
  * so every positive case exercises the bound Config memory surface.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { buildAgent, internalConfig } from './helpers/agentHarness.js';
 
 describe('agent.memory control @plan:PLAN-20260626-RUNTIMEBOUNDARY.P02', () => {
@@ -106,7 +106,7 @@ describe('agent.memory control @plan:PLAN-20260626-RUNTIMEBOUNDARY.P02', () => {
   it('refresh resolves without throwing @scenario:refresh @given:an agent built normally @when:agent.memory.refresh() @then:the promise resolves (no throw)', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      expect(await agent.memory.refresh()).toMatchObject({
+      await expect(agent.memory.refresh()).resolves.toMatchObject({
         memoryContent: expect.any(String),
         fileCount: expect.any(Number),
         filePaths: expect.any(Array),

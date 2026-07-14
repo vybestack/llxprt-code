@@ -25,7 +25,7 @@
  * it tests the real production code path that the bug traverses.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   AnthropicProvider,
   isAnthropicOAuthBaseURL,
@@ -48,12 +48,45 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
+vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
+  ToolFormatter: vi.fn().mockImplementation(() => ({
+    toProviderFormat: vi.fn((tools: unknown[]) => tools),
+    fromProviderFormat: vi.fn((rawToolCall: unknown) => [rawToolCall]),
+    convertGeminiToAnthropic: vi.fn(() => []),
+    convertGeminiToFormat: vi.fn(() => undefined),
+  })),
+}));
+
+vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+  getCoreSystemPromptAsync: vi.fn(
+    async () => "You are Claude Code, Anthropic's official CLI for Claude.",
+  ),
+}));
+
+vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+  getErrorStatus: vi.fn(() => undefined),
+  isNetworkTransientError: vi.fn(() => false),
+}));
+
 const sdkConstructorCalls: Array<Record<string, unknown>> = [];
 const mockMessagesCreate = vi.fn();
-const constructClient = (options: Record<string, unknown>) => {
-  sdkConstructorCalls.push({ ...options });
-  return { messages: { create: mockMessagesCreate } };
-};
+
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: vi.fn().mockImplementation((opts: Record<string, unknown>) => {
+    sdkConstructorCalls.push({ ...opts });
+    return {
+      _options: opts,
+      messages: {
+        create: mockMessagesCreate,
+      },
+      beta: {
+        models: {
+          list: vi.fn(),
+        },
+      },
+    };
+  }),
+}));
 
 const ZAI_BASE_URL = 'https://api.z.ai/api/anthropic';
 const OAUTH_TOKEN = 'sk-ant-oat-oauth-token';
@@ -237,7 +270,6 @@ describe('Issue #2411: base-URL-aware OAuth eligibility for Anthropic', () => {
           undefined,
           TEST_PROVIDER_CONFIG,
           toOAuthManager(oauthManager),
-          { constructClient },
         );
       },
       {
@@ -430,7 +462,6 @@ describe('Issue #2411: base-URL-aware OAuth eligibility for Anthropic', () => {
             undefined,
             TEST_PROVIDER_CONFIG,
             toOAuthManager(oauthManager),
-            { constructClient },
           );
         },
         {
@@ -497,7 +528,6 @@ describe('Issue #2411: base-URL-aware OAuth eligibility for Anthropic', () => {
             undefined,
             TEST_PROVIDER_CONFIG,
             toOAuthManager(oauthManager),
-            { constructClient },
           );
         },
         {

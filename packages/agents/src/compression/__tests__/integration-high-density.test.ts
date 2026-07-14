@@ -5,7 +5,7 @@
  * Integration tests verifying the high-density strategy works end-to-end
  * through the settings → factory → strategy → compression pipeline.
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { COMPRESSION_STRATEGIES } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
   getCompressionStrategy,

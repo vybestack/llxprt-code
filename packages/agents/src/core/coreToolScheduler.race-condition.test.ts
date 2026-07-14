@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
@@ -15,20 +15,6 @@ import {
   createMockMessageBus,
   createMockPolicyEngine,
 } from './coreToolScheduler-test-helpers.js';
-async function waitForCondition(
-  condition: () => boolean,
-  description: string,
-  timeoutMs: number,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (condition()) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error(`Timed out waiting for ${description}`);
-}
 
 describe('CoreToolScheduler race conditions and recovery', () => {
   it('should handle race condition when later tools complete while publishBufferedResults is exiting', async () => {
@@ -133,12 +119,12 @@ describe('CoreToolScheduler race conditions and recovery', () => {
     );
 
     // Wait for all tools to start executing and set up their resolvers
-    await waitForCondition(
-      () => resolvers.size === 5,
-      `five resolvers; received ${resolvers.size}`,
-      1000,
+    await vi.waitFor(
+      () => {
+        expect(resolvers.size).toBe(5);
+      },
+      { timeout: 1000 },
     );
-    expect(resolvers.size).toBe(5);
 
     // Now complete tools in a specific order that triggers the race condition:
     // Complete tool 3 first (middle of the batch)
@@ -164,13 +150,13 @@ describe('CoreToolScheduler race conditions and recovery', () => {
     resolvers.get(1)?.();
 
     // Wait for all calls to complete
-    await waitForCondition(
-      () => completionOrder.length === 5 && publishOrder.length === 5,
-      `five completions and publications; received ${completionOrder.length}/${publishOrder.length}`,
-      2000,
+    await vi.waitFor(
+      () => {
+        expect(completionOrder.length).toBe(5);
+        expect(publishOrder.length).toBe(5);
+      },
+      { timeout: 2000 },
     );
-    expect(completionOrder.length).toBe(5);
-    expect(publishOrder.length).toBe(5);
 
     // Verify that despite the out-of-order completion, all results were published
     // and in the correct request order
@@ -265,13 +251,13 @@ describe('CoreToolScheduler race conditions and recovery', () => {
     );
 
     // Wait for all calls to complete
-    await waitForCondition(
-      () => completionOrder.length === 5 && publishOrder.length === 5,
-      `five completions and publications; received ${completionOrder.length}/${publishOrder.length}`,
-      2000,
+    await vi.waitFor(
+      () => {
+        expect(completionOrder.length).toBe(5);
+        expect(publishOrder.length).toBe(5);
+      },
+      { timeout: 2000 },
     );
-    expect(completionOrder.length).toBe(5);
-    expect(publishOrder.length).toBe(5);
 
     // Completion order: 2, 3, 4, 5, 1 (first is slowest)
     expect(completionOrder).toStrictEqual([2, 3, 4, 5, 1]);

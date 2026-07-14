@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   parseResponsesStream,
@@ -305,13 +305,11 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
     const stream = createSSEStream(chunks);
     const iterator = parseResponsesStream(stream);
 
-    const consumptionPromise = (async (): Promise<void> => {
+    await expect(async () => {
       for await (const _message of iterator) {
         // drain
       }
-    })();
-    expect(consumptionPromise).rejects.toThrow('Internal server error');
-    await consumptionPromise.catch(() => undefined);
+    }).rejects.toThrow('Internal server error');
   });
 
   /**
@@ -326,13 +324,11 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
     const stream = createSSEStream(chunks);
     const iterator = parseResponsesStream(stream);
 
-    const consumptionPromise = (async (): Promise<void> => {
+    await expect(async () => {
       for await (const _message of iterator) {
         // drain
       }
-    })();
-    expect(consumptionPromise).rejects.toThrow('rate limit exceeded');
-    await consumptionPromise.catch(() => undefined);
+    }).rejects.toThrow('rate limit exceeded');
   });
 
   /**
@@ -348,15 +344,11 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
     const stream = createSSEStream(chunks);
     const iterator = parseResponsesStream(stream);
 
-    const consumptionPromise = (async (): Promise<void> => {
+    await expect(async () => {
       for await (const _message of iterator) {
         // drain
       }
-    })();
-    expect(consumptionPromise).rejects.toThrow(
-      'OpenAI Responses API stream failed',
-    );
-    await consumptionPromise.catch(() => undefined);
+    }).rejects.toThrow('OpenAI Responses API stream failed');
   });
 
   /**

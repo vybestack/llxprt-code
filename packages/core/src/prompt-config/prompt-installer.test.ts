@@ -5,7 +5,7 @@
  * using temporary directories to ensure the installer works correctly.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { PromptInstaller, REQUIRED_DIRECTORIES } from './prompt-installer.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';

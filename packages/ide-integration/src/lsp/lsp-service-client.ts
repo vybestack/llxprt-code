@@ -328,8 +328,12 @@ export class LspServiceClient {
       return null;
     }
 
-    const path = Buffer.concat(chunks).toString('utf8').trim();
-    return path.length > 0 ? path : null;
+    const paths = Buffer.concat(chunks)
+      .toString('utf8')
+      .split(/\r?\n/)
+      .map((candidate) => candidate.trim())
+      .filter((candidate) => candidate.length > 0);
+    return paths[0] ?? null;
   }
 
   private async pathIsExecutable(targetPath: string): Promise<boolean> {

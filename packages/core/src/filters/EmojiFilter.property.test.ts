@@ -9,7 +9,7 @@
  * These tests verify invariants that must ALWAYS hold regardless of input
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import type { FilterConfiguration } from './EmojiFilter';
 import { EmojiFilter } from './EmojiFilter';

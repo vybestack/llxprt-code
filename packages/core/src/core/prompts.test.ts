@@ -12,7 +12,7 @@ import {
   afterEach,
   beforeAll,
   afterAll,
-} from 'bun:test';
+} from 'vitest';
 import {
   getCoreSystemPromptAsync,
   initializePromptSystem,
@@ -91,12 +91,12 @@ describe('prompts', () => {
 
   describe('initializePromptSystem', () => {
     it('should initialize without errors', async () => {
-      await initializePromptSystem();
+      await expect(initializePromptSystem()).resolves.not.toThrow();
     });
 
     it('should allow multiple initializations', async () => {
-      await initializePromptSystem();
-      await initializePromptSystem();
+      await expect(initializePromptSystem()).resolves.not.toThrow();
+      await expect(initializePromptSystem()).resolves.not.toThrow();
     });
   });
 });

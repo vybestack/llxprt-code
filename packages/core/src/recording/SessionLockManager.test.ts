@@ -27,40 +27,21 @@
  * the Phase 09 stub — that is correct TDD.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, expect, beforeEach, afterEach, vi } from 'vitest';
+import { it as itProp } from '@fast-check/vitest';
 import * as fc from 'fast-check';
-
-const property =
-  <Values extends unknown[]>(
-    arbitraries: { [Index in keyof Values]: fc.Arbitrary<Values[Index]> },
-    parameters?: fc.Parameters<Values>,
-  ) =>
-  (
-    name: string,
-    predicate: (...values: Values) => Promise<void> | void,
-    timeout?: number,
-  ) =>
-    it(
-      name,
-      () => fc.assert(fc.asyncProperty(...arbitraries, predicate), parameters),
-      timeout,
-    );
-
-const itProp = Object.assign(it, { prop: property });
 import * as path from 'path';
 import * as os from 'os';
-import { writeFile as writeFileCallback } from 'node:fs';
-import { promisify } from 'node:util';
-import * as actualFsPromises from 'node:fs/promises';
 import { fork, type ChildProcess } from 'child_process';
-
-const actualWriteFile = promisify(writeFileCallback);
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 
-vi.mock('node:fs/promises', () => ({
-  ...actualFsPromises,
-  writeFile: vi.fn(actualWriteFile),
-}));
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    writeFile: vi.fn(actual.writeFile),
+  };
+});
 
 const fs = await import('node:fs/promises');
 
@@ -174,8 +155,12 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
   });
 
   afterEach(async () => {
+    const actualFs =
+      await vi.importActual<typeof import('node:fs/promises')>(
+        'node:fs/promises',
+      );
     vi.mocked(fs.writeFile).mockReset();
-    vi.mocked(fs.writeFile).mockImplementation(actualWriteFile);
+    vi.mocked(fs.writeFile).mockImplementation(actualFs.writeFile);
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 

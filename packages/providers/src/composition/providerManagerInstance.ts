@@ -38,7 +38,10 @@ import { registerStandardOAuthProviders } from './oauth-provider-registration.js
 import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
 
 import { type IProviderConfig } from '../types/IProviderConfig.js';
-import { loadProviderAliasEntries } from './providerAliases.js';
+import {
+  loadProviderAliasEntries,
+  type ProviderAliasEntry,
+} from './providerAliases.js';
 
 import {
   sanitizeApiKey,
@@ -65,9 +68,6 @@ interface ProviderManagerFactoryOptions {
   oauthSettings?: IOAuthSettingsProvider;
   addItem?: OAuthUICallback;
   runtimeMessageBus?: MessageBus;
-  loadAliasEntries?: typeof loadProviderAliasEntries;
-  registerAliasProviders?: typeof registerAliasProviders;
-  registerOAuthProviders?: typeof registerOAuthProviders;
 }
 
 type RuntimeContextShape = ProviderRuntimeContext;
@@ -362,7 +362,7 @@ function registerOAuthProviders(
 }
 
 /** Resolves OpenAI-specific settings from user settings and ephemeral overrides. */
-export function resolveOpenaiSettings(
+function resolveOpenaiSettings(
   config: Config | undefined,
   userSettings: UserSettingsView | undefined,
   authOnlyEnabled: boolean,
@@ -425,6 +425,33 @@ export function resolveOpenaiSettings(
   };
 
   return { openaiApiKey, openaiBaseUrl, openaiProviderConfig };
+}
+
+/** Registers all alias-based providers and OAuth providers on the manager. */
+function registerAllProviders(
+  manager: ProviderManager,
+  aliasEntries: ProviderAliasEntry[],
+  openaiApiKey: string | undefined,
+  openaiBaseUrl: string | undefined,
+  openaiProviderConfig: IProviderConfig,
+  oauthManager: OAuthManager,
+  tokenStore: ReturnType<typeof createTokenStore>,
+  config: Config | undefined,
+  authOnlyEnabled: boolean,
+  addItem: ProviderManagerFactoryOptions['addItem'],
+): void {
+  registerAliasProviders(
+    manager,
+    aliasEntries,
+    openaiApiKey,
+    openaiBaseUrl,
+    openaiProviderConfig,
+    oauthManager,
+    config,
+    authOnlyEnabled,
+  );
+
+  registerOAuthProviders(oauthManager, tokenStore, addItem);
 }
 
 export function createProviderManager(
@@ -497,20 +524,17 @@ export function createProviderManager(
       allowBrowserEnvironment,
     );
 
-  const aliasEntries = (options.loadAliasEntries ?? loadProviderAliasEntries)();
-  (options.registerAliasProviders ?? registerAliasProviders)(
+  const aliasEntries = loadProviderAliasEntries();
+  registerAllProviders(
     manager,
     aliasEntries,
     openaiApiKey,
     openaiBaseUrl,
     openaiProviderConfig,
     oauthManager,
+    tokenStore,
     config,
     authOnlyEnabled,
-  );
-  (options.registerOAuthProviders ?? registerOAuthProviders)(
-    oauthManager,
-    tokenStore,
     addItem,
   );
 

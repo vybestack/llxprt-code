@@ -7,7 +7,7 @@
  * Related to issue #1652: Prevents concurrent authentication and token contamination
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'bun:test';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { OAuthManager } from './oauth-manager.js';
 import type { OAuthProvider } from './types.js';
 import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-core';
@@ -392,14 +392,9 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
       };
       oauthManager.registerProvider(provider);
 
-      const authenticationPromise = oauthManager.authenticate(
-        'anthropic',
-        'default',
-      );
-      expect(authenticationPromise).rejects.toThrow(
-        'User cancelled authentication',
-      );
-      await authenticationPromise.catch(() => undefined);
+      await expect(
+        oauthManager.authenticate('anthropic', 'default'),
+      ).rejects.toThrow('User cancelled authentication');
 
       // Lock should be released despite error
       expect(tokenStore.releaseAuthLock).toHaveBeenCalledWith(
@@ -759,7 +754,9 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
       };
       oauthManager.registerProvider(provider);
 
-      await oauthManager.authenticateMultipleBuckets('anthropic', []);
+      await expect(
+        oauthManager.authenticateMultipleBuckets('anthropic', []),
+      ).resolves.toBeUndefined();
 
       expect(provider.initiateAuth).not.toHaveBeenCalled();
     });

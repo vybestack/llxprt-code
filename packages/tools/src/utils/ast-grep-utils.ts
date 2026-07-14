@@ -30,29 +30,8 @@ import ruby from '@ast-grep/lang-ruby';
 
 import * as path from 'node:path';
 
-interface AstGrepRuntime {
-  findInFiles: typeof napiFindInFiles;
-  parse: typeof napiParse;
-  registerDynamicLanguage: typeof registerDynamicLanguage;
-}
-
-const DEFAULT_RUNTIME: AstGrepRuntime = {
-  findInFiles: napiFindInFiles,
-  parse: napiParse,
-  registerDynamicLanguage,
-};
-
-let runtime = DEFAULT_RUNTIME;
 let dynamicLanguagesRegistered = false;
 let dynamicLanguagesAvailable = false;
-
-export function setAstGrepRuntimeForTesting(
-  testRuntime?: AstGrepRuntime,
-): void {
-  runtime = testRuntime ?? DEFAULT_RUNTIME;
-  dynamicLanguagesRegistered = false;
-  dynamicLanguagesAvailable = false;
-}
 
 /**
  * Register the dynamic grammar addons (python, go, rust, ...) on first use.
@@ -64,7 +43,7 @@ export function setAstGrepRuntimeForTesting(
 function ensureDynamicLanguages(): void {
   if (dynamicLanguagesRegistered) return;
   try {
-    runtime.registerDynamicLanguage({
+    registerDynamicLanguage({
       python,
       go,
       rust,
@@ -191,8 +170,7 @@ function isBuiltinLang(language: string | Lang): boolean {
 export function isAstGrepAvailable(): boolean {
   try {
     return (
-      typeof runtime.parse === 'function' &&
-      typeof runtime.findInFiles === 'function'
+      typeof napiParse === 'function' && typeof napiFindInFiles === 'function'
     );
   } catch {
     return false;
@@ -216,7 +194,7 @@ export function parseSource(
           'ast-grep dynamic grammars are unavailable (native addon load failed)',
       };
     }
-    const result = runtime.parse(language as Lang, content);
+    const result = napiParse(language as Lang, content);
     return { root: result };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -243,7 +221,7 @@ export function parse(
       'ast-grep dynamic grammars are unavailable (native addon load failed)',
     );
   }
-  return runtime.parse(language as Lang, content);
+  return napiParse(language as Lang, content);
 }
 
 /**
@@ -258,7 +236,7 @@ export function findInFiles(
   ...args: Parameters<typeof napiFindInFiles>
 ): ReturnType<typeof napiFindInFiles> {
   ensureDynamicLanguages();
-  return runtime.findInFiles(...args);
+  return napiFindInFiles(...args);
 }
 
 // Re-export the Lang enum directly (enum, no native side effects).

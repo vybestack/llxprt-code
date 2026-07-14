@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fsPromises from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -24,6 +24,14 @@ import { LLXPRT_DIR } from './paths.js';
 import type { LlxprtExtension } from '../config/config.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
+vi.mock('os', async (importOriginal) => {
+  const actualOs = await importOriginal<typeof os>();
+  return {
+    ...actualOs,
+    homedir: vi.fn(),
+  };
+});
+
 // Simple extension loader for testing
 class SimpleExtensionLoader {
   constructor(private extensions: LlxprtExtension[]) {}
@@ -38,7 +46,6 @@ describe('memoryDiscovery subfunctions', () => {
   let cwd: string;
   let projectRoot: string;
   let homedir: string;
-  let memoryPaths: import('./memoryDiscovery.js').MemoryDiscoveryPaths;
 
   async function createEmptyDir(fullPath: string) {
     await fsPromises.mkdir(fullPath, { recursive: true });
@@ -56,17 +63,14 @@ describe('memoryDiscovery subfunctions', () => {
       path.join(os.tmpdir(), 'folder-structure-test-'),
     );
 
-    vi.restoreAllMocks();
+    vi.resetAllMocks();
     process.env.NODE_ENV = 'test';
     process.env.VITEST = 'true';
 
     projectRoot = await createEmptyDir(path.join(testRootDir, 'project'));
     cwd = await createEmptyDir(path.join(projectRoot, 'src'));
     homedir = await createEmptyDir(path.join(testRootDir, 'userhome'));
-    memoryPaths = {
-      homeDirectory: homedir,
-      globalCoreMemoryFile: path.join(homedir, LLXPRT_DIR, '.LLXPRT_SYSTEM'),
-    };
+    vi.mocked(os.homedir).mockReturnValue(homedir);
     const llxprtDir = path.join(homedir, LLXPRT_DIR);
     vi.spyOn(Storage, 'getGlobalLlxprtDir').mockImplementation(() => llxprtDir);
     vi.spyOn(Storage, 'getGlobalConfigDir').mockImplementation(() => llxprtDir);
@@ -76,7 +80,6 @@ describe('memoryDiscovery subfunctions', () => {
   });
 
   afterEach(async () => {
-    vi.restoreAllMocks();
     setLlxprtMdFilename(DEFAULT_CONTEXT_FILENAME);
     await fsPromises.rm(testRootDir, { recursive: true, force: true });
   });
@@ -95,11 +98,6 @@ describe('memoryDiscovery subfunctions', () => {
         new FileDiscoveryService(projectRoot),
         [],
         DEFAULT_FOLDER_TRUST,
-        'tree',
-        undefined,
-        200,
-        undefined,
-        memoryPaths,
       );
 
       expect(result.filePaths).toContain(projectLlxprtFile);
@@ -123,11 +121,6 @@ describe('memoryDiscovery subfunctions', () => {
         new FileDiscoveryService(projectRoot),
         [],
         DEFAULT_FOLDER_TRUST,
-        'tree',
-        undefined,
-        200,
-        undefined,
-        memoryPaths,
       );
 
       expect(result.filePaths).toContain(projectLlxprtFile);
@@ -153,11 +146,6 @@ describe('memoryDiscovery subfunctions', () => {
         new FileDiscoveryService(projectRoot),
         [],
         DEFAULT_FOLDER_TRUST,
-        'tree',
-        undefined,
-        200,
-        undefined,
-        memoryPaths,
       );
 
       expect(result.filePaths).toContain(directFile);
@@ -179,11 +167,6 @@ describe('memoryDiscovery subfunctions', () => {
         new FileDiscoveryService(projectRoot),
         [],
         DEFAULT_FOLDER_TRUST,
-        'tree',
-        undefined,
-        200,
-        undefined,
-        memoryPaths,
       );
 
       expect(result.filePaths).toContain(globalFile);
@@ -201,7 +184,7 @@ describe('memoryDiscovery subfunctions', () => {
         'Global memory content',
       );
 
-      const result = await loadGlobalMemory(false, memoryPaths);
+      const result = await loadGlobalMemory();
 
       expect(result.files).toHaveLength(1);
       expect(result.files[0].path).toBe(globalMemoryFile);
@@ -209,7 +192,7 @@ describe('memoryDiscovery subfunctions', () => {
     });
 
     it('should return empty content if global memory file does not exist', async () => {
-      const result = await loadGlobalMemory(false, memoryPaths);
+      const result = await loadGlobalMemory();
 
       expect(result.files).toHaveLength(0);
     });
@@ -228,12 +211,7 @@ describe('memoryDiscovery subfunctions', () => {
         } as LlxprtExtension,
       ]);
 
-      const result = await loadEnvironmentMemory(
-        [],
-        mockExtensionLoader,
-        false,
-        memoryPaths,
-      );
+      const result = await loadEnvironmentMemory([], mockExtensionLoader);
 
       expect(result.files).toHaveLength(1);
       expect(result.files[0].path).toBe(extFile);
@@ -262,8 +240,6 @@ describe('memoryDiscovery subfunctions', () => {
       const result = await loadEnvironmentMemory(
         [srcDir],
         new SimpleExtensionLoader([]),
-        false,
-        memoryPaths,
       );
 
       expect(result.files).toHaveLength(1);
@@ -287,16 +263,12 @@ describe('memoryDiscovery subfunctions', () => {
       const resultNotes = await loadEnvironmentMemory(
         [notesDir],
         new SimpleExtensionLoader([]),
-        false,
-        memoryPaths,
       );
       expect(resultNotes.files).toHaveLength(0);
 
       const resultDocs = await loadEnvironmentMemory(
         [docsDir],
         new SimpleExtensionLoader([]),
-        false,
-        memoryPaths,
       );
       expect(resultDocs.files).toHaveLength(1);
       expect(resultDocs.files[0].path).toBe(docsFile);
@@ -315,8 +287,6 @@ describe('memoryDiscovery subfunctions', () => {
       const result = await loadEnvironmentMemory(
         [repoDir, repoDir],
         new SimpleExtensionLoader([]),
-        false,
-        memoryPaths,
       );
 
       expect(result.files).toHaveLength(1);
@@ -343,8 +313,6 @@ describe('memoryDiscovery subfunctions', () => {
       const result = await loadEnvironmentMemory(
         [dir],
         new SimpleExtensionLoader([]),
-        false,
-        memoryPaths,
       );
 
       expect(result.files).toHaveLength(2);
@@ -367,8 +335,6 @@ describe('memoryDiscovery subfunctions', () => {
       const result = await loadEnvironmentMemory(
         [trustedRoot],
         new SimpleExtensionLoader([]),
-        false,
-        memoryPaths,
       );
 
       expect(result.files).toHaveLength(1);
@@ -393,8 +359,6 @@ describe('memoryDiscovery subfunctions', () => {
       const result = await loadEnvironmentMemory(
         [trustedRoot],
         new SimpleExtensionLoader([]),
-        false,
-        memoryPaths,
       );
 
       expect(result.files).toHaveLength(2);
@@ -416,8 +380,6 @@ describe('memoryDiscovery subfunctions', () => {
       const result = await loadEnvironmentMemory(
         [trustedRoot],
         new SimpleExtensionLoader([]),
-        false,
-        memoryPaths,
       );
 
       const globalFileOccurrences = result.files.filter(
@@ -619,7 +581,7 @@ describe('memoryDiscovery subfunctions', () => {
         'Global core memory',
       );
 
-      const result = await loadCoreMemory([], false, memoryPaths);
+      const result = await loadCoreMemory([]);
 
       expect(result.files).toHaveLength(1);
       expect(result.files[0].path).toBe(globalCoreFile);
@@ -636,7 +598,7 @@ describe('memoryDiscovery subfunctions', () => {
         'Project core memory',
       );
 
-      const result = await loadCoreMemory([trustedRoot], false, memoryPaths);
+      const result = await loadCoreMemory([trustedRoot]);
 
       expect(result.files).toHaveLength(1);
       expect(result.files[0].path).toBe(projectCoreFile);
@@ -658,7 +620,7 @@ describe('memoryDiscovery subfunctions', () => {
         'Project core memory',
       );
 
-      const result = await loadCoreMemory([trustedRoot], false, memoryPaths);
+      const result = await loadCoreMemory([trustedRoot]);
 
       expect(result.files).toHaveLength(2);
       expect(result.files.map((f) => f.path)).toStrictEqual([
@@ -672,7 +634,7 @@ describe('memoryDiscovery subfunctions', () => {
         path.join(testRootDir, 'core_root'),
       );
 
-      const result = await loadCoreMemory([trustedRoot], false, memoryPaths);
+      const result = await loadCoreMemory([trustedRoot]);
 
       expect(result.files).toHaveLength(0);
     });

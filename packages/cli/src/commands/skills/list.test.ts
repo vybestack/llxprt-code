@@ -9,7 +9,11 @@ import { format } from 'node:util';
 import { handleList, listCommand } from './list.js';
 import { loadSettings, type LoadedSettings } from '../../config/settings.js';
 import { loadCliConfig } from '../../config/config.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+import {
+  discoverSkillsForConfig,
+  type SkillDefinition,
+  type Config,
+} from '@vybestack/llxprt-code-core';
 import chalk from 'chalk';
 
 const emitConsoleLog = vi.hoisted(() => vi.fn());
@@ -27,11 +31,24 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
     await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
   return {
     ...actual,
-    coreEvents: {
-      emitConsoleLog,
-    },
-    debugLogger,
+    // discoverSkillsForConfig owns the session MessageBus + Config.initialize
+    // lifecycle (behaviorally tested in core/skills/skillDiscovery.test.ts).
+    // Here it is stubbed as the external boundary so these tests focus on the
+    // command's display/filtering behavior. The command does not emit through
+    // core events; logging goes through the telemetry-package debugLogger,
+    // whose owner is mocked below.
+    discoverSkillsForConfig: vi.fn(),
   };
+});
+
+// list.ts logs through the telemetry-package debugLogger (its owner after
+// #2378), so mock THAT package here — not core — to capture the command's
+// output via the emitConsoleLog spy while core events stay real.
+vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-telemetry')>();
+  Object.assign(actual.debugLogger, debugLogger);
+  return actual;
 });
 
 vi.mock('../../config/settings.js');
@@ -40,15 +57,29 @@ vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
+function skill(overrides: Partial<SkillDefinition>): SkillDefinition {
+  return {
+    name: 'skill',
+    description: 'desc',
+    location: '/path/to/skill',
+    body: 'body',
+    disabled: false,
+    ...overrides,
+  } as SkillDefinition;
+}
+
 describe('skills list command', () => {
   const mockLoadSettings = vi.mocked(loadSettings);
   const mockLoadCliConfig = vi.mocked(loadCliConfig);
+  const mockDiscoverSkills = vi.mocked(discoverSkillsForConfig);
+  const mockConfig = {} as unknown as Config;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     mockLoadSettings.mockReturnValue({
       merged: {},
     } as unknown as LoadedSettings);
+    mockLoadCliConfig.mockResolvedValue(mockConfig);
   });
 
   afterEach(() => {
@@ -56,16 +87,17 @@ describe('skills list command', () => {
   });
 
   describe('handleList', () => {
+    it('discovers skills through the public core discovery API (no CLI-owned runtime assembly)', async () => {
+      mockDiscoverSkills.mockResolvedValue([]);
+
+      await handleList();
+
+      expect(mockDiscoverSkills).toHaveBeenCalledTimes(1);
+      expect(mockDiscoverSkills).toHaveBeenCalledWith(mockConfig);
+    });
+
     it('should log a message if no skills are discovered', async () => {
-      const mockConfig = {
-        initialize: vi.fn().mockResolvedValue(undefined),
-        getSkillManager: vi.fn().mockReturnValue({
-          getAllSkills: vi.fn().mockReturnValue([]),
-        }),
-        getPolicyEngine: vi.fn().mockReturnValue(null),
-        getDebugMode: vi.fn().mockReturnValue(false),
-      };
-      mockLoadCliConfig.mockResolvedValue(mockConfig as unknown as Config);
+      mockDiscoverSkills.mockResolvedValue([]);
 
       await handleList();
 
@@ -76,29 +108,22 @@ describe('skills list command', () => {
     });
 
     it('should list all discovered skills', async () => {
-      const skills = [
-        {
+      mockDiscoverSkills.mockResolvedValue([
+        skill({
           name: 'skill1',
           description: 'desc1',
           disabled: false,
           location: '/path/to/skill1',
-        },
-        {
+          source: 'user',
+        }),
+        skill({
           name: 'skill2',
           description: 'desc2',
           disabled: true,
           location: '/path/to/skill2',
-        },
-      ];
-      const mockConfig = {
-        initialize: vi.fn().mockResolvedValue(undefined),
-        getSkillManager: vi.fn().mockReturnValue({
-          getAllSkills: vi.fn().mockReturnValue(skills),
+          source: 'project',
         }),
-        getPolicyEngine: vi.fn().mockReturnValue(null),
-        getDebugMode: vi.fn().mockReturnValue(false),
-      };
-      mockLoadCliConfig.mockResolvedValue(mockConfig as unknown as Config);
+      ]);
 
       await handleList();
 
@@ -122,6 +147,33 @@ describe('skills list command', () => {
         'log',
         expect.stringContaining(chalk.red('[Disabled]')),
       );
+    });
+
+    it('filters out built-in skills by default and includes them with showAll', async () => {
+      mockDiscoverSkills.mockResolvedValue([
+        skill({ name: 'user-skill', source: 'user' }),
+        skill({ name: 'builtin-skill', source: 'builtin' }),
+      ]);
+
+      await handleList(false);
+
+      const loggedDefault = emitConsoleLog.mock.calls
+        .map((c) => c[1])
+        .join('\n');
+      expect(loggedDefault).toContain('user-skill');
+      expect(loggedDefault).not.toContain('builtin-skill');
+
+      emitConsoleLog.mockClear();
+      mockDiscoverSkills.mockResolvedValue([
+        skill({ name: 'user-skill', source: 'user' }),
+        skill({ name: 'builtin-skill', source: 'builtin' }),
+      ]);
+
+      await handleList(true);
+
+      const loggedAll = emitConsoleLog.mock.calls.map((c) => c[1]).join('\n');
+      expect(loggedAll).toContain('user-skill');
+      expect(loggedAll).toContain('builtin-skill');
     });
 
     it('should throw an error when listing fails', async () => {

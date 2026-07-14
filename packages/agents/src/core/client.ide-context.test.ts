@@ -9,14 +9,16 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { vi } from 'vitest';
-import type { Content } from '@google/genai';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
-import { setupGeminiClient } from './client-test-helpers.js';
+import {
+  setupGeminiClient,
+  type MockResponseShape,
+} from './client-test-helpers.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 // Mock prompts module before imports
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -49,19 +51,19 @@ const {
   mockGenerateContentFn,
   mockEmbedContentFn,
   mockTurnRunFn,
-} = {
+} = vi.hoisted(() => ({
   mockChatCreateFn: vi.fn(),
   mockGenerateContentFn: vi.fn(),
   mockEmbedContentFn: vi.fn(),
   mockTurnRunFn: vi.fn(),
-};
+}));
 
 const {
   todoStoreReadMock,
   todoStoreReadPausedMock,
   todoStoreWritePausedMock,
   mockTodoStoreConstructor,
-} = (() => {
+} = vi.hoisted(() => {
   const readMock = vi.fn();
   const readPausedMock = vi.fn();
   const writePausedMock = vi.fn();
@@ -76,11 +78,8 @@ const {
     todoStoreWritePausedMock: writePausedMock,
     mockTodoStoreConstructor: constructorMock,
   };
-})();
+});
 
-vi.mock('@google/genai', () => ({
-  GoogleGenAI: vi.fn(),
-}));
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -105,14 +104,28 @@ vi.mock(
     })),
   }),
 );
-vi.mock('@vybestack/llxprt-code-tools', () => ({
-  LocalTodoStore: vi.fn().mockImplementation(() => ({
-    readTodos: vi.fn().mockResolvedValue([]),
-    readPausedState: vi.fn().mockResolvedValue(false),
-    writePausedState: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  return {
+    ...actual,
+    LocalTodoStore: mockTodoStoreConstructor,
+  };
+});
+vi.mock('./turn', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./turn.js')>();
+  class MockTurn {
+    pendingToolCalls = [];
+    run = mockTurnRunFn;
+    constructor() {}
+  }
+  return {
+    ...actual,
+    Turn: MockTurn,
+  };
+});
 
+vi.mock('@vybestack/llxprt-code-core/config/config.js');
 vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));
@@ -122,22 +135,38 @@ vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
-    getResponseText: (result: GenerateContentResponse) =>
+    getResponseText: (result: MockResponseShape) =>
       result.candidates?.[0]?.content?.parts
         ?.map((part) => part.text)
         .join('') ?? undefined,
   }),
 );
+vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
+  logApiRequest: vi.fn(),
+  logApiResponse: vi.fn(),
+  logApiError: vi.fn(),
+}));
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ideContext: {
-    getIdeContext: vi.fn(),
-    subscribeToIdeContext: vi.fn(),
-    setIdeContext: vi.fn(),
-    clearIdeContext: vi.fn(),
-  },
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    ideContext: {
+      ...actual.ideContext,
+      getIdeContext: vi.fn(),
+      subscribeToIdeContext: vi.fn(),
+      setIdeContext: vi.fn(),
+      clearIdeContext: vi.fn(),
+    },
+  };
+});
+vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
+  tokenLimit: vi.fn(),
 }));
 vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
@@ -146,7 +175,7 @@ vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   },
 }));
 
-describe('Gemini Client (client.ts)', () => {
+describe('AgentClient (client.ts)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
@@ -154,7 +183,6 @@ describe('Gemini Client (client.ts)', () => {
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,
-      createTurn: () => ({ run: mockTurnRunFn }) as never,
     });
     client = ctx.client;
 
@@ -198,7 +226,7 @@ describe('Gemini Client (client.ts)', () => {
         client['contentGenerator'] = mockGenerator as ContentGenerator;
 
         vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
-        ideContext.getIdeContext.mockReturnValue({
+        vi.mocked(ideContext.getIdeContext).mockReturnValue({
           workspaceState: {
             openFiles: [{ path: '/path/to/file.ts', timestamp: Date.now() }],
           },
@@ -206,15 +234,25 @@ describe('Gemini Client (client.ts)', () => {
       });
 
       it('should NOT add IDE context when a tool call is pending', async () => {
-        // Arrange: History ends with a functionCall from the model
-        const historyWithPendingCall: Content[] = [
-          { role: 'user', parts: [{ text: 'Please use a tool.' }] },
+        // Arrange: History ends with a tool_call from the model
+        const historyWithPendingCall: IContent[] = [
           {
-            role: 'model',
-            parts: [{ functionCall: { name: 'some_tool', args: {} } }],
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Please use a tool.' }],
+          },
+          {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: '',
+                name: 'some_tool',
+                parameters: {},
+              },
+            ],
           },
         ];
-        mockChat.getHistory!.mockReturnValue(historyWithPendingCall);
+        vi.mocked(mockChat.getHistory!).mockReturnValue(historyWithPendingCall);
         // Also spy on the client's getHistory to ensure it returns the right value
         vi.spyOn(client, 'getHistory').mockResolvedValue(
           historyWithPendingCall,
@@ -224,10 +262,10 @@ describe('Gemini Client (client.ts)', () => {
         const stream = client.sendMessageStream(
           [
             {
-              functionResponse: {
-                name: 'some_tool',
-                response: { success: true },
-              },
+              type: 'tool_response',
+              callId: 'some_tool',
+              toolName: 'some_tool',
+              result: { success: true },
             },
           ],
           new AbortController().signal,
@@ -238,7 +276,7 @@ describe('Gemini Client (client.ts)', () => {
         }
 
         // Assert: The IDE context message should NOT have been added to the history.
-        const addHistoryCalls = mockChat.addHistory.mock.calls;
+        const addHistoryCalls = vi.mocked(mockChat.addHistory).mock.calls;
         const contextCall = addHistoryCalls.find((call) =>
           JSON.stringify(call[0]).includes("user's editor context"),
         );
@@ -247,15 +285,22 @@ describe('Gemini Client (client.ts)', () => {
 
       it('should add IDE context when no tool call is pending', async () => {
         // Arrange: History is normal, no pending calls
-        const normalHistory: Content[] = [
-          { role: 'user', parts: [{ text: 'A normal message.' }] },
-          { role: 'model', parts: [{ text: 'A normal response.' }] },
+        const normalHistory: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'A normal message.' }],
+          },
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'A normal response.' }],
+          },
         ];
-        mockChat.getHistory!.mockReturnValue(normalHistory);
+        vi.mocked(mockChat.getHistory!).mockReturnValue(normalHistory);
+        vi.spyOn(client, 'getHistory').mockResolvedValue(normalHistory);
 
         // Act
         const stream = client.sendMessageStream(
-          [{ text: 'Another normal message' }],
+          [{ type: 'text', text: 'Another normal message' }],
           new AbortController().signal,
           'prompt-id-normal',
         );
@@ -264,7 +309,7 @@ describe('Gemini Client (client.ts)', () => {
         }
 
         // Assert: The IDE context message SHOULD have been added.
-        const addHistoryCalls = mockChat.addHistory.mock.calls;
+        const addHistoryCalls = vi.mocked(mockChat.addHistory).mock.calls;
         const contextCall = addHistoryCalls.find((call) =>
           JSON.stringify(call[0]).includes("user's editor context"),
         );
@@ -274,15 +319,25 @@ describe('Gemini Client (client.ts)', () => {
       it('should send the latest IDE context on the next message after a skipped context', async () => {
         // --- Step 1: A tool call is pending, context should be skipped ---
 
-        // Arrange: History ends with a functionCall
-        const historyWithPendingCall: Content[] = [
-          { role: 'user', parts: [{ text: 'Please use a tool.' }] },
+        // Arrange: History ends with a tool_call
+        const historyWithPendingCall: IContent[] = [
           {
-            role: 'model',
-            parts: [{ functionCall: { name: 'some_tool', args: {} } }],
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Please use a tool.' }],
+          },
+          {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: '',
+                name: 'some_tool',
+                parameters: {},
+              },
+            ],
           },
         ];
-        mockChat.getHistory!.mockReturnValue(historyWithPendingCall);
+        vi.mocked(mockChat.getHistory!).mockReturnValue(historyWithPendingCall);
         vi.spyOn(client, 'getHistory').mockResolvedValue(
           historyWithPendingCall,
         );
@@ -293,16 +348,16 @@ describe('Gemini Client (client.ts)', () => {
             openFiles: [{ path: '/path/to/fileA.ts', timestamp: Date.now() }],
           },
         };
-        ideContext.getIdeContext.mockReturnValue(initialIdeContext);
+        vi.mocked(ideContext.getIdeContext).mockReturnValue(initialIdeContext);
 
         // Act: Send the tool response
         let stream = client.sendMessageStream(
           [
             {
-              functionResponse: {
-                name: 'some_tool',
-                response: { success: true },
-              },
+              type: 'tool_response',
+              callId: 'some_tool',
+              toolName: 'some_tool',
+              result: { success: true },
             },
           ],
           new AbortController().signal,
@@ -313,7 +368,7 @@ describe('Gemini Client (client.ts)', () => {
         }
 
         // Assert: The initial context was NOT sent
-        const addHistoryCalls = mockChat.addHistory.mock.calls;
+        const addHistoryCalls = vi.mocked(mockChat.addHistory).mock.calls;
         const contextCall = addHistoryCalls.find((call) =>
           JSON.stringify(call[0]).includes("user's editor context"),
         );
@@ -322,25 +377,32 @@ describe('Gemini Client (client.ts)', () => {
         // --- Step 2: A new message is sent, latest context should be included ---
 
         // Arrange: The model has responded to the tool, and the user is sending a new message.
-        const historyAfterToolResponse: Content[] = [
+        const historyAfterToolResponse: IContent[] = [
           ...historyWithPendingCall,
           {
-            role: 'user',
-            parts: [
+            speaker: 'tool',
+            blocks: [
               {
-                functionResponse: {
-                  name: 'some_tool',
-                  response: { success: true },
-                },
+                type: 'tool_response',
+                callId: 'some_tool',
+                toolName: 'some_tool',
+                result: { success: true },
               },
             ],
           },
-          { role: 'model', parts: [{ text: 'The tool ran successfully.' }] },
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'The tool ran successfully.' }],
+          },
         ];
-        mockChat.getHistory!.mockReturnValue(historyAfterToolResponse);
+        vi.mocked(mockChat.getHistory!).mockReturnValue(
+          historyAfterToolResponse,
+        );
         // Also update the client's getHistory spy
-        client.getHistory.mockResolvedValue(historyAfterToolResponse);
-        mockChat.addHistory!.mockClear(); // Clear previous calls for the next assertion
+        vi.mocked(client.getHistory).mockResolvedValue(
+          historyAfterToolResponse,
+        );
+        vi.mocked(mockChat.addHistory!).mockClear(); // Clear previous calls for the next assertion
 
         // Arrange: The IDE context has now changed
         const newIdeContext = {
@@ -348,11 +410,11 @@ describe('Gemini Client (client.ts)', () => {
             openFiles: [{ path: '/path/to/fileB.ts', timestamp: Date.now() }],
           },
         };
-        ideContext.getIdeContext.mockReturnValue(newIdeContext);
+        vi.mocked(ideContext.getIdeContext).mockReturnValue(newIdeContext);
 
         // Act: Send a new, regular user message
         stream = client.sendMessageStream(
-          [{ text: 'Thanks!' }],
+          [{ type: 'text', text: 'Thanks!' }],
           new AbortController().signal,
           'prompt-id-final',
         );
@@ -361,7 +423,7 @@ describe('Gemini Client (client.ts)', () => {
         }
 
         // Assert: The NEW context was sent as a FULL context because there was no previously sent context.
-        const finalAddHistoryCalls = mockChat.addHistory!.mock.calls;
+        const finalAddHistoryCalls = vi.mocked(mockChat.addHistory!).mock.calls;
         const finalContextCall = finalAddHistoryCalls.find((call) =>
           JSON.stringify(call[0]).includes("user's editor context"),
         );
@@ -377,7 +439,7 @@ describe('Gemini Client (client.ts)', () => {
 
       it('should send a context DELTA on the next message after a skipped context', async () => {
         // --- Step 0: Establish an initial context ---
-        mockChat.getHistory!.mockReturnValue([]); // Start with empty history
+        vi.mocked(mockChat.getHistory!).mockReturnValue([]); // Start with empty history
         vi.spyOn(client, 'getHistory').mockResolvedValue([]);
         const contextA = {
           workspaceState: {
@@ -390,11 +452,11 @@ describe('Gemini Client (client.ts)', () => {
             ],
           },
         };
-        ideContext.getIdeContext.mockReturnValue(contextA);
+        vi.mocked(ideContext.getIdeContext).mockReturnValue(contextA);
 
         // Act: Send a regular message to establish the initial context
         let stream = client.sendMessageStream(
-          [{ text: 'Initial message' }],
+          [{ type: 'text', text: 'Initial message' }],
           new AbortController().signal,
           'prompt-id-initial',
         );
@@ -403,23 +465,33 @@ describe('Gemini Client (client.ts)', () => {
         }
 
         // Assert: Full context for fileA.ts was sent and stored.
-        const initialCall = mockChat.addHistory!.mock.calls[0][0];
+        const initialCall = vi.mocked(mockChat.addHistory!).mock.calls[0][0];
         expect(JSON.stringify(initialCall)).toContain(
           "user's editor context as a JSON object",
         );
         expect(JSON.stringify(initialCall)).toContain('fileA.ts');
         // This implicitly tests that `lastSentIdeContext` is now set internally by the client.
-        mockChat.addHistory!.mockClear();
+        vi.mocked(mockChat.addHistory!).mockClear();
 
         // --- Step 1: A tool call is pending, context should be skipped ---
-        const historyWithPendingCall: Content[] = [
-          { role: 'user', parts: [{ text: 'Please use a tool.' }] },
+        const historyWithPendingCall: IContent[] = [
           {
-            role: 'model',
-            parts: [{ functionCall: { name: 'some_tool', args: {} } }],
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Please use a tool.' }],
+          },
+          {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: '',
+                name: 'some_tool',
+                parameters: {},
+              },
+            ],
           },
         ];
-        mockChat.getHistory!.mockReturnValue(historyWithPendingCall);
+        vi.mocked(mockChat.getHistory!).mockReturnValue(historyWithPendingCall);
         vi.spyOn(client, 'getHistory').mockResolvedValue(
           historyWithPendingCall,
         );
@@ -436,16 +508,16 @@ describe('Gemini Client (client.ts)', () => {
             ],
           },
         };
-        ideContext.getIdeContext.mockReturnValue(contextB);
+        vi.mocked(ideContext.getIdeContext).mockReturnValue(contextB);
 
         // Act: Send the tool response
         stream = client.sendMessageStream(
           [
             {
-              functionResponse: {
-                name: 'some_tool',
-                response: { success: true },
-              },
+              type: 'tool_response',
+              callId: 'some_tool',
+              toolName: 'some_tool',
+              result: { success: true },
             },
           ],
           new AbortController().signal,
@@ -456,27 +528,34 @@ describe('Gemini Client (client.ts)', () => {
         }
 
         // Assert: No context was sent
-        expect(mockChat.addHistory.mock.calls).toHaveLength(0);
+        expect(vi.mocked(mockChat.addHistory).mock.calls).toHaveLength(0);
 
         // --- Step 2: A new message is sent, latest context DELTA should be included ---
-        const historyAfterToolResponse: Content[] = [
+        const historyAfterToolResponse: IContent[] = [
           ...historyWithPendingCall,
           {
-            role: 'user',
-            parts: [
+            speaker: 'tool',
+            blocks: [
               {
-                functionResponse: {
-                  name: 'some_tool',
-                  response: { success: true },
-                },
+                type: 'tool_response',
+                callId: 'some_tool',
+                toolName: 'some_tool',
+                result: { success: true },
               },
             ],
           },
-          { role: 'model', parts: [{ text: 'The tool ran successfully.' }] },
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'The tool ran successfully.' }],
+          },
         ];
-        mockChat.getHistory!.mockReturnValue(historyAfterToolResponse);
+        vi.mocked(mockChat.getHistory!).mockReturnValue(
+          historyAfterToolResponse,
+        );
         // Also update the client's getHistory spy
-        client.getHistory.mockResolvedValue(historyAfterToolResponse);
+        vi.mocked(client.getHistory).mockResolvedValue(
+          historyAfterToolResponse,
+        );
 
         // Arrange: The IDE context has changed again
         const contextC = {
@@ -491,11 +570,11 @@ describe('Gemini Client (client.ts)', () => {
             ],
           },
         };
-        ideContext.getIdeContext.mockReturnValue(contextC);
+        vi.mocked(ideContext.getIdeContext).mockReturnValue(contextC);
 
         // Act: Send a new, regular user message
         stream = client.sendMessageStream(
-          [{ text: 'Thanks!' }],
+          [{ type: 'text', text: 'Thanks!' }],
           new AbortController().signal,
           'prompt-id-final',
         );
@@ -504,7 +583,7 @@ describe('Gemini Client (client.ts)', () => {
         }
 
         // Assert: The DELTA context was sent
-        const finalCall = mockChat.addHistory!.mock.calls[0][0];
+        const finalCall = vi.mocked(mockChat.addHistory!).mock.calls[0][0];
         expect(JSON.stringify(finalCall)).toContain('summary of changes');
         // The delta should reflect fileA being closed and fileC being opened.
         expect(JSON.stringify(finalCall)).toContain('filesClosed');

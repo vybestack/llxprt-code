@@ -4,11 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import {
-  OAuthManager,
-  defaultOAuthManagerUsageDependencies,
-} from './oauth-manager.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { OAuthManager } from './oauth-manager.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from './types.js';
 import type {
   IOAuthSettingsProvider,
@@ -558,7 +555,7 @@ describe.skipIf(skipInCI)(
           manager as unknown as { toggleOAuthEnabled: typeof mockToggle }
         ).toggleOAuthEnabled = mockToggle;
 
-        expect(
+        await expect(
           (
             manager as unknown as { toggleOAuthEnabled: typeof mockToggle }
           ).toggleOAuthEnabled('unknown'),
@@ -599,7 +596,7 @@ describe.skipIf(skipInCI)(
           manager as unknown as { isOAuthEnabled: typeof mockIsEnabled }
         ).isOAuthEnabled = mockIsEnabled;
 
-        expect(manager.getToken('failing')).rejects.toThrow(
+        await expect(manager.getToken('failing')).rejects.toThrow(
           'OAuth flow failed',
         );
       });
@@ -674,10 +671,9 @@ describe.skipIf(skipInCI)(
           scope: 'read',
         });
 
-        expect(await manager.listBuckets('device-code-test')).toStrictEqual([
-          'personal',
-          'work',
-        ]);
+        await expect(
+          manager.listBuckets('device-code-test'),
+        ).resolves.toStrictEqual(['personal', 'work']);
       });
 
       it('prefers an explicit bucket over a single configured profile bucket during auth fallback', async () => {
@@ -858,18 +854,7 @@ describe('Higher priority auth detection', () => {
     const settingsService = new SettingsService();
     registerSettingsService(settingsService);
 
-    const manager = new OAuthManager(
-      tokenStore,
-      loadedSettings,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      {
-        ...defaultOAuthManagerUsageDependencies,
-        getHigherPriorityAuth: async () => null,
-      },
-    );
+    const manager = new OAuthManager(tokenStore, loadedSettings);
 
     settingsService.set('authOnly', true);
 

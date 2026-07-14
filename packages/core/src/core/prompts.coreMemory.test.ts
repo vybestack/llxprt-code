@@ -24,12 +24,13 @@ import process from 'node:process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import * as actualFsPromises from 'node:fs/promises';
-import * as actualSettings from '../../../settings/index.ts';
 
-vi.mock('node:fs/promises', () => {
+const PROJECT_DIR = path.resolve('/my/project');
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
   return {
-    ...actualFsPromises,
+    ...actual,
     readFile: vi
       .fn()
       .mockRejectedValue(
@@ -42,8 +43,10 @@ const mockSettingsService = {
   get: vi.fn().mockReturnValue(undefined),
   set: vi.fn(),
 };
-vi.mock('@vybestack/llxprt-code-settings', () => ({
-  ...actualSettings,
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
   getSettingsService: () => mockSettingsService,
 }));
 
@@ -105,7 +108,7 @@ describe('Core (System) Memory', () => {
             typeof filePath === 'string' ? filePath : filePath.toString();
           if (
             pathStr.includes('.LLXPRT_SYSTEM') &&
-            pathStr.includes('/my/project')
+            pathStr.includes(PROJECT_DIR)
           ) {
             return 'Use pnpm for this project';
           }
@@ -113,7 +116,7 @@ describe('Core (System) Memory', () => {
         },
       );
 
-      const result = await loadCoreMemoryContent('/my/project');
+      const result = await loadCoreMemoryContent(PROJECT_DIR);
       expect(result).toContain('Use pnpm for this project');
     });
 
@@ -130,7 +133,7 @@ describe('Core (System) Memory', () => {
           }
           if (
             pathStr.includes('.LLXPRT_SYSTEM') &&
-            pathStr.includes('/my/project')
+            pathStr.includes(PROJECT_DIR)
           ) {
             return 'Project directive';
           }
@@ -138,7 +141,7 @@ describe('Core (System) Memory', () => {
         },
       );
 
-      const result = await loadCoreMemoryContent('/my/project');
+      const result = await loadCoreMemoryContent(PROJECT_DIR);
       expect(result).toContain('Global directive');
       expect(result).toContain('Project directive');
     });
@@ -158,7 +161,7 @@ describe('Core (System) Memory', () => {
         },
       );
 
-      const result = await loadCoreMemoryContent('/my/project');
+      const result = await loadCoreMemoryContent(PROJECT_DIR);
       expect(result).toBe('');
     });
   });

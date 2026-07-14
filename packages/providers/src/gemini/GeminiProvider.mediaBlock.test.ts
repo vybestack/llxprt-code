@@ -14,28 +14,45 @@
  * limitations under the License.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { vi } from '../../../../test-setup/vi-compat.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { GeminiProvider } from './GeminiProvider.js';
-import type { GoogleGenAI, GoogleGenAIOptions } from '@google/genai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-const generateContentStreamMock = vi.fn();
+const generateContentStreamMock = vi.hoisted(() => vi.fn());
 
-const googleGenAIConstructor = vi.fn(
-  (_options: GoogleGenAIOptions): GoogleGenAI =>
-    ({
-      models: {
-        generateContentStream: generateContentStreamMock,
-      },
-    }) as unknown as GoogleGenAI,
+const googleGenAIConstructor = vi.hoisted(() =>
+  vi.fn().mockImplementation(() => ({
+    models: {
+      generateContentStream: generateContentStreamMock,
+    },
+  })),
 );
 
-const createProvider = (): GeminiProvider =>
-  new GeminiProvider('test-key', undefined, undefined, async (options) =>
-    googleGenAIConstructor(options),
-  );
+vi.mock('@google/genai', () => ({
+  GoogleGenAI: googleGenAIConstructor,
+  Type: { OBJECT: 'object' },
+}));
+
+vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+  getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
+}));
+
+const mockSettingsService = vi.hoisted(() => ({
+  set: vi.fn(),
+  get: vi.fn(),
+  getProviderSettings: vi.fn().mockReturnValue({}),
+  updateSettings: vi.fn(),
+  getAllGlobalSettings: vi.fn().mockReturnValue({}),
+}));
+
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
+  getSettingsService: vi.fn(() => mockSettingsService),
+  SETTINGS_REGISTRY: [],
+}));
 
 describe('GeminiProvider - MediaBlock support', () => {
   const originalGeminiApiKey = process.env.GEMINI_API_KEY;
@@ -71,7 +88,7 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = createProvider();
+    const provider = new GeminiProvider('test-key');
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -133,7 +150,7 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = createProvider();
+    const provider = new GeminiProvider('test-key');
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -204,7 +221,7 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = createProvider();
+    const provider = new GeminiProvider('test-key');
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -259,7 +276,7 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = createProvider();
+    const provider = new GeminiProvider('test-key');
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -313,7 +330,7 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = createProvider();
+    const provider = new GeminiProvider('test-key');
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -368,7 +385,7 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = createProvider();
+    const provider = new GeminiProvider('test-key');
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -423,7 +440,7 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = createProvider();
+    const provider = new GeminiProvider('test-key');
     const contents: IContent[] = [
       {
         speaker: 'human',

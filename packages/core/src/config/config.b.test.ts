@@ -5,13 +5,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as nodeFs from 'node:fs';
-import * as actualTools from '../../../tools/index.ts';
-import * as actualSettings from '../../../settings/index.ts';
-import * as actualIdeIntegration from '../../../ide-integration/index.ts';
-import { coreEvents as actualCoreEvents } from '../utils/events.js';
 import type { Mock } from 'vitest';
 import type { ContractContent } from '../core/clientContract.js';
+import type { IContent } from '../services/history/IContent.js';
 import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from './config.js';
 import * as path from 'node:path';
 import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
@@ -22,16 +18,6 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestConfig } from '../test-utils/config.js';
 import {
   AgentClient,
-  buildContentGeneratorMockBody,
-  buildEventsMockBody,
-  buildFetchMockBody,
-  buildFsMockBody,
-  buildGitServiceMockBody,
-  buildIdeIntegrationMockBody,
-  buildMemoryDiscoveryMockBody,
-  buildSettingsMockBody,
-  buildTelemetryMockBody,
-  buildToolsMockBody,
   createBaseParams,
   resetAgentClientMock,
   sharedConfigTestConstants,
@@ -52,26 +38,64 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
   setGlobalProxy: vi.fn(),
 }));
 
-vi.mock('fs', () => buildFsMockBody(nodeFs));
-vi.mock('@vybestack/llxprt-code-tools', () => buildToolsMockBody(actualTools));
-vi.mock('../core/contentGenerator.js', () =>
-  buildContentGeneratorMockBody({ createContentGeneratorConfig }),
-);
-vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
-vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
-vi.mock('@vybestack/llxprt-code-settings', () =>
-  buildSettingsMockBody(actualSettings),
-);
-vi.mock('@vybestack/llxprt-code-ide-integration', () =>
-  buildIdeIntegrationMockBody(actualIdeIntegration),
-);
-vi.mock('../utils/memoryDiscovery.js', () =>
-  buildMemoryDiscoveryMockBody(hoistedConfigMocks),
-);
-vi.mock('../utils/events.js', () =>
-  buildEventsMockBody({ coreEvents: actualCoreEvents }, hoistedConfigMocks),
-);
-vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
+vi.mock('fs', async (importOriginal) => {
+  const h = await import('./configTestHarness.js');
+  return h.buildFsMockBody(await importOriginal());
+});
+
+// Mock dependencies that might be called during Config construction or createServerConfig.
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const h = await import('./configTestHarness.js');
+  return h.buildToolsMockBody(
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>(),
+  );
+});
+
+// Mock individual tools if their constructors are complex or have side effects
+
+vi.mock('../core/contentGenerator.js', async (importOriginal) => {
+  const h = await import('./configTestHarness.js');
+  return h.buildContentGeneratorMockBody(await importOriginal());
+});
+
+vi.mock('../telemetry/index.js', async () => {
+  const h = await import('./configTestHarness.js');
+  return h.buildTelemetryMockBody();
+});
+
+vi.mock('../services/gitService.js', async () => {
+  const h = await import('./configTestHarness.js');
+  return h.buildGitServiceMockBody();
+});
+
+vi.mock('@vybestack/llxprt-code-settings', async () => {
+  const h = await import('./configTestHarness.js');
+  return h.buildSettingsMockBody();
+});
+
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const h = await import('./configTestHarness.js');
+  return h.buildIdeIntegrationMockBody(
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >(),
+  );
+});
+
+vi.mock('../utils/memoryDiscovery.js', async () => {
+  const h = await import('./configTestHarness.js');
+  return h.buildMemoryDiscoveryMockBody(hoistedConfigMocks);
+});
+
+vi.mock('../utils/events.js', async (importOriginal) => {
+  const h = await import('./configTestHarness.js');
+  return h.buildEventsMockBody(await importOriginal(), hoistedConfigMocks);
+});
+
+vi.mock('../utils/fetch.js', async () => {
+  const h = await import('./configTestHarness.js');
+  return h.buildFetchMockBody(hoistedConfigMocks);
+});
 
 describe('Server Config (config.ts)', () => {
   const baseParams = createBaseParams(
@@ -176,6 +200,55 @@ describe('Server Config (config.ts)', () => {
 
       // Verify that initialize was called after storing history
       expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);
+    });
+
+    it('preserves carried history when the previous client is not yet initialized (#2500)', async () => {
+      // Reproduces the --continue second-rebuild scenario: the previous
+      // client was created by an earlier refreshAuth + finalizeAgent. It
+      // holds restored conversation in `_previousHistory` (surfaced via
+      // getHistory()) but its chat/content generator were never lazily
+      // initialized (isInitialized() === false). The old `!isInitialized()`
+      // guard in extractExistingState discarded that history, so --continue
+      // lost model context. getHistory() must still be consulted.
+      const config = new Config(baseParams);
+      const mockContentConfig = {
+        model: 'gemini-pro',
+        apiKey: 'test-key',
+      };
+      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+
+      const carriedHistory: ContractContent[] = [
+        { role: 'user', parts: [{ text: 'Remember the passphrase' }] },
+        { role: 'model', parts: [{ text: 'PURPLE-TANGERINE-7741' }] },
+      ];
+
+      const mockExistingClient = {
+        isInitialized: vi.fn().mockReturnValue(false),
+        hasChatInitialized: vi.fn().mockReturnValue(false),
+        getHistory: vi.fn().mockResolvedValue(carriedHistory),
+        getHistoryService: vi.fn().mockReturnValue(null),
+      };
+
+      const mockNewClient = {
+        isInitialized: vi.fn().mockReturnValue(true),
+        getHistory: vi.fn().mockResolvedValue([]),
+        getHistoryService: vi.fn().mockReturnValue(null),
+        initialize: vi.fn().mockResolvedValue(undefined),
+        storeHistoryForLaterUse: vi.fn(),
+      };
+
+      (
+        config as unknown as { agentClient: typeof mockExistingClient }
+      ).agentClient = mockExistingClient;
+      AgentClient.mockImplementation(() => mockNewClient);
+
+      await config.refreshAuth();
+
+      // The carried history must be recovered despite !isInitialized().
+      expect(mockExistingClient.getHistory).toHaveBeenCalled();
+      expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalledWith(
+        carriedHistory,
+      );
     });
 
     it('preserves committed chat history without waiting for an active turn to become idle', async () => {
@@ -294,16 +367,16 @@ describe('Server Config (config.ts)', () => {
         vertexai: true,
       });
 
-      const mockExistingHistory: ContractContent[] = [
+      const mockExistingHistory: IContent[] = [
         {
-          role: 'model',
-          parts: [
+          speaker: 'ai',
+          blocks: [
             {
-              text: 'Hidden reasoning',
-              thought: true,
-              thoughtSignature: 'genai-signature',
+              type: 'thinking',
+              thought: 'Hidden reasoning',
+              signature: 'genai-signature',
             },
-            { text: 'Visible response' },
+            { type: 'text', text: 'Visible response' },
           ],
         },
       ];
@@ -337,13 +410,13 @@ describe('Server Config (config.ts)', () => {
         mockNewClient.storeHistoryForLaterUse.mock.calls[0][0];
       expect(storedHistory).toStrictEqual([
         {
-          role: 'model',
-          parts: [
+          speaker: 'ai',
+          blocks: [
             {
-              text: 'Hidden reasoning',
-              thought: true,
+              type: 'thinking',
+              thought: 'Hidden reasoning',
             },
-            { text: 'Visible response' },
+            { type: 'text', text: 'Visible response' },
           ],
         },
       ]);

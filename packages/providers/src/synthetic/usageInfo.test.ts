@@ -4,21 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { fetchSyntheticUsage, formatSyntheticUsage } from './usageInfo.js';
 
 describe('syntheticUsageInfo', () => {
   describe('fetchSyntheticUsage', () => {
-    const originalFetch = globalThis.fetch;
-    const fetchMock = vi.fn<typeof fetch>();
+    let fetchMock: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
-      globalThis.fetch = fetchMock;
+      fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
     });
 
     afterEach(() => {
-      globalThis.fetch = originalFetch;
-      fetchMock.mockReset();
+      vi.restoreAllMocks();
     });
 
     it('should return null for empty API key', async () => {
@@ -171,7 +170,14 @@ describe('syntheticUsageInfo', () => {
   });
 
   describe('formatSyntheticUsage', () => {
-    const now = new Date('2026-02-11T18:00:00Z');
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-02-11T18:00:00Z'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
 
     it('should format subscription with remaining and reset time', () => {
       const usage = {
@@ -182,7 +188,7 @@ describe('syntheticUsageInfo', () => {
         },
       };
 
-      const result = formatSyntheticUsage(usage, now);
+      const result = formatSyntheticUsage(usage);
       expect(result).toHaveLength(1);
       expect(result[0]).toContain('Subscription');
       expect(result[0]).toContain('372.7/1350');
@@ -200,7 +206,7 @@ describe('syntheticUsageInfo', () => {
         },
       };
 
-      const result = formatSyntheticUsage(usage, now);
+      const result = formatSyntheticUsage(usage);
       expect(result).toHaveLength(1);
       expect(result[0]).toContain('Tool calls');
       expect(result[0]).toContain('4384/16200');
@@ -218,7 +224,7 @@ describe('syntheticUsageInfo', () => {
         },
       };
 
-      const result = formatSyntheticUsage(usage, now);
+      const result = formatSyntheticUsage(usage);
       expect(result).toHaveLength(1);
       expect(result[0]).toContain('Search (hourly)');
       expect(result[0]).toContain('100/250');
@@ -246,7 +252,7 @@ describe('syntheticUsageInfo', () => {
         },
       };
 
-      const result = formatSyntheticUsage(usage, now);
+      const result = formatSyntheticUsage(usage);
       expect(result).toHaveLength(3);
       expect(result[0]).toContain('Subscription');
       expect(result[1]).toContain('Tool calls');
@@ -256,7 +262,7 @@ describe('syntheticUsageInfo', () => {
     it('should handle missing optional fields', () => {
       const usage = {};
 
-      const result = formatSyntheticUsage(usage, now);
+      const result = formatSyntheticUsage(usage);
       expect(result).toHaveLength(0);
     });
 
@@ -265,7 +271,7 @@ describe('syntheticUsageInfo', () => {
         subscription: null,
       };
 
-      const result = formatSyntheticUsage(usage, now);
+      const result = formatSyntheticUsage(usage);
       expect(result).toHaveLength(0);
     });
 
@@ -278,7 +284,7 @@ describe('syntheticUsageInfo', () => {
         },
       };
 
-      const result = formatSyntheticUsage(usage, now);
+      const result = formatSyntheticUsage(usage);
       expect(result).toHaveLength(1);
       expect(result[0]).toContain('soon');
     });
@@ -290,7 +296,7 @@ describe('syntheticUsageInfo', () => {
         },
       };
 
-      const result = formatSyntheticUsage(usage, now);
+      const result = formatSyntheticUsage(usage);
       expect(result).toHaveLength(0);
     });
   });

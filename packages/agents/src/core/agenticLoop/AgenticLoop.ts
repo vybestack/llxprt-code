@@ -33,7 +33,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { PartListUnion } from '@google/genai';
+import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   AgentEventType,
   type ToolCallRequestInfo,
@@ -299,7 +299,7 @@ export class AgenticLoop {
    * with CLI top-level prompt ids that use the session counter namespace.
    */
   async *run(
-    message: PartListUnion,
+    message: AgentMessageInput,
     signal: AbortSignal,
     promptId?: string,
   ): AsyncGenerator<AgenticLoopEvent> {
@@ -342,12 +342,12 @@ export class AgenticLoop {
    * next message to send (functionResponse parts) if so.
    */
   private async *runTurn(
-    message: PartListUnion,
+    message: AgentMessageInput,
     signal: AbortSignal,
     promptId: string,
   ): AsyncGenerator<
     AgenticLoopEvent,
-    { continueLoop: boolean; nextMessage: PartListUnion }
+    { continueLoop: boolean; nextMessage: AgentMessageInput }
   > {
     const toolCallRequests: ToolCallRequestInfo[] = [];
     const streamResult = yield* this.streamAndCollect(
@@ -428,7 +428,7 @@ export class AgenticLoop {
 
   /** Streams one model turn, yielding stream events and collecting tool requests. */
   private async *streamAndCollect(
-    message: PartListUnion,
+    message: AgentMessageInput,
     signal: AbortSignal,
     promptId: string,
     toolCallRequests: ToolCallRequestInfo[],
@@ -625,7 +625,7 @@ export class AgenticLoop {
   /** Builds the next message (functionResponse parts) from completed tools. */
   private async buildNextMessage(completed: CompletedToolCall[]): Promise<{
     continueLoop: boolean;
-    nextMessage: PartListUnion;
+    nextMessage: AgentMessageInput;
   }> {
     const { primaryTools } = classifyCompletedTools(completed);
     const geminiTools = primaryTools.filter(

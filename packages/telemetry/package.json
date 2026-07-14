@@ -97,10 +97,9 @@
     "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
-    "test": "bun test --path-ignore-patterns dist",
-    "test:ci": "bun test --path-ignore-patterns dist",
-    "typecheck": "tsc --noEmit",
-    "test:vitest": "vitest run --config ./vitest.config.ts"
+    "test": "vitest run",
+    "test:ci": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "files": [
     "index.ts",
@@ -114,7 +113,6 @@
     "dist"
   ],
   "dependencies": {
-    "@google/genai": "1.30.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.219.0",
     "@opentelemetry/core": "^2.8.0",

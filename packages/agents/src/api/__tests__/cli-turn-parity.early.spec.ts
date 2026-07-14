@@ -56,7 +56,7 @@
  * unchanged.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -156,10 +156,13 @@ function writeTempFixture(
 
 describe('CLI turn-parity (early RED) @plan:PLAN-20260621-COREAPIREMED.P07 @requirement:REQ-INT-001 @requirement:REQ-INT-002', () => {
   it('EP1 fromConfig adopts the external Config and drives a terminal done (REQ-INT-001)', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    const built = await buildCliStyleConfig('parity-toolcall.jsonl');
     try {
       const config = built.config;
-      const agent: Agent = await fromConfig({ config });
+      const agent: Agent = await fromConfig({
+        config,
+        onApproval: () => ToolConfirmationOutcome.ProceedOnce,
+      });
 
       // REQ-INT-001: the adopted Config is the SAME instance.
       expect(internalConfig(agent)).toBe(config);

@@ -26,3 +26,16 @@ export class MessageBus extends PolicyMessageBus {
     super(policyEngine, debugMode, debugLogger);
   }
 }
+
+/**
+ * Public factory for constructing a session-scoped {@link MessageBus} without
+ * exposing the `MessageBus` constructor to consumers. CLI code and other
+ * frontends use this instead of `new MessageBus(...)` so message-bus
+ * construction stays behind the package boundary (#2378).
+ */
+export function createSessionMessageBus(
+  policyEngine?: PolicyEngine,
+  debugMode?: boolean,
+): MessageBus {
+  return new MessageBus(policyEngine, debugMode);
+}

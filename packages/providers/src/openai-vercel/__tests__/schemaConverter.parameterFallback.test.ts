@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { convertToolsToOpenAIVercel } from '../schemaConverter.js';
 
 describe('convertToolsToOpenAIVercel — parametersJsonSchema source', () => {

@@ -4,45 +4,46 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
-const flushAuthScope = vi.fn(() => ({
-  runtimeId: 'test-runtime',
-  revokedTokens: [],
+const { flushMockRef, providerManagerRef, providerRef } = vi.hoisted(() => ({
+  flushMockRef: {
+    current: undefined as ReturnType<typeof vi.fn> | undefined,
+  },
+  providerManagerRef: {
+    current: undefined as
+      | { getProviderByName: ReturnType<typeof vi.fn> }
+      | undefined,
+  },
+  providerRef: {
+    current: undefined as unknown,
+  },
 }));
-const providerManagerRef: {
-  current?: { getProviderByName: ReturnType<typeof vi.fn> };
-} = {};
-const providerRef: { current?: unknown } = {};
+
+vi.mock('@vybestack/llxprt-code-auth', async () => {
+  const actual = await vi.importActual<
+    typeof import('@vybestack/llxprt-code-auth')
+  >('@vybestack/llxprt-code-auth');
+  const flushMock = vi.fn(() => ({
+    runtimeId: 'test-runtime',
+    revokedTokens: [],
+  }));
+  flushMockRef.current = flushMock;
+  return {
+    ...actual,
+    flushRuntimeAuthScope: flushMock,
+  };
+});
 
 import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 
-import {
-  OAuthManager,
-  defaultOAuthManagerComponentFactories,
-} from './oauth-manager.js';
-import { AuthStatusService } from './auth-status-service.js';
+import { OAuthManager } from './oauth-manager.js';
 import type { OAuthProvider } from './types.js';
-import type { TokenStore } from '@vybestack/llxprt-code-core';
-
-function createManager(tokenStore: TokenStore): OAuthManager {
-  return new OAuthManager(
-    tokenStore,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    {
-      ...defaultOAuthManagerComponentFactories,
-      createAuthStatusService: (...args) =>
-        new AuthStatusService(...args, flushAuthScope),
-    },
-  );
-}
+import type { TokenStore } from '@vybestack/llxprt-code-auth';
 
 describe('OAuthManager.logout runtime cache handling', () => {
   beforeEach(() => {
-    flushAuthScope.mockClear();
+    flushMockRef.current?.mockClear();
 
     // Register runtime accessors via the bridge
     const managerMock = {
@@ -78,7 +79,7 @@ describe('OAuthManager.logout runtime cache handling', () => {
       releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     };
 
-    const manager = createManager(tokenStore);
+    const manager = new OAuthManager(tokenStore);
 
     const provider: OAuthProvider & {
       logout?: () => Promise<void>;
@@ -107,7 +108,8 @@ describe('OAuthManager.logout runtime cache handling', () => {
     expect(providerManagerRef.current).toBeDefined();
     providerManagerRef.current?.getProviderByName.mockReturnValue(provider);
 
-    expect(flushAuthScope).toHaveBeenCalledWith('test-runtime');
+    expect(flushMockRef.current).toBeDefined();
+    expect(flushMockRef.current).toHaveBeenCalledWith('test-runtime');
   });
 
   it('removes the session bucket token even when provider.logout exists', async () => {
@@ -124,7 +126,7 @@ describe('OAuthManager.logout runtime cache handling', () => {
       releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     };
 
-    const manager = createManager(tokenStore);
+    const manager = new OAuthManager(tokenStore);
 
     const provider: OAuthProvider & { logout?: () => Promise<void> } = {
       name: 'device-code-test',
@@ -168,7 +170,7 @@ describe('OAuthManager.logout runtime cache handling', () => {
       releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     };
 
-    const manager = createManager(tokenStore);
+    const manager = new OAuthManager(tokenStore);
 
     const provider: OAuthProvider & { logout?: () => Promise<void> } = {
       name: 'device-code-test',
@@ -226,7 +228,7 @@ describe('OAuthManager.logout runtime cache handling', () => {
       releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     };
 
-    const manager = createManager(tokenStore);
+    const manager = new OAuthManager(tokenStore);
 
     const deviceCodeProvider: OAuthProvider & { logout?: () => Promise<void> } =
       {
@@ -291,7 +293,7 @@ describe('OAuthManager.logout runtime cache handling', () => {
       releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     };
 
-    const manager = createManager(tokenStore);
+    const manager = new OAuthManager(tokenStore);
 
     const provider: OAuthProvider & { logout?: () => Promise<void> } = {
       name: 'device-code-test',
@@ -350,7 +352,7 @@ describe('OAuthManager.logout runtime cache handling', () => {
       releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     };
 
-    const manager = createManager(tokenStore);
+    const manager = new OAuthManager(tokenStore);
 
     manager.setSessionBucket('device-code-test', 'default');
     manager.setSessionBucket('device-code-test', 'bucket-a', {

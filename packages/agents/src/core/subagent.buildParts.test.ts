@@ -10,7 +10,7 @@
 
 import type { Mock } from 'vitest';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { SubAgentScope } from './subagent.ts?subagent-build-parts-suite-v2';
+import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
   type PromptConfig,
@@ -19,9 +19,76 @@ import {
 import { buildPartsFromCompletedCalls } from './subagentToolProcessing.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { ChatSession } from './chatSession.js';
-import type { SubagentExecuteToolCall } from './subagentToolProcessing.js';
-import type { Part } from '@google/genai';
-import { Type } from '@google/genai';
+import {
+  createContentGenerator,
+  type ContentGenerator,
+} from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
+import { executeToolCall } from './nonInteractiveToolExecutor.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
+  const mockReadTodos = vi.fn().mockResolvedValue([]);
+  const TodoStoreMock = vi
+    .fn()
+    .mockImplementation(() => ({ readTodos: mockReadTodos }));
+  return { mockReadTodos, TodoStoreMock };
+});
+
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  return {
+    ...actual,
+    LocalTodoStore: TodoStoreMock,
+  };
+});
+
+vi.mock('./chatSession.js');
+vi.mock(
+  '@vybestack/llxprt-code-core/core/contentGenerator.js',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@vybestack/llxprt-code-core/core/contentGenerator.js')
+      >();
+    return {
+      ...actual,
+      createContentGenerator: vi.fn(),
+    };
+  },
+);
+vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
+vi.mock('./nonInteractiveToolExecutor.js');
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    IdeClient: {
+      getInstance: vi.fn().mockResolvedValue({
+        getConnectionStatus: vi.fn(),
+        initialize: vi.fn(),
+        shutdown: vi.fn(),
+      }),
+    },
+  };
+});
+vi.mock(
+  '@vybestack/llxprt-code-core/core/prompts.js',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@vybestack/llxprt-code-core/core/prompts.js')
+      >();
+    return {
+      ...actual,
+      getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
+    };
+  },
+);
+
 import {
   createCompletedToolCallResponse,
   createMockConfig,
@@ -36,21 +103,33 @@ describe('subagent.ts', () => {
   let mockSendMessageStream: Mock;
 
   beforeEach(() => {
-    mockSendMessageStream = vi.fn();
-  });
+    vi.clearAllMocks();
+    mockReadTodos.mockResolvedValue([]);
+    TodoStoreMock.mockClear();
 
-  const createChatSession = (): ChatSession =>
-    ({
-      sendMessageStream: mockSendMessageStream,
-      getHistory: vi.fn().mockReturnValue([]),
-      getHistoryService: vi.fn().mockReturnValue({
-        clear: vi.fn(),
-        findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-        getCurated: vi.fn().mockReturnValue([]),
-        getTotalTokens: vi.fn().mockReturnValue(0),
-      }),
-      getConfig: vi.fn().mockReturnValue(undefined),
-    }) as unknown as ChatSession;
+    vi.mocked(getEnvironmentContext).mockResolvedValue([
+      { text: 'Env Context' },
+    ]);
+    vi.mocked(createContentGenerator).mockResolvedValue({
+      getGenerativeModel: vi.fn(),
+    } as unknown as ContentGenerator);
+
+    mockSendMessageStream = vi.fn();
+    vi.mocked(ChatSession).mockImplementation(
+      () =>
+        ({
+          sendMessageStream: mockSendMessageStream,
+          getHistory: vi.fn().mockReturnValue([]),
+          getHistoryService: vi.fn().mockReturnValue({
+            clear: vi.fn(),
+            findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+            getCurated: vi.fn().mockReturnValue([]),
+            getTotalTokens: vi.fn().mockReturnValue(0),
+          }),
+          getConfig: vi.fn().mockReturnValue(undefined),
+        }) as unknown as ChatSession,
+    );
+  });
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -75,8 +154,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       // Track onMessage calls
@@ -90,7 +167,7 @@ describe('subagent.ts', () => {
         name: 'run_shell_command',
         displayName: 'Shell',
         canUpdateOutput: true,
-        schema: { parameters: { type: Type.OBJECT, properties: {} } },
+        schema: { parameters: { type: 'object', properties: {} } },
         build: vi.fn(),
       };
 
@@ -144,8 +221,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       // Track onMessage calls
@@ -159,7 +234,7 @@ describe('subagent.ts', () => {
         name: 'read_file',
         displayName: 'Read File',
         canUpdateOutput: false,
-        schema: { parameters: { type: Type.OBJECT, properties: {} } },
+        schema: { parameters: { type: 'object', properties: {} } },
         build: vi.fn(),
       };
 
@@ -212,8 +287,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       // Track onMessage calls
@@ -227,7 +300,7 @@ describe('subagent.ts', () => {
         name: 'run_shell_command',
         displayName: 'Shell',
         canUpdateOutput: true,
-        schema: { parameters: { type: Type.OBJECT, properties: {} } },
+        schema: { parameters: { type: 'object', properties: {} } },
         build: vi.fn(),
       };
 
@@ -288,11 +361,9 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession },
       );
 
-      // Simulate error completed calls with functionCall in responseParts
+      // Simulate error completed calls with tool_call in responseParts
       // (this is what coreToolScheduler's createErrorResponse produces)
       const completedCalls = [
         {
@@ -306,18 +377,16 @@ describe('subagent.ts', () => {
             callId: 'call-err',
             responseParts: [
               {
-                functionCall: {
-                  id: 'call-err',
-                  name: 'failing_tool',
-                  args: { path: '/test' },
-                },
+                type: 'tool_call',
+                callId: 'call-err',
+                toolName: 'failing_tool',
+                args: { path: '/test' },
               },
               {
-                functionResponse: {
-                  id: 'call-err',
-                  name: 'failing_tool',
-                  response: { error: 'Tool execution failed' },
-                },
+                type: 'tool_response',
+                callId: 'call-err',
+                toolName: 'failing_tool',
+                result: { error: 'Tool execution failed' },
               },
             ],
             resultDisplay: 'Tool execution failed',
@@ -335,16 +404,18 @@ describe('subagent.ts', () => {
         },
       );
 
-      // CRITICAL: No part should contain functionCall - only functionResponse
-      // functionCall in user-role message causes Anthropic invalid_request_error
+      // CRITICAL: No part should be a tool_call - only tool_response
+      // tool_call in user-role message causes Anthropic invalid_request_error
       for (const part of parts) {
-        expect(part).not.toHaveProperty('functionCall');
+        expect(part).not.toHaveProperty('type', 'tool_call');
       }
-      // Should still have a functionResponse
-      const hasFunctionResponse = parts.some(
-        (p: Part) => 'functionResponse' in p,
+      // Should still have a tool_response
+      const hasToolResponse = parts.some(
+        (p: ContentBlock) =>
+          'type' in p &&
+          (p as Record<string, unknown>).type === 'tool_response',
       );
-      expect(hasFunctionResponse).toBe(true);
+      expect(hasToolResponse).toBe(true);
     });
 
     /**
@@ -370,8 +441,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       const completedCalls = [
@@ -387,11 +456,10 @@ describe('subagent.ts', () => {
             callId: 'call-ok',
             responseParts: [
               {
-                functionResponse: {
-                  id: 'call-ok',
-                  name: 'read_file',
-                  response: { output: 'file contents' },
-                },
+                type: 'tool_response',
+                callId: 'call-ok',
+                toolName: 'read_file',
+                result: { output: 'file contents' },
               },
             ],
             resultDisplay: 'file contents',
@@ -408,18 +476,16 @@ describe('subagent.ts', () => {
             callId: 'call-err',
             responseParts: [
               {
-                functionCall: {
-                  id: 'call-err',
-                  name: 'write_file',
-                  args: { path: '/out.txt', content: 'data' },
-                },
+                type: 'tool_call',
+                callId: 'call-err',
+                toolName: 'write_file',
+                args: { path: '/out.txt', content: 'data' },
               },
               {
-                functionResponse: {
-                  id: 'call-err',
-                  name: 'write_file',
-                  response: { error: 'Permission denied' },
-                },
+                type: 'tool_response',
+                callId: 'call-err',
+                toolName: 'write_file',
+                result: { error: 'Permission denied' },
               },
             ],
             resultDisplay: 'Permission denied',
@@ -437,16 +503,18 @@ describe('subagent.ts', () => {
         },
       );
 
-      // No part should contain functionCall
+      // No part should be a tool_call
       for (const part of parts) {
-        expect(part).not.toHaveProperty('functionCall');
+        expect(part).not.toHaveProperty('type', 'tool_call');
       }
 
-      // Should have functionResponse for both tool calls
-      const functionResponses = parts.filter(
-        (p: Part) => 'functionResponse' in p,
+      // Should have tool_response for both tool calls
+      const toolResponses = parts.filter(
+        (p: ContentBlock) =>
+          'type' in p &&
+          (p as Record<string, unknown>).type === 'tool_response',
       );
-      expect(functionResponses.length).toBe(2);
+      expect(toolResponses.length).toBe(2);
     });
 
     it('should handle calls where tool is undefined gracefully', async () => {
@@ -465,8 +533,6 @@ describe('subagent.ts', () => {
         undefined,
         undefined,
         overrides,
-        undefined,
-        { createChatSession },
       );
 
       // Track onMessage calls
@@ -585,13 +651,14 @@ describe('subagent.ts', () => {
         ]),
       );
 
-      const executeToolCall = vi.fn<SubagentExecuteToolCall>(async () => ({
+      // Mock the tool execution result
+      vi.mocked(executeToolCall).mockResolvedValue({
         ...createCompletedToolCallResponse({
           callId: 'call_hook_test',
           responseParts: [{ text: 'file contents' }],
           resultDisplay: 'Read file successfully',
         }),
-      }));
+      });
 
       const runtimeBundle = createStatelessRuntimeBundle({
         toolRegistry,
@@ -618,8 +685,6 @@ describe('subagent.ts', () => {
         toolConfig,
         undefined,
         overrides,
-        undefined,
-        { createChatSession, executeToolCall },
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -629,7 +694,7 @@ describe('subagent.ts', () => {
 
       // Verify the config passed to executeToolCall has hook methods
       // The bug is that createSchedulerConfig() doesn't delegate these
-      const [toolExecutorConfig] = executeToolCall.mock.calls[0];
+      const [toolExecutorConfig] = vi.mocked(executeToolCall).mock.calls[0];
 
       // These assertions will FAIL until the bug is fixed:
       // createSchedulerConfig() must delegate hook methods to this.config

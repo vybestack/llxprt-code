@@ -9,7 +9,7 @@
  * parameter validation, and KDF input derivation.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import * as crypto from 'node:crypto';
 import {
   isValidEnvelope,

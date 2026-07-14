@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import type { CacheEntry } from './prompt-cache.js';
 import { PromptCache } from './prompt-cache.js';
 import type { PromptContext } from './types.js';

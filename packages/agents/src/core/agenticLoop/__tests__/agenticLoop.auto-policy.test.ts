@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AgenticLoop } from '../AgenticLoop.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import type { Part } from '@google/genai';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   type ApprovalHandler,
   createScriptedAgentClient,
@@ -102,10 +102,10 @@ describe('AgenticLoop integration - a2a-style with auto policy', () => {
     const turn2Parts = partListUnionToParts(turnMessages[1]);
     const fnResponseNames = turn2Parts
       .filter(
-        (p): p is Part & { functionResponse: { name: string } } =>
-          'functionResponse' in p,
+        (p): p is ContentBlock & { type: 'tool_response'; toolName: string } =>
+          p.type === 'tool_response',
       )
-      .map((p) => p.functionResponse.name);
+      .map((p) => p.toolName);
     expect(fnResponseNames).toContain('tool_a');
     expect(fnResponseNames).toContain('tool_b');
   });

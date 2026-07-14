@@ -11,7 +11,7 @@
  * state, ToolResult content, and error types — NOT internal method calls.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   writeFileSync,
   mkdirSync,

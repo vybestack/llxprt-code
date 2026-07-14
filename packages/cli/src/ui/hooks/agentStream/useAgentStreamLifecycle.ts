@@ -10,8 +10,8 @@ import {
   type EditorType,
   type MessageBus,
   type ToolCallRequestInfo,
-  debugLogger,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   MessageType,

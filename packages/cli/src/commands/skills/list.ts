@@ -5,7 +5,8 @@
  */
 
 import type { CommandModule } from 'yargs';
-import { MessageBus, debugLogger } from '@vybestack/llxprt-code-core';
+import { discoverSkillsForConfig } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { loadSettings } from '../../config/settings.js';
 import { loadCliConfig } from '../../config/config.js';
 import { type CliArgs } from '../../config/cliArgParser.js';
@@ -36,20 +37,10 @@ export async function handleList(showAll = false) {
     workspaceDir,
   );
 
-  const sessionMessageBus = new MessageBus(
-    config.getPolicyEngine(),
-    config.getDebugMode(),
-  );
-
-  // Initialize to trigger extension loading and skill discovery
-  await (
-    config as typeof config & {
-      initialize(dependencies?: { messageBus?: MessageBus }): Promise<void>;
-    }
-  ).initialize({ messageBus: sessionMessageBus });
-
-  const skillManager = config.getSkillManager();
-  let skills = skillManager.getAllSkills();
+  // Skill discovery owns its own session MessageBus and Config.initialize
+  // lifecycle inside core (#2378): the CLI command is a thin client and never
+  // constructs a MessageBus or calls Config.initialize itself.
+  let skills = await discoverSkillsForConfig(config);
 
   // By default, filter out built-in skills unless --all is specified
   if (!showAll) {

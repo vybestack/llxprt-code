@@ -38,7 +38,6 @@ import {
   type StatusMutator,
   type SchedulerAccessor,
   type EditorCallbacks,
-  type ConfirmationCoordinatorDependencies,
 } from '../scheduler/confirmation-coordinator.js';
 import type {
   ScheduledToolCall,
@@ -51,6 +50,7 @@ import type {
   AllToolCallsCompleteHandler,
   ToolCallsUpdateHandler,
 } from '@vybestack/llxprt-code-core/scheduler/types.js';
+import { accumulateLiveOutput } from '@vybestack/llxprt-code-core/scheduler/liveOutput.js';
 import { setToolContext } from '../scheduler/utils.js';
 import {
   applyTransition,
@@ -101,7 +101,6 @@ export interface CoreToolSchedulerOptions {
   onEditorClose: () => void;
   onEditorOpen?: () => void;
   toolContextInteractiveMode?: boolean;
-  logToolCall?: typeof logToolCall;
 }
 
 export class CoreToolScheduler implements ToolSchedulerContract {
@@ -121,7 +120,6 @@ export class CoreToolScheduler implements ToolSchedulerContract {
   private toolContextInteractiveMode: boolean;
   private requestQueue: QueuedRequest[] = [];
   private readonly resultAggregator: ResultAggregator;
-  private readonly logToolCall: typeof logToolCall;
 
   // Track all callIds seen at the scheduler boundary to prevent duplicate execution
   private seenCallIds: Set<string> = new Set();
@@ -131,12 +129,8 @@ export class CoreToolScheduler implements ToolSchedulerContract {
    * @requirement REQ-D01-001.2
    * @pseudocode lines 56-72
    */
-  constructor(
-    options: CoreToolSchedulerOptions,
-    confirmationDependencies?: ConfirmationCoordinatorDependencies,
-  ) {
+  constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
-    this.logToolCall = options.logToolCall ?? logToolCall;
     this.toolExecutor = new ToolExecutor(this.config);
     this.toolDispatcher = new ToolDispatcher(
       options.toolRegistry,
@@ -188,7 +182,6 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       schedulerAccessor,
       editorCallbacks,
       (config, details) => triggerToolNotificationHook(config, details),
-      confirmationDependencies,
     );
     this.confirmationCoordinator.subscribe();
   }
@@ -616,7 +609,10 @@ export class CoreToolScheduler implements ToolSchedulerContract {
               }
               this.toolCalls = this.toolCalls.map((tc) =>
                 tc.request.callId === id && tc.status === 'executing'
-                  ? { ...tc, liveOutput: chunk }
+                  ? {
+                      ...tc,
+                      liveOutput: accumulateLiveOutput(tc.liveOutput, chunk),
+                    }
                   : tc,
               );
               this.notifyToolCallsUpdate();
@@ -806,7 +802,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       // Clean up signal mappings for completed calls
       for (const call of completedCalls) {
         this.confirmationCoordinator.deleteSignal(call.request.callId);
-        this.logToolCall(this.config, new ToolCallEvent(call));
+        logToolCall(this.config, new ToolCallEvent(call));
       }
 
       if (this.onAllToolCallsComplete) {

@@ -259,6 +259,13 @@ describe('main bootstrap parsing', () => {
 describe('main channel wiring', () => {
   let onSpy: ReturnType<typeof vi.spyOn>;
   let exitSpy: ReturnType<typeof vi.spyOn>;
+  const lifecycles: Array<{ dispose(): void }> = [];
+
+  const runMain: typeof main = async (dependencies) => {
+    const lifecycle = await main(dependencies);
+    lifecycles.push(lifecycle);
+    return lifecycle;
+  };
 
   const createRpcConnection = (sendNotification = vi.fn()) => ({
     listen: vi.fn(),
@@ -275,6 +282,9 @@ describe('main channel wiring', () => {
   });
 
   afterEach(() => {
+    for (const lifecycle of lifecycles.splice(0)) {
+      lifecycle.dispose();
+    }
     delete process.env.LSP_BOOTSTRAP;
   });
 
@@ -291,7 +301,7 @@ describe('main channel wiring', () => {
       .mockResolvedValue({ close: vi.fn().mockResolvedValue(undefined) });
     const createOrchestrator = vi.fn(() => orchestrator);
 
-    await main({
+    await runMain({
       createOrchestrator,
       setupRpcChannel,
       createMcpChannel,
@@ -319,7 +329,7 @@ describe('main channel wiring', () => {
     const orchestrator = { shutdown: vi.fn().mockResolvedValue(undefined) };
     const createOrchestrator = vi.fn(() => orchestrator);
 
-    await main({
+    await runMain({
       createOrchestrator,
       setupRpcChannel: vi.fn(),
       createMcpChannel: vi.fn(),
@@ -343,7 +353,7 @@ describe('main channel wiring', () => {
 
     const createMcpChannel = vi.fn();
 
-    await main({
+    await runMain({
       createOrchestrator: vi.fn(() => ({
         shutdown: vi.fn().mockResolvedValue(undefined),
       })),
@@ -363,7 +373,7 @@ describe('main channel wiring', () => {
 
     const orchestrator = { shutdown: vi.fn().mockResolvedValue(undefined) };
 
-    await main({
+    await runMain({
       createOrchestrator: vi.fn(() => orchestrator),
       setupRpcChannel: vi.fn(),
       createMcpChannel: vi.fn(),
@@ -390,7 +400,7 @@ describe('main channel wiring', () => {
 
     const sendNotification = vi.fn();
 
-    await main({
+    await runMain({
       createOrchestrator: vi.fn(() => ({
         shutdown: vi.fn().mockResolvedValue(undefined),
       })),
@@ -400,6 +410,34 @@ describe('main channel wiring', () => {
     });
 
     expect(sendNotification).toHaveBeenCalledWith('lsp/ready');
+  });
+
+  it('disposal restores process listener counts', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: { navigationTools: false },
+    });
+    const events = [
+      'SIGTERM',
+      'SIGINT',
+      'uncaughtException',
+      'unhandledRejection',
+    ] as const;
+    const baseline = events.map((event) => process.listenerCount(event));
+
+    const lifecycle = await runMain({
+      createOrchestrator: vi.fn(() => ({
+        shutdown: vi.fn().mockResolvedValue(undefined),
+      })),
+      setupRpcChannel: vi.fn(),
+      createMcpChannel: vi.fn(),
+      createRpcConnection,
+    });
+    lifecycle.dispose();
+
+    expect(events.map((event) => process.listenerCount(event))).toEqual(
+      baseline,
+    );
   });
 });
 

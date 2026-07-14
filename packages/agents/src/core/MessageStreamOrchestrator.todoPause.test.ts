@@ -27,16 +27,14 @@
  * observable effect (a follow-up model turn), not on a private method.
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
-import { vi } from 'vitest';
-import type { PartListUnion } from '@google/genai';
-import type { Turn } from './turn.js';
-import {
-  AgentEventType,
-  type ServerAgentStreamEvent,
-  type ToolCallResponseInfo,
-  type ToolCallRequestInfo,
-} from '../../../core/src/core/turn.ts?todo-pause-events';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type {
+  ServerAgentStreamEvent,
+  ToolCallResponseInfo,
+  ToolCallRequestInfo,
+} from './turn.js';
+import { AgentEventType } from './turn.js';
 import type { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -53,6 +51,18 @@ vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
       userContextLimit ?? 1_000_000,
   ),
 }));
+
+vi.mock('./turn.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./turn.js')>();
+  class MockTurn {
+    pendingToolCalls: unknown[] = [];
+    run = mockTurnRun;
+  }
+  return {
+    ...actual,
+    Turn: MockTurn as unknown as typeof actual.Turn,
+  };
+});
 
 import {
   MessageStreamOrchestrator,
@@ -72,11 +82,10 @@ function makePauseResponse(success: boolean): ToolCallResponseInfo {
     callId: 'pause-call-1',
     responseParts: [
       {
-        functionResponse: {
-          name: 'todo_pause',
-          id: 'pause-call-1',
-          response: success ? { ok: true } : {},
-        },
+        type: 'tool_response',
+        callId: 'pause-call-1',
+        toolName: 'todo_pause',
+        result: success ? { ok: true } : {},
       },
     ],
     resultDisplay: undefined,
@@ -179,7 +188,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
     isSuccessfulTodoPauseResponse:
       options.isSuccessfulTodoPauseResponse ?? vi.fn().mockReturnValue(false),
     isTodoToolCall: vi.fn().mockReturnValue(false),
-    applyPendingReminder: vi.fn((r: PartListUnion) => Promise.resolve(r)),
+    applyPendingReminder: vi.fn((r: AgentMessageInput) => Promise.resolve(r)),
     getTodoReminderForCurrentState: vi.fn().mockResolvedValue({
       todos: activeTodos,
       activeTodos,
@@ -251,11 +260,6 @@ function buildOrchestrator(options: BuildOptions = {}): {
         // Empty — only its invocation (via _finishWithToolCalls) matters.
       },
     ),
-    createTurn: () =>
-      ({
-        pendingToolCalls: [],
-        run: mockTurnRun,
-      }) as unknown as Turn,
   };
 
   return {
@@ -269,7 +273,7 @@ async function collectEvents(
 ): Promise<ServerAgentStreamEvent[]> {
   const events: ServerAgentStreamEvent[] = [];
   for await (const event of orchestrator.execute(
-    [{ text: 'test' }] as PartListUnion,
+    [{ text: 'test' }] as AgentMessageInput,
     new AbortController().signal,
     'prompt-1',
     1,
@@ -317,7 +321,7 @@ function expectPauseToolEvents(events: ServerAgentStreamEvent[]): void {
 describe('MessageStreamOrchestrator — todo_pause loop break (issue #2287)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (tokenLimit as ReturnType<typeof vi.fn>).mockImplementation(
+    vi.mocked(tokenLimit).mockImplementation(
       (_model: string, userContextLimit?: number) =>
         userContextLimit ?? 1_000_000,
     );
@@ -373,11 +377,10 @@ describe('MessageStreamOrchestrator — todo_pause loop break (issue #2287)', ()
         callId: 'pause-call-1',
         responseParts: [
           {
-            functionResponse: {
-              name: 'todo_pause',
-              id: 'pause-call-1',
-              response: {},
-            },
+            type: 'tool_response',
+            callId: 'pause-call-1',
+            toolName: 'todo_pause',
+            result: {},
           },
         ],
         resultDisplay: undefined,

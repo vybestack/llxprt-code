@@ -21,7 +21,7 @@
  * explicit bucket is supplied.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TokenAccessCoordinator } from '../token-access-coordinator.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from '../types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
@@ -166,11 +166,6 @@ function makeCoordinator(opts?: {
     facade as never,
     undefined,
     undefined,
-    {
-      loadProfile: async (name: string) => {
-        throw new Error(`Profile ${name} not found`);
-      },
-    },
   );
 
   return {
@@ -183,6 +178,19 @@ function makeCoordinator(opts?: {
     provider,
   };
 }
+
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+  return {
+    ...actual,
+    ProfileManager: class MockProfileManager {
+      async loadProfile(name: string) {
+        throw new Error(`Profile ${name} not found`);
+      }
+    },
+  };
+});
 
 const FAILED_TOKEN = 'failed-access-token';
 

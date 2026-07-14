@@ -9,7 +9,7 @@
  * @requirement:HOOK-092,HOOK-093,HOOK-094,HOOK-095,HOOK-096,HOOK-097,HOOK-098,HOOK-099,HOOK-100,HOOK-101,HOOK-102,HOOK-103,HOOK-104,HOOK-105
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { HookAggregator } from './hookAggregator.js';
 import type {
   HookExecutionResult,

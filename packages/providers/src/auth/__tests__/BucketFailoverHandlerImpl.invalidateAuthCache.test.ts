@@ -4,8 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'bun:test';
-import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('@vybestack/llxprt-code-auth', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-auth')>();
+  return {
+    ...actual,
+    flushRuntimeAuthScope: vi.fn(),
+  };
+});
+
+import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';
+import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
 import { BucketFailoverHandlerImpl } from '../BucketFailoverHandlerImpl.js';
 import type { BucketFailoverOAuthManagerLike } from '../types.js';
 
@@ -26,18 +37,16 @@ describe('BucketFailoverHandlerImpl.invalidateAuthCache', () => {
       providerId: 'anthropic',
       runtimeMetadata: { source: 'test' },
     };
-    const flushAuthScope = vi.fn();
 
     const handler = new BucketFailoverHandlerImpl(
       ['default'],
       'anthropic',
       oauthManager,
       metadata,
-      { flushAuthScope },
     );
 
     handler.invalidateAuthCache('runtime-1739');
 
-    expect(flushAuthScope).toHaveBeenCalledWith('runtime-1739');
+    expect(flushRuntimeAuthScope).toHaveBeenCalledWith('runtime-1739');
   });
 });

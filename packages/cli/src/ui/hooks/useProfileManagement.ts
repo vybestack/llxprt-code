@@ -12,7 +12,7 @@ import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import type { ProfileListItem } from '../components/ProfileListDialog.js';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 const debug = new DebugLogger('llxprt:ui:useProfileManagement');
 

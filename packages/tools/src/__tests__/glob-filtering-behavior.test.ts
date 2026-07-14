@@ -4,14 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  beforeAll,
-} from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import {
   writeFileSync,
   mkdirSync,
@@ -22,7 +15,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { PartListUnion } from '@google/genai';
+import type { ContentPartListUnion } from '../types/wire-types.js';
 import { GlobTool, type GlobToolParams } from '../tools/glob.js';
 import { createRealToolHost as createRealHost } from './helpers/create-real-tool-host.js';
 import type { IToolHost } from '../interfaces/index.js';
@@ -71,7 +64,7 @@ async function runGlob(
   return result;
 }
 
-function extractFilePaths(llmContent: PartListUnion): string[] {
+function extractFilePaths(llmContent: ContentPartListUnion): string[] {
   if (typeof llmContent !== 'string') {
     throw new TypeError('GlobTool test expected string llmContent');
   }

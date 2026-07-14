@@ -13,7 +13,7 @@
 
 import v8 from 'node:v8';
 import os from 'node:os';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 /**
  * Exit code used to signal that the child process wants a relaunch.

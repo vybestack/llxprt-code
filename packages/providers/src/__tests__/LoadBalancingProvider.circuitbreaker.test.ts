@@ -7,7 +7,7 @@
  * Issue #489 - Advanced Failover with Metrics
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,

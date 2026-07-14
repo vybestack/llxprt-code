@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config, ContractPart } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import {
   shutdownTelemetry,
   isTelemetrySdkInitialized,
@@ -195,7 +195,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       './ui/hooks/atCommandProcessor.js'
     );
     vi.mocked(handleAtCommand).mockImplementation(async ({ query }) => ({
-      processedQuery: [{ text: query }],
+      processedQuery: [{ type: 'text', text: query }],
     }));
   });
 
@@ -210,11 +210,14 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     const mockHandleAtCommand = vi.mocked(handleAtCommand);
 
     const rawInput = 'Summarize @file.txt';
-    const processedParts: ContractPart[] = [
-      { text: 'Summarize @file.txt' },
-      { text: '\n--- Content from referenced files ---\n' },
-      { text: 'This is the content of the file.' },
-      { text: '\n--- End of content ---\n' },
+    const processedParts = [
+      { type: 'text' as const, text: 'Summarize @file.txt' },
+      {
+        type: 'text' as const,
+        text: '\n--- Content from referenced files ---\n',
+      },
+      { type: 'text' as const, text: 'This is the content of the file.' },
+      { type: 'text' as const, text: '\n--- End of content ---\n' },
     ];
 
     mockHandleAtCommand.mockResolvedValue({
@@ -443,8 +446,11 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       prompt_id: 'prompt-id-unknown',
     });
 
-    // The raw input is sent to the Agent.
-    expect(agentState.streamInput).toStrictEqual([{ text: '/unknowncommand' }]);
+    // The unknown slash command falls through to resolveAtQuery which wraps
+    // it as a ContentBlock[].
+    expect(agentState.streamInput).toStrictEqual([
+      { type: 'text', text: '/unknowncommand' },
+    ]);
     expect(processStdoutSpy).toHaveBeenCalledWith('Response to unknown');
   });
 

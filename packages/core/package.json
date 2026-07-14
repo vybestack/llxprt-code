@@ -16,6 +16,11 @@
       "bun": "./index.ts",
       "import": "./dist/index.js"
     },
+    "./auth-factories.js": {
+      "types": "./dist/src/auth-factories.d.ts",
+      "bun": "./src/auth-factories.ts",
+      "import": "./dist/src/auth-factories.js"
+    },
     "./code_assist/codeAssist.js": {
       "bun": "./src/code_assist/codeAssist.ts",
       "import": "./dist/src/code_assist/codeAssist.js"
@@ -322,6 +327,10 @@
       "bun": "./src/scheduler/types.ts",
       "import": "./dist/src/scheduler/types.js"
     },
+    "./scheduler/liveOutput.js": {
+      "bun": "./src/scheduler/liveOutput.ts",
+      "import": "./dist/src/scheduler/liveOutput.js"
+    },
     "./code_assist/types.js": {
       "bun": "./src/code_assist/types.ts",
       "import": "./dist/src/code_assist/types.js"
@@ -446,6 +455,10 @@
       "bun": "./src/utils/generateContentResponseUtilities.ts",
       "import": "./dist/src/utils/generateContentResponseUtilities.js"
     },
+    "./utils/getFolderStructure.js": {
+      "bun": "./src/utils/getFolderStructure.ts",
+      "import": "./dist/src/utils/getFolderStructure.js"
+    },
     "./utils/messageInspectors.js": {
       "bun": "./src/utils/messageInspectors.ts",
       "import": "./dist/src/utils/messageInspectors.js"
@@ -462,6 +475,10 @@
       "bun": "./src/utils/terminalSerializer.ts",
       "import": "./dist/src/utils/terminalSerializer.js"
     },
+    "./utils/testUtils.js": {
+      "bun": "./src/utils/testUtils.ts",
+      "import": "./dist/src/utils/testUtils.js"
+    },
     "./utils/thoughtUtils.js": {
       "bun": "./src/utils/thoughtUtils.ts",
       "import": "./dist/src/utils/thoughtUtils.js"
@@ -476,8 +493,8 @@
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "test": "vitest run",
-    "test:bun": "bun ../../scripts/run_bun_tests.ts",
     "test:ci": "vitest run",
+    "test:mutation": "stryker run stryker.conf.json",
     "typecheck": "tsc --noEmit"
   },
   "files": [
@@ -579,6 +596,8 @@
     "fast-check": "^4.2.0",
     "msw": "^2.3.4",
     "nock": "^14.0.10",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
     "typescript": "^5.3.3",
     "vitest": "^3.2.6"
   },

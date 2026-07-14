@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { EphemeralSettingTarget } from './cliEphemeralSettings.js';
 import { applyCliSetArguments } from './cliEphemeralSettings.js';
 
@@ -65,6 +65,14 @@ describe('applyCliSetArguments', () => {
     applyCliSetArguments(target, ['reasoning.effort=xhigh']);
 
     expect(target.getValue('reasoning.effort')).toBe('xhigh');
+  });
+
+  it('accepts reasoning.effort=max', () => {
+    const target = new TestTarget();
+
+    applyCliSetArguments(target, ['reasoning.effort=max']);
+
+    expect(target.getValue('reasoning.effort')).toBe('max');
   });
 
   it('collects model parameter entries and returns them separately', () => {

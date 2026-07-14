@@ -10,101 +10,257 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderManager } from './providerManagerInstance.js';
+import type { Config } from '@vybestack/llxprt-code-core';
 
-function createContext(settingsService: SettingsService) {
-  return {
-    settingsService,
-    metadata: { scope: 'test' },
+// This test tests provider registration behavior, needs real providerAliases
+vi.unmock('./providerAliases.js');
+
+/**
+ * Mock the concrete provider modules (imported relatively by the composition
+ * SUT chain) so registration can be observed without constructing real
+ * providers. ProviderManager is replaced wholesale, so its internal runtime
+ * context dependencies (sourced from core) are never loaded.
+ */
+function mockProviderModules(opts: {
+  openai: unknown;
+  openaiResponses: unknown;
+  openaiVercel: unknown;
+  anthropic: unknown;
+}): void {
+  vi.doMock('../ProviderManager.js', () => {
+    class MockProviderManager {
+      setConfig(): void {}
+      setActiveProvider(): void {}
+      registerProvider(): void {}
+    }
+    return { ProviderManager: MockProviderManager };
+  });
+  vi.doMock('../gemini/GeminiProvider.js', () => {
+    class MockGeminiProvider {
+      setConfig(): void {}
+    }
+    return { GeminiProvider: MockGeminiProvider };
+  });
+  vi.doMock('../openai/OpenAIProvider.js', () => ({
+    OpenAIProvider: opts.openai,
+  }));
+  vi.doMock('../openai-responses/OpenAIResponsesProvider.js', () => ({
+    OpenAIResponsesProvider: opts.openaiResponses,
+  }));
+  vi.doMock('../openai-vercel/index.js', () => ({
+    OpenAIVercelProvider: opts.openaiVercel,
+  }));
+  vi.doMock('../anthropic/AnthropicProvider.js', () => ({
+    AnthropicProvider: opts.anthropic,
+  }));
+}
+
+function createRegisterStandardOAuthProvidersMock(
+  ensureMock: ReturnType<typeof vi.fn>,
+): (oauthManager: unknown, tokenStore?: unknown, addItem?: unknown) => void {
+  return (oauthManager, tokenStore, addItem) => {
+    for (const provider of ['gemini', 'anthropic', 'codex'] as const) {
+      ensureMock(provider, oauthManager, tokenStore, addItem);
+    }
   };
 }
 
-function createRegistrationObservers() {
-  const registerAliasProviders = vi.fn(
-    (manager: { registerProvider(provider: unknown): void }) => {
-      manager.registerProvider({
-        name: 'gemini',
-        getDefaultModel: () => 'gemini-2.5-pro',
-        getModels: async () => [],
-        getServerTools: () => [],
-      });
-    },
-  );
-  return { registerAliasProviders, registerOAuthProviders: vi.fn() };
-}
-
 describe('Anthropic OAuth registration with environment key', () => {
-  let settingsService: SettingsService;
+  let ensureOAuthProviderRegisteredMock: ReturnType<typeof vi.fn>;
+  let anthropicCtor: ReturnType<typeof vi.fn>;
+  let openaiCtor: ReturnType<typeof vi.fn>;
+  let openaiResponsesCtor: ReturnType<typeof vi.fn>;
+  let openaivercelCtor: ReturnType<typeof vi.fn>;
+  let mockSettingsService: SettingsService;
 
   beforeEach(() => {
-    settingsService = new SettingsService();
+    vi.resetModules();
+    vi.clearAllMocks();
+    ensureOAuthProviderRegisteredMock = vi.fn();
+    anthropicCtor = vi.fn(() => ({}));
+    openaiCtor = vi.fn(() => ({}));
+    openaiResponsesCtor = vi.fn(() => ({}));
+    openaivercelCtor = vi.fn(() => ({}));
+    mockSettingsService = new SettingsService();
   });
 
   afterEach(() => {
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
+    vi.resetModules();
     vi.clearAllMocks();
   });
 
-  it('registers standard OAuth providers even when ANTHROPIC_API_KEY is set', () => {
+  it('registers Anthropic OAuth provider even when ANTHROPIC_API_KEY is set', async () => {
     process.env.ANTHROPIC_API_KEY = 'sk-test-key';
-    const { registerAliasProviders, registerOAuthProviders } =
-      createRegistrationObservers();
 
-    const { oauthManager } = createProviderManager(
-      createContext(settingsService),
-      {
-        allowBrowserEnvironment: false,
-        loadAliasEntries: () => [],
-        registerAliasProviders,
-        registerOAuthProviders,
-      },
-    );
+    vi.doMock('./oauth-provider-registration.js', () => ({
+      ensureOAuthProviderRegistered: ensureOAuthProviderRegisteredMock,
+      registerStandardOAuthProviders: createRegisterStandardOAuthProvidersMock(
+        ensureOAuthProviderRegisteredMock,
+      ),
+      isOAuthProviderRegistered: vi.fn(),
+      resetRegisteredProviders: vi.fn(),
+    }));
 
-    expect(registerOAuthProviders).toHaveBeenCalledTimes(1);
-    expect(registerOAuthProviders.mock.calls[0]?.[0]).toBe(oauthManager);
-    expect(registerOAuthProviders.mock.calls[0]?.[1]).toBeTruthy();
-  });
-
-  it('ignores API keys when authOnly is enabled', () => {
-    process.env.ANTHROPIC_API_KEY = 'sk-test-key';
-    process.env.OPENAI_API_KEY = 'sk-test-openai';
-    settingsService.set('authOnly', true);
-    const { registerAliasProviders, registerOAuthProviders } =
-      createRegistrationObservers();
-
-    createProviderManager(createContext(settingsService), {
-      allowBrowserEnvironment: false,
-      loadAliasEntries: () => [],
-      registerAliasProviders,
-      registerOAuthProviders,
+    const activeContext = {
+      settingsService: mockSettingsService,
+      metadata: { scope: 'test' },
+    };
+    class MockProvider {}
+    mockProviderModules({
+      openai: MockProvider,
+      openaiResponses: MockProvider,
+      openaiVercel: openaivercelCtor,
+      anthropic: anthropicCtor,
     });
 
-    expect(registerAliasProviders).toHaveBeenCalledTimes(1);
-    const call = registerAliasProviders.mock.calls[0];
-    expect(call?.[2]).toBeUndefined();
-    expect(call?.[5]).toBeTruthy();
-    expect(call?.[7]).toBe(true);
+    vi.clearAllMocks();
+
+    const {
+      createProviderManager,
+      resetProviderManager,
+      registerProviderManagerSingleton,
+    } = await import('./providerManagerInstance.js');
+
+    resetProviderManager();
+
+    const { manager, oauthManager } = createProviderManager(activeContext, {
+      config: undefined,
+      allowBrowserEnvironment: false,
+    });
+    registerProviderManagerSingleton(manager, oauthManager);
+
+    const registeredAnthropic =
+      ensureOAuthProviderRegisteredMock.mock.calls.some(
+        ([provider]) => provider === 'anthropic',
+      );
+    expect(registeredAnthropic).toBe(true);
+
+    const ctorCalls = anthropicCtor.mock.calls;
+    expect(ctorCalls.length).toBeGreaterThanOrEqual(1);
+    const firstCall = ctorCalls[0] as unknown[] | undefined;
+    const oauthManagerArg = firstCall ? firstCall[3] : undefined;
+    expect(oauthManagerArg).toBeTruthy();
   });
 
-  it('threads the OAuth manager through alias and OAuth registration', () => {
-    const { registerAliasProviders, registerOAuthProviders } =
-      createRegistrationObservers();
+  it('ignores API keys when authOnly is enabled', async () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-test-key';
+    process.env.OPENAI_API_KEY = 'sk-test-openai';
 
-    const { oauthManager } = createProviderManager(
-      createContext(settingsService),
-      {
-        allowBrowserEnvironment: false,
-        loadAliasEntries: () => [],
-        registerAliasProviders,
-        registerOAuthProviders,
+    vi.doMock('./oauth-provider-registration.js', () => ({
+      ensureOAuthProviderRegistered: ensureOAuthProviderRegisteredMock,
+      registerStandardOAuthProviders: createRegisterStandardOAuthProvidersMock(
+        ensureOAuthProviderRegisteredMock,
+      ),
+      isOAuthProviderRegistered: vi.fn(),
+      resetRegisteredProviders: vi.fn(),
+    }));
+
+    const activeContext = {
+      settingsService: mockSettingsService,
+      metadata: { scope: 'test' },
+    };
+    mockProviderModules({
+      openai: openaiCtor,
+      openaiResponses: openaiResponsesCtor,
+      openaiVercel: openaivercelCtor,
+      anthropic: anthropicCtor,
+    });
+
+    vi.clearAllMocks();
+
+    const {
+      createProviderManager,
+      resetProviderManager,
+      registerProviderManagerSingleton,
+    } = await import('./providerManagerInstance.js');
+
+    resetProviderManager();
+    const mockConfig = {
+      setProviderManager(): void {},
+      getEphemeralSettings() {
+        return { authOnly: true };
       },
-    );
+      getSettingsService() {
+        return mockSettingsService;
+      },
+    } as unknown as Config;
 
-    expect(registerAliasProviders).toHaveBeenCalledTimes(1);
-    expect(registerAliasProviders.mock.calls[0]?.[5]).toBe(oauthManager);
-    expect(registerOAuthProviders.mock.calls[0]?.[0]).toBe(oauthManager);
+    const { manager, oauthManager } = createProviderManager(activeContext, {
+      config: mockConfig,
+      allowBrowserEnvironment: false,
+    });
+    registerProviderManagerSingleton(manager, oauthManager);
+
+    expect(openaiCtor).toHaveBeenCalled();
+    const firstOpenaiCall = openaiCtor.mock.calls[0] as unknown[] | undefined;
+    expect(firstOpenaiCall?.[0]).toBeUndefined();
+
+    expect(openaiResponsesCtor).toHaveBeenCalled();
+    const firstResponsesCall = openaiResponsesCtor.mock.calls[0] as
+      | unknown[]
+      | undefined;
+    expect(firstResponsesCall?.[0]).toBeUndefined();
+
+    expect(anthropicCtor).toHaveBeenCalled();
+    const anthropicArgs = anthropicCtor.mock.calls[0] as unknown[] | undefined;
+    expect(anthropicArgs?.[0]).toBeUndefined();
+  });
+
+  it('threads OAuth manager only into OAuth-capable alias providers', async () => {
+    vi.doMock('./oauth-provider-registration.js', () => ({
+      ensureOAuthProviderRegistered: ensureOAuthProviderRegisteredMock,
+      registerStandardOAuthProviders: createRegisterStandardOAuthProvidersMock(
+        ensureOAuthProviderRegisteredMock,
+      ),
+      isOAuthProviderRegistered: vi.fn(),
+      resetRegisteredProviders: vi.fn(),
+    }));
+
+    const activeContext = {
+      settingsService: mockSettingsService,
+      metadata: { scope: 'test' },
+    };
+    mockProviderModules({
+      openai: openaiCtor,
+      openaiResponses: openaiResponsesCtor,
+      openaiVercel: openaivercelCtor,
+      anthropic: anthropicCtor,
+    });
+
+    vi.clearAllMocks();
+
+    const {
+      createProviderManager,
+      resetProviderManager,
+      registerProviderManagerSingleton,
+    } = await import('./providerManagerInstance.js');
+
+    resetProviderManager();
+
+    const { manager, oauthManager } = createProviderManager(activeContext, {
+      config: undefined,
+      allowBrowserEnvironment: false,
+    });
+    registerProviderManagerSingleton(manager, oauthManager);
+
+    expect(openaiCtor).toHaveBeenCalled();
+    expect(openaivercelCtor).toHaveBeenCalled();
+    expect(openaiResponsesCtor).toHaveBeenCalled();
+
+    const openaiArgs = openaiCtor.mock.calls[0] as unknown[] | undefined;
+    const openaivercelArgs = openaivercelCtor.mock.calls[0] as
+      | unknown[]
+      | undefined;
+    const openaiResponsesArgs = openaiResponsesCtor.mock.calls[0] as
+      | unknown[]
+      | undefined;
+
+    expect(openaiArgs).toHaveLength(3);
+    expect(openaivercelArgs).toHaveLength(3);
+    expect(openaiResponsesArgs?.[3]).toBe(oauthManager);
   });
 });

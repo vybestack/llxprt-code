@@ -23,12 +23,7 @@ export class IdeContextTracker {
   private readonly logger: DebugLogger;
   private readonly config: Config;
 
-  constructor(
-    config: Config,
-    private readonly getIdeContext: typeof ideContext.getIdeContext = ideContext.getIdeContext.bind(
-      ideContext,
-    ),
-  ) {
+  constructor(config: Config) {
     this.config = config;
     this.logger = new DebugLogger('llxprt:core:ideContextTracker');
   }
@@ -62,7 +57,7 @@ export class IdeContextTracker {
     contextParts: string[];
     newIdeContext: IdeContext | undefined;
   } {
-    const currentIdeContext = this.getIdeContext();
+    const currentIdeContext = ideContext.getIdeContext();
     if (!currentIdeContext) {
       return { contextParts: [], newIdeContext: undefined };
     }
@@ -120,7 +115,7 @@ export class IdeContextTracker {
     contextParts: string[];
     newIdeContext: IdeContext | undefined;
   } {
-    const currentIdeContext = this.getIdeContext();
+    const currentIdeContext = ideContext.getIdeContext();
     if (!currentIdeContext || !this.lastSentIdeContext) {
       return { contextParts: [], newIdeContext: currentIdeContext };
     }

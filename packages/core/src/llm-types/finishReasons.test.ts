@@ -3,9 +3,8 @@
  * @requirement REQ-001.1, REQ-001.2, REQ-001.3, REQ-001.4, REQ-001.5
  * @pseudocode lines 10-26
  */
-import { describe, expect } from 'bun:test';
-import { it } from 'bun:test';
-import { propertyTest } from '../test-utils/propertyTest.js';
+import { describe, expect } from 'vitest';
+import { it } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import {
   mapGeminiFinishReason,
@@ -351,8 +350,7 @@ describe('mapping tables export', () => {
 // ============================================================================
 
 describe('finishReasons property-based', () => {
-  propertyTest(
-    [fc.string({ maxLength: 50 })],
+  it.prop([fc.string({ maxLength: 50 })])(
     'for any string, mapGeminiFinishReason preserves rawStopReason and yields a canonical reason',
     (raw: string) => {
       const result = mapGeminiFinishReason(raw);
@@ -363,8 +361,7 @@ describe('finishReasons property-based', () => {
     },
   );
 
-  propertyTest(
-    [fc.string({ maxLength: 50 })],
+  it.prop([fc.string({ maxLength: 50 })])(
     'for any string, mapOpenAIFinishReason preserves rawStopReason and yields a canonical reason',
     (raw: string) => {
       const result = mapOpenAIFinishReason(raw);
@@ -375,8 +372,7 @@ describe('finishReasons property-based', () => {
     },
   );
 
-  propertyTest(
-    [fc.string({ maxLength: 50 })],
+  it.prop([fc.string({ maxLength: 50 })])(
     'for any string, mapAnthropicStopReason preserves rawStopReason and yields a canonical reason',
     (raw: string) => {
       const result = mapAnthropicStopReason(raw);
@@ -387,16 +383,15 @@ describe('finishReasons property-based', () => {
     },
   );
 
-  propertyTest(
-    [
-      fc.oneof(
-        fc.constantFrom(...ALL_CANONICAL),
-        fc.string().filter((s) => !CANONICAL_STRINGS.includes(s)),
-        fc.integer(),
-        fc.boolean(),
-        fc.constant(null),
-      ),
-    ],
+  it.prop([
+    fc.oneof(
+      fc.constantFrom(...ALL_CANONICAL),
+      fc.string().filter((s) => !CANONICAL_STRINGS.includes(s)),
+      fc.integer(),
+      fc.boolean(),
+      fc.constant(null),
+    ),
+  ])(
     'isCanonicalFinishReason is true iff value is in the union set',
     (value: unknown) => {
       const result = isCanonicalFinishReason(value);
@@ -406,14 +401,12 @@ describe('finishReasons property-based', () => {
     },
   );
 
-  propertyTest(
-    [fc.constantFrom(...ALL_CANONICAL)],
+  it.prop([fc.constantFrom(...ALL_CANONICAL)])(
     'every canonical finish reason is recognized by isCanonicalFinishReason',
     (reason: CanonicalFinishReason) => isCanonicalFinishReason(reason) === true,
   );
 
-  propertyTest(
-    [fc.string({ maxLength: 30 })],
+  it.prop([fc.string({ maxLength: 30 })])(
     'mapGeminiFinishReason is pure: same input always yields same output',
     (raw) => {
       const r1 = mapGeminiFinishReason(raw);
@@ -425,8 +418,7 @@ describe('finishReasons property-based', () => {
     },
   );
 
-  propertyTest(
-    [fc.string({ maxLength: 30 })],
+  it.prop([fc.string({ maxLength: 30 })])(
     'mapOpenAIFinishReason is pure: same input always yields same output',
     (raw) => {
       const r1 = mapOpenAIFinishReason(raw);
@@ -438,8 +430,7 @@ describe('finishReasons property-based', () => {
     },
   );
 
-  propertyTest(
-    [fc.string({ maxLength: 30 })],
+  it.prop([fc.string({ maxLength: 30 })])(
     'mapAnthropicStopReason is pure: same input always yields same output',
     (raw) => {
       const r1 = mapAnthropicStopReason(raw);
@@ -451,8 +442,7 @@ describe('finishReasons property-based', () => {
     },
   );
 
-  propertyTest(
-    [fc.constantFrom(...Object.keys(GEMINI_FINISH_MAP))],
+  it.prop([fc.constantFrom(...Object.keys(GEMINI_FINISH_MAP))])(
     'every known Gemini FinishReason maps to a canonical value via GEMINI_FINISH_MAP',
     (raw: string) => {
       const result = mapGeminiFinishReason(raw);
@@ -461,8 +451,7 @@ describe('finishReasons property-based', () => {
     },
   );
 
-  propertyTest(
-    [fc.constantFrom(...Object.keys(OPENAI_FINISH_MAP))],
+  it.prop([fc.constantFrom(...Object.keys(OPENAI_FINISH_MAP))])(
     'every known OpenAI finish reason maps via OPENAI_FINISH_MAP',
     (raw: string) => {
       const result = mapOpenAIFinishReason(raw);
@@ -471,8 +460,7 @@ describe('finishReasons property-based', () => {
     },
   );
 
-  propertyTest(
-    [fc.constantFrom(...Object.keys(ANTHROPIC_STOP_MAP))],
+  it.prop([fc.constantFrom(...Object.keys(ANTHROPIC_STOP_MAP))])(
     'every known Anthropic stop reason maps via ANTHROPIC_STOP_MAP',
     (raw: string) => {
       const result = mapAnthropicStopReason(raw);
@@ -481,8 +469,7 @@ describe('finishReasons property-based', () => {
     },
   );
 
-  propertyTest(
-    [fc.string({ maxLength: 1 })],
+  it.prop([fc.string({ maxLength: 1 })])(
     'single-char strings never crash any mapper and always return canonical',
     (raw: string) =>
       ALL_CANONICAL.includes(mapGeminiFinishReason(raw).finishReason) &&

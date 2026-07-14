@@ -24,9 +24,9 @@ import {
 import {
   openBrowserSecurely,
   shouldLaunchBrowser,
-  DebugLogger,
-  debugLogger,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import { ClipboardService } from './ClipboardService.js';
 import type { LocalOAuthCallbackServer } from './local-oauth-callback.js';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
@@ -37,22 +37,6 @@ import {
   isTokenExpired,
 } from './oauth-provider-base.js';
 import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
-
-export interface AnthropicOAuthProviderDependencies {
-  startLocalOAuthCallback: typeof startLocalOAuthCallback;
-  createDeviceFlow: () => AnthropicDeviceFlow;
-  shouldLaunchBrowser: typeof shouldLaunchBrowser;
-  openBrowserSecurely: typeof openBrowserSecurely;
-  copyToClipboard: typeof ClipboardService.copyToClipboard;
-}
-
-const defaultDependencies: AnthropicOAuthProviderDependencies = {
-  startLocalOAuthCallback,
-  createDeviceFlow: () => new AnthropicDeviceFlow(),
-  shouldLaunchBrowser,
-  openBrowserSecurely,
-  copyToClipboard: ClipboardService.copyToClipboard,
-};
 
 const CALLBACK_PORT_RANGE: [number, number] = [8765, 8795];
 const CALLBACK_TIMEOUT_MS = 3 * 60 * 1000;
@@ -84,7 +68,6 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   private logger: DebugLogger;
   private currentAuthAttemptId?: string;
   private addItem?: OAuthUICallback;
-  private readonly dependencies: AnthropicOAuthProviderDependencies;
 
   /**
    * @plan PLAN-20250823-AUTHFIXES.P06
@@ -96,10 +79,8 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   constructor(
     private _tokenStore?: TokenStore,
     addItem?: OAuthUICallback,
-    dependencies: Partial<AnthropicOAuthProviderDependencies> = {},
   ) {
-    this.dependencies = { ...defaultDependencies, ...dependencies };
-    this.deviceFlow = this.dependencies.createDeviceFlow();
+    this.deviceFlow = new AnthropicDeviceFlow();
     this.retryHandler = new RetryHandler();
     this.errorHandler = new GracefulErrorHandler(this.retryHandler);
     this.logger = new DebugLogger('llxprt:auth:anthropic');
@@ -204,15 +185,13 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     } catch {
       // Runtime not initialized (e.g., tests) — use default
     }
-    const interactive = this.dependencies.shouldLaunchBrowser({
-      forceManual: noBrowser,
-    });
+    const interactive = shouldLaunchBrowser({ forceManual: noBrowser });
     let localCallback: LocalOAuthCallbackServer | null = null;
 
     if (interactive) {
       try {
         const state = this.deviceFlow.getState();
-        localCallback = await this.dependencies.startLocalOAuthCallback({
+        localCallback = await startLocalOAuthCallback({
           state,
           portRange: CALLBACK_PORT_RANGE,
           timeoutMs: CALLBACK_TIMEOUT_MS,
@@ -248,7 +227,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     debugLogger.log(deviceCodeUrl);
 
     try {
-      await this.dependencies.copyToClipboard(deviceCodeUrl);
+      await ClipboardService.copyToClipboard(deviceCodeUrl);
     } catch (error) {
       this.logger.debug(
         () =>
@@ -262,7 +241,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       debugLogger.log('Opening browser for authentication...');
       const browserUrl = callbackUrl ?? deviceCodeUrl;
       try {
-        await this.dependencies.openBrowserSecurely(browserUrl);
+        await openBrowserSecurely(browserUrl);
       } catch (error) {
         this.logger.debug(() => `Browser launch error: ${error}`);
       }

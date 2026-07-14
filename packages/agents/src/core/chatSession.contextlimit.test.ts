@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { DEFAULT_TOKEN_LIMIT } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
@@ -156,7 +156,9 @@ describe('ChatSession Context Limit Enforcement', () => {
     // Total: 40000 (history) + 50000 (pending) + 65536 (budget) = 155536
     // Limit: 190000 - 256 (safety margin) = 189744
     // 155536 < 189744, so should not throw
-    await chat['enforceContextWindow'](pendingTokens, 'test-prompt-id');
+    await expect(
+      chat['enforceContextWindow'](pendingTokens, 'test-prompt-id'),
+    ).resolves.not.toThrow();
 
     // Verify tokenLimit was called with the user context limit
     expect(tokenLimitsModule.tokenLimit).toHaveBeenCalledWith(
@@ -204,7 +206,9 @@ describe('ChatSession Context Limit Enforcement', () => {
     const pendingTokens = 5000; // This should be within the limit
 
     // Act: Should not trigger compression
-    await chat['enforceContextWindow'](pendingTokens, 'test-prompt-id');
+    await expect(
+      chat['enforceContextWindow'](pendingTokens, 'test-prompt-id'),
+    ).resolves.not.toThrow();
 
     // Verify tokenLimit was called with the user context limit
     expect(tokenLimitsModule.tokenLimit).toHaveBeenCalledWith(
@@ -274,7 +278,9 @@ describe('ChatSession Context Limit Enforcement', () => {
     const pendingTokens = 5000;
 
     // Act
-    await chat['enforceContextWindow'](pendingTokens, 'test-prompt-id');
+    await expect(
+      chat['enforceContextWindow'](pendingTokens, 'test-prompt-id'),
+    ).resolves.not.toThrow();
 
     // Verify tokenLimit was called with a fallback (undefined) followed by provider default
     expect(tokenLimitsModule.tokenLimit).toHaveBeenNthCalledWith(

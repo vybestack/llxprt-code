@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import type { ProxySocketClient } from '@vybestack/llxprt-code-auth';
@@ -110,9 +110,9 @@ describe('ProxyOAuthAdapter', () => {
       socketClientStub as unknown as ProxySocketClient,
     );
 
-    const loginPromise = adapter.login('anthropic');
-    expect(loginPromise).rejects.toThrow(/Unknown flow type/i);
-    await loginPromise.catch(() => undefined);
+    await expect(adapter.login('anthropic')).rejects.toThrow(
+      /Unknown flow type/i,
+    );
 
     expect(requestMock).toHaveBeenNthCalledWith(2, 'oauth_cancel', {
       session_id: 'session-to-cancel',
@@ -141,10 +141,9 @@ describe('ProxyOAuthAdapter', () => {
     await new Promise((r) => setImmediate(r));
     mockStdin.emit('close');
 
-    expect(loginPromise).rejects.toThrow(
+    await expect(loginPromise).rejects.toThrow(
       /stdin closed without providing a code/i,
     );
-    await loginPromise.catch(() => undefined);
 
     expect(requestMock).toHaveBeenNthCalledWith(2, 'oauth_cancel', {
       session_id: 'pkce-session-close',
@@ -175,10 +174,9 @@ describe('ProxyOAuthAdapter', () => {
     await new Promise((r) => setImmediate(r));
     mockStdin.emit('end');
 
-    expect(loginPromise).rejects.toThrow(
+    await expect(loginPromise).rejects.toThrow(
       /stdin closed without providing a code/i,
     );
-    await loginPromise.catch(() => undefined);
 
     expect(requestMock).toHaveBeenNthCalledWith(2, 'oauth_cancel', {
       session_id: 'pkce-session-end',

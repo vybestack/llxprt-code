@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import * as http from 'http';
 import * as https from 'https';
 import {

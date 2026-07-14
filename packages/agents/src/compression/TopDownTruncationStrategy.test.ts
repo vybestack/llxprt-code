@@ -17,7 +17,7 @@
  * surviving messages (no summary, no ack).
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { CompressionResult } from '@vybestack/llxprt-code-core/core/compression/types.js';

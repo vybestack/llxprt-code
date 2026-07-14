@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'vitest';
 
 import * as actualNodeFs from 'node:fs'; // For setup/teardown
 import fs from 'node:fs';
@@ -24,9 +32,15 @@ import {
 } from './fileUtils.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
 
+vi.mock('mime-types', () => ({
+  default: { lookup: vi.fn() },
+  lookup: vi.fn(),
+}));
+
+const mockMimeLookup = mime.lookup as Mock;
+
 describe('fileUtils', () => {
   let tempRootDir: string;
-  let mockMimeLookup: ReturnType<typeof vi.spyOn<typeof mime, 'lookup'>>;
   const originalProcessCwd = process.cwd;
 
   let testTextFilePath: string;
@@ -38,7 +52,7 @@ describe('fileUtils', () => {
   let directoryPath: string;
 
   beforeEach(() => {
-    mockMimeLookup = vi.spyOn(mime, 'lookup');
+    vi.resetAllMocks(); // Reset all mocks, including mime.lookup
 
     tempRootDir = actualNodeFs.mkdtempSync(
       path.join(os.tmpdir(), 'fileUtils-test-'),
@@ -157,18 +171,18 @@ describe('fileUtils', () => {
     it('should return true if the file exists', async () => {
       const testFile = path.join(tempRootDir, 'exists.txt');
       actualNodeFs.writeFileSync(testFile, 'content');
-      expect(await fileExists(testFile)).toBe(true);
+      await expect(fileExists(testFile)).resolves.toBe(true);
     });
 
     it('should return false if the file does not exist', async () => {
       const testFile = path.join(tempRootDir, 'does-not-exist.txt');
-      expect(await fileExists(testFile)).toBe(false);
+      await expect(fileExists(testFile)).resolves.toBe(false);
     });
 
     it('should return true for a directory that exists', async () => {
       const testDir = path.join(tempRootDir, 'exists-dir');
       actualNodeFs.mkdirSync(testDir);
-      expect(await fileExists(testDir)).toBe(true);
+      await expect(fileExists(testDir)).resolves.toBe(true);
     });
   });
 

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import type { ToolCall, WaitingToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -20,19 +20,6 @@ import {
   waitForStatus,
 } from './coreToolScheduler-test-helpers.js';
 
-async function waitForCall(
-  callback: ReturnType<typeof vi.fn>,
-  timeoutMs = 5000,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (callback.mock.calls.length > 0) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error('Timed out waiting for tool completion callback');
-}
 describe('CoreToolScheduler cancellation prevents continuation', () => {
   it('should not process tool completions after cancelAll is called', async () => {
     const executeFn = vi.fn().mockImplementation(async () => {
@@ -109,15 +96,19 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
       abortController.signal,
     );
 
-    await waitForStatus(onToolCallsUpdate, 'executing');
+    await vi.waitFor(() => {
+      const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
+      return calls.some((c) => c.status === 'executing');
+    });
 
     scheduler.cancelAll();
     abortController.abort();
 
     await schedulePromise;
 
-    await waitForCall(onAllToolCallsComplete);
-    expect(onAllToolCallsComplete).toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(onAllToolCallsComplete).toHaveBeenCalled();
+    });
 
     const completedCalls = onAllToolCallsComplete.mock.calls.at(
       -1,
@@ -216,7 +207,10 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
       abortController.signal,
     );
 
-    await waitForStatus(onToolCallsUpdate, 'executing');
+    await vi.waitFor(() => {
+      const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
+      return calls.filter((c) => c.status === 'executing').length === 2;
+    });
 
     scheduler.cancelAll();
 
@@ -232,8 +226,9 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
 
     await schedulePromise;
 
-    await waitForCall(onAllToolCallsComplete);
-    expect(onAllToolCallsComplete).toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(onAllToolCallsComplete).toHaveBeenCalled();
+    });
 
     const finalCalls = onAllToolCallsComplete.mock.calls.at(
       -1,
@@ -350,8 +345,9 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
 
     // Wait for completion
     await schedulePromise;
-    await waitForCall(onAllToolCallsComplete);
-    expect(onAllToolCallsComplete).toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(onAllToolCallsComplete).toHaveBeenCalled();
+    });
 
     // Verify the tool executed only once (status is success)
     const completedCalls = onAllToolCallsComplete.mock

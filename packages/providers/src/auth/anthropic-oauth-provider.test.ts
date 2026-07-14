@@ -4,21 +4,67 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import {
-  AnthropicOAuthProvider,
-  type AnthropicOAuthProviderDependencies,
-} from './anthropic-oauth-provider.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
 import type { TokenStore } from '@vybestack/llxprt-code-core';
-import type { AnthropicDeviceFlow } from '@vybestack/llxprt-code-auth';
+
+// Mock the ClipboardService class - do this before importing it
+vi.mock('./ClipboardService.js', () => ({
+  ClipboardService: {
+    copyToClipboard: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
+// Import the mocked ClipboardService for test assertions
+import { ClipboardService } from './ClipboardService.js';
+
+// Register real runtime accessors via the bridge (no mock theater)
 import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
+
+// Mock the device flow implementation
+vi.mock(
+  '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js',
+  async () => {
+    const actual = await vi.importActual(
+      '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js',
+    );
+    return {
+      ...actual,
+      // Mock shouldLaunchBrowser to return true for tests
+      shouldLaunchBrowser: vi.fn().mockReturnValue(true),
+      // Mock openBrowserSecurely to prevent actual browser opening
+      openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
+    };
+  },
+);
+
+vi.mock('@vybestack/llxprt-code-auth', async () => {
+  const actual = await vi.importActual('@vybestack/llxprt-code-auth');
+  return {
+    ...actual,
+    AnthropicDeviceFlow: vi.fn().mockImplementation(() => ({
+      initiateDeviceFlow: vi.fn().mockResolvedValue({
+        device_code: 'mock-device-code',
+        user_code: 'mock-user-code',
+        verification_uri: 'https://anthropic.com/authorize',
+        verification_uri_complete:
+          'https://anthropic.com/authorize?user_code=mock-user-code',
+      }),
+      exchangeCodeForToken: vi.fn().mockResolvedValue({
+        access_token: 'mock-access-token',
+        refresh_token: 'mock-refresh-token',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        token_type: 'Bearer',
+        scope: 'openid profile email',
+      }),
+    })),
+  };
+});
 
 describe('AnthropicOAuthProvider', () => {
   let provider: AnthropicOAuthProvider;
-  let mockTokenStore: TokenStore;
-  let mockAddItem: ReturnType<typeof vi.fn>;
-  let copyToClipboard: ReturnType<typeof vi.fn>;
-  let dependencies: AnthropicOAuthProviderDependencies;
+  let mockTokenStore: import('vitest').MockedObject<TokenStore>;
+  let mockAddItem: ReturnType<typeof import('vitest').vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -45,8 +91,19 @@ describe('AnthropicOAuthProvider', () => {
     };
 
     mockAddItem = vi.fn();
-    copyToClipboard = vi.fn().mockResolvedValue(undefined);
-    dependencies = {
+
+    provider = new AnthropicOAuthProvider(mockTokenStore, mockAddItem);
+
+    // Mock the pending auth promise to prevent hanging
+    vi.spyOn(provider, 'waitForAuthCode').mockResolvedValue(
+      'mock-auth-code#mock-state',
+    );
+
+    // Mock console.log to prevent output during tests
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    // Mock local OAuth callback to prevent actual server startup
+    vi.mock('./local-oauth-callback.js', () => ({
       startLocalOAuthCallback: vi.fn().mockResolvedValue({
         redirectUri: 'http://localhost:8787/callback',
         waitForCallback: vi
@@ -54,47 +111,19 @@ describe('AnthropicOAuthProvider', () => {
           .mockRejectedValue(new Error('Local callback disabled for test')),
         shutdown: vi.fn().mockResolvedValue(undefined),
       }),
-      createDeviceFlow: () =>
-        ({
-          initiateDeviceFlow: vi.fn().mockResolvedValue({
-            device_code: 'mock-device-code',
-            user_code: 'mock-user-code',
-            verification_uri: 'https://anthropic.com/authorize',
-            verification_uri_complete:
-              'https://anthropic.com/authorize?user_code=mock-user-code',
-          }),
-          exchangeCodeForToken: vi.fn().mockResolvedValue({
-            access_token: 'mock-access-token',
-            refresh_token: 'mock-refresh-token',
-            expiry: Math.floor(Date.now() / 1000) + 3600,
-            token_type: 'Bearer',
-            scope: 'openid profile email',
-          }),
-          getState: vi.fn().mockReturnValue('mock-state'),
-          buildAuthorizationUrl: vi
-            .fn()
-            .mockReturnValue('https://anthropic.com/authorize'),
-        }) as unknown as AnthropicDeviceFlow,
-      shouldLaunchBrowser: vi.fn().mockReturnValue(true),
-      openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
-      copyToClipboard,
-    };
-
-    provider = new AnthropicOAuthProvider(
-      mockTokenStore,
-      mockAddItem,
-      dependencies,
-    );
+    }));
 
     // Mock the pending auth promise to prevent hanging
     vi.spyOn(provider, 'waitForAuthCode').mockResolvedValue(
       'mock-auth-code#mock-state',
     );
 
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-
+    // Mock the global object variables used by OAuth
     (global as Record<string, unknown>).__oauth_provider = '';
     (global as Record<string, unknown>).__oauth_needs_code = false;
+
+    // Mock ClipboardService - make sure to clear any previous calls
+    vi.mocked(ClipboardService.copyToClipboard).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -106,11 +135,7 @@ describe('AnthropicOAuthProvider', () => {
     vi.clearAllMocks();
 
     // Re-initialize mocks (it seems the provider's addItem is getting lost)
-    provider = new AnthropicOAuthProvider(
-      mockTokenStore,
-      mockAddItem,
-      dependencies,
-    );
+    provider = new AnthropicOAuthProvider(mockTokenStore, mockAddItem);
 
     // Mock the pending auth promise to prevent hanging - need to call submitAuthCode
     vi.spyOn(provider, 'waitForAuthCode').mockImplementation(async () =>
@@ -145,11 +170,7 @@ describe('AnthropicOAuthProvider', () => {
     vi.clearAllMocks();
 
     // Re-initialize mocks (it seems the provider's addItem is getting lost)
-    provider = new AnthropicOAuthProvider(
-      mockTokenStore,
-      mockAddItem,
-      dependencies,
-    );
+    provider = new AnthropicOAuthProvider(mockTokenStore, mockAddItem);
 
     // Mock the pending auth promise to prevent hanging - need to call submitAuthCode
     vi.spyOn(provider, 'waitForAuthCode').mockImplementation(async () =>
@@ -176,11 +197,7 @@ describe('AnthropicOAuthProvider', () => {
     vi.clearAllMocks();
 
     // Re-initialize mocks (it seems the provider's addItem is getting lost)
-    provider = new AnthropicOAuthProvider(
-      mockTokenStore,
-      mockAddItem,
-      dependencies,
-    );
+    provider = new AnthropicOAuthProvider(mockTokenStore, mockAddItem);
 
     vi.spyOn(provider, 'waitForAuthCode').mockImplementation(async () =>
       Promise.resolve('mock-auth-code#mock-state'),
@@ -192,7 +209,7 @@ describe('AnthropicOAuthProvider', () => {
     await authPromise;
 
     // This should now pass - we expect ClipboardService.copyToClipboard to be called
-    expect(copyToClipboard).toHaveBeenCalled();
+    expect(ClipboardService.copyToClipboard).toHaveBeenCalled();
   });
 
   it('should call addItem with type "oauth_url" when browser launch is disabled', async () => {
@@ -200,11 +217,7 @@ describe('AnthropicOAuthProvider', () => {
     vi.clearAllMocks();
 
     // Re-initialize mocks (it seems the provider's addItem is getting lost)
-    provider = new AnthropicOAuthProvider(
-      mockTokenStore,
-      mockAddItem,
-      dependencies,
-    );
+    provider = new AnthropicOAuthProvider(mockTokenStore, mockAddItem);
 
     vi.spyOn(provider, 'waitForAuthCode').mockImplementation(async () =>
       Promise.resolve('mock-auth-code#mock-state'),
@@ -230,11 +243,7 @@ describe('AnthropicOAuthProvider', () => {
     vi.clearAllMocks();
 
     // Re-initialize mocks (it seems the provider's addItem is getting lost)
-    provider = new AnthropicOAuthProvider(
-      mockTokenStore,
-      mockAddItem,
-      dependencies,
-    );
+    provider = new AnthropicOAuthProvider(mockTokenStore, mockAddItem);
 
     vi.spyOn(provider, 'waitForAuthCode').mockImplementation(async () =>
       Promise.resolve('mock-auth-code#mock-state'),
@@ -260,11 +269,7 @@ describe('AnthropicOAuthProvider', () => {
     vi.clearAllMocks();
 
     // Re-initialize mocks (it seems the provider's addItem is getting lost)
-    provider = new AnthropicOAuthProvider(
-      mockTokenStore,
-      mockAddItem,
-      dependencies,
-    );
+    provider = new AnthropicOAuthProvider(mockTokenStore, mockAddItem);
 
     vi.spyOn(provider, 'waitForAuthCode').mockImplementation(async () =>
       Promise.resolve('mock-auth-code#mock-state'),
@@ -276,6 +281,6 @@ describe('AnthropicOAuthProvider', () => {
     await authPromise;
 
     // This should now pass - we expect the URL to be copied to clipboard
-    expect(copyToClipboard).toHaveBeenCalled();
+    expect(ClipboardService.copyToClipboard).toHaveBeenCalled();
   });
 });

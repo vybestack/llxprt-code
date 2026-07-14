@@ -89,29 +89,19 @@ describe('OpenAIVercelProvider', () => {
   });
 
   describe('Default Model (REQ-OAV-004)', () => {
-    let originalDefaultModel: string | undefined;
-
     beforeEach(() => {
-      originalDefaultModel = process.env.LLXPRT_DEFAULT_MODEL;
-    });
-
-    afterEach(() => {
-      if (originalDefaultModel === undefined) {
-        delete process.env.LLXPRT_DEFAULT_MODEL;
-      } else {
-        process.env.LLXPRT_DEFAULT_MODEL = originalDefaultModel;
-      }
+      vi.unstubAllEnvs();
     });
 
     it('should return default model when LLXPRT_DEFAULT_MODEL is not set', () => {
-      process.env.LLXPRT_DEFAULT_MODEL = '';
+      vi.stubEnv('LLXPRT_DEFAULT_MODEL', '');
       const provider = new OpenAIVercelProvider('test-api-key');
       const defaultModel = provider.getDefaultModel();
       expect(defaultModel).toBe('gpt-4o');
     });
 
     it('should return LLXPRT_DEFAULT_MODEL when set', () => {
-      process.env.LLXPRT_DEFAULT_MODEL = 'custom-model';
+      vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'custom-model');
       const provider = new OpenAIVercelProvider('test-api-key');
       const defaultModel = provider.getDefaultModel();
       expect(defaultModel).toBe('custom-model');
@@ -153,7 +143,7 @@ describe('OpenAIVercelProvider', () => {
       // Avoid accidental live network calls to the default OpenAI base URL in
       // unit tests. If fetch hangs, Vitest will time out and fail this test.
       const fetchMock = vi.fn().mockRejectedValue(new Error('network'));
-      global.fetch = fetchMock as typeof fetch;
+      vi.stubGlobal('fetch', fetchMock);
 
       const provider = new OpenAIVercelProvider('test-api-key');
       const models = await provider.getModels();
@@ -185,7 +175,7 @@ describe('OpenAIVercelProvider', () => {
             ],
           }),
         });
-        global.fetch = fetchMock as typeof fetch;
+        vi.stubGlobal('fetch', fetchMock);
 
         const models = await provider.getModels();
 
@@ -220,7 +210,7 @@ describe('OpenAIVercelProvider', () => {
         );
 
         const fetchMock = vi.fn().mockRejectedValue(new Error('network'));
-        global.fetch = fetchMock as typeof fetch;
+        vi.stubGlobal('fetch', fetchMock);
 
         const models = await provider.getModels();
 
@@ -314,35 +304,67 @@ describe('OpenAIVercelProvider', () => {
       const settingsService = new SettingsService();
       settingsService.set('activeProvider', 'openaivercel');
 
-      let observedRoles: string[] | undefined;
-      let observedSystemPrompt: string | undefined;
-      const generateTextMock = vi.fn(
-        async (request: {
-          messages?: Array<{ role?: string }>;
-          system?: string;
-        }) => {
-          observedRoles = (request.messages ?? []).map(
-            (message) => message.role ?? '',
-          );
-          observedSystemPrompt = request.system;
-          return {
-            text: 'Hello from Qwen',
-            toolCalls: [],
-            finishReason: 'stop',
-            usage: {
-              promptTokens: 1,
-              completionTokens: 1,
-              totalTokens: 2,
-            },
-          };
-        },
-      );
       const provider = new OpenAIVercelProvider(
         'test-api-key',
         'https://portal.qwen.ai/v1',
         { settingsService },
-        { generateText: generateTextMock },
       );
+
+      let observedRoles: string[] | undefined;
+      const fetchMock = vi.fn(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = extractUrl(input);
+
+          if (!url.includes('/chat/completions')) {
+            throw new Error(`Unexpected URL: ${url}`);
+          }
+
+          const parsedBody = JSON.parse(String(init?.body ?? '{}')) as {
+            messages?: Array<{ role?: string }>;
+            model?: string;
+          };
+          const roles = (parsedBody.messages ?? []).map(
+            (msg) => msg.role ?? '',
+          );
+          observedRoles = roles;
+
+          if (roles.includes('developer')) {
+            return new Response(
+              JSON.stringify({
+                error: {
+                  message:
+                    "developer is not one of ['system', 'assistant', 'user', 'tool', 'function'] - 'messages.[0].role'",
+                },
+              }),
+              { status: 400, headers: { 'content-type': 'application/json' } },
+            );
+          }
+
+          return new Response(
+            JSON.stringify({
+              id: 'chatcmpl-test',
+              object: 'chat.completion',
+              created: 0,
+              model: parsedBody.model ?? 'qwen3-coder-plus',
+              choices: [
+                {
+                  index: 0,
+                  message: { role: 'assistant', content: 'Hello from Qwen' },
+                  finish_reason: 'stop',
+                },
+              ],
+              usage: {
+                prompt_tokens: 1,
+                completion_tokens: 1,
+                total_tokens: 2,
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        },
+      );
+
+      vi.stubGlobal('fetch', fetchMock);
 
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
@@ -359,10 +381,10 @@ describe('OpenAIVercelProvider', () => {
         results.push(chunk);
       }
 
-      expect(generateTextMock).toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalled();
       expect(observedRoles).toBeDefined();
       expect(observedRoles).not.toContain('developer');
-      expect(observedSystemPrompt).toBeTruthy();
+      expect(observedRoles?.[0]).toBe('system');
       expect(results.length).toBeGreaterThan(0);
     });
   });

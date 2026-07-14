@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 
 describe('OpenAIVercelProvider - Model Listing', () => {

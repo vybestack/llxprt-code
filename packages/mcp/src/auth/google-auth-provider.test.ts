@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  GoogleCredentialProvider,
-  type GoogleAuthClientLike,
-  type GoogleAuthFactory,
-} from './google-auth-provider.js';
-import { vi, describe, beforeEach, it, expect } from 'bun:test';
+import { GoogleAuth } from 'google-auth-library';
+import { GoogleCredentialProvider } from './google-auth-provider.js';
+import type { Mock } from 'vitest';
+import { vi, describe, beforeEach, it, expect } from 'vitest';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
+
+vi.mock('google-auth-library');
 
 describe('GoogleCredentialProvider', () => {
   it('should throw an error if no scopes are provided', () => {
@@ -25,24 +25,20 @@ describe('GoogleCredentialProvider', () => {
         scopes: ['scope1', 'scope2'],
       },
     } as MCPServerConfig;
-    const createGoogleAuth = vi.fn<GoogleAuthFactory>(() => ({
-      getClient: vi.fn(),
-    }));
-    new GoogleCredentialProvider(config, { createGoogleAuth });
-    expect(createGoogleAuth).toHaveBeenCalledWith({
+    new GoogleCredentialProvider(config);
+    expect(GoogleAuth).toHaveBeenCalledWith({
       scopes: ['scope1', 'scope2'],
     });
   });
 
   describe('with provider instance', () => {
     let provider: GoogleCredentialProvider;
-    let mockGetAccessToken: ReturnType<typeof vi.fn>;
-    let mockClient: GoogleAuthClientLike & {
-      getAccessToken: ReturnType<typeof vi.fn>;
+    let mockGetAccessToken: Mock;
+    let mockClient: {
+      getAccessToken: Mock;
       credentials?: { expiry_date: number | null };
       quotaProjectId?: string;
     };
-    let createGoogleAuth: GoogleAuthFactory;
 
     const validConfig = {
       oauth: {
@@ -62,12 +58,8 @@ describe('GoogleCredentialProvider', () => {
         getAccessToken: mockGetAccessToken,
         credentials: {},
       };
-      // Inject a factory returning a fake auth client, replacing prior
-      // module-level mocking of google-auth-library.
-      createGoogleAuth = () => ({
-        getClient: () => Promise.resolve(mockClient),
-      });
-      provider = new GoogleCredentialProvider(config, { createGoogleAuth });
+      (GoogleAuth.prototype.getClient as Mock).mockResolvedValue(mockClient);
+      provider = new GoogleCredentialProvider(config);
       vi.clearAllMocks();
     });
 
@@ -157,7 +149,6 @@ describe('GoogleCredentialProvider', () => {
       };
       const providerWithHeaders = new GoogleCredentialProvider(
         configWithHeaders,
-        { createGoogleAuth },
       );
       const headers = await providerWithHeaders.getRequestHeaders();
       expect(headers).toStrictEqual({
@@ -174,7 +165,6 @@ describe('GoogleCredentialProvider', () => {
       };
       const providerWithHeaders = new GoogleCredentialProvider(
         configWithHeaders,
-        { createGoogleAuth },
       );
       const headers = await providerWithHeaders.getRequestHeaders();
       expect(headers).toStrictEqual({

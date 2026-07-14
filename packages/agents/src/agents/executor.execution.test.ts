@@ -4,15 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AgentExecutor } from './executor.js';
 import type { AgentInputs } from './types.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
 import { LSTool } from '@vybestack/llxprt-code-tools';
 import { ReadFileTool } from '@vybestack/llxprt-code-tools';
-import type { ChatSession } from '../core/chatSession.js';
-import { type FunctionCall } from '@google/genai';
+import { ChatSession } from '../core/chatSession.js';
+import type { FunctionCall } from './types.js';
+import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import {
   setupExecutorFixture,
@@ -26,28 +26,41 @@ import {
   type MockFn,
 } from './executor-test-helpers.js';
 
-const mockSendMessageStream = vi.fn();
-const mockExecuteToolCall = vi.fn();
-const chatSessionCalls: ConstructorParameters<typeof ChatSession>[] = [];
-const dependencies = {
-  loadDirectoryContext: async () => 'Mocked Environment Context',
-  createChatSession: (...args: ConstructorParameters<typeof ChatSession>) => {
-    chatSessionCalls.push(args);
-    return {
+const { mockSendMessageStream, mockExecuteToolCall } = vi.hoisted(() => ({
+  mockSendMessageStream: vi.fn(),
+  mockExecuteToolCall: vi.fn(),
+}));
+
+vi.mock('../core/chatSession.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../core/chatSession.js')>();
+  return {
+    ...actual,
+    ChatSession: vi.fn().mockImplementation(() => ({
       sendMessageStream: mockSendMessageStream,
-    } as unknown as ChatSession;
-  },
-  executeTool: mockExecuteToolCall,
-};
+    })),
+  };
+});
+
+vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
+  executeToolCall: mockExecuteToolCall,
+}));
+
+vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
+
+const MockedChatSession = vi.mocked(ChatSession);
+const mockedGetDirectoryContextString = vi.mocked(getDirectoryContextString);
 
 describe('AgentExecutor run (Execution Loop and Logic)', () => {
   let fixture: ExecutorTestFixture;
 
   beforeEach(() => {
-    chatSessionCalls.length = 0;
     fixture = setupExecutorFixture({
+      MockedChatSession,
       mockSendMessageStream: mockSendMessageStream as MockFn,
       mockExecuteToolCall: mockExecuteToolCall as MockFn,
+      mockedGetDirectoryContextString:
+        mockedGetDirectoryContextString as MockFn,
       vi,
     });
   });
@@ -63,7 +76,6 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
     const inputs: AgentInputs = { goal: 'Find files' };
 
@@ -107,7 +119,7 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
 
     expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
 
-    const chatConstructorArgs = chatSessionCalls[0];
+    const chatConstructorArgs = MockedChatSession.mock.calls[0];
     const chatConfig = chatConstructorArgs[2]; // generationConfig is the 3rd argument (index 2)
     expect(chatConfig?.systemInstruction).toContain(
       `MUST call the \`${TASK_COMPLETE_TOOL_NAME}\` tool`,
@@ -130,7 +142,9 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
     const completeToolDef = sentTools.find(
       (t: { name: string }) => t.name === TASK_COMPLETE_TOOL_NAME,
     );
-    expect(completeToolDef?.parameters?.required).toContain('finalResult');
+    expect(completeToolDef?.parametersJsonSchema?.required).toContain(
+      'finalResult',
+    );
 
     expect(output.result).toBe('Found file1.txt');
     expect(output.terminate_reason).toBe(AgentTerminateMode.GOAL);
@@ -170,7 +184,6 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     mockModelResponse(mockSendMessageStream, [
@@ -210,7 +223,7 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
     const completeToolDef = sentTools.find(
       (t: { name: string }) => t.name === TASK_COMPLETE_TOOL_NAME,
     );
-    expect(completeToolDef?.parameters?.required).toStrictEqual([]);
+    expect(completeToolDef?.parametersJsonSchema?.required).toStrictEqual([]);
     expect(completeToolDef?.description).toContain(
       'signal that you have completed',
     );
@@ -226,7 +239,6 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     mockModelResponse(mockSendMessageStream, [
@@ -280,7 +292,6 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     mockModelResponse(mockSendMessageStream, [
@@ -318,17 +329,16 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
     );
 
     const turn2Params = getMockMessageParams(mockSendMessageStream, 1);
-    const turn2Parts = turn2Params.message;
-    expect(turn2Parts).toBeDefined();
-    expect(turn2Parts).toHaveLength(1);
+    const turn2Message = turn2Params.message;
+    expect(turn2Message).toBeDefined();
+    expect(turn2Message.blocks).toHaveLength(1);
 
-    expect(turn2Parts![0]).toStrictEqual(
+    expect(turn2Message.blocks[0]).toStrictEqual(
       expect.objectContaining({
-        functionResponse: expect.objectContaining({
-          name: TASK_COMPLETE_TOOL_NAME,
-          response: { error: expectedError },
-          id: 'call1',
-        }),
+        type: 'tool_response',
+        callId: 'call1',
+        toolName: TASK_COMPLETE_TOOL_NAME,
+        result: expect.objectContaining({ error: expectedError }),
       }),
     );
 
@@ -343,7 +353,6 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     mockModelResponse(mockSendMessageStream, [
@@ -379,7 +388,6 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     const call1: FunctionCall = {
@@ -404,8 +412,7 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
     mockExecuteToolCall.mockImplementation(async (_ctx, reqInfo) => {
       callsStarted++;
       const shouldSignal = callsStarted === 2;
-      vi.advanceTimersByTime(100);
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(100);
       // Signal after the await to avoid re-entrancy issues.
       void (shouldSignal && resolverHolder.resolve?.());
       return createCompletedToolCallResponse({
@@ -433,13 +440,10 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
 
     const runPromise = executor.run({ goal: 'Parallel' }, fixture.signal);
 
-    vi.advanceTimersByTime(1);
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(1);
     await bothStarted;
-    vi.advanceTimersByTime(150);
-    await Promise.resolve();
-    vi.advanceTimersByTime(1);
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(150);
+    await vi.advanceTimersByTimeAsync(1);
 
     const output = await runPromise;
 
@@ -447,16 +451,18 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
     expect(output.terminate_reason).toBe(AgentTerminateMode.GOAL);
 
     const turn2Params = getMockMessageParams(mockSendMessageStream, 1);
-    const parts = turn2Params.message;
-    expect(parts).toBeDefined();
-    expect(parts).toHaveLength(2);
-    expect(parts).toStrictEqual(
+    const turn2Message = turn2Params.message;
+    expect(turn2Message).toBeDefined();
+    expect(turn2Message.blocks).toHaveLength(2);
+    expect(turn2Message.blocks).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          functionResponse: expect.objectContaining({ id: 'c1' }),
+          type: 'tool_response',
+          callId: 'c1',
         }),
         expect.objectContaining({
-          functionResponse: expect.objectContaining({ id: 'c2' }),
+          type: 'tool_response',
+          callId: 'c2',
         }),
       ]),
     );
@@ -469,7 +475,6 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     const badCallId = 'bad_call_1';
@@ -503,16 +508,15 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
     consoleWarnSpy.mockRestore();
 
     const turn2Params = getMockMessageParams(mockSendMessageStream, 1);
-    const parts = turn2Params.message;
-    expect(parts).toBeDefined();
-    expect(parts![0]).toStrictEqual(
+    const turn2Message = turn2Params.message;
+    expect(turn2Message).toBeDefined();
+    expect(turn2Message.blocks[0]).toStrictEqual(
       expect.objectContaining({
-        functionResponse: expect.objectContaining({
-          id: badCallId,
-          name: ReadFileTool.Name,
-          response: {
-            error: expect.stringContaining('Unauthorized tool call'),
-          },
+        type: 'tool_response',
+        callId: badCallId,
+        toolName: ReadFileTool.Name,
+        result: expect.objectContaining({
+          error: expect.stringContaining('Unauthorized tool call'),
         }),
       }),
     );

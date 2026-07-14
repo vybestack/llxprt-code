@@ -2,7 +2,7 @@
  * Test that compression locking prevents race conditions
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { HistoryService } from './HistoryService.js';
 
 describe('Compression locking', () => {

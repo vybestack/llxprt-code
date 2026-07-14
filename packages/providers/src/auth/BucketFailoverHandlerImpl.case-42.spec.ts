@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
 import { OAuthManager } from './oauth-manager.js';
 import { MemoryTokenStore } from './BucketFailoverHandlerImpl.test-helpers.js';

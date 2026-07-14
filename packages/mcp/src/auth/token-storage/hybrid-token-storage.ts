@@ -11,55 +11,13 @@ import { TokenStorageType } from './types.js';
 
 const FORCE_FILE_STORAGE_ENV_VAR = 'LLXPRT_FORCE_FILE_STORAGE';
 
-/**
- * A {@link TokenStorage} that can additionally report keychain availability.
- * The keychain backend is only selected when {@link isAvailable} resolves true.
- */
-export interface AvailabilityAwareTokenStorage extends TokenStorage {
-  isAvailable(): Promise<boolean>;
-}
-
-/**
- * Factories for the two concrete backends, injectable so tests can supply
- * fakes without module-level mocking of the storage classes. Defaults build
- * the real keychain and file storages lazily (keychain via dynamic import to
- * preserve the native-module fallback semantics).
- */
-export interface HybridTokenStorageDependencies {
-  createKeychainStorage?: (
-    serviceName: string,
-  ) => Promise<AvailabilityAwareTokenStorage>;
-  createFileStorage?: (serviceName: string) => TokenStorage;
-}
-
-const defaultCreateKeychainStorage = async (
-  serviceName: string,
-): Promise<AvailabilityAwareTokenStorage> => {
-  const { KeychainTokenStorage } = await import('./keychain-token-storage.js');
-  return new KeychainTokenStorage(serviceName);
-};
-
-const defaultCreateFileStorage = (serviceName: string): TokenStorage =>
-  new FileTokenStorage(serviceName);
-
 export class HybridTokenStorage extends BaseTokenStorage {
   private storage: TokenStorage | null = null;
   private storageType: TokenStorageType | null = null;
   private storageInitPromise: Promise<TokenStorage> | null = null;
-  private readonly createKeychainStorage: (
-    serviceName: string,
-  ) => Promise<AvailabilityAwareTokenStorage>;
-  private readonly createFileStorage: (serviceName: string) => TokenStorage;
 
-  constructor(
-    serviceName: string,
-    dependencies: HybridTokenStorageDependencies = {},
-  ) {
+  constructor(serviceName: string) {
     super(serviceName);
-    this.createKeychainStorage =
-      dependencies.createKeychainStorage ?? defaultCreateKeychainStorage;
-    this.createFileStorage =
-      dependencies.createFileStorage ?? defaultCreateFileStorage;
   }
 
   private async initializeStorage(): Promise<TokenStorage> {
@@ -67,9 +25,10 @@ export class HybridTokenStorage extends BaseTokenStorage {
 
     if (!forceFileStorage) {
       try {
-        const keychainStorage = await this.createKeychainStorage(
-          this.serviceName,
+        const { KeychainTokenStorage } = await import(
+          './keychain-token-storage.js'
         );
+        const keychainStorage = new KeychainTokenStorage(this.serviceName);
 
         const isAvailable = await keychainStorage.isAvailable();
         if (isAvailable) {
@@ -82,7 +41,7 @@ export class HybridTokenStorage extends BaseTokenStorage {
       }
     }
 
-    this.storage = this.createFileStorage(this.serviceName);
+    this.storage = new FileTokenStorage(this.serviceName);
     this.storageType = TokenStorageType.ENCRYPTED_FILE;
     return this.storage;
   }

@@ -4,21 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { OAuthManager as OAuthManagerType } from '../../oauth-manager.js';
-import type { BucketFailoverHandlerImpl as BucketFailoverHandler } from '../../BucketFailoverHandlerImpl.js';
+import { OAuthManager } from '../../oauth-manager.js';
+import { BucketFailoverHandlerImpl } from '../../BucketFailoverHandlerImpl.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from '../../types.js';
-
-const behavioralOAuthManagerModule: string =
-  '../../oauth-manager.js?behavioral';
-const { OAuthManager } = (await import(
-  behavioralOAuthManagerModule
-)) as typeof import('../../oauth-manager.js');
-const behavioralFailoverModule: string =
-  '../../BucketFailoverHandlerImpl.js?behavioral';
-const { BucketFailoverHandlerImpl } = (await import(
-  behavioralFailoverModule
-)) as typeof import('../../BucketFailoverHandlerImpl.js');
-import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
+import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
 
 export class MemoryTokenStore implements TokenStore {
   private tokens = new Map<string, OAuthToken>();
@@ -145,7 +134,7 @@ export interface CreateTestOAuthManagerOptions {
 export function createTestOAuthManager(
   tokenStore: TokenStore,
   options?: CreateTestOAuthManagerOptions,
-): OAuthManagerType {
+): OAuthManager {
   const manager = new OAuthManager(tokenStore);
   if (options?.providers) {
     for (const provider of options.providers) {
@@ -158,14 +147,13 @@ export function createTestOAuthManager(
 export function createBucketFailoverHandler(
   buckets: string[],
   provider: string,
-  oauthManager: OAuthManagerType,
+  oauthManager: OAuthManager,
   metadata?: OAuthTokenRequestMetadata,
-): BucketFailoverHandler {
+): BucketFailoverHandlerImpl {
   return new BucketFailoverHandlerImpl(
     buckets,
     provider,
     oauthManager,
     metadata,
-    { authRetryTimeoutMs: 10 },
   );
 }

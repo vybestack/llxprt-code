@@ -24,8 +24,8 @@
  * Property-based tests use @fast-check/vitest (≥30% of total).
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { asyncPropertyTestWithOptions } from '../test-utils/propertyTest.js';
+import { describe, expect, beforeEach, afterEach } from 'vitest';
+import { it } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -181,7 +181,7 @@ describe('integration: full session recording lifecycle', () => {
   // @plan PLAN-20260211-SESSIONRECORDING.P25
   // @requirement REQ-INT-FULL-001
   // =========================================================================
-  asyncPropertyTestWithOptions(
+  it.prop(
     [
       fc.array(
         fc.record({
@@ -217,9 +217,7 @@ describe('integration: full session recording lifecycle', () => {
   // @plan PLAN-20260211-SESSIONRECORDING.P25
   // @requirement REQ-INT-FULL-002
   // =========================================================================
-  asyncPropertyTestWithOptions([fc.integer({ min: 1, max: 15 })], {
-    numRuns: 10,
-  })(
+  it.prop([fc.integer({ min: 1, max: 15 })], { numRuns: 10 })(
     '18: (property) resume preserves original history length for N turns',
     async (turnCount) => {
       const contents: IContent[] = [];
@@ -245,9 +243,7 @@ describe('integration: full session recording lifecycle', () => {
   // @plan PLAN-20260211-SESSIONRECORDING.P25
   // @requirement REQ-INT-FULL-003
   // =========================================================================
-  asyncPropertyTestWithOptions([fc.integer({ min: 1, max: 4 })], {
-    numRuns: 8,
-  })(
+  it.prop([fc.integer({ min: 1, max: 4 })], { numRuns: 8 })(
     '19: (property) seq numbers monotonic after N resumes',
     async (resumeCount) => {
       const { filePath, sessionId } = await createAndRecordSession(chatsDir, {
@@ -285,9 +281,7 @@ describe('integration: full session recording lifecycle', () => {
   // @plan PLAN-20260211-SESSIONRECORDING.P25
   // @requirement REQ-INT-FULL-001
   // =========================================================================
-  asyncPropertyTestWithOptions([fc.integer({ min: 2, max: 6 })], {
-    numRuns: 5,
-  })(
+  it.prop([fc.integer({ min: 2, max: 6 })], { numRuns: 5 })(
     '20: (property) discovery returns sessions sorted newest-first',
     async (sessionCount) => {
       const localTemp = await fs.mkdtemp(
@@ -324,12 +318,9 @@ describe('integration: full session recording lifecycle', () => {
   // @plan PLAN-20260211-SESSIONRECORDING.P25
   // @requirement REQ-INT-FULL-004
   // =========================================================================
-  asyncPropertyTestWithOptions(
-    [fc.integer({ min: 1, max: 10 }), fc.integer({ min: 0, max: 10 })],
-    {
-      numRuns: 15,
-    },
-  )(
+  it.prop([fc.integer({ min: 1, max: 10 }), fc.integer({ min: 0, max: 10 })], {
+    numRuns: 15,
+  })(
     '21: (property) compression with N pre + M post → replay has 1+M items',
     async (preCount, postCount) => {
       const sid = crypto.randomUUID();
@@ -364,9 +355,7 @@ describe('integration: full session recording lifecycle', () => {
   // @plan PLAN-20260211-SESSIONRECORDING.P25
   // @requirement REQ-INT-FULL-001
   // =========================================================================
-  asyncPropertyTestWithOptions([fc.integer({ min: 1, max: 8 })], {
-    numRuns: 10,
-  })(
+  it.prop([fc.integer({ min: 1, max: 8 })], { numRuns: 10 })(
     '22: (property) N provider switches → last switch is reflected in metadata',
     async (switchCount) => {
       const sid = crypto.randomUUID();
@@ -400,9 +389,7 @@ describe('integration: full session recording lifecycle', () => {
   // @plan PLAN-20260211-SESSIONRECORDING.P25
   // @requirement REQ-INT-FULL-001
   // =========================================================================
-  asyncPropertyTestWithOptions([fc.integer({ min: 1, max: 15 })], {
-    numRuns: 10,
-  })(
+  it.prop([fc.integer({ min: 1, max: 15 })], { numRuns: 10 })(
     '23: (property) N non-content events → no file until first content',
     async (eventCount) => {
       const svc = new SessionRecordingService(makeConfig(chatsDir));
@@ -442,12 +429,9 @@ describe('integration: full session recording lifecycle', () => {
   // @plan PLAN-20260211-SESSIONRECORDING.P25
   // @requirement REQ-INT-FULL-001
   // =========================================================================
-  asyncPropertyTestWithOptions(
-    [fc.integer({ min: 1, max: 10 }), fc.integer({ min: 0, max: 10 })],
-    {
-      numRuns: 12,
-    },
-  )(
+  it.prop([fc.integer({ min: 1, max: 10 }), fc.integer({ min: 0, max: 10 })], {
+    numRuns: 12,
+  })(
     'P1: (property) rewind N from M items → max(0, M-N) remain',
     async (totalItems, rewindCount) => {
       const sid = crypto.randomUUID();
@@ -476,12 +460,9 @@ describe('integration: full session recording lifecycle', () => {
   // @plan PLAN-20260211-SESSIONRECORDING.P25
   // @requirement REQ-INT-FULL-002, REQ-INT-FULL-003
   // =========================================================================
-  asyncPropertyTestWithOptions(
-    [fc.integer({ min: 1, max: 8 }), fc.integer({ min: 1, max: 8 })],
-    {
-      numRuns: 10,
-    },
-  )(
+  it.prop([fc.integer({ min: 1, max: 8 }), fc.integer({ min: 1, max: 8 })], {
+    numRuns: 10,
+  })(
     'P2: (property) record N + resume + record M → replay has N+M items',
     async (initialCount, additionalCount) => {
       const contents = Array.from({ length: initialCount }, (_, i) =>
@@ -517,9 +498,7 @@ describe('integration: full session recording lifecycle', () => {
   // @plan PLAN-20260211-SESSIONRECORDING.P25
   // @requirement REQ-INT-FULL-001
   // =========================================================================
-  asyncPropertyTestWithOptions([fc.integer({ min: 1, max: 5 })], {
-    numRuns: 8,
-  })(
+  it.prop([fc.integer({ min: 1, max: 5 })], { numRuns: 8 })(
     'P3: (property) delete removes file for session with N content items',
     async (contentCount) => {
       const localTemp = await fs.mkdtemp(
@@ -537,13 +516,11 @@ describe('integration: full session recording lifecycle', () => {
             contents,
           },
         );
-        await fs.access(filePath);
+        await expect(fs.access(filePath)).resolves.toBeUndefined();
 
         const result = await deleteSession(sessionId, localChats, PROJECT_HASH);
         expect(result.ok).toBe(true);
-        const deletedFileAccess = fs.access(filePath);
-        expect(deletedFileAccess).rejects.toThrow(/ENOENT/);
-        await deletedFileAccess.catch(() => undefined);
+        await expect(fs.access(filePath)).rejects.toThrow(/ENOENT/);
       } finally {
         await fs.rm(localTemp, { recursive: true, force: true });
       }
@@ -555,7 +532,7 @@ describe('integration: full session recording lifecycle', () => {
   // @plan PLAN-20260211-SESSIONRECORDING.P25
   // @requirement REQ-INT-FULL-001
   // =========================================================================
-  asyncPropertyTestWithOptions([fc.uuid()], { numRuns: 10 })(
+  it.prop([fc.uuid()], { numRuns: 10 })(
     'P4: (property) session ID preserved through record → replay',
     async (sessionId) => {
       const localTemp = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-sid-'));

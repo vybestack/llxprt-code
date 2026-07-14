@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { delay, createAbortError } from './delay.js';
 
 describe('createAbortError', () => {
@@ -37,7 +37,7 @@ describe('abortableDelay', () => {
   it('resolves after the specified duration without a signal', async () => {
     const promise = delay(100);
     await vi.advanceTimersByTimeAsync(100);
-    expect(promise).resolves.toBeUndefined();
+    await expect(promise).resolves.toBeUndefined();
   });
 
   it('resolves when a non-aborted signal is provided', async () => {
@@ -46,14 +46,14 @@ describe('abortableDelay', () => {
 
     await vi.advanceTimersByTimeAsync(200);
 
-    expect(promise).resolves.toBeUndefined();
+    await expect(promise).resolves.toBeUndefined();
   });
 
   it('rejects immediately if the signal is already aborted', async () => {
     const controller = new AbortController();
     controller.abort();
 
-    expect(delay(50, controller.signal)).rejects.toMatchObject({
+    await expect(delay(50, controller.signal)).rejects.toMatchObject({
       name: 'AbortError',
       message: 'Aborted',
     });
@@ -66,7 +66,7 @@ describe('abortableDelay', () => {
     await vi.advanceTimersByTimeAsync(100);
     controller.abort();
 
-    expect(promise).rejects.toMatchObject({
+    await expect(promise).rejects.toMatchObject({
       name: 'AbortError',
       message: 'Aborted',
     });
@@ -107,7 +107,7 @@ describe('abortableDelay', () => {
     await vi.advanceTimersByTimeAsync(50);
     controller.abort();
 
-    expect(promise).rejects.toMatchObject({
+    await expect(promise).rejects.toMatchObject({
       name: 'AbortError',
     });
     expect(removeEventListenerSpy).toHaveBeenCalledTimes(1);
@@ -121,7 +121,7 @@ describe('abortableDelay', () => {
     await vi.advanceTimersByTimeAsync(50);
     controller.abort();
 
-    expect(promise).rejects.toMatchObject({
+    await expect(promise).rejects.toMatchObject({
       name: 'AbortError',
     });
     expect(clearTimeoutSpy).toHaveBeenCalled();

@@ -39,7 +39,6 @@ import {
 import { emitStreamToolCallsAndMetadata } from './vercelMetadataMapper.js';
 
 type VercelTools = Record<string, unknown>;
-export type StreamTextFunction = typeof streamText;
 
 export function createStreamingState(): StreamingState {
   return {
@@ -64,7 +63,6 @@ export function invokeStreamText(
   abortSignal: AbortSignal | undefined,
   logger: DebugLogger,
   providerName: string,
-  stream: StreamTextFunction = streamText,
 ): ReturnType<typeof streamText> {
   const streamOptions: Record<string, unknown> = {
     model,
@@ -85,7 +83,7 @@ export function invokeStreamText(
     streamOptions['maxTokens'] = params.maxOutputTokens;
   }
   try {
-    return stream(streamOptions as Parameters<typeof streamText>[0]);
+    return streamText(streamOptions as Parameters<typeof streamText>[0]);
   } catch (error) {
     logger.error(
       () =>

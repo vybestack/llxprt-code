@@ -12,7 +12,7 @@
  * 3. ConfigBaseCore follows the same pattern as BucketFailoverHandler
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ConfigBaseCore } from './configBaseCore.js';
 import type { OnAuthErrorHandler } from './configTypes.js';
 

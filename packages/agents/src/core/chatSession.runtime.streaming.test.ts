@@ -9,9 +9,7 @@
  * Sibling to chatSession.runtime.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { beforeEach, describe, expect, it } from 'bun:test';
-import { vi } from 'vitest';
-import type { Tool } from '@google/genai';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -93,7 +91,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
           { name: 'run_shell_command' } as Record<string, unknown>,
         ],
       },
-    ] as unknown as Tool[];
+    ] as unknown as Array<{ functionDeclarations: Array<{ name: string }> }>;
     const hookConfig = config;
     Object.defineProperties(hookConfig, {
       getConversationLoggingEnabled: { value: () => false },
@@ -170,7 +168,8 @@ describe('ChatSession runtime streaming and abort behavior', () => {
   });
 
   it('aborts a stalled non-stream sendMessage response after partial provider output instead of hanging forever', async () => {
-    const testTimeoutMs = 20;
+    vi.useFakeTimers();
+    const testTimeoutMs = 30_000; // 30 second timeout for this test
 
     try {
       // Set explicit timeout via ephemeral setting
@@ -255,16 +254,21 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         },
       );
 
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
+
       await rejection;
       expect(capturedSignal?.aborted).toBe(true);
       expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
     } finally {
-      config.setEphemeralSetting('stream-idle-timeout-ms', 0);
+      vi.useRealTimers();
     }
   });
 
   it('aborts a stalled direct-message response after partial provider output instead of hanging forever', async () => {
-    const testTimeoutMs = 20;
+    vi.useFakeTimers();
+    const testTimeoutMs = 30_000; // 30 second timeout for this test
 
     try {
       // Set explicit timeout via ephemeral setting
@@ -349,11 +353,15 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         },
       );
 
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
+
       await rejection;
       expect(capturedSignal?.aborted).toBe(true);
       expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
     } finally {
-      config.setEphemeralSetting('stream-idle-timeout-ms', 0);
+      vi.useRealTimers();
     }
   });
 });

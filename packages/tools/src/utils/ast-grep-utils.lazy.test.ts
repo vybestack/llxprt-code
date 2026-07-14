@@ -15,16 +15,7 @@
 // { root } or { error }, availability reports correctly), not on internal mock
 // call sequences.
 
-import { afterEach, describe, expect, it, vi } from 'bun:test';
-import {
-  getAstLanguage,
-  isAstGrepAvailable,
-  LANGUAGE_MAP,
-  parse,
-  parseSource,
-  resolveLanguageFromPath,
-  setAstGrepRuntimeForTesting,
-} from './ast-grep-utils.js';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 
 // Minimal Lang enum shape used by the mocked @ast-grep/napi modules.
 // The real Lang is a string enum; we mirror only the values referenced by
@@ -37,39 +28,74 @@ const MOCK_LANG = {
   Css: 'Css',
 } as const;
 
-function installRuntime(registerImpl: () => void) {
+/**
+ * Install a complete mock for the @ast-grep/* ecosystem.
+ * `registerImpl` controls the behavior of `registerDynamicLanguage`.
+ */
+function mockAstGrepNapi(registerImpl: () => void): {
+  registerSpy: ReturnType<typeof vi.fn>;
+} {
   const registerSpy = vi.fn(registerImpl);
-  setAstGrepRuntimeForTesting({
-    registerDynamicLanguage: registerSpy,
+  vi.doMock('@ast-grep/napi', () => ({
+    __esModule: true,
+    Lang: MOCK_LANG,
     parse: vi.fn((lang: unknown, content: string) => ({
-      root: () => ({ kind: lang, text: content, children: () => [] }),
-    })) as never,
-    findInFiles: vi.fn(() => ({ children: () => [] })) as never,
-  });
+      root: () => ({
+        kind: lang,
+        text: content,
+        children: () => [],
+      }),
+    })),
+    findInFiles: vi.fn(() => ({
+      children: () => [],
+    })),
+    registerDynamicLanguage: registerSpy,
+  }));
+  // The lang-* packages are plain JSON grammar data imported as default
+  // exports by the module under test. Stub them with empty default exports.
+  const emptyGrammar = { __esModule: true, default: {} };
+  for (const pkg of [
+    '@ast-grep/lang-python',
+    '@ast-grep/lang-go',
+    '@ast-grep/lang-rust',
+    '@ast-grep/lang-java',
+    '@ast-grep/lang-cpp',
+    '@ast-grep/lang-c',
+    '@ast-grep/lang-json',
+    '@ast-grep/lang-ruby',
+  ]) {
+    vi.doMock(pkg, () => emptyGrammar);
+  }
   return { registerSpy };
 }
 
 describe('ast-grep-utils lazy initialization', () => {
   afterEach(() => {
-    setAstGrepRuntimeForTesting();
+    vi.doUnmock('@ast-grep/napi');
+    for (const pkg of [
+      '@ast-grep/lang-python',
+      '@ast-grep/lang-go',
+      '@ast-grep/lang-rust',
+      '@ast-grep/lang-java',
+      '@ast-grep/lang-cpp',
+      '@ast-grep/lang-c',
+      '@ast-grep/lang-json',
+      '@ast-grep/lang-ruby',
+    ]) {
+      vi.doUnmock(pkg);
+    }
     vi.restoreAllMocks();
+    vi.resetModules();
   });
 
   describe('import side effects', () => {
     it('importing the module does NOT call registerDynamicLanguage', async () => {
-      const { registerSpy } = installRuntime(() => {
+      const { registerSpy } = mockAstGrepNapi(() => {
         throw new Error('should not be called on import');
       });
 
       // Importing must succeed without invoking native registration.
-      const mod = {
-        LANGUAGE_MAP,
-        getAstLanguage,
-        resolveLanguageFromPath,
-        parse,
-        parseSource,
-        isAstGrepAvailable,
-      };
+      const mod = await import('./ast-grep-utils.js');
 
       expect(registerSpy).not.toHaveBeenCalled();
 
@@ -82,30 +108,23 @@ describe('ast-grep-utils lazy initialization', () => {
     });
 
     it('importing succeeds even when registerDynamicLanguage throws (SAC blocked)', async () => {
-      installRuntime(() => {
+      mockAstGrepNapi(() => {
         // Simulate Windows Smart App Control LoadLibraryExW failure (OS error 4551).
         throw new Error('LoadLibraryExW { source: 4551 }');
       });
 
       // The import must not crash even though the native binding would panic.
-      expect(isAstGrepAvailable()).toBe(true);
+      await expect(import('./ast-grep-utils.js')).resolves.toBeDefined();
     });
   });
 
   describe('lazy registration on first use', () => {
     it('parse triggers registration on first real use', async () => {
-      const { registerSpy } = installRuntime(() => {
+      const { registerSpy } = mockAstGrepNapi(() => {
         /* success */
       });
 
-      const mod = {
-        LANGUAGE_MAP,
-        getAstLanguage,
-        resolveLanguageFromPath,
-        parse,
-        parseSource,
-        isAstGrepAvailable,
-      };
+      const mod = await import('./ast-grep-utils.js');
       expect(registerSpy).not.toHaveBeenCalled();
 
       // First runtime use should trigger registration, then delegate.
@@ -119,18 +138,11 @@ describe('ast-grep-utils lazy initialization', () => {
     });
 
     it('parseSource registers on first call and returns a root', async () => {
-      installRuntime(() => {
+      mockAstGrepNapi(() => {
         /* success */
       });
 
-      const mod = {
-        LANGUAGE_MAP,
-        getAstLanguage,
-        resolveLanguageFromPath,
-        parse,
-        parseSource,
-        isAstGrepAvailable,
-      };
+      const mod = await import('./ast-grep-utils.js');
 
       const result = mod.parseSource('python', 'x = 1');
       expect(result).toHaveProperty('root');
@@ -140,18 +152,11 @@ describe('ast-grep-utils lazy initialization', () => {
 
   describe('graceful degradation on native load failure', () => {
     it('parseSource returns { error } for dynamic languages when registration fails', async () => {
-      installRuntime(() => {
+      mockAstGrepNapi(() => {
         throw new Error('LoadLibraryExW { source: 4551 }');
       });
 
-      const mod = {
-        LANGUAGE_MAP,
-        getAstLanguage,
-        resolveLanguageFromPath,
-        parse,
-        parseSource,
-        isAstGrepAvailable,
-      };
+      const mod = await import('./ast-grep-utils.js');
 
       // Dynamic language: must not throw; must report a descriptive error.
       const result = mod.parseSource('python', 'x = 1');
@@ -162,18 +167,11 @@ describe('ast-grep-utils lazy initialization', () => {
     });
 
     it('parseSource still works for built-in languages when registration fails', async () => {
-      installRuntime(() => {
+      mockAstGrepNapi(() => {
         throw new Error('LoadLibraryExW { source: 4551 }');
       });
 
-      const mod = {
-        LANGUAGE_MAP,
-        getAstLanguage,
-        resolveLanguageFromPath,
-        parse,
-        parseSource,
-        isAstGrepAvailable,
-      };
+      const mod = await import('./ast-grep-utils.js');
 
       // Built-in language (TypeScript) should work even when dynamic addons failed.
       const result = mod.parseSource(MOCK_LANG.TypeScript, 'const x = 1;');
@@ -182,18 +180,11 @@ describe('ast-grep-utils lazy initialization', () => {
     });
 
     it('parse throws clear error for dynamic language when registration fails', async () => {
-      installRuntime(() => {
+      mockAstGrepNapi(() => {
         throw new Error('LoadLibraryExW { source: 4551 }');
       });
 
-      const mod = {
-        LANGUAGE_MAP,
-        getAstLanguage,
-        resolveLanguageFromPath,
-        parse,
-        parseSource,
-        isAstGrepAvailable,
-      };
+      const mod = await import('./ast-grep-utils.js');
 
       expect(() => mod.parse('python', 'x = 1')).toThrow(
         /dynamic grammars are unavailable/,
@@ -201,18 +192,11 @@ describe('ast-grep-utils lazy initialization', () => {
     });
 
     it('parse works for built-in language when registration fails', async () => {
-      installRuntime(() => {
+      mockAstGrepNapi(() => {
         throw new Error('LoadLibraryExW { source: 4551 }');
       });
 
-      const mod = {
-        LANGUAGE_MAP,
-        getAstLanguage,
-        resolveLanguageFromPath,
-        parse,
-        parseSource,
-        isAstGrepAvailable,
-      };
+      const mod = await import('./ast-grep-utils.js');
 
       expect(() =>
         mod.parse(MOCK_LANG.TypeScript, 'const x = 1;'),
@@ -220,18 +204,11 @@ describe('ast-grep-utils lazy initialization', () => {
     });
 
     it('isAstGrepAvailable reports true even after a failed registration (core binding works)', async () => {
-      installRuntime(() => {
+      mockAstGrepNapi(() => {
         throw new Error('LoadLibraryExW { source: 4551 }');
       });
 
-      const mod = {
-        LANGUAGE_MAP,
-        getAstLanguage,
-        resolveLanguageFromPath,
-        parse,
-        parseSource,
-        isAstGrepAvailable,
-      };
+      const mod = await import('./ast-grep-utils.js');
 
       // Trigger the failed registration attempt through a runtime call.
       mod.parseSource('python', 'x = 1');
@@ -242,18 +219,11 @@ describe('ast-grep-utils lazy initialization', () => {
     });
 
     it('isAstGrepAvailable reports true before any registration attempt', async () => {
-      installRuntime(() => {
+      mockAstGrepNapi(() => {
         throw new Error('should not be called');
       });
 
-      const mod = {
-        LANGUAGE_MAP,
-        getAstLanguage,
-        resolveLanguageFromPath,
-        parse,
-        parseSource,
-        isAstGrepAvailable,
-      };
+      const mod = await import('./ast-grep-utils.js');
 
       // The binding loaded, so report true without forcing the native dlopen.
       expect(mod.isAstGrepAvailable()).toBe(true);

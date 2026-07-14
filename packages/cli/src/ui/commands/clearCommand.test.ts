@@ -14,11 +14,18 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual('@vybestack/llxprt-code-core');
   return {
     ...actual,
+    triggerSessionEndHook: vi.fn().mockResolvedValue(undefined),
+    triggerSessionStartHook: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
+vi.mock('@vybestack/llxprt-code-telemetry', async () => {
+  const actual = await vi.importActual('@vybestack/llxprt-code-telemetry');
+  return {
+    ...actual,
     uiTelemetryService: {
       setLastPromptTokenCount: vi.fn(),
     },
-    triggerSessionEndHook: vi.fn().mockResolvedValue(undefined),
-    triggerSessionStartHook: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -26,12 +33,12 @@ import type { Config } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { assertDefined } from '../../test-utils/assertions.js';
 import {
-  uiTelemetryService,
   triggerSessionEndHook,
   triggerSessionStartHook,
   SessionEndReason,
   SessionStartSource,
 } from '@vybestack/llxprt-code-core';
+import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 
 const clearAction = clearCommand.action;
 assertDefined(clearAction);

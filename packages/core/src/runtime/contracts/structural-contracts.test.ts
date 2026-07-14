@@ -16,7 +16,7 @@
  * @requirement:REQ-TEST-001
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { RuntimeModel } from './RuntimeModel.js';
 import type { TelemetryContext } from './TelemetryContext.js';
 import type { ReasoningOutput } from './ReasoningOutput.js';

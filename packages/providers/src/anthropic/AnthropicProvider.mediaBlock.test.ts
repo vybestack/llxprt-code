@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
@@ -53,10 +53,50 @@ interface AnthropicMessage {
   content: string | AnthropicContentBlock[];
 }
 
+vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
+  ToolFormatter: vi.fn().mockImplementation(() => ({
+    toProviderFormat: vi.fn(() => []),
+    fromProviderFormat: vi.fn(() => []),
+  })),
+}));
+
 const mockMessagesCreate = vi.fn();
-const constructClient = () => ({
-  messages: { create: mockMessagesCreate },
-});
+
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: vi.fn().mockImplementation(() => ({
+    messages: {
+      create: mockMessagesCreate,
+    },
+    beta: {
+      models: {
+        list: vi.fn().mockReturnValue({
+          async *[Symbol.asyncIterator]() {
+            yield {
+              id: 'claude-sonnet-4-20250514',
+              display_name: 'Claude 4 Sonnet',
+            };
+          },
+        }),
+      },
+    },
+  })),
+}));
+
+vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+  getCoreSystemPromptAsync: vi.fn().mockResolvedValue('System prompt'),
+}));
+
+vi.mock(
+  '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js',
+  () => ({
+    shouldIncludeSubagentDelegation: vi.fn().mockReturnValue(false),
+  }),
+);
+
+vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+  getErrorStatus: vi.fn(() => undefined),
+  isNetworkTransientError: vi.fn(() => false),
+}));
 
 describe('AnthropicProvider MediaBlock support', () => {
   let provider: AnthropicProvider;
@@ -101,8 +141,6 @@ describe('AnthropicProvider MediaBlock support', () => {
           'test-api-key',
           undefined,
           TEST_PROVIDER_CONFIG,
-          undefined,
-          { constructClient },
         );
       },
       {

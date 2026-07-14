@@ -4,13 +4,33 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
+
+const mockSettingsService = vi.hoisted(() => ({
+  set: vi.fn(),
+  get: vi.fn(),
+  setProviderSetting: vi.fn(),
+  getProviderSettings: vi.fn().mockReturnValue({}),
+  getSettings: vi.fn(),
+  updateSettings: vi.fn(),
+  getAllGlobalSettings: vi.fn().mockReturnValue({}),
+}));
+
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
+  getSettingsService: () => mockSettingsService,
+  SETTINGS_REGISTRY: [],
+}));
 
 describe('OpenAIVercelProvider.shouldRetryResponse', () => {
   let provider: OpenAIVercelProvider;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    mockSettingsService.getSettings.mockResolvedValue({});
     provider = new OpenAIVercelProvider('test-key');
   });
 

@@ -18,7 +18,7 @@
  *  - chatSession-density.property.test.ts
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {

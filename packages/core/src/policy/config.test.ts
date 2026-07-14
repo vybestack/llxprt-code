@@ -2,7 +2,7 @@
  * Tests for Policy Configuration
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import {
   migrateLegacyApprovalMode,
   createPolicyEngineConfig,

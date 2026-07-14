@@ -23,7 +23,7 @@
 
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { ApprovalMode, PolicyDecision } from '@vybestack/llxprt-code-agents';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import { CONFIRMATION_FORCING_SOURCE } from '../confirmationForcing.js';
@@ -163,7 +163,7 @@ describe('createAgent harness hardening @plan:PLAN-20260626-RUNTIMEBOUNDARY.P01'
         expect(events.filter(isToolResultEvent).length).toBeGreaterThanOrEqual(
           1,
         );
-        expect(await responder.captured).toMatchObject({
+        await expect(responder.captured).resolves.toMatchObject({
           name: 'write_file',
         });
         expect(existsSync(outputPath)).toBe(false);
@@ -191,7 +191,7 @@ describe('createAgent harness hardening @plan:PLAN-20260626-RUNTIMEBOUNDARY.P01'
         expect(events.filter(isToolResultEvent).length).toBeGreaterThanOrEqual(
           1,
         );
-        expect(await responder.captured).toMatchObject({
+        await expect(responder.captured).resolves.toMatchObject({
           name: 'read_file',
         });
       } finally {

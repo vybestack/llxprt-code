@@ -8,7 +8,7 @@
  * @plan PLAN-20260130-ASYNCTASK.P07
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { AsyncTaskManager } from './asyncTaskManager.js';
 import { AsyncTaskReminderService } from './asyncTaskReminderService.js';
 import type { OutputObject } from '../core/subagentTypes.js';

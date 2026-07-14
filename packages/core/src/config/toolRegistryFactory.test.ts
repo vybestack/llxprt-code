@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi } from 'vitest';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { AsyncTaskManager } from '../services/asyncTaskManager.js';
 import {

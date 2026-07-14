@@ -14,7 +14,7 @@
  * Implementation already exists in Phase 06 - these tests verify GREEN state.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { createRuntimeInvocationContext } from '../RuntimeInvocationContext.js';
 import type { ProviderRuntimeContext } from '../providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';

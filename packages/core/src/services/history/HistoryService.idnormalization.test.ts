@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { createUserMessage as createUserMessageFromIContent } from './IContent.js';

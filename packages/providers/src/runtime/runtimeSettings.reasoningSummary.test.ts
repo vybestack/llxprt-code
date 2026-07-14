@@ -7,7 +7,7 @@
  * @issue #922 - GPT-5.2-Codex thinking blocks not visible
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { PROFILE_EPHEMERAL_KEYS } from './runtimeSettings.js';
 
 describe('reasoning.summary profile save/load @issue:922', () => {
@@ -30,5 +30,9 @@ describe('reasoning.summary profile save/load @issue:922', () => {
   it('should include text.verbosity in PROFILE_EPHEMERAL_KEYS', () => {
     // text.verbosity is for OpenAI Responses API response verbosity control
     expect(PROFILE_EPHEMERAL_KEYS).toContain('text.verbosity');
+  });
+
+  it('should include reasoning.fieldName in PROFILE_EPHEMERAL_KEYS', () => {
+    expect(PROFILE_EPHEMERAL_KEYS).toContain('reasoning.fieldName');
   });
 });

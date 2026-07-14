@@ -17,7 +17,7 @@
  * has no forbidden dependencies and test-utils is devDependency-only.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { execSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';

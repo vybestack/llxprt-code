@@ -97,7 +97,7 @@ class TestResponsesProvider extends OpenAIResponsesProvider {
     const runtimeConfigEphemeralSettings = options.invocation.ephemerals;
 
     // Simulate the system prompt generation (don't actually call OpenAI)
-    const promptSpy = getCoreSystemPromptAsync;
+    const promptSpy = vi.mocked(getCoreSystemPromptAsync);
     promptSpy.mockClear();
 
     // Generate the system prompt as the real implementation would
@@ -218,7 +218,7 @@ describe('OpenAI Responses provider stateless contract tests', () => {
       'token-per-call',
       'https://api.openai.com/v1',
     );
-    const promptSpy = getCoreSystemPromptAsync;
+    const promptSpy = vi.mocked(getCoreSystemPromptAsync);
     promptSpy.mockClear();
 
     const settingsA = createSettings('conversation-A', 'parent-A');

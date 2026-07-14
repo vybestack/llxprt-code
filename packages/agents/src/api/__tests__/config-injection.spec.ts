@@ -30,7 +30,7 @@
  *         DOES dispose its OWN Config.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import {
   fromConfig,

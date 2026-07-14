@@ -26,9 +26,20 @@ import { GeminiProvider } from '../GeminiProvider.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { CoreSystemPromptOptions } from '@vybestack/llxprt-code-core/core/prompts.js';
 
-const buildCorePrompt = async (
-  options: CoreSystemPromptOptions | undefined,
-): Promise<string> => `SYSTEM[${options?.userMemory ?? ''}]`;
+// Track what system prompts were generated
+let capturedSystemPrompts: string[] = [];
+
+vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+  getCoreSystemPromptAsync: vi.fn(
+    async (options: CoreSystemPromptOptions | undefined) => {
+      const prompt = options?.userMemory
+        ? `SYSTEM[${options.userMemory}]`
+        : 'SYSTEM[empty]';
+      capturedSystemPrompts.push(prompt);
+      return prompt;
+    },
+  ),
+}));
 
 const googleGenAIState = {
   instances: [] as Array<{ options: Record<string, unknown> }>,
@@ -89,6 +100,7 @@ describe('GeminiProvider userMemory preservation (Issue #409)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    capturedSystemPrompts = [];
     googleGenAIState.instances = [];
     googleGenAIState.streamCalls = [];
     googleGenAIState.nonStreamCalls = [];
@@ -123,9 +135,6 @@ describe('GeminiProvider userMemory preservation (Issue #409)', () => {
       process.env.GEMINI_API_KEY,
       undefined,
       config,
-      undefined,
-      buildCorePrompt,
-      async (explicitMemory) => explicitMemory ?? '',
     );
 
     // Create call options with runtime context
@@ -178,6 +187,11 @@ describe('GeminiProvider userMemory preservation (Issue #409)', () => {
       chunks.push(chunk);
     }
 
+    // Verify system prompt was called with userMemory
+    expect(capturedSystemPrompts.length).toBeGreaterThan(0);
+    expect(capturedSystemPrompts[0]).toContain(TEST_USER_MEMORY);
+    expect(capturedSystemPrompts[0]).not.toBe('SYSTEM[empty]');
+
     // Verify the request included systemInstruction
     expect(googleGenAIState.streamCalls.length).toBe(1);
     const request = googleGenAIState.streamCalls[0].request;
@@ -191,9 +205,6 @@ describe('GeminiProvider userMemory preservation (Issue #409)', () => {
       process.env.GEMINI_API_KEY,
       undefined,
       config,
-      undefined,
-      buildCorePrompt,
-      async (explicitMemory) => explicitMemory ?? '',
     );
 
     const runtime1 = createProviderRuntimeContext({
@@ -244,8 +255,9 @@ describe('GeminiProvider userMemory preservation (Issue #409)', () => {
       chunks1.push(chunk);
     }
 
-    const firstRequest = googleGenAIState.streamCalls[0].request;
-    expect(firstRequest.systemInstruction).toContain(TEST_USER_MEMORY);
+    // Verify first call had userMemory
+    expect(capturedSystemPrompts.length).toBe(1);
+    expect(capturedSystemPrompts[0]).toContain(TEST_USER_MEMORY);
 
     // Simulate profile switch - create new provider instance with different auth
     // but same config (which should still have userMemory)
@@ -253,9 +265,6 @@ describe('GeminiProvider userMemory preservation (Issue #409)', () => {
       'different-api-key',
       undefined,
       config, // Same config instance with userMemory
-      undefined,
-      buildCorePrompt,
-      async (explicitMemory) => explicitMemory ?? '',
     );
 
     const runtime2 = createProviderRuntimeContext({
@@ -307,6 +316,11 @@ describe('GeminiProvider userMemory preservation (Issue #409)', () => {
     for await (const chunk of provider2.generateChatCompletion(options2)) {
       chunks2.push(chunk);
     }
+
+    // Verify second call ALSO had userMemory (this is the bug - it would be empty)
+    expect(capturedSystemPrompts.length).toBe(2);
+    expect(capturedSystemPrompts[1]).toContain(TEST_USER_MEMORY);
+    expect(capturedSystemPrompts[1]).not.toBe('SYSTEM[empty]');
 
     // Verify both requests included systemInstruction with userMemory
     expect(googleGenAIState.streamCalls.length).toBe(2);

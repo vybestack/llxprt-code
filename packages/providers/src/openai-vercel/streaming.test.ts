@@ -434,13 +434,11 @@ describe('OpenAIVercelProvider - Streaming', () => {
         providerName: 'openaivercel',
       });
 
-      const consumeStream = async (): Promise<void> => {
+      await expect(async () => {
         for await (const _ of provider.generateChatCompletion(options)) {
           // iterate to trigger error
         }
-      };
-
-      await expect(consumeStream()).rejects.toThrow('Stream error occurred');
+      }).rejects.toThrow('Stream error occurred');
     });
 
     it('should handle network errors during streaming', async () => {

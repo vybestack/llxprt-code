@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import {
   FileExclusions,
   BINARY_EXTENSIONS,
@@ -12,10 +12,16 @@ import {
 } from './ignorePatterns.js';
 import type { Config } from '../config/config.js';
 
+// Mock the memoryTool module
+vi.mock('/llxprt-code-tools', () => ({
+  getCurrentGeminiMdFilename: vi.fn(() => 'GEMINI.md'),
+  getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'),
+}));
+
 describe('FileExclusions', () => {
   describe('getCoreIgnorePatterns', () => {
     it('should return basic ignore patterns', () => {
-      const excluder = new FileExclusions(undefined, () => 'LLXPRT.md');
+      const excluder = new FileExclusions();
       const patterns = excluder.getCoreIgnorePatterns();
 
       expect(patterns).toContain('**/node_modules/**');
@@ -29,7 +35,7 @@ describe('FileExclusions', () => {
 
   describe('getDefaultExcludePatterns', () => {
     it('should return comprehensive patterns by default', () => {
-      const excluder = new FileExclusions(undefined, () => 'LLXPRT.md');
+      const excluder = new FileExclusions();
       const patterns = excluder.getDefaultExcludePatterns();
 
       // Should include core patterns
@@ -54,7 +60,7 @@ describe('FileExclusions', () => {
     });
 
     it('should respect includeDefaults option', () => {
-      const excluder = new FileExclusions(undefined, () => 'LLXPRT.md');
+      const excluder = new FileExclusions();
       const patterns = excluder.getDefaultExcludePatterns({
         includeDefaults: false,
         includeDynamicPatterns: false,
@@ -67,7 +73,7 @@ describe('FileExclusions', () => {
     });
 
     it('should include custom patterns', () => {
-      const excluder = new FileExclusions(undefined, () => 'LLXPRT.md');
+      const excluder = new FileExclusions();
       const patterns = excluder.getDefaultExcludePatterns({
         customPatterns: ['**/custom/**', '**/*.custom'],
       });
@@ -77,7 +83,7 @@ describe('FileExclusions', () => {
     });
 
     it('should include runtime patterns', () => {
-      const excluder = new FileExclusions(undefined, () => 'LLXPRT.md');
+      const excluder = new FileExclusions();
       const patterns = excluder.getDefaultExcludePatterns({
         runtimePatterns: ['**/temp/**', '**/*.tmp'],
       });
@@ -87,7 +93,7 @@ describe('FileExclusions', () => {
     });
 
     it('should respect includeDynamicPatterns option', () => {
-      const excluder = new FileExclusions(undefined, () => 'LLXPRT.md');
+      const excluder = new FileExclusions();
       const patternsWithDynamic = excluder.getDefaultExcludePatterns({
         includeDynamicPatterns: true,
       });
@@ -102,7 +108,7 @@ describe('FileExclusions', () => {
 
   describe('getReadManyFilesExcludes', () => {
     it('should provide legacy compatibility', () => {
-      const excluder = new FileExclusions(undefined, () => 'LLXPRT.md');
+      const excluder = new FileExclusions();
       const patterns = excluder.getReadManyFilesExcludes(['**/*.log']);
 
       // Should include all default patterns
@@ -117,7 +123,7 @@ describe('FileExclusions', () => {
 
   describe('getGlobExcludes', () => {
     it('should return core patterns for glob operations', () => {
-      const excluder = new FileExclusions(undefined, () => 'LLXPRT.md');
+      const excluder = new FileExclusions();
       const patterns = excluder.getGlobExcludes();
 
       expect(patterns).toContain('**/node_modules/**');
@@ -131,7 +137,7 @@ describe('FileExclusions', () => {
     });
 
     it('should include additional excludes', () => {
-      const excluder = new FileExclusions(undefined, () => 'LLXPRT.md');
+      const excluder = new FileExclusions();
       const patterns = excluder.getGlobExcludes(['**/temp/**']);
 
       expect(patterns).toContain('**/node_modules/**');
@@ -146,7 +152,7 @@ describe('FileExclusions', () => {
         getCustomExcludes: vi.fn(() => ['**/config-exclude/**']),
       } as unknown as Config;
 
-      const excluder = new FileExclusions(mockConfig, () => 'LLXPRT.md');
+      const excluder = new FileExclusions(mockConfig);
       const patterns = excluder.getDefaultExcludePatterns();
 
       expect(patterns).toContain('**/config-exclude/**');
@@ -156,7 +162,7 @@ describe('FileExclusions', () => {
     it('should handle config without getCustomExcludes method', () => {
       const mockConfig = {} as Config;
 
-      const excluder = new FileExclusions(mockConfig, () => 'LLXPRT.md');
+      const excluder = new FileExclusions(mockConfig);
       const patterns = excluder.getDefaultExcludePatterns();
 
       // Should not throw and should include default patterns
@@ -169,7 +175,7 @@ describe('FileExclusions', () => {
         getCustomExcludes: vi.fn(() => ['**/config-glob/**']),
       } as unknown as Config;
 
-      const excluder = new FileExclusions(mockConfig, () => 'LLXPRT.md');
+      const excluder = new FileExclusions(mockConfig);
       const patterns = excluder.getGlobExcludes();
 
       expect(patterns).toContain('**/node_modules/**');
@@ -180,7 +186,7 @@ describe('FileExclusions', () => {
 
   describe('buildExcludePatterns', () => {
     it('should be an alias for getDefaultExcludePatterns', () => {
-      const excluder = new FileExclusions(undefined, () => 'LLXPRT.md');
+      const excluder = new FileExclusions();
       const options = {
         includeDefaults: true,
         customPatterns: ['**/test/**'],

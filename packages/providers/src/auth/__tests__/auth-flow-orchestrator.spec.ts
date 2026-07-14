@@ -153,13 +153,13 @@ describe('AuthFlowOrchestrator', () => {
       const expiredToken = makeToken('expired-token', -100); // expired
 
       // Return expired token with a refresh_token on first getToken call
-      tokenStore.getToken.mockResolvedValueOnce(expiredToken); // under auth lock
-      tokenStore.getToken.mockResolvedValueOnce(expiredToken); // re-read under refresh lock
+      vi.mocked(tokenStore.getToken).mockResolvedValueOnce(expiredToken); // under auth lock
+      vi.mocked(tokenStore.getToken).mockResolvedValueOnce(expiredToken); // re-read under refresh lock
 
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       // refreshToken returns null → falls through to initiateAuth
-      provider.refreshToken.mockResolvedValue(null);
+      vi.mocked(provider.refreshToken).mockResolvedValue(null);
       registry.registerProvider(provider);
 
       const orchestrator = createOrchestrator(tokenStore, registry);
@@ -181,12 +181,12 @@ describe('AuthFlowOrchestrator', () => {
       const expiredToken = makeToken('expired-token', -100);
       expiredToken.refresh_token = 'valid-refresh';
 
-      tokenStore.getToken.mockResolvedValueOnce(expiredToken);
-      tokenStore.getToken.mockResolvedValueOnce(expiredToken);
+      vi.mocked(tokenStore.getToken).mockResolvedValueOnce(expiredToken);
+      vi.mocked(tokenStore.getToken).mockResolvedValueOnce(expiredToken);
 
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
-      provider.refreshToken.mockResolvedValue(null);
+      vi.mocked(provider.refreshToken).mockResolvedValue(null);
       registry.registerProvider(provider);
 
       const orchestrator = createOrchestrator(tokenStore, registry);
@@ -206,7 +206,9 @@ describe('AuthFlowOrchestrator', () => {
       const tokenStore = createTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
-      provider.initiateAuth.mockRejectedValue(new Error('auth failed'));
+      vi.mocked(provider.initiateAuth).mockRejectedValue(
+        new Error('auth failed'),
+      );
       registry.registerProvider(provider);
 
       const orchestrator = createOrchestrator(tokenStore, registry);
@@ -225,17 +227,19 @@ describe('AuthFlowOrchestrator', () => {
       const expiredToken = makeToken('expired-token', -100);
       expiredToken.refresh_token = 'valid-refresh';
 
-      tokenStore.getToken.mockResolvedValueOnce(expiredToken);
-      tokenStore.getToken.mockResolvedValueOnce(expiredToken);
+      vi.mocked(tokenStore.getToken).mockResolvedValueOnce(expiredToken);
+      vi.mocked(tokenStore.getToken).mockResolvedValueOnce(expiredToken);
 
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       // Refresh throws — should release refresh lock then fall through to initiateAuth
-      provider.refreshToken.mockRejectedValue(
+      vi.mocked(provider.refreshToken).mockRejectedValue(
         new Error('refresh network error'),
       );
       // initiateAuth also throws to confirm the exception path
-      provider.initiateAuth.mockRejectedValue(new Error('browser auth failed'));
+      vi.mocked(provider.initiateAuth).mockRejectedValue(
+        new Error('browser auth failed'),
+      );
       registry.registerProvider(provider);
 
       const orchestrator = createOrchestrator(tokenStore, registry);
@@ -264,7 +268,7 @@ describe('AuthFlowOrchestrator', () => {
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       const freshToken = makeToken('fresh-token');
-      provider.initiateAuth.mockResolvedValue(freshToken);
+      vi.mocked(provider.initiateAuth).mockResolvedValue(freshToken);
       registry.registerProvider(provider);
 
       const orchestrator = createOrchestrator(tokenStore, registry);
@@ -284,7 +288,7 @@ describe('AuthFlowOrchestrator', () => {
         .__oauth_auth_complete;
       const tokenStore = createTokenStore();
       const validToken = makeToken('existing-token', 3600);
-      tokenStore.getToken.mockResolvedValueOnce(validToken);
+      vi.mocked(tokenStore.getToken).mockResolvedValueOnce(validToken);
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       registry.registerProvider(provider);
@@ -308,12 +312,14 @@ describe('AuthFlowOrchestrator', () => {
       const tokenStore = createTokenStore();
       const expiredToken = makeToken('expired-token', -100);
       expiredToken.refresh_token = 'valid-refresh';
-      tokenStore.getToken
+      vi.mocked(tokenStore.getToken)
         .mockResolvedValueOnce(expiredToken)
         .mockResolvedValueOnce(expiredToken);
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
-      provider.refreshToken.mockResolvedValue(makeToken('refreshed-token'));
+      vi.mocked(provider.refreshToken).mockResolvedValue(
+        makeToken('refreshed-token'),
+      );
       registry.registerProvider(provider);
 
       const orchestrator = createOrchestrator(tokenStore, registry);
@@ -333,8 +339,8 @@ describe('AuthFlowOrchestrator', () => {
       delete (global as { __oauth_auth_complete?: boolean })
         .__oauth_auth_complete;
       const tokenStore = createTokenStore();
-      tokenStore.acquireAuthLock.mockResolvedValue(false);
-      tokenStore.getToken.mockResolvedValue(
+      vi.mocked(tokenStore.acquireAuthLock).mockResolvedValue(false);
+      vi.mocked(tokenStore.getToken).mockResolvedValue(
         makeToken('cross-process-token', 3600),
       );
       const registry = new ProviderRegistry();
@@ -360,7 +366,9 @@ describe('AuthFlowOrchestrator', () => {
       const tokenStore = createTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
-      provider.initiateAuth.mockRejectedValue(new Error('browser auth failed'));
+      vi.mocked(provider.initiateAuth).mockRejectedValue(
+        new Error('browser auth failed'),
+      );
       registry.registerProvider(provider);
 
       const orchestrator = createOrchestrator(tokenStore, registry);
@@ -381,7 +389,9 @@ describe('AuthFlowOrchestrator', () => {
       const tokenStore = createTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
-      provider.initiateAuth.mockResolvedValue(makeToken('fresh-token'));
+      vi.mocked(provider.initiateAuth).mockResolvedValue(
+        makeToken('fresh-token'),
+      );
       registry.registerProvider(provider);
 
       const orchestrator = createOrchestrator(tokenStore, registry);
@@ -399,7 +409,9 @@ describe('AuthFlowOrchestrator', () => {
       const tokenStore = createTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
-      provider.initiateAuth.mockResolvedValue(makeToken('fresh-token'));
+      vi.mocked(provider.initiateAuth).mockResolvedValue(
+        makeToken('fresh-token'),
+      );
       registry.registerProvider(provider);
 
       const orchestrator = createOrchestrator(tokenStore, registry);
@@ -420,7 +432,7 @@ describe('AuthFlowOrchestrator', () => {
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       const freshToken = makeToken('fresh-token');
-      provider.initiateAuth.mockResolvedValue(freshToken);
+      vi.mocked(provider.initiateAuth).mockResolvedValue(freshToken);
       registry.registerProvider(provider);
 
       const orchestrator = createOrchestrator(tokenStore, registry);
@@ -439,7 +451,7 @@ describe('AuthFlowOrchestrator', () => {
       const validToken = makeToken('existing-token', 3600);
 
       // Returns valid token under lock (double-check after acquiring)
-      tokenStore.getToken.mockResolvedValueOnce(validToken);
+      vi.mocked(tokenStore.getToken).mockResolvedValueOnce(validToken);
 
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
@@ -456,8 +468,8 @@ describe('AuthFlowOrchestrator', () => {
   describe('authenticate() — lock timeout path', () => {
     it('throws when auth lock cannot be acquired and no valid disk token', async () => {
       const tokenStore = createTokenStore();
-      tokenStore.acquireAuthLock.mockResolvedValue(false);
-      tokenStore.getToken.mockResolvedValue(null);
+      vi.mocked(tokenStore.acquireAuthLock).mockResolvedValue(false);
+      vi.mocked(tokenStore.getToken).mockResolvedValue(null);
 
       const registry = new ProviderRegistry();
       registry.registerProvider(createProvider('anthropic'));
@@ -470,18 +482,19 @@ describe('AuthFlowOrchestrator', () => {
 
     it('returns early when auth lock times out but valid disk token exists', async () => {
       const tokenStore = createTokenStore();
-      tokenStore.acquireAuthLock.mockResolvedValue(false);
+      vi.mocked(tokenStore.acquireAuthLock).mockResolvedValue(false);
       const validToken = makeToken('cross-process-token', 3600);
-      tokenStore.getToken.mockResolvedValue(validToken);
+      vi.mocked(tokenStore.getToken).mockResolvedValue(validToken);
 
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       registry.registerProvider(provider);
 
       const orchestrator = createOrchestrator(tokenStore, registry);
+      // Should NOT throw
       await expect(
         orchestrator.authenticate('anthropic', 'default'),
-      ).resolves.toBeUndefined();
+      ).resolves.not.toThrow();
 
       expect(provider.initiateAuth).not.toHaveBeenCalled();
     });
@@ -503,7 +516,7 @@ describe('AuthFlowOrchestrator', () => {
       const validToken = makeToken('bucket-token', 3600);
 
       // All buckets return valid tokens → nothing needs auth
-      tokenStore.getToken.mockResolvedValue(validToken);
+      vi.mocked(tokenStore.getToken).mockResolvedValue(validToken);
 
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
@@ -530,7 +543,7 @@ describe('AuthFlowOrchestrator', () => {
       const tokenStore = createTokenStore();
       const validToken = makeToken('already-authed', 3600);
 
-      tokenStore.getToken.mockImplementation(
+      vi.mocked(tokenStore.getToken).mockImplementation(
         async (_provider: string, bucket?: string) => {
           if (bucket === 'bucket1' || bucket === 'bucket2') {
             return validToken;
@@ -595,13 +608,15 @@ describe('AuthFlowOrchestrator', () => {
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
       // initiateAuth never returns — we never reach it; the error is in onPrompt
-      provider.initiateAuth.mockImplementation(() => new Promise(() => {}));
+      vi.mocked(provider.initiateAuth).mockImplementation(
+        () => new Promise(() => {}),
+      );
       registry.registerProvider(provider);
 
       const orchestrator = createOrchestrator(tokenStore, registry);
 
       // getToken returns expired so bucket is unauthenticated → triggers prompt
-      tokenStore.getToken.mockResolvedValue(null);
+      vi.mocked(tokenStore.getToken).mockResolvedValue(null);
 
       await expect(
         orchestrator.authenticateMultipleBuckets('anthropic', ['bucket1']),

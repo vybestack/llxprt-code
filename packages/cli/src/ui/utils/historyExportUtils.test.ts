@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ContractContent } from '@vybestack/llxprt-code-core';
+import type { IContent } from '@vybestack/llxprt-code-core';
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { readFile, unlink } from 'node:fs/promises';
@@ -118,14 +118,14 @@ describe('historyExportUtils', () => {
     });
 
     it('should export history to a file in temp directory', async () => {
-      const history: ContractContent[] = [
+      const history: IContent[] = [
         {
-          role: 'user',
-          parts: [{ text: 'Hello, assistant!' }],
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello, assistant!' }],
         },
         {
-          role: 'model',
-          parts: [{ text: 'Hello! How can I help you today?' }],
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Hello! How can I help you today?' }],
         },
       ];
 
@@ -143,14 +143,14 @@ describe('historyExportUtils', () => {
     });
 
     it('should format user and assistant messages correctly', async () => {
-      const history: ContractContent[] = [
+      const history: IContent[] = [
         {
-          role: 'user',
-          parts: [{ text: 'User question' }],
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'User question' }],
         },
         {
-          role: 'model',
-          parts: [{ text: 'Assistant answer' }],
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Assistant answer' }],
         },
       ];
 
@@ -164,15 +164,15 @@ describe('historyExportUtils', () => {
     });
 
     it('should format function calls in markdown', async () => {
-      const history: ContractContent[] = [
+      const history: IContent[] = [
         {
-          role: 'model',
-          parts: [
+          speaker: 'ai',
+          blocks: [
             {
-              functionCall: {
-                name: 'read_file',
-                args: { path: '/tmp/test.txt' },
-              },
+              type: 'tool_call',
+              id: 'call-1',
+              name: 'read_file',
+              parameters: { path: '/tmp/test.txt' },
             },
           ],
         },
@@ -187,15 +187,15 @@ describe('historyExportUtils', () => {
     });
 
     it('should format function responses in markdown', async () => {
-      const history: ContractContent[] = [
+      const history: IContent[] = [
         {
-          role: 'function',
-          parts: [
+          speaker: 'tool',
+          blocks: [
             {
-              functionResponse: {
-                name: 'read_file',
-                response: { content: 'File contents here' },
-              },
+              type: 'tool_response',
+              callId: 'call-1',
+              toolName: 'read_file',
+              result: { content: 'File contents here' },
             },
           ],
         },
@@ -210,10 +210,12 @@ describe('historyExportUtils', () => {
     });
 
     it('should sanitize sensitive data in exported history', async () => {
-      const history: ContractContent[] = [
+      const history: IContent[] = [
         {
-          role: 'user',
-          parts: [{ text: 'My API key is OPENAI_API_KEY=sk-secret123' }],
+          speaker: 'human',
+          blocks: [
+            { type: 'text', text: 'My API key is OPENAI_API_KEY=sk-secret123' },
+          ],
         },
       ];
 
@@ -228,7 +230,7 @@ describe('historyExportUtils', () => {
     });
 
     it('should handle empty history', async () => {
-      const history: ContractContent[] = [];
+      const history: IContent[] = [];
 
       const result = await exportHistoryForBugReport(history);
       exportedFilePath = result.filePath;
@@ -242,10 +244,13 @@ describe('historyExportUtils', () => {
     });
 
     it('should handle history with multiple parts per message', async () => {
-      const history: ContractContent[] = [
+      const history: IContent[] = [
         {
-          role: 'user',
-          parts: [{ text: 'First part' }, { text: 'Second part' }],
+          speaker: 'human',
+          blocks: [
+            { type: 'text', text: 'First part' },
+            { type: 'text', text: 'Second part' },
+          ],
         },
       ];
 
@@ -257,10 +262,10 @@ describe('historyExportUtils', () => {
     });
 
     it('should create unique filenames with timestamps', async () => {
-      const history: ContractContent[] = [
+      const history: IContent[] = [
         {
-          role: 'user',
-          parts: [{ text: 'Test' }],
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Test' }],
         },
       ];
 

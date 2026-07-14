@@ -5,11 +5,10 @@
  */
 
 import type {
-  ContractContent,
-  ContractPart,
-  ContractPartListUnion,
+  IContent,
+  ContentBlock,
+  AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
-
 /**
  * Integration tests for useAgentEventStream that drive the REAL engine
  * (createAgenticLoop + mapLoopStream) through the hook. The only mock boundary
@@ -32,11 +31,9 @@ import type {
  *        (approve via ProceedOnce AND reject via Cancel), NOT via an
  *        approvalHandler — production never wires one.
  */
-
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook } from '../../../../test-utils/render.js';
 import { act } from 'react';
-
 import {
   createAgenticLoop,
   createToolScheduler,
@@ -50,8 +47,6 @@ import {
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
   AgentEventType,
-  DEFAULT_AGENT_ID,
-  type ToolCallRequestInfo,
   type ServerAgentStreamEvent,
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import type {
@@ -77,51 +72,14 @@ import type {
 } from '@vybestack/llxprt-code-tools';
 import type { AgentEventRouter } from '../useAgentEventStream.js';
 import { useAgentEventStream } from '../useAgentEventStream.js';
-
-// ─── Stream-event builders (same patterns as agents test helpers) ──────────
-
-function toolCallRequestEvent(
-  name: string,
-  callId: string,
-  args: Record<string, unknown> = {},
-): ServerAgentStreamEvent {
-  const value: ToolCallRequestInfo = {
-    callId,
-    name,
-    args,
-    isClientInitiated: false,
-    prompt_id: callId,
-    agentId: DEFAULT_AGENT_ID,
-  };
-  return { type: AgentEventType.ToolCallRequest, value };
-}
-
-function contentEvent(text: string): ServerAgentStreamEvent {
-  return { type: AgentEventType.Content, value: text };
-}
-
-function finishedEvent(): ServerAgentStreamEvent {
-  return {
-    type: AgentEventType.Finished,
-    value: { reason: 'stop' },
-  };
-}
-
-// ─── Scripted AgentClientContract ──────────────────────────────────────────
-
-interface ScriptedClientState {
-  scriptQueue: ServerAgentStreamEvent[][];
-  history: ContractContent[];
-  turnMessages: ContractPartListUnion[];
-  recordedToolCalls: CompletedToolCall[][];
-  sendMessageStreamCalls: ContractPartListUnion[];
-}
-
-function partListUnionToParts(req: ContractPartListUnion): ContractPart[] {
-  if (Array.isArray(req)) return req as ContractPart[];
-  if (typeof req === 'string') return [{ text: req }];
-  return [req];
-}
+import {
+  toolCallRequestEvent,
+  contentEvent,
+  finishedEvent,
+  agentRequestInputToIContent,
+  agentRequestInputToBlocks,
+  type ScriptedClientState,
+} from './loopTestHelpers.js';
 
 function createScriptedAgentClient(scripts: ServerAgentStreamEvent[][]): {
   client: AgentClientContract;
@@ -140,7 +98,7 @@ function createScriptedAgentClient(scripts: ServerAgentStreamEvent[][]): {
     getHistory() {
       return state.history;
     },
-    setHistory(h: ContractContent[]) {
+    setHistory(h: IContent[]) {
       state.history.splice(0, state.history.length, ...h);
     },
     clearHistory() {
@@ -169,20 +127,20 @@ function createScriptedAgentClient(scripts: ServerAgentStreamEvent[][]): {
       return state.history;
     },
     storeHistoryServiceForReuse: () => {},
-    storeHistoryForLaterUse: (h: ContractContent[]) => state.history.push(...h),
-    addHistory: async (content: ContractContent) => {
+    storeHistoryForLaterUse: (h: IContent[]) => state.history.push(...h),
+    addHistory: async (content: IContent) => {
       state.history.push(content);
     },
     async *sendMessageStream(
-      req: ContractPartListUnion,
+      req: AgentRequestInput,
       signal: AbortSignal,
       _promptId: string,
     ): AsyncGenerator<ServerAgentStreamEvent> {
       state.sendMessageStreamCalls.push(req);
       state.turnMessages.push(req);
-      state.history.push({ role: 'user', parts: partListUnionToParts(req) });
+      state.history.push(agentRequestInputToIContent(req));
       const script = state.scriptQueue.shift();
-      if (!script) return;
+      if (script === undefined) return;
       for (const event of script) {
         if (signal.aborted) return;
         yield event;
@@ -232,9 +190,8 @@ function createTestConfig(options: {
       deps: Parameters<Config['getOrCreateScheduler']>[3],
     ) => {
       const schedulerMessageBus = deps?.messageBus;
-      if (!schedulerMessageBus) {
+      if (!schedulerMessageBus)
         throw new Error('Test config requires deps.messageBus');
-      }
       return getOrCreateScheduler(
         fixture as unknown as Config,
         sessionId,
@@ -288,15 +245,6 @@ function createAskPolicyEngine(): PolicyEngine {
 
 // ─── Hand-built fake Agent wrapping the REAL engine ───────────────────────
 
-/**
- * Options for building a hand-built fake Agent that runs the real engine.
- * Each stream() call constructs a fresh AgenticLoop via createAgenticLoop and
- * pipes it through mapLoopStream, approximating AgentImpl.stream's
- * composition. Unlike the real Agent facade, this stub bypasses fromConfig /
- * AgentImpl construction, so facade-level concerns (stale-client guard,
- * ToolControl notify taps) are NOT exercised here — those are covered by
- * packages/agents tests.
- */
 interface RealEngineAgentOptions {
   agentClient: AgentClientContract;
   config: Config;
@@ -315,10 +263,6 @@ function createRealEngineAgent(opts: RealEngineAgentOptions): Agent {
   const editorCallbacksHolder =
     opts.editorCallbacksHolder ??
     ({ current: {} } as { current: Record<string, unknown> });
-
-  // The stub implements the Agent methods/properties this test exercises.
-  // Unimplemented readonly control properties are cast at the boundary via
-  // `as unknown as Agent` (repo idiom) instead of per-field `as never`.
   const agent = {
     async chat() {
       return { text: '', toolCalls: [], finishReason: 'stop' };
@@ -339,7 +283,7 @@ function createRealEngineAgent(opts: RealEngineAgentOptions): Agent {
       });
       yield* mapLoopStream(
         loop.run(
-          input as ContractPartListUnion,
+          input as never,
           streamOpts?.signal ?? new AbortController().signal,
           streamOpts?.promptId ?? 'test',
         ),
@@ -425,7 +369,6 @@ function createRealEngineAgent(opts: RealEngineAgentOptions): Agent {
   return agent;
 }
 
-/** No-op stubs shared by scripted + hanging clients. */
 function unused(): never {
   throw new Error('not used');
 }
@@ -435,7 +378,7 @@ function createClientBase(): AgentClientContract {
     async initialize() {},
     isInitialized: () => true,
     hasChatInitialized: () => true,
-    getChat() {
+    getChat: () => {
       throw new Error('override getChat');
     },
     async getHistory() {
@@ -473,7 +416,7 @@ interface HookHarness {
   result: {
     current: {
       runStream: (
-        msg: ContractPartListUnion,
+        msg: AgentRequestInput,
         sig: AbortSignal,
         pid: string,
       ) => Promise<void>;
@@ -491,7 +434,6 @@ function setupHookWithAgent(agent: Agent): HookHarness {
     { current: null };
   const addItem = vi.fn();
   const onToolCallsUpdate = vi.fn();
-
   const { result, unmount } = renderHook(() =>
     useAgentEventStream({
       agent,
@@ -515,11 +457,11 @@ function setupHookWithAgent(agent: Agent): HookHarness {
   return { result, routedEvents, addItem, onToolCallsUpdate, unmount };
 }
 
-function hasFunctionResponse(history: ContractContent[]): boolean {
+function hasFunctionResponse(history: IContent[]): boolean {
   return history
-    .filter((h) => h.role === 'user')
-    .flatMap((h) => h.parts)
-    .some((p) => !!p && 'functionResponse' in p);
+    .filter((h) => h.speaker === 'human' || h.speaker === 'tool')
+    .flatMap((h) => h.blocks)
+    .some((b) => b.type === 'tool_response');
 }
 
 describe('useAgentEventStream loop integration', () => {
@@ -531,17 +473,10 @@ describe('useAgentEventStream loop integration', () => {
   });
 
   it('(i) multi-turn: real loop drives tool-call continuation end-to-end', async () => {
-    // Turn 1: model requests a tool call. Turn 2: model gives final answer.
-    // MockTool's constructor wraps `execute` in vi.fn(impl), so no separate
-    // mockResolvedValue is needed.
     const tool = new MockTool({
       name: 'echo_tool',
-      execute: async () => ({
-        llmContent: 'echoed',
-        returnDisplay: 'echoed',
-      }),
+      execute: async () => ({ llmContent: 'echoed', returnDisplay: 'echoed' }),
     });
-
     const toolRegistry = createToolRegistryForTest([tool]);
     const policyEngine = createAllowPolicyEngine();
     const messageBus = new MessageBus(policyEngine, false);
@@ -572,7 +507,7 @@ describe('useAgentEventStream loop integration', () => {
     const controller = new AbortController();
     await act(async () => {
       await harness.result.current.runStream(
-        'user message' as ContractPartListUnion,
+        'user message' as AgentRequestInput,
         controller.signal,
         'prompt-1',
       );
@@ -584,18 +519,13 @@ describe('useAgentEventStream loop integration', () => {
     expect(state.sendMessageStreamCalls).toHaveLength(2);
     expect(state.turnMessages).toHaveLength(2);
 
-    // The second turn's message contained a functionResponse part.
+    // The second turn's message contained a tool_response block.
     expect(hasFunctionResponse(state.history)).toBe(true);
-    const turn2Parts = state.turnMessages[1] as ContractPart[];
-    expect(
-      Array.isArray(turn2Parts) &&
-        turn2Parts.some((p) => 'functionResponse' in p),
-    ).toBe(true);
+    const turn2Blocks = agentRequestInputToBlocks(state.turnMessages[1]);
+    expect(turn2Blocks.some((b) => b.type === 'tool_response')).toBe(true);
 
-    // The real scheduler executed the tool.
     expect(tool.executeFn).toHaveBeenCalledTimes(1);
 
-    // The hook received a tool-result event for the completed tool.
     const toolResults = harness.routedEvents.filter(
       (e) => e.type === 'tool-result',
     );
@@ -605,7 +535,6 @@ describe('useAgentEventStream loop integration', () => {
       result: { id: 'call-1', name: 'echo_tool' },
     });
 
-    // The final assistant text was rendered after the tool result.
     const textValues = harness.routedEvents
       .filter((e) => e.type === 'text')
       .map((e) => (e as { text: string }).text);
@@ -619,9 +548,6 @@ describe('useAgentEventStream loop integration', () => {
     );
     expect(toolResultIdx).toBeGreaterThanOrEqual(0);
     expect(finalTextIdx).toBeGreaterThan(toolResultIdx);
-
-    // addItem received a tool_group item for the completed tool (via the
-    // onAllToolCallsComplete display callback).
     expect(harness.addItem).toHaveBeenCalledTimes(1);
   });
 
@@ -637,14 +563,9 @@ describe('useAgentEventStream loop integration', () => {
       approvalMode: ApprovalMode.YOLO,
     });
 
-    // A scripted client that emits one ContractContent chunk, then hangs on a
-    // never-resolving promise unless the signal aborts, at which point it
-    // emits UserCancelled (matching the real client's abort behavior).
     let callCount = 0;
     const hangingChat = {
-      getHistory() {
-        return [] as ContractContent[];
-      },
+      getHistory: () => [] as IContent[],
       setHistory: () => {},
       clearHistory: () => {},
       getHistoryService: () => null,
@@ -655,18 +576,15 @@ describe('useAgentEventStream loop integration', () => {
 
     const hangingClient: AgentClientContract = {
       ...createClientBase(),
-      getChat() {
-        return hangingChat;
-      },
+      getChat: () => hangingChat,
       addHistory: async () => {},
       async *sendMessageStream(
-        _req: ContractPartListUnion,
+        _req: string | ContentBlock[] | IContent,
         signal: AbortSignal,
         _promptId: string,
       ): AsyncGenerator<ServerAgentStreamEvent> {
         callCount++;
         yield contentEvent('partial-text');
-        // Hang until aborted.
         await new Promise<void>((resolve) => {
           if (signal.aborted) {
             resolve();
@@ -694,7 +612,7 @@ describe('useAgentEventStream loop integration', () => {
     const controller = new AbortController();
     const runPromise = act(async () => {
       await harness.result.current.runStream(
-        'go' as ContractPartListUnion,
+        'go' as AgentRequestInput,
         controller.signal,
         'prompt-cancel',
       );
@@ -745,7 +663,6 @@ describe('useAgentEventStream loop integration', () => {
     return new Promise((resolve, reject) => {
       const start = Date.now();
       let settled = false;
-      // If the run settles before the status is observed, reject immediately.
       if (runPromise) {
         void Promise.resolve(runPromise)
           .catch(() => {})
@@ -778,14 +695,12 @@ describe('useAgentEventStream loop integration', () => {
     });
   }
 
-  /** Gets onConfirm from the union confirmationDetails (production UI path). */
   function getOnConfirm(
     tc: WaitingToolCall,
   ): (outcome: ToolConfirmationOutcome) => Promise<void> {
     return (tc.confirmationDetails as ToolCallConfirmationDetails).onConfirm;
   }
 
-  /** Shared setup for confirmation tests: ASK_USER policy + confirming tool. */
   function setupConfirmationTest(
     toolName: string,
     callId: string,
@@ -821,10 +736,6 @@ describe('useAgentEventStream loop integration', () => {
   }
 
   it('(iii-a) approval: ProceedOnce via confirmationDetails.onConfirm resolves the tool and the loop continues', async () => {
-    // Exercises the PRODUCTION confirmation path: the forwarded ToolCall enters
-    // awaiting_approval, then the test calls confirmationDetails.onConfirm(
-    // ProceedOnce) — exactly what ToolConfirmationMessage.tsx:553 does. No
-    // approvalHandler is wired (production never wires one).
     const { harness, controller } = setupConfirmationTest(
       'confirm_tool',
       'call-appr',
@@ -836,17 +747,13 @@ describe('useAgentEventStream loop integration', () => {
         [contentEvent('approved-and-done'), finishedEvent()],
       ],
     );
-
-    // Start without awaiting — the loop blocks at awaiting_approval until
-    // we resolve via onConfirm.
     const runPromise = act(async () => {
       await harness.result.current.runStream(
-        'go' as ContractPartListUnion,
+        'go' as AgentRequestInput,
         controller.signal,
         'prompt-appr',
       );
     });
-
     const awaitingTc = await waitForToolCallStatus(
       harness,
       'call-appr',
@@ -856,11 +763,8 @@ describe('useAgentEventStream loop integration', () => {
     );
     const waitingTc = awaitingTc as WaitingToolCall;
     expect(waitingTc.confirmationDetails).toBeDefined();
-
-    // Resolve exactly like ToolConfirmationMessage.tsx:553.
     await getOnConfirm(waitingTc)(ToolConfirmationOutcome.ProceedOnce);
     await runPromise;
-
     expect(
       await waitForToolCallStatus(harness, 'call-appr', 'success'),
     ).toBeDefined();
@@ -872,23 +776,18 @@ describe('useAgentEventStream loop integration', () => {
   });
 
   it('(iii-b) approval: Cancel via confirmationDetails.onConfirm rejects the tool and the turn ends with cancelled status', async () => {
-    // Exercises the PRODUCTION rejection path: the forwarded ToolCall enters
-    // awaiting_approval, then the test calls confirmationDetails.onConfirm(
-    // Cancel) — exactly what ToolConfirmationMessage.tsx does on reject.
     const { harness, controller } = setupConfirmationTest(
       'confirm_tool',
       'call-rej',
       [[toolCallRequestEvent('confirm_tool', 'call-rej'), finishedEvent()]],
     );
-
     const runPromise = act(async () => {
       await harness.result.current.runStream(
-        'go' as ContractPartListUnion,
+        'go' as AgentRequestInput,
         controller.signal,
         'prompt-rej',
       );
     });
-
     const awaitingTc = await waitForToolCallStatus(
       harness,
       'call-rej',
@@ -900,7 +799,6 @@ describe('useAgentEventStream loop integration', () => {
     expect(waitingTc.confirmationDetails).toBeDefined();
     await getOnConfirm(waitingTc)(ToolConfirmationOutcome.Cancel);
     await runPromise;
-
     expect(
       await waitForToolCallStatus(harness, 'call-rej', 'cancelled'),
     ).toBeDefined();
@@ -919,13 +817,9 @@ describe('useAgentEventStream loop integration', () => {
       interactive: true,
       approvalMode: ApprovalMode.YOLO,
     });
-
     const { client } = createScriptedAgentClient([]);
-    const displayCallbacksHolder = {
-      current: {} as DisplayCallbacks,
-    };
+    const displayCallbacksHolder = { current: {} as DisplayCallbacks };
     const editorCallbacksHolder = { current: {} as Record<string, unknown> };
-
     const agent = createRealEngineAgent({
       agentClient: client,
       config,
@@ -934,20 +828,13 @@ describe('useAgentEventStream loop integration', () => {
       displayCallbacksHolder,
       editorCallbacksHolder,
     });
-
     const harness = setupHookWithAgent(agent);
-
-    // After mount, display callbacks were registered on the agent.
     expect(displayCallbacksHolder.current).toHaveProperty('onToolCallsUpdate');
     expect(displayCallbacksHolder.current).toHaveProperty(
       'onAllToolCallsComplete',
     );
     expect(editorCallbacksHolder.current).toHaveProperty('getPreferredEditor');
-
     harness.unmount();
-
-    // After unmount, the cleanup cleared the registration — the holders are
-    // now empty objects so a stale unmounted hook's closures cannot fire.
     expect(Object.keys(displayCallbacksHolder.current)).toHaveLength(0);
     expect(Object.keys(editorCallbacksHolder.current)).toHaveLength(0);
   });

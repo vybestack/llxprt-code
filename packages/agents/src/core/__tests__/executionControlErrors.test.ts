@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
-import type { GenerateContentResponse } from '@google/genai';
+import { describe, it, expect } from 'vitest';
+import { emptyModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   AgentExecutionStoppedError,
   AgentExecutionBlockedError,
@@ -45,15 +45,15 @@ describe('AgentExecutionStoppedError', () => {
 });
 
 describe('AgentExecutionBlockedError', () => {
-  it('should store reason, syntheticResponse, and systemMessage', () => {
-    const synthetic = { candidates: [] } as unknown as GenerateContentResponse;
+  it('should store reason, blockedOutput, and systemMessage', () => {
+    const blocked = emptyModelOutput('ai');
     const error = new AgentExecutionBlockedError(
       'block reason',
-      synthetic,
+      blocked,
       'block system',
     );
     expect(error.reason).toBe('block reason');
-    expect(error.syntheticResponse).toBe(synthetic);
+    expect(error.blockedOutput).toBe(blocked);
     expect(error.systemMessage).toBe('block system');
     expect(error.contextCleared).toBeUndefined();
     expect(error.name).toBe('AgentExecutionBlockedError');

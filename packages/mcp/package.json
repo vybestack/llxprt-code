@@ -21,18 +21,17 @@
     "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
-    "test": "bun test --path-ignore-patterns dist",
-    "test:bun": "bun ../../scripts/run_bun_tests.ts",
-    "test:ci": "bun test --path-ignore-patterns dist",
+    "test": "vitest run",
+    "test:ci": "vitest run",
     "test:mutation": "stryker run stryker.conf.json",
-    "typecheck": "tsc --noEmit",
-    "test:vitest": "vitest run --config ./vitest.config.ts"
+    "typecheck": "tsc --noEmit"
   },
   "files": [
     "index.ts",
     "src",
     "!**/*.test.ts",
     "!**/*.test.tsx",
+    "!**/*.test-d.ts",
     "!**/*.spec.ts",
     "!**/*.spec.tsx",
     "!**/__tests__/**",
@@ -41,7 +40,6 @@
   ],
   "dependencies": {
     "@vybestack/llxprt-code-storage": "file:../storage",
-    "@google/genai": "1.30.0",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@vybestack/llxprt-code-settings": "file:../settings",
     "@vybestack/llxprt-code-tools": "file:../tools",

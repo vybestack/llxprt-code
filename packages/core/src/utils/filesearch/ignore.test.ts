@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, afterEach } from 'bun:test';
+import { describe, it, expect, afterEach } from 'vitest';
 import { Ignore, loadIgnoreRules } from './ignore.js';
 import { createTmpDir, cleanupTmpDir } from '@vybestack/llxprt-code-test-utils';
 

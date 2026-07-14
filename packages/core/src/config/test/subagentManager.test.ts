@@ -4,22 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { it as itProp } from '@fast-check/vitest';
 import * as fc from 'fast-check';
-
-function propertyTest<TValues extends [unknown, ...unknown[]]>(
-  name: string,
-  arbitraries: { [TIndex in keyof TValues]: fc.Arbitrary<TValues[TIndex]> },
-  predicate: (...values: TValues) => Promise<void>,
-): void {
-  it(name, async () => {
-    await fc.assert(
-      fc.asyncProperty(fc.tuple(...arbitraries), (values) =>
-        predicate(...values),
-      ),
-    );
-  });
-}
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -164,12 +151,12 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
       '😀',
     );
 
-    propertyTest(
+    itProp(
       'rejects invalid subagent names generated randomly @plan:PLAN-20250117-SUBAGENTCONFIG.P04 @requirement:REQ-013',
       [validNameArb, invalidSuffixArb],
       async (base, suffix) => {
         const invalidName = `${base}${suffix}`;
-        expect(
+        await expect(
           subagentManager.saveSubagent(invalidName, 'testprofile', 'Prompt'),
         ).rejects.toThrow(/invalid.*name/i);
       },
@@ -184,23 +171,23 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
       `${String.fromCharCode(32)}${String.fromCharCode(10)}${String.fromCharCode(9)}${String.fromCharCode(32)}`,
     );
 
-    propertyTest(
+    itProp(
       'rejects prompts that resolve to empty text @plan:PLAN-20250117-SUBAGENTCONFIG.P04 @requirement:REQ-013',
       [whitespacePromptArb],
       async (emptyPrompt) => {
-        expect(
+        await expect(
           subagentManager.saveSubagent('testagent', 'testprofile', emptyPrompt),
         ).rejects.toThrow(/prompt/i);
       },
     );
 
-    propertyTest(
+    itProp(
       'rejects non-existent profiles generated randomly @plan:PLAN-20250117-SUBAGENTCONFIG.P04 @requirement:REQ-013',
       [validNameArb],
       async (baseProfile) => {
         const unknownProfile = `${baseProfile}-alt`;
         await fs.rm(subagentsDir, { recursive: true, force: true });
-        expect(
+        await expect(
           subagentManager.saveSubagent('testagent', unknownProfile, 'Prompt'),
         ).rejects.toThrow(/profile.*not found/i);
       },
@@ -222,7 +209,7 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
     });
 
     it('should throw error for non-existent subagent @requirement:REQ-013 @plan:PLAN-20250117-SUBAGENTCONFIG.P04', async () => {
-      expect(subagentManager.loadSubagent('nonexistent')).rejects.toThrow(
+      await expect(subagentManager.loadSubagent('nonexistent')).rejects.toThrow(
         /not found/i,
       );
     });
@@ -233,7 +220,7 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
       const invalidPath = path.join(subagentsDir, 'invalid.json');
       await fs.writeFile(invalidPath, 'not valid json', 'utf-8');
 
-      expect(subagentManager.loadSubagent('invalid')).rejects.toThrow(
+      await expect(subagentManager.loadSubagent('invalid')).rejects.toThrow(
         /invalid.*json/i,
       );
     });
@@ -251,7 +238,7 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
       };
       await fs.writeFile(incompletePath, JSON.stringify(incomplete), 'utf-8');
 
-      expect(subagentManager.loadSubagent('incomplete')).rejects.toThrow(
+      await expect(subagentManager.loadSubagent('incomplete')).rejects.toThrow(
         /required field/i,
       );
     });
@@ -260,7 +247,7 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
       .string({ minLength: 1 })
       .filter((value) => value.trim().length > 0);
 
-    propertyTest(
+    itProp(
       'preserves saved subagent configuration for any valid prompt @plan:PLAN-20250117-SUBAGENTCONFIG.P04 @requirement:REQ-002',
       [validNameArb, nonEmptyPromptArb],
       async (name, prompt) => {
@@ -331,7 +318,7 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
       expect(list).toContain('agent1');
     });
 
-    propertyTest(
+    itProp(
       'lists saved subagents in sorted order for any valid set @plan:PLAN-20250117-SUBAGENTCONFIG.P04 @requirement:REQ-002',
       [fc.array(validNameArb, { minLength: 1, maxLength: 6 })],
       async (names) => {
@@ -383,7 +370,7 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
       expect(deleted).toBe(false);
     });
 
-    propertyTest(
+    itProp(
       'returns false for any unsaved subagent name @plan:PLAN-20250117-SUBAGENTCONFIG.P04 @requirement:REQ-002',
       [validNameArb],
       async (name) => {

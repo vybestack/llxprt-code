@@ -22,7 +22,7 @@
  * @plan PLAN-20260117-CODEX-REASONING
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,

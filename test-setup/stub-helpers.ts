@@ -38,7 +38,10 @@ export class StubRegistry {
     }
     const descriptor = Object.getOwnPropertyDescriptor(this.target, key);
     if (descriptor && !descriptor.configurable) {
-      if (!descriptor.writable) {
+      if ('value' in descriptor && !descriptor.writable) {
+        throw new TypeError(`Cannot stub readonly property ${String(key)}`);
+      }
+      if ('set' in descriptor && descriptor.set === undefined) {
         throw new TypeError(`Cannot stub readonly property ${String(key)}`);
       }
       this.target[key] = value;
@@ -53,14 +56,25 @@ export class StubRegistry {
   }
 
   restoreAll(): void {
+    const errors: unknown[] = [];
     for (const [key, record] of this.snapshots) {
-      if (record.descriptor) {
-        Object.defineProperty(this.target, key, record.descriptor);
-      } else {
-        Reflect.deleteProperty(this.target, key);
+      try {
+        if (record.descriptor) {
+          Object.defineProperty(this.target, key, record.descriptor);
+        } else {
+          Reflect.deleteProperty(this.target, key);
+        }
+      } catch (error: unknown) {
+        errors.push(error);
       }
     }
     this.snapshots.clear();
+    if (errors.length > 0) {
+      throw new AggregateError(
+        errors,
+        'Failed to restore all stubbed properties',
+      );
+    }
   }
 }
 
@@ -93,11 +107,11 @@ async function waitForImpl<T>(
   interval: number,
   timeout: number,
 ): Promise<T> {
-  const deadline = Date.now() + timeout;
+  const deadline = performance.now() + timeout;
   let lastError: unknown;
 
   for (;;) {
-    const remaining = deadline - Date.now();
+    const remaining = deadline - performance.now();
     if (remaining <= 0) {
       throw lastError ?? new Error('waitFor timed out');
     }
@@ -106,12 +120,14 @@ async function waitForImpl<T>(
       return await invokeBeforeDeadline(callback, remaining);
     } catch (error: unknown) {
       lastError = error;
-      if (Date.now() >= deadline) {
+      if (performance.now() >= deadline) {
         throw lastError;
       }
     }
-    const delay = Math.min(interval, deadline - Date.now());
-    await new Promise<void>((resolve) => setTimeout(resolve, delay));
+    const delay = Math.min(interval, deadline - performance.now());
+    if (delay > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, delay));
+    }
   }
 }
 

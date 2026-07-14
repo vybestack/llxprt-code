@@ -17,7 +17,7 @@
  * Tests operate on a REAL HighDensityStrategy instance. No mock theater.
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import * as fc from 'fast-check';
 import type {
   IContent,

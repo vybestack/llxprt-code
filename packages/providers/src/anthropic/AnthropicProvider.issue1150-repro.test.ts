@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type {
   IContent,
@@ -21,10 +21,27 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { AnthropicRequestBody } from './test-utils/anthropicTestUtils.js';
 
+vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+  getCoreSystemPromptAsync: vi.fn(
+    async () => "You are Claude Code, Anthropic's official CLI for Claude.",
+  ),
+}));
+
+// REQ-RETRY-001: retryWithBackoff removed from providers
+vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+  getErrorStatus: vi.fn(() => undefined),
+  isNetworkTransientError: vi.fn(() => false),
+}));
+
 const mockMessagesCreate = vi.fn();
-const constructClient = () => ({
-  messages: { create: mockMessagesCreate },
-});
+
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: vi.fn().mockImplementation(() => ({
+    messages: {
+      create: mockMessagesCreate,
+    },
+  })),
+}));
 
 describe('AnthropicProvider Issue #1150 Reproduction: Edge cases causing thinking to disappear', () => {
   let provider: AnthropicProvider;
@@ -47,16 +64,10 @@ describe('AnthropicProvider Issue #1150 Reproduction: Edge cases causing thinkin
           ...svc.getProviderSettings('anthropic'),
         });
 
-        return new AnthropicProvider(
-          'test-api-key',
-          undefined,
-          {
-            ...TEST_PROVIDER_CONFIG,
-            getEphemeralSettings: ephemeralSettingsGetter,
-          },
-          undefined,
-          { constructClient },
-        );
+        return new AnthropicProvider('test-api-key', undefined, {
+          ...TEST_PROVIDER_CONFIG,
+          getEphemeralSettings: ephemeralSettingsGetter,
+        });
       },
       {
         runtimeId: 'anthropic.issue1150repro.test',

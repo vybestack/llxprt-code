@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { PromptService, type PromptServiceConfig } from './prompt-service.js';
 import type { PromptContext } from './types.js';
 import type { PromptInstaller } from './prompt-installer.js';
@@ -58,9 +58,9 @@ describe('PromptService', () => {
       const envGitFile = path.join(baseDir, 'env', 'git-repository.md');
       const toolsEditFile = path.join(baseDir, 'tools', 'edit.md');
 
-      expect(fs.stat(coreFile)).resolves.toBeTruthy();
-      expect(fs.stat(envGitFile)).resolves.toBeTruthy();
-      expect(fs.stat(toolsEditFile)).resolves.toBeTruthy();
+      await expect(fs.stat(coreFile)).resolves.toBeTruthy();
+      await expect(fs.stat(envGitFile)).resolves.toBeTruthy();
+      await expect(fs.stat(toolsEditFile)).resolves.toBeTruthy();
     });
 
     it('should install default prompt files on first initialization', async () => {
@@ -126,7 +126,7 @@ describe('PromptService', () => {
         : '/invalid-path/that/cannot/be/created/prompts';
       const service = new PromptService({ baseDir });
 
-      expect(service.initialize()).rejects.toThrow(Error);
+      await expect(service.initialize()).rejects.toThrow(Error);
     });
 
     it('should continue initialization even if some files fail to load', async () => {
@@ -140,7 +140,7 @@ describe('PromptService', () => {
         'Core content',
       );
 
-      await service.initialize();
+      await expect(service.initialize()).resolves.not.toThrow();
     });
 
     it('should surface installer notices once when defaults are newer than local prompts', async () => {
@@ -271,7 +271,7 @@ describe('PromptService', () => {
     it('should throw error if context is null', async () => {
       await service.initialize();
 
-      expect(
+      await expect(
         service.getPrompt(null as unknown as PromptContext),
       ).rejects.toThrow('Context is required');
     });
@@ -290,7 +290,7 @@ describe('PromptService', () => {
         },
       };
 
-      expect(service.getPrompt(context)).rejects.toThrow(
+      await expect(service.getPrompt(context)).rejects.toThrow(
         'Provider is required',
       );
     });
@@ -309,7 +309,9 @@ describe('PromptService', () => {
         },
       };
 
-      expect(service.getPrompt(context)).rejects.toThrow('Model is required');
+      await expect(service.getPrompt(context)).rejects.toThrow(
+        'Model is required',
+      );
     });
 
     it('should assemble prompt in correct order: core -> env -> tools -> user memory', async () => {
@@ -637,7 +639,7 @@ describe('PromptService', () => {
       const service = new PromptService({ baseDir });
 
       // Try to reload before initialization
-      await service.reloadFiles();
+      await expect(service.reloadFiles()).resolves.not.toThrow();
     });
   });
 
@@ -892,7 +894,7 @@ describe('PromptService', () => {
 
       const service = new PromptService({ baseDir: conflictBaseDir });
       // This should handle the error gracefully during initialization
-      expect(service.initialize()).rejects.toThrow('Installation failed');
+      await expect(service.initialize()).rejects.toThrow('Installation failed');
     });
   });
 });

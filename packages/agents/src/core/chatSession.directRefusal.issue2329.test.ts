@@ -15,10 +15,9 @@
  * provider — no mock theater.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { FinishReason } from '@google/genai';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ChatSession } from './chatSession.js';
-import { getProviderStopReason } from './providerStopReason.js';
+import type { TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
@@ -37,6 +36,23 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+
+/**
+ * Extracts visible text from a neutral ModelOutput — the post-P13
+ * replacement for the deleted GenerateContentResponse `.text` getter.
+ */
+function extractText(output: {
+  content: { blocks: Array<{ type: string; text?: string }> };
+}): string {
+  return output.content.blocks
+    .filter((b): b is TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
+}
+
+vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+  retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
+}));
 
 describe('Issue 2329: direct-path refusal preservation @issue:2329', () => {
   let settingsService: SettingsService;
@@ -123,9 +139,11 @@ describe('Issue 2329: direct-path refusal preservation @issue:2329', () => {
       'prompt-direct-refusal',
     );
 
-    expect(response.text).toBe('I cannot help with that request.');
-    expect(response.candidates?.[0]?.finishReason).toBe(FinishReason.STOP);
-    expect(getProviderStopReason(response.candidates?.[0])).toBe('refusal');
+    expect(extractText(response)).toBe('I cannot help with that request.');
+    // refusal is a distinct canonical finish reason; rawStopReason preserves
+    // the provider-native 'refusal' value on the neutral rawStopReason carrier.
+    expect(response.finishReason).toBe('refusal');
+    expect(response.rawStopReason).toBe('refusal');
   });
 
   it('preserves text and stop reason when a single chunk carries both', async () => {
@@ -154,8 +172,8 @@ describe('Issue 2329: direct-path refusal preservation @issue:2329', () => {
       'prompt-direct-refusal-single',
     );
 
-    expect(response.text).toBe('Declined.');
-    expect(response.candidates?.[0]?.finishReason).toBe(FinishReason.STOP);
-    expect(getProviderStopReason(response.candidates?.[0])).toBe('refusal');
+    expect(extractText(response)).toBe('Declined.');
+    expect(response.finishReason).toBe('refusal');
+    expect(response.rawStopReason).toBe('refusal');
   });
 });

@@ -20,7 +20,6 @@ import {
   type StatusMutator,
   type SchedulerAccessor,
   type EditorCallbacks,
-  type ConfirmationCoordinatorDependencies,
 } from './confirmation-coordinator.js';
 import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-tools';
@@ -199,7 +198,6 @@ export function createCoordinator(
     editorCallbacks?: EditorCallbacks;
     config?: Config;
     toolCalls?: ToolCall[];
-    dependencies?: ConfirmationCoordinatorDependencies;
   } = {},
 ) {
   const messageBus = makeMessageBus();
@@ -211,18 +209,6 @@ export function createCoordinator(
   const editorCallbacks = overrides.editorCallbacks ?? makeEditorCallbacks();
   const onToolNotification = vi.fn().mockResolvedValue(undefined);
 
-  const dependencies: ConfirmationCoordinatorDependencies =
-    overrides.dependencies ?? {
-      isModifiableDeclarativeTool: (
-        tool,
-      ): tool is import('@vybestack/llxprt-code-tools').ModifiableDeclarativeTool<object> =>
-        true,
-      modifyWithEditor: async () => ({
-        updatedParams: { content: 'updated' },
-        updatedDiff: '--- a +++ b @@ updated @@',
-      }),
-    };
-
   const coordinator = new ConfirmationCoordinator(
     messageBus as unknown as MessageBus,
     config,
@@ -230,7 +216,6 @@ export function createCoordinator(
     schedulerAccessor,
     editorCallbacks,
     onToolNotification,
-    dependencies,
   );
   coordinator.subscribe();
 

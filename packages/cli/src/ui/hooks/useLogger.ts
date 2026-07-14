@@ -6,7 +6,8 @@
 
 import { useState, useEffect } from 'react';
 import type { Storage } from '@vybestack/llxprt-code-settings';
-import { sessionId, Logger } from '@vybestack/llxprt-code-core';
+import { Logger } from '@vybestack/llxprt-code-core';
+import { sessionId } from '@vybestack/llxprt-code-telemetry';
 
 /**
  * Hook to manage the logger instance.

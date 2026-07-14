@@ -1,4 +1,4 @@
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC

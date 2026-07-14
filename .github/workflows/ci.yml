@@ -264,6 +264,10 @@ jobs:
         run: |-
           npm run lint:cli-boundary
 
+      - name: 'Run agents neutral gate (anti-#2424 enforcement)'
+        run: |-
+          npm run gate:agents-neutral
+
       # Build must run BEFORE the type-aware lint: several workspace tsconfigs
       # map cross-workspace imports to `dist/*.d.ts` (e.g. storage, settings),
       # so tsserver (projectService) needs the compiled declarations on disk to
@@ -623,16 +627,13 @@ jobs:
           bunx vitest run --config ./scripts/tests/vitest.config.ts scripts/tests/test-orchestrator.test.ts
 
   #
-  # Bun-native test parity (issue #2475)
+  # Bun-native test compatibility (issue #2475)
   #
-  # Runs a representative sample of tests from each migrated workspace using
-  # Bun's native test runner (bun test) to verify parity with the Vitest
-  # results. This catches regressions in the Bun compatibility shim
-  # (augment-bun-vi.ts) and workspace-specific bunfig.toml configurations
-  # without the cost of a full Bun-native run of all 500+ test files per
-  # workspace.
+  # Runs representative tests from workspaces with supported Bun-native
+  # compatibility. Vitest-only workspaces remain covered by the primary test
+  # jobs and are intentionally excluded from this smoke gate.
   bun_native_test_parity:
-    name: 'Bun Native Test Parity'
+    name: 'Bun Native Test Compatibility'
     runs-on: 'ubuntu-latest'
     timeout-minutes: 15
     needs:
@@ -656,25 +657,9 @@ jobs:
           bun install
           git checkout -- bun.lock
 
-      - name: 'Run CLI characterization test under Bun'
+      - name: 'Run Bun-native tests (manifest-based)'
         run: |-
-          cd packages/cli
-          bun test src/__tests__/cliSessionDispatch.characterization.test.tsx --max-concurrency 1 --timeout 30000
-
-      - name: 'Run agents sample under Bun'
-        run: |-
-          cd packages/agents
-          bun test src/agents/executor.test.ts --max-concurrency 1 --timeout 30000
-
-      - name: 'Run core sample under Bun'
-        run: |-
-          cd packages/core
-          bun test src/utils/errors.test.ts --max-concurrency 1 --timeout 30000
-
-      - name: 'Run providers sample under Bun'
-        run: |-
-          cd packages/providers
-          bun test src/BaseProvider.test.ts --max-concurrency 1 --timeout 30000
+          bun scripts/run_bun_tests.ts --timeout 30000
 
   #
   # Test: Node (Linux and macOS - always run)

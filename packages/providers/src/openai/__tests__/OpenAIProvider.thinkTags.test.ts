@@ -9,7 +9,7 @@
  * @plan PLAN-20251202-THINKING.P16
  * @requirement REQ-THINK-003
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { extractThinkTagsAsBlock } from '../../utils/thinkingExtraction.js';
 import { sanitizeProviderText } from '../../utils/textSanitizer.js';
 

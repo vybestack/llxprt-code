@@ -17,7 +17,7 @@
  *     ?? config.getModel), proving live-client resolution.
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import {
   buildAgent,
   drain,
@@ -98,11 +98,10 @@ const SAMPLE_COMPLETED: CompletedToolCall[] = [
     response: {
       responseParts: [
         {
-          functionResponse: {
-            id: 'caller-call-1',
-            name: 'list_directory',
-            response: { output: 'file1.txt' },
-          },
+          type: 'tool_response',
+          callId: 'caller-call-1',
+          toolName: 'list_directory',
+          result: { output: 'file1.txt' },
         },
       ],
       error: undefined,

@@ -6,7 +6,7 @@
 
 import path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import type { GenerateContentConfig } from '@google/genai';
+import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
@@ -44,10 +44,7 @@ import {
 } from './reasoningUtils.js';
 import { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import {
-  retryWithBackoff,
-  type RetryOptions,
-} from '@vybestack/llxprt-code-core/utils/retry.js';
+import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
@@ -94,25 +91,14 @@ export class CompressionHandler {
   constructor(
     private readonly runtimeContext: AgentRuntimeContext,
     private readonly historyService: HistoryService,
-    private readonly generationConfig: GenerateContentConfig,
+    private readonly generationConfig: ModelGenerationSettings,
     private readonly providerResolver: (
       compressionProfileName: string | undefined,
     ) => CompressionProviderResult | Promise<CompressionProviderResult>,
     private readonly hookTrigger: (
       context: CompressionContext,
     ) => Promise<void>,
-    private readonly retry: <T>(
-      operation: () => Promise<T>,
-      options: RetryOptions<T>,
-    ) => Promise<T> = retryWithBackoff,
   ) {}
-
-  resolveCompressionStrategy(
-    strategyName: Parameters<typeof getCompressionStrategy>[0],
-  ): ReturnType<typeof getCompressionStrategy> {
-    return getCompressionStrategy(strategyName);
-  }
-
   /**
    * Runtime provider context, widened to include null/undefined for defensive
    * runtime boundary guards. Provider runtime state may be absent during
@@ -199,7 +185,7 @@ export class CompressionHandler {
       const strategyName = parseCompressionStrategyName(
         this.runtimeContext.ephemerals.compressionStrategy(),
       );
-      const strategy = this.resolveCompressionStrategy(strategyName);
+      const strategy = getCompressionStrategy(strategyName);
 
       // REQ-HD-002.2: If strategy has no optimize method or trigger isn't continuous
       if (!strategy.optimize || strategy.trigger.mode !== 'continuous') {
@@ -397,10 +383,7 @@ export class CompressionHandler {
   /**
    * Compute context-window limits and completion budget for enforcement.
    */
-  computeContextLimits(
-    provider?: IProvider,
-    resolveTokenLimit: typeof tokenLimit = tokenLimit,
-  ): {
+  private computeContextLimits(provider?: IProvider): {
     completionBudget: number;
     limit: number;
     marginAdjustedLimit: number;
@@ -415,18 +398,7 @@ export class CompressionHandler {
       ),
     );
     const userContextLimit = this.runtimeContext.ephemerals.contextLimit();
-    const providerContextLimit = provider?.getContextLimit?.();
-    const configuredContextLimit =
-      userContextLimit ??
-      (typeof providerContextLimit === 'number' &&
-      Number.isFinite(providerContextLimit) &&
-      providerContextLimit > 0
-        ? providerContextLimit
-        : undefined);
-    const limit = resolveTokenLimit(
-      this.runtimeContext.state.model,
-      configuredContextLimit,
-    );
+    const limit = tokenLimit(this.runtimeContext.state.model, userContextLimit);
     const safetyAdjustedLimit = Math.max(
       0,
       limit - CompressionHandler.TOKEN_SAFETY_MARGIN,
@@ -597,7 +569,6 @@ export class CompressionHandler {
     pendingTokens: number,
     promptId: string,
     provider?: IProvider,
-    resolveTokenLimit: typeof tokenLimit = tokenLimit,
   ): Promise<void> {
     const enforcer = new PendingContextWindowEnforcer({
       historyService: this.historyService,
@@ -605,7 +576,7 @@ export class CompressionHandler {
       ineffectiveCompressionReductionThreshold:
         CompressionHandler.INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD,
       getContextLimits: (activeProvider) =>
-        this.computeContextLimits(activeProvider, resolveTokenLimit),
+        this.computeContextLimits(activeProvider),
       computeProjectedTokens: (tokens, completionBudget) =>
         this.computeProjectedTokens(tokens, completionBudget),
       ensureDensityOptimized: () => this.ensureDensityOptimized(),
@@ -774,14 +745,14 @@ export class CompressionHandler {
       const strategyName = parseCompressionStrategyName(
         this.runtimeContext.ephemerals.compressionStrategy(),
       );
-      const strategy = this.resolveCompressionStrategy(strategyName);
+      const strategy = getCompressionStrategy(strategyName);
       const result = await strategy.compress(context);
       return result.newHistory;
     };
 
     let primaryError: unknown;
     try {
-      const newHistory = await this.retry(attemptPrimary, {
+      const newHistory = await retryWithBackoff(attemptPrimary, {
         maxAttempts: 3,
         initialDelayMs: 2000,
         maxDelayMs: 10000,
@@ -824,7 +795,7 @@ export class CompressionHandler {
   private async compressWithFallbackStrategy(
     context: CompressionContext,
   ): Promise<CompressionResult> {
-    const fallback = this.resolveCompressionStrategy('top-down-truncation');
+    const fallback = getCompressionStrategy('top-down-truncation');
     return fallback.compress(context);
   }
 

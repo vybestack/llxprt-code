@@ -13,14 +13,21 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as compressionFactory from '../compressionStrategyFactory.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import {
-  makeHttpError,
-  makeChatSession,
-  retryWithoutDelay,
-} from './compression-retry-helpers.js';
+import { makeHttpError, makeChatSession } from './compression-retry-helpers.js';
+
+// Mock the delay utility so retryWithBackoff doesn't actually wait in tests
+vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
+  delay: vi.fn().mockResolvedValue(undefined),
+  createAbortError: () => {
+    const err = new Error('Aborted');
+    err.name = 'AbortError';
+    return err;
+  },
+}));
 
 // ---------------------------------------------------------------------------
 // Phase 4: Failure tracking and cooldown
@@ -29,11 +36,10 @@ import {
 describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY.P01', () => {
   let runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
   let providerRuntimeSnapshot: ProviderRuntimeContext;
-  let previousProviderRuntime: ProviderRuntimeContext | null;
 
   beforeEach(() => {
-    previousProviderRuntime =
-      providerRuntime.peekActiveProviderRuntimeContext();
+    vi.clearAllMocks();
+    vi.useFakeTimers();
     runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
@@ -43,7 +49,8 @@ describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY
   });
 
   afterEach(() => {
-    providerRuntime.setActiveProviderRuntimeContext(previousProviderRuntime);
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   /**
@@ -51,16 +58,11 @@ describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY
    * After 3 failures within 60 seconds, compression is skipped
    */
   it('skips compression after 3 consecutive failures within cooldown period', async () => {
-    const chat = makeChatSession(
-      runtimeSetup,
-      providerRuntimeSnapshot,
-      retryWithoutDelay,
-    );
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     let compressionAttempts = 0;
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation(() => ({
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
         name: 'middle-out' as const,
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
@@ -68,7 +70,8 @@ describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY
           compressionAttempts++;
           throw makeHttpError(500);
         }),
-      }));
+      }),
+    );
 
     // Force 3 compressions to trigger cooldown
     await chat.performCompression('test-prompt'); // attempt 1 (fails)
@@ -88,16 +91,11 @@ describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY
    * Cooldown expires after 60 seconds
    */
   it('cooldown expires after 60 seconds allowing compression to resume', async () => {
-    const chat = makeChatSession(
-      runtimeSetup,
-      providerRuntimeSnapshot,
-      retryWithoutDelay,
-    );
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     let compressionAttempts = 0;
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation(() => ({
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
         name: 'middle-out' as const,
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
@@ -105,10 +103,8 @@ describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY
           compressionAttempts++;
           throw makeHttpError(500);
         }),
-      }));
-
-    let now = Date.now();
-    const dateNowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+      }),
+    );
 
     // Trigger 3 failures to enter cooldown
     await chat.performCompression('test-prompt');
@@ -118,12 +114,11 @@ describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY
     const countAfterCooldown = compressionAttempts;
 
     // Advance time past cooldown period (60 seconds)
-    now += 61000;
+    vi.advanceTimersByTime(61000);
 
     // Should attempt compression again after cooldown expires
     await chat.performCompression('test-prompt');
     expect(compressionAttempts).toBeGreaterThan(countAfterCooldown);
-    dateNowSpy.mockRestore();
   });
 
   /**
@@ -131,18 +126,13 @@ describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY
    * Cooldown resets on successful compression
    */
   it('resets failure count after successful compression', async () => {
-    const chat = makeChatSession(
-      runtimeSetup,
-      providerRuntimeSnapshot,
-      retryWithoutDelay,
-    );
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     let shouldFail = true;
     let compressionAttempts = 0;
 
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation(() => ({
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
         name: 'middle-out' as const,
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
@@ -161,7 +151,8 @@ describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY
             },
           };
         }),
-      }));
+      }),
+    );
 
     // Cause 2 failures (not yet at cooldown threshold)
     await chat.performCompression('test-prompt');

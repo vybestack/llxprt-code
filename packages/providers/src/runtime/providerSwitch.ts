@@ -60,9 +60,6 @@ interface ProviderSwitchOptions {
   preserveEphemerals?: string[];
   skipModelDefaults?: boolean;
   addItem?: OAuthUICallback;
-  loadAliasEntries?: typeof loadProviderAliasEntries;
-  runtimeServices?: ReturnType<typeof getCliRuntimeServices>;
-  getActiveProfileName?: typeof getActiveProfileName;
 }
 
 interface ProviderSwitchContext {
@@ -222,13 +219,11 @@ function resetBucketFailoverHandler(config: Config): void {
   candidate.setBucketFailoverHandler(undefined);
 }
 
-function getAliasConfig(
-  providerName: string,
-  loadAliasEntries: typeof loadProviderAliasEntries,
-): ProviderAliasConfig | undefined {
+function getAliasConfig(providerName: string): ProviderAliasConfig | undefined {
   try {
-    return loadAliasEntries().find((entry) => entry.alias === providerName)
-      ?.config;
+    return loadProviderAliasEntries().find(
+      (entry) => entry.alias === providerName,
+    )?.config;
   } catch {
     return undefined;
   }
@@ -283,8 +278,15 @@ function clearEphemeralsForSwitch(
   const maxOutputTokensBeforeSwitch = existingEphemerals.maxOutputTokens;
 
   for (const key of Object.keys(existingEphemerals)) {
+    // activeProvider and currentProfile are session-level identity state,
+    // not per-provider ephemerals. They must survive a provider switch —
+    // clearing currentProfile here would wipe the profile name set by
+    // applyProfileSnapshot, causing the UI to lose the active profile
+    // identity (issue #2501).
     const shouldPreserve =
-      key === 'activeProvider' || context.preserveEphemerals.includes(key);
+      key === 'activeProvider' ||
+      key === 'currentProfile' ||
+      context.preserveEphemerals.includes(key);
     if (!shouldPreserve) {
       context.config.setEphemeralSetting(key, undefined);
     }
@@ -727,8 +729,7 @@ function createProviderSwitchContext(
     throw new Error('Provider name is required.');
   }
 
-  const { config, settingsService, providerManager } =
-    options.runtimeServices ?? getCliRuntimeServices();
+  const { config, settingsService, providerManager } = getCliRuntimeServices();
   const currentProvider = providerManager.getActiveProviderName() ?? null;
 
   if (currentProvider === name) {
@@ -779,10 +780,7 @@ function createProviderSwitchContext(
 
     activeProvider: providerManager.getActiveProvider(),
     baseProvider: {},
-    aliasConfig: getAliasConfig(
-      name,
-      options.loadAliasEntries ?? loadProviderAliasEntries,
-    ),
+    aliasConfig: getAliasConfig(name),
     modelToApply: '',
     providerBaseUrl: undefined,
     finalBaseUrl: undefined,
@@ -840,7 +838,7 @@ export async function switchActiveProvider(
   addProviderInfoMessages(context);
   await initializeContentGeneratorConfigIfSupported(context.config);
 
-  const profileName = (options.getActiveProfileName ?? getActiveProfileName)();
+  const profileName = getActiveProfileName();
 
   // Context-scoped model resolution (issue #1770): prefer the context-local
   // model sources over the stale global getActiveModelName().

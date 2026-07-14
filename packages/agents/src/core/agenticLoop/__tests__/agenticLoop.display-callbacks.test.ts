@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AgenticLoop } from '../AgenticLoop.js';
 import type { AgenticLoopEvent } from '../types.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
@@ -192,7 +192,7 @@ describe('AgenticLoop with caller display callbacks', () => {
     expect(completedEvents[0].completed[0].status).toBe('success');
     expect(turnMessages).toHaveLength(2);
     const turn2Parts = partListUnionToParts(turnMessages[1]);
-    expect(turn2Parts.some((p) => 'functionResponse' in p)).toBe(true);
+    expect(turn2Parts.some((p) => p.type === 'tool_response')).toBe(true);
     const streamContents = events
       .filter(isStream)
       .filter((e) => e.event.type === AgentEventType.Content)
@@ -486,5 +486,69 @@ describe('AgenticLoop with caller display callbacks', () => {
         return ev.value;
       });
     expect(streamContents).toContain('survived-async');
+  });
+
+  it('accumulates string output chunks into liveOutput instead of replacing (fixes #2008)', async () => {
+    const tool = new MockTool({
+      name: 'delta_streaming_tool',
+      canUpdateOutput: true,
+    });
+    tool.executeFn.mockImplementation(
+      async (
+        _params: Record<string, unknown>,
+        _signal: AbortSignal,
+        updateOutput?: (output: string) => void,
+      ) => {
+        updateOutput?.('Hello ');
+        updateOutput?.('world');
+        updateOutput?.('!');
+        return { llmContent: 'done', returnDisplay: 'done' };
+      },
+    );
+
+    const toolRegistry = createToolRegistryForTest([tool]);
+    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+    const config = createTestConfig({
+      messageBus,
+      toolRegistry,
+      policyEngine: createAllowPolicyEngine(),
+      interactive: false,
+      approvalMode: ApprovalMode.YOLO,
+    });
+
+    const toolUpdatesByStatus: ToolCall[] = [];
+
+    const { client } = createScriptedAgentClient([
+      [
+        toolCallRequestEvent('delta_streaming_tool', 'call-acc', { x: 1 }),
+        finishedEvent(),
+      ],
+      [contentEvent('final'), finishedEvent()],
+    ]);
+
+    const loop = new AgenticLoop({
+      agentClient: client,
+      config,
+      messageBus,
+      displayCallbacks: {
+        onToolCallsUpdate: (toolCalls) => {
+          toolUpdatesByStatus.push(...toolCalls);
+        },
+        getPreferredEditor: () => undefined,
+      },
+    });
+
+    await collectEvents(loop, 'go', new AbortController().signal);
+
+    const executingUpdates = toolUpdatesByStatus.filter(
+      (tc) => tc.request.callId === 'call-acc' && tc.status === 'executing',
+    );
+    expect(executingUpdates.length).toBeGreaterThanOrEqual(1);
+
+    // The last executing update (after all three chunks) must contain the
+    // full accumulated string, proving deltas are appended not replaced.
+    expect(executingUpdates[executingUpdates.length - 1]).toMatchObject({
+      liveOutput: 'Hello world!',
+    });
   });
 });

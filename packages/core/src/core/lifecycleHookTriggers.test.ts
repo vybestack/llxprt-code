@@ -12,7 +12,7 @@
  * Tests for lifecycle hook trigger functions (SessionStart, SessionEnd, BeforeAgent, AfterAgent)
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   triggerSessionStartHook,
   triggerSessionEndHook,

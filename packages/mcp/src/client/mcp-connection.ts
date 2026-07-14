@@ -44,17 +44,6 @@ import { MCPOAuthProvider } from '../auth/oauth-provider.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 
-export interface McpConnectionDependencies {
-  createClient?: (
-    clientVersion: string,
-    workspaceContext: WorkspaceContext,
-  ) => Client;
-  createTransport?: typeof createTransport;
-  getStoredOAuthToken?: typeof getStoredOAuthToken;
-  retryWithOAuth?: typeof retryWithOAuth;
-  showAuthRequiredMessage?: typeof showAuthRequiredMessage;
-}
-
 function initializeMcpClient(
   clientVersion: string,
   workspaceContext: WorkspaceContext,
@@ -324,15 +313,12 @@ async function handleConnectionError(
   mcpServerConfig: MCPServerConfig,
   error: unknown,
   httpReturned404: boolean,
-  dependencies: McpConnectionDependencies,
 ): Promise<Client> {
   if (isAuthenticationError(error)) {
     mcpServerRequiresOAuth.set(mcpServerName, true);
-    const storedToken = await (
-      dependencies.getStoredOAuthToken ?? getStoredOAuthToken
-    )(mcpServerName);
+    const storedToken = await getStoredOAuthToken(mcpServerName);
     if (storedToken) {
-      await (dependencies.retryWithOAuth ?? retryWithOAuth)(
+      await retryWithOAuth(
         mcpClient,
         mcpServerName,
         mcpServerConfig,
@@ -341,9 +327,7 @@ async function handleConnectionError(
       );
       return mcpClient;
     }
-    await (dependencies.showAuthRequiredMessage ?? showAuthRequiredMessage)(
-      mcpServerName,
-    );
+    await showAuthRequiredMessage(mcpServerName);
   }
 
   if (
@@ -384,17 +368,13 @@ export async function connectToMcpServer(
   mcpServerConfig: MCPServerConfig,
   debugMode: boolean,
   workspaceContext: WorkspaceContext,
-  dependencies: McpConnectionDependencies = {},
 ): Promise<Client> {
-  const mcpClient = (dependencies.createClient ?? initializeMcpClient)(
-    clientVersion,
-    workspaceContext,
-  );
+  const mcpClient = initializeMcpClient(clientVersion, workspaceContext);
 
   let httpReturned404 = false;
 
   try {
-    const transport = await (dependencies.createTransport ?? createTransport)(
+    const transport = await createTransport(
       mcpServerName,
       mcpServerConfig,
       debugMode,
@@ -419,7 +399,6 @@ export async function connectToMcpServer(
       mcpServerConfig,
       error,
       httpReturned404,
-      dependencies,
     );
   }
 }

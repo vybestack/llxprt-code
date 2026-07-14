@@ -26,14 +26,8 @@ function isValidOld(old: unknown): boolean {
 }
 
 export class UserAccountManager {
-  constructor(
-    private readonly getAccountsCachePath: () => string = () =>
-      Storage.getProviderAccountsPath(),
-    private readonly logger: typeof debugLogger = debugLogger,
-  ) {}
-
   private getGoogleAccountsCachePath(): string {
-    return this.getAccountsCachePath();
+    return Storage.getProviderAccountsPath();
   }
 
   /**
@@ -52,14 +46,14 @@ export class UserAccountManager {
 
       // Inlined validation logic
       if (typeof parsed !== 'object' || parsed === null) {
-        this.logger.log('Invalid accounts file schema, starting fresh.');
+        debugLogger.log('Invalid accounts file schema, starting fresh.');
         return defaultState;
       }
       const { active, old } = parsed as Partial<UserAccounts>;
       const isValid = isValidActive(active) && isValidOld(old);
 
       if (!isValid) {
-        this.logger.log('Invalid accounts file schema, starting fresh.');
+        debugLogger.log('Invalid accounts file schema, starting fresh.');
         return defaultState;
       }
 
@@ -68,7 +62,7 @@ export class UserAccountManager {
         old: parsed.old ?? [],
       };
     } catch (error) {
-      this.logger.log('Could not parse accounts file, starting fresh.', error);
+      debugLogger.log('Could not parse accounts file, starting fresh.', error);
       return defaultState;
     }
   }
@@ -86,7 +80,7 @@ export class UserAccountManager {
       ) {
         return defaultState;
       }
-      this.logger.log(
+      debugLogger.log(
         'Error during sync read of accounts, starting fresh.',
         error,
       );
@@ -107,7 +101,7 @@ export class UserAccountManager {
       ) {
         return defaultState;
       }
-      this.logger.log('Could not parse accounts file, starting fresh.', error);
+      debugLogger.log('Could not parse accounts file, starting fresh.', error);
       return defaultState;
     }
   }

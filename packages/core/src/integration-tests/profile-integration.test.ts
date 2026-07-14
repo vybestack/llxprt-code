@@ -14,20 +14,15 @@ import {
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import * as actualSettings from '../../../settings/index.ts';
 
-vi.mock('fs/promises', () => ({
-  default: {
-    mkdir: vi.fn(),
-    writeFile: vi.fn(),
-    readFile: vi.fn(),
-    readdir: vi.fn(),
-  },
-}));
-vi.mock('os', () => ({ default: { homedir: vi.fn() } }));
-vi.mock('path', () => ({ default: { join: vi.fn() } }));
-vi.mock('@vybestack/llxprt-code-settings', () => ({
-  ...actualSettings,
+// Mock file system and settings service instance
+vi.mock('fs/promises');
+vi.mock('os');
+vi.mock('path');
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
   getSettingsService: vi.fn(),
 }));
 
@@ -285,11 +280,11 @@ describe('Profile Integration Tests', () => {
     // Both integrated and direct operations should work
     await expect(
       manager.save('test-profile', settingsService),
-    ).resolves.toBeUndefined();
+    ).resolves.not.toThrow();
 
     await expect(
       manager.saveProfile('test-profile', testProfile),
-    ).resolves.toBeUndefined();
+    ).resolves.not.toThrow();
     await expect(manager.loadProfile('test-profile')).resolves.toStrictEqual(
       testProfile,
     );

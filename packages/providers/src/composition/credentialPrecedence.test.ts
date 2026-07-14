@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { CredentialInputs } from './credentialPrecedence.js';
 import { resolveCredentialPrecedence } from './credentialPrecedence.js';
 

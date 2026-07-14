@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ToolCallTrackerService } from '../services/tool-call-tracker-service.js';
 import { TodoContextTracker } from '../services/todo-context-tracker.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';

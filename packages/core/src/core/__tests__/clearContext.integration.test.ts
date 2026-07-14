@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { AfterAgentHookOutput, DefaultHookOutput } from '../../hooks/types.js';
 import { AgentEventType } from '../turn.js';
 import type { ServerAgentStreamEvent } from '../turn.js';

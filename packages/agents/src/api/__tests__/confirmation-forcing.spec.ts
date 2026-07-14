@@ -22,7 +22,7 @@
  *    other registry members delegate unchanged.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import {
   createConfirmationForcingProbe,
   applyForcingPolicy,
@@ -90,7 +90,7 @@ describe('Confirmation forcing seam @plan:PLAN-20260617-COREAPI.P17 @requirement
     const result = await buildAndConfirm(probe, { absolute_path: '/x' });
     const details = narrowConfirmDetails(result.details);
     const onConfirm = (details as { onConfirm: () => Promise<void> }).onConfirm;
-    expect(await onConfirm()).toBeUndefined();
+    await expect(onConfirm()).resolves.toBeUndefined();
   });
 
   it('non-build invocation members delegate to the real invocation bound to this @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006', async () => {

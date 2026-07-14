@@ -24,9 +24,8 @@ import { Config } from '../config/config.js';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 
-vi.mock('@opentelemetry/sdk-node', () => ({
-  NodeSDK: vi.fn(),
-}));
+vi.mock('@opentelemetry/sdk-node');
+vi.mock('../config/config.js');
 
 describe('flushTelemetry', () => {
   let mockConfig: Config;

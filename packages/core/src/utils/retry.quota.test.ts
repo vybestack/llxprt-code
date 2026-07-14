@@ -7,7 +7,7 @@
  * Split from retry.test.ts for max-lines compliance.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   retryWithBackoff,
   isRetryableError,
@@ -152,7 +152,7 @@ describe('retryWithBackoff abort handling', () => {
       signal: abortController.signal,
     });
 
-    expect(promise).rejects.toThrow(
+    await expect(promise).rejects.toThrow(
       expect.objectContaining({ name: 'AbortError' }),
     );
     expect(mockFn).not.toHaveBeenCalled();

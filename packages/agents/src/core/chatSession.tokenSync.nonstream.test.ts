@@ -9,7 +9,7 @@
  * (non-streaming responses). Sibling to chatSession.tokenSync.test.ts.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {

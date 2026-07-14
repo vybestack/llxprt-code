@@ -14,7 +14,7 @@
  * @plan PLAN-20250214-CREDPROXY.P16
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 
 import {
@@ -269,7 +269,7 @@ describe('CredentialProxyServer', () => {
     server = createServer();
     await server.start();
 
-    expect(server.start()).rejects.toThrow(/already started/);
+    await expect(server.start()).rejects.toThrow(/already started/);
   });
 
   // ─── Handshake ─────────────────────────────────────────────────────────────

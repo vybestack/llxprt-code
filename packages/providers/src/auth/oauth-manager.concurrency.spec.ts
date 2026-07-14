@@ -7,9 +7,8 @@
  * Related to issue #1151: Prevents concurrent token refreshes across processes.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi } from 'vitest';
 import { OAuthManager } from './oauth-manager.js';
-import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 import type { OAuthProvider } from './types.js';
 import type {
   OAuthToken,
@@ -26,9 +25,6 @@ function makeToken(accessToken: string, expiryOffset = 3600): OAuthToken {
     scope: '',
   };
 }
-beforeEach(() => {
-  oauthRuntimeBridge.setAccessors(undefined);
-});
 
 describe('OAuthManager concurrency', () => {
   it('serializes bucket resolution for concurrent getOAuthToken calls (same provider)', async () => {

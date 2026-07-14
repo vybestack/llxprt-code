@@ -18,7 +18,7 @@
  * PASSES; it is never forced to fail artificially.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, relative, dirname, normalize, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';

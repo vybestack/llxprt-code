@@ -20,7 +20,7 @@
  * moves real tool code into packages/tools.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   writeFileSync,
   mkdirSync,

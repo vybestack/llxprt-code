@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BaseProvider,
   type NormalizedGenerateChatOptions,
@@ -80,7 +80,7 @@ describe('BaseProvider runtime guard', () => {
       metadata: { test: true },
     } as GenerateChatOptions);
 
-    expect(iterator.next()).rejects.toMatchObject({
+    await expect(iterator.next()).rejects.toMatchObject({
       name: 'MissingProviderRuntimeError',
       providerKey: 'BaseProvider.harness',
       missingFields: expect.arrayContaining(['settings']),
@@ -119,7 +119,7 @@ describe('BaseProvider runtime guard', () => {
       metadata: { scenario: 'missing-config' },
     } as GenerateChatOptions);
 
-    expect(iterator.next()).rejects.toMatchObject({
+    await expect(iterator.next()).rejects.toMatchObject({
       name: 'MissingProviderRuntimeError',
       providerKey: 'BaseProvider.harness',
       missingFields: expect.arrayContaining(['config']),

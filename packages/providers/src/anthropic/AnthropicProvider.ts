@@ -46,15 +46,6 @@ import {
   executeAnthropicApiCall,
 } from './AnthropicApiExecution.js';
 
-export type AnthropicClientConstructor = (options: ClientOptions) => Anthropic;
-
-const createAnthropicClient: AnthropicClientConstructor = (options) =>
-  new Anthropic(options);
-
-export interface AnthropicProviderDependencies {
-  constructClient: AnthropicClientConstructor;
-}
-
 export class AnthropicProvider extends BaseProvider {
   // @plan PLAN-20251023-STATELESS-HARDENING.P08
   // All properties are stateless - no runtime/client caches or constructor-captured config
@@ -63,14 +54,12 @@ export class AnthropicProvider extends BaseProvider {
 
   // Rate limit state tracking - updated on each API response
   private lastRateLimitInfo?: AnthropicRateLimitInfo;
-  private readonly dependencies: AnthropicProviderDependencies;
 
   constructor(
     apiKey?: string,
     baseURL?: string,
     config?: IProviderConfig,
     oauthManager?: OAuthManager,
-    dependencies?: Partial<AnthropicProviderDependencies>,
   ) {
     // Initialize base provider with auth configuration
     const baseConfig: BaseProviderConfig = {
@@ -84,9 +73,6 @@ export class AnthropicProvider extends BaseProvider {
     };
 
     super(baseConfig, config);
-    this.dependencies = {
-      constructClient: dependencies?.constructClient ?? createAnthropicClient,
-    };
 
     // @plan PLAN-20251023-STATELESS-HARDENING.P08
     // No logger instances stored as instance variables - create on demand
@@ -171,7 +157,7 @@ export class AnthropicProvider extends BaseProvider {
       }
     }
 
-    return this.dependencies.constructClient(clientConfig as ClientOptions);
+    return new Anthropic(clientConfig as ClientOptions);
   }
 
   /**

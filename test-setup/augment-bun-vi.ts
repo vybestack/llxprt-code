@@ -14,7 +14,7 @@
  * `vi.hoisted`, `vi.mocked`, `vi.stubEnv`, etc.
  */
 
-import { vi as bunVi, mock } from 'bun:test';
+import { afterEach, vi as bunVi, mock } from 'bun:test';
 import { createRequire, isBuiltin } from 'node:module';
 import { relative } from 'node:path';
 import { StubRegistry, waitFor, isMockFunction } from './stub-helpers.js';
@@ -26,6 +26,14 @@ const envRegistry = new StubRegistry(process.env);
 const globalRegistry = new StubRegistry(globalThis);
 
 const importActual = (id: string): Promise<unknown> => {
+  afterEach(() => {
+    try {
+      envRegistry.restoreAll();
+    } finally {
+      globalRegistry.restoreAll();
+    }
+  });
+
   if (isBuiltin(id)) {
     return Promise.resolve(localRequire(id));
   }
@@ -129,7 +137,28 @@ const viAugmentations = {
 // ALWAYS overridden because Bun's built-in vi.mock does not pass
 // importOriginal to the factory, breaking Vitest-compatible factory
 // signatures like vi.mock(id, (importOriginal) => ...).
-const forceOverride = new Set(['mock', 'doMock']);
+const forceOverride = new Set([
+  'mock',
+  'doMock',
+  'stubEnv',
+  'unstubAllEnvs',
+  'stubGlobal',
+  'unstubAllGlobals',
+  'restoreAllMocks',
+]);
+
+const originalRestoreAllMocks = bunVi.restoreAllMocks.bind(bunVi);
+viAugmentations.restoreAllMocks = (): void => {
+  try {
+    originalRestoreAllMocks();
+  } finally {
+    try {
+      envRegistry.restoreAll();
+    } finally {
+      globalRegistry.restoreAll();
+    }
+  }
+};
 
 for (const [key, value] of Object.entries(viAugmentations)) {
   if (forceOverride.has(key) || !(key in bunVi)) {

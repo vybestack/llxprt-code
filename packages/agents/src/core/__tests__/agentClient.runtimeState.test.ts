@@ -17,7 +17,7 @@
  * and an optional HistoryService as its third constructor argument.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { AgentClient } from '../client.js';
 import {
   Config,

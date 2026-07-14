@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { vi } from '../../../test-setup/vi-compat.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type {
   BaseProviderConfig,
   NormalizedGenerateChatOptions,

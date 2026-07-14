@@ -12,8 +12,7 @@
  * were silently skipped instead of being refreshed.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { vi } from '../../../../../test-setup/vi-compat.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OAuthManager } from '../oauth-manager.js';
 import type { OAuthProvider, TokenStore, OAuthToken } from '../types.js';
 

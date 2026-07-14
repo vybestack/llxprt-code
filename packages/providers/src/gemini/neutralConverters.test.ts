@@ -19,7 +19,7 @@
  * @pseudocode lines 10-77
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'vitest';
 import {
   ApiError,
   Outcome,

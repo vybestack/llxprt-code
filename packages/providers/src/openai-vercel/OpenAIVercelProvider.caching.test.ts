@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
@@ -22,8 +22,16 @@ import type { GenerateChatOptions as ProviderCallOptions } from '../IProvider.js
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-const generateTextMock = vi.fn();
-const streamTextMock = vi.fn();
+vi.mock('ai', () => ({
+  generateText: vi.fn(),
+  streamText: vi.fn(),
+  extractReasoningMiddleware: vi.fn(() => ({})),
+  wrapLanguageModel: vi.fn((config) => config.model),
+}));
+
+vi.mock('@ai-sdk/openai', () => ({
+  createOpenAI: vi.fn(() => vi.fn((modelId: string) => ({ modelId }))),
+}));
 
 describe('OpenAIVercelProvider - Cache Metrics', () => {
   let provider: OpenAIVercelProvider;
@@ -31,11 +39,14 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
   let config: ReturnType<typeof createRuntimeConfigStub>;
 
   beforeEach(() => {
-    generateTextMock.mockReset();
-    streamTextMock.mockReset();
+    vi.clearAllMocks();
     settingsService = new SettingsService();
     settingsService.set('activeProvider', 'openaivercel');
     config = createRuntimeConfigStub(settingsService);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   async function collectResults(
@@ -49,12 +60,9 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
   }
 
   function createTestProvider(): OpenAIVercelProvider {
-    return new OpenAIVercelProvider(
-      'test-api-key',
-      undefined,
-      { settingsService },
-      { generateText: generateTextMock, streamText: streamTextMock },
-    );
+    return new OpenAIVercelProvider('test-api-key', undefined, {
+      settingsService,
+    });
   }
 
   function createTestMessages(): IContent[] {
@@ -80,7 +88,10 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
 
   describe('Vercel AI SDK usage format', () => {
     it('extracts cache metrics from Vercel AI SDK usage', async () => {
-      generateTextMock.mockResolvedValue({
+      const { generateText } = await import('ai');
+      const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
+
+      mockGenerateText.mockResolvedValue({
         text: 'Response text',
         usage: {
           inputTokens: 100,
@@ -109,7 +120,10 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
     });
 
     it('extracts OpenAI cache format from usage object', async () => {
-      generateTextMock.mockResolvedValue({
+      const { generateText } = await import('ai');
+      const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
+
+      mockGenerateText.mockResolvedValue({
         text: 'Response text',
         usage: {
           inputTokens: 100,
@@ -142,7 +156,10 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
     });
 
     it('extracts Anthropic cache format from usage object', async () => {
-      generateTextMock.mockResolvedValue({
+      const { generateText } = await import('ai');
+      const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
+
+      mockGenerateText.mockResolvedValue({
         text: 'Response text',
         usage: {
           inputTokens: 100,
@@ -179,7 +196,10 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
     // This test verifies the streaming path works; actual header extraction is
     // covered by the cacheMetricsExtractor unit tests.
     it('handles streaming response and includes usage metadata', async () => {
-      streamTextMock.mockReturnValue({
+      const { streamText } = await import('ai');
+      const mockStreamText = streamText as ReturnType<typeof vi.fn>;
+
+      mockStreamText.mockReturnValue({
         fullStream: (async function* () {
           yield { type: 'text-delta', text: 'Hello' };
           yield {
@@ -211,7 +231,10 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
 
   describe('Cache metrics in IContent metadata', () => {
     it('includes cache metrics in IContent metadata for non-streaming', async () => {
-      generateTextMock.mockResolvedValue({
+      const { generateText } = await import('ai');
+      const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
+
+      mockGenerateText.mockResolvedValue({
         text: 'Response text',
         usage: {
           inputTokens: 100,
@@ -246,7 +269,10 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
     });
 
     it('includes cache metrics in IContent metadata for streaming', async () => {
-      streamTextMock.mockReturnValue({
+      const { streamText } = await import('ai');
+      const mockStreamText = streamText as ReturnType<typeof vi.fn>;
+
+      mockStreamText.mockReturnValue({
         fullStream: (async function* () {
           yield { type: 'text-delta', text: 'Hello' };
           yield {
@@ -285,7 +311,10 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
     });
 
     it('handles Deepseek cache format with cache miss tokens', async () => {
-      generateTextMock.mockResolvedValue({
+      const { generateText } = await import('ai');
+      const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
+
+      mockGenerateText.mockResolvedValue({
         text: 'Response text',
         usage: {
           inputTokens: 100,

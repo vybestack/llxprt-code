@@ -31,7 +31,7 @@
  * theater.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   fromConfig,
   type Agent,
@@ -240,7 +240,7 @@ describe('Replaceable alternate-client smoke (issue #2204) @plan:PLAN-20260629-I
     cleanupFns.push(cleanup);
     await agent.dispose();
     // A second dispose must not throw — clients may call it defensively.
-    expect(await agent.dispose()).toBeUndefined();
+    await expect(agent.dispose()).resolves.toBeUndefined();
   });
 
   it('getStats() reflects turn activity after a stream completes through the public surface @requirement:REQ-2204-1 @scenario:status-inspection', async () => {

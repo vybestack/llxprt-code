@@ -72,12 +72,8 @@ describe('OpenAIVercelProvider - Error Handling', () => {
     settingsService.set('activeProvider', 'openaivercel');
     config = createRuntimeConfigStub(settingsService);
 
-    mockStreamText = (await import('ai')).streamText as ReturnType<
-      typeof vi.fn
-    >;
-    mockGenerateText = (await import('ai')).generateText as ReturnType<
-      typeof vi.fn
-    >;
+    mockStreamText = vi.mocked((await import('ai')).streamText);
+    mockGenerateText = vi.mocked((await import('ai')).generateText);
 
     provider = new OpenAIVercelProvider('test-api-key', undefined, {
       settingsService,
@@ -726,13 +722,11 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       const stream = iterator;
 
       const chunks: string[] = [];
-      const consumeStream = async (): Promise<void> => {
+      await expect(async () => {
         for await (const chunk of stream) {
           chunks.push(chunk);
         }
-      };
-
-      await expect(consumeStream()).rejects.toThrow(ProviderError);
+      }).rejects.toThrow(ProviderError);
 
       expect(chunks.length).toBeGreaterThan(0);
     });

@@ -4,8 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
+vi.mock('@vybestack/llxprt-code-auth', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('@vybestack/llxprt-code-auth')
+  >('@vybestack/llxprt-code-auth');
+  return {
+    ...actual,
+    flushRuntimeAuthScope: vi.fn(),
+  };
+});
+
 import { StreamProcessor } from './StreamProcessor.js';
+import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';
 
 describe('StreamProcessor._handleBucketFailover', () => {
   beforeEach(() => {
@@ -14,7 +27,6 @@ describe('StreamProcessor._handleBucketFailover', () => {
 
   it('allows single-bucket handlers to run tryFailover and flush auth scope', async () => {
     const tryFailover = vi.fn().mockResolvedValue(true);
-    const flushAuthScope = vi.fn();
 
     const processor = Object.create(
       StreamProcessor.prototype,
@@ -38,7 +50,6 @@ describe('StreamProcessor._handleBucketFailover', () => {
       logger: {
         debug: vi.fn(),
       },
-      flushAuthScope,
     });
 
     const result = await (
@@ -49,6 +60,6 @@ describe('StreamProcessor._handleBucketFailover', () => {
 
     expect(result).toBe(true);
     expect(tryFailover).toHaveBeenCalledTimes(1);
-    expect(flushAuthScope).toHaveBeenCalledWith('provider-runtime-1739');
+    expect(flushRuntimeAuthScope).toHaveBeenCalledWith('provider-runtime-1739');
   });
 });

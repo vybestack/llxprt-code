@@ -48,10 +48,7 @@ import {
   discoverPrompts,
   invokeMcpPrompt,
 } from './mcp-discovery.js';
-import {
-  connectToMcpServer,
-  type McpConnectionDependencies,
-} from './mcp-connection.js';
+import { connectToMcpServer } from './mcp-connection.js';
 import {
   hasNetworkTransport,
   isEnabled,
@@ -114,7 +111,6 @@ export class McpClient {
     private readonly debugMode: boolean,
     private readonly clientVersion: string,
     private readonly onToolsUpdated?: (signal?: AbortSignal) => Promise<void>,
-    private readonly connectionDependencies: McpConnectionDependencies = {},
   ) {}
 
   async connect(): Promise<void> {
@@ -131,7 +127,6 @@ export class McpClient {
         this.serverConfig,
         this.debugMode,
         this.workspaceContext,
-        this.connectionDependencies,
       );
 
       this.registerNotificationHandlers();

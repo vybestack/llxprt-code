@@ -183,14 +183,6 @@ export interface ChatSessionInternals {
   ensureDensityOptimized(): Promise<void>;
   densityDirty: boolean;
   historyService: HistoryService;
-  compressionHandler: {
-    computeContextLimits(provider?: unknown): {
-      completionBudget: number;
-      limit: number;
-      marginAdjustedLimit: number;
-    };
-    performCompression(...args: unknown[]): Promise<unknown>;
-  };
   ensureCompressionBeforeSend(
     promptId: string,
     pendingTokens: number,

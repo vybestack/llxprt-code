@@ -23,10 +23,7 @@ export class ProviderPerformanceTracker {
   private totalTokensWithMeasuredTime = 0;
   private logger: DebugLogger;
 
-  constructor(
-    private providerName: string,
-    private readonly now: () => number = Date.now,
-  ) {
+  constructor(private providerName: string) {
     this.metrics = this.initializeMetrics();
     this.tokenTimestamps = [];
     this.logger = new DebugLogger('llxprt:performance:tracker');
@@ -93,7 +90,7 @@ export class ProviderPerformanceTracker {
 
     this.metrics.chunksReceived = chunkCount;
 
-    const now = this.now();
+    const now = Date.now();
     this.tokenTimestamps.push({
       startTimestamp: now - totalTime,
       completionTimestamp: now,
@@ -120,7 +117,7 @@ export class ProviderPerformanceTracker {
     }
 
     this.metrics.errors.push({
-      timestamp: this.now(),
+      timestamp: Date.now(),
       duration,
       error: error.substring(0, 200), // Truncate long errors
     });
@@ -162,7 +159,7 @@ export class ProviderPerformanceTracker {
    * Calculate tokens per minute based on recent token usage
    */
   private calculateTokensPerMinute(): void {
-    const now = this.now();
+    const now = Date.now();
     this.tokenTimestamps = this.tokenTimestamps.filter(
       (entry) => now - entry.completionTimestamp <= 60000,
     );

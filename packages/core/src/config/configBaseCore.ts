@@ -22,11 +22,14 @@ import type {
 } from '../core/clientContract.js';
 import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
 import type { TaskToolRegistration } from './toolRegistryFactory.js';
+import type { PostSkillDiscoveryToolRegistrar } from './configTypes.js';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import type { ResourceRegistry } from '../resources/resource-registry.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import { LLXPRT_CONFIG_DIR as LLXPRT_DIR } from '@vybestack/llxprt-code-tools';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { HookDefinition, HookEventName } from '../hooks/types.js';
 import type { HookSystem } from '../hooks/hookSystem.js';
@@ -291,7 +294,12 @@ export abstract class ConfigBaseCore {
    * @requirement REQ-INV-003
    */
   protected taskToolRegistration: TaskToolRegistration | undefined;
+  protected postSkillDiscoveryToolRegistrar:
+    | PostSkillDiscoveryToolRegistrar
+    | undefined;
   protected initialized = false;
+  private runtimeMessageBus: MessageBus | undefined;
+  private runtimeOAuthManager: OAuthManager | undefined;
 
   // ---- Simple field accessors ----
 
@@ -300,6 +308,35 @@ export abstract class ConfigBaseCore {
   }
   getProviderManager(): RuntimeProviderManager | undefined {
     return this.providerManager;
+  }
+  setRuntimeMessageBus(messageBus: MessageBus): void {
+    this.runtimeMessageBus = messageBus;
+  }
+  getRuntimeMessageBus(): MessageBus | undefined {
+    return this.runtimeMessageBus;
+  }
+  /**
+   * Associates the exact assembled OAuthManager with this Config's runtime
+   * bundle. The seam is Config-associated (not ambient): agent construction
+   * (fromConfig) adopts THIS manager by reference, so the OAuthManager the
+   * Agent sees is the exact one the providers runtime assembled on the same
+   * bus — no second OAuthManager is constructed or looked up.
+   *
+   * @plan:PLAN-20270110-ISSUE2378.P03 @requirement:REQ-2378-003
+   */
+  setRuntimeOAuthManager(oauthManager: OAuthManager | undefined): void {
+    this.runtimeOAuthManager = oauthManager;
+  }
+  /**
+   * Returns the exact assembled OAuthManager associated with this Config, or
+   * undefined when no runtime bundle has been attached. Consumers that need the
+   * session OAuthManager read it from here (or from the Agent facade) instead of
+   * ambient lookup.
+   *
+   * @plan:PLAN-20270110-ISSUE2378.P03 @requirement:REQ-2378-003
+   */
+  getRuntimeOAuthManager(): OAuthManager | undefined {
+    return this.runtimeOAuthManager;
   }
   /**
    * @plan:PLAN-20260603-ISSUE1584.P16a
@@ -765,6 +802,16 @@ export abstract class ConfigBaseCore {
    */
   getTaskToolRegistration(): TaskToolRegistration | undefined {
     return this.taskToolRegistration;
+  }
+  getPostSkillDiscoveryToolRegistrar():
+    | PostSkillDiscoveryToolRegistrar
+    | undefined {
+    return this.postSkillDiscoveryToolRegistrar;
+  }
+  setPostSkillDiscoveryToolRegistrar(
+    registrar: PostSkillDiscoveryToolRegistrar | undefined,
+  ): void {
+    this.postSkillDiscoveryToolRegistrar = registrar;
   }
   getEnableHooksUI(): boolean {
     return this.enableHooksUI;

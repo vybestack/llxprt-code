@@ -67,7 +67,6 @@ export interface CodeSearchToolParams {
 }
 
 export interface CodeSearchToolDependencies {
-  fetch?: typeof fetch;
   keyStorage?: Pick<IToolKeyStorage, 'resolveKey'>;
   settingsService?: Pick<ISettingsService, 'getSetting' | 'getSettingsService'>;
 }
@@ -163,7 +162,7 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
       };
 
       const endpointUrl = await this.buildEndpointUrl();
-      const response = await (this.dependencies.fetch ?? fetch)(endpointUrl, {
+      const response = await fetch(endpointUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify(codeRequest),

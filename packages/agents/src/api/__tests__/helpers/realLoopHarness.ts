@@ -19,8 +19,13 @@
  * lives under __tests__/helpers/ which is excluded from the P09 boundary scan.
  */
 
-import { type Content, type Part, type PartListUnion } from '@google/genai';
 import { FakeProvider } from '@vybestack/llxprt-code-providers';
+import {
+  emptyModelOutput,
+  iContentFromBlocks,
+  type AgentMessageInput,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   PerformCompressionResult,
   type ServerAgentStreamEvent,
@@ -82,16 +87,6 @@ export async function fakeProviderContentLoopEvents(
 // and COLLECTS emitted AgenticLoopEvents. Used for the scheduler/abort rows
 // that must exercise the real tool-execution continuation path.
 
-function partListUnionToParts(req: PartListUnion): Part[] {
-  if (Array.isArray(req)) {
-    return req as Part[];
-  }
-  if (typeof req === 'string') {
-    return [{ text: req }];
-  }
-  return [req];
-}
-
 type TurnScript = ServerAgentStreamEvent[];
 
 interface ScriptedClient {
@@ -100,14 +95,26 @@ interface ScriptedClient {
 
 function createScriptedAgentClient(scripts: TurnScript[]): ScriptedClient {
   const scriptQueue = [...scripts];
-  const history: Content[] = [];
-  const chat: AgentChatContract = {
+  const history: IContent[] = [];
+  const chat: AgentChatContract = makeScriptedChat(history);
+  const client: AgentClientContract = makeScriptedClientContract(
+    history,
+    chat,
+    scriptQueue,
+  );
+  return { client };
+}
+
+function makeScriptedChat(history: IContent[]): AgentChatContract {
+  return {
+    sendMessage: async () => emptyModelOutput(),
     sendMessageStream: async () => {
       async function* emptyStream() {}
       return emptyStream();
     },
+    generateDirectMessage: async () => emptyModelOutput(),
     getHistory: () => history,
-    setHistory: (nextHistory: Content[]) => {
+    setHistory: (nextHistory: IContent[]) => {
       history.splice(0, history.length, ...nextHistory);
     },
     clearHistory: () => {
@@ -118,7 +125,14 @@ function createScriptedAgentClient(scripts: TurnScript[]): ScriptedClient {
     performCompression: async () => PerformCompressionResult.COMPRESSED,
     recordCompletedToolCalls: () => {},
   };
-  const client: AgentClientContract = {
+}
+
+function makeScriptedClientContract(
+  history: IContent[],
+  chat: AgentChatContract,
+  scriptQueue: TurnScript[],
+): AgentClientContract {
+  return {
     async initialize() {},
     isInitialized: () => true,
     hasChatInitialized: () => true,
@@ -128,12 +142,12 @@ function createScriptedAgentClient(scripts: TurnScript[]): ScriptedClient {
     },
     getHistoryService: () => null,
     storeHistoryServiceForReuse: () => {},
-    storeHistoryForLaterUse: (h: Content[]) => history.push(...h),
+    storeHistoryForLaterUse: (h: IContent[]) => history.push(...h),
     dispose: () => {},
     setTools: async () => {},
     clearTools: () => {},
     updateSystemInstruction: async () => {},
-    addHistory: async (content: Content) => {
+    addHistory: async (content: IContent) => {
       history.push(content);
     },
     resetChat: async () => {},
@@ -156,25 +170,30 @@ function createScriptedAgentClient(scripts: TurnScript[]): ScriptedClient {
     },
     generateEmbedding: async () => [],
     async *sendMessageStream(
-      req: PartListUnion,
+      req: AgentMessageInput,
       signal: AbortSignal,
     ): AsyncGenerator<ServerAgentStreamEvent> {
-      history.push({ role: 'user', parts: partListUnionToParts(req) });
+      history.push(
+        iContentFromBlocks(
+          [
+            {
+              type: 'text',
+              text: typeof req === 'string' ? req : JSON.stringify(req),
+            },
+          ],
+          'human',
+        ),
+      );
       const script = scriptQueue.shift();
-      if (!script) {
-        return;
-      }
+      if (!script) return;
       for (const event of script) {
-        if (signal.aborted) {
-          return;
-        }
+        if (signal.aborted) return;
         yield event;
       }
     },
     getUserTier: () => undefined,
     getCurrentSequenceModel: () => null,
   };
-  return { client };
 }
 
 function narrowConfig(fixture: Record<string, unknown>): Config {

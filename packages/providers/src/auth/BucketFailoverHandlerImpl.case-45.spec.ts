@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
 import { OAuthManager } from './oauth-manager.js';
 import {
@@ -56,7 +56,7 @@ describe('BucketFailoverHandlerImpl #45', () => {
     await ensurePromise;
 
     // Assert
-    expect(await failoverPromise).toBe(true);
+    await expect(failoverPromise).resolves.toBe(true);
     expect(handler.getCurrentBucket()).toBe('bucket-b');
     expect(oauthManager.authenticate).not.toHaveBeenCalled();
     expect(oauthManager.setSessionBucket).toHaveBeenCalledWith(

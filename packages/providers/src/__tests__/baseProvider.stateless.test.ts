@@ -2,7 +2,7 @@
  * @plan PLAN-20251018-STATELESSPROVIDER2.P05
  * @requirement REQ-SP2-001
  */
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'vitest';
 import {
   BaseProvider,
   type NormalizedGenerateChatOptions,

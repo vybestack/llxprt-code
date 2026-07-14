@@ -2,28 +2,38 @@
  * @plan PLAN-20250120-DEBUGLOGGING.P10
  * @requirement REQ-005
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import type { Stats } from 'node:fs';
-import { FileOutput, type FileOutputDependencies } from './FileOutput.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { promises as fs } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
+import { FileOutput } from './FileOutput.js';
 import type { LogEntry } from './types.js';
 
-const mockFs = {
-  access: vi.fn(),
-  mkdir: vi.fn(),
-  stat: vi.fn(),
-  appendFile: vi.fn(),
-};
-const mockHomedir = vi.fn();
-const mockJoin = vi.fn((...parts: string[]) => parts.join('/'));
-const dependencies: FileOutputDependencies = {
-  fs: mockFs,
-  homedir: mockHomedir,
-  join: mockJoin,
-};
+// Mock fs module
+vi.mock('fs', () => ({
+  promises: {
+    access: vi.fn(),
+    mkdir: vi.fn(),
+    stat: vi.fn(),
+    appendFile: vi.fn(),
+    readFile: vi.fn(),
+    unlink: vi.fn(),
+  },
+}));
+
+// Mock os module
+vi.mock('os', () => ({
+  homedir: vi.fn(),
+}));
+
+// Mock path module
+vi.mock('path', () => ({
+  join: vi.fn((...args) => args.join('/')),
+}));
 
 describe('FileOutput', () => {
   let fileOutput: FileOutput | undefined;
-  const mockHome = '/test/home';
+  const mockHomedir = '/test/home';
   const mockDebugDir = '/test/home/.llxprt/debug';
 
   beforeEach(() => {
@@ -34,18 +44,19 @@ describe('FileOutput', () => {
       undefined;
 
     // Setup mocks
-    mockHomedir.mockReturnValue(mockHome);
-    mockJoin.mockImplementation((...args) => args.join('/'));
-    mockFs.access.mockResolvedValue(undefined);
-    mockFs.mkdir.mockResolvedValue(undefined);
-    mockFs.appendFile.mockResolvedValue(undefined);
-    mockFs.stat.mockRejectedValue(new Error('File not found'));
+    vi.mocked(homedir).mockReturnValue(mockHomedir);
+    vi.mocked(join).mockImplementation((...args) => args.join('/'));
+    vi.mocked(fs.access).mockResolvedValue(undefined);
+    vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+    vi.mocked(fs.appendFile).mockResolvedValue(undefined);
+    vi.mocked(fs.stat).mockRejectedValue(new Error('File not found'));
   });
 
   afterEach(async () => {
     if (fileOutput) {
       await fileOutput.dispose();
     }
+    vi.clearAllTimers();
   });
 
   /**
@@ -56,8 +67,8 @@ describe('FileOutput', () => {
    * @then Same instance returned
    */
   it('should implement singleton pattern @plan:PLAN-20250120-DEBUGLOGGING.P10', () => {
-    const instance1 = FileOutput.getInstance(dependencies);
-    const instance2 = FileOutput.getInstance(dependencies);
+    const instance1 = FileOutput.getInstance();
+    const instance2 = FileOutput.getInstance();
 
     expect(instance1).toBe(instance2);
   });
@@ -70,9 +81,11 @@ describe('FileOutput', () => {
    * @then Directory created with proper permissions
    */
   it('should create debug directory if it does not exist @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
-    mockFs.access.mockRejectedValueOnce(new Error('Directory not found'));
+    vi.mocked(fs.access).mockRejectedValueOnce(
+      new Error('Directory not found'),
+    );
 
-    fileOutput = FileOutput.getInstance(dependencies);
+    fileOutput = FileOutput.getInstance();
 
     const logEntry: LogEntry = {
       timestamp: '2025-01-21T00:00:00.000Z',
@@ -85,7 +98,7 @@ describe('FileOutput', () => {
 
     await fileOutput.write(logEntry);
 
-    expect(mockFs.mkdir).toHaveBeenCalledWith(mockDebugDir, {
+    expect(fs.mkdir).toHaveBeenCalledWith(mockDebugDir, {
       recursive: true,
       mode: 0o700,
     });
@@ -99,7 +112,7 @@ describe('FileOutput', () => {
    * @then Entry written in JSONL format
    */
   it('should write log entries in JSONL format @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
-    fileOutput = FileOutput.getInstance(dependencies);
+    fileOutput = FileOutput.getInstance();
 
     const logEntry: LogEntry = {
       timestamp: '2025-01-21T00:00:00.000Z',
@@ -115,7 +128,7 @@ describe('FileOutput', () => {
 
     const expectedJsonl = JSON.stringify(logEntry) + '\n';
 
-    expect(mockFs.appendFile).toHaveBeenCalledWith(
+    expect(fs.appendFile).toHaveBeenCalledWith(
       expect.stringContaining('llxprt-debug-'),
       expectedJsonl,
       { encoding: 'utf8', mode: 0o600 },
@@ -130,7 +143,7 @@ describe('FileOutput', () => {
    * @then File created with 0600 permissions
    */
   it('should set proper file permissions @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
-    fileOutput = FileOutput.getInstance(dependencies);
+    fileOutput = FileOutput.getInstance();
 
     const logEntry: LogEntry = {
       timestamp: '2025-01-21T00:00:00.000Z',
@@ -143,7 +156,7 @@ describe('FileOutput', () => {
 
     await fileOutput.write(logEntry);
 
-    expect(mockFs.appendFile).toHaveBeenCalledWith(
+    expect(fs.appendFile).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
       { encoding: 'utf8', mode: 0o600 },
@@ -158,7 +171,7 @@ describe('FileOutput', () => {
    * @then Entries queued and batched for writing
    */
   it('should queue writes asynchronously @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
-    fileOutput = FileOutput.getInstance(dependencies);
+    fileOutput = FileOutput.getInstance();
 
     const entries: LogEntry[] = [];
     for (let i = 0; i < 5; i++) {
@@ -177,7 +190,7 @@ describe('FileOutput', () => {
     await Promise.all(promises);
 
     // Should have been batched together
-    expect(mockFs.appendFile).toHaveBeenCalled();
+    expect(fs.appendFile).toHaveBeenCalled();
   });
 
   /**
@@ -188,7 +201,7 @@ describe('FileOutput', () => {
    * @then Entries written in single operation
    */
   it('should batch writes efficiently @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
-    fileOutput = FileOutput.getInstance(dependencies);
+    fileOutput = FileOutput.getInstance();
 
     const batchSize = 3;
     const entries: LogEntry[] = [];
@@ -210,7 +223,7 @@ describe('FileOutput', () => {
     }
 
     // Verify batched JSONL format
-    const calls = mockFs.appendFile.mock.calls;
+    const calls = vi.mocked(fs.appendFile).mock.calls;
     expect(calls.length).toBeGreaterThan(0);
 
     const jsonlContent = calls[0][1] as string;
@@ -231,13 +244,13 @@ describe('FileOutput', () => {
    * @then New log file created
    */
   it('should rotate files when size limit exceeded @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
-    fileOutput = FileOutput.getInstance(dependencies);
+    fileOutput = FileOutput.getInstance();
 
     // Mock file stats to show large file
-    mockFs.stat.mockResolvedValueOnce({
+    vi.mocked(fs.stat).mockResolvedValueOnce({
       size: 11 * 1024 * 1024, // 11MB, exceeds 10MB limit
       birthtime: new Date(),
-    } as unknown as Stats);
+    } as unknown as fs.Stats);
 
     const logEntry: LogEntry = {
       timestamp: '2025-01-21T00:00:00.000Z',
@@ -251,8 +264,8 @@ describe('FileOutput', () => {
     await fileOutput.write(logEntry);
 
     // Should have checked file stats and created new file
-    expect(mockFs.stat).toHaveBeenCalled();
-    expect(mockFs.appendFile).toHaveBeenCalled();
+    expect(fs.stat).toHaveBeenCalled();
+    expect(fs.appendFile).toHaveBeenCalled();
   });
 
   /**
@@ -263,16 +276,16 @@ describe('FileOutput', () => {
    * @then New log file created for current day
    */
   it('should rotate files daily @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
-    fileOutput = FileOutput.getInstance(dependencies);
+    fileOutput = FileOutput.getInstance();
 
     // Mock file stats to show old file
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
 
-    mockFs.stat.mockResolvedValueOnce({
+    vi.mocked(fs.stat).mockResolvedValueOnce({
       size: 1024, // Small file
       birthtime: yesterday,
-    } as unknown as Stats);
+    } as unknown as fs.Stats);
 
     const logEntry: LogEntry = {
       timestamp: '2025-01-21T00:00:00.000Z',
@@ -286,7 +299,7 @@ describe('FileOutput', () => {
     await fileOutput.write(logEntry);
 
     // Should have checked file stats and used new file name
-    expect(mockFs.stat).toHaveBeenCalled();
+    expect(fs.stat).toHaveBeenCalled();
   });
 
   /**
@@ -297,7 +310,7 @@ describe('FileOutput', () => {
    * @then All pending writes flushed and timers cleared
    */
   it('should flush pending writes on dispose @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
-    fileOutput = FileOutput.getInstance(dependencies);
+    fileOutput = FileOutput.getInstance();
 
     // Add entries to trigger writes
     const logEntry: LogEntry = {
@@ -312,14 +325,14 @@ describe('FileOutput', () => {
     await fileOutput.write(logEntry);
 
     // Dispose should complete without errors
-    await fileOutput.dispose();
+    await expect(fileOutput.dispose()).resolves.not.toThrow();
 
     // Verify that appendFile was called during the write operation
-    expect(mockFs.appendFile).toHaveBeenCalled();
+    expect(fs.appendFile).toHaveBeenCalled();
   });
 
   it('should flush queued entries that were still pending at dispose time @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
-    fileOutput = FileOutput.getInstance(dependencies);
+    fileOutput = FileOutput.getInstance();
 
     let resolveAppendStarted!: () => void;
     const appendStarted = new Promise<void>((resolve) => {
@@ -331,7 +344,7 @@ describe('FileOutput', () => {
       resolveFirstAppend = resolve;
     });
 
-    mockFs.appendFile
+    vi.mocked(fs.appendFile)
       .mockImplementationOnce(() => {
         resolveAppendStarted();
         return firstAppend;
@@ -365,8 +378,8 @@ describe('FileOutput', () => {
 
     await Promise.all([firstWrite, secondWrite, disposePromise]);
 
-    expect(mockFs.appendFile).toHaveBeenCalledTimes(2);
-    expect(mockFs.appendFile.mock.calls[1][1]).toBe(
+    expect(fs.appendFile).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(fs.appendFile).mock.calls[1][1]).toBe(
       JSON.stringify(secondEntry) + '\n',
     );
   });
@@ -379,10 +392,10 @@ describe('FileOutput', () => {
    * @then Error handled gracefully without crashing
    */
   it('should handle write errors gracefully @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
-    fileOutput = FileOutput.getInstance(dependencies);
+    fileOutput = FileOutput.getInstance();
 
     // Mock appendFile to fail
-    mockFs.appendFile.mockRejectedValueOnce(new Error('Disk full'));
+    vi.mocked(fs.appendFile).mockRejectedValueOnce(new Error('Disk full'));
 
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -396,7 +409,7 @@ describe('FileOutput', () => {
     };
 
     // Should not throw
-    await fileOutput.write(logEntry);
+    await expect(fileOutput.write(logEntry)).resolves.not.toThrow();
 
     // Should log error to console
     expect(consoleSpy).toHaveBeenCalledWith(
@@ -415,13 +428,13 @@ describe('FileOutput', () => {
    * @then Oldest entries dropped to prevent memory issues
    */
   it('should limit queue size to prevent memory issues @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
-    fileOutput = FileOutput.getInstance(dependencies);
+    fileOutput = FileOutput.getInstance();
 
     let resolveAppend!: () => void;
     const blockedAppend = new Promise<void>((resolve) => {
       resolveAppend = resolve;
     });
-    mockFs.appendFile.mockImplementation(() => blockedAppend);
+    vi.mocked(fs.appendFile).mockImplementation(() => blockedAppend);
 
     // Add more entries than max queue size (1000)
     const entries: LogEntry[] = [];
@@ -455,7 +468,7 @@ describe('FileOutput', () => {
    * @then File name includes date and time with proper format
    */
   it('should generate unique file names with timestamp @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
-    fileOutput = FileOutput.getInstance(dependencies);
+    fileOutput = FileOutput.getInstance();
 
     const logEntry: LogEntry = {
       timestamp: '2025-01-21T00:00:00.000Z',
@@ -468,7 +481,7 @@ describe('FileOutput', () => {
 
     await fileOutput.write(logEntry);
 
-    const appendCall = mockFs.appendFile.mock.calls[0];
+    const appendCall = vi.mocked(fs.appendFile).mock.calls[0];
     const writtenPath = appendCall[0] as string;
     // Validate the filename structure without a complex regex literal:
     // llxprt-debug-<runId>-YYYY-MM-DD-HH-MM-SS.jsonl
@@ -493,7 +506,7 @@ describe('FileOutput', () => {
    * @then Args preserved in JSONL output
    */
   it('should preserve log entry arguments in JSONL @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
-    fileOutput = FileOutput.getInstance(dependencies);
+    fileOutput = FileOutput.getInstance();
 
     const logEntry: LogEntry = {
       timestamp: '2025-01-21T00:00:00.000Z',
@@ -506,7 +519,7 @@ describe('FileOutput', () => {
     await fileOutput.write(logEntry);
 
     const expectedJsonl = JSON.stringify(logEntry) + '\n';
-    expect(mockFs.appendFile).toHaveBeenCalledWith(
+    expect(fs.appendFile).toHaveBeenCalledWith(
       expect.any(String),
       expectedJsonl,
       expect.any(Object),
@@ -521,7 +534,7 @@ describe('FileOutput', () => {
    * @then All writes handled correctly without corruption
    */
   it('should handle concurrent writes safely @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
-    fileOutput = FileOutput.getInstance(dependencies);
+    fileOutput = FileOutput.getInstance();
 
     const entries: LogEntry[] = [];
     for (let i = 0; i < 10; i++) {
@@ -540,7 +553,7 @@ describe('FileOutput', () => {
     await Promise.all(promises);
 
     // Should have written without errors
-    expect(mockFs.appendFile).toHaveBeenCalled();
+    expect(fs.appendFile).toHaveBeenCalled();
   });
 
   /**
@@ -551,7 +564,7 @@ describe('FileOutput', () => {
    * @then Write ignored gracefully
    */
   it('should ignore writes after disposal @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
-    fileOutput = FileOutput.getInstance(dependencies);
+    fileOutput = FileOutput.getInstance();
 
     // Dispose first
     await fileOutput.dispose();
@@ -569,6 +582,6 @@ describe('FileOutput', () => {
     await fileOutput.write(logEntry);
 
     // Should not have attempted to write
-    expect(mockFs.appendFile).not.toHaveBeenCalled();
+    expect(fs.appendFile).not.toHaveBeenCalled();
   });
 });

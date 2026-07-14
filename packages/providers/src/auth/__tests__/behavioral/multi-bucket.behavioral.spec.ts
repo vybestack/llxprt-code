@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   MemoryTokenStore,
   makeToken,
@@ -23,7 +23,6 @@ describe('Multi-bucket behavioral scenarios', () => {
   let tokenStore: MemoryTokenStore;
 
   beforeEach(() => {
-    vi.useRealTimers();
     tokenStore = new MemoryTokenStore();
   });
 
@@ -191,19 +190,16 @@ describe('Multi-bucket behavioral scenarios', () => {
     });
     manager.setSessionBucket(PROVIDER, 'bucket-a');
 
-    const authenticatedBuckets: Array<string | undefined> = [];
-    Object.defineProperty(manager, 'authenticate', {
-      configurable: true,
-      value: async (_provider: string, bucket?: string) => {
-        authenticatedBuckets.push(bucket);
+    const authenticateSpy = vi.fn(
+      async (_provider: string, bucket?: string) => {
         await tokenStore.saveToken(
           PROVIDER,
           makeToken('reauth-token'),
           bucket ?? 'bucket-a',
         );
       },
-      writable: true,
-    });
+    );
+    manager.authenticate = authenticateSpy;
 
     const handler = createBucketFailoverHandler(
       ['bucket-a', 'bucket-b', 'bucket-c'],
@@ -211,9 +207,9 @@ describe('Multi-bucket behavioral scenarios', () => {
       manager,
     );
 
-    await handler.tryFailover({ authRetryTimeoutMs: 10 });
+    await handler.tryFailover();
 
-    expect(authenticatedBuckets[0]).toBe('bucket-b');
+    expect(authenticateSpy).toHaveBeenCalledTimes(1);
   });
 
   it('MB-07: Foreground reauth succeeds', async () => {

@@ -6,7 +6,6 @@
  * Split from profileApplication.test.ts during #2092 lint hardening.
  */
 
-import { createRequire } from 'node:module';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   Profile,
@@ -35,14 +34,13 @@ import {
 } from './profileApplicationTestSetup.js';
 import type { ProfileApplicationResult } from './profileApplicationTestSetup.js';
 
-const require = createRequire(import.meta.url);
-const actualFs =
-  require('node:fs/promises') as typeof import('node:fs/promises');
-
-vi.mock('node:fs/promises', () => ({
-  ...actualFs,
-  readFile: vi.fn(),
-}));
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    readFile: vi.fn(),
+  };
+});
 
 const mockFs = await import('node:fs/promises');
 
@@ -144,7 +142,7 @@ describe('Profile application basics', () => {
   });
 
   it('should read keyfile before switching provider (stash→switch→apply pattern)', async () => {
-    const readFileSpy = mockFs.readFile;
+    const readFileSpy = vi.mocked(mockFs.readFile);
     readFileSpy.mockResolvedValue('test-api-key-from-file');
 
     const callOrder: string[] = [];
@@ -271,7 +269,7 @@ describe('Profile application basics', () => {
   });
 
   it('should not trigger OAuth when loading profile with keyfile', async () => {
-    mockFs.readFile.mockResolvedValue('test-api-key-from-keyfile');
+    vi.mocked(mockFs.readFile).mockResolvedValue('test-api-key-from-keyfile');
 
     const authenticateSpy = vi.fn();
     let switchWasCalledWithAutoOAuth = false;
@@ -312,7 +310,10 @@ describe('Profile application basics', () => {
     });
 
     const expectedPath = path.resolve('/home/user/.anthropic_key');
-    expect(mockFs.readFile).toHaveBeenCalledWith(expectedPath, 'utf-8');
+    expect(vi.mocked(mockFs.readFile)).toHaveBeenCalledWith(
+      expectedPath,
+      'utf-8',
+    );
 
     expect(updateActiveProviderApiKeyMock).toHaveBeenCalledWith(
       'test-api-key-from-keyfile',

@@ -7,7 +7,7 @@
  * subprofile tokenizer (issue #2207).
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
@@ -444,11 +444,11 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
 
     const provider = new LoadBalancingProvider(lbConfig, providerManager);
 
-    const consumptionPromise = consumeIterator(provider, [
-      createTextContent('this rejected request is too large'),
-    ]);
-    expect(consumptionPromise).rejects.toThrow(/context limit exceeded/i);
-    await consumptionPromise.catch(() => undefined);
+    await expect(
+      consumeIterator(provider, [
+        createTextContent('this rejected request is too large'),
+      ]),
+    ).rejects.toThrow(/context limit exceeded/i);
 
     await consumeIterator(provider, [createTextContent('ok')]);
     expect(provider.getTokenAccountingDiagnostics().selectedSubProfile).toBe(
@@ -525,13 +525,9 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
       providerManager,
     );
 
-    const consumptionPromise = consumeIterator(provider, [
-      createTextContent('too large for backend'),
-    ]);
-    expect(consumptionPromise).rejects.toThrow(
-      /estimated 50 tokens exceeds configured limit 10/i,
-    );
-    await consumptionPromise.catch(() => undefined);
+    await expect(
+      consumeIterator(provider, [createTextContent('too large for backend')]),
+    ).rejects.toThrow(/estimated 50 tokens exceeds configured limit 10/i);
 
     expect(openAiCalls).not.toHaveBeenCalled();
     expect(provider.getStats().totalRequests).toBe(0);
@@ -593,13 +589,11 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
       providerManager,
     );
 
-    const consumptionPromise = consumeIterator(provider, [
-      createTextContent('too large everywhere'),
-    ]);
-    expect(consumptionPromise).rejects.toThrow(
+    await expect(
+      consumeIterator(provider, [createTextContent('too large everywhere')]),
+    ).rejects.toThrow(
       /context limit exceeded for all eligible backends.*gpt.*50.*10.*opus.*60.*20/i,
     );
-    await consumptionPromise.catch(() => undefined);
 
     expect(openAiCalls).not.toHaveBeenCalled();
     expect(anthropicCalls).not.toHaveBeenCalled();
@@ -640,13 +634,11 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
       providerManager,
     );
 
-    const consumptionPromise = consumeIterator(provider, [
-      createTextContent('too large'),
-    ]);
-    expect(consumptionPromise).rejects.toThrow(
+    await expect(
+      consumeIterator(provider, [createTextContent('too large')]),
+    ).rejects.toThrow(
       /context limit exceeded for all eligible backends.*gpt.*50.*10.*opus.*60.*10/i,
     );
-    await consumptionPromise.catch(() => undefined);
   });
 
   describe('Failover re-estimation', () => {

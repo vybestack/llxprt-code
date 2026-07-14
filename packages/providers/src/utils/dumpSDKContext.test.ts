@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -90,8 +90,7 @@ describe('dumpSDKErrorRequestResponse', () => {
     );
 
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
       undefined,
       'openai',
       { error: 'Rate limit' },
@@ -136,8 +135,7 @@ describe('wrapStreamWithDump', () => {
     }
 
     expect(received).toStrictEqual(chunks);
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
       'base-123',
       'openai',
       { streaming: true, chunks, completed: true },
@@ -160,17 +158,14 @@ describe('wrapStreamWithDump', () => {
     );
     const received: unknown[] = [];
 
-    const consumptionPromise = (async (): Promise<void> => {
+    await expect(async () => {
       for await (const chunk of wrapped) {
         received.push(chunk);
       }
-    })();
-    expect(consumptionPromise).rejects.toThrow('stream failed');
-    await consumptionPromise.catch(() => undefined);
+    }).rejects.toThrow('stream failed');
 
     expect(received).toStrictEqual([firstChunk]);
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
       'base-456',
       'anthropic',
       {
@@ -205,8 +200,7 @@ describe('wrapStreamWithDump', () => {
     }
 
     expect(received).toStrictEqual([chunks[0]]);
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
       'base-cancelled',
       'gemini',
       { streaming: true, chunks: [chunks[0]], completed: false },
@@ -240,24 +234,20 @@ describe('wrapStreamWithDump', () => {
     );
     const received: unknown[] = [];
 
-    const consumptionPromise = (async (): Promise<void> => {
+    await expect(async () => {
       for await (const chunk of wrapped) {
         received.push(chunk);
       }
-    })();
-    expect(consumptionPromise).rejects.toThrow('stream failed');
-    await consumptionPromise.catch(() => undefined);
+    }).rejects.toThrow('stream failed');
 
     expect(received).toStrictEqual([firstChunk]);
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledTimes(1);
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledExactlyOnceWith(
       'openai',
       '/chat/completions',
       requestBody,
       'https://api.openai.com/v1',
     );
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
       'base-789',
       'openai',
       {
@@ -298,17 +288,14 @@ describe('wrapStreamWithDump', () => {
       dumpSDKResponseContextSpy,
     );
 
-    const consumptionPromise = (async (): Promise<void> => {
+    await expect(async () => {
       for await (const _chunk of wrapped) {
         // Exhaust stream.
       }
-    })();
-    expect(consumptionPromise).rejects.toThrow('stream failed');
-    await consumptionPromise.catch(() => undefined);
+    }).rejects.toThrow('stream failed');
 
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
       undefined,
       'openai',
       {

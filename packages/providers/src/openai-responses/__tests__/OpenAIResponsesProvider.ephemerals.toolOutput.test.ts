@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { buildResponsesInputFromContent } from '../buildResponsesInputFromContent.js';
 

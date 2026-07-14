@@ -23,7 +23,7 @@
  * @requirement REQ-OAV-MC-005 - Handle mixed content (text + tool calls)
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type {
   UserModelMessage,
   AssistantModelMessage,

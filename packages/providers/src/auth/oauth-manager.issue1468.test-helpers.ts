@@ -4,52 +4,119 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi } from 'vitest';
-import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
-import type { OAuthToken, TokenStore } from './types.js';
-import { OAuthManager } from './oauth-manager.js';
-import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
+/**
+ * Issue #1468: getProfileBuckets must validate provider matches
+ *
+ * Root cause: getProfileBuckets(providerName) was returning buckets from the
+ * currently loaded profile WITHOUT checking if profile.provider === providerName.
+ * This could cause tokens to be stored under the wrong provider keys when:
+ * 1. User has Anthropic profile loaded (provider: "anthropic", buckets: ["gmail"])
+ * 2. Something calls getOAuthToken("codex")
+ * 3. getProfileBuckets("codex") would return ["gmail"] from the Anthropic profile
+ * 4. Token operations would use those buckets with the "codex" provider
+ *
+ * Fix: getProfileBuckets now verifies profile.provider === providerName before
+ * returning buckets, returning [] if they don't match.
+ */
 
-export const mockLoadProfile = vi.fn();
-export const mockFetchAnthropicUsage = vi.fn();
+import { vi } from 'vitest';
+import type * as Core from '@vybestack/llxprt-code-core';
+import type * as SettingsPackage from '@vybestack/llxprt-code-settings';
+import type * as Providers from '@vybestack/llxprt-code-providers';
+
+// Hoisted mocks used by module factories
+const { mockLoadProfile, mockFetchAnthropicUsage } = vi.hoisted(() => ({
+  mockLoadProfile: vi.fn(),
+  mockFetchAnthropicUsage: vi.fn(),
+}));
+
+export { mockFetchAnthropicUsage, mockLoadProfile };
+
+vi.mock('@vybestack/llxprt-code-providers', async () => {
+  const actual = await vi.importActual<typeof Providers>(
+    '@vybestack/llxprt-code-providers',
+  );
+  return {
+    ...actual,
+    fetchAnthropicUsage: mockFetchAnthropicUsage,
+  };
+});
+
+vi.mock('@vybestack/llxprt-code-core', async () => {
+  const actual = await vi.importActual<typeof Core>(
+    '@vybestack/llxprt-code-core',
+  );
+  return {
+    ...actual,
+  };
+});
+
+vi.mock('@vybestack/llxprt-code-settings', async () => {
+  const actual = await vi.importActual<typeof SettingsPackage>(
+    '@vybestack/llxprt-code-settings',
+  );
+  return {
+    ...actual,
+    ProfileManager: class MockProfileManager {
+      async loadProfile(name: string) {
+        return mockLoadProfile(name);
+      }
+    },
+  };
+});
+
+// Mock the current profile name via the bridge
 export const mockGetCurrentProfileName = vi.fn();
 export const mockSettingsGet = vi.fn();
 
+import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
+
+import { OAuthManager } from './oauth-manager.js';
+import type { OAuthToken, TokenStore } from './types.js';
+import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
+
 export class MockTokenStore implements TokenStore {
-  private readonly tokens = new Map<string, OAuthToken>();
+  private tokens = new Map<string, OAuthToken>();
 
   async saveToken(
     provider: string,
     token: OAuthToken,
     bucket?: string,
   ): Promise<void> {
-    this.tokens.set(bucket ? `${provider}:${bucket}` : provider, token);
+    const key = bucket ? `${provider}:${bucket}` : provider;
+    this.tokens.set(key, token);
   }
 
   async getToken(
     provider: string,
     bucket?: string,
   ): Promise<OAuthToken | null> {
-    return this.tokens.get(bucket ? `${provider}:${bucket}` : provider) ?? null;
+    const key = bucket ? `${provider}:${bucket}` : provider;
+    return this.tokens.get(key) ?? null;
   }
 
   async removeToken(provider: string, bucket?: string): Promise<void> {
-    this.tokens.delete(bucket ? `${provider}:${bucket}` : provider);
+    const key = bucket ? `${provider}:${bucket}` : provider;
+    this.tokens.delete(key);
   }
 
   async listProviders(): Promise<string[]> {
-    return Array.from(
-      new Set(Array.from(this.tokens.keys(), (key) => key.split(':')[0])),
-    ).sort();
+    const providers = new Set<string>();
+    for (const key of this.tokens.keys()) {
+      const [provider] = key.split(':');
+      providers.add(provider);
+    }
+    return Array.from(providers).sort();
   }
 
   async listBuckets(provider: string): Promise<string[]> {
-    const prefix = `${provider}:`;
-    const buckets = new Set(
-      Array.from(this.tokens.keys())
-        .filter((key) => key.startsWith(prefix))
-        .map((key) => key.slice(prefix.length)),
-    );
+    const buckets = new Set<string>();
+    for (const key of this.tokens.keys()) {
+      if (key.startsWith(`${provider}:`)) {
+        const bucket = key.slice(`${provider}:`.length);
+        buckets.add(bucket);
+      }
+    }
     if (this.tokens.has(provider)) {
       buckets.add('default');
     }
@@ -64,13 +131,17 @@ export class MockTokenStore implements TokenStore {
     return true;
   }
 
-  async releaseRefreshLock(): Promise<void> {}
+  async releaseRefreshLock(): Promise<void> {
+    // no-op
+  }
 
   async acquireAuthLock(): Promise<boolean> {
     return true;
   }
 
-  async releaseAuthLock(): Promise<void> {}
+  async releaseAuthLock(): Promise<void> {
+    // no-op
+  }
 
   clear(): void {
     this.tokens.clear();
@@ -80,12 +151,12 @@ export class MockTokenStore implements TokenStore {
 export function createFakeOAuthSettings(): IOAuthSettingsProvider {
   const providers: Record<string, boolean> = {};
   return {
-    isOAuthEnabled: (provider) => providers[provider] ?? false,
+    isOAuthEnabled: (provider: string) => providers[provider] ?? false,
     getProviderApiKey: () => undefined,
     getProviderKeyfile: () => undefined,
     getProviderBaseUrl: () => undefined,
     getOAuthEnabledProviders: () => providers,
-    setOAuthEnabled: (provider, enabled) => {
+    setOAuthEnabled: (provider: string, enabled: boolean) => {
       providers[provider] = enabled;
     },
   };
@@ -95,27 +166,33 @@ export function createIssue1468Fixture(): {
   tokenStore: MockTokenStore;
   manager: OAuthManager;
 } {
+  // Register runtime accessors for profile name resolution (no mock theater).
+  // This mirrors the old vi.mock that was active for all importing tests.
+  // Registering here (rather than at module load) scopes the accessors to the
+  // fixture lifecycle, so suites that import this helper do not leak shared
+  // bridge state into unrelated tests via import order.
   oauthRuntimeBridge.setAccessors({
     getEphemeralSetting: () => undefined,
     getProviderManager: () => undefined,
     getRuntimeContext: () => undefined,
     getCurrentProfileName: () =>
-      mockGetCurrentProfileName() ?? mockSettingsGet() ?? null,
+      (mockGetCurrentProfileName() ?? mockSettingsGet() ?? null) as
+        | string
+        | null,
   });
 
-  vi.clearAllMocks();
   const tokenStore = new MockTokenStore();
-  const manager = new OAuthManager(
-    tokenStore,
-    createFakeOAuthSettings(),
-    undefined,
-    { loadProfile: mockLoadProfile },
-    mockFetchAnthropicUsage,
-  );
+  const settings = createFakeOAuthSettings();
+  const manager = new OAuthManager(tokenStore, settings);
+  vi.clearAllMocks();
+  mockFetchAnthropicUsage.mockReset();
+
   return { tokenStore, manager };
 }
 
 export function clearIssue1468Fixture(tokenStore: MockTokenStore): void {
   tokenStore.clear();
+  // Clear the bridge accessors registered in createIssue1468Fixture so this
+  // helper does not leave shared global state behind for other suites.
   oauthRuntimeBridge.setAccessors(undefined);
 }

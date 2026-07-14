@@ -82,6 +82,11 @@ export interface HookControlDeps {
   readonly cwd: () => string;
 }
 
+type SessionStartResult = {
+  systemMessage?: string;
+  additionalContext?: string;
+};
+
 /**
  * Real hooks/lifecycle control. Maintains the set of registered observers and
  * forwards both lifecycle-trigger executions and bus-mediated executions.
@@ -105,6 +110,7 @@ export class HookControl implements AgentHookControl {
     string,
     BusHookExecutionRequest
   >();
+  private sessionStartPromise: Promise<SessionStartResult> | undefined;
   private busUnsubscribeRequest?: () => void;
   private busUnsubscribeResponse?: () => void;
 
@@ -131,7 +137,12 @@ export class HookControl implements AgentHookControl {
    * @plan:PLAN-20260617-COREAPI.P23
    * @requirement:REQ-015
    */
-  async triggerSessionStart(): Promise<void> {
+  triggerSessionStart(): Promise<SessionStartResult> {
+    this.sessionStartPromise ??= this.fireSessionStart();
+    return this.sessionStartPromise;
+  }
+
+  private async fireSessionStart(): Promise<SessionStartResult> {
     const input = this.buildSessionStartInput();
     const result = await triggerSessionStartHook(
       this.deps.config,
@@ -139,6 +150,17 @@ export class HookControl implements AgentHookControl {
     );
     const output = this.toHookOutput(HookEventName.SessionStart, result);
     this.emit(HookEventName.SessionStart, input, output);
+    if (result === undefined) {
+      return {};
+    }
+    return {
+      ...(result.systemMessage !== undefined
+        ? { systemMessage: result.systemMessage }
+        : {}),
+      ...(result.getAdditionalContext() !== undefined
+        ? { additionalContext: result.getAdditionalContext() }
+        : {}),
+    };
   }
 
   /**

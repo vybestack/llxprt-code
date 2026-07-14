@@ -21,7 +21,7 @@
  * interfaces. They do NOT construct auth instances or call factory functions.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { ISecureStore } from '@vybestack/llxprt-code-auth';
 import type { ISettingsService } from '@vybestack/llxprt-code-auth';
 import type { IDebugLogger } from '@vybestack/llxprt-code-auth';

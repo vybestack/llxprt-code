@@ -499,29 +499,24 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
       const iterator = provider.generateChatCompletion(options);
       await collectResults(iterator);
 
-      const generateOptions = mockGenerateText.mock.calls[0]?.[0];
-      const generatedTools = generateOptions?.tools;
-      if (Array.isArray(generatedTools)) {
-        expect(generatedTools).toEqual([
-          expect.objectContaining({
-            type: 'function',
-            function: expect.objectContaining({
-              name: 'get_weather',
-              description: 'Get the current weather',
-              parameters: expect.objectContaining({ type: 'object' }),
+      expect(mockGenerateText).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tools: [
+            expect.objectContaining({
+              type: 'function',
+              function: expect.objectContaining({
+                name: 'get_weather',
+                parameters: expect.objectContaining({
+                  type: 'object',
+                  properties: expect.objectContaining({
+                    city: { type: 'string' },
+                  }),
+                }),
+              }),
             }),
-          }),
-        ]);
-      } else {
-        expect(generatedTools).toEqual(
-          expect.objectContaining({
-            get_weather: expect.objectContaining({
-              description: 'Get the current weather',
-              inputSchema: expect.any(Object),
-            }),
-          }),
-        );
-      }
+          ],
+        }),
+      );
     });
   });
 

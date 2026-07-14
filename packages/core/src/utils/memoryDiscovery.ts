@@ -377,23 +377,10 @@ export interface MemoryLoadResult {
   files: Array<{ path: string; content: string }>;
 }
 
-export interface MemoryDiscoveryPaths {
-  homeDirectory: string;
-  globalCoreMemoryFile: string;
-}
-
-function defaultMemoryDiscoveryPaths(): MemoryDiscoveryPaths {
-  return {
-    homeDirectory: homedir(),
-    globalCoreMemoryFile: getGlobalCoreMemoryFilePath(),
-  };
-}
-
 export async function loadGlobalMemory(
   debugMode: boolean = false,
-  paths: MemoryDiscoveryPaths = defaultMemoryDiscoveryPaths(),
 ): Promise<MemoryLoadResult> {
-  const userHome = paths.homeDirectory;
+  const userHome = homedir();
   const llxprtMdFilenames = getAllLlxprtMdFilenames();
 
   const accessChecks = llxprtMdFilenames.map(async (filename) => {
@@ -436,13 +423,12 @@ async function findUpwardLlxprtFiles(
   startDir: string,
   stopDir: string,
   debugMode: boolean,
-  homeDirectory: string,
 ): Promise<string[]> {
   const upwardPaths: string[] = [];
   let currentDir = path.resolve(startDir);
   const resolvedStopDir = path.resolve(stopDir);
   const llxprtMdFilenames = getAllLlxprtMdFilenames();
-  const globalLlxprtDir = path.resolve(path.join(homeDirectory, LLXPRT_DIR));
+  const globalLlxprtDir = path.resolve(path.join(homedir(), LLXPRT_DIR));
 
   if (debugMode) {
     logger.debug(
@@ -512,7 +498,6 @@ export async function loadEnvironmentMemory(
   trustedRoots: string[],
   extensionLoader: ExtensionLoader,
   debugMode: boolean = false,
-  paths: MemoryDiscoveryPaths = defaultMemoryDiscoveryPaths(),
 ): Promise<MemoryLoadResult> {
   const allPaths = new Set<string>();
 
@@ -524,12 +509,7 @@ export async function loadEnvironmentMemory(
         `Loading environment memory for trusted root: ${resolvedRoot} (Stopping exactly here)`,
       );
     }
-    return findUpwardLlxprtFiles(
-      resolvedRoot,
-      resolvedRoot,
-      debugMode,
-      paths.homeDirectory,
-    );
+    return findUpwardLlxprtFiles(resolvedRoot, resolvedRoot, debugMode);
   });
 
   const pathArrays = await Promise.all(traversalPromises);
@@ -558,11 +538,10 @@ export async function loadEnvironmentMemory(
 export async function loadCoreMemory(
   trustedRoots: string[],
   debugMode: boolean = false,
-  paths: MemoryDiscoveryPaths = defaultMemoryDiscoveryPaths(),
 ): Promise<MemoryLoadResult> {
   const allPaths = new Set<string>();
 
-  const globalCoreMemoryPath = paths.globalCoreMemoryFile;
+  const globalCoreMemoryPath = getGlobalCoreMemoryFilePath();
   try {
     await fs.access(globalCoreMemoryPath, fsSync.constants.R_OK);
     allPaths.add(globalCoreMemoryPath);
@@ -644,7 +623,6 @@ export async function loadServerHierarchicalMemory(
   fileFilteringOptions?: FileFilteringOptions,
   maxDirs: number = 200,
   maxDepth?: number,
-  paths: MemoryDiscoveryPaths = defaultMemoryDiscoveryPaths(),
 ): Promise<LoadServerHierarchicalMemoryResponse> {
   if (debugMode)
     logger.debug(
@@ -653,7 +631,7 @@ export async function loadServerHierarchicalMemory(
 
   // For the server, homedir() refers to the server process's home.
   // This is consistent with how MemoryTool already finds the global path.
-  const userHomePath = paths.homeDirectory;
+  const userHomePath = homedir();
   const filePaths = await getLlxprtMdFilePathsInternal(
     currentWorkingDirectory,
     includeDirectoriesToReadLlxprt,
@@ -709,7 +687,6 @@ export async function loadJitSubdirectoryMemory(
   alreadyLoadedPaths: Set<string>,
   debugMode: boolean = false,
   jitContextEnabled: boolean = true,
-  paths: MemoryDiscoveryPaths = defaultMemoryDiscoveryPaths(),
 ): Promise<MemoryLoadResult> {
   if (!jitContextEnabled) {
     if (debugMode) {
@@ -752,7 +729,6 @@ export async function loadJitSubdirectoryMemory(
     resolvedTarget,
     bestRoot,
     debugMode,
-    paths.homeDirectory,
   );
 
   // Filter out already loaded paths

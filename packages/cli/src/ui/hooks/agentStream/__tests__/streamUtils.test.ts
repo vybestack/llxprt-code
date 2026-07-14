@@ -13,13 +13,12 @@ import {
   UnauthorizedError,
   parseAndFormatApiError,
 } from '@vybestack/llxprt-code-core';
-import type { Config, ContractPart } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import type { HistoryItemWithoutId } from '../../../types.js';
 import { ToolCallStatus } from '../../../types.js';
 import {
-  mergePartListUnions,
   mergePendingToolGroupsForDisplay,
   collectAgentTools,
   buildFinishReasonMessage,
@@ -36,6 +35,9 @@ import {
 import { splitPartsByRole } from '@vybestack/llxprt-code-agents';
 import { getActiveProviderNameForApiError } from '../../../../utils/apiErrorFormatting.js';
 import { testRegex } from '../../../../test-utils/regex.js';
+
+/** Part element type accepted by splitPartsByRole. */
+type TestPart = Parameters<typeof splitPartsByRole>[0][number];
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
@@ -54,40 +56,6 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
 vi.mock('../../../utils/markdownUtilities.js', async () => ({
   findLastSafeSplitPoint: vi.fn((text: string) => text.length),
 }));
-
-// ─── mergePartListUnions ──────────────────────────────────────────────────────
-
-describe('mergePartListUnions', () => {
-  it('merges string items into text parts', () => {
-    const result = mergePartListUnions(['hello', 'world']);
-    expect(result).toStrictEqual([{ text: 'hello' }, { text: 'world' }]);
-  });
-
-  it('merges Part objects directly', () => {
-    const part: ContractPart = { text: 'foo' };
-    const result = mergePartListUnions([part]);
-    expect(result).toStrictEqual([{ text: 'foo' }]);
-  });
-
-  it('merges arrays of string/Part', () => {
-    const result = mergePartListUnions([['a', { text: 'b' }]]);
-    expect(result).toStrictEqual([{ text: 'a' }, { text: 'b' }]);
-  });
-
-  it('returns empty array for empty input', () => {
-    expect(mergePartListUnions([])).toStrictEqual([]);
-  });
-
-  it('flattens nested arrays', () => {
-    const result = mergePartListUnions([['a', 'b'], ['c'], 'd']);
-    expect(result).toStrictEqual([
-      { text: 'a' },
-      { text: 'b' },
-      { text: 'c' },
-      { text: 'd' },
-    ]);
-  });
-});
 
 // ─── mergePendingToolGroupsForDisplay ─────────────────────────────────────────
 
@@ -174,9 +142,9 @@ describe('mergePendingToolGroupsForDisplay', () => {
 
 describe('splitPartsByRole', () => {
   it('separates functionCall parts into functionCalls array', () => {
-    const parts: ContractPart[] = [
-      { functionCall: { name: 'foo', args: {} } },
-      { text: 'hello' },
+    const parts: TestPart[] = [
+      { type: 'tool_call', id: '1', name: 'foo', parameters: {} },
+      { type: 'text', text: 'hello' },
     ];
     const { functionCalls, functionResponses, otherParts } =
       splitPartsByRole(parts);
@@ -186,8 +154,13 @@ describe('splitPartsByRole', () => {
   });
 
   it('separates functionResponse parts into functionResponses array', () => {
-    const parts: ContractPart[] = [
-      { functionResponse: { name: 'foo', response: { result: 'ok' } } },
+    const parts: TestPart[] = [
+      {
+        type: 'tool_response',
+        callId: '1',
+        toolName: 'foo',
+        result: { result: 'ok' },
+      },
     ];
     const { functionCalls, functionResponses, otherParts } =
       splitPartsByRole(parts);
@@ -206,11 +179,11 @@ describe('splitPartsByRole', () => {
   });
 
   it('correctly separates mixed content', () => {
-    const parts: ContractPart[] = [
-      { functionCall: { name: 'a', args: {} } },
-      { functionResponse: { name: 'a', response: {} } },
-      { text: 'text' },
-      { functionCall: { name: 'b', args: {} } },
+    const parts: TestPart[] = [
+      { type: 'tool_call', id: '1', name: 'a', parameters: {} },
+      { type: 'tool_response', callId: '1', toolName: 'a', result: {} },
+      { type: 'text', text: 'text' },
+      { type: 'tool_call', id: '2', name: 'b', parameters: {} },
     ];
     const { functionCalls, functionResponses, otherParts } =
       splitPartsByRole(parts);

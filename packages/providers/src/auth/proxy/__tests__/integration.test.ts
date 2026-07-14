@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,8 +16,11 @@ import {
   ProxySocketClient,
   ProxyTokenStore,
 } from '@vybestack/llxprt-code-core';
-const { createProviderKeyStorage, createTokenStore, resetFactorySingletons } =
-  await import('../credential-store-factory.js?proxy-integration');
+import {
+  createProviderKeyStorage,
+  createTokenStore,
+  resetFactorySingletons,
+} from '../credential-store-factory.js';
 import { CredentialProxyServer } from '../credential-proxy-server.js';
 import { createAndStartProxy, stopProxy } from '../sandbox-proxy-lifecycle.js';
 
@@ -240,7 +243,7 @@ describe('proxy integration (phase 31)', () => {
       socketPath: path.join(tmpDir, 'lifecycle-stop.sock'),
     });
     await stopProxy();
-    expect(await handle.stop()).toBeUndefined();
+    await expect(handle.stop()).resolves.toBeUndefined();
   });
 
   it.skipIf(isWindows)(
@@ -474,7 +477,7 @@ describe('proxy integration (phase 31)', () => {
       const proxyKeys = new ProxyProviderKeyStorage(
         new ProxySocketClient(socketPath),
       );
-      expect(proxyKeys.saveKey('anthropic', 'forbidden')).rejects.toThrow(
+      await expect(proxyKeys.saveKey('anthropic', 'forbidden')).rejects.toThrow(
         'API key management is not available in sandbox mode',
       );
     });
@@ -487,7 +490,7 @@ describe('proxy integration (phase 31)', () => {
       const proxyKeys = new ProxyProviderKeyStorage(
         new ProxySocketClient(socketPath),
       );
-      expect(proxyKeys.deleteKey('anthropic')).rejects.toThrow(
+      await expect(proxyKeys.deleteKey('anthropic')).rejects.toThrow(
         'API key management is not available in sandbox mode',
       );
     });
@@ -533,11 +536,9 @@ describe('proxy integration (phase 31)', () => {
       const proxyStore = new ProxyTokenStore(started.socketPath);
       await proxyStore.listProviders();
       await started.server.stop();
-      const request = proxyStore.listProviders();
-      expect(request).rejects.toThrow(
+      await expect(proxyStore.listProviders()).rejects.toThrow(
         /Credential proxy connection lost|connect|ECONNREFUSED|ENOENT/i,
       );
-      await request.catch(() => undefined);
     } finally {
       await started.server.stop();
     }

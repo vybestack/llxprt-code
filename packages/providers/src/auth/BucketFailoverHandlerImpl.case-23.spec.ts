@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
 import type { BucketFailureReason } from '@vybestack/llxprt-code-core';
 import {

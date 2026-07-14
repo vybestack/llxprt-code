@@ -7,10 +7,10 @@
  * should not require authentication, as they are typically used with
  * local AI servers like Ollama that don't require API keys.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '../OpenAIProvider.js';
-import type OpenAI from 'openai';
+import OpenAI from 'openai';
 import {
   clearActiveProviderRuntimeContext,
   createProviderRuntimeContext,
@@ -22,60 +22,68 @@ import {
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { isLocalEndpoint } from '../../utils/localEndpoint.js';
 
-class FakeOpenAI {
-  static instances: Set<symbol> = new Set();
-  static created: symbol[] = [];
-  static requests: Array<{ request: Record<string, unknown> }> = [];
-  static lastOptions: Record<string, unknown> | null = null;
+vi.mock('openai', () => {
+  class FakeOpenAI {
+    static instances: Set<symbol> = new Set();
+    static created: symbol[] = [];
+    static requests: Array<{ request: Record<string, unknown> }> = [];
+    static lastOptions: Record<string, unknown> | null = null;
 
-  static reset(): void {
-    FakeOpenAI.instances.clear();
-    FakeOpenAI.created = [];
-    FakeOpenAI.requests = [];
-    FakeOpenAI.lastOptions = null;
-  }
+    static reset(): void {
+      FakeOpenAI.instances.clear();
+      FakeOpenAI.created = [];
+      FakeOpenAI.requests = [];
+      FakeOpenAI.lastOptions = null;
+    }
 
-  readonly instanceId: symbol;
-  options: Record<string, unknown>;
+    readonly instanceId: symbol;
+    options: Record<string, unknown>;
 
-  constructor(opts: Record<string, unknown>) {
-    this.instanceId = Symbol('openai-client');
-    FakeOpenAI.instances.add(this.instanceId);
-    FakeOpenAI.created.push(this.instanceId);
-    this.options = opts;
-    FakeOpenAI.lastOptions = opts;
-  }
+    constructor(opts: Record<string, unknown>) {
+      this.instanceId = Symbol('openai-client');
+      FakeOpenAI.instances.add(this.instanceId);
+      FakeOpenAI.created.push(this.instanceId);
+      this.options = opts;
+      FakeOpenAI.lastOptions = opts;
+    }
 
-  chat = {
-    completions: {
-      create: vi.fn(async (request: Record<string, unknown>) => {
-        FakeOpenAI.requests.push({ request });
-        return {
-          async *[Symbol.asyncIterator]() {
-            yield {
-              choices: [
-                {
-                  delta: { content: 'local-mock-response' },
-                  finish_reason: 'stop',
-                  index: 0,
+    chat = {
+      completions: {
+        create: vi.fn(async (request: Record<string, unknown>) => {
+          FakeOpenAI.requests.push({ request });
+          return {
+            async *[Symbol.asyncIterator]() {
+              yield {
+                choices: [
+                  {
+                    delta: { content: 'local-mock-response' },
+                    finish_reason: 'stop',
+                    index: 0,
+                  },
+                ],
+                usage: {
+                  prompt_tokens: 0,
+                  completion_tokens: 0,
+                  total_tokens: 0,
                 },
-              ],
-              usage: {
-                prompt_tokens: 0,
-                completion_tokens: 0,
-                total_tokens: 0,
-              },
-            };
-          },
-        };
-      }),
-    },
-  };
-}
+              };
+            },
+          };
+        }),
+      },
+    };
+  }
 
-const constructClient = (options: Record<string, unknown>): OpenAI =>
-  new FakeOpenAI(options) as unknown as OpenAI;
-const FakeOpenAIClass = FakeOpenAI;
+  return { default: FakeOpenAI };
+});
+
+const FakeOpenAIClass = OpenAI as unknown as {
+  instances: Set<symbol>;
+  created: symbol[];
+  requests: Array<{ request: Record<string, unknown> }>;
+  lastOptions: Record<string, unknown> | null;
+  reset(): void;
+};
 
 /**
  * Test provider that allows us to control auth token behavior
@@ -84,10 +92,6 @@ const FakeOpenAIClass = FakeOpenAI;
  */
 class LocalTestOpenAIProvider extends OpenAIProvider {
   private authTokenOverride: string | null = null;
-
-  constructor(apiKey: string | undefined, baseURL?: string) {
-    super(apiKey, baseURL, undefined, { constructClient });
-  }
 
   setAuthTokenOverride(token: string | null): void {
     this.authTokenOverride = token;
@@ -129,8 +133,8 @@ describe('OpenAI local endpoint tests', () => {
     FakeOpenAIClass.reset();
     // Clear environment variables that could interfere with auth tests
     // This is critical for CI environments which may have OPENAI_API_KEY set
-    process.env.OPENAI_API_KEY = '';
-    process.env.OPENAI_BASE_URL = '';
+    vi.stubEnv('OPENAI_API_KEY', '');
+    vi.stubEnv('OPENAI_BASE_URL', '');
 
     setActiveProviderRuntimeContext(
       createProviderRuntimeContext({
@@ -142,8 +146,7 @@ describe('OpenAI local endpoint tests', () => {
 
   afterEach(() => {
     clearActiveProviderRuntimeContext();
-    delete process.env.OPENAI_API_KEY;
-    delete process.env.OPENAI_BASE_URL;
+    vi.unstubAllEnvs();
   });
 
   describe('isLocalEndpoint utility', () => {
@@ -221,7 +224,7 @@ describe('OpenAI local endpoint tests', () => {
 
         // Should NOT throw REQ-SP4-003 error
         const generator = provider.generateChatCompletion(callOptions);
-        expect(await generator.next()).toBeDefined();
+        await expect(generator.next()).resolves.toBeDefined();
         expect(FakeOpenAIClass.created).toHaveLength(1);
       });
 
@@ -241,7 +244,7 @@ describe('OpenAI local endpoint tests', () => {
         });
 
         const generator = provider.generateChatCompletion(callOptions);
-        expect(await generator.next()).toBeDefined();
+        await expect(generator.next()).resolves.toBeDefined();
         expect(FakeOpenAIClass.created).toHaveLength(1);
       });
 
@@ -261,7 +264,7 @@ describe('OpenAI local endpoint tests', () => {
         });
 
         const generator = provider.generateChatCompletion(callOptions);
-        expect(await generator.next()).toBeDefined();
+        await expect(generator.next()).resolves.toBeDefined();
         expect(FakeOpenAIClass.created).toHaveLength(1);
       });
 
@@ -304,7 +307,7 @@ describe('OpenAI local endpoint tests', () => {
         });
 
         const generator = provider.generateChatCompletion(callOptions);
-        expect(generator.next()).rejects.toThrow('REQ-SP4-003');
+        await expect(generator.next()).rejects.toThrow('REQ-SP4-003');
       });
 
       it('allows remote endpoints with auth token', async () => {
@@ -325,7 +328,7 @@ describe('OpenAI local endpoint tests', () => {
         });
 
         const generator = provider.generateChatCompletion(callOptions);
-        expect(await generator.next()).toBeDefined();
+        await expect(generator.next()).resolves.toBeDefined();
         expect(FakeOpenAIClass.created).toHaveLength(1);
       });
     });

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import * as dumpContextModule from '../utils/dumpContext.js';
 import * as dumpSDKContextModule from '../utils/dumpSDKContext.js';
@@ -255,16 +255,13 @@ describe('AnthropicProvider dumpContext integration', () => {
     const generator = provider['generateChatCompletionWithOptions'](options);
 
     // Expect the error to be thrown
-    const consumeGenerator = (async () => {
+    await expect(async () => {
       for await (const chunk of generator) {
         void chunk;
       }
-    })();
-    expect(consumeGenerator).rejects.toThrow(/API Error/);
-    await consumeGenerator.catch(() => undefined);
+    }).rejects.toThrow(/API Error/);
 
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledTimes(1);
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledExactlyOnceWith(
       'anthropic',
       '/v1/messages',
       expect.objectContaining({
@@ -272,8 +269,7 @@ describe('AnthropicProvider dumpContext integration', () => {
       }),
       'https://api.anthropic.com',
     );
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
       '20260101-120000-anthropic-test12',
       'anthropic',
       { error: 'API Error: Rate limit exceeded' },

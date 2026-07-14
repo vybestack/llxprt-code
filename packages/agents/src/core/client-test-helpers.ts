@@ -16,10 +16,8 @@
  */
 
 import { vi } from 'vitest';
-import type { Chat, GenerateContentResponse } from '@google/genai';
-import { GoogleGenAI } from '@google/genai';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-
+import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ChatSession } from './chatSession.js';
 import type { MessageStreamDeps } from './MessageStreamOrchestrator.js';
 import { AgentClient } from './client.js';
@@ -52,6 +50,17 @@ export interface ClientTestContext {
   mockConfig: Config;
 }
 
+/**
+ * Neutral structural type for the vi.mock of generateContentResponseUtilities.
+ * Used by all client test files to type the mocked `getResponseText` parameter
+ * without importing any Google provider type.
+ */
+export interface MockResponseShape {
+  candidates?: Array<{
+    content?: { parts?: Array<{ text?: string }> };
+  }>;
+}
+
 export interface ClientMockFns {
   mockChatCreateFn: ReturnType<typeof vi.fn>;
   mockGenerateContentFn: ReturnType<typeof vi.fn>;
@@ -60,18 +69,16 @@ export interface ClientMockFns {
   resolveTokenLimit?: MessageStreamDeps['resolveTokenLimit'];
 }
 
-function asMock<T>(value: T): T & ReturnType<typeof vi.fn> {
-  return value as T & ReturnType<typeof vi.fn>;
-}
-
 /** Reset all mocks and re-apply the shared service mocks. */
 function resetAndApplyServiceMocks(): void {
   vi.resetAllMocks();
-  asMock(uiTelemetryService.setLastPromptTokenCount).mockClear();
+  vi.mocked(uiTelemetryService.setLastPromptTokenCount).mockClear();
 
-  asMock(getCoreSystemPromptAsync).mockResolvedValue('Test system instruction');
+  vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(
+    'Test system instruction',
+  );
 
-  asMock(ComplexityAnalyzer).mockImplementation(
+  vi.mocked(ComplexityAnalyzer).mockImplementation(
     () =>
       ({
         analyzeComplexity: vi.fn().mockReturnValue({
@@ -85,7 +92,7 @@ function resetAndApplyServiceMocks(): void {
       }) as unknown as ComplexityAnalyzer,
   );
 
-  asMock(TodoReminderService).mockImplementation(
+  vi.mocked(TodoReminderService).mockImplementation(
     () =>
       ({
         getComplexTaskSuggestion: vi.fn(),
@@ -99,46 +106,24 @@ function resetAndApplyServiceMocks(): void {
   setSimulate429(false);
 }
 
-/** Wire the GoogleGenAI constructor mock to the provided mock fns. */
-function setupGoogleGenAIMock(mockFns: ClientMockFns): void {
-  const { mockChatCreateFn, mockGenerateContentFn, mockEmbedContentFn } =
-    mockFns;
-
-  const MockedGoogleGenAI = asMock(GoogleGenAI);
-  MockedGoogleGenAI.mockImplementation((..._args: unknown[]): GoogleGenAI => {
-    const mockInstance = {
-      chats: { create: mockChatCreateFn },
-      models: {
-        generateContent: mockGenerateContentFn,
-        embedContent: mockEmbedContentFn,
-      },
-    };
-    return mockInstance as unknown as GoogleGenAI;
-  });
-
-  mockChatCreateFn.mockResolvedValue({} as Chat);
-  mockGenerateContentFn.mockResolvedValue({
-    candidates: [
-      {
-        content: {
-          parts: [{ text: '{"key": "value"}' }],
-        },
-      },
-    ],
-  } as unknown as GenerateContentResponse);
+/**
+ * Previously wired the GoogleGenAI constructor mock to the provided mock fns.
+ * The production code no longer uses GoogleGenAI (it uses createContentGenerator),
+ * so this is now a no-op retained for API compatibility with callers.
+ */
+function setupGoogleGenAIMock(_mockFns: ClientMockFns): void {
+  // No-op — embedding/generation mocks are wired via vi.mock in individual test files.
 }
 
-/** Build the config fixture and its content-generator settings. */
-function createConfigFixture(): {
-  config: Config;
-  contentGeneratorConfig: ContentGeneratorConfig;
-} {
+/** Build and register the mock Config implementation. */
+function setupConfigMock(): ContentGeneratorConfig {
   const mockToolRegistry = {
     getFunctionDeclarations: vi.fn().mockReturnValue([]),
     getTool: vi.fn().mockReturnValue(null),
     getAllTools: vi.fn().mockReturnValue([]),
   };
   const fileService = new FileDiscoveryService('/test/dir');
+  const MockedConfig = vi.mocked(Config, true);
   const contentGeneratorConfig: ContentGeneratorConfig = {
     model: 'test-model',
     apiKey: 'test-key',
@@ -188,19 +173,19 @@ function createConfigFixture(): {
     getMcpClientManager: vi.fn().mockReturnValue(undefined),
     getModelRouterService: vi.fn().mockReturnValue(undefined),
   };
-  return {
-    config: mockConfigObject as unknown as Config,
-    contentGeneratorConfig,
-  };
+  MockedConfig.mockImplementation(() => mockConfigObject as unknown as Config);
+  return contentGeneratorConfig;
 }
 
 /** Instantiate the AgentClient and wire its chat mock. */
 async function createAndInitClient(
-  mockConfig: Config,
   contentGeneratorConfig: ContentGeneratorConfig,
   createTurn?: MessageStreamDeps['createTurn'],
   resolveTokenLimit?: MessageStreamDeps['resolveTokenLimit'],
 ): Promise<AgentClient> {
+  const mockConfig = new Config({
+    sessionId: 'test-session-id',
+  } as ConfigParameters);
   const runtimeState = createAgentRuntimeState({
     runtimeId: 'test-runtime',
     provider: 'gemini',
@@ -245,12 +230,12 @@ export async function setupGeminiClient(
 ): Promise<ClientTestContext> {
   resetAndApplyServiceMocks();
   setupGoogleGenAIMock(mockFns);
-  const { config: mockConfig, contentGeneratorConfig } = createConfigFixture();
+  const contentGeneratorConfig = setupConfigMock();
   const client = await createAndInitClient(
-    mockConfig,
     contentGeneratorConfig,
     mockFns.createTurn,
     mockFns.resolveTokenLimit,
   );
+  const mockConfig = client['config'];
   return { client, mockConfig };
 }

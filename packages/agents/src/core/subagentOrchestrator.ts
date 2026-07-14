@@ -110,11 +110,6 @@ export interface SubagentOrchestratorOptions {
   runtimeLoader?: RuntimeLoader;
   scopeFactory?: ScopeFactory;
   idFactory?: () => string;
-  createSettingsService?: () => SettingsService;
-  createProviderRuntimeContext?: typeof createSettingsProviderRuntimeContext;
-  createIsolatedRuntimeContext?: typeof createIsolatedRuntimeContext;
-  activateProvider?: typeof executeProviderActivation;
-  applyProfile?: typeof applyProfileWithGuards;
   /**
    * Session/runtime MessageBus threaded into the SubAgentScope so
    * non-interactive subagent tool execution can satisfy
@@ -134,11 +129,6 @@ export class SubagentOrchestrator {
   private readonly runtimeLoader: RuntimeLoader;
   private readonly scopeFactory: ScopeFactory;
   private readonly idFactory: () => string;
-  private readonly createSettingsService: () => SettingsService;
-  private readonly createProviderRuntimeContext: typeof createSettingsProviderRuntimeContext;
-  private readonly createIsolatedRuntimeContext: typeof createIsolatedRuntimeContext;
-  private readonly activateProvider: typeof executeProviderActivation;
-  private readonly applyProfile: typeof applyProfileWithGuards;
   private readonly defaultDisabledTools = normalizeDefaultToolSet(
     DEFAULT_DISABLED_TOOLS,
   );
@@ -148,16 +138,6 @@ export class SubagentOrchestrator {
     this.scopeFactory =
       options.scopeFactory ?? SubAgentScope.create.bind(SubAgentScope);
     this.idFactory = options.idFactory ?? randomUUID;
-    this.createSettingsService =
-      options.createSettingsService ?? createRuntimeSettingsService;
-    this.createProviderRuntimeContext =
-      options.createProviderRuntimeContext ??
-      createSettingsProviderRuntimeContext;
-    this.createIsolatedRuntimeContext =
-      options.createIsolatedRuntimeContext ?? createIsolatedRuntimeContext;
-    this.activateProvider =
-      options.activateProvider ?? executeProviderActivation;
-    this.applyProfile = options.applyProfile ?? applyProfileWithGuards;
   }
 
   private buildScopeDispose(
@@ -582,7 +562,7 @@ export class SubagentOrchestrator {
       modelConfig,
       agentRuntimeId,
     );
-    const settingsService = this.createSettingsService();
+    const settingsService = createRuntimeSettingsService();
     if (!isLoadBalancerActivation) {
       populatePreActivationSettings(
         settingsService,
@@ -634,7 +614,7 @@ export class SubagentOrchestrator {
     modelConfig: ModelConfig;
     signal?: AbortSignal;
   }): Promise<AgentRuntimeLoaderResult> {
-    const providerRuntime = this.createProviderRuntimeContext({
+    const providerRuntime = createSettingsProviderRuntimeContext({
       settingsService: params.isolatedHandle.settingsService,
       config: params.isolatedHandle.config,
       runtimeId: params.isolatedHandle.runtimeId,
@@ -716,7 +696,7 @@ export class SubagentOrchestrator {
     // parent's (Issue #2410). Load-balancer profiles intentionally activate via
     // the foreground profile-application path inside this isolated runtime so
     // the real load-balancer provider is registered and selected.
-    const handle = this.createIsolatedRuntimeContext({
+    const handle = createIsolatedRuntimeContext({
       runtimeId: agentRuntimeId,
       settingsService,
       profileManager: this.options.profileManager,
@@ -758,12 +738,12 @@ export class SubagentOrchestrator {
           if (isLoadBalancerActivation) {
             // applyProfileWithGuards reads getCliRuntimeServices(), which is
             // scoped by runWithRuntimeScope above to this isolated runtime id.
-            await this.applyProfile(activationProfile, {
+            await applyProfileWithGuards(activationProfile, {
               profileName,
               profileManager: this.options.profileManager,
             });
           } else {
-            await this.activateProvider(handle.config, {
+            await executeProviderActivation(handle.config, {
               provider: activationProfile.provider,
               model: activationProfile.model,
               modelParams: activationProfile.modelParams,

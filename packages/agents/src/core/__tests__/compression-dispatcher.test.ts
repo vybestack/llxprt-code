@@ -16,7 +16,7 @@
  * performCompression() to use the strategy pattern via the factory.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -29,7 +29,10 @@ import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecyc
 import { PreCompressTrigger } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 
-const preCompressHook = vi.fn<typeof triggerPreCompressHook>();
+// Mock the lifecycle hook triggers
+vi.mock('@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js', () => ({
+  triggerPreCompressHook: vi.fn().mockResolvedValue(undefined),
+}));
 
 // ---------------------------------------------------------------------------
 // Message helpers (same pattern as sandwich-compression.test.ts)
@@ -366,7 +369,7 @@ describe('Compression Dispatcher Integration (P13)', () => {
       vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
 
       // Should propagate the error
-      expect(chat.performCompression('test-prompt-id')).rejects.toThrow(
+      await expect(chat.performCompression('test-prompt-id')).rejects.toThrow(
         'Strategy execution failed',
       );
 
@@ -405,7 +408,7 @@ describe('Compression Dispatcher Integration (P13)', () => {
       );
       vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
 
-      expect(chat.performCompression('test-prompt-id')).rejects.toThrow(
+      await expect(chat.performCompression('test-prompt-id')).rejects.toThrow(
         /Provider initialization failed/,
       );
 
@@ -516,7 +519,6 @@ describe('Compression Dispatcher Integration (P13)', () => {
         mockContentGenerator,
         {},
         [],
-        preCompressHook,
       );
       vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
         mockProvider as never,
@@ -524,7 +526,7 @@ describe('Compression Dispatcher Integration (P13)', () => {
       vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
 
       // Mock the compression to return valid history
-      (mockContentGenerator as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      vi.mocked(mockContentGenerator).mockResolvedValueOnce({
         content: 'Compressed summary',
         usage: {},
       } as never);
@@ -532,10 +534,10 @@ describe('Compression Dispatcher Integration (P13)', () => {
       await chat.performCompression('test-prompt-id');
 
       // Assert: triggerPreCompressHook was called
-      expect(preCompressHook).toHaveBeenCalledTimes(1);
+      expect(triggerPreCompressHook).toHaveBeenCalledTimes(1);
 
       // Assert: triggerPreCompressHook was called with correct parameters
-      expect(preCompressHook).toHaveBeenCalledWith(
+      expect(triggerPreCompressHook).toHaveBeenCalledWith(
         expect.anything(), // config
         PreCompressTrigger.Manual, // or Auto - depends on context
       );
@@ -559,7 +561,6 @@ describe('Compression Dispatcher Integration (P13)', () => {
         localContentGenerator,
         {},
         [],
-        preCompressHook,
       );
       vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
         localMockProvider as never,
@@ -567,10 +568,12 @@ describe('Compression Dispatcher Integration (P13)', () => {
       vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
 
       // Mock triggerPreCompressHook to throw
-      preCompressHook.mockRejectedValueOnce(new Error('Hook failed'));
+      vi.mocked(triggerPreCompressHook).mockRejectedValueOnce(
+        new Error('Hook failed'),
+      );
 
       // Compression should still succeed despite hook failure
-      expect(await chat.performCompression('test-prompt-id')).toBe(
+      await expect(chat.performCompression('test-prompt-id')).resolves.toBe(
         PerformCompressionResult.COMPRESSED,
       );
 
@@ -593,14 +596,13 @@ describe('Compression Dispatcher Integration (P13)', () => {
         mockContentGenerator,
         {},
         [],
-        preCompressHook,
       );
 
       const result = await chat.performCompression('test-prompt-id');
 
       expect(result).toBe(PerformCompressionResult.SKIPPED_EMPTY);
-      expect(preCompressHook).toHaveBeenCalledTimes(1);
-      expect(preCompressHook).toHaveBeenCalledWith(
+      expect(triggerPreCompressHook).toHaveBeenCalledTimes(1);
+      expect(triggerPreCompressHook).toHaveBeenCalledWith(
         expect.anything(),
         PreCompressTrigger.Manual,
       );

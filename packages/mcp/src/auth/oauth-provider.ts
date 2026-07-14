@@ -10,7 +10,6 @@ import type * as net from 'node:net';
 import { URL } from 'node:url';
 import type { EventEmitter } from 'node:events';
 import { openBrowserSecurely } from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
-import type { MCPOAuthProviderDependencies } from './oauth-provider-dependencies.js';
 import {
   type MCPOAuthToken,
   MCPOAuthTokenStorage,
@@ -44,6 +43,7 @@ export interface MCPOAuthConfig {
   tokenParamName?: string; // For SSE connections, specifies the query parameter name for the token
   registrationUrl?: string;
 }
+
 /**
  * OAuth authorization response.
  */
@@ -51,6 +51,7 @@ export interface OAuthAuthorizationResponse {
   code: string;
   state: string;
 }
+
 /**
  * Dynamic client registration request (RFC 7591).
  */
@@ -62,6 +63,7 @@ export interface OAuthClientRegistrationRequest {
   token_endpoint_auth_method: string;
   scope?: string;
 }
+
 /**
  * Dynamic client registration response (RFC 7591).
  */
@@ -76,11 +78,16 @@ export interface OAuthClientRegistrationResponse {
   token_endpoint_auth_method: string;
   scope?: string;
 }
+
+/**
+ * PKCE (Proof Key for Code Exchange) parameters.
+ */
 interface PKCEParams {
   codeVerifier: string;
   codeChallenge: string;
   state: string;
 }
+
 const REDIRECT_PATH = '/oauth/callback';
 const HTTP_OK = 200;
 
@@ -105,6 +112,7 @@ async function applyWWWAuthenticateDiscovery(
     clientSecret: config.clientSecret,
   };
 }
+
 async function applyAuthenticateHeaderDiscovery(
   response: Response,
   mcpServerUrl: string,
@@ -116,6 +124,7 @@ async function applyAuthenticateHeaderDiscovery(
   }
   return applyWWWAuthenticateDiscovery(wwwAuthenticate, mcpServerUrl, config);
 }
+
 /**
  * Handle an incoming OAuth callback request.
  * Validates the state, extracts the auth code, and sends a response to the browser.
@@ -137,6 +146,7 @@ async function handleOAuthCallback(
       res.end('Not found');
       return;
     }
+
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
     const error = url.searchParams.get('error');
@@ -157,6 +167,7 @@ async function handleOAuthCallback(
       reject(new Error(`OAuth error: ${error}`));
       return;
     }
+
     if (!code || !state) {
       res.writeHead(400);
       res.end('Missing code or state parameter');
@@ -194,6 +205,9 @@ async function handleOAuthCallback(
  * Provider for handling OAuth authentication for MCP servers.
  */
 export class MCPOAuthProvider {
+  /**
+   * Register a client dynamically with the OAuth server.
+   */
   private static async registerClient(
     registrationUrl: string,
     config: MCPOAuthConfig,
@@ -313,30 +327,32 @@ export class MCPOAuthProvider {
     };
   }
 
-  private static generatePKCEParams(
-    dependencies: MCPOAuthProviderDependencies,
-  ): PKCEParams {
-    const codeVerifier = (dependencies.randomBytes ?? crypto.randomBytes)(
-      64,
-    ).toString('base64url');
+  /**
+   * Generate PKCE parameters for OAuth flow.
+   */
+  private static generatePKCEParams(): PKCEParams {
+    // Generate code verifier (43-128 characters)
+    // using 64 bytes results in ~86 characters, safely above the minimum of 43
+    const codeVerifier = crypto.randomBytes(64).toString('base64url');
 
-    const codeChallenge = (dependencies.createHash ?? crypto.createHash)(
-      'sha256',
-    )
+    // Generate code challenge using SHA256
+    const codeChallenge = crypto
+      .createHash('sha256')
       .update(codeVerifier)
       .digest('base64url');
 
-    const state = (dependencies.randomBytes ?? crypto.randomBytes)(16).toString(
-      'base64url',
-    );
+    // Generate state for CSRF protection
+    const state = crypto.randomBytes(16).toString('base64url');
 
     return { codeVerifier, codeChallenge, state };
   }
 
+  /**
+   * Start a local HTTP server to handle OAuth callback.
+   */
   private static startCallbackServer(
     expectedState: string,
-    port: number | undefined,
-    createServer: typeof http.createServer,
+    port?: number,
   ): {
     port: Promise<number>;
     response: Promise<OAuthAuthorizationResponse>;
@@ -352,7 +368,7 @@ export class MCPOAuthProvider {
       (resolve, reject) => {
         let serverPort: number;
 
-        const server = createServer(
+        const server = http.createServer(
           (req: http.IncomingMessage, res: http.ServerResponse) => {
             void handleOAuthCallback(
               req,
@@ -453,6 +469,7 @@ export class MCPOAuthProvider {
       params.append('audience', config.audiences.join(' '));
     }
 
+    // Add resource parameter for MCP OAuth spec compliance
     if (mcpServerUrl) {
       try {
         params.append(
@@ -502,6 +519,7 @@ export class MCPOAuthProvider {
       params.append('audience', config.audiences.join(' '));
     }
 
+    // Add resource parameter for MCP OAuth spec compliance
     if (mcpServerUrl) {
       try {
         params.append(
@@ -572,6 +590,7 @@ export class MCPOAuthProvider {
       params.append('audience', config.audiences.join(' '));
     }
 
+    // Add resource parameter for MCP OAuth spec compliance
     if (mcpServerUrl) {
       try {
         params.append(
@@ -781,7 +800,6 @@ export class MCPOAuthProvider {
       port: Promise<number>;
       response: Promise<OAuthAuthorizationResponse>;
     },
-    openBrowser: typeof openBrowserSecurely,
     events?: EventEmitter,
   ): Promise<string> {
     const displayMessage = (message: string) => {
@@ -808,7 +826,7 @@ TIP: Triple-click to select the entire URL, then copy and paste it into your bro
 WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.`);
 
     try {
-      await openBrowser(authUrl);
+      await openBrowserSecurely(authUrl);
     } catch (error) {
       debugLogger.warn(
         'Failed to open browser automatically:',
@@ -858,7 +876,6 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
     config: MCPOAuthConfig,
     mcpServerUrl?: string,
     events?: EventEmitter,
-    dependencies: MCPOAuthProviderDependencies = {},
   ): Promise<MCPOAuthToken> {
     config = await this.discoverOAuthConfigIfNeeded(
       serverName,
@@ -866,13 +883,12 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
       mcpServerUrl,
     );
 
-    const pkceParams = this.generatePKCEParams(dependencies);
+    const pkceParams = this.generatePKCEParams();
     const preferredPort = this.getPortFromUrl(config.redirectUri);
 
     const callbackServer = this.startCallbackServer(
       pkceParams.state,
       preferredPort,
-      dependencies.createServer ?? http.createServer,
     );
 
     const redirectPort = await callbackServer.port;
@@ -892,7 +908,6 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
       redirectPort,
       mcpServerUrl,
       callbackServer,
-      dependencies.openBrowser ?? openBrowserSecurely,
       events,
     );
 
@@ -931,11 +946,13 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
       `Found token for server: ${serverName}, expired: ${MCPOAuthTokenStorage.isTokenExpired(token)}`,
     );
 
+    // Check if token is expired
     if (!MCPOAuthTokenStorage.isTokenExpired(token)) {
       debugLogger.debug(`Returning valid token for server: ${serverName}`);
       return token.accessToken;
     }
 
+    // Try to refresh if we have a refresh token
     if (token.refreshToken && config.clientId && credentials.tokenUrl) {
       try {
         debugLogger.log(
@@ -949,6 +966,7 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
           credentials.mcpServerUrl,
         );
 
+        // Update stored token
         const newToken: MCPOAuthToken = {
           accessToken: newTokenResponse.access_token,
           tokenType: newTokenResponse.token_type,
@@ -974,6 +992,7 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
         return newToken.accessToken;
       } catch (error) {
         debugLogger.error(`Failed to refresh token: ${getErrorMessage(error)}`);
+        // Remove invalid token
         await tokenStorage.deleteCredentials(serverName);
       }
     }

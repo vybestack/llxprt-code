@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { DebugLogger } from '@vybestack/llxprt-code-core';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';

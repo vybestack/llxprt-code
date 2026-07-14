@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { convertToFunctionResponse } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';

@@ -14,7 +14,7 @@
  * @requirement:REQ-TEST-001
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { RuntimeContentGeneratorFactory } from './RuntimeContentGeneratorFactory.js';
 import type { RuntimeProviderManager } from './RuntimeProviderManager.js';
 import type { RuntimeProvider } from './RuntimeProvider.js';

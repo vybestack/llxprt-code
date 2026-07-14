@@ -152,23 +152,20 @@ export async function waitForStatus(
   onToolCallsUpdate: Mock,
   status: ToolCall['status'],
 ): Promise<ToolCall | undefined> {
-  const deadline = Date.now() + 1000;
-  let latestCalls: ToolCall[] | undefined;
-  do {
+  let matchingCall: ToolCall | undefined;
+  await vi.waitFor(() => {
     const calls = onToolCallsUpdate.mock.calls;
-    latestCalls = calls[calls.length - 1]?.[0] as ToolCall[] | undefined;
-    const matchingCall = latestCalls?.find((call) => call.status === status);
-    if (matchingCall) {
-      return matchingCall;
+    const latestCalls = calls[calls.length - 1]?.[0] as ToolCall[] | undefined;
+    matchingCall = latestCalls?.find((call) => call.status === status);
+    if (!matchingCall) {
+      throw new Error(
+        `Waiting for status "${status}", latest statuses: ${
+          latestCalls?.map((call) => call.status).join(', ') ?? 'none'
+        }`,
+      );
     }
-    await new Promise<void>((resolve) => setTimeout(resolve, 10));
-  } while (Date.now() < deadline);
-
-  throw new Error(
-    `Waiting for status "${status}", latest statuses: ${
-      latestCalls?.map((call) => call.status).join(', ') ?? 'none'
-    }`,
-  );
+  });
+  return matchingCall;
 }
 
 export class MockEditToolInvocation extends BaseToolInvocation<

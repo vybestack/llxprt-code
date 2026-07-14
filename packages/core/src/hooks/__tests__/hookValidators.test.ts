@@ -7,20 +7,9 @@
  * These tests verify runtime validation at mediated boundaries.
  * All validators are type predicates that narrow TypeScript types.
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
+import { test } from '@fast-check/vitest';
 import * as fc from 'fast-check';
-
-function propertyTest<TValues extends [unknown, ...unknown[]]>(
-  arbitraries: { [TIndex in keyof TValues]: fc.Arbitrary<TValues[TIndex]> },
-  name: string,
-  predicate: (...values: TValues) => void,
-): void {
-  it(name, () => {
-    fc.assert(
-      fc.property(fc.tuple(...arbitraries), (values) => predicate(...values)),
-    );
-  });
-}
 
 import {
   validateBeforeToolInput,
@@ -280,20 +269,19 @@ describe('Property-based validation invariants @plan:PLAN-20250218-HOOKSYSTEM.P1
    * @plan PLAN-20250218-HOOKSYSTEM.P10
    * @requirement DELTA-HPAY-001
    */
-  propertyTest(
-    [
-      fc.string({ minLength: 1, maxLength: 64 }), // non-empty tool name
-      fc.record({
-        // shaped input record
-        path: fc.string({ minLength: 1 }),
-        encoding: fc.constantFrom('utf8', 'binary', 'base64'),
-      }),
-      fc.record({
-        // extra fields: scalar values
-        extra_flag: fc.boolean(),
-        extra_count: fc.integer({ min: 0, max: 999 }),
-      }),
-    ],
+  test.prop([
+    fc.string({ minLength: 1, maxLength: 64 }), // non-empty tool name
+    fc.record({
+      // shaped input record
+      path: fc.string({ minLength: 1 }),
+      encoding: fc.constantFrom('utf8', 'binary', 'base64'),
+    }),
+    fc.record({
+      // extra fields: scalar values
+      extra_flag: fc.boolean(),
+      extra_count: fc.integer({ min: 0, max: 999 }),
+    }),
+  ])(
     'METAMORPHIC: validateBeforeToolInput(valid + extra) === validateBeforeToolInput(valid) @plan:PLAN-20250218-HOOKSYSTEM.P10',
     (toolName, toolInput, extraFields) => {
       const base = { tool_name: toolName, tool_input: toolInput };
@@ -310,11 +298,10 @@ describe('Property-based validation invariants @plan:PLAN-20250218-HOOKSYSTEM.P1
    * @plan PLAN-20250218-HOOKSYSTEM.P10
    * @requirement DELTA-HPAY-001
    */
-  propertyTest(
-    [
-      fc.string({ minLength: 1, maxLength: 64 }),
-      fc.record({ path: fc.string({ minLength: 1 }) }),
-    ],
+  test.prop([
+    fc.string({ minLength: 1, maxLength: 64 }),
+    fc.record({ path: fc.string({ minLength: 1 }) }),
+  ])(
     'METAMORPHIC: validateBeforeToolInput fails when tool_name removed @plan:PLAN-20250218-HOOKSYSTEM.P10',
     (toolName, toolInput) => {
       const valid = { tool_name: toolName, tool_input: toolInput };
@@ -330,17 +317,16 @@ describe('Property-based validation invariants @plan:PLAN-20250218-HOOKSYSTEM.P1
    * @plan PLAN-20250218-HOOKSYSTEM.P10
    * @requirement DELTA-HPAY-005
    */
-  propertyTest(
-    [
-      fc.oneof(
-        fc.constant(null),
-        fc.constant(undefined),
-        fc.integer(),
-        fc.boolean(),
-        fc.float(),
-        fc.string({ maxLength: 10 }), // strings are primitives, not objects
-      ),
-    ],
+  test.prop([
+    fc.oneof(
+      fc.constant(null),
+      fc.constant(undefined),
+      fc.integer(),
+      fc.boolean(),
+      fc.float(),
+      fc.string({ maxLength: 10 }), // strings are primitives, not objects
+    ),
+  ])(
     'METAMORPHIC: all validators reject any primitive input @plan:PLAN-20250218-HOOKSYSTEM.P10',
     (primitive) => {
       expect(validateBeforeToolInput(primitive)).toBe(false);
@@ -356,13 +342,12 @@ describe('Property-based validation invariants @plan:PLAN-20250218-HOOKSYSTEM.P1
    * @plan PLAN-20250218-HOOKSYSTEM.P10
    * @requirement DELTA-HPAY-001
    */
-  propertyTest(
-    [
-      fc.string({ minLength: 1, maxLength: 200 }), // non-empty message
-      fc.record({
-        severity: fc.constantFrom('info', 'warn', 'error'),
-      }),
-    ],
+  test.prop([
+    fc.string({ minLength: 1, maxLength: 200 }), // non-empty message
+    fc.record({
+      severity: fc.constantFrom('info', 'warn', 'error'),
+    }),
+  ])(
     'METAMORPHIC: validateNotificationInput passes for valid notification @plan:PLAN-20250218-HOOKSYSTEM.P10',
     (message, extra) => {
       const payload = {
@@ -379,12 +364,11 @@ describe('Property-based validation invariants @plan:PLAN-20250218-HOOKSYSTEM.P1
    * @plan PLAN-20250218-HOOKSYSTEM.P10
    * @requirement DELTA-HPAY-001
    */
-  propertyTest(
-    [
-      fc.record({
-        severity: fc.constantFrom('info', 'warn', 'error'),
-      }),
-    ],
+  test.prop([
+    fc.record({
+      severity: fc.constantFrom('info', 'warn', 'error'),
+    }),
+  ])(
     'METAMORPHIC: validateNotificationInput rejects empty string message @plan:PLAN-20250218-HOOKSYSTEM.P10',
     (extra) => {
       const payload = {
@@ -401,8 +385,7 @@ describe('Property-based validation invariants @plan:PLAN-20250218-HOOKSYSTEM.P1
    * @plan PLAN-20250218-HOOKSYSTEM.P10
    * @requirement DELTA-HPAY-001
    */
-  propertyTest(
-    [fc.string({ minLength: 1, maxLength: 500 })],
+  test.prop([fc.string({ minLength: 1, maxLength: 500 })])(
     'METAMORPHIC: validateBeforeAgentInput passes for any non-empty prompt @plan:PLAN-20250218-HOOKSYSTEM.P10',
     (prompt) => {
       expect(validateBeforeAgentInput({ prompt })).toBe(true);

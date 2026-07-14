@@ -4,12 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import type { Mock } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { UserAccountManager } from './userAccountManager.js';
 import * as debugLoggerModule from './debugLogger.js';
 import * as fs from 'node:fs';
-import os from 'node:os';
+import * as os from 'node:os';
 import path from 'node:path';
+import { Storage } from '@vybestack/llxprt-code-settings';
+
+vi.mock('os', async (importOriginal) => {
+  const os = await importOriginal<typeof import('os')>();
+  return {
+    ...os,
+    homedir: vi.fn(),
+  };
+});
 
 describe('UserAccountManager', () => {
   let tempHomeDir: string;
@@ -20,9 +30,13 @@ describe('UserAccountManager', () => {
     tempHomeDir = fs.mkdtempSync(
       path.join(os.tmpdir(), 'llxprt-code-test-home-'),
     );
+    (os.homedir as Mock).mockReturnValue(tempHomeDir);
     accountsFile = () =>
       path.join(tempHomeDir, '.llxprt', 'provider_accounts.json');
-    userAccountManager = new UserAccountManager(accountsFile);
+    vi.spyOn(Storage, 'getProviderAccountsPath').mockImplementation(() =>
+      accountsFile(),
+    );
+    userAccountManager = new UserAccountManager();
   });
 
   afterEach(() => {

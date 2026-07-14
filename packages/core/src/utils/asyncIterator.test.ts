@@ -9,7 +9,7 @@
  * @issue #1750 - Stream retry boundary fix
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { prependAsyncGenerator } from './asyncIterator.js';
 
 describe('prependAsyncGenerator', () => {

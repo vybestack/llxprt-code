@@ -6,8 +6,10 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { GoogleGenAIWrapper } from './googleGenAIWrapper.js';
-import type { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 import type { ModelGenerationRequest } from '../llm-types/modelRequest.js';
+
+vi.mock('@google/genai');
 
 function makeModels() {
   const mockGenerateContent = vi.fn().mockResolvedValue({
@@ -38,15 +40,15 @@ function makeModels() {
 }
 
 describe('GoogleGenAIWrapper (neutral)', () => {
-  const createGoogleGenAI = vi.fn();
   it('generateContent converts neutral request and returns neutral ModelOutput', async () => {
     const models = makeModels();
-    createGoogleGenAI.mockReturnValue({ models } as unknown as GoogleGenAI);
+    vi.mocked(GoogleGenAI).mockImplementation(
+      () => ({ models }) as unknown as GoogleGenAI,
+    );
 
     const wrapper = new GoogleGenAIWrapper(
       { model: 'gemini-pro', apiKey: 'test-key' },
       { headers: {} },
-      createGoogleGenAI,
     );
 
     const request: ModelGenerationRequest = {
@@ -74,12 +76,13 @@ describe('GoogleGenAIWrapper (neutral)', () => {
 
   it('generateContentStream yields neutral ModelStreamChunk values', async () => {
     const models = makeModels();
-    createGoogleGenAI.mockReturnValue({ models } as unknown as GoogleGenAI);
+    vi.mocked(GoogleGenAI).mockImplementation(
+      () => ({ models }) as unknown as GoogleGenAI,
+    );
 
     const wrapper = new GoogleGenAIWrapper(
       { model: 'gemini-pro', apiKey: 'test-key' },
       { headers: {} },
-      createGoogleGenAI,
     );
 
     const request: ModelGenerationRequest = {
@@ -105,12 +108,13 @@ describe('GoogleGenAIWrapper (neutral)', () => {
 
   it('countTokens returns neutral CountTokensResult', async () => {
     const models = makeModels();
-    createGoogleGenAI.mockReturnValue({ models } as unknown as GoogleGenAI);
+    vi.mocked(GoogleGenAI).mockImplementation(
+      () => ({ models }) as unknown as GoogleGenAI,
+    );
 
     const wrapper = new GoogleGenAIWrapper(
       { model: 'gemini-pro', apiKey: 'test-key' },
       { headers: {} },
-      createGoogleGenAI,
     );
 
     const result = await wrapper.countTokens({
@@ -122,12 +126,13 @@ describe('GoogleGenAIWrapper (neutral)', () => {
 
   it('embedContent returns neutral EmbedContentResult', async () => {
     const models = makeModels();
-    createGoogleGenAI.mockReturnValue({ models } as unknown as GoogleGenAI);
+    vi.mocked(GoogleGenAI).mockImplementation(
+      () => ({ models }) as unknown as GoogleGenAI,
+    );
 
     const wrapper = new GoogleGenAIWrapper(
       { model: 'gemini-pro', apiKey: 'test-key' },
       { headers: {} },
-      createGoogleGenAI,
     );
 
     const result = await wrapper.embedContent({ texts: ['hello'] });
@@ -136,9 +141,9 @@ describe('GoogleGenAIWrapper (neutral)', () => {
   });
 
   it('properly initializes GoogleGenAI with config', () => {
-    createGoogleGenAI.mockReturnValue({
-      models: makeModels(),
-    } as unknown as GoogleGenAI);
+    vi.mocked(GoogleGenAI).mockImplementation(
+      () => ({ models: makeModels() }) as unknown as GoogleGenAI,
+    );
 
     const config = {
       model: 'gemini-pro',
@@ -148,9 +153,9 @@ describe('GoogleGenAIWrapper (neutral)', () => {
 
     const httpOptions = { headers: { 'User-Agent': 'Test' } };
 
-    new GoogleGenAIWrapper(config, httpOptions, createGoogleGenAI);
+    new GoogleGenAIWrapper(config, httpOptions);
 
-    expect(createGoogleGenAI).toHaveBeenCalledWith({
+    expect(GoogleGenAI).toHaveBeenCalledWith({
       apiKey: 'test-key',
       vertexai: true,
       httpOptions,
@@ -158,18 +163,18 @@ describe('GoogleGenAIWrapper (neutral)', () => {
   });
 
   it('handles undefined apiKey', () => {
-    createGoogleGenAI.mockReturnValue({
-      models: makeModels(),
-    } as unknown as GoogleGenAI);
+    vi.mocked(GoogleGenAI).mockImplementation(
+      () => ({ models: makeModels() }) as unknown as GoogleGenAI,
+    );
 
     const config = {
       model: 'gemini-pro',
       apiKey: '',
     };
 
-    new GoogleGenAIWrapper(config, { headers: {} }, createGoogleGenAI);
+    new GoogleGenAIWrapper(config, { headers: {} });
 
-    expect(createGoogleGenAI).toHaveBeenCalledWith({
+    expect(GoogleGenAI).toHaveBeenCalledWith({
       apiKey: undefined,
       vertexai: undefined,
       httpOptions: { headers: {} },

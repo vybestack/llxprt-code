@@ -11,7 +11,7 @@
  * turn handling do not hang.
  */
 
-import { describe, it, expect, beforeAll, vi } from 'bun:test';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { ToolCallPipeline } from './ToolCallPipeline.js';
 

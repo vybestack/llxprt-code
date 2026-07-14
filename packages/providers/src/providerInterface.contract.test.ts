@@ -5,7 +5,7 @@
  * @pseudocode provider-invocation.md lines 3-12
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import type {
   BaseProviderConfig,
   NormalizedGenerateChatOptions,

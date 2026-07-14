@@ -21,7 +21,7 @@
  * assertions pass with no rewrite.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import {
   fromConfig,
@@ -133,7 +133,7 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
   });
 
   it('T1d fromConfig({}) without a config rejects with a clear validation error (NOT NotYetImplemented) @requirement:REQ-001 @scenario:validation @given:an options object missing the required config field @when:fromConfig({} as never) @then:the promise rejects with an Error whose message names the missing config field (never the NotYetImplemented stub string)', async () => {
-    expect(fromConfig({} as never)).rejects.toThrow(/config|Config/i);
+    await expect(fromConfig({} as never)).rejects.toThrow(/config|Config/i);
   });
 
   it('T1e fromConfig with sessionId sets the runtime id deterministically; without sessionId it derives a non-empty runtime id @requirement:REQ-001 @scenario:runtimeId @given:a caller-supplied sessionId @when:fromConfig({ config, sessionId }) @then:the runtime id observable equals the supplied sessionId; @given:no sessionId @then:the runtime id observable is a non-empty generated string', async () => {

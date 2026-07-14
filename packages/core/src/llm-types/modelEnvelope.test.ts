@@ -3,9 +3,8 @@
  * @requirement REQ-005.1, REQ-005.2, REQ-005.3, REQ-005.4, REQ-005.5
  * @pseudocode lines 10-52
  */
-import { describe, expect } from 'bun:test';
-import { it } from 'bun:test';
-import { propertyTest } from '../test-utils/propertyTest.js';
+import { describe, expect } from 'vitest';
+import { it } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import {
   emptyModelOutput,
@@ -269,19 +268,18 @@ describe('accumulateModelStreamChunk', () => {
 // ---------------------------------------------------------------------------
 
 describe('accumulateModelStreamChunk property-based', () => {
-  propertyTest(
-    [
+  it.prop([
+    fc.array(
       fc.array(
-        fc.array(
-          fc.record({
-            type: fc.constant('text' as const),
-            text: fc.string({ minLength: 0, maxLength: 50 }),
-          }),
-          { minLength: 0, maxLength: 5 },
-        ),
+        fc.record({
+          type: fc.constant('text' as const),
+          text: fc.string({ minLength: 0, maxLength: 50 }),
+        }),
         { minLength: 0, maxLength: 5 },
       ),
-    ],
+      { minLength: 0, maxLength: 5 },
+    ),
+  ])(
     'for ANY sequence of text-block chunks, accumulated blocks length === sum of chunk block lengths and text preserved in order',
     (blocksPerChunk) => {
       const chunks: ModelStreamChunk[] = blocksPerChunk.map((blocks) => ({
@@ -301,8 +299,7 @@ describe('accumulateModelStreamChunk property-based', () => {
     },
   );
 
-  propertyTest(
-    [fc.string({ minLength: 1, maxLength: 20 })],
+  it.prop([fc.string({ minLength: 1, maxLength: 20 })])(
     'accumulate is pure: repeated accumulation yields same result',
     (text) => {
       const c1 = chunkWithText(text);
@@ -380,16 +377,15 @@ describe('getToolCalls', () => {
 });
 
 describe('getToolCalls property-based', () => {
-  propertyTest(
-    [
-      fc.array(
-        fc.record({
-          id: fc.string({ minLength: 1, maxLength: 10 }),
-          name: fc.string({ minLength: 1, maxLength: 15 }),
-        }),
-        { minLength: 0, maxLength: 8 },
-      ),
-    ],
+  it.prop([
+    fc.array(
+      fc.record({
+        id: fc.string({ minLength: 1, maxLength: 10 }),
+        name: fc.string({ minLength: 1, maxLength: 15 }),
+      }),
+      { minLength: 0, maxLength: 8 },
+    ),
+  ])(
     'n tool_call blocks in → n ToolCallRequests out with matching names',
     (calls) => {
       const output: ModelOutput = {
@@ -522,8 +518,7 @@ describe('toModelStreamChunk', () => {
 });
 
 describe('toModelStreamChunk property-based', () => {
-  propertyTest(
-    [fc.constantFrom(...CANONICAL_FINISH_REASONS)],
+  it.prop([fc.constantFrom(...CANONICAL_FINISH_REASONS)])(
     'already-canonical raw passes through unchanged',
     (canonical: string) => {
       const ic: IContent = {
@@ -538,8 +533,7 @@ describe('toModelStreamChunk property-based', () => {
     },
   );
 
-  propertyTest(
-    [fc.string({ minLength: 0, maxLength: 30 })],
+  it.prop([fc.string({ minLength: 0, maxLength: 30 })])(
     'any raw stopReason produces a canonical finishReason and preserves raw',
     (raw: string) => {
       const ic: IContent = {
@@ -554,8 +548,7 @@ describe('toModelStreamChunk property-based', () => {
     },
   );
 
-  propertyTest(
-    [fc.string({ minLength: 0, maxLength: 20 })],
+  it.prop([fc.string({ minLength: 0, maxLength: 20 })])(
     'toModelStreamChunk never mutates input IContent',
     (text) => {
       const ic: IContent = {
@@ -569,28 +562,23 @@ describe('toModelStreamChunk property-based', () => {
     },
   );
 
-  propertyTest(
-    [
-      fc.record({
-        promptTokens: fc.nat({ max: 10000 }),
-        completionTokens: fc.nat({ max: 10000 }),
-        totalTokens: fc.nat({ max: 20000 }),
-      }),
-    ],
-    'toModelStreamChunk preserves usage byte-identical from metadata',
-    (u) => {
-      const ic: IContent = {
-        speaker: 'ai',
-        blocks: [],
-        metadata: { usage: u },
-      };
-      const result = toModelStreamChunk(ic);
-      return JSON.stringify(result.usage) === JSON.stringify(u);
-    },
-  );
+  it.prop([
+    fc.record({
+      promptTokens: fc.nat({ max: 10000 }),
+      completionTokens: fc.nat({ max: 10000 }),
+      totalTokens: fc.nat({ max: 20000 }),
+    }),
+  ])('toModelStreamChunk preserves usage byte-identical from metadata', (u) => {
+    const ic: IContent = {
+      speaker: 'ai',
+      blocks: [],
+      metadata: { usage: u },
+    };
+    const result = toModelStreamChunk(ic);
+    return JSON.stringify(result.usage) === JSON.stringify(u);
+  });
 
-  propertyTest(
-    [fc.string({ minLength: 1, maxLength: 30 })],
+  it.prop([fc.string({ minLength: 1, maxLength: 30 })])(
     'toModelStreamChunk preserves id as responseId',
     (id) => {
       const ic: IContent = {
@@ -608,8 +596,7 @@ describe('toModelStreamChunk property-based', () => {
 // ---------------------------------------------------------------------------
 
 describe('emptyModelOutput property-based', () => {
-  propertyTest(
-    [fc.constantFrom('human', 'ai', 'tool')],
+  it.prop([fc.constantFrom('human', 'ai', 'tool')])(
     'always produces empty blocks array and correct speaker',
     (speaker) => {
       const out = emptyModelOutput(speaker);
@@ -621,8 +608,7 @@ describe('emptyModelOutput property-based', () => {
     },
   );
 
-  propertyTest(
-    [fc.constantFrom('human', 'ai', 'tool')],
+  it.prop([fc.constantFrom('human', 'ai', 'tool')])(
     'result has no optional keys regardless of speaker',
     (speaker) => {
       const out = emptyModelOutput(speaker);
@@ -644,17 +630,16 @@ describe('emptyModelOutput property-based', () => {
 // ---------------------------------------------------------------------------
 
 describe('accumulateModelStreamChunk additional property-based', () => {
-  propertyTest(
-    [
-      fc.record({
-        a: fc.nat({ max: 100 }),
-        b: fc.nat({ max: 100 }),
-      }),
-      fc.record({
-        b: fc.nat({ max: 100 }),
-        c: fc.nat({ max: 100 }),
-      }),
-    ],
+  it.prop([
+    fc.record({
+      a: fc.nat({ max: 100 }),
+      b: fc.nat({ max: 100 }),
+    }),
+    fc.record({
+      b: fc.nat({ max: 100 }),
+      c: fc.nat({ max: 100 }),
+    }),
+  ])(
     'providerMetadata shallow-merge always has chunk keys overwrite acc keys',
     (accMeta, chunkMeta) => {
       const acc: ModelOutput = {
@@ -676,33 +661,28 @@ describe('accumulateModelStreamChunk additional property-based', () => {
     },
   );
 
-  propertyTest(
-    [
-      fc.record({
-        promptTokens: fc.nat({ max: 1000 }),
-        completionTokens: fc.nat({ max: 1000 }),
-        totalTokens: fc.nat({ max: 2000 }),
-      }),
-    ],
-    'usage from last chunk always wins',
-    (finalUsage) => {
-      const acc: ModelOutput = {
-        content: { speaker: 'ai', blocks: [] },
-        usage: usage(1, 1, 2),
-      };
-      const chunk: ModelStreamChunk = {
-        content: { speaker: 'ai', blocks: [] },
-        usage: finalUsage,
-      };
-      return (
-        JSON.stringify(accumulateModelStreamChunk(acc, chunk).usage) ===
-        JSON.stringify(finalUsage)
-      );
-    },
-  );
+  it.prop([
+    fc.record({
+      promptTokens: fc.nat({ max: 1000 }),
+      completionTokens: fc.nat({ max: 1000 }),
+      totalTokens: fc.nat({ max: 2000 }),
+    }),
+  ])('usage from last chunk always wins', (finalUsage) => {
+    const acc: ModelOutput = {
+      content: { speaker: 'ai', blocks: [] },
+      usage: usage(1, 1, 2),
+    };
+    const chunk: ModelStreamChunk = {
+      content: { speaker: 'ai', blocks: [] },
+      usage: finalUsage,
+    };
+    return (
+      JSON.stringify(accumulateModelStreamChunk(acc, chunk).usage) ===
+      JSON.stringify(finalUsage)
+    );
+  });
 
-  propertyTest(
-    [fc.array(textBlockArb(), { minLength: 0, maxLength: 3 })],
+  it.prop([fc.array(textBlockArb(), { minLength: 0, maxLength: 3 })])(
     'accumulating into emptyModelOutput preserves block count',
     (blocks) => {
       const chunk: ModelStreamChunk = {
@@ -713,17 +693,16 @@ describe('accumulateModelStreamChunk additional property-based', () => {
     },
   );
 
-  propertyTest(
-    [
-      fc.array(
-        fc.record({
-          id: fc.string({ minLength: 1, maxLength: 10 }),
-          name: fc.string({ minLength: 1, maxLength: 15 }),
-          parameters: fc.record({ value: fc.nat({ max: 100 }) }),
-        }),
-        { minLength: 0, maxLength: 5 },
-      ),
-    ],
+  it.prop([
+    fc.array(
+      fc.record({
+        id: fc.string({ minLength: 1, maxLength: 10 }),
+        name: fc.string({ minLength: 1, maxLength: 15 }),
+        parameters: fc.record({ value: fc.nat({ max: 100 }) }),
+      }),
+      { minLength: 0, maxLength: 5 },
+    ),
+  ])(
     'getToolCalls extracts matching args when parameters is a plain object',
     (calls) => {
       const output: ModelOutput = {

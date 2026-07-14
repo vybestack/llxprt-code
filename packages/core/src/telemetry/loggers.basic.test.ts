@@ -27,7 +27,7 @@ import {
 } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
 import * as metrics from '@vybestack/llxprt-code-telemetry/telemetry/metrics.js';
 import * as sdk from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
-import { vi, describe, beforeEach, it, expect } from 'bun:test';
+import { vi, describe, beforeEach, it, expect } from 'vitest';
 import type { RuntimeUsageMetadata } from '../runtime/AgentRuntimeContext.js';
 import * as uiTelemetry from './uiTelemetry.js';
 

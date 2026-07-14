@@ -19,10 +19,8 @@
  *        independent try/catch per call (no provider-name branching).
  */
 
-import {
-  DebugLogger,
-  flushRuntimeAuthScope,
-} from '@vybestack/llxprt-code-core';
+import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { AuthStatus, TokenStore } from './types.js';
 import type { ProviderRegistry } from './provider-registry.js';
 import type { ProactiveRenewalManager } from './proactive-renewal-manager.js';
@@ -40,7 +38,6 @@ export class AuthStatusService {
     private readonly proactiveRenewalManager: ProactiveRenewalManager,
     private readonly bucketManager: OAuthBucketManager,
     private readonly tokenAccessCoordinator: TokenAccessCoordinator,
-    private readonly flushAuthScope: typeof flushRuntimeAuthScope = flushRuntimeAuthScope,
   ) {}
 
   // --------------------------------------------------------------------------
@@ -438,7 +435,7 @@ export class AuthStatusService {
     }
 
     try {
-      this.flushAuthScope(runtimeContext.runtimeId);
+      flushRuntimeAuthScope(runtimeContext.runtimeId);
       logger.debug(
         `Flushed runtime auth scope ${runtimeContext.runtimeId} for ${providerName}`,
       );

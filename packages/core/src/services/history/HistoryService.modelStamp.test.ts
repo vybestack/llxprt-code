@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { HistoryService } from './HistoryService.js';
 import { stampAiTurnModel, type IContent } from './IContent.js';
 

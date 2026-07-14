@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { tokenLimit, DEFAULT_TOKEN_LIMIT } from './tokenLimits.js';
 
 describe('tokenLimit', () => {
@@ -152,6 +152,11 @@ describe('tokenLimit', () => {
     it('should return 256K for codex-prefixed non-suffixed models', () => {
       // These IDs contain no "codex" substring, so only the provider prefix
       // can identify them as Codex models (per composition/aliases/codex.config).
+      expect(tokenLimit('codex:gpt-5.6')).toBe(262_144);
+      expect(tokenLimit('codex:gpt-5.6-sol')).toBe(262_144);
+      expect(tokenLimit('codex:gpt-5.6-terra')).toBe(262_144);
+      expect(tokenLimit('codex:gpt-5.6-luna')).toBe(262_144);
+      expect(tokenLimit('codex:gpt-5.7-sol')).toBe(262_144);
       expect(tokenLimit('codex:gpt-5.5')).toBe(262_144);
       expect(tokenLimit('codex:gpt-5.4')).toBe(262_144);
       expect(tokenLimit('codex:gpt-5.2')).toBe(262_144);

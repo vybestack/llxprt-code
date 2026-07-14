@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, afterEach } from 'bun:test';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { CoreToolScheduler, type ToolCall } from './coreToolScheduler.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
@@ -25,21 +25,6 @@ function createMockPolicyEngine() {
     evaluate: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
     checkDecision: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
   };
-}
-
-async function waitForCondition(
-  condition: () => boolean,
-  description: string,
-  timeoutMs = 5000,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (condition()) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error(`Timed out waiting for ${description}`);
 }
 
 function createMockToolRegistry(mockTool: MockTool) {
@@ -176,10 +161,10 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     );
 
     // Wait for all tools to start executing
-    await waitForCondition(() => {
+    await vi.waitFor(() => {
       const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
       return calls.filter((c) => c.status === 'executing').length === 3;
-    }, 'all three tools to enter executing state');
+    });
 
     // Complete tools 1 and 2 first (they're fast)
     tool1Resolve!();
@@ -195,12 +180,12 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     tool0Resolve!();
 
     // The scheduler should complete without hanging
-    await waitForCondition(
-      () => onAllToolCallsComplete.mock.calls.length > 0,
-      'tool completion callback',
-      2000,
+    await vi.waitFor(
+      () => {
+        expect(onAllToolCallsComplete).toHaveBeenCalled();
+      },
+      { timeout: 2000 },
     );
-    expect(onAllToolCallsComplete).toHaveBeenCalled();
 
     const finalCalls = onAllToolCallsComplete.mock.calls.at(
       -1,
@@ -276,10 +261,10 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     );
 
     // Wait for tool to start executing
-    await waitForCondition(() => {
+    await vi.waitFor(() => {
       const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
       return calls.some((c) => c.status === 'executing');
-    }, 'a tool to enter executing state');
+    });
 
     // Cancel and abort
     scheduler.cancelAll();
@@ -289,12 +274,12 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     await schedulePromise;
 
     // Wait for completion
-    await waitForCondition(
-      () => onAllToolCallsComplete.mock.calls.length > 0,
-      'tool completion callback',
-      2000,
+    await vi.waitFor(
+      () => {
+        expect(onAllToolCallsComplete).toHaveBeenCalled();
+      },
+      { timeout: 2000 },
     );
-    expect(onAllToolCallsComplete).toHaveBeenCalled();
 
     // Verify cancelled state
     const calls = onAllToolCallsComplete.mock.calls.at(-1)?.[0] as ToolCall[];
@@ -379,10 +364,10 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     );
 
     // Wait for all tools to start
-    await waitForCondition(() => {
+    await vi.waitFor(() => {
       const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
-      return calls.some((c) => c.status === 'executing');
-    }, 'a tool to enter executing state');
+      return calls.filter((c) => c.status === 'executing').length === 3;
+    });
 
     // Wait for fast tools (1 and 2) to complete and buffer their results
     // They complete quickly but can't be published until tool 0's result is ready
@@ -395,12 +380,12 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     slowToolResolve!();
 
     // Should complete without hanging
-    await waitForCondition(
-      () => onAllToolCallsComplete.mock.calls.length > 0,
-      'tool completion callback',
-      2000,
+    await vi.waitFor(
+      () => {
+        expect(onAllToolCallsComplete).toHaveBeenCalled();
+      },
+      { timeout: 2000 },
     );
-    expect(onAllToolCallsComplete).toHaveBeenCalled();
 
     const finalCalls = onAllToolCallsComplete.mock.calls.at(
       -1,

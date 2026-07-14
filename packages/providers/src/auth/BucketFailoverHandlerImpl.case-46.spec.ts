@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
 import { OAuthManager } from './oauth-manager.js';
 import {
@@ -56,8 +56,8 @@ describe('BucketFailoverHandlerImpl #46', () => {
     releaseForegroundAuth?.();
 
     // Assert: both calls succeed but only one foreground authenticate occurs.
-    expect(await first).toBe(true);
-    expect(await second).toBe(true);
+    await expect(first).resolves.toBe(true);
+    await expect(second).resolves.toBe(true);
     expect(oauthManager.authenticate).toHaveBeenCalledTimes(1);
     expect(oauthManager.authenticate).toHaveBeenCalledWith(
       'anthropic',

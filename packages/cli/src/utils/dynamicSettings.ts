@@ -1,4 +1,4 @@
-import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SettingDefinition } from '../config/settingsSchema.js';
 
 interface DynamicToolSettingsSource {

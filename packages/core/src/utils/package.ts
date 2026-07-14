@@ -32,10 +32,9 @@ export type PackageJson = BasePackageJson & {
  */
 export async function getPackageJson(
   cwd: string,
-  readPackage: typeof readPackageUp = readPackageUp,
 ): Promise<PackageJson | undefined> {
   try {
-    const result = await readPackage({ cwd, normalize: false });
+    const result = await readPackageUp({ cwd, normalize: false });
     if (!result) {
       return undefined;
     }

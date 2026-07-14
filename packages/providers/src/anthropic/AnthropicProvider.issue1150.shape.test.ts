@@ -19,7 +19,7 @@
  *
  * These tests document the exact bugs that need to be fixed.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type {
   IContent,
@@ -48,10 +48,28 @@ import type {
   AnthropicRequestBody,
 } from './test-utils/anthropicTestUtils.js';
 
+// Mock dependencies
+vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+  getCoreSystemPromptAsync: vi.fn(
+    async () => "You are Claude Code, Anthropic's official CLI for Claude.",
+  ),
+}));
+
+// REQ-RETRY-001: retryWithBackoff removed from providers
+vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+  getErrorStatus: vi.fn(() => undefined),
+  isNetworkTransientError: vi.fn(() => false),
+}));
+
 const mockMessagesCreate = vi.fn();
-const constructClient = () => ({
-  messages: { create: mockMessagesCreate },
-});
+
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: vi.fn().mockImplementation(() => ({
+    messages: {
+      create: mockMessagesCreate,
+    },
+  })),
+}));
 
 describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
   let provider: AnthropicProvider;
@@ -74,16 +92,10 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
           ...svc.getProviderSettings('anthropic'),
         });
 
-        return new AnthropicProvider(
-          'test-api-key',
-          undefined,
-          {
-            ...TEST_PROVIDER_CONFIG,
-            getEphemeralSettings: ephemeralSettingsGetter,
-          },
-          undefined,
-          { constructClient },
-        );
+        return new AnthropicProvider('test-api-key', undefined, {
+          ...TEST_PROVIDER_CONFIG,
+          getEphemeralSettings: ephemeralSettingsGetter,
+        });
       },
       {
         runtimeId: 'anthropic.shape.test',

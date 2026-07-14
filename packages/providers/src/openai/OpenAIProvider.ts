@@ -47,26 +47,28 @@ import { type DumpMode } from '../utils/dumpContext.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
 import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
+import {
+  resolveOpenAITransport,
+  resolveExplicitTransportModeFromSources,
+  OPENAI_TRANSPORT_SELECTOR_KEYS,
+} from './openaiModelPolicy.js';
+import {
+  executeOpenAIResponsesRequest,
+  type ResponsesExecutorDeps,
+} from '../openai-responses/openAIResponsesExecutor.js';
 
 import { buildContinuationMessages } from './OpenAIRequestBuilder.js';
 import { extractSanitizedChunkText } from './OpenAIStreamChunkText.js';
 import {
   createHttpAgents,
   resolveRuntimeKey,
-  createOpenAIClient,
   instantiateClient,
   mergeInvocationHeaders,
-  type OpenAIClientConstructor,
 } from './OpenAIClientFactory.js';
-
-export interface OpenAIProviderDependencies {
-  constructClient?: OpenAIClientConstructor;
-}
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
   private readonly textToolParser = new GemmaToolCallParser();
   private readonly toolCallPipeline = new ToolCallPipeline();
-  private readonly dependencies: OpenAIProviderDependencies;
 
   private getLogger(): DebugLogger {
     return new DebugLogger('llxprt:provider:openai');
@@ -81,7 +83,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     apiKey: string | undefined,
     baseURL?: string,
     config?: IProviderConfig,
-    dependencies?: Partial<OpenAIProviderDependencies>,
   ) {
     const normalizedApiKey =
       apiKey && apiKey.trim() !== '' ? apiKey : undefined;
@@ -96,9 +97,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       },
       config,
     );
-    this.dependencies = {
-      constructClient: dependencies?.constructClient ?? createOpenAIClient,
-    };
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
     // @requirement:REQ-SP4-002
@@ -114,6 +112,66 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    */
   private createToolFormatter(): ToolFormatter {
     return new ToolFormatter();
+  }
+
+  private buildResponsesExecutorDeps(): ResponsesExecutorDeps {
+    return {
+      providerName: this.name,
+      logger: new DebugLogger('llxprt:provider:openai'),
+      getProviderBaseURL: () => this.getBaseURL(),
+      getCustomHeaders: (options) => this.getCustomHeaders(options),
+      isCodexBaseURL: () => false,
+      getCodexAccountId: async () => {
+        throw new Error('Codex account ID not available for OpenAIProvider');
+      },
+      resolveAuthTokenForPrompt: async () => this.getAuthTokenForPrompt(),
+      generateSyntheticCallId: () => {
+        const randomSuffix = Math.random().toString(36).substring(2, 10);
+        return `call_synthetic_${randomSuffix}`;
+      },
+      shouldRetryOnError: (error) => this.shouldRetryResponse(error),
+      getDefaultModel: () => this.getDefaultModel(),
+      getGlobalConfig: () => undefined,
+    };
+  }
+
+  private resolveOpenAIResponsesEnabled(): boolean | undefined {
+    const settingsService = this.resolveSettingsService();
+    const providerValue = settingsService.getProviderSettings(this.name)[
+      'openaiResponsesEnabled'
+    ];
+    if (typeof providerValue === 'boolean') {
+      return providerValue;
+    }
+
+    const globalValue = settingsService.get('openaiResponsesEnabled');
+    if (typeof globalValue === 'boolean') {
+      return globalValue;
+    }
+
+    return this.providerConfig?.openaiResponsesEnabled;
+  }
+
+  private resolveTransport(
+    model: string,
+    baseURL: string | undefined,
+  ): { useResponses: boolean } {
+    const settingsService = this.resolveSettingsService();
+    const providerSettings = settingsService.getProviderSettings(this.name);
+    const explicitMode = resolveExplicitTransportModeFromSources(
+      providerSettings,
+      () => settingsService.get('responses-mode') as string | undefined,
+    );
+    return resolveOpenAITransport({
+      model,
+      baseURL,
+      explicitMode,
+      openaiResponsesEnabled: this.resolveOpenAIResponsesEnabled(),
+    });
+  }
+
+  getOpenaiResponsesEnabled(): boolean | undefined {
+    return this.resolveOpenAIResponsesEnabled();
   }
 
   protected async getClient(
@@ -144,13 +202,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // based on User-Agent, which must be sent as a real HTTP header.
     const headers = mergeInvocationHeaders(options);
 
-    return instantiateClient(
-      authToken,
-      baseURL,
-      agents,
-      headers,
-      this.dependencies.constructClient,
-    );
+    return instantiateClient(authToken, baseURL, agents, headers);
   }
 
   /**
@@ -225,6 +277,30 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Return commonly available OpenAI models as fallback
     // Use this.name so it works for providers that extend OpenAIProvider (e.g., Chutes.ai)
     return [
+      {
+        id: 'gpt-5.6',
+        name: 'GPT-5.6',
+        provider: this.name,
+        supportedToolFormats: ['openai'],
+      },
+      {
+        id: 'gpt-5.6-sol',
+        name: 'GPT-5.6 Sol',
+        provider: this.name,
+        supportedToolFormats: ['openai'],
+      },
+      {
+        id: 'gpt-5.6-terra',
+        name: 'GPT-5.6 Terra',
+        provider: this.name,
+        supportedToolFormats: ['openai'],
+      },
+      {
+        id: 'gpt-5.6-luna',
+        name: 'GPT-5.6 Luna',
+        provider: this.name,
+        supportedToolFormats: ['openai'],
+      },
       {
         id: 'gpt-5.5',
         name: 'GPT-5.5',
@@ -351,6 +427,18 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
+    const model = options.resolved.model || this.getModel();
+    const baseURL = options.resolved.baseURL ?? this.baseProviderConfig.baseURL;
+
+    const decision = this.resolveTransport(model, baseURL);
+    if (decision.useResponses) {
+      yield* executeOpenAIResponsesRequest(
+        options,
+        this.buildResponsesExecutorDeps(),
+      );
+      return;
+    }
+
     const callFormatter = this.createToolFormatter();
     const client = await this.getClient(options);
     const runtimeKey = resolveRuntimeKey(options);
@@ -411,6 +499,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         'toolFormatOverride',
         'tool-format-override',
         'defaultModel',
+        // Transport selectors are control-plane settings, not model params
+        ...OPENAI_TRANSPORT_SELECTOR_KEYS,
       ]);
 
       const params: Record<string, unknown> = {};
@@ -496,6 +586,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     mergedHeaders: Record<string, string> | undefined,
     baseURL: string | undefined,
     logger: DebugLogger,
+    reasoningFieldName: string | undefined,
   ): AsyncGenerator<IContent, void, unknown> {
     const { processStreamingResponse } = await import(
       './OpenAIStreamProcessor.js'
@@ -509,6 +600,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         textToolParser: this.textToolParser,
         logger,
         getBaseURL: () => this.getBaseURL(),
+        reasoningFieldName,
       };
       yield* processStreamingResponse(
         response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
@@ -592,6 +684,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       getBaseURL: () => this.getBaseURL(),
     });
 
+    const reasoningFieldName = options.settings.get('reasoning.fieldName') as
+      | string
+      | undefined;
+
     yield* this.dispatchResponse(
       response,
       model,
@@ -604,6 +700,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       mergedHeaders,
       baseURL,
       logger,
+      reasoningFieldName,
     );
   }
 

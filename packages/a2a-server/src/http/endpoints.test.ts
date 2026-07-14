@@ -31,31 +31,33 @@ function createEndpointExecutor() {
   return {
     execute: vi.fn(),
     cancelTask: vi.fn(),
-    createTask: vi.fn((id: string, contextId: string) => {
-      const metadata = {
-        id,
-        contextId,
-        taskState: 'submitted',
-        model: 'gemini-pro',
-        mcpServers: [],
-        availableTools: [],
-      } as TaskMetadata;
-      const wrapper = {
-        id,
-        task: { getMetadata: async () => metadata },
-        toSDKTask: () => ({
+    createTask: vi.fn(
+      (id: string, contextId: string, _agentSettings?: unknown) => {
+        const metadata = {
           id,
           contextId,
-          kind: 'task' as const,
-          status: { state: 'submitted' as const },
-          metadata: {},
-          history: [],
-          artifacts: [],
-        }),
-      } as EndpointTask;
-      tasks.set(id, wrapper);
-      return Promise.resolve(wrapper);
-    }),
+          taskState: 'submitted',
+          model: 'gemini-pro',
+          mcpServers: [],
+          availableTools: [],
+        } as TaskMetadata;
+        const wrapper = {
+          id,
+          task: { getMetadata: async () => metadata },
+          toSDKTask: () => ({
+            id,
+            contextId,
+            kind: 'task' as const,
+            status: { state: 'submitted' as const },
+            metadata: { _contextId: contextId },
+            history: [],
+            artifacts: [],
+          }),
+        } as EndpointTask;
+        tasks.set(id, wrapper);
+        return Promise.resolve(wrapper);
+      },
+    ),
     getTask: (id: string) => tasks.get(id),
     getAllTasks: () => [...tasks.values()],
     reconstruct: vi.fn(),

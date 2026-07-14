@@ -12,11 +12,9 @@
  * via the injected AuthenticatorInterface to avoid a circular import cycle.
  */
 
-import {
-  DebugLogger,
-  type Config,
-  type OAuthTokenRequestMetadata,
-} from '@vybestack/llxprt-code-core';
+import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   OAuthToken,
   TokenStore,
@@ -41,7 +39,6 @@ import {
 import {
   resolveProfileBuckets,
   resolveCurrentProfileSessionMetadata,
-  type ProfileBucketResolverDependencies,
 } from './token-profile-resolver.js';
 import type { ProviderRegistry } from './provider-registry.js';
 import type { ProactiveRenewalManager } from './proactive-renewal-manager.js';
@@ -117,7 +114,6 @@ export class TokenAccessCoordinator {
      * see the current Config instance.
      */
     private readonly getConfigFn: () => Config | undefined = () => undefined,
-    private readonly profileBucketDependencies?: ProfileBucketResolverDependencies,
   ) {}
 
   // --------------------------------------------------------------------------
@@ -849,11 +845,7 @@ export class TokenAccessCoordinator {
     providerName: string,
     metadata?: OAuthTokenRequestMetadata,
   ): Promise<string[]> {
-    return resolveProfileBuckets(
-      providerName,
-      metadata,
-      this.profileBucketDependencies,
-    );
+    return resolveProfileBuckets(providerName, metadata);
   }
 
   // --------------------------------------------------------------------------

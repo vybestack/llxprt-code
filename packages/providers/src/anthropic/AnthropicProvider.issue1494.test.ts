@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type {
   IContent,
@@ -24,10 +24,26 @@ import type {
   AnthropicContentBlock,
 } from './test-utils/anthropicTestUtils.js';
 
+vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+  getCoreSystemPromptAsync: vi.fn(
+    async () => "You are Claude Code, Anthropic's official CLI for Claude.",
+  ),
+}));
+
+vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+  getErrorStatus: vi.fn(() => undefined),
+  isNetworkTransientError: vi.fn(() => false),
+}));
+
 const mockMessagesCreate = vi.fn();
-const constructClient = () => ({
-  messages: { create: mockMessagesCreate },
-});
+
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: vi.fn().mockImplementation(() => ({
+    messages: {
+      create: mockMessagesCreate,
+    },
+  })),
+}));
 
 describe('AnthropicProvider Issue #1494: thinking blocks without signatures must not be silently dropped', () => {
   let provider: AnthropicProvider;
@@ -50,16 +66,10 @@ describe('AnthropicProvider Issue #1494: thinking blocks without signatures must
           ...svc.getProviderSettings('anthropic'),
         });
 
-        return new AnthropicProvider(
-          'test-api-key',
-          undefined,
-          {
-            ...TEST_PROVIDER_CONFIG,
-            getEphemeralSettings: ephemeralSettingsGetter,
-          },
-          undefined,
-          { constructClient },
-        );
+        return new AnthropicProvider('test-api-key', undefined, {
+          ...TEST_PROVIDER_CONFIG,
+          getEphemeralSettings: ephemeralSettingsGetter,
+        });
       },
       {
         runtimeId: 'anthropic.issue1494.test',

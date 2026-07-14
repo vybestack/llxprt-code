@@ -25,7 +25,7 @@
  * mock theater.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';

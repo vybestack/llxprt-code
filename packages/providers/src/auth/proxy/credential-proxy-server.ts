@@ -45,16 +45,9 @@ const isWindows = process.platform === 'win32';
 
 // ─── Options ─────────────────────────────────────────────────────────────────
 
-export interface CredentialProxyFileSystem {
-  mkdirSync: typeof fs.mkdirSync;
-  chmodSync: typeof fs.chmodSync;
-  unlinkSync: typeof fs.unlinkSync;
-}
-
 export interface CredentialProxyServerOptions {
   tokenStore: TokenStore;
   providerKeyStorage: ProviderKeyStorage;
-  fileSystem?: CredentialProxyFileSystem;
   socketDir?: string;
   /** Flow factories for OAuth initiation - maps provider name to factory function */
   flowFactories?: Map<string, () => OAuthFlowInterface>;
@@ -68,7 +61,6 @@ export interface CredentialProxyServerOptions {
 
 export class CredentialProxyServer {
   private readonly options: CredentialProxyServerOptions;
-  private readonly fileSystem: CredentialProxyFileSystem;
   private socketPath: string | null = null;
   private server: net.Server | null = null;
   private readonly connections: Set<net.Socket> = new Set();
@@ -76,7 +68,6 @@ export class CredentialProxyServer {
 
   constructor(options: CredentialProxyServerOptions) {
     this.options = options;
-    this.fileSystem = options.fileSystem ?? fs;
     this.oauthHandler = new CredentialProxyOAuthHandler(options);
   }
 
@@ -92,7 +83,7 @@ export class CredentialProxyServer {
     // Unix-domain sockets live on the filesystem.
     if (!isWindows) {
       const dir = path.dirname(socketPath);
-      this.fileSystem.mkdirSync(dir, { mode: 0o700, recursive: true });
+      fs.mkdirSync(dir, { mode: 0o700, recursive: true });
     }
 
     this.server = net.createServer((socket) => this.handleConnection(socket));
@@ -115,7 +106,7 @@ export class CredentialProxyServer {
       // On Windows there is no on-disk file to chmod; the named pipe uses the
       // system default security descriptor (no per-user DACL is applied by
       // Node), so the 128-bit nonce is the sole access-control mechanism.
-      this.fileSystem.chmodSync(socketPath, 0o600);
+      fs.chmodSync(socketPath, 0o600);
     }
 
     return socketPath;
@@ -144,7 +135,7 @@ export class CredentialProxyServer {
       // on-disk file to unlink. Only POSIX Unix-domain sockets need cleanup.
       if (!isWindows && socketPathToClean !== null) {
         try {
-          this.fileSystem.unlinkSync(socketPathToClean);
+          fs.unlinkSync(socketPathToClean);
         } catch {
           // Socket file may already be removed
         }
@@ -207,12 +198,10 @@ export class CredentialProxyServer {
     });
 
     socket.on('close', () => {
-      decoder.reset();
       this.connections.delete(socket);
     });
 
     socket.on('error', () => {
-      decoder.reset();
       this.connections.delete(socket);
     });
   }

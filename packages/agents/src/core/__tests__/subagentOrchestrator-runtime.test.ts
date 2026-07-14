@@ -9,47 +9,21 @@
  * subagentOrchestrator.test.ts so no file-level max-lines disable is needed.
  */
 
-import { describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi } from 'vitest';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
-import { SettingsService } from '../../../../settings/src/settings/SettingsService.js?subagent-orchestrator-runtime-suite';
-import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubAgentScope } from '../subagent.js';
 import { type SubAgentScope as SubAgentScopeInstance } from '../subagent.js';
 import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { SubagentOrchestrator } from '../subagentOrchestrator.js?subagent-orchestrator-runtime-suite';
+import * as runtimeModule from '@vybestack/llxprt-code-providers/runtime.js';
+import * as activationExecutor from '../../api/providerActivationExecutor.js';
+import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import {
   makeForegroundConfig,
   createRuntimeBundle,
 } from './subagentOrchestrator-test-helpers.js';
-
-const createIsolatedRuntimeContext = (options: {
-  runtimeId?: string;
-  settingsService?: SettingsService;
-  metadata?: Record<string, unknown>;
-  prepare?: (context: IsolatedRuntimeContextHandle) => void;
-}): IsolatedRuntimeContextHandle => {
-  const settingsService = options.settingsService ?? new SettingsService();
-  const context = {
-    runtimeId: options.runtimeId ?? 'isolated-runtime',
-    metadata: options.metadata ?? {},
-    settingsService,
-    config: makeForegroundConfig(),
-    providerManager: { registerProvider: vi.fn() },
-    oauthManager: {},
-  } as unknown as IsolatedRuntimeContextHandle;
-  return {
-    ...context,
-    activate: vi.fn(),
-    cleanup: vi.fn(),
-  };
-};
-
-const activateProvider = vi
-  .fn()
-  .mockResolvedValue({ authFailed: false, infoMessages: [] });
 
 describe('SubagentOrchestrator - Runtime Assembly', () => {
   const subagentConfig: SubagentConfig = {
@@ -101,13 +75,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
-      createSettingsService: () => new SettingsService(),
-      createProviderRuntimeContext: (init) => ({
-        ...init,
-        settingsService: init.settingsService,
-      }),
-      createIsolatedRuntimeContext,
-      activateProvider,
     });
 
     const result = await orchestrator.launch({
@@ -158,13 +125,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: config,
       scopeFactory,
       runtimeLoader,
-      createSettingsService: () => new SettingsService(),
-      createProviderRuntimeContext: (init) => ({
-        ...init,
-        settingsService: init.settingsService,
-      }),
-      createIsolatedRuntimeContext,
-      activateProvider,
     });
 
     await orchestrator.launch({
@@ -189,18 +149,22 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const loadProfile = vi.fn().mockResolvedValue(profile);
     const cleanup = vi.fn().mockResolvedValue(undefined);
     const activate = vi.fn().mockResolvedValue(undefined);
-    const createIsolatedRuntimeContext = vi.fn().mockReturnValue({
-      runtimeId: 'isolated-runtime',
-      metadata: { source: 'test' },
-      settingsService: undefined,
-      config: makeForegroundConfig(),
-      providerManager: {},
-      oauthManager: {},
-      activate,
-      cleanup,
-    });
-    const activateProvider = vi
-      .fn()
+    const createIsolatedRuntimeContextSpy = vi
+      .spyOn(runtimeModule, 'createIsolatedRuntimeContext')
+      .mockReturnValue({
+        runtimeId: 'isolated-runtime',
+        metadata: { source: 'test' },
+        settingsService: undefined,
+        config: makeForegroundConfig(),
+        providerManager: {},
+        oauthManager: {},
+        activate,
+        cleanup,
+      } as unknown as ReturnType<
+        typeof runtimeModule.createIsolatedRuntimeContext
+      >);
+    const executeProviderActivationSpy = vi
+      .spyOn(activationExecutor, 'executeProviderActivation')
       .mockResolvedValue({ authFailed: false, infoMessages: [] });
 
     const runtimeBundle = createRuntimeBundle('post-bundle-failure');
@@ -215,20 +179,23 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
-      createIsolatedRuntimeContext,
-      activateProvider,
     });
 
-    const launchPromise = orchestrator.launch({
-      name: subagentConfig.name,
-      runConfig,
-    });
-    expect(launchPromise).rejects.toThrow('scope creation failed');
-    await launchPromise.catch(() => undefined);
+    try {
+      await expect(
+        orchestrator.launch({
+          name: subagentConfig.name,
+          runConfig,
+        }),
+      ).rejects.toThrow('scope creation failed');
 
-    expect(cleanup).toHaveBeenCalledTimes(1);
-    expect(activate).toHaveBeenCalledTimes(1);
-    expect(activateProvider).toHaveBeenCalledTimes(1);
+      expect(cleanup).toHaveBeenCalledTimes(1);
+      expect(activate).toHaveBeenCalledTimes(1);
+      expect(executeProviderActivationSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      createIsolatedRuntimeContextSpy.mockRestore();
+      executeProviderActivationSpy.mockRestore();
+    }
   });
 
   it('does not seed default disabled tools when profile omits disabled tools', async () => {
@@ -260,13 +227,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
-      createSettingsService: () => new SettingsService(),
-      createProviderRuntimeContext: (init) => ({
-        ...init,
-        settingsService: init.settingsService,
-      }),
-      createIsolatedRuntimeContext,
-      activateProvider,
     });
 
     await orchestrator.launch({
@@ -311,13 +271,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
-      createSettingsService: () => new SettingsService(),
-      createProviderRuntimeContext: (init) => ({
-        ...init,
-        settingsService: init.settingsService,
-      }),
-      createIsolatedRuntimeContext,
-      activateProvider,
     });
 
     await orchestrator.launch({
@@ -356,7 +309,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
     const runtimeBundle = createRuntimeBundle('qwen');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-    const settingsService = new SettingsService();
 
     const scope = {
       runtimeContext: runtimeBundle.runtimeContext,
@@ -372,13 +324,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
-      createSettingsService: () => settingsService,
-      createProviderRuntimeContext: (init) => ({
-        ...init,
-        settingsService: init.settingsService,
-      }),
-      createIsolatedRuntimeContext,
-      activateProvider,
     });
 
     await orchestrator.launch({
@@ -386,10 +331,8 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     });
 
     const loaderArgs = runtimeLoader.mock.calls[0][0];
+    const settingsService = loaderArgs.profile.providerRuntime.settingsService;
 
-    expect(loaderArgs.profile.providerRuntime.settingsService).toBe(
-      settingsService,
-    );
     expect(loaderArgs.profile.state.baseUrl).toBe(qwenBaseUrl);
     expect(settingsService.getProviderSettings('qwen')['base-url']).toBe(
       qwenBaseUrl,
@@ -425,7 +368,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       const loadProfile = vi.fn().mockResolvedValue(vertexProfile);
       const runtimeBundle = createRuntimeBundle('vertex');
       const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-      const settingsService = new SettingsService();
       const scope = {
         runtimeContext: runtimeBundle.runtimeContext,
         getAgentId: () => 'vertex-helper-1',
@@ -440,20 +382,12 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
         foregroundConfig: makeForegroundConfig(),
         scopeFactory,
         runtimeLoader,
-        createSettingsService: () => settingsService,
-        createProviderRuntimeContext: (init) => ({
-          ...init,
-          settingsService: init.settingsService,
-        }),
-        createIsolatedRuntimeContext,
-        activateProvider,
       });
 
       await orchestrator.launch({ name: vertexSubagent.name });
 
-      expect(
-        runtimeLoader.mock.calls[0][0].profile.providerRuntime.settingsService,
-      ).toBe(settingsService);
+      const settingsService =
+        runtimeLoader.mock.calls[0][0].profile.providerRuntime.settingsService;
       // This mocked runtime-loader boundary verifies settings population itself:
       // GCP ephemerals are scoped to SettingsService and never written globally.
       expect(settingsService.get('GOOGLE_CLOUD_PROJECT')).toBe(
@@ -516,13 +450,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
-      createSettingsService: () => new SettingsService(),
-      createProviderRuntimeContext: (init) => ({
-        ...init,
-        settingsService: init.settingsService,
-      }),
-      createIsolatedRuntimeContext,
-      activateProvider,
     });
 
     await orchestrator.launch({
@@ -572,13 +499,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
-      createSettingsService: () => new SettingsService(),
-      createProviderRuntimeContext: (init) => ({
-        ...init,
-        settingsService: init.settingsService,
-      }),
-      createIsolatedRuntimeContext,
-      activateProvider,
     });
 
     await orchestrator.launch({
@@ -630,13 +550,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
-      createSettingsService: () => new SettingsService(),
-      createProviderRuntimeContext: (init) => ({
-        ...init,
-        settingsService: init.settingsService,
-      }),
-      createIsolatedRuntimeContext,
-      activateProvider,
     });
 
     await orchestrator.launch({
@@ -688,13 +601,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
-      createSettingsService: () => new SettingsService(),
-      createProviderRuntimeContext: (init) => ({
-        ...init,
-        settingsService: init.settingsService,
-      }),
-      createIsolatedRuntimeContext,
-      activateProvider,
     });
 
     const firstRun = await orchestrator.launch({
@@ -742,13 +648,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
         getAgentId: () => 'planner-dispose',
       } as unknown as SubAgentScopeInstance),
       runtimeLoader,
-      createSettingsService: () => new SettingsService(),
-      createProviderRuntimeContext: (init) => ({
-        ...init,
-        settingsService: init.settingsService,
-      }),
-      createIsolatedRuntimeContext,
-      activateProvider,
     });
 
     const run = await orchestrator.launch({
@@ -825,7 +724,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const config = makeForegroundConfig();
     const runtimeBundle = createRuntimeBundle('load-balancer');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-    const settingsService = new SettingsService();
     const scope = {
       runtimeContext: runtimeBundle.runtimeContext,
       getAgentId: () => 'typescript-helper-1',
@@ -840,13 +738,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: config,
       scopeFactory,
       runtimeLoader,
-      createSettingsService: () => settingsService,
-      createProviderRuntimeContext: (init) => ({
-        ...init,
-        settingsService: init.settingsService,
-      }),
-      applyProfile: async () => undefined,
-      createIsolatedRuntimeContext,
     });
 
     const result = await orchestrator.launch({
@@ -854,9 +745,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     });
 
     const loaderArgs = runtimeLoader.mock.calls[0][0];
-    expect(loaderArgs.profile.providerRuntime.settingsService).toBe(
-      settingsService,
-    );
+    const settingsService = loaderArgs.profile.providerRuntime.settingsService;
 
     // The load-balancer profile is preserved and activated as a real
     // load-balancer provider, not collapsed to profiles[0].
@@ -927,16 +816,9 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
-      createSettingsService: () => new SettingsService(),
-      createProviderRuntimeContext: (init) => ({
-        ...init,
-        settingsService: init.settingsService,
-      }),
-      createIsolatedRuntimeContext,
-      activateProvider,
     });
 
-    expect(
+    await expect(
       orchestrator.launch({ name: emptyLoadBalancerSubagent.name }),
     ).rejects.toThrow(/must reference at least one profile/);
     expect(runtimeLoader).not.toHaveBeenCalled();
@@ -991,16 +873,9 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
-      createSettingsService: () => new SettingsService(),
-      createProviderRuntimeContext: (init) => ({
-        ...init,
-        settingsService: init.settingsService,
-      }),
-      createIsolatedRuntimeContext,
-      activateProvider,
     });
 
-    expect(
+    await expect(
       orchestrator.launch({ name: nestedLoadBalancerSubagent.name }),
     ).rejects.toThrow(/cannot use nested load balancer profile 'inner-lb'/);
     expect(runtimeLoader).not.toHaveBeenCalled();

@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import {
   getToolGovernanceEphemerals,
   readToolList,
   buildToolDeclarationsFromView,
   getEnabledToolNamesForPrompt,
   shouldIncludeSubagentDelegationForConfig,
-} from './clientToolGovernance.js?client-tool-governance-suite';
+} from './clientToolGovernance.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -161,7 +161,11 @@ describe('buildToolDeclarationsFromView', () => {
     } as unknown as ToolRegistry;
     const view = makeView(['bash']);
     const result = buildToolDeclarationsFromView(registry, view);
-    expect(result).toStrictEqual([decl1]);
+    // toToolDeclaration normalizes to a neutral ToolDeclaration, defaulting
+    // parametersJsonSchema to {} when no schema is present on the source.
+    expect(result).toStrictEqual([
+      { name: 'bash', description: 'Run bash', parametersJsonSchema: {} },
+    ]);
   });
 
   it('falls back to getAllTools when getFunctionDeclarations not available', () => {

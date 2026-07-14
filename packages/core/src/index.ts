@@ -9,6 +9,7 @@ export * from './safety/index.js';
 
 // Export config
 export * from './config/config.js';
+export * from './config/models.js';
 export * from './config/subagentManager.js';
 export * from './config/schedulerSingleton.js';
 export * from './policy/index.js';
@@ -38,6 +39,7 @@ export * from './hooks/index.js';
 // Export skills system
 export * from './skills/skillManager.js';
 export * from './skills/skillLoader.js';
+export * from './skills/skillDiscovery.js';
 
 // Export environment sanitization
 export * from './services/environmentSanitization.js';
@@ -82,6 +84,7 @@ export type {
   ValidatingToolCall,
   WaitingToolCall,
 } from './scheduler/types.js';
+export { accumulateLiveOutput } from './scheduler/liveOutput.js';
 
 export * from './core/contentGenerator.js';
 export * from './core/logger.js';
@@ -508,6 +511,7 @@ export * from './telemetry/uiTelemetry.js';
 export { sessionId } from './utils/session.js';
 // Export content interfaces
 export * from './services/history/IContent.js';
+export { ContentConverters } from './services/history/ContentConverters.js';
 
 // @plan PLAN-20260702-LLMTYPES.P04
 // @requirement REQ-013.1
@@ -603,6 +607,15 @@ export type {
 } from './runtime/AgentRuntimeContext.js';
 export { TelemetryTarget } from './runtime/AgentRuntimeContext.js';
 export { createAgentRuntimeContext } from './runtime/createAgentRuntimeContext.js';
+
+// Export settings runtime adapter helpers so CLI code can resolve/activate the
+// ambient settings runtime context via the public barrel rather than deep
+// imports (#2378).
+export {
+  resolveRuntimeSettingsService,
+  activateSettingsRuntimeContext,
+} from './runtime/settingsRuntimeAdapter.js';
+
 export type {
   RuntimeProvider,
   RuntimeProviderManager,

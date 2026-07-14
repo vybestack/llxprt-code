@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ProviderRegistry } from '../provider-registry.js';
 import type { OAuthProvider, OAuthToken } from '../types.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';

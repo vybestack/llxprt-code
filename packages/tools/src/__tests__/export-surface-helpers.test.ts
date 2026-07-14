@@ -8,7 +8,7 @@ import {
   exportsIdentifierFromSource,
   exportsModuleFromSource,
 } from '@vybestack/llxprt-code-test-utils';
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'vitest';
 
 describe('export surface helper semantics', () => {
   describe('exportsIdentifierFromSource', () => {

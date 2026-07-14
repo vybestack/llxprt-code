@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, beforeEach, afterEach } from 'bun:test';
-import { asyncPropertyTest } from '../test-utils/propertyTest.js';
+import { describe, expect, beforeEach, afterEach } from 'vitest';
+import { it } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -42,17 +42,16 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-005
      */
-    asyncPropertyTest(
-      [
-        fc.constantFrom(
-          'content' as const,
-          'compressed' as const,
-          'rewind' as const,
-          'provider_switch' as const,
-          'session_event' as const,
-          'directories_changed' as const,
-        ),
-      ],
+    it.prop([
+      fc.constantFrom(
+        'content' as const,
+        'compressed' as const,
+        'rewind' as const,
+        'provider_switch' as const,
+        'session_event' as const,
+        'directories_changed' as const,
+      ),
+    ])(
       'malformed payload for any known event type is skipped without crash @requirement:REQ-RPL-005',
       async (eventType) => {
         const localTempDir = await fs.mkdtemp(
@@ -100,8 +99,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-002d, REQ-RPL-003
      */
-    asyncPropertyTest(
-      [fc.integer({ min: 1, max: 10 }), fc.integer({ min: 0, max: 15 })],
+    it.prop([fc.integer({ min: 1, max: 10 }), fc.integer({ min: 0, max: 15 })])(
       'rewind after compression: max(0, 1+postCount - rewindN) items @requirement:REQ-RPL-002d, REQ-RPL-003',
       async (postCount, rewindN) => {
         const localTempDir = await fs.mkdtemp(
@@ -137,16 +135,15 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-007
      */
-    asyncPropertyTest(
-      [
-        fc.array(
-          fc.record({
-            provider: fc.constantFrom('anthropic', 'openai', 'google', 'azure'),
-            model: fc.string({ minLength: 1, maxLength: 20 }),
-          }),
-          { minLength: 1, maxLength: 5 },
-        ),
-      ],
+    it.prop([
+      fc.array(
+        fc.record({
+          provider: fc.constantFrom('anthropic', 'openai', 'google', 'azure'),
+          model: fc.string({ minLength: 1, maxLength: 20 }),
+        }),
+        { minLength: 1, maxLength: 5 },
+      ),
+    ])(
       'provider switch always updates metadata to latest provider/model @requirement:REQ-RPL-007',
       async (switches) => {
         const localTempDir = await fs.mkdtemp(
@@ -181,16 +178,15 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-007
      */
-    asyncPropertyTest(
-      [
-        fc.array(
-          fc.array(fc.string({ minLength: 1, maxLength: 30 }), {
-            minLength: 1,
-            maxLength: 3,
-          }),
-          { minLength: 1, maxLength: 5 },
-        ),
-      ],
+    it.prop([
+      fc.array(
+        fc.array(fc.string({ minLength: 1, maxLength: 30 }), {
+          minLength: 1,
+          maxLength: 3,
+        }),
+        { minLength: 1, maxLength: 5 },
+      ),
+    ])(
       'directories_changed always updates metadata to latest directories @requirement:REQ-RPL-007',
       async (dirChanges) => {
         const localTempDir = await fs.mkdtemp(
@@ -224,8 +220,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-008
      */
-    asyncPropertyTest(
-      [fc.integer({ min: 1, max: 10 }), fc.integer({ min: 1, max: 10 })],
+    it.prop([fc.integer({ min: 1, max: 10 }), fc.integer({ min: 1, max: 10 })])(
       'session_events never appear in history regardless of count @requirement:REQ-RPL-008',
       async (contentCount, eventCount) => {
         const localTempDir = await fs.mkdtemp(
@@ -263,8 +258,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-005
      */
-    asyncPropertyTest(
-      [fc.integer({ min: 1, max: 10 }), fc.boolean()],
+    it.prop([fc.integer({ min: 1, max: 10 }), fc.boolean()])(
       'BOM on first line never prevents replay @requirement:REQ-RPL-005',
       async (contentCount: number, hasBom: boolean) => {
         const localTempDir = await fs.mkdtemp(
@@ -298,12 +292,11 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-003
      */
-    asyncPropertyTest(
-      [
-        fc.integer({ min: 1, max: 5 }),
-        fc.integer({ min: 1, max: 5 }),
-        fc.integer({ min: 0, max: 5 }),
-      ],
+    it.prop([
+      fc.integer({ min: 1, max: 5 }),
+      fc.integer({ min: 1, max: 5 }),
+      fc.integer({ min: 0, max: 5 }),
+    ])(
       'multiple compressions: only post-last-compression content survives @requirement:REQ-RPL-003',
       async (preFirst, preLast, postLast) => {
         const localTempDir = await fs.mkdtemp(
@@ -350,14 +343,13 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-001
      */
-    asyncPropertyTest(
-      [
-        fc.record({
-          sessionId: fc.uuid(),
-          provider: fc.constantFrom('anthropic', 'openai', 'google'),
-          model: fc.string({ minLength: 1, maxLength: 20 }),
-        }),
-      ],
+    it.prop([
+      fc.record({
+        sessionId: fc.uuid(),
+        provider: fc.constantFrom('anthropic', 'openai', 'google'),
+        model: fc.string({ minLength: 1, maxLength: 20 }),
+      }),
+    ])(
       'readSessionHeader returns matching metadata for valid files @requirement:REQ-RPL-001',
       async ({ sessionId, provider, model }) => {
         const localTempDir = await fs.mkdtemp(
@@ -393,8 +385,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-005
      */
-    asyncPropertyTest(
-      [fc.integer({ min: 1, max: 15 })],
+    it.prop([fc.integer({ min: 1, max: 15 })])(
       'corrupt last line is always silently discarded regardless of event count @requirement:REQ-RPL-005',
       async (contentCount) => {
         const localTempDir = await fs.mkdtemp(

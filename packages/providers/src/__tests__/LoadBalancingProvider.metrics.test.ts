@@ -55,6 +55,7 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
   });
 
   afterEach(() => {
+    vi.clearAllTimers();
     vi.useRealTimers();
   });
 
@@ -256,6 +257,7 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
   describe('Latency tracking', () => {
     it('should calculate latency from start to finish', async () => {
       vi.useFakeTimers();
+      vi.setSystemTime(0);
 
       const lb = new LoadBalancingProvider(config, providerManager);
 
@@ -282,8 +284,7 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
         }
       })();
 
-      await Promise.resolve();
-      vi.advanceTimersByTime(50);
+      await vi.advanceTimersByTimeAsync(50);
       await consume;
 
       const stats = lb.getStats();
@@ -293,6 +294,7 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
 
     it('should compute average latency correctly', async () => {
       vi.useFakeTimers();
+      vi.setSystemTime(0);
 
       const lb = new LoadBalancingProvider(config, providerManager);
 
@@ -324,8 +326,7 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
             // consume
           }
         })();
-        await Promise.resolve();
-        vi.advanceTimersByTime(expectedDelay);
+        await vi.advanceTimersByTimeAsync(expectedDelay);
         await consume;
       }
 

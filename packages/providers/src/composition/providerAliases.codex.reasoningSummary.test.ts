@@ -7,7 +7,7 @@
  * @issue #922 - GPT-5.2-Codex thinking blocks not visible
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';

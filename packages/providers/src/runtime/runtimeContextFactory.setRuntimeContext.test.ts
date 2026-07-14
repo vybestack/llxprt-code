@@ -18,7 +18,7 @@
  * field error — proving the scoped runtime was installed.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import type { IsolatedRuntimeContextHandle } from './runtimeSettings.js';

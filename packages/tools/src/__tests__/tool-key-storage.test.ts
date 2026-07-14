@@ -27,7 +27,7 @@
  * behavioral equivalence after the move.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import {
   maskKeyForDisplay,
   getSupportedToolNames,
@@ -237,7 +237,7 @@ describe('Tool Key Storage Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
       it('rejects unsupported tool key names before touching storage', async () => {
         const facade = new ToolKeyStorageFacade(createInMemoryKeyStorage());
 
-        expect(facade.saveKey('unsupported', 'secret')).rejects.toThrow(
+        await expect(facade.saveKey('unsupported', 'secret')).rejects.toThrow(
           'Unsupported tool key storage name: unsupported',
         );
       });

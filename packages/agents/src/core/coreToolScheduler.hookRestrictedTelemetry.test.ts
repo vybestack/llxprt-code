@@ -4,9 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('../index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../index.js')>();
+  return {
+    ...actual,
+    logToolCall: vi.fn(),
+  };
+});
+
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import { ApprovalMode } from '../index.js';
+import { ApprovalMode, logToolCall } from '../index.js';
 import type { Config, ToolRegistry } from '../index.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
@@ -53,7 +62,6 @@ function createToolRegistry(): ToolRegistry {
 describe('CoreToolScheduler hook-restricted telemetry', () => {
   it('drops hook-restricted blocked calls before scheduler callbacks and telemetry', async () => {
     const onAllToolCallsComplete = vi.fn();
-    const logToolCall = vi.fn();
     const config = createConfig();
     const scheduler = new CoreToolScheduler({
       config,
@@ -63,7 +71,6 @@ describe('CoreToolScheduler hook-restricted telemetry', () => {
       getPreferredEditor: () => undefined,
       onEditorClose: vi.fn(),
       toolContextInteractiveMode: false,
-      logToolCall,
     });
 
     await scheduler.schedule(

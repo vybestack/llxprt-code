@@ -4,24 +4,32 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { vi } from '../../../../test-setup/vi-compat.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { GeminiProvider } from './GeminiProvider.js';
-import type { GoogleGenAI, GoogleGenAIOptions } from '@google/genai';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
-const googleGenAIConstructor = vi.fn(
-  (_options: GoogleGenAIOptions): GoogleGenAI =>
-    ({ models: {} }) as unknown as GoogleGenAI,
-);
+const googleGenAIConstructor = vi.hoisted(() => vi.fn());
 
-const mockSettingsService = {
+vi.mock('@google/genai', () => ({
+  GoogleGenAI: googleGenAIConstructor,
+  Type: { OBJECT: 'object' },
+}));
+
+vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+  getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
+}));
+
+vi.mock('@vybestack/llxprt-code-core/code_assist/codeAssist.js', () => ({
+  createCodeAssistContentGenerator: vi.fn(),
+}));
+
+const mockSettingsService = vi.hoisted(() => ({
   set: vi.fn(),
   get: vi.fn(),
   getProviderSettings: vi.fn().mockReturnValue({}),
   updateSettings: vi.fn(),
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
-};
+}));
 
 type GeminiProviderInternals = {
   createGenAIClient: (
@@ -60,12 +68,7 @@ function createGenAIClientViaProvider(
 }
 
 function createProviderWithRuntimeSettings(): GeminiProvider {
-  const provider = new GeminiProvider(
-    undefined,
-    undefined,
-    undefined,
-    async (options) => googleGenAIConstructor(options),
-  );
+  const provider = new GeminiProvider();
   provider.setRuntimeSettingsService(
     mockSettingsService as unknown as SettingsService,
   );

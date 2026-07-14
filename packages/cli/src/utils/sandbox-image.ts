@@ -5,7 +5,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 const LOCAL_DEV_SANDBOX_IMAGE_NAME = 'llxprt-code-sandbox';
 

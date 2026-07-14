@@ -4,12 +4,43 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
-import { vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TodoContinuationService } from './TodoContinuationService.js';
 import { AgentEventType } from './turn.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+
+// Mock TodoStore so persisted todo state doesn't hit the filesystem
+const {
+  todoStoreReadMock,
+  todoStoreReadPausedMock,
+  todoStoreWritePausedMock,
+  mockTodoStoreConstructor,
+} = vi.hoisted(() => {
+  const readMock = vi.fn();
+  const readPausedMock = vi.fn();
+  const writePausedMock = vi.fn();
+  const constructorMock = vi.fn().mockImplementation(() => ({
+    readTodos: readMock,
+    readPausedState: readPausedMock,
+    writePausedState: writePausedMock,
+  }));
+  return {
+    todoStoreReadMock: readMock,
+    todoStoreReadPausedMock: readPausedMock,
+    todoStoreWritePausedMock: writePausedMock,
+    mockTodoStoreConstructor: constructorMock,
+  };
+});
+
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  return {
+    ...actual,
+    LocalTodoStore: mockTodoStoreConstructor,
+  };
+});
 
 vi.mock(
   '@vybestack/llxprt-code-core/services/todo-reminder-service.js',
@@ -62,9 +93,16 @@ describe('TodoContinuationService', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    (
-      TodoReminderService as unknown as ReturnType<typeof vi.fn>
-    ).mockImplementation(
+    todoStoreReadMock.mockResolvedValue([]);
+    todoStoreReadPausedMock.mockResolvedValue(false);
+    todoStoreWritePausedMock.mockResolvedValue(undefined);
+    mockTodoStoreConstructor.mockImplementation(() => ({
+      readTodos: todoStoreReadMock,
+      readPausedState: todoStoreReadPausedMock,
+      writePausedState: todoStoreWritePausedMock,
+    }));
+
+    vi.mocked(TodoReminderService).mockImplementation(
       () =>
         ({
           getComplexTaskSuggestion: vi
@@ -271,7 +309,7 @@ describe('TodoContinuationService', () => {
       );
       expect(result).toBeDefined();
       expect(
-        reminderService.getEscalatedComplexTaskSuggestion,
+        vi.mocked(reminderService.getEscalatedComplexTaskSuggestion),
       ).toHaveBeenCalled();
     });
   });
@@ -300,56 +338,82 @@ describe('TodoContinuationService', () => {
 
   describe('appendTodoSuffixToRequest', () => {
     it('appends suffix to request array', () => {
-      const req = [{ text: 'Do something' }];
+      const req = [{ type: 'text', text: 'Do something' }];
       const result = service.appendTodoSuffixToRequest(req);
-      expect(Array.isArray(result)).toBe(true);
-      const arr = result as Array<{ text?: string }>;
-      expect(
-        arr.some((p): boolean => p.text?.includes('TODO List') === true),
-      ).toBe(true);
+      expect(result).toStrictEqual([
+        {
+          speaker: 'human',
+          blocks: [
+            { type: 'text', text: 'Do something' },
+            {
+              type: 'text',
+              text: 'Use TODO List to organize this effort.',
+            },
+          ],
+        },
+      ]);
     });
 
     it('does not duplicate suffix if already present', () => {
       const req = [
-        { text: 'Do something' },
-        { text: 'Use TODO List to organize this effort.' },
+        { type: 'text', text: 'Do something' },
+        { type: 'text', text: 'Use TODO List to organize this effort.' },
       ];
       const result = service.appendTodoSuffixToRequest(req);
-      const arr = result as Array<{ text?: string }>;
-      const suffixCount = arr.filter(
-        (p): boolean =>
-          p.text?.includes('Use TODO List to organize this effort.') === true,
-      ).length;
-      expect(suffixCount).toBe(1);
+      expect(result).toStrictEqual([
+        {
+          speaker: 'human',
+          blocks: [
+            { type: 'text', text: 'Do something' },
+            { type: 'text', text: 'Use TODO List to organize this effort.' },
+          ],
+        },
+      ]);
     });
 
-    it('normalizes string request to Part array and appends suffix', () => {
-      const req = 'plain string request';
-      const result = service.appendTodoSuffixToRequest(req);
-      expect(Array.isArray(result)).toBe(true);
-      const arr = result as Array<{ text?: string }>;
-      expect(arr[0]).toStrictEqual({ text: 'plain string request' });
-      expect(
-        arr.some((p): boolean => p.text?.includes('TODO List') === true),
-      ).toBe(true);
+    it('normalizes string request and appends suffix inside human content', () => {
+      const result = service.appendTodoSuffixToRequest('plain string request');
+      expect(result).toStrictEqual([
+        {
+          speaker: 'human',
+          blocks: [
+            { type: 'text', text: 'plain string request' },
+            {
+              type: 'text',
+              text: 'Use TODO List to organize this effort.',
+            },
+          ],
+        },
+      ]);
     });
 
-    it('normalizes singular {text} object and appends suffix', () => {
-      const req = { text: 'do this task' };
-      const result = service.appendTodoSuffixToRequest(req);
-      expect(Array.isArray(result)).toBe(true);
-      const arr = result as Array<{ text?: string }>;
-      expect(arr[0]).toStrictEqual({ text: 'do this task' });
-      expect(
-        arr.some((p): boolean => p.text?.includes('TODO List') === true),
-      ).toBe(true);
+    it('preserves singular IContent metadata while appending suffix', () => {
+      const result = service.appendTodoSuffixToRequest({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'do this task' }],
+        metadata: { turnId: 'turn-2' },
+      });
+      expect(result).toStrictEqual([
+        {
+          speaker: 'human',
+          blocks: [
+            { type: 'text', text: 'do this task' },
+            {
+              type: 'text',
+              text: 'Use TODO List to organize this effort.',
+            },
+          ],
+          metadata: { turnId: 'turn-2' },
+        },
+      ]);
     });
 
-    it('does not mutate the original array', () => {
-      const req = [{ text: 'Do something' }];
+    it('does not mutate or alias the original array', () => {
+      const req = [{ type: 'text', text: 'Do something' }];
       const original = [...req];
-      service.appendTodoSuffixToRequest(req);
+      const result = service.appendTodoSuffixToRequest(req);
       expect(req).toStrictEqual(original);
+      expect(result[0].blocks).not.toBe(req);
     });
   });
 

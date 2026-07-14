@@ -11,32 +11,53 @@
  * A fresh process per file preserves the isolation expected by the existing
  * workspace suites while still executing every test with Bun's native runner.
  *
+ * **Important**: This script does NOT discover test files by glob. Only files
+ * explicitly listed in `scripts/bun-test-manifest.ts` are executed. Bun's
+ * native test runner does not support several Vitest-specific APIs (relative
+ * `vi.importActual`, `vi.resetModules`, process-wide `mock.module`), so
+ * silently attempting all legacy test files would produce failures that look
+ * like real regressions but are actually module-lifecycle incompatibilities.
+ * The manifest ensures `test:bun` only runs files that have been verified to
+ * pass under Bun, giving honest CI signal.
+ *
  * Usage:
  *   bun scripts/run_bun_tests.ts [options]
  *
  * Options:
- *   --cwd <dir>           Working directory (defaults to process.cwd())
- *   --exclude <pattern>   Glob pattern to exclude (can be repeated)
+ *   --workspace <name>    Only run tests for the named workspace
  *   --tsconfig <path>     Path to tsconfig override (passed via --tsconfig-override)
- *   --include <pattern>   Glob pattern to include (can be repeated, defaults to standard test patterns)
  *   --timeout <ms>        Per-test timeout in milliseconds (defaults to 30000)
  *   --dry-run             List files that would be run without executing them
  */
 
+import { resolve } from 'node:path';
+import { resolveBunNativeTestFiles } from './bun-test-manifest.js';
+
+const scriptDir = import.meta.dir;
+const repoRoot = resolve(scriptDir, '..');
+
 interface CliOptions {
-  cwd: string;
-  exclude: string[];
-  include: string[];
+  workspace: string | null;
   tsconfig: string | null;
   timeout: number;
   dryRun: boolean;
 }
 
+function readOptionValue(
+  argv: string[],
+  index: number,
+  option: string,
+): string {
+  const value = argv[index + 1];
+  if (!value || value.startsWith('--')) {
+    throw new Error(`Missing value for ${option}`);
+  }
+  return value;
+}
+
 function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
-    cwd: process.cwd(),
-    exclude: [],
-    include: [],
+    workspace: null,
     tsconfig: null,
     timeout: 30_000,
     dryRun: false,
@@ -45,82 +66,55 @@ function parseArgs(argv: string[]): CliOptions {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     switch (arg) {
-      case '--cwd':
-        options.cwd = argv[++i] ?? options.cwd;
-        break;
-      case '--exclude':
-        options.exclude.push(argv[++i] ?? '');
-        break;
-      case '--include':
-        options.include.push(argv[++i] ?? '');
+      case '--workspace':
+      case '-w':
+        options.workspace = readOptionValue(argv, i++, arg);
         break;
       case '--tsconfig':
-        options.tsconfig = argv[++i] ?? null;
+        options.tsconfig = readOptionValue(argv, i++, arg);
         break;
-      case '--timeout':
-        options.timeout = Number(argv[++i] ?? options.timeout);
+      case '--timeout': {
+        const value = readOptionValue(argv, i++, arg);
+        const timeout = Number(value);
+        if (!Number.isFinite(timeout) || timeout <= 0) {
+          throw new Error(`Invalid --timeout value: ${value}`);
+        }
+        options.timeout = timeout;
         break;
+      }
       case '--dry-run':
         options.dryRun = true;
         break;
+      default:
+        throw new Error(`Unknown option: ${arg}`);
     }
   }
 
   return options;
 }
 
-const DEFAULT_INCLUDE_PATTERNS = ['src/**/*.{test,spec}.{ts,tsx,js,jsx}'];
-
-function collectTestFiles(options: CliOptions): string[] {
-  const includePatterns =
-    options.include.length > 0 ? options.include : DEFAULT_INCLUDE_PATTERNS;
-
-  const defaultExcludes = ['node_modules', 'dist', 'tmp'];
-
-  const allExcludes = [...defaultExcludes, ...options.exclude];
-
-  // Build a set of all excluded file paths by scanning each exclude pattern
-  const excludedFiles = new Set<string>();
-  for (const pattern of allExcludes) {
-    const glob = new Bun.Glob(pattern);
-    for (const file of glob.scanSync({
-      cwd: options.cwd,
-      onlyFiles: true,
-    })) {
-      excludedFiles.add(file);
-    }
-  }
-
-  const allFiles = new Set<string>();
-
-  for (const pattern of includePatterns) {
-    const glob = new Bun.Glob(pattern);
-    for (const file of glob.scanSync({
-      cwd: options.cwd,
-      onlyFiles: true,
-    })) {
-      if (!excludedFiles.has(file)) {
-        allFiles.add(file);
-      }
-    }
-  }
-
-  return Array.from(allFiles).sort();
-}
-
-async function main(): Promise<void> {
+function main(): void {
   const options = parseArgs(process.argv.slice(2));
-  const files = collectTestFiles(options);
+  const files = resolveBunNativeTestFiles(
+    repoRoot,
+    options.workspace ?? undefined,
+  );
 
   if (files.length === 0) {
-    console.error(`No native Bun test files found under ${options.cwd}`);
+    const scope = options.workspace
+      ? `workspace "${options.workspace}"`
+      : 'any workspace';
+    console.error(`No native Bun test files found for ${scope}.`);
+    console.error(
+      'Files must be explicitly listed in scripts/bun-test-manifest.ts.',
+    );
     process.exit(1);
   }
 
   if (options.dryRun) {
     console.log(`Dry run: ${files.length} files would be executed:`);
-    for (const file of files) {
-      console.log(`  ${file}`);
+    for (const entry of files) {
+      console.log(`  [${entry.cwd}] ${entry.file}`);
     }
     return;
   }
@@ -138,9 +132,10 @@ async function main(): Promise<void> {
   let passed = 0;
   let failed = 0;
 
-  for (const file of files) {
-    const child = Bun.spawnSync([process.execPath, ...baseArgs, file], {
-      cwd: options.cwd,
+  for (const entry of files) {
+    // Each file runs from its workspace root so bunfig.toml preloads apply.
+    const child = Bun.spawnSync([process.execPath, ...baseArgs, entry.file], {
+      cwd: entry.cwd,
       env: process.env,
       stdin: 'inherit',
       stdout: 'inherit',
@@ -148,7 +143,7 @@ async function main(): Promise<void> {
     });
 
     if (child.exitCode !== 0) {
-      console.error(`Native Bun test failed: ${file}`);
+      console.error(`Native Bun test failed: ${entry.file}`);
       failed++;
       process.exitCode = 1;
     } else {

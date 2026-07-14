@@ -4,27 +4,37 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { vi } from 'vitest';
-import type { ServerAgentStreamEvent } from './turn.ts?turn-hook-events-suite';
-import {
-  Turn,
-  AgentEventType,
-  DEFAULT_AGENT_ID,
-} from './turn.ts?turn-hook-events-suite';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { ServerAgentStreamEvent } from './turn.js';
+import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
-import {
-  type MockedChatInstance,
-  mockResponseToChunk,
-} from './turn-test-helpers.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
 
-const mockSendMessageStream = vi.fn();
-const mockGetHistory = vi.fn();
+const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
+  mockSendMessageStream: vi.fn(),
+  mockGetHistory: vi.fn(),
+}));
 
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
+
+vi.mock(
+  '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js')
+      >();
+    return {
+      // analyzeResponseOutcome now operates on ContentBlock[]; delegate to the
+      // real implementation so thinking/tool_call/text detection is correct.
+      analyzeResponseOutcome: actual.analyzeResponseOutcome,
+    };
+  },
+);
 
 describe('Turn - hook execution control events', () => {
   let turn: Turn;
@@ -59,7 +69,7 @@ describe('Turn - hook execution control events', () => {
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
-    const reqParts: Part[] = [{ text: 'test message' }];
+    const reqParts: ContentBlock[] = [{ type: 'text', text: 'test message' }];
     const events: AgentEventType[] = [];
     for await (const event of turn.run(
       reqParts,
@@ -71,23 +81,21 @@ describe('Turn - hook execution control events', () => {
   });
 
   it('should yield AgentExecutionBlocked event and continue processing', async () => {
-    const resp = {
-      candidates: [
-        {
-          content: { parts: [{ text: 'Synthetic response after block' }] },
-          finishReason: 'STOP',
-        },
-      ],
-    } as GenerateContentResponse;
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.AGENT_EXECUTION_BLOCKED,
         reason: 'Hook blocked execution',
       };
-      yield { type: StreamEventType.CHUNK, value: mockResponseToChunk(resp) };
+      yield {
+        type: StreamEventType.CHUNK,
+        value: mockChunk({
+          text: 'Synthetic response after block',
+          finishReason: 'STOP',
+        }),
+      };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
-    const reqParts: Part[] = [{ text: 'test message' }];
+    const reqParts: ContentBlock[] = [{ type: 'text', text: 'test message' }];
     const events: AgentEventType[] = [];
     for await (const event of turn.run(
       reqParts,
@@ -108,7 +116,7 @@ describe('Turn - hook execution control events', () => {
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
-    const reqParts: Part[] = [{ text: 'test message' }];
+    const reqParts: ContentBlock[] = [{ type: 'text', text: 'test message' }];
     const events: ServerAgentStreamEvent[] = [];
     for await (const event of turn.run(
       reqParts,
@@ -129,7 +137,7 @@ describe('Turn - hook execution control events', () => {
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
-    const reqParts: Part[] = [{ text: 'test message' }];
+    const reqParts: ContentBlock[] = [{ type: 'text', text: 'test message' }];
     const events: ServerAgentStreamEvent[] = [];
     for await (const event of turn.run(
       reqParts,
@@ -156,7 +164,7 @@ describe('Turn - hook execution control events', () => {
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
-    const reqParts: Part[] = [{ text: 'test message' }];
+    const reqParts: ContentBlock[] = [{ type: 'text', text: 'test message' }];
     const events: ServerAgentStreamEvent[] = [];
     for await (const event of turn.run(
       reqParts,
@@ -176,24 +184,22 @@ describe('Turn - hook execution control events', () => {
   });
 
   it('should propagate contextCleared=true in AgentExecutionBlocked event', async () => {
-    const resp = {
-      candidates: [
-        {
-          content: { parts: [{ text: 'Response after block' }] },
-          finishReason: 'STOP',
-        },
-      ],
-    } as GenerateContentResponse;
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.AGENT_EXECUTION_BLOCKED,
         reason: 'Hook blocked execution',
         contextCleared: true,
       };
-      yield { type: StreamEventType.CHUNK, value: mockResponseToChunk(resp) };
+      yield {
+        type: StreamEventType.CHUNK,
+        value: mockChunk({
+          text: 'Response after block',
+          finishReason: 'STOP',
+        }),
+      };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
-    const reqParts: Part[] = [{ text: 'test message' }];
+    const reqParts: ContentBlock[] = [{ type: 'text', text: 'test message' }];
     const events: ServerAgentStreamEvent[] = [];
     for await (const event of turn.run(
       reqParts,
@@ -221,7 +227,7 @@ describe('Turn - hook execution control events', () => {
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
-    const reqParts: Part[] = [{ text: 'test message' }];
+    const reqParts: ContentBlock[] = [{ type: 'text', text: 'test message' }];
     const events: ServerAgentStreamEvent[] = [];
     for await (const event of turn.run(
       reqParts,

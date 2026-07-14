@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.unmock('./providerAliases.js');
 
 import { loadProviderAliasEntries } from './providerAliases.js';
 

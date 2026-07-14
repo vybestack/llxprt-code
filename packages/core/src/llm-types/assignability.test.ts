@@ -8,7 +8,7 @@
  * (NOT imported from @vybestack/llxprt-code-providers to avoid inverting
  * package dependency direction). Sources cited inline.
  */
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'vitest';
 import {
   toolDeclarationsFromLegacyToolset,
   type ToolDeclaration,

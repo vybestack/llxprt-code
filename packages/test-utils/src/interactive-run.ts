@@ -72,12 +72,11 @@ export class InteractiveRun {
 
   async expectText(text: string, timeout?: number) {
     const effectiveTimeout = timeout ?? getDefaultTimeout();
-    await poll(
-      () => stripAnsi(this.output).toLowerCase().includes(text.toLowerCase()),
-      effectiveTimeout,
-      200,
-    );
-    if (!stripAnsi(this.output).toLowerCase().includes(text.toLowerCase())) {
+    const expectedText = text.toLowerCase();
+    const includesExpectedText = () =>
+      stripAnsi(this.output).toLowerCase().includes(expectedText);
+    await poll(includesExpectedText, effectiveTimeout, 200);
+    if (!includesExpectedText()) {
       throw new Error(`Expected interactive output to contain "${text}"`);
     }
   }

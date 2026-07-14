@@ -4,17 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AgentExecutor } from './executor.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
 import { LSTool } from '@vybestack/llxprt-code-tools';
 import {
-  type ChatSession,
+  ChatSession,
   StreamEventType,
   type StreamEvent,
 } from '../core/chatSession.js';
-import type { Part } from '@google/genai';
+import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import {
   setupExecutorFixture,
   createTestDefinition,
@@ -29,28 +28,41 @@ import {
   type MockFn,
 } from './executor-test-helpers.js';
 
-const mockSendMessageStream = vi.fn();
-const mockExecuteToolCall = vi.fn();
-const dependencies = {
-  loadDirectoryContext: async () => 'Mocked Environment Context',
-  createChatSession: () =>
-    ({ sendMessageStream: mockSendMessageStream }) as unknown as ChatSession,
-  executeTool: mockExecuteToolCall,
-};
+const { mockSendMessageStream, mockExecuteToolCall } = vi.hoisted(() => ({
+  mockSendMessageStream: vi.fn(),
+  mockExecuteToolCall: vi.fn(),
+}));
 
-/**
- * Safely extracts text from a Part, returning empty string when not a text part.
- */
-const extractPartText = (part: Part): string =>
-  'text' in part && typeof part.text === 'string' ? part.text : '';
+vi.mock('../core/chatSession.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../core/chatSession.js')>();
+  return {
+    ...actual,
+    ChatSession: vi.fn().mockImplementation(() => ({
+      sendMessageStream: mockSendMessageStream,
+    })),
+  };
+});
+
+vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
+  executeToolCall: mockExecuteToolCall,
+}));
+
+vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
+
+const MockedChatSession = vi.mocked(ChatSession);
+const mockedGetDirectoryContextString = vi.mocked(getDirectoryContextString);
 
 describe('AgentExecutor (Recovery Turn)', () => {
   let fixture: ExecutorTestFixture;
 
   beforeEach(() => {
     fixture = setupExecutorFixture({
+      MockedChatSession,
       mockSendMessageStream: mockSendMessageStream as MockFn,
       mockExecuteToolCall: mockExecuteToolCall as MockFn,
+      mockedGetDirectoryContextString:
+        mockedGetDirectoryContextString as MockFn,
       vi,
     });
   });
@@ -69,7 +81,6 @@ describe('AgentExecutor (Recovery Turn)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     mockWorkResponse(mockSendMessageStream, mockExecuteToolCall, 't1');
@@ -123,7 +134,6 @@ describe('AgentExecutor (Recovery Turn)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     mockWorkResponse(mockSendMessageStream, mockExecuteToolCall, 't1');
@@ -167,15 +177,13 @@ describe('AgentExecutor (Recovery Turn)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     mockModelResponse(mockSendMessageStream, [
       { name: LSTool.Name, args: { path: '.' }, id: 't1' },
     ]);
     mockExecuteToolCall.mockImplementationOnce(async () => {
-      vi.advanceTimersByTime(61 * 1000);
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(61 * 1000);
       return createCompletedToolCallResponse({
         callId: 't1',
         name: LSTool.Name,
@@ -229,7 +237,6 @@ describe('AgentExecutor (Recovery Turn)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     // Turn 1: model stops with no tool calls (protocol violation)
@@ -288,7 +295,6 @@ describe('AgentExecutor (Recovery Turn)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     // Turn 1: model stops with no tool calls (protocol violation)
@@ -337,7 +343,6 @@ describe('AgentExecutor (Recovery Turn)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     mockWorkResponse(mockSendMessageStream, mockExecuteToolCall, 't1');
@@ -369,7 +374,6 @@ describe('AgentExecutor (Recovery Turn)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     mockWorkResponse(mockSendMessageStream, mockExecuteToolCall, 't1');
@@ -401,7 +405,6 @@ describe('AgentExecutor (Recovery Turn)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     mockWorkResponse(mockSendMessageStream, mockExecuteToolCall, 't1');
@@ -418,12 +421,12 @@ describe('AgentExecutor (Recovery Turn)', () => {
 
     // The second call to sendMessageStream should contain the warning message
     const secondCallParams = getMockMessageParams(mockSendMessageStream, 1);
-    const messageParts = secondCallParams.message;
-    expect(messageParts).toBeDefined();
-    expect(messageParts).toHaveLength(1);
-    const part = messageParts![0];
-    expect(part).toHaveProperty('text');
-    const text = extractPartText(part);
+    const recoveryMessage = secondCallParams.message;
+    expect(recoveryMessage).toBeDefined();
+    expect(recoveryMessage.blocks).toHaveLength(1);
+    const block = recoveryMessage.blocks[0];
+    expect(block?.type).toBe('text');
+    const text = (block as { text: string }).text;
     expect(text).toContain('WARNING');
     expect(text).toContain(TASK_COMPLETE_TOOL_NAME);
     expect(text).toContain('ONE final chance');
@@ -436,7 +439,6 @@ describe('AgentExecutor (Recovery Turn)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     mockSendMessageStream.mockImplementationOnce(async () =>
@@ -471,7 +473,6 @@ describe('AgentExecutor (Recovery Turn)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     mockWorkResponse(mockSendMessageStream, mockExecuteToolCall, 't1');
@@ -510,7 +511,6 @@ describe('AgentExecutor (Recovery Turn)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     mockModelResponse(mockSendMessageStream, [
@@ -556,7 +556,6 @@ describe('AgentExecutor (Recovery Turn)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     // Turn 1: normal tool call
@@ -564,8 +563,7 @@ describe('AgentExecutor (Recovery Turn)', () => {
       { name: LSTool.Name, args: { path: '.' }, id: 't1' },
     ]);
     mockExecuteToolCall.mockImplementationOnce(async () => {
-      vi.advanceTimersByTime(61 * 1000);
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(61 * 1000);
       return createCompletedToolCallResponse({
         callId: 't1',
         name: LSTool.Name,
@@ -610,7 +608,6 @@ describe('AgentExecutor (Recovery Turn)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     mockWorkResponse(mockSendMessageStream, mockExecuteToolCall, 't1');
@@ -667,7 +664,6 @@ describe('AgentExecutor (Recovery Turn)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     mockWorkResponse(mockSendMessageStream, mockExecuteToolCall, 't1');
@@ -709,7 +705,6 @@ describe('AgentExecutor (Recovery Turn)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     mockWorkResponse(mockSendMessageStream, mockExecuteToolCall, 't1');
@@ -742,7 +737,6 @@ describe('AgentExecutor (Recovery Turn)', () => {
       fixture.mockConfig,
       getTestRuntimeMessageBus(fixture.mockConfig),
       fixture.onActivity,
-      dependencies,
     );
 
     mockWorkResponse(mockSendMessageStream, mockExecuteToolCall, 't1');

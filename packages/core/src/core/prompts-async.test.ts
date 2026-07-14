@@ -20,9 +20,12 @@ import {
   beforeEach,
   afterEach,
   beforeAll,
-} from 'bun:test';
+  vi,
+} from 'vitest';
 
-delete globalThis.process.env.LLXPRT_PROMPT_MANIFEST;
+vi.hoisted(() => {
+  delete globalThis.process.env.LLXPRT_PROMPT_MANIFEST;
+});
 
 import {
   getCoreSystemPromptAsync,

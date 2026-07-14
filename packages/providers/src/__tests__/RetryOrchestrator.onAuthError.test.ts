@@ -12,7 +12,7 @@
  * 3. Uses the handler from config (both runtime.config and options.config)
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';

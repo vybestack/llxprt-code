@@ -82,11 +82,6 @@ const coverageReporter = isWindows
 
 export default defineConfig({
   plugins: [workspaceAliasPlugin],
-  resolve: {
-    alias: {
-      'bun:test': 'vitest',
-    },
-  },
   test: {
     passWithNoTests: true,
     reporters: ['default', 'junit'],
@@ -119,6 +114,12 @@ export default defineConfig({
       reportsDirectory: './coverage',
       include: ['src/**/*'],
       reporter: coverageReporter,
+    },
+    typecheck: {
+      enabled: true,
+      checker: 'tsc',
+      include: ['src/**/*.test-d.ts'],
+      tsconfig: './tsconfig.typecheck.json',
     },
   },
 });

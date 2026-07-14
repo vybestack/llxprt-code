@@ -34,10 +34,7 @@ function testPath(...segments: string[]): string {
   return path.normalize(result);
 }
 
-vi.mock('fs/promises', () => ({
-  access: vi.fn(),
-  readFile: vi.fn(),
-}));
+vi.mock('fs/promises');
 const mockedFs = vi.mocked(fs);
 
 // Mock console methods to capture warnings

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -424,7 +424,7 @@ describe('RetryOrchestrator', () => {
         } as unknown as GenerateChatOptions['runtime'],
       };
 
-      expect(
+      await expect(
         consumeStream(orchestrator.generateChatCompletion(options)),
       ).rejects.toThrow(/bucket/i);
     });
@@ -783,7 +783,7 @@ describe('RetryOrchestrator', () => {
         } as unknown as GenerateChatOptions['runtime'],
       };
 
-      expect(
+      await expect(
         consumeStream(orchestrator.generateChatCompletion(options)),
       ).rejects.toThrow(/bucket/i);
     });
@@ -934,11 +934,9 @@ describe('RetryOrchestrator', () => {
         } as unknown as GenerateChatOptions['runtime'],
       };
 
-      const consumptionPromise = consumeStream(
-        orchestrator.generateChatCompletion(options),
-      );
-      expect(consumptionPromise).rejects.toThrow(/Rate limit exceeded/);
-      await consumptionPromise.catch(() => undefined);
+      await expect(
+        consumeStream(orchestrator.generateChatCompletion(options)),
+      ).rejects.toThrow(/Rate limit exceeded/);
 
       // resetSession should NOT be called since request never succeeded
       expect(resetSessionCallCount).toBe(0);

@@ -13,7 +13,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ChatSession } from '../../core/chatSession.ts?compression-hardlimit-suite';
+import { ChatSession } from '../../core/chatSession.js';
+import * as compressionFactory from '../compressionStrategyFactory.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
@@ -28,27 +29,27 @@ import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime
 import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { makeHttpError } from './compression-retry-helpers.js';
 
-const retryWithoutDelay = async <T>(
-  operation: () => Promise<T>,
-  options: {
-    maxAttempts: number;
-    shouldRetryOnError: (error: Error) => boolean;
+vi.mock('@vybestack/llxprt-code-settings', async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
+  return {
+    ...original,
+    Storage: {
+      ...original.Storage,
+      getGlobalConfigDir: vi.fn(() => '/tmp/llxprt-test-config'),
+    },
+  };
+});
+
+// Mock the delay utility so retryWithBackoff doesn't actually wait in tests
+vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
+  delay: vi.fn().mockResolvedValue(undefined),
+  createAbortError: () => {
+    const err = new Error('Aborted');
+    err.name = 'AbortError';
+    return err;
   },
-): Promise<T> => {
-  for (let attempt = 1; attempt <= options.maxAttempts; attempt++) {
-    try {
-      return await operation();
-    } catch (error) {
-      if (
-        attempt === options.maxAttempts ||
-        !options.shouldRetryOnError(error as Error)
-      ) {
-        throw error;
-      }
-    }
-  }
-  throw new Error('Retry attempts exhausted');
-};
+}));
 
 // ---------------------------------------------------------------------------
 // Phase 5: Hard-limit compression bypass (Issue #1791)
@@ -57,11 +58,9 @@ const retryWithoutDelay = async <T>(
 describe('Hard-limit compression behavior (Issue #1791)', () => {
   let runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
   let providerRuntimeSnapshot: ProviderRuntimeContext;
-  let previousProviderRuntime: ProviderRuntimeContext | null;
 
   beforeEach(() => {
-    previousProviderRuntime =
-      providerRuntime.peekActiveProviderRuntimeContext();
+    vi.clearAllMocks();
     runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
@@ -71,7 +70,7 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
   });
 
   afterEach(() => {
-    providerRuntime.setActiveProviderRuntimeContext(previousProviderRuntime);
+    vi.restoreAllMocks();
   });
 
   /**
@@ -88,8 +87,7 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     const maxOutputTokens = overrides?.maxOutputTokens ?? 65_536;
 
     const runtimeState = createAgentRuntimeState({
-      runtimeId:
-        runtimeSetup.runtime.runtimeId ?? 'compression-hardlimit-runtime',
+      runtimeId: runtimeSetup.runtime.runtimeId,
       provider: runtimeSetup.provider.name,
       model: 'test-model',
       sessionId: 'test-session-id',
@@ -110,8 +108,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     vi.spyOn(historyService, 'startCompression').mockImplementation(() => {});
     vi.spyOn(historyService, 'endCompression').mockImplementation(() => {});
     vi.spyOn(historyService, 'getCurated').mockReturnValue([
-      { role: 'user', parts: [{ text: 'hello' }] },
-      { role: 'model', parts: [{ text: 'hi' }] },
+      { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
     ]);
     vi.spyOn(historyService, 'getRawHistory').mockReturnValue([]);
     vi.spyOn(historyService, 'applyDensityResult').mockResolvedValue(undefined);
@@ -146,14 +144,7 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
       embedContent: vi.fn(),
     };
 
-    return new ChatSession(
-      view,
-      mockContentGenerator,
-      { maxOutputTokens },
-      [],
-      undefined,
-      retryWithoutDelay,
-    );
+    return new ChatSession(view, mockContentGenerator, { maxOutputTokens }, []);
   }
 
   /**
@@ -167,17 +158,10 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
       maxOutputTokens: 40_000,
     });
 
-    const getStrategy = vi.spyOn(
-      chat['compressionHandler'],
-      'resolveCompressionStrategy',
-    );
+    const getStrategy = vi.spyOn(compressionFactory, 'getCompressionStrategy');
 
     await expect(
-      chat.enforceContextWindow(
-        10_000,
-        'test-prompt',
-        (_model, configuredLimit) => configuredLimit ?? 1_000_000,
-      ),
+      chat['enforceContextWindow'](10_000, 'test-prompt'),
     ).resolves.toBeUndefined();
 
     expect(getStrategy).not.toHaveBeenCalled();
@@ -195,9 +179,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     });
 
     let compressionAttempts = 0;
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation(() => ({
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
         name: 'middle-out' as const,
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
@@ -205,8 +188,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
           compressionAttempts++;
           return {
             newHistory: [
-              { role: 'user', parts: [{ text: 'hello' }] },
-              { role: 'model', parts: [{ text: 'hi' }] },
+              { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+              { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
             ],
             metadata: {
               originalMessageCount: 10,
@@ -216,15 +199,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             },
           };
         }),
-      }));
+      }),
+    );
     vi.spyOn(chat['historyService'], 'getTotalTokens').mockReturnValue(150_000);
 
     await expect(
-      chat.enforceContextWindow(
-        10_000,
-        'test-prompt',
-        (_model, configuredLimit) => configuredLimit ?? 1_000_000,
-      ),
+      chat['enforceContextWindow'](10_000, 'test-prompt'),
     ).rejects.toThrow('tokensStillNeeded=5');
 
     expect(compressionAttempts).toBeGreaterThan(0);
@@ -244,18 +224,17 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
 
       // Put the chat into cooldown by forcing 3 compression failures
       let primaryAttempts = 0;
-      vi.spyOn(
-        chat['compressionHandler'],
-        'resolveCompressionStrategy',
-      ).mockImplementation(() => ({
-        name: 'middle-out' as const,
-        requiresLLM: true,
-        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-        compress: vi.fn().mockImplementation(async () => {
-          primaryAttempts++;
-          throw makeHttpError(500);
+      vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+        () => ({
+          name: 'middle-out' as const,
+          requiresLLM: true,
+          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+          compress: vi.fn().mockImplementation(async () => {
+            primaryAttempts++;
+            throw makeHttpError(500);
+          }),
         }),
-      }));
+      );
 
       // Trigger cooldown: 3 failures via performCompression
       await chat.performCompression('test-prompt'); // failure 1
@@ -270,29 +249,28 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
 
       // Now make compression succeed so enforceContextWindow can get past it
       const succeedAfter = primaryAttempts;
-      vi.spyOn(
-        chat['compressionHandler'],
-        'resolveCompressionStrategy',
-      ).mockImplementation(() => ({
-        name: 'middle-out' as const,
-        requiresLLM: true,
-        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-        compress: vi.fn().mockImplementation(async () => {
-          primaryAttempts++;
-          if (primaryAttempts <= succeedAfter) {
-            throw makeHttpError(500);
-          }
-          return {
-            newHistory: [],
-            metadata: {
-              originalMessageCount: 10,
-              compressedMessageCount: 0,
-              strategyUsed: 'middle-out' as const,
-              llmCallMade: true,
-            },
-          };
+      vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+        () => ({
+          name: 'middle-out' as const,
+          requiresLLM: true,
+          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+          compress: vi.fn().mockImplementation(async () => {
+            primaryAttempts++;
+            if (primaryAttempts <= succeedAfter) {
+              throw makeHttpError(500);
+            }
+            return {
+              newHistory: [],
+              metadata: {
+                originalMessageCount: 10,
+                compressedMessageCount: 0,
+                strategyUsed: 'middle-out' as const,
+                llmCallMade: true,
+              },
+            };
+          }),
         }),
-      }));
+      );
 
       // Mock getTotalTokens to return a low value after a few calls
       // (simulating compression having succeeded)
@@ -309,11 +287,7 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
       );
 
       // enforceContextWindow should bypass cooldown and attempt compression
-      await chat.enforceContextWindow(
-        50_000,
-        'test-prompt',
-        (_model, configuredLimit) => configuredLimit ?? 1_000_000,
-      );
+      await chat['enforceContextWindow'](50_000, 'test-prompt');
 
       // Compression should have been attempted despite cooldown
       expect(primaryAttempts).toBeGreaterThan(attemptsBeforeCooldown);
@@ -334,9 +308,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     let truncationCalled = false;
     let primaryCallCount = 0;
 
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation((name) => {
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
         if (name === 'top-down-truncation') {
           truncationCalled = true;
           return {
@@ -363,8 +336,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             // Primary succeeds but barely reduces tokens (returns same history)
             return {
               newHistory: [
-                { role: 'user', parts: [{ text: 'hello' }] },
-                { role: 'model', parts: [{ text: 'hi' }] },
+                { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+                { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
               ],
               metadata: {
                 originalMessageCount: 10,
@@ -375,7 +348,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             };
           }),
         };
-      });
+      },
+    );
 
     // Mock getTotalTokens to stay high even after "compression"
     // so the fallback is triggered
@@ -383,11 +357,7 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
 
     // enforceContextWindow should detect ineffective compression and force fallback
     try {
-      await chat.enforceContextWindow(
-        50_000,
-        'test-prompt',
-        (_model, configuredLimit) => configuredLimit ?? 1_000_000,
-      );
+      await chat['enforceContextWindow'](50_000, 'test-prompt');
     } catch {
       // May still throw if tokens remain over limit, but truncation should have been called
     }
@@ -410,9 +380,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     let primaryCallCount = 0;
     let truncationCalled = false;
 
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation((name) => {
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
         if (name === 'top-down-truncation') {
           return {
             name: 'top-down-truncation' as const,
@@ -421,7 +390,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             compress: vi.fn().mockImplementation(async () => {
               truncationCalled = true;
               return {
-                newHistory: [{ role: 'user', parts: [{ text: 'truncated' }] }],
+                newHistory: [
+                  {
+                    speaker: 'human',
+                    blocks: [{ type: 'text', text: 'truncated' }],
+                  },
+                ],
                 metadata: {
                   originalMessageCount: 10,
                   compressedMessageCount: 1,
@@ -440,7 +414,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
           compress: vi.fn().mockImplementation(async () => {
             primaryCallCount++;
             return {
-              newHistory: [{ role: 'user', parts: [{ text: 'compressed' }] }],
+              newHistory: [
+                {
+                  speaker: 'human',
+                  blocks: [{ type: 'text', text: 'compressed' }],
+                },
+              ],
               metadata: {
                 originalMessageCount: 10,
                 compressedMessageCount: 1,
@@ -450,7 +429,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             };
           }),
         };
-      });
+      },
+    );
 
     vi.spyOn(chat['historyService'], 'getTotalTokens').mockImplementation(
       () => {
@@ -462,11 +442,7 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     );
 
     await expect(
-      chat.enforceContextWindow(
-        10_000,
-        'test-prompt',
-        (_model, configuredLimit) => configuredLimit ?? 1_000_000,
-      ),
+      chat['enforceContextWindow'](10_000, 'test-prompt'),
     ).resolves.toBeUndefined();
 
     expect(primaryCallCount).toBe(2);
@@ -485,9 +461,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     });
 
     let primaryCallCount = 0;
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation((name) => {
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
         if (name === 'top-down-truncation') {
           return {
             name: 'top-down-truncation' as const,
@@ -505,7 +480,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             primaryCallCount++;
             if (primaryCallCount === 1) {
               return {
-                newHistory: [{ role: 'user', parts: [{ text: 'compressed' }] }],
+                newHistory: [
+                  {
+                    speaker: 'human',
+                    blocks: [{ type: 'text', text: 'compressed' }],
+                  },
+                ],
                 metadata: {
                   originalMessageCount: 10,
                   compressedMessageCount: 1,
@@ -517,15 +497,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             throw makeHttpError(500);
           }),
         };
-      });
+      },
+    );
     vi.spyOn(chat['historyService'], 'getTotalTokens').mockReturnValue(155_000);
 
     await expect(
-      chat.enforceContextWindow(
-        10_000,
-        'test-prompt',
-        (_model, configuredLimit) => configuredLimit ?? 1_000_000,
-      ),
+      chat['enforceContextWindow'](10_000, 'test-prompt'),
     ).rejects.toThrow(
       'Automatic compression failed before fallback: Error: Additional hard-limit compression attempt failed.',
     );
@@ -544,9 +521,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     });
 
     let fallbackApplied = false;
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation((name) => {
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
         if (name === 'top-down-truncation') {
           return {
             name: 'top-down-truncation' as const,
@@ -555,7 +531,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             compress: vi.fn().mockImplementation(async () => {
               fallbackApplied = true;
               return {
-                newHistory: [{ role: 'user', parts: [{ text: 'truncated' }] }],
+                newHistory: [
+                  {
+                    speaker: 'human',
+                    blocks: [{ type: 'text', text: 'truncated' }],
+                  },
+                ],
                 metadata: {
                   originalMessageCount: 10,
                   compressedMessageCount: 1,
@@ -575,18 +556,15 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             .fn()
             .mockRejectedValue(new EmptySummaryError('middle-out')),
         };
-      });
+      },
+    );
 
     vi.spyOn(chat['historyService'], 'getTotalTokens').mockImplementation(() =>
       fallbackApplied ? 140_000 : 155_000,
     );
 
     await expect(
-      chat.enforceContextWindow(
-        10_000,
-        'test-prompt',
-        (_model, configuredLimit) => configuredLimit ?? 1_000_000,
-      ),
+      chat['enforceContextWindow'](10_000, 'test-prompt'),
     ).resolves.toBeUndefined();
 
     expect(fallbackApplied).toBe(true);
@@ -604,9 +582,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     });
 
     let primaryCallCount = 0;
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation((name) => {
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
         if (name === 'top-down-truncation') {
           return {
             name: 'top-down-truncation' as const,
@@ -625,15 +602,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             throw makeHttpError(500);
           }),
         };
-      });
+      },
+    );
     vi.spyOn(chat['historyService'], 'getTotalTokens').mockReturnValue(155_000);
 
     await expect(
-      chat.enforceContextWindow(
-        10_000,
-        'test-prompt',
-        (_model, configuredLimit) => configuredLimit ?? 1_000_000,
-      ),
+      chat['enforceContextWindow'](10_000, 'test-prompt'),
     ).rejects.toThrow(
       'Automatic compression failed before fallback: Error: Auto compression failed during hard-limit enforcement.',
     );
@@ -651,9 +625,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
       maxOutputTokens: 40_000,
     });
 
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation((name) => {
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
         if (name === 'top-down-truncation') {
           return {
             name: 'top-down-truncation' as const,
@@ -668,7 +641,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
           requiresLLM: true,
           trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
           compress: vi.fn().mockResolvedValue({
-            newHistory: [{ role: 'user', parts: [{ text: 'compressed' }] }],
+            newHistory: [
+              {
+                speaker: 'human',
+                blocks: [{ type: 'text', text: 'compressed' }],
+              },
+            ],
             metadata: {
               originalMessageCount: 10,
               compressedMessageCount: 1,
@@ -677,15 +655,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             },
           }),
         };
-      });
+      },
+    );
     vi.spyOn(chat['historyService'], 'getTotalTokens').mockReturnValue(155_000);
 
     await expect(
-      chat.enforceContextWindow(
-        10_000,
-        'test-prompt',
-        (_model, configuredLimit) => configuredLimit ?? 1_000_000,
-      ),
+      chat['enforceContextWindow'](10_000, 'test-prompt'),
     ).rejects.toThrow(
       'Truncation fallback failed during hard-limit enforcement: Error: truncation broke',
     );
@@ -709,9 +684,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     ).compressionHandler.lastPromptTokenCount = 95_000;
 
     let fallbackApplied = false;
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation((name) => {
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
         if (name === 'top-down-truncation') {
           return {
             name: 'top-down-truncation' as const,
@@ -720,7 +694,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             compress: vi.fn().mockImplementation(async () => {
               fallbackApplied = true;
               return {
-                newHistory: [{ role: 'user', parts: [{ text: 'truncated' }] }],
+                newHistory: [
+                  {
+                    speaker: 'human',
+                    blocks: [{ type: 'text', text: 'truncated' }],
+                  },
+                ],
                 metadata: {
                   originalMessageCount: 10,
                   compressedMessageCount: 2,
@@ -739,8 +718,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
           compress: vi.fn().mockResolvedValue({
             // Insufficient compression triggers hard-limit truncation.
             newHistory: [
-              { role: 'user', parts: [{ text: 'hello' }] },
-              { role: 'model', parts: [{ text: 'hi' }] },
+              { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+              { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
             ],
             metadata: {
               originalMessageCount: 10,
@@ -750,16 +729,13 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             },
           }),
         };
-      });
+      },
+    );
 
     vi.spyOn(chat['historyService'], 'getTotalTokens').mockReturnValue(150_000);
 
     await expect(
-      chat.enforceContextWindow(
-        50_000,
-        'test-prompt',
-        (_model, configuredLimit) => configuredLimit ?? 1_000_000,
-      ),
+      chat['enforceContextWindow'](50_000, 'test-prompt'),
     ).rejects.toThrow(Error);
 
     expect(fallbackApplied).toBe(true);
@@ -795,9 +771,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     ).compressionHandler.lastPromptTokenCount = 95_000;
 
     let compressionAttempts = 0;
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation(() => ({
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
         name: 'middle-out' as const,
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
@@ -805,8 +780,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
           compressionAttempts++;
           return {
             newHistory: [
-              { role: 'user', parts: [{ text: 'hello' }] },
-              { role: 'model', parts: [{ text: 'hi' }] },
+              { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+              { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
             ],
             metadata: {
               originalMessageCount: 10,
@@ -816,16 +791,13 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             },
           };
         }),
-      }));
+      }),
+    );
 
     vi.spyOn(chat['historyService'], 'getTotalTokens').mockReturnValue(1_000);
 
     try {
-      await chat.enforceContextWindow(
-        10_000,
-        'test-prompt',
-        (_model, configuredLimit) => configuredLimit ?? 1_000_000,
-      );
+      await chat['enforceContextWindow'](10_000, 'test-prompt');
     } catch {
       // We only care that hard-limit path did not early-return and attempted compression.
     }
@@ -848,9 +820,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     });
 
     // Make compression return the same history (ineffective)
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation((name) => {
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
         if (name === 'top-down-truncation') {
           return {
             name: 'top-down-truncation' as const,
@@ -858,8 +829,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
             compress: vi.fn().mockResolvedValue({
               newHistory: [
-                { role: 'user', parts: [{ text: 'hello' }] },
-                { role: 'model', parts: [{ text: 'hi' }] },
+                { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+                { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
               ],
               metadata: {
                 originalMessageCount: 10,
@@ -876,8 +847,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
           trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
           compress: vi.fn().mockResolvedValue({
             newHistory: [
-              { role: 'user', parts: [{ text: 'hello' }] },
-              { role: 'model', parts: [{ text: 'hi' }] },
+              { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+              { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
             ],
             metadata: {
               originalMessageCount: 10,
@@ -887,18 +858,15 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             },
           }),
         };
-      });
+      },
+    );
 
     // Keep tokens high so nothing reduces enough
     vi.spyOn(chat['historyService'], 'getTotalTokens').mockReturnValue(80_000);
 
     let errorMessage = '';
     try {
-      await chat.enforceContextWindow(
-        10_000,
-        'test-prompt',
-        (_model, configuredLimit) => configuredLimit ?? 1_000_000,
-      );
+      await chat['enforceContextWindow'](10_000, 'test-prompt');
     } catch (err) {
       errorMessage = (err as Error).message;
     }
@@ -925,9 +893,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     const chat = makeChatForEnforceContextWindow({ totalTokens: 100_000 });
 
     let compressionAttempts = 0;
-    chat['compressionHandler'].resolveCompressionStrategy = vi
-      .fn()
-      .mockImplementation(() => ({
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
         name: 'middle-out' as const,
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
@@ -935,7 +902,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
           compressionAttempts++;
           throw makeHttpError(500);
         }),
-      }));
+      }),
+    );
 
     // Force cooldown
     await chat.performCompression('test-prompt'); // failure 1

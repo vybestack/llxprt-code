@@ -9,9 +9,8 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { vi } from 'vitest';
-import type { Content } from '@google/genai';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
@@ -21,7 +20,11 @@ import {
   type ModelInfo,
 } from './turn.js';
 import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
-import { fromAsync, setupGeminiClient } from './client-test-helpers.js';
+import {
+  fromAsync,
+  setupGeminiClient,
+  type MockResponseShape,
+} from './client-test-helpers.js';
 
 // Mock prompts module before imports
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -54,19 +57,19 @@ const {
   mockGenerateContentFn,
   mockEmbedContentFn,
   mockTurnRunFn,
-} = {
+} = vi.hoisted(() => ({
   mockChatCreateFn: vi.fn(),
   mockGenerateContentFn: vi.fn(),
   mockEmbedContentFn: vi.fn(),
   mockTurnRunFn: vi.fn(),
-};
+}));
 
 const {
   todoStoreReadMock,
   todoStoreReadPausedMock,
   todoStoreWritePausedMock,
   mockTodoStoreConstructor,
-} = (() => {
+} = vi.hoisted(() => {
   const readMock = vi.fn();
   const readPausedMock = vi.fn();
   const writePausedMock = vi.fn();
@@ -81,11 +84,8 @@ const {
     todoStoreWritePausedMock: writePausedMock,
     mockTodoStoreConstructor: constructorMock,
   };
-})();
+});
 
-vi.mock('@google/genai', () => ({
-  GoogleGenAI: vi.fn(),
-}));
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -110,14 +110,28 @@ vi.mock(
     })),
   }),
 );
-vi.mock('@vybestack/llxprt-code-tools', () => ({
-  LocalTodoStore: vi.fn().mockImplementation(() => ({
-    readTodos: todoStoreReadMock,
-    readPausedState: todoStoreReadPausedMock,
-    writePausedState: todoStoreWritePausedMock,
-  })),
-}));
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  return {
+    ...actual,
+    LocalTodoStore: mockTodoStoreConstructor,
+  };
+});
+vi.mock('./turn', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./turn.js')>();
+  class MockTurn {
+    pendingToolCalls = [];
+    run = mockTurnRunFn;
+    constructor() {}
+  }
+  return {
+    ...actual,
+    Turn: MockTurn,
+  };
+});
 
+vi.mock('@vybestack/llxprt-code-core/config/config.js');
 vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));
@@ -127,22 +141,38 @@ vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
-    getResponseText: (result: GenerateContentResponse) =>
+    getResponseText: (result: MockResponseShape) =>
       result.candidates?.[0]?.content?.parts
         ?.map((part) => part.text)
         .join('') ?? undefined,
   }),
 );
+vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
+  logApiRequest: vi.fn(),
+  logApiResponse: vi.fn(),
+  logApiError: vi.fn(),
+}));
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ideContext: {
-    getIdeContext: vi.fn(),
-    subscribeToIdeContext: vi.fn(),
-    setIdeContext: vi.fn(),
-    clearIdeContext: vi.fn(),
-  },
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    ideContext: {
+      ...actual.ideContext,
+      getIdeContext: vi.fn(),
+      subscribeToIdeContext: vi.fn(),
+      setIdeContext: vi.fn(),
+      clearIdeContext: vi.fn(),
+    },
+  };
+});
+vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
+  tokenLimit: vi.fn(),
 }));
 vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
@@ -151,7 +181,7 @@ vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   },
 }));
 
-describe('Gemini Client (client.ts)', () => {
+describe('AgentClient (client.ts)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
@@ -159,7 +189,6 @@ describe('Gemini Client (client.ts)', () => {
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,
-      createTurn: () => ({ run: mockTurnRunFn }) as never,
     });
     client = ctx.client;
 
@@ -278,12 +307,15 @@ describe('Gemini Client (client.ts)', () => {
     });
 
     it('uses live chat history instead of a stale stored snapshot when reinitializing', async () => {
-      const storedHistory: Content[] = [
-        { role: 'user', parts: [{ text: 'old turn' }] },
+      const storedHistory: IContent[] = [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'old turn' }] },
       ];
-      const liveHistory: Content[] = [
+      const liveHistory: IContent[] = [
         ...storedHistory,
-        { role: 'model', parts: [{ text: 'new committed turn' }] },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'new committed turn' }],
+        },
       ];
       const mockChat: Partial<ChatSession> = {
         getHistory: vi.fn().mockReturnValue(liveHistory),
@@ -301,18 +333,23 @@ describe('Gemini Client (client.ts)', () => {
     });
 
     it('preserves stored conversation history when refreshing tools before the next turn', async () => {
-      const committedHistory: Content[] = [
-        { role: 'user', parts: [{ text: 'We are fixing issue 2049.' }] },
+      const committedHistory: IContent[] = [
         {
-          role: 'model',
-          parts: [{ text: 'Profile switches must preserve context.' }],
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'We are fixing issue 2049.' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            { type: 'text', text: 'Profile switches must preserve context.' },
+          ],
         },
       ];
       client.storeHistoryForLaterUse(committedHistory);
       client['chat'] = undefined;
       const startChatSpy = vi
         .spyOn(client, 'startChat')
-        .mockImplementation(async (extraHistory?: Content[]) => {
+        .mockImplementation(async (extraHistory?: IContent[]) => {
           const restoredHistory = extraHistory ?? [];
           return {
             getHistory: vi.fn().mockReturnValue(restoredHistory),
@@ -422,7 +459,7 @@ describe('Gemini Client (client.ts)', () => {
       });
 
       const stream = client.sendMessageStream(
-        [{ text: 'Hi' }],
+        [{ type: 'text', text: 'Hi' }],
         new AbortController().signal,
         'prompt-change-mid-seq',
       );
@@ -452,7 +489,7 @@ describe('Gemini Client (client.ts)', () => {
         .mockReturnValue(mockStream2);
 
       const stream = client.sendMessageStream(
-        [{ text: 'Hi' }],
+        [{ type: 'text', text: 'Hi' }],
         new AbortController().signal,
         'prompt-same-identity',
       );
@@ -521,7 +558,7 @@ describe('Gemini Client (client.ts)', () => {
       });
 
       const stream = client.sendMessageStream(
-        [{ text: 'Hi' }],
+        [{ type: 'text', text: 'Hi' }],
         new AbortController().signal,
         'prompt-provider-change',
       );

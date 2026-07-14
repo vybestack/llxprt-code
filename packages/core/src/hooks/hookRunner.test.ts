@@ -10,19 +10,9 @@
  * @pseudocode:analysis/pseudocode/02-hook-event-handler-flow.md
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeAll,
-  beforeEach,
-  afterEach,
-} from 'vitest';
-import * as actualChildProcess from 'node:child_process';
-import * as actualDebug from '../../../telemetry/src/debug/index.ts';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import type { HookRunner as HookRunnerType } from './hookRunner.js';
+import { HookRunner } from './hookRunner.js';
 import { HookEventName, HookType } from './types.js';
 import type { HookConfig } from './types.js';
 import type { Config } from '../config/config.js';
@@ -47,10 +37,14 @@ type MockChildProcessWithoutNullStreams = ChildProcessWithoutNullStreams & {
   mockProcessOn: ReturnType<typeof vi.fn>;
 };
 
-vi.mock('node:child_process', () => ({
-  ...actualChildProcess,
-  spawn: vi.fn(),
-}));
+// Mock child_process with importOriginal for partial mocking
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    spawn: vi.fn(),
+  };
+});
 
 // Mock debugLogger using vi.hoisted
 const mockDebugLogger = vi.hoisted(() => ({
@@ -67,7 +61,6 @@ vi.mock('../debug/index.js', () => {
   DebugLogger.getLogger = vi.fn().mockReturnValue(mockDebugLogger);
 
   return {
-    ...actualDebug,
     DebugLogger,
   };
 });
@@ -83,8 +76,7 @@ const mockConsole = {
 vi.stubGlobal('console', mockConsole);
 
 describe('HookRunner', () => {
-  let HookRunner: typeof HookRunnerType;
-  let hookRunner: HookRunnerType;
+  let hookRunner: HookRunner;
   let mockSpawn: MockChildProcessWithoutNullStreams;
 
   const mockInput: HookInput = {
@@ -104,10 +96,6 @@ describe('HookRunner', () => {
       blockedEnvironmentVariables: [],
     }),
   } as unknown as Config;
-
-  beforeAll(async () => {
-    ({ HookRunner } = await import('./hookRunner.js'));
-  });
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -311,11 +299,13 @@ describe('HookRunner', () => {
 
         // SECURITY: Verify spawn is called with shell executable and expanded path
         // Note: Safe paths without metacharacters may not be quoted
+        const expectedPath =
+          process.platform === 'win32'
+            ? /'\/test\/project'\/hooks\/test\.sh/
+            : /\/test\/project\/hooks\/test\.sh/;
         expect(spawn).toHaveBeenCalledWith(
           expect.stringMatching(/bash|powershell/),
-          expect.arrayContaining([
-            expect.stringMatching(/\/test\/project\/hooks\/test\.sh/),
-          ]),
+          expect.arrayContaining([expect.stringMatching(expectedPath)]),
           expect.objectContaining({
             shell: false,
             env: expect.objectContaining({

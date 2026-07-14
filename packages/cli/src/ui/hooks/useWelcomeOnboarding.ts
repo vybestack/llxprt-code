@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { type LoadedSettings } from '../../config/settings.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {

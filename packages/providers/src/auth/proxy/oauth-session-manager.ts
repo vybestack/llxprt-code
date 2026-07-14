@@ -29,29 +29,12 @@ export interface OAuthSession {
   used: boolean;
 }
 
-export interface PKCESessionStoreDependencies {
-  now: () => number;
-  setInterval: typeof setInterval;
-  clearInterval: typeof clearInterval;
-}
-
-const defaultDependencies: PKCESessionStoreDependencies = {
-  now: Date.now,
-  setInterval,
-  clearInterval,
-};
-
 export class PKCESessionStore {
   private readonly sessions: Map<string, OAuthSession> = new Map();
   private readonly sessionTimeoutMs: number;
-  private readonly dependencies: PKCESessionStoreDependencies;
   private gcInterval: NodeJS.Timeout | null = null;
 
-  constructor(
-    sessionTimeoutMs: number = 600_000,
-    dependencies: PKCESessionStoreDependencies = defaultDependencies,
-  ) {
-    this.dependencies = dependencies;
+  constructor(sessionTimeoutMs: number = 600_000) {
     const envTimeoutSeconds = process.env.LLXPRT_OAUTH_SESSION_TIMEOUT_SECONDS;
     const parsedEnvTimeoutSeconds = Number.parseInt(
       envTimeoutSeconds ?? '',
@@ -65,16 +48,13 @@ export class PKCESessionStore {
 
   startGC(): void {
     if (this.gcInterval) {
-      this.dependencies.clearInterval(this.gcInterval);
+      clearInterval(this.gcInterval);
     }
-    this.gcInterval = this.dependencies.setInterval(
-      () => this.sweepExpired(),
-      60_000,
-    );
+    this.gcInterval = setInterval(() => this.sweepExpired(), 60_000);
   }
 
   sweepExpired(): void {
-    const now = this.dependencies.now();
+    const now = Date.now();
     for (const [sessionId, session] of this.sessions) {
       if (now - session.createdAt > this.sessionTimeoutMs || session.used) {
         session.abortController?.abort();
@@ -97,7 +77,7 @@ export class PKCESessionStore {
       bucket,
       flowType,
       flowInstance,
-      createdAt: this.dependencies.now(),
+      createdAt: Date.now(),
       peerIdentity,
       used: false,
     });
@@ -114,7 +94,7 @@ export class PKCESessionStore {
       throw new Error('SESSION_ALREADY_USED');
     }
 
-    if (this.dependencies.now() - session.createdAt > this.sessionTimeoutMs) {
+    if (Date.now() - session.createdAt > this.sessionTimeoutMs) {
       session.abortController?.abort();
       this.sessions.delete(sessionId);
       throw new Error('SESSION_EXPIRED');
@@ -152,7 +132,7 @@ export class PKCESessionStore {
     }
     this.sessions.clear();
     if (this.gcInterval) {
-      this.dependencies.clearInterval(this.gcInterval);
+      clearInterval(this.gcInterval);
       this.gcInterval = null;
     }
   }

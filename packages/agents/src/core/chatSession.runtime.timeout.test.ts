@@ -5,25 +5,37 @@
  */
 
 /**
- * Stream idle timeout configuration behavior used by TurnProcessor and
+ * Stream idle timeout behavioral tests for TurnProcessor and
  * DirectMessageProcessor. Sibling to chatSession.runtime.test.ts (split to
  * avoid file-level max-lines disable).
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { ChatSession } from './chatSession.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { resolveStreamIdleTimeoutMs } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
+import {
+  createProviderRuntimeContext,
+  type ProviderRuntimeContext,
+} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { createAgentRuntimeStateFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeStateFactory.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import {
+  createProviderAdapterFromManager,
+  createTelemetryAdapterFromConfig,
+  createToolRegistryViewFromRegistry,
+} from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 
 describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessageProcessor', () => {
   const originalEnv = process.env;
-
-  const createConfig = (timeoutMs: number): Config => {
-    const config = new Config(createConfigParams(new SettingsService()));
-    config.setEphemeralSetting('stream-idle-timeout-ms', timeoutMs);
-    return config;
-  };
+  let localSettingsService: SettingsService;
+  let localConfig: Config;
+  let localProviderRuntime: ProviderRuntimeContext;
+  let localManager: TestRuntimeProviderManager;
 
   beforeEach(() => {
     process.env = { ...originalEnv };
@@ -31,28 +43,161 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     process.env = originalEnv;
   });
 
   describe('TurnProcessor', () => {
-    it('honors the config setting', () => {
-      expect(resolveStreamIdleTimeoutMs(createConfig(12_000))).toBe(12_000);
+    it('honors config setting: uses resolveStreamIdleTimeoutMs with config from getConfig()', async () => {
+      const customTimeoutMs = 12_000;
+
+      localSettingsService = new SettingsService();
+      localConfig = new Config(createConfigParams(localSettingsService));
+      localConfig.setEphemeralSetting(
+        'stream-idle-timeout-ms',
+        customTimeoutMs,
+      );
+
+      // Verify ChatSession.getConfig() returns a config that provides the setting
+      localProviderRuntime = createProviderRuntimeContext({
+        settingsService: localSettingsService,
+        config: localConfig,
+        runtimeId: 'test.runtime',
+        metadata: { source: 'timeout-test' },
+      });
+
+      localManager = new TestRuntimeProviderManager(localProviderRuntime);
+      localManager.setConfig(localConfig);
+      localConfig.setProviderManager(localManager);
+
+      const provider: IProvider = {
+        name: 'stub',
+        isDefault: true,
+        getModels: vi.fn(async () => []),
+        getDefaultModel: () => 'stub-model',
+        generateChatCompletion: vi.fn(async function* () {}),
+        getServerTools: () => [],
+        invokeServerTool: vi.fn(),
+      };
+      localManager.registerProvider(provider);
+      localManager.setActiveProvider('stub');
+
+      const contentGenerator = {} as ContentGenerator;
+      const chat = new ChatSession(
+        createAgentRuntimeContext({
+          state: createAgentRuntimeStateFromConfig(localConfig),
+          settings: { compressionThreshold: 0.8 },
+          provider: createProviderAdapterFromManager(localManager),
+          telemetry: createTelemetryAdapterFromConfig(localConfig),
+          tools: createToolRegistryViewFromRegistry(
+            localConfig.getToolRegistry(),
+          ),
+          providerRuntime: localProviderRuntime,
+        }),
+        contentGenerator,
+        {},
+        [],
+      );
+
+      // Verify the config is accessible via getConfig()
+      const configFromChat = chat.getConfig();
+      expect(configFromChat).toBeDefined();
+      expect(
+        configFromChat?.getEphemeralSetting('stream-idle-timeout-ms'),
+      ).toBe(customTimeoutMs);
     });
 
-    it('disables the watchdog when configured with zero', () => {
-      expect(resolveStreamIdleTimeoutMs(createConfig(0))).toBe(0);
+    it('disabled path: setting 0 disables watchdog', async () => {
+      localSettingsService = new SettingsService();
+      localConfig = new Config(createConfigParams(localSettingsService));
+      localConfig.setEphemeralSetting('stream-idle-timeout-ms', 0);
+
+      localProviderRuntime = createProviderRuntimeContext({
+        settingsService: localSettingsService,
+        config: localConfig,
+        runtimeId: 'test.runtime',
+        metadata: { source: 'disabled-test' },
+      });
+
+      localManager = new TestRuntimeProviderManager(localProviderRuntime);
+      localManager.setConfig(localConfig);
+      localConfig.setProviderManager(localManager);
+
+      const provider: IProvider = {
+        name: 'stub',
+        isDefault: true,
+        getModels: vi.fn(async () => []),
+        getDefaultModel: () => 'stub-model',
+        generateChatCompletion: vi.fn(async function* () {}),
+        getServerTools: () => [],
+        invokeServerTool: vi.fn(),
+      };
+      localManager.registerProvider(provider);
+      localManager.setActiveProvider('stub');
+
+      const contentGenerator = {} as ContentGenerator;
+      const chat = new ChatSession(
+        createAgentRuntimeContext({
+          state: createAgentRuntimeStateFromConfig(localConfig),
+          settings: { compressionThreshold: 0.8 },
+          provider: createProviderAdapterFromManager(localManager),
+          telemetry: createTelemetryAdapterFromConfig(localConfig),
+          tools: createToolRegistryViewFromRegistry(
+            localConfig.getToolRegistry(),
+          ),
+          providerRuntime: localProviderRuntime,
+        }),
+        contentGenerator,
+        {},
+        [],
+      );
+
+      const configFromChat = chat.getConfig();
+      expect(
+        configFromChat?.getEphemeralSetting('stream-idle-timeout-ms'),
+      ).toBe(0);
     });
 
-    it('gives the environment variable precedence over config', () => {
-      process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS = '15000';
+    it('env var precedence: env var overrides config setting', async () => {
+      const envTimeoutMs = 15_000;
+      process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS = String(envTimeoutMs);
 
-      expect(resolveStreamIdleTimeoutMs(createConfig(60_000))).toBe(15_000);
+      localSettingsService = new SettingsService();
+      localConfig = new Config(createConfigParams(localSettingsService));
+      localConfig.setEphemeralSetting('stream-idle-timeout-ms', 60_000);
+
+      const { resolveStreamIdleTimeoutMs } = await import(
+        '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js'
+      );
+
+      const result = resolveStreamIdleTimeoutMs(localConfig);
+      expect(result).toBe(envTimeoutMs); // Env wins
     });
   });
 
-  describe('DirectMessageProcessor', () => {
-    it('resolves the timeout from its runtime config', () => {
-      expect(resolveStreamIdleTimeoutMs(createConfig(10_000))).toBe(10_000);
+  describe('DirectMessageProcessor (via generateDirectMessage)', () => {
+    it('uses runtimeContext.config for resolveStreamIdleTimeoutMs', async () => {
+      const customTimeoutMs = 10_000;
+
+      localSettingsService = new SettingsService();
+      localConfig = new Config(createConfigParams(localSettingsService));
+      localConfig.setEphemeralSetting(
+        'stream-idle-timeout-ms',
+        customTimeoutMs,
+      );
+
+      // Verify the config is properly set
+      expect(localConfig.getEphemeralSetting('stream-idle-timeout-ms')).toBe(
+        customTimeoutMs,
+      );
+
+      // The DirectMessageProcessor passes runtimeContext.config to resolveStreamIdleTimeoutMs
+      // This test verifies the config has the setting accessible
+      const { resolveStreamIdleTimeoutMs } = await import(
+        '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js'
+      );
+      const result = resolveStreamIdleTimeoutMs(localConfig);
+      expect(result).toBe(customTimeoutMs);
     });
   });
 });

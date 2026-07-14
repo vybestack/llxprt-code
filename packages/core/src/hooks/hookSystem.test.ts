@@ -10,17 +10,8 @@
  * @pseudocode:analysis/pseudocode/01-hook-system-lifecycle.md
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeAll,
-  beforeEach,
-  afterEach,
-} from 'vitest';
-import type { HookSystem as HookSystemType } from './hookSystem.js';
-import * as actualDebug from '../../../telemetry/src/debug/index.ts';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { HookSystem } from './hookSystem.js';
 import { HookSystemNotInitializedError } from './errors.js';
 import type { Config } from '../config/config.js';
 import type { Storage } from '@vybestack/llxprt-code-settings';
@@ -40,7 +31,6 @@ vi.mock('../debug/index.js', () => {
   DebugLogger.getLogger = vi.fn().mockReturnValue(mockDebugLogger);
 
   return {
-    ...actualDebug,
     DebugLogger,
   };
 });
@@ -49,18 +39,13 @@ vi.mock('../debug/index.js', () => {
 vi.mock('fs', () => ({
   existsSync: vi.fn().mockReturnValue(false),
   readFileSync: vi.fn(),
+  promises: {},
 }));
 
-let HookSystem: typeof HookSystemType;
-
 describe('HookSystem', () => {
-  let hookSystem: HookSystemType;
+  let hookSystem: HookSystem;
   let mockConfig: Config;
   let mockStorage: Storage;
-
-  beforeAll(async () => {
-    ({ HookSystem } = await import('./hookSystem.js'));
-  });
 
   beforeEach(() => {
     vi.resetAllMocks();

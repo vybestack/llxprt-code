@@ -16,12 +16,6 @@ import {
 } from './test-utils.js';
 
 const PROVIDER = 'anthropic';
-async function advanceTimers(ms: number): Promise<void> {
-  vi.advanceTimersByTime(ms);
-  for (let i = 0; i < 10; i++) {
-    await Promise.resolve();
-  }
-}
 
 describe('User entry point behavioral scenarios', () => {
   let tokenStore: MemoryTokenStore;
@@ -68,7 +62,7 @@ describe('User entry point behavioral scenarios', () => {
         auth: { type: 'oauth', buckets: ['bucket-a', 'bucket-b'] },
       });
 
-      await advanceTimers(305 * 1000);
+      await vi.advanceTimersByTimeAsync(305 * 1000);
 
       expect(acquireLockSpy).toHaveBeenCalled();
     });
@@ -121,7 +115,7 @@ describe('User entry point behavioral scenarios', () => {
 
       acquireLockSpy.mockClear();
 
-      await advanceTimers(305 * 1000);
+      await vi.advanceTimersByTimeAsync(305 * 1000);
 
       expect(acquireLockSpy).not.toHaveBeenCalledWith(
         PROVIDER,
@@ -203,7 +197,7 @@ describe('User entry point behavioral scenarios', () => {
         nearExpiryToken,
       );
 
-      await advanceTimers(305 * 1000);
+      await vi.advanceTimersByTimeAsync(305 * 1000);
 
       expect(refreshTokenSpy).toHaveBeenCalledWith(nearExpiryToken);
       expect(saveTokenSpy).toHaveBeenCalledWith(

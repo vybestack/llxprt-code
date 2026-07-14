@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 
 // Root core imports
 import * as core from '@vybestack/llxprt-code-core';

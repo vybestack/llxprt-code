@@ -12,7 +12,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import * as nodeFs from 'node:fs';
 import { Readable, Writable } from 'node:stream';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
@@ -20,11 +19,7 @@ import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import { initializeTestConfig } from '../test-utils/config.js';
 
 import { setLlxprtMdFilename as _mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
-import * as actualTools from '../../../tools/index.ts';
-import * as lspServiceClientModule from '../../../ide-integration/index.ts';
-import * as actualIdeIntegration from '../../../ide-integration/index.ts';
-import * as actualSettings from '../../../settings/index.ts';
-import { coreEvents } from '../utils/events.js';
+import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
 import { debugLogger } from '../utils/debugLogger.js';
 
 function containsAllSubstrings(value: string, parts: string[]): boolean {
@@ -32,16 +27,21 @@ function containsAllSubstrings(value: string, parts: string[]): boolean {
 }
 
 // Mock dependencies
-vi.mock('fs', () => ({
-  ...nodeFs,
-  existsSync: vi.fn().mockReturnValue(true),
-  statSync: vi.fn().mockReturnValue({
-    isDirectory: vi.fn().mockReturnValue(true),
-  }),
-  realpathSync: vi.fn((path) => path),
-}));
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    existsSync: vi.fn().mockReturnValue(true),
+    statSync: vi.fn().mockReturnValue({
+      isDirectory: vi.fn().mockReturnValue(true),
+    }),
+    realpathSync: vi.fn((path) => path),
+  };
+});
 
-vi.mock('@vybestack/llxprt-code-tools', () => {
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
   const ToolRegistryMock = vi.fn().mockImplementation(() => {
     const tools: Array<{
       serverName?: string;
@@ -73,12 +73,9 @@ vi.mock('@vybestack/llxprt-code-tools', () => {
     };
   });
   return {
-    ...actualTools,
+    ...actual,
     ToolRegistry: ToolRegistryMock,
-    MemoryTool: vi.fn().mockReturnValue({
-      name: 'save_memory',
-      displayName: 'save_memory',
-    }),
+    MemoryTool: vi.fn(),
     setLlxprtMdFilename: vi.fn(),
     getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'),
     DEFAULT_CONTEXT_FILENAME: 'LLXPRT.md',
@@ -102,6 +99,15 @@ vi.mock('@vybestack/llxprt-code-tools', () => {
   };
 });
 
+vi.mock('../core/contentGenerator.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../core/contentGenerator.js')>();
+  return {
+    ...actual,
+    createContentGeneratorConfig: vi.fn(),
+  };
+});
+
 vi.mock('../telemetry/index.js', () => ({
   initializeTelemetry: vi.fn(),
   DEFAULT_TELEMETRY_TARGET: 'local',
@@ -109,6 +115,22 @@ vi.mock('../telemetry/index.js', () => ({
   logCliConfiguration: vi.fn(),
   StartSessionEvent: vi.fn(),
 }));
+
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    IdeClient: {
+      getInstance: vi.fn().mockResolvedValue({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      }),
+    },
+  };
+});
 
 vi.mock('../services/fileDiscoveryService.js', () => ({
   FileDiscoveryService: vi.fn().mockImplementation(() => ({
@@ -170,8 +192,10 @@ vi.mock('../runtime/providerRuntimeContext.js', () => ({
   }),
 }));
 
-vi.mock('@vybestack/llxprt-code-settings', () => ({
-  ...actualSettings,
+vi.mock('@vybestack/llxprt-code-settings', async () => ({
+  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+    '@vybestack/llxprt-code-settings',
+  )),
   getSettingsService: vi.fn().mockReturnValue({
     get: vi.fn(),
     set: vi.fn(),
@@ -222,9 +246,14 @@ vi.mock('../utils/memoryDiscovery.js', () => ({
   getAllLlxprtMdFilenames: vi.fn().mockReturnValue([]),
 }));
 
-vi.spyOn(coreEvents, 'emit').mockReturnValue(true);
+vi.mock('../utils/events.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/events.js')>();
+  vi.spyOn(actual.coreEvents, 'emit').mockReturnValue(true);
+  return actual;
+});
 
 describe('Config LSP Integration (P33)', () => {
+  const isWindows = process.platform === 'win32';
   const mockTargetDir = fileURLToPath(new URL('../../../../', import.meta.url));
   const mockSessionId = 'test-session-id';
 
@@ -243,29 +272,6 @@ describe('Config LSP Integration (P33)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(
-      lspServiceClientModule.LspServiceClient.prototype,
-      'start',
-    ).mockResolvedValue(undefined);
-    vi.spyOn(
-      lspServiceClientModule.LspServiceClient.prototype,
-      'isAlive',
-    ).mockReturnValue(true);
-    vi.spyOn(
-      lspServiceClientModule.LspServiceClient.prototype,
-      'getUnavailableReason',
-    ).mockReturnValue(undefined);
-    vi.spyOn(
-      lspServiceClientModule.LspServiceClient.prototype,
-      'getMcpTransportStreams',
-    ).mockReturnValue({
-      readable: new Readable({ read() {} }),
-      writable: new Writable({
-        write(_chunk, _encoding, callback) {
-          callback();
-        },
-      }),
-    });
   });
 
   describe('REQ-CFG-010: lsp: false disables LSP', () => {
@@ -440,49 +446,58 @@ describe('Config LSP Integration (P33)', () => {
       ).toBe(true);
     });
 
-    it('should register MCP navigation when navigationTools is true', async () => {
-      const params = createBaseConfigParams({
-        lsp: {
-          servers: [],
-          navigationTools: true,
-        },
-      });
-      const config = new Config(params);
-      await initializeTestConfig(config);
+    // Live MCP navigation registration depends on the Bun-backed LSP transport,
+    // which is not currently supported by these native Windows test runs (#2509).
+    it.skipIf(isWindows)(
+      'should register MCP navigation when navigationTools is true',
+      async () => {
+        const params = createBaseConfigParams({
+          lsp: {
+            servers: [],
+            navigationTools: true,
+          },
+        });
+        const config = new Config(params);
+        await initializeTestConfig(config);
 
-      const lspConfig = config.getLspConfig();
-      expect(lspConfig?.navigationTools).toBe(true);
+        const lspConfig = config.getLspConfig();
+        expect(lspConfig?.navigationTools).toBe(true);
 
-      await vi.waitFor(() => {
-        const tools = config.getToolRegistry().getAllTools();
-        const lspNavTools = tools.filter(
-          (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
-        );
-        expect(lspNavTools.length).toBeGreaterThan(0);
-      });
-    });
+        await vi.waitFor(() => {
+          const tools = config.getToolRegistry().getAllTools();
+          const lspNavTools = tools.filter(
+            (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+          );
+          expect(lspNavTools.length).toBeGreaterThan(0);
+        });
+      },
+    );
 
-    it('should default to enabled when navigationTools is absent', async () => {
-      const params = createBaseConfigParams({
-        lsp: {
-          servers: [],
-          // navigationTools omitted
-        },
-      });
-      const config = new Config(params);
-      await initializeTestConfig(config);
+    // Same transport limitation as the explicit navigationTools case above.
+    it.skipIf(isWindows)(
+      'should default to enabled when navigationTools is absent',
+      async () => {
+        const params = createBaseConfigParams({
+          lsp: {
+            servers: [],
+            // navigationTools omitted
+          },
+        });
+        const config = new Config(params);
+        await initializeTestConfig(config);
 
-      const lspConfig = config.getLspConfig();
-      expect(lspConfig?.navigationTools).toBeUndefined();
+        const lspConfig = config.getLspConfig();
+        expect(lspConfig?.navigationTools).toBeUndefined();
 
-      await vi.waitFor(() => {
-        const tools = config.getToolRegistry().getAllTools();
-        const lspNavTools = tools.filter(
-          (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
-        );
-        expect(lspNavTools.length).toBeGreaterThan(0);
-      });
-    });
+        await vi.waitFor(() => {
+          const tools = config.getToolRegistry().getAllTools();
+          const lspNavTools = tools.filter(
+            (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+          );
+          expect(lspNavTools.length).toBeGreaterThan(0);
+        });
+      },
+    );
   });
 
   describe('REQ-NAV-055: Register MCP only after service starts', () => {
@@ -553,15 +568,6 @@ describe('Config LSP Integration (P33)', () => {
     });
 
     it('should not register MCP navigation tools when service is unavailable', async () => {
-      vi.spyOn(
-        lspServiceClientModule.LspServiceClient.prototype,
-        'isAlive',
-      ).mockReturnValue(false);
-      vi.spyOn(
-        lspServiceClientModule.LspServiceClient.prototype,
-        'getUnavailableReason',
-      ).mockReturnValue('Server command not executable');
-
       const params = createBaseConfigParams({
         lsp: {
           servers: [

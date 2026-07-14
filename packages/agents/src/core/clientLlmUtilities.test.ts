@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
-import { vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('test system prompt'),
@@ -33,6 +32,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { BaseLLMClient } from './baseLlmClient.js';
 import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 
 const TEST_MODEL = 'test-model';
@@ -90,11 +90,16 @@ describe('generateJson', () => {
     contentGenerator = makeContentGenerator();
     baseLlmClient = makeBaseLlmClient();
     vi.clearAllMocks();
-    getCoreSystemPromptAsync.mockResolvedValue(SYSTEM_PROMPT);
+    vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(SYSTEM_PROMPT);
   });
 
   it('returns parsed JSON for valid model response', async () => {
-    const contents = [{ role: 'user', parts: [{ text: 'hello' }] }];
+    const contents = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'hello' }],
+      } as IContent,
+    ];
     const schema = { type: 'object' };
 
     const result = await generateJson(
@@ -113,7 +118,12 @@ describe('generateJson', () => {
   });
 
   it('uses lightweight system prompt (getCoreSystemPromptAsync, no env context)', async () => {
-    const contents = [{ role: 'user', parts: [{ text: 'hello' }] }];
+    const contents = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'hello' }],
+      } as IContent,
+    ];
 
     await generateJson(
       config,
@@ -136,12 +146,15 @@ describe('generateJson', () => {
   });
 
   it('converts plain text "user"/"model" responses for next_speaker checks', async () => {
-    baseLlmClient.generateJson.mockResolvedValue(
+    vi.mocked(baseLlmClient.generateJson).mockResolvedValue(
       'user' as unknown as Record<string, unknown>,
     );
 
     const contents = [
-      { role: 'user', parts: [{ text: 'determine next_speaker please' }] },
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'determine next_speaker please' }],
+      } as IContent,
     ];
 
     const result = await generateJson(
@@ -164,9 +177,14 @@ describe('generateJson', () => {
 
   it('rethrows errors when not aborted', async () => {
     const apiError = new Error('API failure');
-    baseLlmClient.generateJson.mockRejectedValue(apiError);
+    vi.mocked(baseLlmClient.generateJson).mockRejectedValue(apiError);
 
-    const contents = [{ role: 'user', parts: [{ text: 'hello' }] }];
+    const contents = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'hello' }],
+      } as IContent,
+    ];
 
     await expect(
       generateJson(
@@ -201,11 +219,16 @@ describe('generateContent', () => {
       generateContent: vi.fn().mockResolvedValue(mockResponse),
     });
     vi.clearAllMocks();
-    getCoreSystemPromptAsync.mockResolvedValue(SYSTEM_PROMPT);
+    vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(SYSTEM_PROMPT);
   });
 
   it('returns generated content with merged config', async () => {
-    const contents = [{ role: 'user', parts: [{ text: 'write something' }] }];
+    const contents = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'write something' }],
+      } as IContent,
+    ];
     const baseConfig = { temperature: 0, topP: 1 };
 
     const result = await generateContent(
@@ -234,7 +257,12 @@ describe('generateContent', () => {
   });
 
   it('uses lightweight system prompt (getCoreSystemPromptAsync, no env context)', async () => {
-    const contents = [{ role: 'user', parts: [{ text: 'hello' }] }];
+    const contents = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'hello' }],
+      } as IContent,
+    ];
 
     await generateContent(
       config,
@@ -259,11 +287,16 @@ describe('generateContent', () => {
   });
 
   it('wraps and rethrows non-abort errors with model name', async () => {
-    contentGenerator.generateContent.mockRejectedValue(
+    vi.mocked(contentGenerator.generateContent).mockRejectedValue(
       new Error('network error'),
     );
 
-    const contents = [{ role: 'user', parts: [{ text: 'hello' }] }];
+    const contents = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'hello' }],
+      } as IContent,
+    ];
 
     await expect(
       generateContent(
@@ -299,7 +332,7 @@ describe('generateEmbedding', () => {
       [0.1, 0.2],
       [0.3, 0.4],
     ];
-    baseLlmClient.generateEmbedding.mockResolvedValue(embeddings);
+    vi.mocked(baseLlmClient.generateEmbedding).mockResolvedValue(embeddings);
 
     const result = await generateEmbedding(
       baseLlmClient,

@@ -9,16 +9,22 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { vi } from 'vitest';
-import type { Part, PartListUnion } from '@google/genai';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type {
+  ContentBlock,
+  AgentMessageInput,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType, PerformCompressionResult } from './turn.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
-import { fromAsync, setupGeminiClient } from './client-test-helpers.js';
+import {
+  fromAsync,
+  setupGeminiClient,
+  type MockResponseShape,
+} from './client-test-helpers.js';
 
 // Mock prompts module before imports
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -51,19 +57,19 @@ const {
   mockGenerateContentFn,
   mockEmbedContentFn,
   mockTurnRunFn,
-} = {
+} = vi.hoisted(() => ({
   mockChatCreateFn: vi.fn(),
   mockGenerateContentFn: vi.fn(),
   mockEmbedContentFn: vi.fn(),
   mockTurnRunFn: vi.fn(),
-};
+}));
 
 const {
   todoStoreReadMock,
   todoStoreReadPausedMock,
   todoStoreWritePausedMock,
   mockTodoStoreConstructor,
-} = (() => {
+} = vi.hoisted(() => {
   const readMock = vi.fn();
   const readPausedMock = vi.fn();
   const writePausedMock = vi.fn();
@@ -78,9 +84,8 @@ const {
     todoStoreWritePausedMock: writePausedMock,
     mockTodoStoreConstructor: constructorMock,
   };
-})();
+});
 
-vi.mock('@google/genai', () => ({ GoogleGenAI: vi.fn() }));
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -105,8 +110,28 @@ vi.mock(
     })),
   }),
 );
-vi.mock('@vybestack/llxprt-code-tools', () => ({ LocalTodoStore: vi.fn() }));
+vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+  return {
+    ...actual,
+    LocalTodoStore: mockTodoStoreConstructor,
+  };
+});
+vi.mock('./turn', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./turn.js')>();
+  class MockTurn {
+    pendingToolCalls = [];
+    run = mockTurnRunFn;
+    constructor() {}
+  }
+  return {
+    ...actual,
+    Turn: MockTurn,
+  };
+});
 
+vi.mock('@vybestack/llxprt-code-core/config/config.js');
 vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));
@@ -116,19 +141,13 @@ vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
-    getResponseText: (result: GenerateContentResponse) =>
+    getResponseText: (result: MockResponseShape) =>
       result.candidates?.[0]?.content?.parts
         ?.map((part) => part.text)
         .join('') ?? undefined,
   }),
 );
 vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
-  DEFAULT_OTLP_ENDPOINT: 'http://localhost:4318',
-  DEFAULT_TELEMETRY_TARGET: null,
-  TelemetryTarget: { LOCAL: 'local', GCP: 'gcp' },
-  StartSessionEvent: class StartSessionEvent {},
-  initializeTelemetry: vi.fn(),
-  logCliConfiguration: vi.fn(),
   logApiRequest: vi.fn(),
   logApiResponse: vi.fn(),
   logApiError: vi.fn(),
@@ -136,14 +155,22 @@ vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ideContext: {
-    getIdeContext: vi.fn(),
-    subscribeToIdeContext: vi.fn(),
-    setIdeContext: vi.fn(),
-    clearIdeContext: vi.fn(),
-  },
-}));
+vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-ide-integration')
+    >();
+  return {
+    ...actual,
+    ideContext: {
+      ...actual.ideContext,
+      getIdeContext: vi.fn(),
+      subscribeToIdeContext: vi.fn(),
+      setIdeContext: vi.fn(),
+      clearIdeContext: vi.fn(),
+    },
+  };
+});
 vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
   tokenLimit: vi.fn(),
 }));
@@ -154,7 +181,7 @@ vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   },
 }));
 
-describe('Gemini Client (client.ts)', () => {
+describe('AgentClient (client.ts)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
@@ -162,7 +189,6 @@ describe('Gemini Client (client.ts)', () => {
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,
-      createTurn: () => ({ run: mockTurnRunFn }) as never,
     });
     client = ctx.client;
 
@@ -193,11 +219,11 @@ describe('Gemini Client (client.ts)', () => {
     it('should yield ContextWindowWillOverflow when the context window is about to overflow', async () => {
       // Arrange
       const MOCKED_TOKEN_LIMIT = 1000;
-      tokenLimit.mockReturnValue(MOCKED_TOKEN_LIMIT);
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
 
       // Set last prompt token count
       const lastPromptTokenCount = 900;
-      uiTelemetryService.getLastPromptTokenCount.mockReturnValue(
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
         lastPromptTokenCount,
       );
 
@@ -221,7 +247,7 @@ describe('Gemini Client (client.ts)', () => {
       // We need a request > 95 tokens.
       // A string of length 400 is roughly 100 tokens.
       const longText = 'a'.repeat(400);
-      const request: Part[] = [{ text: longText }];
+      const request = [{ type: 'text' as const, text: longText }];
       // Structured fallback counts the text content (400 chars), not JSON structure.
       const estimatedRequestTokenCount = Math.floor(longText.length / 4);
       const remainingTokenCount = MOCKED_TOKEN_LIMIT - lastPromptTokenCount;
@@ -259,11 +285,11 @@ describe('Gemini Client (client.ts)', () => {
       // the normal send/compression/enforcement path should attempt to resolve
       // the overflow with the switched model's tokenizer.
       const MOCKED_TOKEN_LIMIT = 200000;
-      tokenLimit.mockReturnValue(MOCKED_TOKEN_LIMIT);
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
 
       // e.g. 249,442 stored tokens against a 200,000-token model.
       const lastPromptTokenCount = 249442;
-      uiTelemetryService.getLastPromptTokenCount.mockReturnValue(
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
         lastPromptTokenCount,
       );
 
@@ -284,7 +310,7 @@ describe('Gemini Client (client.ts)', () => {
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
       // A small "continue" request — remaining is -49,442.
-      const request: Part[] = [{ text: 'continue' }];
+      const request: ContentBlock[] = [{ type: 'text', text: 'continue' }];
 
       const mockStream = (async function* () {
         yield { type: AgentEventType.Content, value: 'ok' };
@@ -313,10 +339,10 @@ describe('Gemini Client (client.ts)', () => {
       // bare functionResponse part. The negative-remaining short-circuit must
       // defer to the send path rather than tripping a bogus guard.
       const MOCKED_TOKEN_LIMIT = 200000;
-      tokenLimit.mockReturnValue(MOCKED_TOKEN_LIMIT);
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
 
       const lastPromptTokenCount = 249442;
-      uiTelemetryService.getLastPromptTokenCount.mockReturnValue(
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
         lastPromptTokenCount,
       );
 
@@ -337,13 +363,13 @@ describe('Gemini Client (client.ts)', () => {
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
-      // Pure functionResponse continuation — 0 tokens by text estimate.
-      const request: Part[] = [
+      // Pure tool_response continuation — 0 tokens by text estimate.
+      const request: ContentBlock[] = [
         {
-          functionResponse: {
-            name: 'someTool',
-            response: { result: 'done' },
-          },
+          type: 'tool_response',
+          callId: 'someTool',
+          toolName: 'someTool',
+          result: { result: 'done' },
         },
       ];
 
@@ -369,26 +395,21 @@ describe('Gemini Client (client.ts)', () => {
       expect(mockTurnRunFn).toHaveBeenCalled();
     });
 
-    it('should use the model-aware tokenizer (estimatePendingTokens + convertPartListUnionToIContent) when remaining capacity is positive', async () => {
+    it('should use the model-aware tokenizer (estimatePendingTokens + iContentFromAgentMessageInput) when remaining capacity is positive', async () => {
       // Arrange — proves the positive-remaining path routes through the
       // tokenizer-backed sizing path rather than the text-only fallback.
       const MOCKED_TOKEN_LIMIT = 10000;
-      tokenLimit.mockReturnValue(MOCKED_TOKEN_LIMIT);
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
       const lastPromptTokenCount = 1000;
-      uiTelemetryService.getLastPromptTokenCount.mockReturnValue(
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
         lastPromptTokenCount,
       );
 
-      const convertSpy = vi.fn().mockReturnValue({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'hi' }],
-      });
       const estimateSpy = vi.fn().mockResolvedValue(50);
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
-        convertPartListUnionToIContent: convertSpy,
         estimatePendingTokens: estimateSpy,
       };
       client['chat'] = mockChat as ChatSession;
@@ -398,7 +419,7 @@ describe('Gemini Client (client.ts)', () => {
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
-      const request: Part[] = [{ text: 'continue' }];
+      const request = [{ type: 'text' as const, text: 'continue' }];
 
       // Act
       const stream = client.sendMessageStream(
@@ -408,11 +429,14 @@ describe('Gemini Client (client.ts)', () => {
       );
       await fromAsync(stream);
 
-      // Assert — tokenizer path was used; text-only fallback was not needed.
-      expect(convertSpy).toHaveBeenCalledWith(request);
+      // Assert — tokenizer path was used; estimatePendingTokens receives the
+      // IContent[] produced by iContentFromAgentMessageInput.
       expect(estimateSpy).toHaveBeenCalledTimes(1);
       expect(estimateSpy).toHaveBeenCalledWith([
-        { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'continue' }],
+        },
       ]);
       // No overflow since 50 < (9000 * 0.95).
       expect(mockTurnRunFn).toHaveBeenCalled();
@@ -422,9 +446,9 @@ describe('Gemini Client (client.ts)', () => {
       // Arrange — proves the negative-remaining short-circuit avoids the
       // tokenizer-backed sizing path entirely (it returns before sizing).
       const MOCKED_TOKEN_LIMIT = 200000;
-      tokenLimit.mockReturnValue(MOCKED_TOKEN_LIMIT);
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
       const lastPromptTokenCount = 249442;
-      uiTelemetryService.getLastPromptTokenCount.mockReturnValue(
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
         lastPromptTokenCount,
       );
 
@@ -446,7 +470,7 @@ describe('Gemini Client (client.ts)', () => {
 
       // Act
       const stream = client.sendMessageStream(
-        [{ text: 'continue' }],
+        [{ type: 'text', text: 'continue' }],
         new AbortController().signal,
         'prompt-id-tokenizer-skipped-negative',
       );
@@ -465,12 +489,12 @@ describe('Gemini Client (client.ts)', () => {
 
     it('should count functionResponse payload tokens in the structured fallback (no tokenizer available)', async () => {
       // Arrange — a minimal chat double WITHOUT tokenizer methods forces the
-      // structured fallback. A functionResponse-only request must be estimated
+      // structured fallback. A tool-response-only request must be estimated
       // as > 0 tokens (its JSON payload), unlike the old text-only estimate.
       const MOCKED_TOKEN_LIMIT = 1000;
-      tokenLimit.mockReturnValue(MOCKED_TOKEN_LIMIT);
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
       const lastPromptTokenCount = 0;
-      uiTelemetryService.getLastPromptTokenCount.mockReturnValue(
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
         lastPromptTokenCount,
       );
 
@@ -486,15 +510,15 @@ describe('Gemini Client (client.ts)', () => {
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
-      // Build a functionResponse payload large enough that its JSON/4 exceeds
+      // Build a tool_response payload large enough that its JSON/4 exceeds
       // the 95% threshold of the full limit (1000 * 0.95 = 950 tokens).
       const largeResult = 'x'.repeat(4000);
-      const request: Part[] = [
+      const request = [
         {
-          functionResponse: {
-            name: 'someTool',
-            response: { result: largeResult },
-          },
+          type: 'tool_response' as const,
+          callId: 'someTool',
+          toolName: 'someTool',
+          result: { result: largeResult },
         },
       ];
 
@@ -512,20 +536,21 @@ describe('Gemini Client (client.ts)', () => {
         (e) => e.type === AgentEventType.ContextWindowWillOverflow,
       );
       expect(overflow).toBeDefined();
-      // JSON of the functionResponse is well over 4000 chars → > 950 tokens.
+      // JSON of the tool_response result is well over 4000 chars → > 950 tokens.
       expect(
         (overflow as { value: { estimatedRequestTokenCount: number } }).value
           .estimatedRequestTokenCount,
       ).toBeGreaterThan(950);
     });
 
-    it('should use structured fallback when request conversion throws before tokenizer sizing', async () => {
-      // Arrange — convertPartListUnionToIContent is synchronous. If it throws,
-      // the fallback still needs to run instead of rejecting the stream.
+    it('should use structured fallback when tokenizer throws before sizing', async () => {
+      // Arrange — estimatePendingTokens throws (e.g. uninitialized internals
+      // during early preflight). The fallback still needs to run instead of
+      // rejecting the stream.
       const MOCKED_TOKEN_LIMIT = 1000;
-      tokenLimit.mockReturnValue(MOCKED_TOKEN_LIMIT);
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
       const lastPromptTokenCount = 0;
-      uiTelemetryService.getLastPromptTokenCount.mockReturnValue(
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
         lastPromptTokenCount,
       );
 
@@ -533,19 +558,18 @@ describe('Gemini Client (client.ts)', () => {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
-        convertPartListUnionToIContent: vi.fn(() => {
-          throw new Error('conversion unavailable');
-        }),
-        estimatePendingTokens: vi.fn().mockResolvedValue(1),
+        estimatePendingTokens: vi
+          .fn()
+          .mockRejectedValue(new Error('tokenizer unavailable')),
       };
       client['chat'] = mockChat as ChatSession;
 
-      const request: Part[] = [
+      const request = [
         {
-          functionResponse: {
-            name: 'someTool',
-            response: { result: 'x'.repeat(4000) },
-          },
+          type: 'tool_response' as const,
+          callId: 'someTool',
+          toolName: 'someTool',
+          result: { result: 'x'.repeat(4000) },
         },
       ];
 
@@ -557,7 +581,7 @@ describe('Gemini Client (client.ts)', () => {
       );
       const events = await fromAsync(stream);
 
-      // Assert — fallback counted the functionResponse payload and emitted the
+      // Assert — fallback counted the tool_response payload and emitted the
       // same preflight overflow event rather than throwing.
       const overflow = events.find(
         (e) => e.type === AgentEventType.ContextWindowWillOverflow,
@@ -569,9 +593,9 @@ describe('Gemini Client (client.ts)', () => {
     it('should ignore inlineData/fileData in the structured fallback to avoid false positives', async () => {
       // Arrange — large binary payloads must not inflate the fallback estimate.
       const MOCKED_TOKEN_LIMIT = 1000;
-      tokenLimit.mockReturnValue(MOCKED_TOKEN_LIMIT);
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
       const lastPromptTokenCount = 0;
-      uiTelemetryService.getLastPromptTokenCount.mockReturnValue(
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
         lastPromptTokenCount,
       );
 
@@ -587,13 +611,13 @@ describe('Gemini Client (client.ts)', () => {
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
-      const request: Part[] = [
-        { text: 'short' }, // 5 chars → 1 token
+      const request: ContentBlock[] = [
+        { type: 'text', text: 'short' }, // 5 chars → 1 token
         {
-          inlineData: {
-            mimeType: 'application/pdf',
-            data: 'A'.repeat(11 * 1024 * 1024), // ignored
-          },
+          type: 'media',
+          mimeType: 'application/pdf',
+          data: 'A'.repeat(11 * 1024 * 1024), // ignored
+          encoding: 'base64',
         },
       ];
 
@@ -621,7 +645,7 @@ describe('Gemini Client (client.ts)', () => {
       const CONFIG_MODEL_LIMIT = 2000;
 
       // Set up token limits
-      tokenLimit.mockImplementation((model) => {
+      vi.mocked(tokenLimit).mockImplementation((model) => {
         if (model === STICKY_MODEL) return STICKY_MODEL_LIMIT;
         return CONFIG_MODEL_LIMIT;
       });
@@ -631,7 +655,7 @@ describe('Gemini Client (client.ts)', () => {
 
       // Set token count
       const lastPromptTokenCount = 900;
-      uiTelemetryService.getLastPromptTokenCount.mockReturnValue(
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
         lastPromptTokenCount,
       );
 
@@ -651,7 +675,7 @@ describe('Gemini Client (client.ts)', () => {
       // Remaining (sticky) = 100. Threshold (95%) = 95.
       // We need a request > 95 tokens.
       const longText = 'a'.repeat(400);
-      const request: Part[] = [{ text: longText }];
+      const request = [{ type: 'text' as const, text: longText }];
       // Structured fallback counts the text content (400 chars), not JSON structure.
       const estimatedRequestTokenCount = Math.floor(longText.length / 4);
       const remainingTokenCount = STICKY_MODEL_LIMIT - lastPromptTokenCount;
@@ -681,7 +705,7 @@ describe('Gemini Client (client.ts)', () => {
     it('should not trigger overflow warning for requests with large binary data (PDFs/images)', async () => {
       // Arrange
       const MOCKED_TOKEN_LIMIT = 1000000; // 1M tokens
-      tokenLimit.mockReturnValue(MOCKED_TOKEN_LIMIT);
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
 
       const lastPromptTokenCount = 10000;
       const mockChat: Partial<ChatSession> = {
@@ -694,13 +718,13 @@ describe('Gemini Client (client.ts)', () => {
       // In the old implementation, this would incorrectly estimate ~2.7M tokens
       // In the new implementation, only the text part is counted
       const largePdfBase64 = 'A'.repeat(11 * 1024 * 1024);
-      const request: Part[] = [
-        { text: 'Please analyze this PDF document' }, // ~35 chars = ~8 tokens
+      const request: ContentBlock[] = [
+        { type: 'text', text: 'Please analyze this PDF document' }, // ~35 chars = ~8 tokens
         {
-          inlineData: {
-            mimeType: 'application/pdf',
-            data: largePdfBase64, // This should be ignored in token estimation
-          },
+          type: 'media',
+          mimeType: 'application/pdf',
+          data: largePdfBase64, // This should be ignored in token estimation
+          encoding: 'base64',
         },
       ];
 
@@ -754,7 +778,7 @@ describe('Gemini Client (client.ts)', () => {
       };
       client['chat'] = mockChat as ChatSession;
 
-      const initialRequest = [{ text: 'Hi' }];
+      const initialRequest = [{ type: 'text', text: 'Hi' }];
       const promptId = 'prompt-id-invalid-stream';
       const signal = new AbortController().signal;
 
@@ -765,7 +789,7 @@ describe('Gemini Client (client.ts)', () => {
       // Assert
       expect(events).toStrictEqual([
         {
-          type: 'model_info',
+          type: AgentEventType.ModelInfo,
           value: {
             model: 'test-model',
             providerName: 'backend',
@@ -783,14 +807,24 @@ describe('Gemini Client (client.ts)', () => {
       // First call with original request
       expect(mockTurnRunFn).toHaveBeenNthCalledWith(
         1,
-        initialRequest,
+        [
+          {
+            speaker: 'human',
+            blocks: initialRequest,
+          },
+        ],
         expect.any(Object),
       );
 
       // Second call with "Please continue."
       expect(mockTurnRunFn).toHaveBeenNthCalledWith(
         2,
-        [{ text: 'System: Please continue.' }],
+        [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'System: Please continue.' }],
+          },
+        ],
         expect.any(Object),
       );
     });
@@ -813,7 +847,7 @@ describe('Gemini Client (client.ts)', () => {
       };
       client['chat'] = mockChat as ChatSession;
 
-      const initialRequest = [{ text: 'Hi' }];
+      const initialRequest = [{ type: 'text', text: 'Hi' }];
       const promptId = 'prompt-id-invalid-stream';
       const signal = new AbortController().signal;
 
@@ -824,7 +858,7 @@ describe('Gemini Client (client.ts)', () => {
       // Assert
       expect(events).toStrictEqual([
         {
-          type: 'model_info',
+          type: AgentEventType.ModelInfo,
           value: {
             model: 'test-model',
             providerName: 'backend',
@@ -843,10 +877,10 @@ describe('Gemini Client (client.ts)', () => {
         false,
       );
 
-      const forwardedRequests: Part[][] = [];
+      const forwardedRequests: ContentBlock[][] = [];
       mockTurnRunFn.mockReset();
-      mockTurnRunFn.mockImplementation((req: PartListUnion) => {
-        forwardedRequests.push(req as Part[]);
+      mockTurnRunFn.mockImplementation((req: AgentMessageInput) => {
+        forwardedRequests.push(req as ContentBlock[]);
         return (async function* () {
           yield {
             type: AgentEventType.Thought,
@@ -876,7 +910,7 @@ describe('Gemini Client (client.ts)', () => {
       todoStoreReadMock.mockResolvedValue([]);
 
       const stream = client.sendMessageStream(
-        [{ text: 'Do something' }],
+        [{ type: 'text', text: 'Do something' }],
         new AbortController().signal,
         'prompt-thinking-invalid-stream-no-continue',
       );
@@ -897,7 +931,7 @@ describe('Gemini Client (client.ts)', () => {
       ).toBe(false);
       expect(events).toStrictEqual([
         {
-          type: 'model_info',
+          type: AgentEventType.ModelInfo,
           value: {
             model: 'test-model',
             providerName: 'backend',
@@ -935,7 +969,7 @@ describe('Gemini Client (client.ts)', () => {
       };
       client['chat'] = mockChat as ChatSession;
 
-      const initialRequest = [{ text: 'Hi' }];
+      const initialRequest = [{ type: 'text', text: 'Hi' }];
       const promptId = 'prompt-id-infinite-invalid-stream';
       const signal = new AbortController().signal;
 
@@ -946,7 +980,7 @@ describe('Gemini Client (client.ts)', () => {
       // Assert
       // We expect 1 ModelInfo + 2 InvalidStream events (original + 1 retry)
       expect(events.length).toBe(3);
-      expect(events[0]?.type).toBe('model_info');
+      expect(events[0]?.type).toBe(AgentEventType.ModelInfo);
       expect(
         events.slice(1).every((e) => e.type === AgentEventType.InvalidStream),
       ).toBe(true);

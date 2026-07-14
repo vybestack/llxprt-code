@@ -4,11 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { DirectWebFetchToolParams } from './direct-web-fetch.js';
 import { DirectWebFetchTool } from './direct-web-fetch.js';
 import type { IToolHost, ToolResult as _ToolResult } from '../index.js';
-const mockedFetch = vi.fn();
+import fetch from 'node-fetch';
+
+vi.mock('node-fetch');
+const mockedFetch = fetch as unknown as ReturnType<typeof vi.fn>;
 
 describe('DirectWebFetchTool', () => {
   let config: IToolHost;
@@ -23,7 +26,7 @@ describe('DirectWebFetchTool', () => {
       isInteractive: () => false,
       hasFeatureFlag: () => false,
     };
-    tool = new DirectWebFetchTool(config, { fetch: mockedFetch });
+    tool = new DirectWebFetchTool(config);
     vi.clearAllMocks();
   });
 

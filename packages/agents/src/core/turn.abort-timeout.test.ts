@@ -4,32 +4,38 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ServerAgentStreamEvent } from './turn.js';
-import { AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
-import { Turn } from './turn.ts?abort-timeout-behavior';
-import type { Part } from '@google/genai';
+import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
-import {
-  type MockedChatInstance,
-  mockResponseToChunk,
-} from './turn-test-helpers.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
 
-const mockSendMessageStream = vi.fn();
-const mockGetHistory = vi.fn();
+const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
+  mockSendMessageStream: vi.fn(),
+  mockGetHistory: vi.fn(),
+}));
 
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
 
-const drainMicrotasks = async (): Promise<void> => {
-  for (let i = 0; i < 100; i++) {
-    await Promise.resolve();
-  }
-};
+vi.mock(
+  '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js')
+      >();
+    return {
+      // analyzeResponseOutcome now operates on ContentBlock[]; delegate to the
+      // real implementation so thinking/tool_call/text detection is correct.
+      analyzeResponseOutcome: actual.analyzeResponseOutcome,
+    };
+  },
+);
 
 describe('Turn run - abort and idle timeout', () => {
   let turn: Turn;
@@ -61,28 +67,20 @@ describe('Turn run - abort and idle timeout', () => {
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [{ content: { parts: [{ text: 'First part' }] } }],
-        }),
+        value: mockChunk({ text: 'First part' }),
       };
       abortController.abort();
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [
-            {
-              content: {
-                parts: [{ text: 'Second part - should not be processed' }],
-              },
-            },
-          ],
+        value: mockChunk({
+          text: 'Second part - should not be processed',
         }),
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
     const events = [];
-    const reqParts: Part[] = [{ text: 'Test abort' }];
+    const reqParts: ContentBlock[] = [{ type: 'text', text: 'Test abort' }];
     for await (const event of turn.run(reqParts, abortController.signal)) {
       events.push(event);
     }
@@ -92,7 +90,7 @@ describe('Turn run - abort and idle timeout', () => {
         value: 'First part',
         traceId: undefined,
       },
-      { type: 'user_cancelled' },
+      { type: AgentEventType.UserCancelled },
     ]);
     expect(turn.getDebugResponses().length).toBe(1);
   });
@@ -126,9 +124,7 @@ describe('Turn run - abort and idle timeout', () => {
         try {
           yield {
             type: StreamEventType.CHUNK,
-            value: mockResponseToChunk({
-              candidates: [{ content: { parts: [{ text: 'First part' }] } }],
-            }),
+            value: mockChunk({ text: 'First part' }),
           };
           await new Promise<void>((resolve) => {
             abortController.signal.addEventListener('abort', () => resolve(), {
@@ -137,14 +133,8 @@ describe('Turn run - abort and idle timeout', () => {
           });
           yield {
             type: StreamEventType.CHUNK,
-            value: mockResponseToChunk({
-              candidates: [
-                {
-                  content: {
-                    parts: [{ text: 'Second part - should not be processed' }],
-                  },
-                },
-              ],
+            value: mockChunk({
+              text: 'Second part - should not be processed',
             }),
           };
         } finally {
@@ -176,12 +166,11 @@ describe('Turn run - abort and idle timeout', () => {
         }
       })();
 
-      vi.advanceTimersByTime(100);
-      await drainMicrotasks();
+      await vi.advanceTimersByTimeAsync(100);
       await runPromise;
 
       expect(returnSpy).toHaveBeenCalled();
-      expect(events).toContainEqual({ type: 'user_cancelled' });
+      expect(events).toContainEqual({ type: AgentEventType.UserCancelled });
     } finally {
       vi.useRealTimers();
     }
@@ -196,26 +185,18 @@ describe('Turn run - abort and idle timeout', () => {
         if (shouldAbort) {
           yield {
             type: StreamEventType.CHUNK,
-            value: mockResponseToChunk({
-              candidates: [{ content: { parts: [{ text: 'Partial' }] } }],
-            }),
+            value: mockChunk({ text: 'Partial' }),
           };
           abortController.abort();
           await new Promise((resolve) => setTimeout(resolve, 10));
           yield {
             type: StreamEventType.CHUNK,
-            value: mockResponseToChunk({
-              candidates: [{ content: { parts: [{ text: 'Ignored' }] } }],
-            }),
+            value: mockChunk({ text: 'Ignored' }),
           };
         } else {
           yield {
             type: StreamEventType.CHUNK,
-            value: mockResponseToChunk({
-              candidates: [
-                { content: { parts: [{ text: 'Second call success' }] } },
-              ],
-            }),
+            value: mockChunk({ text: 'Second call success' }),
           };
         }
       })();
@@ -233,7 +214,7 @@ describe('Turn run - abort and idle timeout', () => {
       events1.push(event);
     }
 
-    expect(events1).toContainEqual({ type: 'user_cancelled' });
+    expect(events1).toContainEqual({ type: AgentEventType.UserCancelled });
     expect(callCount).toBe(1);
 
     const freshController = new AbortController();
@@ -284,13 +265,15 @@ describe('Turn run - abort and idle timeout', () => {
     });
 
     const events = [];
-    const reqParts: Part[] = [{ text: 'Test malformed error handling' }];
+    const reqParts: ContentBlock[] = [
+      { type: 'text', text: 'Test malformed error handling' },
+    ];
 
     for await (const event of turn.run(reqParts, abortController.signal)) {
       events.push(event);
     }
 
-    expect(events).toStrictEqual([{ type: 'user_cancelled' }]);
+    expect(events).toStrictEqual([{ type: AgentEventType.UserCancelled }]);
 
     expect(reportError).not.toHaveBeenCalled();
   });
@@ -323,9 +306,7 @@ describe('Turn run - abort and idle timeout', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [{ content: { parts: [{ text: 'First part' }] } }],
-          }),
+          value: mockChunk({ text: 'First part' }),
         };
         await new Promise<void>(() => {});
       })();
@@ -351,9 +332,7 @@ describe('Turn run - abort and idle timeout', () => {
         return events;
       })();
 
-      await drainMicrotasks();
-      vi.advanceTimersByTime(testTimeoutMs + 1);
-      await drainMicrotasks();
+      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
       const events = await eventsPromise;
 
       expect(events).toStrictEqual([
@@ -363,7 +342,7 @@ describe('Turn run - abort and idle timeout', () => {
           traceId: undefined,
         },
         {
-          type: 'stream_idle_timeout',
+          type: AgentEventType.StreamIdleTimeout,
           value: {
             error: {
               message:
@@ -410,15 +389,7 @@ describe('Turn run - abort and idle timeout', () => {
         (async function* () {
           yield {
             type: StreamEventType.CHUNK,
-            value: mockResponseToChunk({
-              candidates: [
-                {
-                  content: {
-                    parts: [{ text: shouldHang ? 'Hanging' : 'OK' }],
-                  },
-                },
-              ],
-            }),
+            value: mockChunk({ text: shouldHang ? 'Hanging' : 'OK' }),
           };
           if (shouldHang) {
             await new Promise<void>(() => {});
@@ -447,13 +418,11 @@ describe('Turn run - abort and idle timeout', () => {
         return events;
       })();
 
-      await drainMicrotasks();
-      vi.advanceTimersByTime(testTimeoutMs + 1);
-      await drainMicrotasks();
+      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
       const events1 = await events1Promise;
 
       expect(events1).toContainEqual(
-        expect.objectContaining({ type: 'stream_idle_timeout' }),
+        expect.objectContaining({ type: AgentEventType.StreamIdleTimeout }),
       );
       expect(callCount).toBe(1);
 
@@ -468,8 +437,7 @@ describe('Turn run - abort and idle timeout', () => {
         return events;
       })();
 
-      vi.advanceTimersByTime(100);
-      await drainMicrotasks();
+      await vi.advanceTimersByTimeAsync(100);
       const events2 = await events2Promise;
 
       expect(callCount).toBe(2);
