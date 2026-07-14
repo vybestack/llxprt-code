@@ -43,7 +43,10 @@ export class LiveTrustTransitionLifecycle {
     }
     const sequence = ++this.transitionSequence;
     if (!trusted) {
-      this.dependencies.downgradeApprovalMode();
+      this.runSynchronousStep(
+        () => this.dependencies.downgradeApprovalMode(),
+        sequence,
+      );
     }
     this.runSynchronousStep(
       () => this.dependencies.removeTrustedPolicyRules(),
@@ -78,9 +81,14 @@ export class LiveTrustTransitionLifecycle {
     if (this.disposing) {
       return;
     }
-    this.transitionChain = this.transitionChain.then(() =>
-      this.runTransition(trusted, sequence),
-    );
+    this.transitionChain = this.transitionChain
+      .catch((error: unknown) => {
+        LiveTrustTransitionLifecycle.logger.error(
+          `Unexpected trust transition chain failure: ${getErrorMessage(error)}`,
+        );
+        this.retainFailures([error], sequence);
+      })
+      .then(() => this.runTransition(trusted, sequence));
   }
 
   private async runTransition(

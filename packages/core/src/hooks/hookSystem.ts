@@ -55,8 +55,12 @@ export class HookSystem {
   private eventHandler: HookEventHandler | null = null;
   private initializationPromise: Promise<void> | undefined;
   private initializationGeneration = 0;
-  private initializationSignal: AbortSignal | undefined;
+  private readonly initializationSignals = new Map<
+    number,
+    AbortSignal | undefined
+  >();
   private lifecycleGeneration = 0;
+  private readonly disposalController = new AbortController();
 
   /**
    * @plan PLAN-20250218-HOOKSYSTEM.P03
@@ -105,9 +109,11 @@ export class HookSystem {
     if (this.lifecycleGeneration > 0) {
       return Promise.reject(new Error('HookSystem has been disposed.'));
     }
-    signal?.throwIfAborted();
-    this.initializationGeneration++;
-    this.initializationSignal = signal;
+    if (signal?.aborted === true) {
+      return Promise.reject(signal.reason);
+    }
+    const generation = ++this.initializationGeneration;
+    this.initializationSignals.set(generation, signal);
     if (this.initializationPromise !== undefined) {
       return this.initializationPromise;
     }
@@ -124,8 +130,17 @@ export class HookSystem {
     let completedGeneration = 0;
     while (completedGeneration < this.initializationGeneration) {
       const generation = this.initializationGeneration;
-      await this.initializeGeneration(this.initializationSignal);
+      const requestedSignal = this.initializationSignals.get(generation);
+      const signal = requestedSignal
+        ? AbortSignal.any([requestedSignal, this.disposalController.signal])
+        : this.disposalController.signal;
+      await this.initializeGeneration(signal);
       completedGeneration = generation;
+      for (const queuedGeneration of this.initializationSignals.keys()) {
+        if (queuedGeneration <= completedGeneration) {
+          this.initializationSignals.delete(queuedGeneration);
+        }
+      }
     }
   }
 
@@ -418,6 +433,8 @@ export class HookSystem {
   dispose(): void {
     this.lifecycleGeneration++;
     this.initializationGeneration++;
+    this.disposalController.abort(new Error('HookSystem has been disposed.'));
+    this.initializationSignals.clear();
     this.disposeEventHandler();
   }
 

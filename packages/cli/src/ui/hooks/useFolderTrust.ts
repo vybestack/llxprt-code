@@ -96,11 +96,18 @@ export const useFolderTrust = (
       if (trustLevel === null) {
         return;
       }
-      const trustedFolders = loadTrustedFolders();
-      const savedSnapshot = trustedFolders.snapshotValue(workingDirectory);
-      const previousLiveTrust = config?.isTrustedFolder() ?? false;
+      let trustedFolders: ReturnType<typeof loadTrustedFolders> | undefined;
+      let savedSnapshot:
+        | ReturnType<ReturnType<typeof loadTrustedFolders>['snapshotValue']>
+        | undefined;
+      let previousLiveTrust = false;
+      let failedPhase: 'persistence' | 'live' = 'persistence';
       try {
+        trustedFolders = loadTrustedFolders();
+        savedSnapshot = trustedFolders.snapshotValue(workingDirectory);
+        previousLiveTrust = config?.isTrustedFolder() ?? false;
         trustedFolders.setValue(workingDirectory, trustLevel);
+        failedPhase = 'live';
         const newIsTrusted =
           resolveLocalWorkspaceTrust(
             settings.merged,
@@ -111,15 +118,19 @@ export const useFolderTrust = (
         setIsFolderTrustDialogOpen(false);
       } catch (error) {
         const rollbackFailures: unknown[] = [];
-        try {
-          trustedFolders.restoreSnapshot(savedSnapshot);
-        } catch (rollbackError) {
-          rollbackFailures.push(rollbackError);
+        if (trustedFolders !== undefined && savedSnapshot !== undefined) {
+          try {
+            trustedFolders.restoreSnapshot(savedSnapshot);
+          } catch (rollbackError) {
+            rollbackFailures.push(rollbackError);
+          }
         }
-        try {
-          await config?.setTrustedFolderLive(previousLiveTrust);
-        } catch (rollbackError) {
-          rollbackFailures.push(rollbackError);
+        if (failedPhase === 'live') {
+          try {
+            await config?.setTrustedFolderLive(previousLiveTrust);
+          } catch (rollbackError) {
+            rollbackFailures.push(rollbackError);
+          }
         }
         const reportedError =
           rollbackFailures.length === 0
@@ -129,7 +140,7 @@ export const useFolderTrust = (
                 'Trust update and rollback failed',
               );
         const message = `${getTrustCommitErrorMessage(
-          'live',
+          failedPhase,
           reportedError,
           rollbackFailures.length === 0,
         )} Exiting LLxprt Code.`;

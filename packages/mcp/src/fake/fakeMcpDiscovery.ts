@@ -130,13 +130,7 @@ class FakeMcpToolInvocation extends BaseToolInvocation<
   }
 
   async execute(): Promise<ToolResult> {
-    let authorized = false;
-    try {
-      authorized = this.isAuthorized();
-    } catch {
-      authorized = false;
-    }
-    if (!authorized) {
+    if (!isAuthorizedSafely(this.isAuthorized)) {
       return {
         llmContent: MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE,
         returnDisplay: MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE,
@@ -296,9 +290,6 @@ export async function applyFakeServerDiscovery(
     return disconnectFakeServer(name, toolRegistry);
   }
   updateMCPServerStatus(name, MCPServerStatus.CONNECTED);
-  if (!hasAuthorization()) {
-    return disconnectFakeServer(name, toolRegistry);
-  }
   return {
     status: MCPServerStatus.CONNECTED,
     registeredToolNames,

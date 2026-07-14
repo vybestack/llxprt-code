@@ -254,6 +254,23 @@ describe('useAutoAcceptIndicator', () => {
     expect(result.current).toBe(ApprovalMode.DEFAULT);
   });
 
+  it('restores the agent approval mode when folder trust is regained', () => {
+    agentStub.getApprovalMode.mockReturnValue(ApprovalMode.AUTO_EDIT);
+    const { result } = renderHook(() =>
+      useAutoAcceptIndicator({ agent: agentStub as unknown as Agent }),
+    );
+
+    act(() => {
+      coreEvents.emitFolderTrustChanged(false);
+    });
+    expect(result.current).toBe(ApprovalMode.DEFAULT);
+
+    act(() => {
+      coreEvents.emitFolderTrustChanged(true);
+    });
+    expect(result.current).toBe(ApprovalMode.AUTO_EDIT);
+  });
+
   describe('when setApprovalMode throws (e.g. untrusted folder)', () => {
     beforeEach(() => {
       agentStub.setApprovalMode.mockImplementation(() => {

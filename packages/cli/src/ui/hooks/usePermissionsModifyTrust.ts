@@ -73,14 +73,10 @@ function restoreSavedTrustLevel(
 }
 
 async function applyLiveTrustLevel(
-  config: PermissionsTrustRuntime | undefined,
+  config: PermissionsTrustRuntime,
   trustedFolders: LoadedTrustedFolders,
   folderPath: string,
-  nextLevel: TrustLevel,
 ): Promise<boolean> {
-  if (config === undefined) {
-    return nextLevel !== TrustLevel.DO_NOT_TRUST;
-  }
   await config.setTrustedFolderLive(
     resolveLocalWorkspaceTrust(
       { folderTrust: config.getFolderTrust() },
@@ -106,7 +102,19 @@ async function commitSavedTrustLevel(
   folderPath: string,
   nextLevel: TrustLevel,
 ): Promise<{ result: TrustCommitResult; effectiveTrust?: boolean }> {
-  const savedSnapshot = trustedFolders.snapshotValue(folderPath);
+  let savedSnapshot: TrustedFolderSnapshot;
+  try {
+    savedSnapshot = trustedFolders.snapshotValue(folderPath);
+  } catch (error) {
+    return {
+      result: {
+        success: false,
+        phase: 'persistence',
+        error,
+        rollbackSucceeded: true,
+      },
+    };
+  }
   const previousLiveTrust = config?.isTrustedFolder() ?? false;
   try {
     trustedFolders.setValue(folderPath, nextLevel);
@@ -120,6 +128,12 @@ async function commitSavedTrustLevel(
       },
     };
   }
+  if (config === undefined) {
+    return {
+      result: { success: true },
+      effectiveTrust: nextLevel !== TrustLevel.DO_NOT_TRUST,
+    };
+  }
   try {
     return {
       result: { success: true },
@@ -127,7 +141,6 @@ async function commitSavedTrustLevel(
         config,
         trustedFolders,
         folderPath,
-        nextLevel,
       ),
     };
   } catch (error) {
@@ -137,12 +150,10 @@ async function commitSavedTrustLevel(
     } catch (rollbackError) {
       rollbackFailures.push(rollbackError);
     }
-    if (config !== undefined) {
-      try {
-        await config.setTrustedFolderLive(previousLiveTrust);
-      } catch (rollbackError) {
-        rollbackFailures.push(rollbackError);
-      }
+    try {
+      await config.setTrustedFolderLive(previousLiveTrust);
+    } catch (rollbackError) {
+      rollbackFailures.push(rollbackError);
     }
     return {
       result: {
@@ -177,6 +188,8 @@ export function usePermissionsModifyTrust(
     () => trustedFolders.resolvePathTrust(normalizedCwd),
     [trustedFolders, normalizedCwd],
   );
+  const currentEffectiveTrust =
+    config?.isTrustedFolder() ?? winningRule?.trusted;
   const currentTrustLevel = trustedFolders.getValue(normalizedCwd);
   const effectiveLocalTrustLevel = winningRule?.rule.trustLevel;
   const { isIdeTrusted } = useIdeTrustListener(config ?? emptyIdeState);
@@ -190,15 +203,17 @@ export function usePermissionsModifyTrust(
     undefined,
   );
   const [effectiveTrust, setEffectiveTrust] = useState<boolean | undefined>(
-    config?.isTrustedFolder() ?? winningRule?.trusted,
+    currentEffectiveTrust,
   );
 
   useEffect(() => {
-    const resolvedRule = trustedFolders.resolvePathTrust(normalizedCwd);
     setPendingTrustLevel(trustedFolders.getValue(normalizedCwd));
     setCommittedLevel(undefined);
-    setEffectiveTrust(config?.isTrustedFolder() ?? resolvedRule?.trusted);
-  }, [config, normalizedCwd, trustedFolders]);
+  }, [normalizedCwd, trustedFolders]);
+
+  useEffect(() => {
+    setEffectiveTrust(currentEffectiveTrust);
+  }, [currentEffectiveTrust]);
 
   const commitTrustLevel = useCallback(
     async (level?: TrustLevel): Promise<TrustCommitResult> => {

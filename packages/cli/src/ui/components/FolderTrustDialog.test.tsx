@@ -118,11 +118,15 @@ describe('FolderTrustDialog', () => {
     expect(mockedExit).not.toHaveBeenCalled();
     selection.resolve();
     await selection.promise;
+
+    act(() => {
+      stdin.write('\u001b[27u');
+    });
+    await waitFor(() => expect(mockedExit).toHaveBeenCalledTimes(2));
   });
 
   describe('parentFolder display', () => {
     it('should correctly display the parent folder name for a nested directory', () => {
-      mockedCwd.mockReturnValue('/home/user/project');
       const { lastFrame } = renderWithProviders(
         <FolderTrustDialog
           workingDirectory="/home/user/project"

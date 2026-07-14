@@ -71,6 +71,7 @@ describe('McpClient disconnect cleanup', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    fs.rmSync(testWorkspace, { recursive: true, force: true });
   });
 
   it('reaches disconnected when the SDK client close fails', async () => {

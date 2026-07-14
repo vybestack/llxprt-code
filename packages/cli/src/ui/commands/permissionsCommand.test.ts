@@ -83,22 +83,6 @@ describe('permissionsCommand', () => {
     mockedCwd.mockReturnValue(workspacePath);
     ideContext.clearIdeContext();
     mockRules.length = 0;
-    mockSnapshotValue.mockImplementation((location: string) => ({
-      canonicalPath: location,
-      entries: mockRules.map(
-        ({ path: rulePath, trustLevel }) => [rulePath, trustLevel] as const,
-      ),
-    }));
-    mockRestoreSnapshot.mockImplementation(
-      (snapshot: {
-        entries: ReadonlyArray<readonly [string, trustedFolders.TrustLevel]>;
-      }) => {
-        mockRules.length = 0;
-        for (const [rulePath, trustLevel] of snapshot.entries) {
-          mockRules.push({ path: rulePath, trustLevel });
-        }
-      },
-    );
     mockSetValue.mockImplementation(
       (rulePath: string, trustLevel: trustedFolders.TrustLevel) => {
         mockRules.push({ path: rulePath, trustLevel });
@@ -169,7 +153,7 @@ describe('permissionsCommand', () => {
     expect(permissionsCommand.kind).toBe(CommandKind.BUILT_IN);
   });
 
-  describe('dialog mode (no arguments)', async () => {
+  describe('dialog mode (no arguments)', () => {
     it('should return a dialog action when no args provided', async () => {
       const mockContext = createMockContext();
       const result = await permissionsCommand.action?.(mockContext, '');
@@ -191,7 +175,7 @@ describe('permissionsCommand', () => {
     });
   });
 
-  describe('modify trust mode (with arguments)', async () => {
+  describe('modify trust mode (with arguments)', () => {
     it('should modify trust for an explicit target directory', async () => {
       const mockContext = createMockContext();
       const targetPath = path.join(testRoot, 'projects', 'my-project');
@@ -420,7 +404,7 @@ describe('permissionsCommand', () => {
     });
   });
 
-  describe('live Config update', async () => {
+  describe('live Config update', () => {
     it('should call setTrustedFolderLive(true) when trusting the current workspace', async () => {
       const setTrustedFolderLive = vi.fn();
       const mockContext = createMockContext({ setTrustedFolderLive });

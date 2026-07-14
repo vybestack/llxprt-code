@@ -230,4 +230,25 @@ describe('saveTrustedFolders filesystem permissions', () => {
     expect(folders.user.config).toStrictEqual({});
     expect(fs.existsSync(filePath)).toBe(false);
   });
+
+  it('preserves the published config object when persistence rollback is required', () => {
+    const directory = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'llxprt-trusted-folders-'),
+    );
+    temporaryDirectories.push(directory);
+    const blockedParent = path.join(directory, 'blocked-parent');
+    fs.writeFileSync(blockedParent, 'not a directory');
+    const filePath = path.join(blockedParent, 'trustedFolders.json');
+    const workspace = path.join(directory, 'workspace');
+    fs.mkdirSync(workspace);
+    const config = { [workspace]: TrustLevel.DO_NOT_TRUST };
+    const folders = new LoadedTrustedFolders({ path: filePath, config }, []);
+
+    expect(() => folders.setValue(workspace, TrustLevel.TRUST_FOLDER)).toThrow(
+      /ENOTDIR|not a directory/i,
+    );
+
+    expect(folders.user.config).toBe(config);
+    expect(config).toStrictEqual({ [workspace]: TrustLevel.DO_NOT_TRUST });
+  });
 });

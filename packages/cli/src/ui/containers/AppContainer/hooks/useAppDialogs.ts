@@ -11,7 +11,6 @@ import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
 import { useAuthCommand } from '../../../hooks/useAuthCommand.js';
 import { useFolderTrust } from '../../../hooks/useFolderTrust.js';
 import { useWelcomeOnboarding } from '../../../hooks/useWelcomeOnboarding.js';
-import { useIdeTrustListener } from '../../../hooks/useIdeTrustListener.js';
 import { useEditorSettings } from '../../../hooks/useEditorSettings.js';
 import { useExtensionUpdates } from '../../../hooks/useExtensionUpdates.js';
 import { useOAuthOrchestration } from '../../../hooks/useOAuthOrchestration.js';
@@ -179,9 +178,6 @@ function useIdeTrustEffect(
   config: AppDialogsParams['config'],
   st: ReturnType<typeof useDialogsState>,
 ) {
-  // IDE trust changes are now handled live by the Config's internal
-  // listener (registerIdeTrustListener), so no restart prompt is needed.
-  useIdeTrustListener(config);
   useQueueErrorTimeout({
     queueErrorMessage: st.queueErrorMessage,
     setQueueErrorMessage: st.setQueueErrorMessage,

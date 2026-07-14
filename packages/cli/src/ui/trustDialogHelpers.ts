@@ -26,12 +26,12 @@ export function buildTrustOptions(
     {
       label: `Trust parent folder (${parentFolder})`,
       value: FolderTrustChoice.TRUST_PARENT,
-      key: `Trust parent folder (${parentFolder})`,
+      key: FolderTrustChoice.TRUST_PARENT,
     },
     {
       label: "Don't trust",
       value: FolderTrustChoice.DO_NOT_TRUST,
-      key: "Don't trust",
+      key: FolderTrustChoice.DO_NOT_TRUST,
     },
   ];
 }
@@ -78,9 +78,10 @@ export function getWarningMessage(
     return `This folder is ${status} via your IDE settings. Changes here save a local fallback for use without the IDE.`;
   }
   if (isParentTrusted === true) {
-    const status =
-      currentTrustLevel === TrustLevel.DO_NOT_TRUST ? 'not trusted' : 'trusted';
-    return `This folder is ${status} via a parent folder setting. You can override it with a more specific rule.`;
+    if (currentTrustLevel === TrustLevel.DO_NOT_TRUST) {
+      return 'This folder is not trusted because a local rule overrides the trusted parent folder.';
+    }
+    return 'This folder is trusted via a parent folder setting. You can override it with a more specific rule.';
   }
   return null;
 }
@@ -120,7 +121,9 @@ export function getTrustCommitErrorMessage(
 ): string {
   const detail = flattenErrorDetails(error).join('; ');
   if (phase === 'persistence') {
-    return `Failed to save trust settings: ${detail}`;
+    return rollbackSucceeded
+      ? `Failed to save trust settings: ${detail}`
+      : `Failed to save trust settings and rollback was incomplete: ${detail}`;
   }
   return rollbackSucceeded
     ? `Trust settings could not be applied live, so the saved setting was restored: ${detail}`

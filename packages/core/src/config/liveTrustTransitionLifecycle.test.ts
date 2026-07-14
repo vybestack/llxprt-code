@@ -79,6 +79,23 @@ describe('LiveTrustTransitionLifecycle', () => {
     await expect(settlement).rejects.toBe(transitionFailure);
   });
 
+  it('contains approval-mode downgrade failures and continues the transition', async () => {
+    const downgradeFailure = new Error('approval downgrade failed');
+    const dependencies = createDependencies({
+      downgradeApprovalMode: vi.fn(() => {
+        throw downgradeFailure;
+      }),
+    });
+    const lifecycle = new LiveTrustTransitionLifecycle(dependencies);
+
+    const settlement = lifecycle.apply(false);
+
+    await expect(settlement).rejects.toBe(downgradeFailure);
+    expect(dependencies.transitionMcp).toHaveBeenCalledWith(false);
+    expect(dependencies.initializeHooks).toHaveBeenCalledOnce();
+    expect(dependencies.emitTrustChanged).toHaveBeenCalledWith(false);
+  });
+
   it('runs no transition side effects after disposal begins', async () => {
     const dependencies = createDependencies();
     const lifecycle = new LiveTrustTransitionLifecycle(dependencies);

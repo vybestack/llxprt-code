@@ -209,13 +209,11 @@ export function buildEventsMockBody(
   hoisted: HoistedConfigMocks,
 ) {
   const eventsModule = actual as { coreEvents: object };
+  const coreEvents = Reflect.construct(eventsModule.coreEvents.constructor, []);
+  Object.assign(coreEvents, hoisted.coreEvents, { emit: vi.fn() });
   return {
     ...(actual as object),
-    coreEvents: {
-      ...eventsModule.coreEvents,
-      ...hoisted.coreEvents,
-      emit: vi.fn(),
-    },
+    coreEvents,
   };
 }
 

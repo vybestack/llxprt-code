@@ -32,7 +32,7 @@ vi.mock('node:process', async () => {
   };
 });
 
-describe('useFolderTrust', async () => {
+describe('useFolderTrust', () => {
   let mockSettings: LoadedSettings;
   let mockTrustedFolders: LoadedTrustedFolders;
   let loadTrustedFoldersSpy: vi.SpyInstance;

@@ -16,5 +16,8 @@ export function formatConfigFileErrors(
   const details = errors.map(
     (error) => `Error in ${error.path}: ${error.message}`,
   );
-  return `${details.join('\n')}\nPlease fix the ${fileDescription} and try again.`;
+  const instruction = `Please fix the ${fileDescription} and try again.`;
+  return details.length === 0
+    ? instruction
+    : `${details.join('\n')}\n${instruction}`;
 }

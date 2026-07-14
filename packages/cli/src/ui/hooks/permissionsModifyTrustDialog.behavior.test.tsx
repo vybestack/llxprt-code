@@ -56,7 +56,7 @@ vi.mock('./useIdeTrustListener.js', () => ({
 
 import { usePermissionsModifyTrust } from './usePermissionsModifyTrust.js';
 
-describe('PermissionsModifyTrustDialog trust provenance', async () => {
+describe('PermissionsModifyTrustDialog trust provenance', () => {
   beforeEach(() => {
     mockedSetValue.mockReset();
     mockedDeleteValue.mockReset();
@@ -93,12 +93,16 @@ describe('PermissionsModifyTrustDialog trust provenance', async () => {
         throw new Error('live update failed');
       })
       .mockImplementation(() => undefined);
+    let liveTrust = true;
     const config: PermissionsTrustRuntime = {
       getWorkingDir: () => '/configured/workspace',
       getFolderTrust: () => true,
       getIdeClient: () => undefined,
-      isTrustedFolder: () => true,
-      setTrustedFolderLive,
+      isTrustedFolder: () => liveTrust,
+      setTrustedFolderLive: async (trusted) => {
+        await setTrustedFolderLive(trusted);
+        liveTrust = trusted;
+      },
     };
     const { result } = renderHook(() => usePermissionsModifyTrust(config));
 
@@ -129,7 +133,7 @@ describe('PermissionsModifyTrustDialog trust provenance', async () => {
     expect(mockedSetValue).toHaveBeenCalledTimes(2);
     expect(setTrustedFolderLive).toHaveBeenCalledTimes(3);
     expect(result.current.committedTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
-    expect(result.current.effectiveTrust).toBe(true);
+    expect(result.current.effectiveTrust).toBe(false);
   });
 
   it('preserves the pending selection when persistence fails', async () => {

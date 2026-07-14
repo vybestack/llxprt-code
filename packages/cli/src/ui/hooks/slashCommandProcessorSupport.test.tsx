@@ -92,13 +92,11 @@ describe('useCommandReload', () => {
   });
 
   it('reloads the command registry when folder trust changes', async () => {
+    let trusted = false;
     const config = {
-      getFolderTrust: () => false,
-      isTrustedFolder: () => true,
+      getFolderTrust: () => true,
+      isTrustedFolder: () => trusted,
     } as CliUiRuntime;
-    const { result } = renderHook(() => useCommandRegistry(config));
-    await waitFor(() => expect(result.current).toStrictEqual([]));
-
     loaderState.fileCommands = [
       {
         name: 'trusted-file-command',
@@ -106,6 +104,10 @@ describe('useCommandReload', () => {
         kind: CommandKind.FILE,
       },
     ];
+    const { result } = renderHook(() => useCommandRegistry(config));
+    await waitFor(() => expect(result.current).toStrictEqual([]));
+
+    trusted = true;
     act(() => {
       coreEvents.emitFolderTrustChanged(true);
     });

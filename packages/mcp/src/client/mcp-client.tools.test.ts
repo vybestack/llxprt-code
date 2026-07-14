@@ -739,7 +739,7 @@ describe('mcp-client', () => {
       );
     });
 
-    it('removes stale tools when authorization is revoked during discovery', async () => {
+    it('removes stale tools when authorization is revoked during refresh', async () => {
       let trusted = true;
       const mockedClient = {
         connect: vi.fn(),
@@ -838,6 +838,7 @@ describe('mcp-client', () => {
 
       await notificationCallback();
 
+      expect(toolRegistry.registerTool).toHaveBeenCalledOnce();
       expect(toolRegistry.removeMcpToolsByServer).toHaveBeenCalledTimes(2);
       expect(coreEvents.emitFeedback).not.toHaveBeenCalled();
     });

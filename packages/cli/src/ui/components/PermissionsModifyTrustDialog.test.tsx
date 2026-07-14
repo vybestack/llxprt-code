@@ -284,7 +284,7 @@ describe('PermissionsModifyTrustDialog', () => {
       expect(addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.ERROR,
-          text: expect.stringMatching(/restored/i),
+          text: expect.stringMatching(/rollback was incomplete/i),
         }),
         expect.any(Number),
       );
@@ -294,7 +294,6 @@ describe('PermissionsModifyTrustDialog', () => {
       '/test/dir',
       TrustLevel.TRUST_FOLDER,
     );
-    expect(mockedDeleteValue).toHaveBeenCalledWith('/test/dir');
     expect(mockedTrustedConfig['/test/dir']).toBeUndefined();
     expect(lastFrame()).toContain('Modify Trust Settings');
 
@@ -515,7 +514,7 @@ describe('PermissionsModifyTrustDialog', () => {
 
     expect(lastFrame()).toContain('Current: Not trusted (via parent folder)');
     expect(lastFrame()).toContain(
-      'This folder is not trusted via a parent folder setting.',
+      'This folder is not trusted because a local rule overrides the trusted parent folder.',
     );
     stdin.write('\r');
     await waitFor(() => {

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
@@ -81,6 +82,16 @@ function requireCanonicalPath(location: string): string {
     throw new Error(`Unable to resolve canonical path for "${location}".`);
   }
   return canonicalPath;
+}
+
+function restoreConfigInPlace(
+  target: Record<string, TrustLevel>,
+  snapshot: Readonly<Record<string, TrustLevel>>,
+): void {
+  for (const key of Object.keys(target)) {
+    delete target[key];
+  }
+  Object.assign(target, snapshot);
 }
 
 export class LoadedTrustedFolders {
@@ -179,7 +190,7 @@ export class LoadedTrustedFolders {
     try {
       saveTrustedFolders(this.user);
     } catch (e) {
-      this.user.config = originalConfig;
+      restoreConfigInPlace(this.user.config, originalConfig);
       throw e;
     }
   }
@@ -197,7 +208,7 @@ export class LoadedTrustedFolders {
     try {
       saveTrustedFolders(this.user);
     } catch (e) {
-      this.user.config = originalConfig;
+      restoreConfigInPlace(this.user.config, originalConfig);
       throw e;
     }
   }
@@ -217,7 +228,7 @@ export class LoadedTrustedFolders {
     try {
       saveTrustedFolders(this.user);
     } catch (e) {
-      this.user.config = originalConfig;
+      restoreConfigInPlace(this.user.config, originalConfig);
       throw e;
     }
   }
@@ -336,7 +347,7 @@ export function saveTrustedFolders(
 
   const temporaryPath = path.join(
     dirPath,
-    `.${path.basename(trustedFoldersFile.path)}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`,
+    `.${path.basename(trustedFoldersFile.path)}.${process.pid}.${randomUUID()}.tmp`,
   );
   try {
     fs.writeFileSync(

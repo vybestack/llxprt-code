@@ -701,6 +701,7 @@ describe('McpClientManager trust transitions', () => {
 
       expect(manager.getMcpServerCount()).toBe(0);
       expect(client.discover).not.toHaveBeenCalled();
+      expect(client.disconnect).toHaveBeenCalledOnce();
     });
 
     it('removes an existing client and its artifacts when trust is revoked after reconnect', async () => {

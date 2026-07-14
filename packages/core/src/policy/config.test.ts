@@ -232,6 +232,8 @@ describe('policy config', () => {
       const engineConfig = await createPolicyEngineConfig(
         settings,
         ApprovalMode.DEFAULT,
+        undefined,
+        true,
       );
 
       expect(
@@ -254,10 +256,40 @@ describe('policy config', () => {
       ]);
     });
 
+    it('suppresses trusted MCP rules when folder trust is explicitly false', async () => {
+      const engineConfig = await createPolicyEngineConfig(
+        {
+          mcp: {
+            excluded: ['excluded-server'],
+            allowed: ['allowed-server'],
+          },
+          mcpServers: {
+            'trusted-server': { trust: true },
+          },
+        },
+        ApprovalMode.DEFAULT,
+        undefined,
+        false,
+      );
+
+      expect(
+        engineConfig.rules.some(
+          (rule) => rule.source === 'Settings (MCP Trusted)',
+        ),
+      ).toBe(false);
+      expect(
+        engineConfig.rules
+          .filter((rule) => rule.source?.startsWith('Settings (MCP') === true)
+          .map((rule) => rule.source),
+      ).toStrictEqual(['Settings (MCP Excluded)', 'Settings (MCP Allowed)']);
+    });
+
     it('preserves an explicit trailing star in a user allowed tool name', async () => {
       const engineConfig = await createPolicyEngineConfig(
         { tools: { allowed: ['user-server__*'] } },
         ApprovalMode.DEFAULT,
+        undefined,
+        false,
       );
 
       const rule = engineConfig.rules.find(

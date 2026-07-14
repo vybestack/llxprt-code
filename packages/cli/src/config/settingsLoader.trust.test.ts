@@ -159,6 +159,16 @@ describe('settingsLoader workspace trust provenance', () => {
     expect(settings.isTrusted).toBe(false);
   });
 
+  it('fails closed when no trust rule matches the workspace', () => {
+    exposeTrustRules({
+      '/some/other/path': TrustLevel.TRUST_FOLDER,
+    });
+
+    const settings = loadSettings('/unmatched/workspace');
+
+    expect(settings.isTrusted).toBe(false);
+  });
+
   it('fails closed when the workspace canonical identity cannot be resolved', () => {
     const workspace = '/trusted/workspace';
     exposeTrustRules({ [workspace]: TrustLevel.TRUST_FOLDER });

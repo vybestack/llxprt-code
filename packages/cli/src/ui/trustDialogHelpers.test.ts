@@ -92,7 +92,7 @@ describe('trustDialogHelpers', () => {
 
     it('warns about parent folder trust', () => {
       const msg = getWarningMessage(undefined, true, TrustLevel.DO_NOT_TRUST);
-      expect(msg).toContain('not trusted via a parent folder setting');
+      expect(msg).toContain('local rule overrides the trusted parent folder');
     });
 
     it('returns null when no override applies', () => {

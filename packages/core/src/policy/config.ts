@@ -76,15 +76,15 @@ export async function createPolicyEngineConfig(
 export async function createPolicyEngineConfig(
   settings: PolicySettings,
   approvalMode: ApprovalMode,
-  defaultPoliciesDir?: string,
-  trustedFolder?: boolean,
+  defaultPoliciesDir: string | undefined,
+  trustedFolder: boolean,
 ): Promise<PolicyEngineConfig>;
 
 export async function createPolicyEngineConfig(
   configOrSettings: PolicyConfigSource | PolicySettings,
   approvalModeParam?: ApprovalMode,
   defaultPoliciesDir?: string,
-  trustedFolder = true,
+  trustedFolder?: boolean,
 ): Promise<PolicyEngineConfig> {
   const isPolicyConfigSource =
     typeof (configOrSettings as PolicyConfigSource).getApprovalMode ===
@@ -97,7 +97,7 @@ export async function createPolicyEngineConfig(
     configOrSettings as PolicySettings,
     approvalModeParam!,
     defaultPoliciesDir,
-    trustedFolder,
+    trustedFolder ?? false,
   );
 }
 
@@ -150,8 +150,8 @@ async function loadUserPolicyRules(
 async function buildSettingsRules(
   settings: PolicySettings,
   approvalMode: ApprovalMode,
-  defaultPoliciesDir?: string,
-  trustedFolder = true,
+  defaultPoliciesDir: string | undefined,
+  trustedFolder: boolean,
 ): Promise<PolicyEngineConfig> {
   const policyDirs = getPolicyDirectories(defaultPoliciesDir);
 

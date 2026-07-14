@@ -115,9 +115,11 @@ export const permissionsCommand: SlashCommand = {
       const savedSnapshot = trustedFolders.snapshotValue(targetPath);
       const config = context.services.config;
       const previousLiveTrust = config?.isTrustedFolder() ?? false;
+      let failedPhase: 'persistence' | 'live' = 'persistence';
       try {
         trustedFolders.setValue(targetPath, trustLevel);
         if (config) {
+          failedPhase = 'live';
           const cwd = config.getWorkingDir();
           await config.setTrustedFolderLive(
             resolveLocalWorkspaceTrust(
@@ -157,7 +159,7 @@ export const permissionsCommand: SlashCommand = {
           type: 'message',
           messageType: 'error',
           content: getTrustCommitErrorMessage(
-            'persistence',
+            failedPhase,
             reportedError,
             rollbackFailures.length === 0,
           ),

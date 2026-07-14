@@ -13,7 +13,15 @@ import {
   FILE_COMMANDS_UNTRUSTED_MESSAGE,
   type FileCommandRuntime,
 } from './FileCommandLoader.js';
-import { assert, vi } from 'vitest';
+import {
+  afterEach,
+  assert,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
 import { SHORTHAND_ARGS_PLACEHOLDER } from './prompt-processors/types.js';
 import { ShellProcessor } from './prompt-processors/shellProcessor.js';
@@ -112,7 +120,7 @@ describe('FileCommandLoader', () => {
     expect(command).toBeDefined();
     expect(command.name).toBe('test');
 
-    const result = await command.action?.(
+    const result = await command.action(
       createMockCommandContext({
         invocation: {
           raw: '/test',
@@ -841,9 +849,10 @@ describe('FileCommandLoader', () => {
     it('blocks execution synchronously when trust is revoked after loading', async () => {
       const { loader, setTrusted } = setupLiveTrust(true);
       const [command] = await loader.loadCommands(signal);
+      expect(command).toBeDefined();
 
       setTrusted(false);
-      const result = await command.action?.(
+      const result = await command.action(
         createMockCommandContext({
           invocation: {
             raw: '/secure',

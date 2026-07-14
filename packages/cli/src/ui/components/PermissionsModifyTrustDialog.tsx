@@ -243,6 +243,14 @@ function useTrustDialogState(
         } else {
           onExit();
         }
+      } catch (error) {
+        addItem(
+          {
+            type: MessageType.ERROR,
+            text: getTrustCommitErrorMessage('live', error, false),
+          } as HistoryItemWithoutId,
+          Date.now(),
+        );
       } finally {
         committingRef.current = false;
         setIsCommitting(false);

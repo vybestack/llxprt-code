@@ -14,7 +14,11 @@ import { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource
 import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { McpClientManager } from './mcp-client-manager.js';
-import { getMCPServerStatus, MCPServerStatus } from './mcp-client.js';
+import {
+  getMCPServerStatus,
+  MCPServerStatus,
+  updateMCPServerStatus,
+} from './mcp-client.js';
 
 const SERVER_NAME = 'fixture-server';
 
@@ -29,12 +33,17 @@ describe('McpClientManager fake discovery lifecycle', () => {
   });
 
   afterEach(() => {
+    updateMCPServerStatus(SERVER_NAME, MCPServerStatus.DISCONNECTED);
+    updateMCPServerStatus('other-server', MCPServerStatus.DISCONNECTED);
     delete process.env.LLXPRT_FAKE_MCP;
     fs.rmSync(workspacePath, { recursive: true, force: true });
     vi.restoreAllMocks();
   });
 
-  function createManager(fixture: unknown): {
+  function createManager(
+    fixture: unknown,
+    serverNames: readonly string[] = [SERVER_NAME],
+  ): {
     manager: McpClientManager;
     toolRegistry: ToolRegistry;
   } {
@@ -43,7 +52,10 @@ describe('McpClientManager fake discovery lifecycle', () => {
     const resourceRegistry = new ResourceRegistry();
     const config = {
       isTrustedFolder: () => true,
-      getMcpServers: () => ({ [SERVER_NAME]: { command: 'unused' } }),
+      getMcpServers: () =>
+        Object.fromEntries(
+          serverNames.map((serverName) => [serverName, { command: 'unused' }]),
+        ),
       getMcpServerCommand: () => undefined,
       getPromptRegistry: () => promptRegistry,
       getResourceRegistry: () => resourceRegistry,
@@ -102,37 +114,15 @@ describe('McpClientManager fake discovery lifecycle', () => {
   });
 
   it('publishes canonical MCP names and avoids collisions between servers', async () => {
-    fs.writeFileSync(
-      fixturePath,
-      JSON.stringify({
+    const { manager, toolRegistry } = createManager(
+      {
         servers: {
           [SERVER_NAME]: { tools: [{ name: 'shared-tool' }] },
           'other-server': { tools: [{ name: 'shared-tool' }] },
         },
-      }),
+      },
+      [SERVER_NAME, 'other-server'],
     );
-    const promptRegistry = new PromptRegistry();
-    const resourceRegistry = new ResourceRegistry();
-    const config = {
-      isTrustedFolder: () => true,
-      getMcpServers: () => ({
-        [SERVER_NAME]: { command: 'unused' },
-        'other-server': { command: 'unused' },
-      }),
-      getMcpServerCommand: () => undefined,
-      getPromptRegistry: () => promptRegistry,
-      getResourceRegistry: () => resourceRegistry,
-      getDebugMode: () => false,
-      getWorkspaceContext: () => new WorkspaceContext(workspacePath),
-      getAllowedMcpServers: () => undefined,
-      getBlockedMcpServers: () => undefined,
-      getExtensions: () => [],
-      refreshMcpContext: async () => {},
-    } as unknown as Config;
-    const toolRegistry = new ToolRegistry(config, {
-      requestConfirmation: async () => false,
-    });
-    const manager = new McpClientManager('0.0.1', toolRegistry, config);
 
     await manager.startConfiguredMcpServers();
 
@@ -155,7 +145,9 @@ describe('McpClientManager fake discovery lifecycle', () => {
       },
     });
     const discovery = manager.startConfiguredMcpServers();
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await vi.waitFor(() =>
+      expect(getMCPServerStatus(SERVER_NAME)).toBe(MCPServerStatus.CONNECTING),
+    );
     const started = Date.now();
 
     await manager.stop();

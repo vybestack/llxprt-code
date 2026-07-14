@@ -9,6 +9,7 @@ import {
   buildEventsMockBody,
   type HoistedConfigMocks,
 } from './configTestHarness.js';
+import { CoreEventEmitter } from '../utils/events.js';
 
 function createHoistedMocks(): HoistedConfigMocks {
   return {
@@ -23,20 +24,15 @@ function createHoistedMocks(): HoistedConfigMocks {
 }
 
 describe('buildEventsMockBody', () => {
-  it('does not mutate the imported coreEvents object', () => {
-    const originalEmit = vi.fn();
-    const actual = {
-      coreEvents: { emit: originalEmit, existing: true },
-    };
+  it('creates an independent event emitter with prototype methods', () => {
+    const coreEvents = new CoreEventEmitter();
+    const actual = { coreEvents };
 
     const mocked = buildEventsMockBody(actual, createHoistedMocks());
 
-    expect(actual.coreEvents).toStrictEqual({
-      emit: originalEmit,
-      existing: true,
-    });
+    expect(actual.coreEvents).toBe(coreEvents);
     expect(mocked.coreEvents).not.toBe(actual.coreEvents);
-    expect(mocked.coreEvents).toMatchObject({ existing: true });
-    expect(mocked.coreEvents.emit).not.toBe(originalEmit);
+    expect(mocked.coreEvents).toBeInstanceOf(CoreEventEmitter);
+    expect(mocked.coreEvents.emitFolderTrustChanged).toBeTypeOf('function');
   });
 });

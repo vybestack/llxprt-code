@@ -13,8 +13,10 @@ import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import * as process from 'node:process';
 import * as path from 'node:path';
-import { ExitCodes } from '@vybestack/llxprt-code-core';
+import { DebugLogger, ExitCodes } from '@vybestack/llxprt-code-core';
 import { FolderTrustChoice, buildTrustOptions } from '../trustDialogHelpers.js';
+
+const debug = DebugLogger.getLogger('llxprt:ui:folder-trust-dialog');
 
 function isFolderTrustChoice(value: unknown): value is FolderTrustChoice {
   return (
@@ -110,6 +112,8 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
             void (async () => {
               try {
                 await onSelect(choice);
+              } catch (error) {
+                debug.error('Folder trust selection failed', error);
               } finally {
                 committingRef.current = false;
                 setIsCommitting(false);

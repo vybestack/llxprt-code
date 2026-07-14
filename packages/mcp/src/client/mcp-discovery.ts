@@ -377,6 +377,15 @@ function rollbackAndDisconnect(
   updateMCPServerStatus(mcpServerName, MCPServerStatus.DISCONNECTED);
 }
 
+function requireAuthorization(
+  isAuthorized: (() => boolean) | undefined,
+): () => boolean {
+  if (isAuthorized === undefined) {
+    throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
+  }
+  return isAuthorized;
+}
+
 /**
  * Discovers and sanitizes tools from a connected MCP client.
  */
@@ -393,7 +402,7 @@ export async function discoverTools(
   },
 ): Promise<DiscoveredMCPTool[]> {
   const debug = new DebugLogger('llxprt:mcp:discovery');
-  const isAuthorized = options?.isAuthorized ?? (() => false);
+  const isAuthorized = requireAuthorization(options?.isAuthorized);
 
   try {
     debug.log(`Starting tool discovery for server: ${mcpServerName}`);
@@ -508,7 +517,7 @@ export async function discoverResources(
   if (mcpClient.getServerCapabilities()?.resources == null) {
     return [];
   }
-  const isAuthorized = options?.isAuthorized ?? (() => false);
+  const isAuthorized = requireAuthorization(options?.isAuthorized);
   if (!isAuthorized()) {
     return [];
   }
@@ -569,10 +578,9 @@ export async function discoverPrompts(
   mcpClient: Client,
   options?: PromptDiscoveryOptions,
 ): Promise<Prompt[]> {
+  const isAuthorized = requireAuthorization(options?.isAuthorized);
   try {
     if (mcpClient.getServerCapabilities()?.prompts == null) return [];
-
-    const isAuthorized = options?.isAuthorized ?? (() => false);
 
     if (!isAuthorized()) {
       return [];
@@ -637,8 +645,9 @@ export async function invokeMcpPrompt(
   promptParams: Record<string, unknown>,
   isAuthorized?: () => boolean,
 ): Promise<GetPromptResult> {
+  const checkAuthorized = requireAuthorization(isAuthorized);
   try {
-    if (isAuthorized?.() !== true) {
+    if (!checkAuthorized()) {
       throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
     }
     const sanitizedParams: Record<string, string> = {};
@@ -652,7 +661,7 @@ export async function invokeMcpPrompt(
       name: promptName,
       arguments: sanitizedParams,
     });
-    if (!isAuthorized()) {
+    if (!checkAuthorized()) {
       throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
     }
 

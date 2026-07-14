@@ -15,30 +15,34 @@ import type { Config } from '../../config/config.js';
 import type { LlxprtExtension } from '../../config/config.js';
 import { HookEventName } from '../types.js';
 
+function createHookConfig(extensions: LlxprtExtension[] = []): Config {
+  return {
+    getEnableHooks: () => true,
+    getHooks: () => ({}),
+    getSessionId: () => 'test-session',
+    getWorkingDir: () => '/test',
+    getTargetDir: () => '/test',
+    getExtensions: () => extensions,
+    getDisabledHooks: () => [],
+    getModel: () => 'test-model',
+    isTrustedFolder: () => true,
+    getProjectHooks: () => null,
+    getSanitizationConfig: () => ({
+      enableEnvironmentVariableRedaction: false,
+      allowedEnvironmentVariables: [],
+      blockedEnvironmentVariables: [],
+    }),
+    getSessionRecordingService: () => null,
+  } as unknown as Config;
+}
+
 describe('Hook Re-Initialization (126c32ac)', () => {
   let mockConfig: Config;
   let mockExtensions: LlxprtExtension[];
 
   beforeEach(() => {
     mockExtensions = [];
-    mockConfig = {
-      getEnableHooks: () => true,
-      getHooks: () => ({}),
-      getSessionId: () => 'test-session',
-      getWorkingDir: () => '/test',
-      getTargetDir: () => '/test',
-      getExtensions: () => mockExtensions,
-      getDisabledHooks: () => [],
-      getModel: () => 'test-model',
-      isTrustedFolder: () => true,
-      getProjectHooks: () => null,
-      getSanitizationConfig: () => ({
-        enableEnvironmentVariableRedaction: false,
-        allowedEnvironmentVariables: [],
-        blockedEnvironmentVariables: [],
-      }),
-      getSessionRecordingService: () => null,
-    } as unknown as Config;
+    mockConfig = createHookConfig(mockExtensions);
   });
 
   it('should reload hooks when extension with hooks is added', async () => {
@@ -336,5 +340,73 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
     expect(unsubscribes[0]).toHaveBeenCalledTimes(1); // First disposed before second init
     expect(unsubscribes[1]).toHaveBeenCalledTimes(1); // Second disposed before third init
     expect(unsubscribes[2]).not.toHaveBeenCalled(); // Third still active
+  });
+
+  it('returns an already-aborted initialization as a rejected promise', async () => {
+    const mockConfig = {
+      getEnableHooks: () => true,
+      getHooks: () => ({}),
+      getSessionId: () => 'test-session',
+      getWorkingDir: () => '/test',
+      getTargetDir: () => '/test',
+      getExtensions: () => [],
+      getDisabledHooks: () => [],
+      getModel: () => 'test-model',
+      isTrustedFolder: () => true,
+      getProjectHooks: () => null,
+      getSanitizationConfig: () => ({
+        enableEnvironmentVariableRedaction: false,
+        allowedEnvironmentVariables: [],
+        blockedEnvironmentVariables: [],
+      }),
+      getSessionRecordingService: () => null,
+    } as unknown as Config;
+    const hookSystem = new HookSystem(mockConfig);
+    const controller = new AbortController();
+    controller.abort();
+
+    let initialization: Promise<void> | undefined;
+    expect(() => {
+      initialization = hookSystem.initialize(controller.signal);
+    }).not.toThrow();
+    await expect(initialization).rejects.toThrow(/abort/i);
+  });
+
+  it('aborts registry initialization when disposed', async () => {
+    const mockConfig = {
+      getEnableHooks: () => true,
+      getHooks: () => ({}),
+      getSessionId: () => 'test-session',
+      getWorkingDir: () => '/test',
+      getTargetDir: () => '/test',
+      getExtensions: () => [],
+      getDisabledHooks: () => [],
+      getModel: () => 'test-model',
+      isTrustedFolder: () => true,
+      getProjectHooks: () => null,
+      getSanitizationConfig: () => ({
+        enableEnvironmentVariableRedaction: false,
+        allowedEnvironmentVariables: [],
+        blockedEnvironmentVariables: [],
+      }),
+      getSessionRecordingService: () => null,
+    } as unknown as Config;
+    const hookSystem = new HookSystem(mockConfig);
+    const registry = hookSystem.getRegistry();
+    let observedSignal: AbortSignal | undefined;
+    vi.spyOn(registry, 'initialize').mockImplementation(async (signal) => {
+      observedSignal = signal;
+      await new Promise<void>((resolve) => {
+        signal?.addEventListener('abort', () => resolve(), { once: true });
+      });
+      signal?.throwIfAborted();
+    });
+
+    const initialization = hookSystem.initialize();
+    await vi.waitFor(() => expect(observedSignal).toBeDefined());
+    hookSystem.dispose();
+
+    expect(observedSignal?.aborted).toBe(true);
+    await expect(initialization).rejects.toThrow(/disposed/i);
   });
 });

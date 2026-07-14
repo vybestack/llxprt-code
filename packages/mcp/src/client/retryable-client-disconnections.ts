@@ -10,15 +10,17 @@ export class RetryableClientDisconnections {
   private readonly pending = new WeakMap<McpClient, Promise<void>>();
   private readonly failed = new Set<McpClient>();
 
-  retire(_client: McpClient): void {}
-
-  activate(client: McpClient): void {
+  retire(client: McpClient): void {
     this.pending.delete(client);
     this.failed.delete(client);
   }
 
+  activate(client: McpClient): void {
+    this.retire(client);
+  }
+
   getFailed(): ReadonlySet<McpClient> {
-    return this.failed;
+    return new Set(this.failed);
   }
 
   disconnect(client: McpClient): Promise<void> {

@@ -217,7 +217,7 @@ describe('MCP capability authorization', () => {
     );
   });
 
-  it('fails closed and skips listPrompts when no authorization callback is provided', async () => {
+  it('reports omitted prompt authorization as a security error', async () => {
     const listPrompts = vi.fn().mockResolvedValue({
       prompts: [{ name: 'prompt' }],
     });
@@ -226,9 +226,9 @@ describe('MCP capability authorization', () => {
       listPrompts,
     } as unknown as Client;
 
-    const prompts = await discoverPrompts('server', client);
-
-    expect(prompts).toStrictEqual([]);
+    await expect(discoverPrompts('server', client)).rejects.toThrow(
+      MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE,
+    );
     expect(listPrompts).not.toHaveBeenCalled();
   });
 
@@ -346,14 +346,9 @@ describe('MCP capability authorization', () => {
       callTool,
     } as unknown as Client;
 
-    const tools = await discoverTools(
-      'server',
-      { command: 'server' },
-      client,
-      {} as Config,
-    );
-
-    expect(tools).toStrictEqual([]);
+    await expect(
+      discoverTools('server', { command: 'server' }, client, {} as Config),
+    ).rejects.toThrow(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
     expect(listTools).not.toHaveBeenCalled();
     expect(callTool).not.toHaveBeenCalled();
   });
@@ -474,9 +469,9 @@ describe('MCP capability authorization', () => {
       request,
     } as unknown as Client;
 
-    const resources = await discoverResources('server', client);
-
-    expect(resources).toStrictEqual([]);
+    await expect(discoverResources('server', client)).rejects.toThrow(
+      MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE,
+    );
     expect(request).not.toHaveBeenCalled();
   });
 
@@ -691,13 +686,15 @@ describe('MCP capability authorization', () => {
     ).onerror;
     expect(errorHandler).toBeTypeOf('function');
 
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
     expect(() => errorHandler(new Error('connection lost'))).not.toThrow();
+    consoleError.mockRestore();
 
     expect(closeFn).toHaveBeenCalled();
     expect(removeTools).toHaveBeenCalledWith('server');
     expect(removePrompts).toHaveBeenCalledWith('server');
-    const { updateMCPServerStatus } = await import('./mcp-status.js');
     expect(updateMCPServerStatus).toHaveBeenCalledWith(
       'server',
       'disconnected',

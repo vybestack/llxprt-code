@@ -90,6 +90,7 @@ export class McpClientManager {
    */
   private trustGeneration = 0;
   private readonly discoveringServers = new Map<string, Promise<void>>();
+  private readonly queuedDiscoveryConfigs = new Map<string, MCPServerConfig>();
   private readonly connectingClients = new Map<string, McpClient>();
   private readonly quarantinedClients = new Map<string, McpClient>();
   private readonly clientDisconnections = new RetryableClientDisconnections();
@@ -230,11 +231,8 @@ export class McpClientManager {
     }
     const pendingDiscovery = this.discoveringServers.get(name);
     if (pendingDiscovery) {
-      return pendingDiscovery.then(async () => {
-        if (this.cliConfig.isTrustedFolder() && !this.stopped) {
-          await this.maybeDiscoverMcpServer(name, config);
-        }
-      });
+      this.queuedDiscoveryConfigs.set(name, config);
+      return pendingDiscovery;
     }
     const existing = this.clients.get(name);
     if (existing && existing.getServerConfig().extension !== config.extension) {
@@ -247,18 +245,39 @@ export class McpClientManager {
       return;
     }
 
-    const currentDiscoveryPromise = this.buildDiscoveryPromise(
+    const currentDiscoveryPromise: Promise<void> = this.buildDiscoveryPromise(
       name,
       config,
       existing,
-    ).finally(() => {
-      if (this.discoveringServers.get(name) === currentDiscoveryPromise) {
-        this.discoveringServers.delete(name);
-      }
-    });
+    ).then(
+      () => this.finishDiscovery(name, currentDiscoveryPromise),
+      (error: unknown): Promise<never> =>
+        this.finishDiscovery(name, currentDiscoveryPromise).then(() => {
+          throw error;
+        }),
+    );
     this.discoveringServers.set(name, currentDiscoveryPromise);
     this.enqueueDiscovery(currentDiscoveryPromise);
     return currentDiscoveryPromise;
+  }
+
+  private async finishDiscovery(
+    name: string,
+    completedDiscovery: Promise<void>,
+  ): Promise<void> {
+    if (this.discoveringServers.get(name) !== completedDiscovery) {
+      return;
+    }
+    this.discoveringServers.delete(name);
+    const queuedConfig = this.queuedDiscoveryConfigs.get(name);
+    this.queuedDiscoveryConfigs.delete(name);
+    if (
+      queuedConfig !== undefined &&
+      this.cliConfig.isTrustedFolder() &&
+      !this.stopped
+    ) {
+      await this.maybeDiscoverMcpServer(name, queuedConfig);
+    }
   }
 
   private buildDiscoveryPromise(

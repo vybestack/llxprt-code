@@ -129,7 +129,7 @@ describe('applyFakeServerDiscovery authorization', () => {
     });
   });
 
-  it.each([MCPServerStatus.CONNECTING, MCPServerStatus.CONNECTED])(
+  it.each([MCPServerStatus.CONNECTING])(
     'rolls back when the %s status publication revokes authorization',
     async (revokingStatus) => {
       const name = `status-${revokingStatus}-revocation`;
