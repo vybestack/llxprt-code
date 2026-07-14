@@ -804,7 +804,11 @@ export class Session {
       todoEvents.offTodoUpdated(this.todoListener);
       this.stopConfigUpdates();
       this.settleActiveConfirmation();
-      await this.terminals?.settleAll();
+      await this.terminals
+        ?.settleAll()
+        .catch((error) =>
+          this.logger.debug(() => `Terminal cleanup failed: ${error}`),
+        );
       this.pendingPrompt?.abort();
       this.pendingPrompt = null;
     } finally {
