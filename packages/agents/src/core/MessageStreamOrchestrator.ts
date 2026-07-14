@@ -311,8 +311,8 @@ export class MessageStreamOrchestrator {
         ctx.prompt_id,
         initialRequest,
         estimatedTokens,
-        this._getProviderName(),
-        this.deps.getEffectiveModel(),
+        effectiveIdentity.providerName,
+        effectiveIdentity.model,
       );
     };
 
