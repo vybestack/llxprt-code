@@ -100,6 +100,65 @@ function addCommonJSViolation(
   }
 }
 
+function isLogicalExpression(node: ts.BinaryExpression): boolean {
+  return [
+    ts.SyntaxKind.BarBarToken,
+    ts.SyntaxKind.QuestionQuestionToken,
+    ts.SyntaxKind.AmpersandAmpersandToken,
+  ].includes(node.operatorToken.kind);
+}
+
+/**
+ * Global identifiers that are statically known to produce no export names
+ * when used as `module.exports = <id>`. These are JavaScript global
+ * constants; they are parsed as Identifier nodes (not keyword nodes) so
+ * the neutral-identifier fail-closed must explicitly exempt them.
+ */
+const SAFE_GLOBAL_IDENTIFIERS: ReadonlySet<string> = new Set([
+  'undefined',
+  'NaN',
+  'Infinity',
+]);
+
+function isSafeStaticExportValue(rhs: ts.Expression): boolean {
+  const safeKinds: readonly ts.SyntaxKind[] = [
+    ts.SyntaxKind.ClassExpression,
+    ts.SyntaxKind.FunctionExpression,
+    ts.SyntaxKind.CallExpression,
+    ts.SyntaxKind.NumericLiteral,
+    ts.SyntaxKind.StringLiteral,
+    ts.SyntaxKind.BigIntLiteral,
+    ts.SyntaxKind.RegularExpressionLiteral,
+    ts.SyntaxKind.NullKeyword,
+    ts.SyntaxKind.UndefinedKeyword,
+    ts.SyntaxKind.TrueKeyword,
+    ts.SyntaxKind.FalseKeyword,
+  ];
+  return safeKinds.includes(rhs.kind);
+}
+
+function checkCompositeAssignmentRhs(
+  ctx: ExportScanContext,
+  node: ts.Node,
+  rhs: ts.Expression,
+  violations: GeminiExportViolation[],
+): boolean {
+  if (ts.isConditionalExpression(rhs)) {
+    checkCommonJSAssignmentRhs(ctx, node, rhs.whenTrue, violations);
+    checkCommonJSAssignmentRhs(ctx, node, rhs.whenFalse, violations);
+    return true;
+  }
+  if (!ts.isBinaryExpression(rhs)) return false;
+  if (rhs.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+    checkCommonJSAssignmentRhs(ctx, node, rhs.right, violations);
+    return true;
+  }
+  if (!isLogicalExpression(rhs)) return false;
+  checkCommonJSAssignmentRhs(ctx, node, rhs.left, violations);
+  checkCommonJSAssignmentRhs(ctx, node, rhs.right, violations);
+  return true;
+}
+
 /**
  * Inspect the RHS of a CommonJS assignment for Gemini-named exports.
  * Handles identifiers, class/function expressions, and object literals.
@@ -117,15 +176,7 @@ function checkCommonJSAssignmentRhs(
   rhs: ts.Expression,
   violations: GeminiExportViolation[],
 ): void {
-  // Chained assignment: exports = module.exports = { ... }
-  // The RHS is itself a BinaryExpression; recurse into its RHS.
-  if (
-    ts.isBinaryExpression(rhs) &&
-    rhs.operatorToken.kind === ts.SyntaxKind.EqualsToken
-  ) {
-    checkCommonJSAssignmentRhs(ctx, node, rhs.right, violations);
-    return;
-  }
+  if (checkCompositeAssignmentRhs(ctx, node, rhs, violations)) return;
   if (ts.isObjectLiteralExpression(rhs)) {
     checkCommonJSObjectLiteral(ctx, rhs, violations);
     return;
@@ -139,6 +190,20 @@ function checkCommonJSAssignmentRhs(
     const binding = resolveObjectLiteralBinding(ctx, rhs);
     if (binding !== undefined) {
       checkCommonJSObjectLiteral(ctx, binding, violations);
+      return;
+    }
+    // An unresolved neutral identifier cannot be statically inspected for
+    // its exported names. Its own name has been checked above; if the name
+    // itself does not contain "Gemini" and is not a known-safe global
+    // constant (undefined/NaN/Infinity), fail closed to avoid missing a
+    // dynamic export surface.
+    if (!containsGemini(rhs.text) && !SAFE_GLOBAL_IDENTIFIERS.has(rhs.text)) {
+      addFailClosedViolation(
+        ctx,
+        node,
+        'module.exports = unresolved identifier (fail-closed)',
+        violations,
+      );
     }
     return;
   }
@@ -158,6 +223,21 @@ function checkCommonJSAssignmentRhs(
       ctx,
       node,
       'module.exports = callExpression() (fail-closed)',
+      violations,
+    );
+    return;
+  }
+  // A3: any other expression kind (PropertyAccess, ArrayLiteral, etc.)
+  // cannot be statically inspected for export names — fail closed.
+  // Null/undefined/boolean/number literals produce no export names.
+  // Class/function expressions (named or anonymous) are safe: their names
+  // have already been checked above, or they are anonymous (no export name).
+  // CallExpressions are handled above (fail-closed or exempted).
+  if (!isSafeStaticExportValue(rhs)) {
+    addFailClosedViolation(
+      ctx,
+      node,
+      'module.exports = unresolvable expression (fail-closed)',
       violations,
     );
   }
@@ -351,6 +431,12 @@ export function checkCommonJSExport(
   // operators (`module.exports ||= { GeminiLeak: 1 }`) require the property
   // name to already be on the LHS, which is handled above.
   if (expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken) {
+    // Whole-target logical assignments (`module.exports ||= { ... }`,
+    // `??=`, `&&=`) must also inspect the RHS because the assigned value
+    // becomes part of the exported surface.
+    if (isModuleExports(ctx, lhs)) {
+      checkCommonJSAssignmentRhs(ctx, node, expr.right, violations);
+    }
     return;
   }
   // module.exports = { ... } / module.exports = GeminiName / module.exports = class Gemini {}

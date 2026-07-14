@@ -92,12 +92,19 @@ function collectModuleImport(
       'namespace',
       range.from,
       range.to,
+      clause.namedBindings.name.getStart(),
     );
     ctx.knownNamespaces.add(clause.namedBindings.name.text);
   }
 
   if (clause.name !== undefined) {
-    ctx.resolver.register(clause.name.text, 'namespace', range.from, range.to);
+    ctx.resolver.register(
+      clause.name.text,
+      'namespace',
+      range.from,
+      range.to,
+      clause.name.getStart(),
+    );
     ctx.knownNamespaces.add(clause.name.text);
   }
 }
@@ -118,7 +125,13 @@ function collectImportEquals(
   if (specifier === null) return;
   if (!MODULE_FACTORY_SPECIFIERS.has(specifier)) return;
   const range = moduleRange(node);
-  ctx.resolver.register(node.name.text, 'namespace', range.from, range.to);
+  ctx.resolver.register(
+    node.name.text,
+    'namespace',
+    range.from,
+    range.to,
+    node.name.getStart(),
+  );
   ctx.knownNamespaces.add(node.name.text);
 }
 
@@ -234,6 +247,19 @@ function tryRegisterCallInitializer(
   if (
     ts.isIdentifier(initializer.expression) &&
     ctx.createRequireReturningFunctions.has(initializer.expression.text)
+  ) {
+    registerBindings(ctx, declaration, 'binding', range);
+    return true;
+  }
+  // A5: Direct arrow/function IIFE that returns createRequire(...) → binding
+  // e.g. `const req = (() => createRequire(import.meta.url))();`
+  //   or `const req = ((url) => createRequire(url))(import.meta.url);`
+  //   or `const req = (function(url) { return createRequire(url); })(...);`
+  // Parentheses around the function expression must be unwrapped.
+  const iifeCallee = unwrapParentheses(initializer.expression);
+  if (
+    isFunctionLikeDeclaration(iifeCallee) &&
+    functionReturnsCreateRequire(ctx, iifeCallee)
   ) {
     registerBindings(ctx, declaration, 'binding', range);
     return true;
@@ -395,14 +421,26 @@ function collectCjsModuleRequire(
     for (const element of name.elements) {
       if (importedNameOfBinding(element) === 'createRequire') {
         const localName = element.name.getText();
-        ctx.resolver.register(localName, 'factory', range.from, range.to);
+        ctx.resolver.register(
+          localName,
+          'factory',
+          range.from,
+          range.to,
+          element.name.getStart(),
+        );
         ctx.knownFactoryAliases.add(localName);
       }
     }
     return;
   }
   if (ts.isIdentifier(name)) {
-    ctx.resolver.register(name.text, 'namespace', range.from, range.to);
+    ctx.resolver.register(
+      name.text,
+      'namespace',
+      range.from,
+      range.to,
+      name.getStart(),
+    );
     ctx.knownNamespaces.add(name.text);
   }
 }
@@ -514,6 +552,17 @@ function collectVariableDeclaration(
 }
 
 /**
+ * Unwrap nested ParenthesizedExpression nodes to reach the inner expression.
+ */
+function unwrapParentheses(node: ts.Expression): ts.Expression {
+  let current: ts.Expression = node;
+  while (ts.isParenthesizedExpression(current)) {
+    current = current.expression;
+  }
+  return current;
+}
+
+/**
  * Determine if a node is a function-like declaration.
  */
 function isFunctionLikeDeclaration(
@@ -550,15 +599,79 @@ function collectFunctionShadows(
 ): void {
   const range = hoistedRange(node);
   if ('name' in node && node.name !== undefined && ts.isIdentifier(node.name)) {
-    ctx.resolver.register(node.name.text, 'shadow', range.from, range.to);
+    ctx.resolver.register(
+      node.name.text,
+      'shadow',
+      range.from,
+      range.to,
+      node.name.getStart(),
+    );
     ctx.globalShadows.registerShadow(node.name.text, range.from, range.to);
   }
   for (const param of node.parameters) {
     for (const name of collectBindingNames(param.name)) {
-      ctx.resolver.register(name, 'shadow', range.from, range.to);
+      ctx.resolver.register(
+        name,
+        'shadow',
+        range.from,
+        range.to,
+        param.name.getStart(),
+      );
       ctx.globalShadows.registerShadow(name, range.from, range.to);
     }
   }
+}
+
+function collectCallAssignment(
+  ctx: ImportScanContext,
+  lhs: ts.Identifier,
+  rhs: ts.Expression,
+  range: { readonly from: number; readonly to: number },
+): void {
+  if (!ts.isCallExpression(rhs)) return;
+  let kind: 'binding' | 'require-alias' | undefined;
+  if (isCreateRequireFactoryCallee(ctx, rhs.expression)) {
+    kind = 'binding';
+  } else if (isRequireBindCall(ctx, rhs)) {
+    kind = 'require-alias';
+  } else if (
+    ts.isIdentifier(rhs.expression) &&
+    ctx.createRequireReturningFunctions.has(rhs.expression.text)
+  ) {
+    kind = 'binding';
+  } else {
+    // A7: Direct arrow/function IIFE that returns createRequire(...) → binding.
+    // Same logic as tryRegisterCallInitializer for variable declarations.
+    const iifeCallee = unwrapParentheses(rhs.expression);
+    if (
+      isFunctionLikeDeclaration(iifeCallee) &&
+      functionReturnsCreateRequire(ctx, iifeCallee)
+    ) {
+      kind = 'binding';
+    }
+  }
+  if (kind === undefined) return;
+  ctx.resolver.register(lhs.text, kind, range.from, range.to, lhs.getStart());
+  if (kind === 'binding') ctx.knownBindings.add(lhs.text);
+}
+
+/**
+ * Compute the active range for an assignment alias. The alias lifetime
+ * must follow the outer LHS binding's declaration scope, not the inner
+ * assignment block. For `let r; { r = require; } r('...')`, the alias
+ * must be active where `r(...)` is called outside the block (Finding2b).
+ *
+ * Falls back to the assignment's enclosing block scope if the LHS
+ * declaration scope cannot be resolved (e.g. undeclared assignment target).
+ */
+function assignmentAliasRange(
+  ctx: ImportScanContext,
+  lhs: ts.Identifier,
+  node: ts.ExpressionStatement,
+): { readonly from: number; readonly to: number } {
+  const declRange = ctx.resolver.declarationRangeAt(lhs.text, lhs.getStart());
+  if (declRange !== undefined) return declRange;
+  return blockScopedRange(node);
 }
 
 /**
@@ -577,54 +690,59 @@ function collectAssignment(
   if (!ts.isIdentifier(lhs)) return;
   const rhs = expr.right;
   const rhsPos = rhs.getStart();
-  const range = blockScopedRange(node);
+  const range = assignmentAliasRange(ctx, lhs, node);
 
   // r = require
-  if (ts.isIdentifier(rhs) && rhs.text === REQUIRE_IDENTIFIER) {
-    ctx.resolver.register(lhs.text, 'require-alias', range.from, range.to);
+  if (
+    ts.isIdentifier(rhs) &&
+    rhs.text === REQUIRE_IDENTIFIER &&
+    isGlobalRequireRef(ctx, rhs)
+  ) {
+    ctx.resolver.register(
+      lhs.text,
+      'require-alias',
+      range.from,
+      range.to,
+      lhs.getStart(),
+    );
     return;
   }
   // r = someBinding (createRequire return value)
   if (ts.isIdentifier(rhs) && ctx.resolver.isBinding(rhs.text, rhsPos)) {
-    ctx.resolver.register(lhs.text, 'binding', range.from, range.to);
+    ctx.resolver.register(
+      lhs.text,
+      'binding',
+      range.from,
+      range.to,
+      lhs.getStart(),
+    );
     ctx.knownBindings.add(lhs.text);
     return;
   }
   // r = factory alias: `r = createRequire`
   if (ts.isIdentifier(rhs) && ctx.resolver.isFactoryAlias(rhs.text, rhsPos)) {
-    ctx.resolver.register(lhs.text, 'factory', range.from, range.to);
+    ctx.resolver.register(
+      lhs.text,
+      'factory',
+      range.from,
+      range.to,
+      lhs.getStart(),
+    );
     ctx.knownFactoryAliases.add(lhs.text);
     return;
   }
   // r = someRequireAlias (transitive)
   if (ts.isIdentifier(rhs) && ctx.resolver.isRequireAlias(rhs.text, rhsPos)) {
-    ctx.resolver.register(lhs.text, 'require-alias', range.from, range.to);
+    ctx.resolver.register(
+      lhs.text,
+      'require-alias',
+      range.from,
+      range.to,
+      lhs.getStart(),
+    );
     return;
   }
-  // r = createRequire(...)(...) → binding
-  if (
-    ts.isCallExpression(rhs) &&
-    isCreateRequireFactoryCallee(ctx, rhs.expression)
-  ) {
-    ctx.resolver.register(lhs.text, 'binding', range.from, range.to);
-    ctx.knownBindings.add(lhs.text);
-    return;
-  }
-  // r = require.bind(null) / module.require.bind(null) → require-alias (F3)
-  if (ts.isCallExpression(rhs) && isRequireBindCall(ctx, rhs)) {
-    ctx.resolver.register(lhs.text, 'require-alias', range.from, range.to);
-    return;
-  }
-  // r = someCreateRequireReturningFunction(url) → binding (Finding1 transitive)
-  if (
-    ts.isCallExpression(rhs) &&
-    ts.isIdentifier(rhs.expression) &&
-    ctx.createRequireReturningFunctions.has(rhs.expression.text)
-  ) {
-    ctx.resolver.register(lhs.text, 'binding', range.from, range.to);
-    ctx.knownBindings.add(lhs.text);
-    return;
-  }
+  collectCallAssignment(ctx, lhs, rhs, range);
 }
 
 /**

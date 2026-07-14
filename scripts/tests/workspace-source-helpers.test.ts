@@ -362,4 +362,17 @@ describe('readWorkspaceManifest', () => {
       cleanup();
     }
   });
+
+  it('throws with contextual path when package.json is malformed JSON', () => {
+    const { repoRoot, cleanup } = createTempRepo('packages/broken', {
+      'package.json': '{ "name": ',
+    });
+    try {
+      expect(() => readWorkspaceManifest('packages/broken', repoRoot)).toThrow(
+        join(repoRoot, 'packages/broken', 'package.json'),
+      );
+    } finally {
+      cleanup();
+    }
+  });
 });

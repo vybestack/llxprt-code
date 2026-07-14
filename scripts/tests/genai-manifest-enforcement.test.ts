@@ -5,12 +5,13 @@
  */
 
 /**
- * Behavioral tests for the shared manifest-enforcement module (#2352 F1, F9,
- * F10).
+ * Behavioral tests for the shared manifest-enforcement module (#2352 F1, F6,
+ * F9, F10).
  *
  * These tests exercise the real enforcement functions directly (no mocks):
  *
  * - F1: reject unauthorized npm aliases targeting @google/genai.
+ * - F6: reject malformed dependency sections (non-object shapes).
  * - F9: reject duplicate dependency sections (SDK declared in both
  *   dependencies AND devDependencies, etc.).
  * - F10: production guard requires exact configured root/core/providers
@@ -25,6 +26,9 @@ import {
   validateManifestDependencies,
   type ManifestValidationInput,
 } from '../genai-enclave/manifest-enforcement.ts';
+import { SANCTIONED_GENAI_VERSION } from '../genai-enclave/config.ts';
+
+const SANCTIONED_VERSION = SANCTIONED_GENAI_VERSION;
 
 function input(
   workspaceDir: string,
@@ -35,11 +39,36 @@ function input(
 
 const SANCTIONED = 'packages/core';
 
+const ALL_DEPENDENCY_SECTIONS = [
+  'dependencies',
+  'devDependencies',
+  'peerDependencies',
+  'optionalDependencies',
+] as const;
+
 describe('validateManifestDependencies — F1: reject unauthorized npm aliases targeting GenAI', () => {
+  it.each(ALL_DEPENDENCY_SECTIONS)(
+    'rejects an npm alias targeting @google/genai in %s',
+    (section) => {
+      const manifest: Record<string, unknown> = {};
+      manifest[section] = {
+        'fake-name': `npm:@google/genai@${SANCTIONED_VERSION}`,
+      };
+      const result = validateManifestDependencies(
+        input('packages/cli', manifest),
+      );
+      expect(
+        result.violations.some((v) => v.message.includes('npm alias')),
+      ).toBe(true);
+    },
+  );
+
   it('rejects an npm alias whose target is @google/genai', () => {
     const result = validateManifestDependencies(
       input('packages/cli', {
-        dependencies: { 'fake-name': 'npm:@google/genai@1.30.0' },
+        dependencies: {
+          'fake-name': `npm:@google/genai@${SANCTIONED_VERSION}`,
+        },
       }),
     );
     expect(result.violations.length).toBeGreaterThanOrEqual(1);
@@ -112,7 +141,7 @@ describe('validateManifestDependencies — F1: reject unauthorized npm aliases t
     const result = validateManifestDependencies(
       input(SANCTIONED, {
         dependencies: {
-          '@google/genai': '1.30.0',
+          '@google/genai': SANCTIONED_VERSION,
           'mime-types': 'npm:mime-types@^3.0.1',
         },
       }),
@@ -125,8 +154,8 @@ describe('validateManifestDependencies — F9: reject duplicate dependency secti
   it('rejects SDK declared in both dependencies and devDependencies', () => {
     const result = validateManifestDependencies(
       input(SANCTIONED, {
-        dependencies: { '@google/genai': '1.30.0' },
-        devDependencies: { '@google/genai': '1.30.0' },
+        dependencies: { '@google/genai': SANCTIONED_VERSION },
+        devDependencies: { '@google/genai': SANCTIONED_VERSION },
       }),
     );
     expect(result.violations.some((v) => v.message.includes('duplicate'))).toBe(
@@ -137,8 +166,8 @@ describe('validateManifestDependencies — F9: reject duplicate dependency secti
   it('rejects SDK declared in both dependencies and peerDependencies', () => {
     const result = validateManifestDependencies(
       input(SANCTIONED, {
-        dependencies: { '@google/genai': '1.30.0' },
-        peerDependencies: { '@google/genai': '1.30.0' },
+        dependencies: { '@google/genai': SANCTIONED_VERSION },
+        peerDependencies: { '@google/genai': SANCTIONED_VERSION },
       }),
     );
     expect(result.violations.some((v) => v.message.includes('duplicate'))).toBe(
@@ -146,24 +175,30 @@ describe('validateManifestDependencies — F9: reject duplicate dependency secti
     );
   });
 
-  it('rejects SDK declared in both dependencies and optionalDependencies', () => {
+  it('rejects SDK in both dependencies and optionalDependencies (duplicate + wrong-section)', () => {
     const result = validateManifestDependencies(
       input(SANCTIONED, {
-        dependencies: { '@google/genai': '1.30.0' },
-        optionalDependencies: { '@google/genai': '1.30.0' },
+        dependencies: { '@google/genai': SANCTIONED_VERSION },
+        optionalDependencies: { '@google/genai': SANCTIONED_VERSION },
       }),
     );
-    expect(result.violations.some((v) => v.message.includes('duplicate'))).toBe(
-      true,
+    expect(result.violations).toHaveLength(2);
+    const hasDuplicate = result.violations.some((v) =>
+      v.message.includes('multiple dependency sections'),
     );
+    const hasWrongSection = result.violations.some((v) =>
+      v.message.includes('found in "optionalDependencies"'),
+    );
+    expect(hasDuplicate).toBe(true);
+    expect(hasWrongSection).toBe(true);
   });
 
   it('rejects SDK declared in three sections simultaneously', () => {
     const result = validateManifestDependencies(
       input(SANCTIONED, {
-        dependencies: { '@google/genai': '1.30.0' },
-        devDependencies: { '@google/genai': '1.30.0' },
-        optionalDependencies: { '@google/genai': '1.30.0' },
+        dependencies: { '@google/genai': SANCTIONED_VERSION },
+        devDependencies: { '@google/genai': SANCTIONED_VERSION },
+        optionalDependencies: { '@google/genai': SANCTIONED_VERSION },
       }),
     );
     const duplicateViolations = result.violations.filter((v) =>
@@ -175,7 +210,7 @@ describe('validateManifestDependencies — F9: reject duplicate dependency secti
   it('does NOT reject a single declaration in dependencies', () => {
     const result = validateManifestDependencies(
       input(SANCTIONED, {
-        dependencies: { '@google/genai': '1.30.0' },
+        dependencies: { '@google/genai': SANCTIONED_VERSION },
       }),
     );
     expect(result.violations).toEqual([]);
@@ -184,7 +219,7 @@ describe('validateManifestDependencies — F9: reject duplicate dependency secti
   it('rejects SDK ONLY in devDependencies (wrong section for sanctioned workspace)', () => {
     const result = validateManifestDependencies(
       input(SANCTIONED, {
-        devDependencies: { '@google/genai': '1.30.0' },
+        devDependencies: { '@google/genai': SANCTIONED_VERSION },
       }),
     );
     expect(result.violations.length).toBeGreaterThanOrEqual(1);
@@ -198,7 +233,7 @@ describe('validateManifestDependencies — F10: exact configured root/core/provi
   it('requires root workspace (.) to declare SDK at exact version', () => {
     const result = validateManifestDependencies(
       input('.', {
-        dependencies: { '@google/genai': '1.30.0' },
+        dependencies: { '@google/genai': SANCTIONED_VERSION },
       }),
     );
     expect(result.violations).toEqual([]);
@@ -211,9 +246,9 @@ describe('validateManifestDependencies — F10: exact configured root/core/provi
       }),
     );
     expect(result.violations.length).toBeGreaterThanOrEqual(1);
-    expect(result.violations.some((v) => v.message.includes('1.30.0'))).toBe(
-      true,
-    );
+    expect(
+      result.violations.some((v) => v.message.includes(SANCTIONED_VERSION)),
+    ).toBe(true);
   });
 
   it('rejects root without SDK declaration', () => {
@@ -228,7 +263,7 @@ describe('validateManifestDependencies — F10: exact configured root/core/provi
   it('requires packages/core to declare SDK at exact version', () => {
     const result = validateManifestDependencies(
       input('packages/core', {
-        dependencies: { '@google/genai': '1.30.0' },
+        dependencies: { '@google/genai': SANCTIONED_VERSION },
       }),
     );
     expect(result.violations).toEqual([]);
@@ -246,7 +281,7 @@ describe('validateManifestDependencies — F10: exact configured root/core/provi
   it('requires packages/providers to declare SDK at exact version', () => {
     const result = validateManifestDependencies(
       input('packages/providers', {
-        dependencies: { '@google/genai': '1.30.0' },
+        dependencies: { '@google/genai': SANCTIONED_VERSION },
       }),
     );
     expect(result.violations).toEqual([]);
@@ -264,7 +299,7 @@ describe('validateManifestDependencies — F10: exact configured root/core/provi
   it('rejects a non-sanctioned workspace declaring SDK', () => {
     const result = validateManifestDependencies(
       input('packages/cli', {
-        dependencies: { '@google/genai': '1.30.0' },
+        dependencies: { '@google/genai': SANCTIONED_VERSION },
       }),
     );
     expect(result.violations.length).toBeGreaterThanOrEqual(1);
@@ -281,9 +316,10 @@ describe('validateManifestDependencies — F6: malformed dependency sections', (
         dependencies: ['@google/genai'],
       }),
     );
-    expect(result.errors.length).toBeGreaterThanOrEqual(1);
-    expect(result.errors.some((e) => e.message.includes('dependencies'))).toBe(
-      true,
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].message).toBe(
+      'package.json "dependencies" must be an object when present ' +
+        '(got array) — fail-closed.',
     );
   });
 
@@ -293,10 +329,11 @@ describe('validateManifestDependencies — F6: malformed dependency sections', (
         devDependencies: '@google/genai',
       }),
     );
-    expect(result.errors.length).toBeGreaterThanOrEqual(1);
-    expect(
-      result.errors.some((e) => e.message.includes('devDependencies')),
-    ).toBe(true);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].message).toBe(
+      'package.json "devDependencies" must be an object when present ' +
+        '(got string) — fail-closed.',
+    );
   });
 
   it('rejects a dependency section that is null', () => {
@@ -305,10 +342,11 @@ describe('validateManifestDependencies — F6: malformed dependency sections', (
         optionalDependencies: null,
       }),
     );
-    expect(result.errors.length).toBeGreaterThanOrEqual(1);
-    expect(
-      result.errors.some((e) => e.message.includes('optionalDependencies')),
-    ).toBe(true);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].message).toBe(
+      'package.json "optionalDependencies" must be an object when present ' +
+        '(got null) — fail-closed.',
+    );
   });
 
   it('rejects a dependency section that is a number', () => {
@@ -338,7 +376,7 @@ describe('validateManifestDependencies — F6: malformed dependency sections', (
   it('does NOT error on a valid object dependency section', () => {
     const result = validateManifestDependencies(
       input(SANCTIONED, {
-        dependencies: { '@google/genai': '1.30.0' },
+        dependencies: { '@google/genai': SANCTIONED_VERSION },
       }),
     );
     expect(result.errors).toEqual([]);

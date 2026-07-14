@@ -314,3 +314,185 @@ describe('export-detection — identifier export must both flag identifier and i
     expect(violations[0].exportName).toBe('GeminiNested');
   });
 });
+
+describe('A2/A3: whole-target module.exports logical assignments inspect RHS', () => {
+  it('detects Gemini name via module.exports ||= { ... } object literal', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'module.exports ||= { GeminiLeak: 1 };',
+    );
+    expect(
+      scanGeminiExports(sf, 'legacy.cjs').map((v) => v.exportName),
+    ).toContain('GeminiLeak');
+  });
+
+  it('detects Gemini name via module.exports ??= { ... } object literal', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'module.exports ??= { GeminiLeak: 1 };',
+    );
+    expect(
+      scanGeminiExports(sf, 'legacy.cjs').map((v) => v.exportName),
+    ).toContain('GeminiLeak');
+  });
+
+  it('detects Gemini name via module.exports &&= { ... } object literal', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'module.exports &&= { GeminiLeak: 1 };',
+    );
+    expect(
+      scanGeminiExports(sf, 'legacy.cjs').map((v) => v.exportName),
+    ).toContain('GeminiLeak');
+  });
+
+  it('does NOT flag safe module.exports ||= with non-Gemini names', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'module.exports ||= { normalName: 1 };',
+    );
+    expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
+  });
+
+  it('does NOT flag safe module.exports ??= with non-Gemini names', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'module.exports ??= { normalName: 1 };',
+    );
+    expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
+  });
+
+  it('fail-closed: module.exports ||= with callExpression RHS', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'module.exports ||= makeExports();',
+    );
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].exportForm).toContain('fail-closed');
+  });
+
+  it('fail-closed: module.exports ??= with callExpression RHS', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'module.exports ??= makeExports();',
+    );
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].exportForm).toContain('fail-closed');
+  });
+
+  it('detects Gemini in both branches of module.exports &&= conditional RHS', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'module.exports &&= cond ? { GeminiLeak: 1 } : null;',
+    );
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].exportName).toBe('GeminiLeak');
+  });
+
+  it('fail-closed: module.exports = conditional with unresolvable branch', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'module.exports = cond ? makeExports() : null;',
+    );
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].exportForm).toContain('fail-closed');
+  });
+
+  it('fail-closed: module.exports = logical OR with unresolvable branch', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'module.exports = fallback || makeExports();',
+    );
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations.length).toBeGreaterThanOrEqual(1);
+    expect(violations.some((v) => v.exportForm.includes('fail-closed'))).toBe(
+      true,
+    );
+  });
+
+  describe('A6: unresolved neutral identifier RHS must fail closed', () => {
+    it('fail-closed: module.exports = someUnknownVar (unresolved neutral identifier)', () => {
+      const sf = parseSourceFile(
+        'legacy.cjs',
+        'module.exports = someUnknownVar;\n',
+      );
+      const violations = scanGeminiExports(sf, 'legacy.cjs');
+      expect(violations).toHaveLength(1);
+      expect(violations[0].exportForm).toContain('fail-closed');
+    });
+
+    it('fail-closed: module.exports = a.nonLiteralProperty (unresolvable property access)', () => {
+      const sf = parseSourceFile(
+        'legacy.cjs',
+        'module.exports = a.nonLiteralProperty;\n',
+      );
+      const violations = scanGeminiExports(sf, 'legacy.cjs');
+      expect(violations).toHaveLength(1);
+      expect(violations[0].exportForm).toContain('fail-closed');
+    });
+
+    it('does NOT fail-closed when module.exports = null', () => {
+      const sf = parseSourceFile('legacy.cjs', 'module.exports = null;\n');
+      expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
+    });
+
+    it('does NOT fail-closed when module.exports = undefined', () => {
+      const sf = parseSourceFile('legacy.cjs', 'module.exports = undefined;\n');
+      expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
+    });
+
+    it('does NOT fail-closed when module.exports = 42 (numeric literal)', () => {
+      const sf = parseSourceFile('legacy.cjs', 'module.exports = 42;\n');
+      expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
+    });
+
+    it('does NOT fail-closed when module.exports = "str" (string literal)', () => {
+      const sf = parseSourceFile('legacy.cjs', 'module.exports = "str";\n');
+      expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
+    });
+
+    it('does NOT fail-closed when module.exports = true (boolean literal)', () => {
+      const sf = parseSourceFile('legacy.cjs', 'module.exports = true;\n');
+      expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
+    });
+
+    it('does NOT fail-closed when module.exports = /regex/ (regex literal)', () => {
+      const sf = parseSourceFile('legacy.cjs', 'module.exports = /regex/;\n');
+      expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
+    });
+
+    it('does NOT fail-closed for module.exports = {} (empty object literal)', () => {
+      const sf = parseSourceFile('legacy.cjs', 'module.exports = {};\n');
+      expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
+    });
+
+    it('does NOT fail-closed for module.exports = function() {} (anonymous function)', () => {
+      const sf = parseSourceFile(
+        'legacy.cjs',
+        'module.exports = function() {};\n',
+      );
+      expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
+    });
+
+    it('does NOT fail-closed for module.exports = class {} (anonymous class)', () => {
+      const sf = parseSourceFile('legacy.cjs', 'module.exports = class {};\n');
+      expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
+    });
+
+    it('still flags Gemini-named identifier even when fail-closed is suppressed by binding resolution', () => {
+      const sf = parseSourceFile(
+        'legacy.cjs',
+        'const src = { GeminiLeak: 1 };\nmodule.exports = src;\n',
+      );
+      const violations = scanGeminiExports(sf, 'legacy.cjs');
+      expect(violations.some((v) => v.exportName === 'GeminiLeak')).toBe(true);
+      expect(violations.some((v) => v.exportForm.includes('fail-closed'))).toBe(
+        false,
+      );
+    });
+  });
+});

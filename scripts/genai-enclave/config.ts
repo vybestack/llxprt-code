@@ -55,7 +55,7 @@ export const GENAI_IMPORT_ENCLAVES: readonly ImportEnclave[] = [
 ];
 
 /**
- * Convenience: the raw prefix strings (back-compat for existing callers).
+ * Convenience: the raw prefix strings.
  */
 const IMPORT_ENCLAVE_PREFIXES: readonly string[] = GENAI_IMPORT_ENCLAVES.map(
   (e) => e.prefix,
@@ -595,4 +595,20 @@ export function isTestFile(relPath: string): boolean {
     return true;
   }
   return TEST_FILE_PATTERNS.some((pattern) => pattern.test(relPath));
+}
+
+// ─── Config-file detection ──────────────────────────────────────────────────
+
+const CONFIG_FILE_PATTERN =
+  /^(?:eslint|vitest|vite|webpack|rollup|jest)(?:[\w.-]*?)\.config\.[cm]?[jt]s$/;
+
+/**
+ * Determine if `path` is a runtime export surface (not a config file).
+ * Config files (vitest.config.ts, vite.worker.config.mjs, etc.) are exempt
+ * from the Gemini-name export check because their exports are build-time
+ * configuration, not runtime API surface.
+ */
+export function isRuntimeExportSurface(relPath: string): boolean {
+  const fileName = relPath.slice(relPath.lastIndexOf('/') + 1);
+  return !CONFIG_FILE_PATTERN.test(fileName);
 }

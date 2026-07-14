@@ -197,7 +197,7 @@ export class ProvenanceResolver {
     kind: ProvenanceKind,
     activeFrom: number,
     activeTo: number,
-    declPos: number = activeFrom,
+    declPos: number,
   ): void {
     const list = this.entries.get(name);
     const entry: ScopeEntry = { kind, activeFrom, activeTo, declPos };
@@ -287,6 +287,32 @@ export class ProvenanceResolver {
     const list = this.entries.get(name);
     if (list === undefined) return false;
     return list.some((e) => e.kind === kind);
+  }
+
+  /**
+   * Return the active range of the declaration entry for `name` that is
+   * active at `pos`. This is the scope range of the binding (const/let/var/
+   * function) that declares `name` at the source position.
+   *
+   * Used by assignment alias collection so that `r = require` inside an
+   * inner block registers the alias for the lifetime of the outer `let r`
+   * declaration, not just the inner block (Finding2b: assignment lifetime
+   * follows outer LHS binding).
+   */
+  declarationRangeAt(
+    name: string,
+    pos: number,
+  ): { readonly from: number; readonly to: number } | undefined {
+    const list = this.entries.get(name);
+    if (list === undefined) return undefined;
+    const active = list.filter((e) => e.activeFrom <= pos && pos <= e.activeTo);
+    if (active.length === 0) return undefined;
+    active.sort((a, b) => {
+      const aRange = a.activeTo - a.activeFrom;
+      const bRange = b.activeTo - b.activeFrom;
+      return aRange - bRange;
+    });
+    return { from: active[0].activeFrom, to: active[0].activeTo };
   }
 }
 

@@ -85,7 +85,13 @@ export function readWorkspaceManifest(
   if (!existsSync(path)) {
     return null;
   }
-  const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error);
+    throw new Error(`Cannot parse ${path}: ${cause}`);
+  }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     throw new Error(`package.json at ${path} is not a JSON object`);
   }

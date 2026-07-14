@@ -37,7 +37,7 @@
 
 import semver from 'semver';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
-import { join, resolve, dirname } from 'node:path';
+import { join, resolve } from 'node:path';
 
 /** The dependency sections of a package.json manifest. */
 export interface ManifestDependencies {
@@ -261,16 +261,6 @@ export interface DependencyMismatch {
   readonly message: string;
 }
 
-/**
- * Verify that the root manifest covers a single workspace dependency.
- * Returns a mismatch diagnostic if the dependency is missing, in the wrong
- * section, or has an incompatible semver range. Returns null if all is well.
- *
- * `internalPackages` is a manifest-derived set of internal package names
- * (built from the workspace manifests' `name` fields). Protocol specifiers
- * (file:, workspace:, link:) must resolve to an internal package — an
- * unresolved external protocol specifier is rejected.
- */
 /** A lookup result for finding a dependency in the root manifest sections. */
 interface RootDeclarationLookup {
   readonly version: string;
@@ -562,8 +552,8 @@ export function deriveShippedWorkspaceDirs(root: RootManifest): Set<string> {
 }
 
 /**
- * A duplicate dependency diagnostic: a package declared in both
- * `dependencies` and `optionalDependencies` of the SAME manifest (F6).
+ * A duplicate dependency diagnostic: a package declared in more than one
+ * dependency section of the SAME manifest (F6).
  */
 export interface RootDuplicateDependency {
   readonly name: string;
@@ -572,9 +562,10 @@ export interface RootDuplicateDependency {
 }
 
 /**
- * Detect packages declared in both `dependencies` AND `optionalDependencies`
- * of the root manifest (F6). A duplicate across these sections creates
- * ambiguity at install time and allows per-section version drift.
+ * Detect packages declared in multiple dependency sections
+ * (dependencies, optionalDependencies, peerDependencies) of the root
+ * manifest (F6). A duplicate across sections creates ambiguity at install
+ * time and allows per-section version drift.
  *
  * Returns a diagnostic for each package found in more than one section.
  */
@@ -710,12 +701,19 @@ function resolveProtocol(
   // For file: and link: protocols, resolve the path relative to the
   // *consuming* workspace (not the target), because npm resolves file:
   // specifiers relative to the consuming package.json's directory.
+  // When consumerWorkspace is not provided, fail closed rather than
+  // guessing with the target's parent directory.
   if (specifier.startsWith('file:') || specifier.startsWith('link:')) {
     const pathPart = extractProtocolPath(specifier);
-    const consumerAbs =
-      consumerWorkspace !== undefined
-        ? resolve(repoRoot, consumerWorkspace)
-        : dirname(expectedAbs);
+    if (consumerWorkspace === undefined) {
+      return {
+        resolved: false,
+        reason:
+          'Consumer workspace directory is required to resolve ' +
+          'file: or link: protocol specifiers',
+      };
+    }
+    const consumerAbs = resolve(repoRoot, consumerWorkspace);
     const resolvedAbs = resolve(consumerAbs, pathPart);
     // Verify the resolved path exists
     if (!existsSync(resolvedAbs)) {

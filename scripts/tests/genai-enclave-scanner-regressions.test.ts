@@ -304,3 +304,219 @@ describe('Finding7: lexical shadowed require — no false violation', () => {
     expect(violations[0].kind).toBe('genai-import');
   });
 });
+
+// ─── A4: assignment alias shadowed require (#2546) ─────────────────────────
+
+describe('A4: assignment alias registration respects shadowed require', () => {
+  it('does NOT flag require(@google/genai) via assignment when require is shadowed', () => {
+    const sf = parseSourceFile(
+      'test.cjs',
+      'let r;\n' +
+        '{\n' +
+        '  const require = (name) => null;\n' +
+        '  r = require;\n' +
+        '}\n' +
+        "r('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.cjs');
+    expect(violations).toEqual([]);
+  });
+
+  it('DOES flag require(@google/genai) via assignment when require is global', () => {
+    const sf = parseSourceFile(
+      'test.cjs',
+      'let r;\n' + 'r = require;\n' + "r('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.cjs');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].kind).toBe('genai-import');
+  });
+});
+
+// ─── A1: string-literal property name in destructured createRequire ─────────
+
+describe('A1: string-literal property name in destructured createRequire', () => {
+  it('detects @google/genai via destructured { "createRequire": cr } from require(node:module)', () => {
+    const sf = parseSourceFile(
+      'test.cjs',
+      'const { "createRequire": cr } = require("node:module");\n' +
+        'cr(import.meta.url)("@google/genai");\n',
+    );
+    const violations = scanGenaiImports(sf, 'test.cjs');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].kind).toBe('genai-import');
+  });
+
+  it('detects @google/genai via single-quoted destructured createRequire', () => {
+    const sf = parseSourceFile(
+      'test.cjs',
+      "const { 'createRequire': cr } = require('node:module');\n" +
+        "cr(import.meta.url)('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.cjs');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].kind).toBe('genai-import');
+  });
+
+  it('does NOT flag when the destructured name is a non-matching string literal', () => {
+    const sf = parseSourceFile(
+      'test.cjs',
+      'const { "otherRequire": cr } = require("node:module");\n' +
+        'cr(import.meta.url)("@google/genai");\n',
+    );
+    const violations = scanGenaiImports(sf, 'test.cjs');
+    expect(violations).toEqual([]);
+  });
+});
+
+// ─── A5: createRequire-returning IIFEs (#2546) ──────────────────────────────
+
+describe('A5: createRequire-returning direct arrow IIFEs', () => {
+  it('detects @google/genai via arrow IIFE returning createRequire', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "import { createRequire } from 'node:module';\n" +
+        'const req = (() => createRequire(import.meta.url))();\n' +
+        "req('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+
+  it('detects @google/genai via parameterized arrow IIFE', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "import { createRequire } from 'node:module';\n" +
+        'const req = ((url) => createRequire(url))(import.meta.url);\n' +
+        "req('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+
+  it('detects @google/genai via function expression IIFE', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "import { createRequire } from 'node:module';\n" +
+        'const req = (function(url) { return createRequire(url); })(import.meta.url);\n' +
+        "req('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+
+  it('does NOT flag a safe IIFE that does not return createRequire', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      'const val = (() => 42)();\n' + "val('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations).toEqual([]);
+  });
+});
+
+// ─── A7: assignment RHS createRequire-returning IIFE (#2546) ────────────────
+
+describe('A7: assignment RHS createRequire-returning IIFE', () => {
+  it('detects @google/genai via assignment r = arrow IIFE returning createRequire', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "import { createRequire } from 'node:module';\n" +
+        'let r;\n' +
+        'r = (() => createRequire(import.meta.url))();\n' +
+        "r('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+
+  it('detects @google/genai via assignment r = parameterized arrow IIFE', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "import { createRequire } from 'node:module';\n" +
+        'let r;\n' +
+        'r = ((url) => createRequire(url))(import.meta.url);\n' +
+        "r('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+
+  it('detects @google/genai via assignment r = function expression IIFE', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "import { createRequire } from 'node:module';\n" +
+        'let r;\n' +
+        'r = (function(url) { return createRequire(url); })(import.meta.url);\n' +
+        "r('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+
+  it('does NOT flag assignment of a safe IIFE that does not return createRequire', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      'let r;\n' + 'r = (() => 42)();\n' + "r('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations).toEqual([]);
+  });
+});
+
+// ─── A8: assignment lifetime follows outer LHS binding ─────────────────────
+
+describe('A8: assignment lifetime follows outer LHS binding', () => {
+  it('detects @google/genai when require alias is assigned in inner block but used outside', () => {
+    const sf = parseSourceFile(
+      'test.cjs',
+      'let r;\n' + '{\n' + '  r = require;\n' + '}\n' + "r('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.cjs');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+
+  it('detects @google/genai when binding alias is assigned in inner block but used outside', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "import { createRequire } from 'node:module';\n" +
+        'let r;\n' +
+        '{\n' +
+        '  r = createRequire(import.meta.url);\n' +
+        '}\n' +
+        "r('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+
+  it('does NOT flag when require is shadowed in the assignment block', () => {
+    const sf = parseSourceFile(
+      'test.cjs',
+      'let r;\n' +
+        '{\n' +
+        '  const require = (name) => null;\n' +
+        '  r = require;\n' +
+        '}\n' +
+        "r('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.cjs');
+    expect(violations).toEqual([]);
+  });
+
+  it('does NOT flag when a local variable shadows the alias name in a different scope', () => {
+    const sf = parseSourceFile(
+      'test.cjs',
+      'let r;\n' +
+        '{\n' +
+        '  r = require;\n' +
+        '}\n' +
+        '{\n' +
+        '  const r = (name) => null;\n' +
+        "  r('@google/genai');\n" +
+        '}\n',
+    );
+    const violations = scanGenaiImports(sf, 'test.cjs');
+    expect(violations).toEqual([]);
+  });
+});

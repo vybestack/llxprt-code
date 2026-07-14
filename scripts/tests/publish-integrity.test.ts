@@ -425,6 +425,25 @@ describe('published package integrity (S1)', () => {
     ).toBe(true);
   });
 });
+
+interface ShippedWorkspacePackagePath {
+  readonly workspaceDir: string;
+  readonly packagePath: string;
+}
+
+function collectShippedWorkspacePackagePaths(
+  rootPackage: RootPackageMetadata,
+): ShippedWorkspacePackagePath[] {
+  const shippedWorkspaceDirs = deriveShippedWorkspaceDirs(rootPackage);
+  return (rootPackage.workspaces ?? [])
+    .filter((workspaceDir) => shippedWorkspaceDirs.has(workspaceDir))
+    .map((workspaceDir) => ({
+      workspaceDir,
+      packagePath: join(repoRoot, workspaceDir, 'package.json'),
+    }))
+    .filter(({ packagePath }) => existsSync(packagePath));
+}
+
 describe('published package no-compile runtime contract (S6)', () => {
   it('publishes a checked-in launcher bin instead of a compiled dist entry', () => {
     const rootPackage = JSON.parse(
@@ -468,18 +487,12 @@ describe('published package no-compile runtime contract (S6)', () => {
       dependencies: rootPackage.dependencies ?? {},
       optionalDependencies: rootPackage.optionalDependencies ?? {},
     };
-    const shippedWorkspaceDirs = deriveShippedWorkspaceDirs(rootPackage);
     const globWorkspaces = (rootPackage.workspaces ?? []).filter((entry) =>
       /[*?[\]{}]/.test(entry),
     );
     expect(globWorkspaces).toEqual([]);
-    const shippedWorkspacePackagePaths = (rootPackage.workspaces ?? [])
-      .filter((workspaceDir) => shippedWorkspaceDirs.has(workspaceDir))
-      .map((workspaceDir) => ({
-        workspaceDir,
-        packagePath: join(repoRoot, workspaceDir, 'package.json'),
-      }))
-      .filter(({ packagePath }) => existsSync(packagePath));
+    const shippedWorkspacePackagePaths =
+      collectShippedWorkspacePackagePaths(rootPackage);
     expect(shippedWorkspacePackagePaths.length).toBeGreaterThan(0);
 
     // Build the manifest-derived internal package name set from ALL
@@ -557,7 +570,6 @@ describe('published package no-compile runtime contract (S6)', () => {
         readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
       ) as RootPackageMetadata;
       const packed = getPackedPaths();
-      const shippedWorkspaceDirs = deriveShippedWorkspaceDirs(rootPackage);
 
       // Build the authoritative package-name-to-workspace map from the root
       // workspaces list. This replaces the old convention of deriving the
@@ -567,13 +579,8 @@ describe('published package no-compile runtime contract (S6)', () => {
         rootPackage.workspaces ?? [],
       );
 
-      const shippedWorkspacePackagePaths = (rootPackage.workspaces ?? [])
-        .filter((workspaceDir) => shippedWorkspaceDirs.has(workspaceDir))
-        .map((workspaceDir) => ({
-          workspaceDir,
-          packagePath: join(repoRoot, workspaceDir, 'package.json'),
-        }))
-        .filter(({ packagePath }) => existsSync(packagePath));
+      const shippedWorkspacePackagePaths =
+        collectShippedWorkspacePackagePaths(rootPackage);
 
       const mismatches = shippedWorkspacePackagePaths.flatMap(
         ({ workspaceDir, packagePath }) => {
@@ -645,20 +652,14 @@ describe('published package no-compile runtime contract (S6)', () => {
         readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
       ) as RootPackageMetadata;
       const packed = getPackedPaths();
-      const shippedWorkspaceDirs = deriveShippedWorkspaceDirs(rootPackage);
 
       const packageNameToWorkspace = buildPackageNameToWorkspaceMap(
         repoRoot,
         rootPackage.workspaces ?? [],
       );
 
-      const shippedWorkspacePackagePaths = (rootPackage.workspaces ?? [])
-        .filter((workspaceDir) => shippedWorkspaceDirs.has(workspaceDir))
-        .map((workspaceDir) => ({
-          workspaceDir,
-          packagePath: join(repoRoot, workspaceDir, 'package.json'),
-        }))
-        .filter(({ packagePath }) => existsSync(packagePath));
+      const shippedWorkspacePackagePaths =
+        collectShippedWorkspacePackagePaths(rootPackage);
 
       const allMissing = shippedWorkspacePackagePaths.flatMap(
         ({ packagePath }) => {
@@ -668,7 +669,8 @@ describe('published package no-compile runtime contract (S6)', () => {
           return Array.from(iterateWorkspaceDependencies(workspacePackage))
             .filter(({ name }) => packageNameToWorkspace.has(name))
             .flatMap(({ name: dep }) => {
-              const depWorkspaceDir = packageNameToWorkspace.get(dep)!;
+              const depWorkspaceDir = packageNameToWorkspace.get(dep);
+              if (depWorkspaceDir === undefined) return [];
               const depManifest = readWorkspaceManifest(
                 depWorkspaceDir,
                 repoRoot,
@@ -703,20 +705,14 @@ describe('published package no-compile runtime contract (S6)', () => {
         readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
       ) as RootPackageMetadata;
       const packed = getPackedPaths();
-      const shippedWorkspaceDirs = deriveShippedWorkspaceDirs(rootPackage);
 
       const packageNameToWorkspace = buildPackageNameToWorkspaceMap(
         repoRoot,
         rootPackage.workspaces ?? [],
       );
 
-      const shippedWorkspacePackagePaths = (rootPackage.workspaces ?? [])
-        .filter((workspaceDir) => shippedWorkspaceDirs.has(workspaceDir))
-        .map((workspaceDir) => ({
-          workspaceDir,
-          packagePath: join(repoRoot, workspaceDir, 'package.json'),
-        }))
-        .filter(({ packagePath }) => existsSync(packagePath));
+      const shippedWorkspacePackagePaths =
+        collectShippedWorkspacePackagePaths(rootPackage);
 
       const allMissing = shippedWorkspacePackagePaths.flatMap(
         ({ packagePath }) => {
@@ -726,7 +722,8 @@ describe('published package no-compile runtime contract (S6)', () => {
           return Array.from(iterateWorkspaceDependencies(workspacePackage))
             .filter(({ name }) => packageNameToWorkspace.has(name))
             .flatMap(({ name: dep }) => {
-              const depWorkspaceDir = packageNameToWorkspace.get(dep)!;
+              const depWorkspaceDir = packageNameToWorkspace.get(dep);
+              if (depWorkspaceDir === undefined) return [];
               const depManifest = readWorkspaceManifest(
                 depWorkspaceDir,
                 repoRoot,

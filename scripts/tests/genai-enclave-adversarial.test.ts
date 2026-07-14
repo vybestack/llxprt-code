@@ -5,7 +5,7 @@
  */
 
 /**
- * Adversarial regression tests for all 12 reproduced findings (#2352).
+ * Adversarial regression tests for all 11 reproduced findings (#2352).
  *
  * Each test is an exact adversarial case that was confirmed as a gap via
  * probe tests. Tests are organized by finding number and cover both
@@ -27,7 +27,6 @@
  *  10. complete lexical shadows/reassignment and distinguish static
  *      empty spreads
  *  11. variant config filename classification
- *  12. AgentStream Vitest config array replacement and lint guards
  */
 
 import { describe, it, expect } from 'vitest';
@@ -36,6 +35,7 @@ import {
   scanGeminiExports,
   parseSourceFile,
 } from '../genai-enclave/scanner.ts';
+import { isRuntimeExportSurface } from '../genai-enclave/config.ts';
 import {
   type WorkspaceManifest,
   verifyTransitiveSourceClosure,
@@ -694,56 +694,23 @@ describe('Finding10: static empty spread — no false positive', () => {
 // ─── Finding 11: variant config filename classification ─────────────────────
 
 describe('Finding11: variant config filename classification', () => {
-  // These tests verify the isRuntimeExportSurface predicate indirectly
-  // by checking that scanGeminiExports is NOT called on config files.
-  // We test the regex directly via the guard's behavior.
-
-  it('recognizes standard vitest.config.ts as a config file (not runtime)', () => {
-    // The guard skips export-name scanning for config files.
-    // We verify this by checking that a Gemini-named export in a config
-    // file is NOT flagged. This requires running the full guard, so we
-    // test the predicate directly here.
-    const fileName = 'vitest.config.ts';
-    const isConfig =
-      /^(?:eslint|vitest|vite|webpack|rollup|jest)(?:[\w.-]*?)\.config\.[cm]?[jt]s$/.test(
-        fileName,
-      );
-    expect(isConfig).toBe(true);
+  it('classifies standard vitest.config.ts as NOT a runtime export surface', () => {
+    expect(isRuntimeExportSurface('vitest.config.ts')).toBe(false);
   });
 
-  it('recognizes variant vitest.unit.config.ts as a config file', () => {
-    const fileName = 'vitest.unit.config.ts';
-    const isConfig =
-      /^(?:eslint|vitest|vite|webpack|rollup|jest)(?:[\w.-]*?)\.config\.[cm]?[jt]s$/.test(
-        fileName,
-      );
-    expect(isConfig).toBe(true);
+  it('classifies variant vitest.unit.config.ts as NOT a runtime export surface', () => {
+    expect(isRuntimeExportSurface('vitest.unit.config.ts')).toBe(false);
   });
 
-  it('recognizes vite.worker.config.mjs as a config file', () => {
-    const fileName = 'vite.worker.config.mjs';
-    const isConfig =
-      /^(?:eslint|vitest|vite|webpack|rollup|jest)(?:[\w.-]*?)\.config\.[cm]?[jt]s$/.test(
-        fileName,
-      );
-    expect(isConfig).toBe(true);
+  it('classifies vite.worker.config.mjs as NOT a runtime export surface', () => {
+    expect(isRuntimeExportSurface('vite.worker.config.mjs')).toBe(false);
   });
 
-  it('does NOT classify a non-config file as a config file', () => {
-    const fileName = 'index.ts';
-    const isConfig =
-      /^(?:eslint|vitest|vite|webpack|rollup|jest)(?:[\w.-]*?)\.config\.[cm]?[jt]s$/.test(
-        fileName,
-      );
-    expect(isConfig).toBe(false);
+  it('classifies a non-config file as a runtime export surface', () => {
+    expect(isRuntimeExportSurface('index.ts')).toBe(true);
   });
 
-  it('does NOT classify a file with a similar but non-config name', () => {
-    const fileName = 'vitest-helper.ts';
-    const isConfig =
-      /^(?:eslint|vitest|vite|webpack|rollup|jest)(?:[\w.-]*?)\.config\.[cm]?[jt]s$/.test(
-        fileName,
-      );
-    expect(isConfig).toBe(false);
+  it('does NOT classify a file with a similar but non-config name as config', () => {
+    expect(isRuntimeExportSurface('vitest-helper.ts')).toBe(true);
   });
 });

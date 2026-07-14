@@ -56,11 +56,22 @@ function readManifest(workspaceDir: string): DependencyManifest {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasPrivateFlag(value: unknown): boolean {
+  if (!isRecord(value) || !Object.hasOwn(value, 'private')) return false;
+  return Object.getOwnPropertyDescriptor(value, 'private')?.value === true;
+}
+
 function isDependencyManifest(value: unknown): value is DependencyManifest {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false;
   }
-  const manifest = value as Record<string, unknown>;
+  const manifest: Record<string, unknown> = Object.fromEntries(
+    Object.entries(value),
+  );
   return [
     'dependencies',
     'devDependencies',
@@ -79,18 +90,29 @@ function isDependencyManifest(value: unknown): value is DependencyManifest {
     // Only enforce that @google/genai (if present) is a string, so that
     // valid manifests with object-style dependency specs in other entries
     // are not rejected.
-    const genaiVersion = (section as Record<string, unknown>)[GENAI_PACKAGE];
-    return genaiVersion === undefined || typeof genaiVersion === 'string';
+    const entries = Object.entries(section);
+    for (const [name, version] of entries) {
+      if (name === GENAI_PACKAGE && typeof version !== 'string') {
+        return false;
+      }
+    }
+    return true;
   });
 }
 
 function getGenaiVersion(manifest: DependencyManifest): string | undefined {
-  return (
-    manifest.dependencies?.[GENAI_PACKAGE] ??
-    manifest.devDependencies?.[GENAI_PACKAGE] ??
-    manifest.peerDependencies?.[GENAI_PACKAGE] ??
-    manifest.optionalDependencies?.[GENAI_PACKAGE]
-  );
+  const sections = [
+    manifest.dependencies,
+    manifest.devDependencies,
+    manifest.peerDependencies,
+    manifest.optionalDependencies,
+  ];
+  for (const section of sections) {
+    if (section !== undefined && GENAI_PACKAGE in section) {
+      return section[GENAI_PACKAGE];
+    }
+  }
+  return undefined;
 }
 
 describe('published-root packaging bridge regression (finding2)', () => {
@@ -119,12 +141,10 @@ describe('published-root packaging bridge regression (finding2)', () => {
 
   describe('root packaging bridge rationale', () => {
     it('root package.json is the packaging bridge (private but declares deps)', () => {
-      // The root is "private": true (not published directly), but it
-      // declares @google/genai so workspace installs resolve the SDK.
-      const rootManifest = JSON.parse(
+      const rootManifest: unknown = JSON.parse(
         readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'),
-      ) as { private?: boolean };
-      expect(rootManifest.private).toBe(true);
+      );
+      expect(hasPrivateFlag(rootManifest)).toBe(true);
     });
   });
 

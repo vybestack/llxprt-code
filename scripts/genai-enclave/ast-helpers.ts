@@ -117,9 +117,16 @@ export function objectPropertyName(
  */
 export function importedNameOfBinding(element: ts.BindingElement): string {
   if (element.propertyName) {
-    return ts.isIdentifier(element.propertyName)
-      ? element.propertyName.text
-      : element.propertyName.getText();
+    if (ts.isIdentifier(element.propertyName)) {
+      return element.propertyName.text;
+    }
+    if (
+      ts.isStringLiteral(element.propertyName) ||
+      ts.isNoSubstitutionTemplateLiteral(element.propertyName)
+    ) {
+      return element.propertyName.text;
+    }
+    return element.propertyName.getText();
   }
   return ts.isIdentifier(element.name)
     ? element.name.text

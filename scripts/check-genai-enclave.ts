@@ -62,6 +62,7 @@ import {
   isInGeminiNameEnclave,
   isExplicitlyAllowedGeminiName,
   isTestFile,
+  isRuntimeExportSurface,
   getGenaiDependencyWorkspaceDirs,
 } from './genai-enclave/config.ts';
 import {
@@ -458,13 +459,6 @@ function formatManifestViolation(
   v: ManifestDependencyViolation & { readonly manifestPath: string },
 ): string {
   return `  ${v.manifestPath}: ${v.message}`;
-}
-
-function isRuntimeExportSurface(relPath: string): boolean {
-  const fileName = relPath.slice(relPath.lastIndexOf('/') + 1);
-  return !/^(?:eslint|vitest|vite|webpack|rollup|jest)(?:[\w.-]*?)\.config\.[cm]?[jt]s$/.test(
-    fileName,
-  );
 }
 
 function collectGeminiExportViolations(
