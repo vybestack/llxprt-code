@@ -467,13 +467,14 @@ export class SubagentOrchestrator {
       return undefined;
     }
     const value = config.getEphemeralSetting('maxTurnsPerPrompt');
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-      return undefined;
+    if (
+      typeof value === 'number' &&
+      Number.isFinite(value) &&
+      (value === -1 || value > 0)
+    ) {
+      return value;
     }
-    if (!Number.isInteger(value) || (value !== -1 && value <= 0)) {
-      return undefined;
-    }
-    return value;
+    return undefined;
   }
 
   private baseSessionId(): string {

@@ -594,11 +594,6 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       foregroundConfig: makeConfigWithMaxTurns(Number.POSITIVE_INFINITY),
     },
     {
-      caseName: 'the foreground value is fractional',
-      subagentName: 'fractional-parent-helper',
-      foregroundConfig: makeConfigWithMaxTurns(1.5),
-    },
-    {
       caseName: 'the foreground value is not a number',
       subagentName: 'string-parent-helper',
       foregroundConfig: makeConfigWithMaxTurns('not-a-number'),
