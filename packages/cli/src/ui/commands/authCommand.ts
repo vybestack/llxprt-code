@@ -369,12 +369,10 @@ export class AuthCommandExecutor {
       return this.manageBrowserProfile(provider, bucket, selector);
     }
 
-    // Lines 15-17: Handle logout action (NEW) @pseudocode lines 15-17
     if (action === 'logout' || action === 'signout') {
       return this.logoutWithBucket(provider, param);
     }
 
-    // Lines 19-24: Invalid action @pseudocode lines 19-24
     return {
       type: 'message',
       messageType: 'error',

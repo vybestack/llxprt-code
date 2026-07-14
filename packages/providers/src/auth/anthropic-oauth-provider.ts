@@ -264,7 +264,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     let browserOpts: BrowserLaunchOptions | undefined;
     try {
       const assoc = oauthRuntimeBridge.getBrowserProfileAssociation(
-        'anthropic',
+        this.name,
         this.currentAuthBucket,
       );
       if (assoc) {
@@ -273,8 +273,13 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           profileDirectory: assoc.profileDirectory,
         };
       }
-    } catch {
-      // Association lookup failed — fall back to default browser
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `Browser profile association lookup failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
     }
     try {
       await openBrowserSecurely(browserUrl, browserOpts);
