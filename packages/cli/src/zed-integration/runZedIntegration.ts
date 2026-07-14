@@ -62,6 +62,7 @@ export async function runZedIntegration(
     }
   } catch (error) {
     logger.debug(() => `ERROR: Failed to create AgentSideConnection: ${error}`);
+    await cleanupAgents(agents, logger);
     throw error;
   }
 }

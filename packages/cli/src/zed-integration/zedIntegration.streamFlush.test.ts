@@ -37,8 +37,11 @@ describe('Zed Session.prompt (Agent API) - stream flush ordering', () => {
     const response = await runPrompt(session);
 
     expect(response.stopReason).toBe('end_turn');
-    expect(connection.sessionUpdateKinds()).toStrictEqual([
-      'agent_message_chunk',
+    expect(connection.onlySessionUpdates()).toStrictEqual([
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'before loop' },
+      },
     ]);
   });
 
@@ -57,9 +60,16 @@ describe('Zed Session.prompt (Agent API) - stream flush ordering', () => {
 
     await runPrompt(session);
 
-    expect(connection.sessionUpdateKinds()).toStrictEqual([
-      'agent_message_chunk',
-      'usage_update',
+    expect(connection.onlySessionUpdates()).toStrictEqual([
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'before usage' },
+      },
+      {
+        sessionUpdate: 'usage_update',
+        used: 5,
+        size: expect.any(Number),
+      },
     ]);
   });
 });

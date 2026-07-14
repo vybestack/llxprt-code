@@ -119,12 +119,18 @@ export class SessionLifecycle {
       throw acp.RequestError.resourceNotFound(params.sessionId);
     }
     const { session } = await this.restore(params.sessionId, params.cwd);
-    await session.sendAvailableCommands();
     this.sessions.set(params.sessionId, session);
-    return {
-      modes: buildSessionModes(session.getApprovalMode()),
-      ...(await this.configOptions(session)),
-    };
+    try {
+      await session.sendAvailableCommands();
+      return {
+        modes: buildSessionModes(session.getApprovalMode()),
+        ...(await this.configOptions(session)),
+      };
+    } catch (error) {
+      this.sessions.delete(params.sessionId);
+      await session.dispose().catch(() => undefined);
+      throw error;
+    }
   }
 
   private async performDelete(
@@ -167,6 +173,8 @@ export class SessionLifecycle {
     }
     try {
       await live.dispose();
+    } catch {
+      // Persisted deletion must still proceed after best-effort live cleanup.
     } finally {
       this.sessions.delete(sessionId);
     }

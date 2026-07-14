@@ -199,7 +199,7 @@ describe('session_metadata recording (issue #1611)', () => {
       expect(result.metadata.title).toBe('Updated title');
     });
 
-    it('returns a fatal replay error when session_metadata precedes session_start', async () => {
+    it('returns a specific fatal error when session_metadata precedes session_start', async () => {
       const chatsDir = await makeTempChatsDir();
       const filePath = path.join(chatsDir, 'session-test-meta-early.jsonl');
       await writeJsonlFile(filePath, [
@@ -208,7 +208,8 @@ describe('session_metadata recording (issue #1611)', () => {
       ]);
 
       const result = await replaySession(filePath, PROJECT_HASH);
-      expect(result.ok).toBe(false);
+      assertReplayError(result);
+      expect(result.error).toContain('session_start');
     });
 
     it('records a warning for malformed session_metadata title (non-string, non-null)', async () => {
@@ -308,9 +309,10 @@ describe('session_metadata recording (issue #1611)', () => {
         PROJECT_HASH,
       );
       expect(sessions).toHaveLength(1);
-      expect(sessions[0].createdAt).toBeDefined();
-      expect(typeof sessions[0].createdAt).toBe('string');
-      expect(Number.isNaN(Date.parse(sessions[0].createdAt!))).toBe(false);
+      const createdAt = sessions[0].createdAt;
+      expect(createdAt).toBeDefined();
+      expect(typeof createdAt).toBe('string');
+      expect(Number.isNaN(Date.parse(createdAt ?? ''))).toBe(false);
     });
   });
 });

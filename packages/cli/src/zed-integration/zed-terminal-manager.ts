@@ -237,11 +237,13 @@ export class TerminalManager {
         previousOutput = current.output;
       }
     }
-    previousOutput = await this.pollFinalOutput(
-      active,
-      previousOutput,
-      onOutput,
-    );
+    if (exitError === undefined) {
+      previousOutput = await this.pollFinalOutput(
+        active,
+        previousOutput,
+        onOutput,
+      );
+    }
     if (exitError !== undefined) {
       throw exitError;
     }

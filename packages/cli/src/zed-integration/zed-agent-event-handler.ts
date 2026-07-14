@@ -175,5 +175,5 @@ async function handleNotice(
 }
 
 function assertNever(event: never): never {
-  throw new Error(`Unhandled agent event: ${String(event)}`);
+  throw new Error(`Unhandled agent event: ${JSON.stringify(event)}`);
 }

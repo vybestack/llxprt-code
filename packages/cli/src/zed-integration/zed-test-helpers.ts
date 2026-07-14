@@ -491,16 +491,19 @@ export class RecordingConnection {
       );
   }
 
-  availableCommandUpdates(): acp.AvailableCommandsUpdate[] {
+  availableCommandUpdates(): Array<
+    Extract<acp.SessionUpdate, { sessionUpdate: 'available_commands_update' }>
+  > {
     return this.messages
       .filter((m) => m.kind === 'sessionUpdate')
       .map((m) => (m as { update: acp.SessionUpdate }).update)
       .filter(
         (
           update,
-        ): update is acp.AvailableCommandsUpdate & {
-          sessionUpdate: 'available_commands_update';
-        } => update.sessionUpdate === 'available_commands_update',
+        ): update is Extract<
+          acp.SessionUpdate,
+          { sessionUpdate: 'available_commands_update' }
+        > => update.sessionUpdate === 'available_commands_update',
       );
   }
 

@@ -211,13 +211,7 @@ async function probeMatchingSessionFile(
   return file === null ? { kind: 'no-match' } : { kind: 'match', file };
 }
 
-/**
- * True when `error` is a Node ENOENT (no-such-file/directory) rejection — used
- * to distinguish a genuinely-absent chats dir (missing session) from a real
- * probe failure such as EACCES (FINDING B2). Exported so the loadSession
- * re-attach probe (zed-session-loader.ts) classifies its probe failures with
- * the exact same rule instead of keeping a duplicate.
- */
+/** Summarizes an unexpected probe value without risking circular JSON. */
 function summarizeProbeValue(value: unknown): string {
   try {
     return JSON.stringify(value).slice(0, 200);
@@ -226,6 +220,7 @@ function summarizeProbeValue(value: unknown): string {
   }
 }
 
+/** True when `error` is a Node ENOENT rejection. */
 export function isEnoent(error: unknown): boolean {
   return (
     typeof error === 'object' &&
@@ -318,9 +313,13 @@ function errorMessage(error: unknown): string {
  * through to internalError.
  */
 function isNotFoundResumeReason(detail: string): boolean {
+  const envelope = 'Failed to resume session: ';
+  const reason = detail.startsWith(envelope)
+    ? detail.slice(envelope.length)
+    : detail;
   return (
-    detail.includes(RESUME_NO_SESSIONS_FOUND) ||
-    detail.includes(RESUME_SESSION_NOT_FOUND_PREFIX) ||
-    RESUME_SESSION_INDEX_OUT_OF_RANGE_RE.test(detail)
+    reason === RESUME_NO_SESSIONS_FOUND ||
+    reason.startsWith(RESUME_SESSION_NOT_FOUND_PREFIX) ||
+    RESUME_SESSION_INDEX_OUT_OF_RANGE_RE.test(reason)
   );
 }

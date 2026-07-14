@@ -215,12 +215,13 @@ export class ZedAgent {
     const { sessionId } = params;
     const reattached = await this.tryReattachLiveSession(sessionId);
     if (reattached !== null) {
-      try {
-        await reattached.sendAvailableCommands();
-      } catch (error) {
-        await this.rollbackSession(sessionId, reattached);
-        throw error;
-      }
+      await reattached
+        .sendAvailableCommands()
+        .catch((error: unknown) =>
+          this.logger.debug(
+            () => `Available commands delivery failed: ${error}`,
+          ),
+        );
       return {
         modes: buildSessionModes(reattached.getApprovalMode()),
         ...(await zedSessionConfigOptions(this.clientCapabilities, reattached)),
@@ -228,12 +229,11 @@ export class ZedAgent {
     }
     await this.disposePriorSession(sessionId);
     const session = await this.installResumedSession(sessionId, params.cwd);
-    try {
-      await session.sendAvailableCommands();
-    } catch (error) {
-      await this.rollbackSession(sessionId, session);
-      throw error;
-    }
+    await session
+      .sendAvailableCommands()
+      .catch((error: unknown) =>
+        this.logger.debug(() => `Available commands delivery failed: ${error}`),
+      );
     return {
       modes: buildSessionModes(session.getApprovalMode()),
       ...(await zedSessionConfigOptions(this.clientCapabilities, session)),
@@ -494,14 +494,13 @@ export class Session {
   }
   async cancelPendingPrompt(): Promise<void> {
     this.settleActiveConfirmation();
+    this.pendingPrompt?.abort();
+    this.pendingPrompt = null;
     await this.terminals
       ?.settleAll()
       .catch((e: unknown) =>
         this.logger.debug(() => `Terminal settleAll failed: ${e}`),
       );
-    if (!this.pendingPrompt) return;
-    this.pendingPrompt.abort();
-    this.pendingPrompt = null;
   }
   private settleActiveConfirmation(): void {
     for (const confirmationId of [...this.activeConfirmations.keys()]) {

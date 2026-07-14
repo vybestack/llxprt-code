@@ -5,7 +5,7 @@
  */
 
 import type { SessionSummary } from '@vybestack/llxprt-code-core';
-import { SessionDiscovery, DebugLogger } from '@vybestack/llxprt-code-core';
+import { SessionDiscovery } from '@vybestack/llxprt-code-core';
 import type * as acp from '@agentclientprotocol/sdk';
 import {
   paginateSessions,
@@ -15,8 +15,6 @@ import {
 const SESSION_PAGE_SIZE = 50;
 const LIST_CONCURRENCY_LIMIT = 8;
 
-const logger = new DebugLogger('llxprt:zed-integration:session-listing');
-
 async function mapWithConcurrencyLimit<T, R>(
   items: readonly T[],
   limit: number,
@@ -24,16 +22,23 @@ async function mapWithConcurrencyLimit<T, R>(
 ): Promise<R[]> {
   const results: R[] = [];
   let index = 0;
+  let aborted = false;
   const workers = Array.from(
     { length: Math.min(limit, items.length) },
     async () => {
-      while (index < items.length) {
+      while (!aborted && index < items.length) {
         const current = index++;
         results[current] = await fn(items[current]);
       }
     },
   );
-  await Promise.all(workers);
+  try {
+    await Promise.all(workers);
+  } catch (error) {
+    aborted = true;
+    await Promise.allSettled(workers);
+    throw error;
+  }
   return results;
 }
 
@@ -115,14 +120,12 @@ async function toLifecycleSession(
   summary: SessionSummary,
   fallbackCwd: string,
 ): Promise<LifecycleSession> {
-  const metadataTitle = await readTitleSafe(() =>
-    SessionDiscovery.readSessionMetadataTitle(summary.filePath),
+  const metadataTitle = await SessionDiscovery.readSessionMetadataTitle(
+    summary.filePath,
   );
   const displayTitle =
     metadataTitle === undefined
-      ? await readTitleSafe(() =>
-          SessionDiscovery.readFirstUserMessage(summary.filePath),
-        )
+      ? await SessionDiscovery.readFirstUserMessage(summary.filePath)
       : metadataTitle;
   return {
     sessionId: summary.sessionId,
@@ -133,17 +136,6 @@ async function toLifecycleSession(
       : {}),
     ...(typeof displayTitle === 'string' ? { title: displayTitle } : {}),
   };
-}
-
-async function readTitleSafe(
-  read: () => Promise<string | null | undefined>,
-): Promise<string | null | undefined> {
-  try {
-    return await read();
-  } catch (error) {
-    logger.debug(() => `Title resolution failed: ${String(error)}`);
-    return undefined;
-  }
 }
 
 function toSessionInfo(session: LifecycleSession): acp.SessionInfo {

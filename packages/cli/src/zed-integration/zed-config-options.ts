@@ -66,9 +66,7 @@ async function availableModels(
 ): Promise<RuntimeModel[] | undefined> {
   try {
     const provider = agent.getProviderStatus().provider;
-    return (
-      (await config.getProviderManager()?.getAvailableModels(provider)) ?? []
-    );
+    return await config.getProviderManager()?.getAvailableModels(provider);
   } catch (error) {
     logger.debug(() => `Failed to load available models: ${String(error)}`);
     return undefined;

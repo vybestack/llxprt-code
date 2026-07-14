@@ -199,6 +199,9 @@ export function toLoadRequestError(
   if (error instanceof acp.RequestError) {
     return error;
   }
-  const detail = error instanceof Error ? error.message : String(error);
+  const rawDetail = error instanceof Error ? error.message : String(error);
+  const detail =
+    rawDetail ||
+    (error instanceof Error ? error.constructor.name : 'unknown error');
   return acp.RequestError.internalError({ sessionId, reason: detail }, detail);
 }

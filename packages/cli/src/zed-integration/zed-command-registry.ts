@@ -36,9 +36,9 @@ export function parseZedCommandPrompt(
   if (value.length === 0) return null;
   const boundary = value.search(/\s/);
   return boundary === -1
-    ? { name: value, args: '' }
+    ? { name: value.toLowerCase(), args: '' }
     : {
-        name: value.slice(0, boundary),
+        name: value.slice(0, boundary).toLowerCase(),
         args: value.slice(boundary + 1).trim(),
       };
 }
