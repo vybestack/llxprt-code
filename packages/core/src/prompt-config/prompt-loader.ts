@@ -18,7 +18,6 @@ interface ChokidarLike {
       persistent: boolean;
       recursive: boolean;
       ignoreInitial: boolean;
-      ignored: (watchPath: string) => boolean;
     },
   ): ChokidarWatcherLike;
 }
@@ -407,7 +406,6 @@ export class PromptLoader {
       persistent: true,
       recursive: true,
       ignoreInitial: true,
-      ignored: (watchPath: string) => !watchPath.endsWith('.md'),
     });
 
     watcher.on('add', (filePath: string) => handleChange('add', filePath));

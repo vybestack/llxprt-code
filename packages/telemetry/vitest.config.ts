@@ -5,6 +5,7 @@
  */
 
 import { existsSync } from 'node:fs';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
@@ -28,12 +29,23 @@ const storageExportToSource: Record<string, string> = {
 };
 
 function resolveTsSource(baseDir: string, specifier: string): string | null {
-  const direct = baseDir + specifier;
+  const baseRoot = resolve(baseDir);
+  const direct = resolve(baseRoot, specifier);
+  const relativePath = relative(baseRoot, direct);
+  if (
+    relativePath === '..' ||
+    relativePath.startsWith(`..${sep}`) ||
+    isAbsolute(relativePath)
+  ) {
+    return null;
+  }
+
   if (direct.endsWith('.js')) {
     const tsPath = direct.slice(0, -3) + '.ts';
     if (existsSync(tsPath)) {
       return tsPath;
     }
+    return existsSync(direct) ? direct : null;
   }
   if (existsSync(direct)) {
     return direct;

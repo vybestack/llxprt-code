@@ -9,19 +9,29 @@ import { Storage } from '@vybestack/llxprt-code-storage';
 import { ConfigurationManager } from './ConfigurationManager.js';
 import type { DebugSettings } from './types.js';
 
+function cleanupGlobalSettings(): void {
+  const configHome = process.env.LLXPRT_CONFIG_HOME;
+  if (
+    process.env.LLXPRT_TEST_STORAGE_ISOLATED !== '1' ||
+    configHome === undefined
+  ) {
+    throw new Error('ConfigurationManager tests require isolated storage');
+  }
+
+  const settingsPath = path.resolve(Storage.getGlobalSettingsPath());
+  const resolvedConfigHome = path.resolve(configHome);
+  const relativePath = path.relative(resolvedConfigHome, settingsPath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    throw new Error('Refusing to clean settings outside isolated storage');
+  }
+
+  fs.rmSync(settingsPath, { force: true });
+}
+
 describe('ConfigurationManager', () => {
   beforeEach(() => {
     ConfigurationManager.resetForTesting();
-
-    // Clean any settings.json left by a previous test in the same worker.
-    const settingsPath = Storage.getGlobalSettingsPath();
-    if (fs.existsSync(settingsPath)) {
-      try {
-        fs.unlinkSync(settingsPath);
-      } catch {
-        // Best-effort cleanup within isolated temp root.
-      }
-    }
+    cleanupGlobalSettings();
 
     delete process.env.DEBUG;
     delete process.env.LLXPRT_DEBUG;
@@ -41,15 +51,7 @@ describe('ConfigurationManager', () => {
 
   afterEach(() => {
     ConfigurationManager.resetForTesting();
-
-    const settingsPath = Storage.getGlobalSettingsPath();
-    if (fs.existsSync(settingsPath)) {
-      try {
-        fs.unlinkSync(settingsPath);
-      } catch {
-        // Best-effort cleanup within isolated temp root.
-      }
-    }
+    cleanupGlobalSettings();
   });
 
   describe('Singleton Pattern', () => {
@@ -157,6 +159,10 @@ describe('ConfigurationManager', () => {
         'token',
         'password',
       ]);
+      expect(config.output).toStrictEqual({
+        target: 'file',
+        directory: path.join(Storage.getGlobalLogDir(), 'debug'),
+      });
     });
   });
 

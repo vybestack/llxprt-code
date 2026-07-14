@@ -5,10 +5,13 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { isolateStorageRoots } from './isolateStorageRoots.js';
+import {
+  isolateStorageRoots,
+  STORAGE_ENV_KEYS,
+  STORAGE_ENV_SUBDIRECTORIES,
+} from './isolateStorageRoots.js';
 import { Storage } from '../config/storage.js';
 
 describe('isolateStorageRoots', () => {
@@ -21,14 +24,24 @@ describe('isolateStorageRoots', () => {
     expect(Storage.getGlobalLogDir().startsWith(tempRoot)).toBe(true);
   });
 
-  it('creates a temp root that is NOT beneath the real home directory', () => {
+  it('assigns each storage category to its dedicated isolated subdirectory', () => {
     const tempRoot = isolateStorageRoots();
-    const home = os.homedir();
 
-    // On Windows, os.tmpdir() may return a path beneath the user profile.
-    // In that case, verify isolation via path.relative instead of startsWith.
-    const relative = path.relative(home, tempRoot);
-    expect(relative.startsWith('..') || path.isAbsolute(relative)).toBe(true);
+    expect(Storage.getGlobalConfigDir()).toBe(path.join(tempRoot, 'config'));
+    expect(Storage.getGlobalDataDir()).toBe(path.join(tempRoot, 'data'));
+    expect(Storage.getGlobalCacheDir()).toBe(path.join(tempRoot, 'cache'));
+    expect(Storage.getGlobalLogDir()).toBe(path.join(tempRoot, 'log'));
+  });
+
+  it('provides one shared subdirectory mapping for every storage variable', () => {
+    expect(
+      STORAGE_ENV_KEYS.map((key) => [key, STORAGE_ENV_SUBDIRECTORIES[key]]),
+    ).toStrictEqual([
+      ['LLXPRT_CONFIG_HOME', 'config'],
+      ['LLXPRT_DATA_HOME', 'data'],
+      ['LLXPRT_CACHE_HOME', 'cache'],
+      ['LLXPRT_LOG_HOME', 'log'],
+    ]);
   });
 
   it('is idempotent: calling twice returns the same root', () => {

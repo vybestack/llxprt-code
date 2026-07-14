@@ -10,6 +10,24 @@ import path from 'node:path';
 
 const ISOLATION_MARKER = 'LLXPRT_TEST_STORAGE_ISOLATED';
 
+export const STORAGE_ENV_KEYS = [
+  'LLXPRT_CONFIG_HOME',
+  'LLXPRT_DATA_HOME',
+  'LLXPRT_CACHE_HOME',
+  'LLXPRT_LOG_HOME',
+] as const;
+
+export type StorageEnvKey = (typeof STORAGE_ENV_KEYS)[number];
+
+export const STORAGE_ENV_SUBDIRECTORIES: Readonly<
+  Record<StorageEnvKey, string>
+> = {
+  LLXPRT_CONFIG_HOME: 'config',
+  LLXPRT_DATA_HOME: 'data',
+  LLXPRT_CACHE_HOME: 'cache',
+  LLXPRT_LOG_HOME: 'log',
+};
+
 /**
  * Isolates ALL storage roots to a per-run temp directory so tests can never
  * write into the real user config/data/cache/log dirs.
@@ -51,27 +69,33 @@ export function isolateStorageRoots(): string {
     );
   }
 
-  const subdirs: Record<string, string> = {
-    config: path.join(testStorageRoot, 'config'),
-    data: path.join(testStorageRoot, 'data'),
-    cache: path.join(testStorageRoot, 'cache'),
-    log: path.join(testStorageRoot, 'log'),
-  };
-
   try {
-    for (const dir of Object.values(subdirs)) {
-      fs.mkdirSync(dir, { recursive: true });
+    for (const key of STORAGE_ENV_KEYS) {
+      fs.mkdirSync(
+        path.join(testStorageRoot, STORAGE_ENV_SUBDIRECTORIES[key]),
+        { recursive: true },
+      );
     }
   } catch (e) {
+    try {
+      fs.rmSync(testStorageRoot, { recursive: true, force: true });
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [e, cleanupError],
+        'Failed to create and clean up isolated test storage',
+      );
+    }
     throw new Error(
       `Failed to create isolated test storage subdirectories: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
 
-  process.env.LLXPRT_CONFIG_HOME = subdirs.config;
-  process.env.LLXPRT_DATA_HOME = subdirs.data;
-  process.env.LLXPRT_CACHE_HOME = subdirs.cache;
-  process.env.LLXPRT_LOG_HOME = subdirs.log;
+  for (const key of STORAGE_ENV_KEYS) {
+    process.env[key] = path.join(
+      testStorageRoot,
+      STORAGE_ENV_SUBDIRECTORIES[key],
+    );
+  }
   process.env[ISOLATION_MARKER] = '1';
 
   return testStorageRoot;

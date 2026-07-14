@@ -52,7 +52,10 @@ export class ConfigurationManager {
       enabled: false,
       namespaces: [],
       level: 'info',
-      output: { target: 'file', directory: `~/${LLXPRT_DIR}/debug` },
+      output: {
+        target: 'file',
+        directory: path.join(Storage.getGlobalLogDir(), 'debug'),
+      },
       lazyEvaluation: true,
       redactPatterns: ['apiKey', 'token', 'password'],
     };
