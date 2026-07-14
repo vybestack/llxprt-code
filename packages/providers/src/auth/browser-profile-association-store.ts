@@ -73,7 +73,21 @@ function defaultFilePath(): string {
   return path.join(Storage.getGlobalDataDir(), 'oauth-browser-profiles.json');
 }
 
+function validateProvider(provider: string): void {
+  if (provider.length === 0 || provider.includes(':')) {
+    throw new Error('Provider must be non-empty and must not contain colons.');
+  }
+}
+
+function validateBucket(bucket: string): void {
+  if (bucket.length === 0) {
+    throw new Error('Bucket must be non-empty.');
+  }
+}
+
 function associationKey(provider: string, bucket: string): string {
+  validateProvider(provider);
+  validateBucket(bucket);
   return `${provider}:${bucket}`;
 }
 
@@ -258,6 +272,7 @@ export class BrowserProfileAssociationStore {
   listAssociations(
     provider: string,
   ): Array<{ bucket: string } & BrowserProfileAssociation> {
+    validateProvider(provider);
     const data = this.readData().data;
     const prefix = `${provider}:`;
     const results: Array<{ bucket: string } & BrowserProfileAssociation> = [];

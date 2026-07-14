@@ -94,12 +94,16 @@ describe('discoverBrowserProfiles', () => {
         discoverBrowserProfiles('chrome', {
           platform: 'sunos' as NodeJS.Platform,
           homeDir: '/home/user',
+          fileExists: () => true,
+          readFile: () => '',
         }),
       ).not.toThrow();
 
       const profiles = discoverBrowserProfiles('chrome', {
         platform: 'sunos' as NodeJS.Platform,
         homeDir: '/home/user',
+        fileExists: () => true,
+        readFile: () => '',
       });
       expect(profiles).toStrictEqual([]);
     });
@@ -257,6 +261,21 @@ Path=Profiles/xxxxxxxx.default-release`;
             '/Users/testuser/Library/Application Support/Firefox/Profiles/xxxxxxxx.default-release',
         },
       ]);
+    });
+
+    it('ignores a relative Path that escapes the Firefox profile root', () => {
+      const profilesIni = `[Profile0]
+IsRelative=1
+Path=../../outside.default-release`;
+
+      const profiles = discoverBrowserProfiles('firefox', {
+        platform: 'darwin',
+        homeDir: '/Users/testuser',
+        fileExists: () => true,
+        readFile: () => profilesIni,
+      });
+
+      expect(profiles).toStrictEqual([]);
     });
 
     it('preserves an absolute Path when Name is absent', () => {

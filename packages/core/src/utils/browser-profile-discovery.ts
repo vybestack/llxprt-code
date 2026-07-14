@@ -232,6 +232,23 @@ function parseIniKeyValue(
   };
 }
 
+function resolveRelativeFirefoxProfilePath(
+  rootDir: string,
+  profilePath: string,
+): string | undefined {
+  const resolvedRoot = path.resolve(rootDir);
+  const resolvedProfile = path.resolve(resolvedRoot, profilePath);
+  const relativePath = path.relative(resolvedRoot, resolvedProfile);
+  if (
+    relativePath === '..' ||
+    relativePath.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativePath)
+  ) {
+    return undefined;
+  }
+  return resolvedProfile;
+}
+
 /**
  * Discover Firefox profiles by reading profiles.ini.
  */
@@ -270,7 +287,7 @@ function discoverFirefoxProfiles(
     if (!directoryName && entry.path) {
       directoryName = path.isAbsolute(entry.path)
         ? entry.path
-        : path.resolve(rootDir, entry.path);
+        : resolveRelativeFirefoxProfilePath(rootDir, entry.path);
     }
     if (directoryName) {
       profiles.push({

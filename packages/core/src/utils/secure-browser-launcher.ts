@@ -31,11 +31,13 @@ type BrowserExecOptions = ExecFileOptions & {
  * Shared exec options for browser launches. Both the default-browser path
  * and the specific-browser path use these so behavior stays consistent.
  */
-const browserExecOptions: BrowserExecOptions = {
-  env: { ...env, SHELL: undefined },
-  detached: true,
-  stdio: 'ignore',
-};
+function getBrowserExecOptions(): BrowserExecOptions {
+  return {
+    env: { ...env, SHELL: undefined },
+    detached: true,
+    stdio: 'ignore',
+  };
+}
 
 /**
  * Candidate Chrome/Chromium binary names on Linux/BSD, tried in order when
@@ -329,8 +331,9 @@ async function openDefaultBrowser(url: string): Promise<void> {
       throw new Error(`Unsupported platform: ${platformName}`);
   }
 
+  const execOptions = getBrowserExecOptions();
   try {
-    await execFileAsync(command, args, browserExecOptions);
+    await execFileAsync(command, args, execOptions);
   } catch (error) {
     if (isLinuxLike(platformName) && command === 'xdg-open') {
       const fallbackCommands = [
@@ -343,7 +346,7 @@ async function openDefaultBrowser(url: string): Promise<void> {
       const succeeded = await tryFallbackBrowserCommands(
         fallbackCommands,
         url,
-        browserExecOptions,
+        execOptions,
       );
       if (succeeded) {
         return;
@@ -472,7 +475,7 @@ async function openSpecificBrowser(
   }
 
   try {
-    await execFileAsync(command, args, browserExecOptions);
+    await execFileAsync(command, args, getBrowserExecOptions());
   } catch (error) {
     const succeeded =
       (await tryLinuxFallbackBinaries(platformName, browser, command, args)) ||
@@ -513,7 +516,7 @@ async function tryLinuxFallbackBinaries(
     }
     tried.add(fallback);
     try {
-      await execFileAsync(fallback, args, browserExecOptions);
+      await execFileAsync(fallback, args, getBrowserExecOptions());
       return true;
     } catch {
       // Try the next fallback binary.
@@ -583,7 +586,7 @@ async function tryWindowsFallbackBinaries(
     }
     tried.add(resolved);
     try {
-      await execFileAsync(resolved, args, browserExecOptions);
+      await execFileAsync(resolved, args, getBrowserExecOptions());
       return true;
     } catch {
       // Try the next candidate path.

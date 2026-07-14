@@ -364,9 +364,8 @@ export class AuthCommandExecutor {
 
     // Handle profile action: associate/clear a browser profile for a bucket
     if (action === 'profile') {
-      const bucket = parts[2];
       const selector = parts[3];
-      return this.manageBrowserProfile(provider, bucket, selector);
+      return this.manageBrowserProfile(provider, param, selector);
     }
 
     if (action === 'logout' || action === 'signout') {

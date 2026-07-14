@@ -327,6 +327,43 @@ describe('BrowserProfileAssociationStore', () => {
     });
   });
 
+  describe('key validation', () => {
+    it('rejects empty or colon-delimited provider names', () => {
+      const store = createStore(createInMemoryFs());
+      const association = {
+        browser: 'chrome' as const,
+        profileDirectory: 'Default',
+      };
+
+      expect(() => store.setAssociation('', 'default', association)).toThrow(
+        'Provider must be non-empty',
+      );
+      expect(() =>
+        store.setAssociation('anthropic:extra', 'default', association),
+      ).toThrow('must not contain colons');
+      expect(() => store.listAssociations('')).toThrow(
+        'Provider must be non-empty',
+      );
+    });
+
+    it('rejects an empty bucket name', () => {
+      const store = createStore(createInMemoryFs());
+
+      expect(() =>
+        store.setAssociation('anthropic', '', {
+          browser: 'chrome',
+          profileDirectory: 'Default',
+        }),
+      ).toThrow('Bucket must be non-empty');
+      expect(() => store.getAssociation('anthropic', '')).toThrow(
+        'Bucket must be non-empty',
+      );
+      expect(() => store.clearAssociation('anthropic', '')).toThrow(
+        'Bucket must be non-empty',
+      );
+    });
+  });
+
   describe('immutability', () => {
     it('mutating the returned association does not affect the store', () => {
       const fs = createInMemoryFs();
@@ -340,7 +377,7 @@ describe('BrowserProfileAssociationStore', () => {
       const result = store.getAssociation('anthropic', 'default');
       expect(result).toBeDefined();
       // Mutate the returned object
-      (result as { profileDirectory: string }).profileDirectory = 'HACKED';
+      result!.profileDirectory = 'HACKED';
 
       // Store should be unaffected
       const result2 = store.getAssociation('anthropic', 'default');
