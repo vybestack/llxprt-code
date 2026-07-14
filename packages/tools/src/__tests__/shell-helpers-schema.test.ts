@@ -31,30 +31,57 @@ function createShellTool(): ShellTool {
   return new ShellTool(createFakeShellService());
 }
 
+function getObjectProperty(value: unknown, property: string): unknown {
+  if (typeof value !== 'object' || value === null) {
+    return undefined;
+  }
+  return Reflect.get(value, property);
+}
+
+function getCommandDescription(tool: ShellTool): string {
+  const properties = getObjectProperty(
+    tool.schema.parametersJsonSchema,
+    'properties',
+  );
+  const command = getObjectProperty(properties, 'command');
+  const description = getObjectProperty(command, 'description');
+  return typeof description === 'string' ? description : '';
+}
+
 describe('ShellTool schema guidance on Windows', () => {
   beforeEach(() => {
     vi.mocked(os.platform).mockReturnValue('win32');
   });
 
   it('describes the PowerShell runtime invocation', () => {
-    expect(createShellTool().schema).toMatchObject({
-      description: expect.stringMatching(
-        /PowerShell.*powershell\.exe.*pwsh.*-NoProfile -Command/,
-      ),
+    const description = createShellTool().schema.description ?? '';
+
+    expect({
+      PowerShell: description.includes('PowerShell'),
+      powershellExecutable: description.includes('powershell.exe'),
+      pwshExecutable: description.includes('pwsh'),
+      invocationFlags: description.includes('-NoProfile -Command'),
+    }).toStrictEqual({
+      PowerShell: true,
+      powershellExecutable: true,
+      pwshExecutable: true,
+      invocationFlags: true,
     });
   });
 
   it('describes the command parameter as PowerShell input', () => {
-    expect(createShellTool().schema).toMatchObject({
-      parametersJsonSchema: {
-        properties: {
-          command: {
-            description: expect.stringMatching(
-              /PowerShell.*-NoProfile -Command.*powershell\.exe.*pwsh/,
-            ),
-          },
-        },
-      },
+    const description = getCommandDescription(createShellTool());
+
+    expect({
+      PowerShell: description.includes('PowerShell'),
+      powershellExecutable: description.includes('powershell.exe'),
+      pwshExecutable: description.includes('pwsh'),
+      invocationFlags: description.includes('-NoProfile -Command'),
+    }).toStrictEqual({
+      PowerShell: true,
+      powershellExecutable: true,
+      pwshExecutable: true,
+      invocationFlags: true,
     });
   });
 

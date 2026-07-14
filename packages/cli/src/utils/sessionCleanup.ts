@@ -6,10 +6,9 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { homedir } from 'node:os';
 import { type Config } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { LLXPRT_DIR } from '@vybestack/llxprt-code-storage';
+import { Storage } from '@vybestack/llxprt-code-storage';
 import type { Settings, SessionRetentionSettings } from '../config/settings.js';
 import { getAllSessionFiles, type SessionFileEntry } from './sessionUtils.js';
 import { firstNonEmptyString } from './coalesce.js';
@@ -37,7 +36,7 @@ export interface CleanupResult {
 }
 /**
  * Attempts to cleanup debug log files associated with a session ID.
- * Debug logs may reside in ~/.llxprt/debug/ with filenames containing the session ID.
+ * Debug logs reside beneath the platform-standard global log directory.
  * This is a best-effort cleanup that silently handles missing files or directories.
  *
  * @param sessionId - The session ID to look for in debug log filenames
@@ -45,12 +44,7 @@ export interface CleanupResult {
  */
 async function cleanupDebugLogsForSession(sessionId: string): Promise<number> {
   try {
-    const home = homedir();
-    if (!home) {
-      return 0;
-    }
-
-    const debugDir = path.join(home, LLXPRT_DIR, 'debug');
+    const debugDir = path.join(Storage.getGlobalLogDir(), 'debug');
 
     // Check if debug directory exists
     try {

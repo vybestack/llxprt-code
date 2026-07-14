@@ -105,6 +105,7 @@ export default defineConfig({
   test: {
     reporters: [['default'], ['junit', { outputFile: 'junit.xml' }]],
     passWithNoTests: true,
+    setupFiles: ['./test-setup-storage-isolation.ts'],
     coverage: {
       provider: 'v8',
       reportsDirectory: './coverage',

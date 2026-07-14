@@ -27,6 +27,7 @@ import {
   type Config,
   DebugLogger,
   type RuntimeProviderManager,
+  type RuntimeProvider,
   peekActiveProviderRuntimeContext,
   type HydratedModel,
 } from '@vybestack/llxprt-code-core';
@@ -471,61 +472,91 @@ export interface ProviderRuntimeStatus {
   baseURL?: string;
 }
 
+function buildProviderDisplayLabel(
+  providerName: string | null,
+  modelName: string | null,
+): string {
+  if (providerName && modelName) {
+    return `${providerName}:${modelName}`;
+  }
+  if (providerName) {
+    return providerName;
+  }
+  return modelName ?? 'unknown';
+}
+
+function safeCall<T>(operation: string, fn: () => T): T | undefined {
+  try {
+    return fn();
+  } catch (error) {
+    logger.debug(() => `Unable to ${operation}: ${String(error)}`);
+    return undefined;
+  }
+}
+
+type BaseURLProvider = RuntimeProvider & {
+  getBaseURL: () => string | undefined;
+};
+
+function isBaseURLProvider(
+  provider: RuntimeProvider,
+): provider is BaseURLProvider {
+  return 'getBaseURL' in provider && typeof provider.getBaseURL === 'function';
+}
+
+function resolveProviderBaseURL(
+  provider: RuntimeProvider | undefined,
+): string | undefined {
+  if (!provider || !isBaseURLProvider(provider)) {
+    return undefined;
+  }
+  return safeCall('read provider base URL', () => provider.getBaseURL());
+}
+
+function resolveProviderIsPaidMode(
+  provider: RuntimeProvider | undefined,
+): boolean | undefined {
+  if (!provider) {
+    return undefined;
+  }
+  return safeCall('read provider paid-mode status', () =>
+    provider.isPaidMode?.(),
+  );
+}
+
 export function getActiveProviderStatus(): ProviderRuntimeStatus {
   const { config, settingsService, providerManager } = getCliRuntimeServices();
   const resolvedModel = getActiveModelName();
   const modelName =
     resolvedModel && resolvedModel.trim() !== '' ? resolvedModel : null;
 
-  try {
-    const provider = providerManager.getActiveProvider();
-    if (!provider) {
-      throw new Error('No active provider is configured.');
-    }
-    const displayLabel = modelName
-      ? `${provider.name}:${modelName}`
-      : provider.name;
+  const resolvedName = resolveActiveProviderName(settingsService, config);
 
-    // Try to get baseURL from provider if it has the method
-    let baseURL: string | undefined;
-    try {
-      if (
-        'getBaseURL' in provider &&
-        typeof (provider as { getBaseURL?: () => string | undefined })
-          .getBaseURL === 'function'
-      ) {
-        baseURL = (
-          provider as { getBaseURL: () => string | undefined }
-        ).getBaseURL();
-      }
-    } catch {
-      baseURL = undefined;
-    }
-
+  if (resolvedName && resolvedName.trim() !== '') {
+    const provider = safeCall('resolve configured provider', () =>
+      providerManager.getProviderByName(resolvedName),
+    );
     return {
-      providerName: provider.name,
+      providerName: resolvedName,
       modelName,
-      displayLabel,
-      isPaidMode: provider.isPaidMode?.(),
-      baseURL,
-    };
-  } catch {
-    const providerName =
-      resolveActiveProviderName(settingsService, config) ?? null;
-    let fallbackLabel: string;
-    if (providerName && modelName) {
-      fallbackLabel = `${providerName}:${modelName}`;
-    } else if (providerName) {
-      fallbackLabel = providerName;
-    } else {
-      fallbackLabel = modelName ?? 'unknown';
-    }
-    return {
-      providerName,
-      modelName,
-      displayLabel: fallbackLabel,
+      displayLabel: buildProviderDisplayLabel(resolvedName, modelName),
+      isPaidMode: resolveProviderIsPaidMode(provider),
+      baseURL: resolveProviderBaseURL(provider),
     };
   }
+
+  const activeProvider = safeCall('resolve active provider', () =>
+    providerManager.getActiveProvider(),
+  );
+  const providerName = activeProvider?.name ?? null;
+
+  return {
+    providerName,
+    modelName,
+    displayLabel: buildProviderDisplayLabel(providerName, modelName),
+    isPaidMode: resolveProviderIsPaidMode(activeProvider),
+    baseURL: resolveProviderBaseURL(activeProvider),
+  };
 }
 
 export async function listAvailableModels(

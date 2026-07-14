@@ -366,6 +366,11 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `false`
   - **Requires restart:** No
 
+- **`ui.alwaysDisplayFullShellCommand`** (boolean):
+  - **Description:** Display complete shell commands without truncation.
+  - **Default:** `true`
+  - **Requires restart:** No
+
 - **`ui.showLineNumbers`** (boolean):
   - **Description:** Show line numbers in the chat.
   - **Default:** `false`

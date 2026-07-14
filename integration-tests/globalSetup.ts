@@ -9,138 +9,171 @@ if (process.env['NO_COLOR'] !== undefined) {
   delete process.env['NO_COLOR'];
 }
 
-import {
-  mkdir,
-  readdir,
-  rm,
-  readFile,
-  writeFile,
-  unlink,
-} from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { mkdir, readdir, rm, mkdtemp } from 'node:fs/promises';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as os from 'node:os';
-import * as path from 'node:path';
-
 import {
-  LLXPRT_CONFIG_DIR,
-  DEFAULT_CONTEXT_FILENAME,
-} from '@vybestack/llxprt-code-tools';
-// Import the quota-guard module directly (not the package index): the index
-// re-exports test-rig.ts which imports from 'vitest', and vitest cannot be
-// imported inside globalSetup (it runs in a different context).
-import {
-  clearQuotaGuard,
-  getQuotaGuardTrip,
-} from '@vybestack/llxprt-code-test-utils/src/quota-guard.js';
+  STORAGE_ENV_KEYS,
+  STORAGE_ENV_SUBDIRECTORIES,
+  type StorageEnvKey,
+} from '../packages/storage/src/testing/isolateStorageRoots.js';
 
 // Handle the case where import.meta.url might be undefined in CI
 const __dirname = import.meta?.url
   ? dirname(fileURLToPath(import.meta.url))
-  : path.resolve(process.cwd(), 'integration-tests');
+  : resolve(process.cwd(), 'integration-tests');
 
 const rootDir = join(__dirname, '..');
 const integrationTestsDir = join(rootDir, '.integration-tests');
 let runDir = ''; // Make runDir accessible in teardown
+let integrationStorageRoot = ''; // Track temp storage root for cleanup
+let savedStorageEnv: ReadonlyMap<StorageEnvKey, string | undefined> | undefined;
 
-const memoryFilePath = join(
-  os.homedir(),
-  LLXPRT_CONFIG_DIR,
-  DEFAULT_CONTEXT_FILENAME,
-);
-let originalMemoryContent: string | null = null;
+function restoreStorageEnv(): void {
+  if (savedStorageEnv === undefined) {
+    return;
+  }
+  for (const key of STORAGE_ENV_KEYS) {
+    const value = savedStorageEnv.get(key);
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+  savedStorageEnv = undefined;
+}
 
 export async function setup() {
-  try {
-    originalMemoryContent = await readFile(memoryFilePath, 'utf-8');
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
-      throw e;
-    }
-    // File doesn't exist, which is fine.
+  if (savedStorageEnv !== undefined || integrationStorageRoot !== '') {
+    throw new Error('Integration global setup is already active');
   }
 
-  runDir = join(integrationTestsDir, `${Date.now()}`);
-  await mkdir(runDir, { recursive: true });
+  savedStorageEnv = new Map(
+    STORAGE_ENV_KEYS.map((key) => [key, process.env[key]]),
+  );
 
-  // Clean up old test runs, but keep the latest few for debugging
   try {
-    const testRuns = await readdir(integrationTestsDir);
-    if (testRuns.length > 5) {
-      const oldRuns = testRuns.sort().slice(0, testRuns.length - 5);
-      await Promise.all(
-        oldRuns.map((oldRun) =>
-          rm(join(integrationTestsDir, oldRun), {
-            recursive: true,
-            force: true,
-          }),
-        ),
+    // Isolate ALL storage roots so spawned CLI subprocesses (which inherit
+    // process.env) never write into the real user config/data/cache/log dirs.
+    integrationStorageRoot = await mkdtemp(
+      join(os.tmpdir(), 'llxprt-integration-storage-'),
+    );
+    for (const key of STORAGE_ENV_KEYS) {
+      const storageDir = join(
+        integrationStorageRoot,
+        STORAGE_ENV_SUBDIRECTORIES[key],
+      );
+      await mkdir(storageDir, { recursive: true });
+      process.env[key] = storageDir;
+    }
+
+    runDir = join(integrationTestsDir, `${Date.now()}`);
+    await mkdir(runDir, { recursive: true });
+
+    // Clean up old test runs, but keep the latest few for debugging
+    try {
+      const testRuns = await readdir(integrationTestsDir);
+      if (testRuns.length > 5) {
+        const oldRuns = testRuns.sort().slice(0, testRuns.length - 5);
+        await Promise.all(
+          oldRuns.map((oldRun) =>
+            rm(join(integrationTestsDir, oldRun), {
+              recursive: true,
+              force: true,
+            }),
+          ),
+        );
+      }
+    } catch (e) {
+      console.error('Error cleaning up old test runs:', e);
+    }
+
+    process.env['INTEGRATION_TEST_FILE_DIR'] = runDir;
+    // Don't set LLXPRT_CODE_INTEGRATION_TEST anymore - we use --ide-mode disable instead
+    process.env['TELEMETRY_LOG_FILE'] = join(runDir, 'telemetry.log');
+    // Ensure IDE detection doesn't trigger during tests
+    delete process.env['TERM_PROGRAM'];
+
+    if (process.env['KEEP_OUTPUT']) {
+      console.log(`Keeping output for test run in: ${runDir}`);
+    }
+    process.env['VERBOSE'] = process.env['VERBOSE'] ?? 'false';
+
+    console.log(`\nIntegration test output directory: ${runDir}`);
+  } catch (setupError) {
+    restoreStorageEnv();
+    const currentRunDir = runDir;
+    const storageRoot = integrationStorageRoot;
+    const cleanupErrors: unknown[] = [];
+    for (const cleanupPath of [currentRunDir, storageRoot]) {
+      if (cleanupPath === '') {
+        continue;
+      }
+      try {
+        await rm(cleanupPath, {
+          recursive: true,
+          force: true,
+          maxRetries: 3,
+          retryDelay: 100,
+        });
+      } catch (cleanupError) {
+        cleanupErrors.push(cleanupError);
+      }
+    }
+    runDir = '';
+    integrationStorageRoot = '';
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError(
+        [setupError, ...cleanupErrors],
+        'Integration global setup and cleanup failed',
       );
     }
-  } catch (e) {
-    console.error('Error cleaning up old test runs:', e);
+    throw setupError;
   }
-
-  process.env['INTEGRATION_TEST_FILE_DIR'] = runDir;
-  // Clear any stale quota-guard sentinel from a previous run. `runDir` is fresh
-  // per run so this is defensive, but cheap insurance against leaked state.
-  clearQuotaGuard();
-  // Don't set LLXPRT_CODE_INTEGRATION_TEST anymore - we use --ide-mode disable instead
-  process.env['TELEMETRY_LOG_FILE'] = join(runDir, 'telemetry.log');
-  // Ensure IDE detection doesn't trigger during tests
-  delete process.env['TERM_PROGRAM'];
-
-  if (process.env['KEEP_OUTPUT']) {
-    console.log(`Keeping output for test run in: ${runDir}`);
-  }
-  process.env['VERBOSE'] = process.env['VERBOSE'] ?? 'false';
-
-  console.log(`\nIntegration test output directory: ${runDir}`);
 }
 
 export async function teardown() {
-  // Capture the quota-guard trip BEFORE any cleanup: the sentinel lives inside
-  // `runDir` (INTEGRATION_TEST_FILE_DIR), which the cleanup below removes.
-  const trip = getQuotaGuardTrip();
+  const cleanupErrors: unknown[] = [];
+  const currentRunDir = runDir;
+  const storageRoot = integrationStorageRoot;
+  restoreStorageEnv();
 
   // Cleanup the test run directory unless KEEP_OUTPUT is set
-  if (process.env['KEEP_OUTPUT'] !== 'true' && runDir) {
+  if (process.env['KEEP_OUTPUT'] !== 'true' && currentRunDir !== '') {
     try {
-      await rm(runDir, { recursive: true, force: true });
-    } catch (e) {
-      console.warn('Failed to clean up test run directory:', e);
+      await rm(currentRunDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
+    } catch (error) {
+      cleanupErrors.push(error);
     }
   }
 
-  if (originalMemoryContent !== null) {
-    await mkdir(dirname(memoryFilePath), { recursive: true });
-    await writeFile(memoryFilePath, originalMemoryContent, 'utf-8');
-  } else {
+  if (storageRoot !== '') {
     try {
-      await unlink(memoryFilePath);
-    } catch {
-      // File might not exist if the test failed before creating it.
+      await rm(storageRoot, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
+    } catch (error) {
+      cleanupErrors.push(error);
     }
   }
 
-  // A tripped guard means the run aborted early on a provider quota/rate-limit
-  // wall. Surface a prominent banner and throw so vitest exits non-zero even
-  // though the executed tests were skipped (not failed) — this is an
-  // infrastructure/quota failure, not a code regression. globalSetup may be
-  // subject to no-console lint, so use process.stdout.write.
-  if (trip !== null) {
-    const divider = '='.repeat(72);
-    const banner = [
-      divider,
-      'E2E RUN ABORTED: provider quota/rate-limit exhausted',
-      trip.reason,
-      'Remaining tests were skipped; this is an infrastructure/quota failure, not a code regression.',
-      divider,
-      '',
-    ].join('\n');
-    process.stdout.write(banner);
-    throw new Error(
-      `E2E aborted: provider quota/rate-limit exhausted — ${trip.reason}`,
+  runDir = '';
+  integrationStorageRoot = '';
+
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(
+      cleanupErrors,
+      'Integration global teardown failed',
     );
   }
 }

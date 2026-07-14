@@ -266,7 +266,7 @@ describe('Gemini Client (client.ts)', () => {
           type: AgentEventType.ModelInfo,
           value: {
             model: 'test-model',
-            providerName: 'backend',
+            providerName: 'gemini',
             profileName: null,
             displayLabel: 'test-model',
           },
@@ -433,7 +433,7 @@ describe('Gemini Client (client.ts)', () => {
           type: AgentEventType.ModelInfo,
           value: {
             model: 'test-model',
-            providerName: 'backend',
+            providerName: 'gemini',
             profileName: null,
             displayLabel: 'test-model',
           },

@@ -49,7 +49,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     passWithNoTests: true,
-    setupFiles: ['./test-setup.ts'],
+    setupFiles: ['./test-setup-storage-isolation.ts', './test-setup.ts'],
     server: {
       deps: {
         inline: ['@vybestack/llxprt-code-policy'],
