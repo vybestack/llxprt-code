@@ -5,14 +5,14 @@
  */
 
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Box, Text } from 'ink';
 import type { IndividualToolCallDisplay } from '../../types.js';
 import { ToolCallStatus } from '../../types.js';
 import { Colors } from '../../colors.js';
 import { theme } from '../../semantic-colors.js';
 import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../constants.js';
-import { useKeypress } from '../../hooks/useKeypress.js';
+import { useShellCommandDisplay } from '../../contexts/ShellCommandDisplayContext.js';
 import {
   ShellExecutionService,
   splitCommands,
@@ -165,31 +165,6 @@ function computeShellFocusState(
 }
 
 /**
- * Hook to manage details visibility toggle.
- */
-function useDetailsToggle(
-  status: ToolCallStatus,
-  isFocused: boolean,
-): [boolean, React.Dispatch<React.SetStateAction<boolean>>] {
-  const [isDetailsVisible, setIsDetailsVisible] = useState(false);
-
-  useKeypress(
-    (key) => {
-      if (
-        key.ctrl === true &&
-        key.name === 'r' &&
-        status === ToolCallStatus.Executing
-      ) {
-        setIsDetailsVisible((prev) => !prev);
-      }
-    },
-    { isActive: isFocused },
-  );
-
-  return [isDetailsVisible, setIsDetailsVisible];
-}
-
-/**
  * Render the executing status hint.
  */
 function renderExecutingHint(
@@ -260,6 +235,7 @@ function renderToolMessageHeader(
   name: string,
   description: string,
   emphasis: TextEmphasis,
+  showFullDescription: boolean,
   isThisShellFocusable: boolean,
   isThisShellFocused: boolean,
 ): React.ReactNode {
@@ -276,6 +252,7 @@ function renderToolMessageHeader(
         status={status}
         description={description}
         emphasis={emphasis}
+        showFullDescription={showFullDescription}
       />
       {isThisShellFocusable && (
         <Box marginLeft={1} flexShrink={0}>
@@ -355,6 +332,7 @@ export interface ToolMessageProps extends IndividualToolCallDisplay {
 }
 
 export const ToolMessage: React.FC<ToolMessageProps> = ({
+  callId,
   name,
   description,
   resultDisplay,
@@ -372,7 +350,12 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   borderColor = Colors.Gray,
   borderDimColor = false,
 }) => {
-  const [isDetailsVisible] = useDetailsToggle(status, isFocused);
+  const isDetailsVisible = useShellCommandDisplay(
+    callId,
+    name,
+    status,
+    isFocused,
+  );
 
   const { isThisShellFocused, isThisShellFocusable } = computeShellFocusState(
     name,
@@ -405,6 +388,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
         name,
         description || '',
         emphasis,
+        isDetailsVisible,
         isThisShellFocusable,
         isThisShellFocused,
       )}
