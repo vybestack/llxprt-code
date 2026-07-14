@@ -22,21 +22,23 @@ describe('ModelLimitsCatalogSchema', () => {
     },
   );
 
-  it.each(['exactLimits', 'prefixLimits', 'orderedRules'] as const)(
-    'rejects a catalog missing required field %s',
-    (field) => {
-      const valid = {
-        defaultLimit: 1000,
-        exactLimits: {},
-        prefixLimits: [],
-        orderedRules: [],
-      };
-      const bad = Object.fromEntries(
-        Object.entries(valid).filter(([key]) => key !== field),
-      );
-      expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
-    },
-  );
+  it.each([
+    'defaultLimit',
+    'exactLimits',
+    'prefixLimits',
+    'orderedRules',
+  ] as const)('rejects a catalog missing required field %s', (field) => {
+    const valid = {
+      defaultLimit: 1000,
+      exactLimits: {},
+      prefixLimits: [],
+      orderedRules: [],
+    };
+    const bad = Object.fromEntries(
+      Object.entries(valid).filter(([key]) => key !== field),
+    );
+    expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
+  });
 
   it('rejects an ordered rule with an unknown type', () => {
     const bad = {
@@ -69,45 +71,54 @@ describe('ModelLimitsCatalogSchema', () => {
     expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
   });
 
-  it('rejects an empty substring in a substringOrProviderPrefix rule', () => {
-    const bad = {
-      ...catalogData,
-      orderedRules: [
-        {
-          type: 'substringOrProviderPrefix',
-          substring: '',
-          providerPrefix: 'codex',
-          limit: 100,
-        },
-      ],
-    };
-    expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
-  });
+  it.each(['', '   '])(
+    'rejects invalid substring %j in a substringOrProviderPrefix rule',
+    (substring) => {
+      const bad = {
+        ...catalogData,
+        orderedRules: [
+          {
+            type: 'substringOrProviderPrefix',
+            substring,
+            providerPrefix: 'codex',
+            limit: 100,
+          },
+        ],
+      };
+      expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
+    },
+  );
 
-  it('rejects an empty providerPrefix in a substringOrProviderPrefix rule', () => {
-    const bad = {
-      ...catalogData,
-      orderedRules: [
-        {
-          type: 'substringOrProviderPrefix',
-          substring: 'codex',
-          providerPrefix: '',
-          limit: 100,
-        },
-      ],
-    };
-    expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
-  });
+  it.each(['', '   '])(
+    'rejects invalid providerPrefix %j in a substringOrProviderPrefix rule',
+    (providerPrefix) => {
+      const bad = {
+        ...catalogData,
+        orderedRules: [
+          {
+            type: 'substringOrProviderPrefix',
+            substring: 'codex',
+            providerPrefix,
+            limit: 100,
+          },
+        ],
+      };
+      expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
+    },
+  );
 
-  it('rejects an empty substring in a substringCaseInsensitive rule', () => {
-    const bad = {
-      ...catalogData,
-      orderedRules: [
-        { type: 'substringCaseInsensitive', substring: '', limit: 100 },
-      ],
-    };
-    expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
-  });
+  it.each(['', '   '])(
+    'rejects invalid substring %j in a substringCaseInsensitive rule',
+    (substring) => {
+      const bad = {
+        ...catalogData,
+        orderedRules: [
+          { type: 'substringCaseInsensitive', substring, limit: 100 },
+        ],
+      };
+      expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
+    },
+  );
 
   // --- Behavioral rejection: prefix groups ---
 
