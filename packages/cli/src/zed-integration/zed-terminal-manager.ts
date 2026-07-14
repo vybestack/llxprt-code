@@ -219,7 +219,15 @@ export class TerminalManager {
       } finally {
         pollDelay.cancel();
       }
-      const current = await active.handle.currentOutput();
+      let current: acp.TerminalOutputResponse;
+      try {
+        current = await active.handle.currentOutput();
+      } catch (error) {
+        this.logger.debug(
+          () => `Terminal output poll failed: ${errorMessage(error)}`,
+        );
+        break;
+      }
       const chunk = outputDelta(previousOutput, current.output);
       if (chunk !== '') {
         onOutput({ type: 'data', chunk });

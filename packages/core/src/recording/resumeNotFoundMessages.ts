@@ -61,6 +61,9 @@ export function resumeSessionIndexOutOfRangeMessage(
   ref: number | `${number}`,
   count: number,
 ): string {
+  if (count <= 0) {
+    return RESUME_NO_SESSIONS_FOUND;
+  }
   return `${RESUME_SESSION_INDEX_OUT_OF_RANGE_PREFIX}${ref} out of range (1-${count})`;
 }
 

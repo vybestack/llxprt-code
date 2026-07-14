@@ -314,9 +314,9 @@ function handleSessionMetadata(
     return;
   }
   const title = payload.title;
-  if (title === null || title === undefined || typeof title === 'string') {
+  if (title === null || typeof title === 'string') {
     acc.metadata.title = title;
-  } else {
+  } else if (title !== undefined) {
     acc.malformedCount++;
     acc.warnings.push(
       `Line ${lineNumber}: malformed session_metadata title, skipping`,

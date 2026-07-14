@@ -167,15 +167,24 @@ export class ZedAgent {
         config: sessionConfig,
         terminals,
       } = await this.buildSessionAgent(sessionId, cwd);
-      await enableZedSessionRecording(agent, (error) =>
-        this.logger.debug(() => `Recording failed for ${sessionId}: ${error}`),
-      );
-      const session = await this.createSession(
-        sessionId,
-        agent,
-        sessionConfig,
-        terminals,
-      );
+      let session: Session;
+      try {
+        await enableZedSessionRecording(agent, (error) =>
+          this.logger.debug(
+            () => `Recording failed for ${sessionId}: ${error}`,
+          ),
+        );
+        session = await this.createSession(
+          sessionId,
+          agent,
+          sessionConfig,
+          terminals,
+        );
+      } catch (error) {
+        await agent.dispose().catch(() => undefined);
+        await terminals?.settleAll().catch(() => undefined);
+        throw error;
+      }
       try {
         await session.sendAvailableCommands();
       } catch (error) {
@@ -342,6 +351,7 @@ export class ZedAgent {
       return { session, history };
     } catch (error) {
       await agent.dispose().catch(() => undefined);
+      await terminals?.settleAll().catch(() => undefined);
       this.logger.debug(() => `loadSession - build/resume failed: ${error}`);
       throw toLoadRequestError(sessionId, error);
     }
@@ -379,13 +389,19 @@ export class ZedAgent {
         this.logger,
       );
     }
-    const agent = await fromConfig({
-      config: sessionConfig,
-      sessionId,
-      ...(terminalSetup === undefined
-        ? {}
-        : { messageBus: terminalSetup.messageBus }),
-    });
+    let agent: Agent;
+    try {
+      agent = await fromConfig({
+        config: sessionConfig,
+        sessionId,
+        ...(terminalSetup === undefined
+          ? {}
+          : { messageBus: terminalSetup.messageBus }),
+      });
+    } catch (error) {
+      await terminalSetup?.terminals.settleAll().catch(() => undefined);
+      throw error;
+    }
     return {
       agent,
       config: sessionConfig,
