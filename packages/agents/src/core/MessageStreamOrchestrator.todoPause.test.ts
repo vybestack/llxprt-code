@@ -232,7 +232,10 @@ function buildOrchestrator(options: BuildOptions = {}): {
         .fn()
         .mockResolvedValue(blockingAfterHookOutput),
     } as unknown as MessageStreamDeps['agentHookManager'],
-    getEffectiveModel: () => 'gpt-4',
+    getEffectiveModelIdentity: () => ({
+      providerName: 'openai',
+      model: 'gpt-4',
+    }),
     getHistory: vi.fn().mockResolvedValue([]),
     getSessionTurnCount: vi.fn().mockReturnValue(1),
     incrementSessionTurnCount: vi.fn(),

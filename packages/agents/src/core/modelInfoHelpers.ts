@@ -8,20 +8,52 @@ import { AgentEventType } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { ServerAgentStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { ModelInfo } from './turn.js';
 
-/** Resolves the effective model from the active provider or falls back. */
-export function resolveActiveModel(config: Config, fallback: string): string {
-  const activeProvider = config
-    .getContentGeneratorConfig()
-    ?.providerManager?.getActiveProvider();
-  if (activeProvider) {
-    const activeModel = activeProvider.getCurrentModel?.();
-    if (typeof activeModel === 'string' && activeModel.trim() !== '')
-      return activeModel;
-    const defaultModel = activeProvider.getDefaultModel?.();
-    if (typeof defaultModel === 'string' && defaultModel.trim() !== '')
-      return defaultModel;
+export interface EffectiveModelIdentity {
+  readonly providerName: string;
+  readonly model: string;
+}
+
+export type RoutedModelProvider = {
+  readonly name: string;
+  readonly getCurrentModel?: () => string | undefined;
+  readonly getDefaultModel?: () => string | undefined;
+};
+
+function nonBlank(value: string | null | undefined): string | undefined {
+  return typeof value === 'string' && value.trim() !== '' ? value : undefined;
+}
+
+function readModel(
+  getModel: (() => string | undefined) | undefined,
+): string | undefined {
+  try {
+    return nonBlank(getModel?.());
+  } catch {
+    return undefined;
   }
-  return fallback;
+}
+
+export function buildEffectiveModelIdentity(
+  routedProviderName: string,
+  routedProvider: RoutedModelProvider | undefined,
+  currentSequenceModel: string | null,
+  configFallback: string,
+): EffectiveModelIdentity {
+  const sequenceModel = nonBlank(currentSequenceModel);
+  if (sequenceModel) {
+    return { providerName: routedProviderName, model: sequenceModel };
+  }
+
+  const currentModel = readModel(() => routedProvider?.getCurrentModel?.());
+  if (currentModel) {
+    return { providerName: routedProviderName, model: currentModel };
+  }
+
+  const defaultModel = readModel(() => routedProvider?.getDefaultModel?.());
+  return {
+    providerName: routedProviderName,
+    model: defaultModel ?? configFallback,
+  };
 }
 
 /** Resolves the current profile name from the config's settings service. */
@@ -46,27 +78,19 @@ export function resolveProfileName(config: Config): string | null {
   return null;
 }
 
-/** Resolves the provider name from config. */
-export function resolveProviderName(config: Config): string {
-  const activeName = config
-    .getContentGeneratorConfig()
-    ?.providerManager?.getActiveProviderName();
-  return activeName && activeName.length > 0 ? activeName : 'backend';
-}
-
-/** Builds the full ModelInfo from config. */
 export function buildModelInfo(
   config: Config,
-  fallbackModel: string,
+  identity: EffectiveModelIdentity,
 ): ModelInfo {
-  const model = resolveActiveModel(config, fallbackModel);
   const profileName = resolveProfileName(config);
   return {
-    model,
-    providerName: resolveProviderName(config),
+    model: identity.model,
+    providerName: identity.providerName,
     profileName,
     displayLabel:
-      profileName && profileName !== '' ? `${profileName}:${model}` : model,
+      profileName && profileName !== ''
+        ? `${profileName}:${identity.model}`
+        : identity.model,
   };
 }
 
@@ -82,10 +106,10 @@ export function modelIdentityKey(info: ModelInfo): string {
 /** Emits a ModelInfo event for a new sequence (always emitted). */
 export async function* emitModelInfoForNewSequence(
   config: Config,
-  fallbackModel: string,
+  identity: EffectiveModelIdentity,
 ): AsyncGenerator<ServerAgentStreamEvent, void> {
   yield {
     type: AgentEventType.ModelInfo,
-    value: buildModelInfo(config, fallbackModel),
+    value: buildModelInfo(config, identity),
   };
 }

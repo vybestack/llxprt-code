@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
+import { Storage } from '@vybestack/llxprt-code-storage';
 import { FileOutput } from './FileOutput.js';
 import type { LogEntry } from './types.js';
 
@@ -69,11 +69,6 @@ vi.mock('fs', () => ({
   },
 }));
 
-// Mock os module
-vi.mock('os', () => ({
-  homedir: vi.fn(),
-}));
-
 // Mock path module
 vi.mock('path', () => ({
   join: vi.fn((...args) => args.join('/')),
@@ -81,8 +76,7 @@ vi.mock('path', () => ({
 
 describe('FileOutput', () => {
   let fileOutput: FileOutput | undefined;
-  const mockHomedir = '/test/home';
-  const mockDebugDir = '/test/home/.llxprt/debug';
+  const mockDebugDir = join(Storage.getGlobalLogDir(), 'debug');
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -92,7 +86,6 @@ describe('FileOutput', () => {
       undefined;
 
     // Setup mocks
-    vi.mocked(homedir).mockReturnValue(mockHomedir);
     vi.mocked(join).mockImplementation((...args) => args.join('/'));
     vi.mocked(fs.access).mockResolvedValue(undefined);
     vi.mocked(fs.mkdir).mockResolvedValue(undefined);
@@ -124,7 +117,7 @@ describe('FileOutput', () => {
   /**
    * @requirement REQ-005.2
    * @scenario Directory creation
-   * @given ~/.llxprt/debug directory does not exist
+   * @given the platform-standard debug log directory does not exist
    * @when FileOutput writes first log entry
    * @then Directory created with proper permissions
    */

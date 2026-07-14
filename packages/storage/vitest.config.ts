@@ -31,7 +31,7 @@ export default defineConfig({
     testTimeout: 30000,
     teardownTimeout: 120000,
     silent: true,
-    setupFiles: ['./test-setup-storage-isolation.ts', './test-setup.ts'],
+    setupFiles: ['./test-setup-storage-isolation.ts'],
     pool: shouldUseForkPool ? 'forks' : undefined,
     poolOptions: shouldUseForkPool
       ? {

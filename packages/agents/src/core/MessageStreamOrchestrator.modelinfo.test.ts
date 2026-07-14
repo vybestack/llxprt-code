@@ -27,6 +27,10 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { LoopDetectionService } from '@vybestack/llxprt-code-core/services/loopDetectionService.js';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
+import {
+  buildEffectiveModelIdentity,
+  type EffectiveModelIdentity,
+} from './modelInfoHelpers.js';
 
 const mockTurnRun = vi.fn();
 
@@ -55,19 +59,21 @@ import {
 } from './MessageStreamOrchestrator.js';
 
 interface HarnessState {
-  model: string;
-  providerName?: string;
+  identity: EffectiveModelIdentity;
   profileName?: string | null;
-  providerManagerDefaultModel?: string;
-  providerManagerActiveModel?: string;
   lastPromptId?: string;
-  currentSequenceModel: string | null;
   contextLimit?: number;
 }
 
-interface BuildOptions extends Partial<HarnessState> {
+interface BuildOptions {
+  providerName?: string;
+  model?: string;
+  profileName?: string | null;
+  lastPromptId?: string;
+  contextLimit?: number;
   /** Override the stream produced by Turn.run */
   turnStream?: AsyncGenerator<ServerAgentStreamEvent>;
+  identityProvider?: () => EffectiveModelIdentity;
 }
 
 function buildOrchestrator(options: BuildOptions = {}): {
@@ -75,13 +81,12 @@ function buildOrchestrator(options: BuildOptions = {}): {
   state: HarnessState;
 } {
   const state: HarnessState = {
-    model: options.model ?? 'gpt-4',
-    providerName: options.providerName,
+    identity: {
+      providerName: options.providerName ?? 'openai',
+      model: options.model ?? 'gpt-4',
+    },
     profileName: options.profileName ?? null,
-    providerManagerDefaultModel: options.providerManagerDefaultModel,
-    providerManagerActiveModel: options.providerManagerActiveModel,
     lastPromptId: options.lastPromptId,
-    currentSequenceModel: options.currentSequenceModel ?? null,
     contextLimit: options.contextLimit,
   };
 
@@ -91,23 +96,9 @@ function buildOrchestrator(options: BuildOptions = {}): {
     getHistory: vi.fn().mockReturnValue([]),
   };
 
-  const providerManager = {
-    getActiveProviderName: vi.fn(() => state.providerName ?? ''),
-    getActiveProvider: vi.fn(() => ({
-      name: state.providerName ?? 'openai',
-      getCurrentModel: vi.fn(() => state.providerManagerActiveModel ?? ''),
-      getDefaultModel: vi.fn(() => state.providerManagerDefaultModel ?? ''),
-    })),
-  };
-
   const config = {
-    getContentGeneratorConfig: vi.fn(() => ({
-      providerManager,
-      model: state.model,
-    })),
     getMaxSessionTurns: vi.fn(() => 0),
     getIdeMode: vi.fn(() => false),
-    getModel: vi.fn(() => state.model),
     getEphemeralSetting: vi.fn((key: string) =>
       key === 'context-limit' ? state.contextLimit : undefined,
     ),
@@ -130,6 +121,8 @@ function buildOrchestrator(options: BuildOptions = {}): {
     })();
 
   mockTurnRun.mockReturnValue(stream);
+
+  const identityFn = options.identityProvider ?? (() => state.identity);
 
   const deps: MessageStreamDeps = {
     config,
@@ -180,10 +173,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
       fireBeforeAgentHookSafe: vi.fn().mockResolvedValue(undefined),
       fireAfterAgentHookSafe: vi.fn().mockResolvedValue(undefined),
     } as unknown as MessageStreamDeps['agentHookManager'],
-    getEffectiveModel: () => {
-      if (state.currentSequenceModel) return state.currentSequenceModel;
-      return state.model;
-    },
+    getEffectiveModelIdentity: identityFn,
     getHistory: vi.fn().mockResolvedValue([]),
     getSessionTurnCount: vi.fn().mockReturnValue(1),
     incrementSessionTurnCount: vi.fn(),
@@ -206,9 +196,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
     setLastPromptId: (id: string) => {
       state.lastPromptId = id;
     },
-    resetCurrentSequenceModel: () => {
-      state.currentSequenceModel = null;
-    },
+    resetCurrentSequenceModel: vi.fn(),
     updateTelemetryTokenCount: vi.fn(),
     sendMessageStream: vi.fn(),
   };
@@ -265,23 +253,22 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
   });
 
   it('emits exactly one ModelInfo on a continuation when model identity changes', async () => {
-    const { orchestrator, state } = buildOrchestrator({
-      model: 'gpt-4',
+    let identity: EffectiveModelIdentity = {
       providerName: 'openai',
+      model: 'gpt-4',
+    };
+    const { orchestrator, state } = buildOrchestrator({
+      identityProvider: () => identity,
     });
 
-    // Simulate the first prompt already completed (lastPromptId is set)
     state.lastPromptId = 'prompt-1';
+    identity = {
+      providerName: 'anthropic',
+      model: 'claude-3',
+    };
 
-    // Now simulate a model change during a continuation (same prompt id)
-    state.model = 'claude-3';
-    state.providerName = 'anthropic';
-    state.currentSequenceModel = 'claude-3';
-
-    // Re-enter execute with the SAME prompt id (continuation/retry)
     const infos = await collectModelInfos(orchestrator, 'prompt-1');
 
-    // Should emit exactly one ModelInfo for the changed identity
     expect(infos).toHaveLength(1);
     expect(infos[0]?.model).toBe('claude-3');
     expect(infos[0]?.providerName).toBe('anthropic');
@@ -323,38 +310,6 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     expect(infos).toHaveLength(1);
     expect(infos[0]?.profileName).toBe('profile-b');
     expect(infos[0]?.displayLabel).toBe('profile-b:gpt-4');
-  });
-
-  it('prefers provider manager active model over config.getModel', async () => {
-    const { orchestrator } = buildOrchestrator({
-      model: 'config-model',
-      providerName: 'openai',
-      providerManagerActiveModel: 'provider-active-model',
-    });
-
-    const infos = await collectModelInfos(orchestrator, 'prompt-new');
-
-    expect(infos).toHaveLength(1);
-    // The ModelInfo should reflect provider manager active model,
-    // not the config model
-    expect(infos[0]?.model).toBe('provider-active-model');
-  });
-
-  it('does not report provider defaults as the active model when a user-selected provider model exists', async () => {
-    const { orchestrator } = buildOrchestrator({
-      model: 'selected-provider-model',
-      providerName: 'Makora',
-      providerManagerDefaultModel: 'nvidia/Kimi-K2.6-NVFP4',
-      providerManagerActiveModel: 'zai-org/GLM-5.1-FP8',
-    });
-
-    const infos = await collectModelInfos(
-      orchestrator,
-      'prompt-selected-model',
-    );
-
-    expect(infos).toHaveLength(1);
-    expect(infos[0]?.model).toBe('zai-org/GLM-5.1-FP8');
   });
 
   it('restores all committed previous history when initializing the next chat', async () => {
@@ -404,10 +359,9 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
 
   it('B1: load-balancer profile reports the active sub-profile model, not the config default', async () => {
     const { orchestrator } = buildOrchestrator({
-      model: 'gemini-2.5-pro',
+      model: 'glm-5.2',
       providerName: 'load-balancer',
       profileName: 'glm',
-      providerManagerActiveModel: 'glm-5.2',
     });
 
     const infos = await collectModelInfos(orchestrator, 'prompt-lb-active');
@@ -417,23 +371,6 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     expect(infos[0]?.providerName).toBe('load-balancer');
     expect(infos[0]?.profileName).toBe('glm');
     expect(infos[0]?.displayLabel).toBe('glm:glm-5.2');
-  });
-
-  it('B2: load-balancer profile with no active selection falls back to the provider default model, never the config Gemini default', async () => {
-    const { orchestrator } = buildOrchestrator({
-      model: 'gemini-2.5-pro',
-      providerName: 'load-balancer',
-      profileName: 'glm',
-      providerManagerActiveModel: '',
-      providerManagerDefaultModel: 'glm-5.2',
-    });
-
-    const infos = await collectModelInfos(orchestrator, 'prompt-lb-default');
-
-    expect(infos).toHaveLength(1);
-    expect(infos[0]?.model).toBe('glm-5.2');
-    expect(infos[0]?.displayLabel).toBe('glm:glm-5.2');
-    expect(infos[0]?.model).not.toBe('gemini-2.5-pro');
   });
 
   it('displayLabel shows profile:model when a profile is active (issue #2501)', async () => {
@@ -464,5 +401,147 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
 
     expect(infos).toHaveLength(1);
     expect(infos[0]?.displayLabel).toBe('gpt-5.6-sol');
+  });
+
+  it('issue #2544: reports the routed Codex identity, never a stale manager Gemini identity', async () => {
+    const { orchestrator } = buildOrchestrator({
+      model: 'gpt-5.6-sol',
+      providerName: 'codex',
+      profileName: null,
+    });
+
+    const infos = await collectModelInfos(orchestrator, 'prompt-2544');
+
+    expect(infos).toHaveLength(1);
+    expect(infos[0]?.providerName).toBe('codex');
+    expect(infos[0]?.model).toBe('gpt-5.6-sol');
+    expect(infos[0]?.displayLabel).toBe('gpt-5.6-sol');
+  });
+});
+
+describe('buildEffectiveModelIdentity — model precedence (issue #2544)', () => {
+  it('prefers currentSequenceModel, then routed getCurrentModel, then routed getDefaultModel, then config fallback', () => {
+    const routedProvider = {
+      name: 'codex',
+      getCurrentModel: () => 'routed-current',
+      getDefaultModel: () => 'routed-default',
+    };
+    expect(
+      buildEffectiveModelIdentity('codex', routedProvider, 'seq', 'fallback')
+        .model,
+    ).toBe('seq');
+    expect(
+      buildEffectiveModelIdentity('codex', routedProvider, null, 'fallback')
+        .model,
+    ).toBe('routed-current');
+  });
+
+  it('falls back to routed getDefaultModel when getCurrentModel is blank, then config fallback', () => {
+    const blankCurrent = {
+      name: 'codex',
+      getCurrentModel: () => '',
+      getDefaultModel: () => 'routed-default',
+    };
+    expect(
+      buildEffectiveModelIdentity('codex', blankCurrent, null, 'fallback')
+        .model,
+    ).toBe('routed-default');
+    const blankAll = {
+      name: 'codex',
+      getCurrentModel: () => '',
+      getDefaultModel: () => '',
+    };
+    expect(
+      buildEffectiveModelIdentity('codex', blankAll, null, 'config-fallback')
+        .model,
+    ).toBe('config-fallback');
+  });
+
+  it('returns the config fallback and routed provider name when the routed provider is undefined', () => {
+    const identity = buildEffectiveModelIdentity(
+      'codex',
+      undefined,
+      null,
+      'config-fallback',
+    );
+    expect(identity.model).toBe('config-fallback');
+    expect(identity.providerName).toBe('codex');
+  });
+
+  it('issue #2544: never mixes a stale manager model with a routed provider name', () => {
+    const routedCodexProvider = {
+      name: 'codex',
+      getCurrentModel: () => 'gpt-5.6-sol',
+      getDefaultModel: () => 'gpt-5.6-sol',
+    };
+    const identity = buildEffectiveModelIdentity(
+      'codex',
+      routedCodexProvider,
+      null,
+      'gemini-pro',
+    );
+    expect(identity.providerName).toBe('codex');
+    expect(identity.model).toBe('gpt-5.6-sol');
+    expect(identity.model).not.toBe('gemini-pro');
+  });
+
+  it('does not evaluate provider models when the sequence model is available', () => {
+    const routedProvider = {
+      name: 'codex',
+      getCurrentModel: () => {
+        throw new Error('should not run');
+      },
+      getDefaultModel: () => {
+        throw new Error('should not run');
+      },
+    };
+
+    expect(
+      buildEffectiveModelIdentity(
+        'codex',
+        routedProvider,
+        'sequence',
+        'fallback',
+      ).model,
+    ).toBe('sequence');
+  });
+
+  it('uses the default model when the current model accessor fails', () => {
+    const routedProvider = {
+      name: 'codex',
+      getCurrentModel: () => {
+        throw new Error('unavailable');
+      },
+      getDefaultModel: () => 'routed-default',
+    };
+
+    expect(
+      buildEffectiveModelIdentity('codex', routedProvider, null, 'fallback')
+        .model,
+    ).toBe('routed-default');
+  });
+
+  it('issue #1770 load-balancer: current selection wins over default', () => {
+    const routedProvider = {
+      name: 'Makora',
+      getCurrentModel: () => 'zai-org/GLM-5.1-FP8',
+      getDefaultModel: () => 'nvidia/Kimi-K2.6-NVFP4',
+    };
+    expect(
+      buildEffectiveModelIdentity('Makora', routedProvider, null, 'default')
+        .model,
+    ).toBe('zai-org/GLM-5.1-FP8');
+  });
+
+  it('issue #1770 load-balancer: default wins when no active selection', () => {
+    const routedProvider = {
+      name: 'Makora',
+      getCurrentModel: () => '',
+      getDefaultModel: () => 'nvidia/Kimi-K2.6-NVFP4',
+    };
+    expect(
+      buildEffectiveModelIdentity('Makora', routedProvider, null, 'default')
+        .model,
+    ).toBe('nvidia/Kimi-K2.6-NVFP4');
   });
 });

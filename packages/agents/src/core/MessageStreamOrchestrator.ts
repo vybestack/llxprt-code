@@ -18,7 +18,7 @@ import {
 import {
   buildModelInfo,
   modelIdentityKey,
-  resolveProviderName,
+  type EffectiveModelIdentity,
 } from './modelInfoHelpers.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -52,7 +52,7 @@ export interface MessageStreamDeps {
   todoContinuationService: TodoContinuationService;
   ideContextTracker: IdeContextTracker;
   agentHookManager: AgentHookManager;
-  getEffectiveModel: () => string;
+  getEffectiveModelIdentity: () => EffectiveModelIdentity;
   getHistory: () => Promise<IContent[]>;
   getSessionTurnCount: () => number;
   incrementSessionTurnCount: () => void;
@@ -283,7 +283,7 @@ export class MessageStreamOrchestrator {
     initialRequest: AgentMessageInput,
     ctx: StreamContext,
   ): AsyncGenerator<ServerAgentStreamEvent, Turn | undefined> {
-    const { config, getChat, getSessionTurnCount, getEffectiveModel } =
+    const { config, getChat, getSessionTurnCount, getEffectiveModelIdentity } =
       this.deps;
 
     if (
@@ -302,9 +302,10 @@ export class MessageStreamOrchestrator {
     }
 
     const chat = getChat();
+    const effectiveIdentity = getEffectiveModelIdentity();
     const remainingTokenCount =
       getTokenLimitForConfiguredContext(
-        getEffectiveModel(),
+        effectiveIdentity.model,
         config,
         this.deps.resolveTokenLimit,
       ) - chat.getLastPromptTokenCount();
@@ -836,11 +837,14 @@ export class MessageStreamOrchestrator {
   }
 
   private _getProviderName(): string {
-    return resolveProviderName(this.deps.config);
+    return this.deps.getEffectiveModelIdentity().providerName;
   }
 
   private _buildModelInfo(): ModelInfo {
-    return buildModelInfo(this.deps.config, this.deps.getEffectiveModel());
+    return buildModelInfo(
+      this.deps.config,
+      this.deps.getEffectiveModelIdentity(),
+    );
   }
 
   private *_modelInfoEvents(force: boolean): Generator<ServerAgentStreamEvent> {

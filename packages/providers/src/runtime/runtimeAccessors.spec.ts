@@ -19,6 +19,7 @@ import { configureCliStatelessHardening } from './statelessHardening.js';
 import { setCliRuntimeContext } from './runtimeLifecycle.js';
 import type {
   Config,
+  RuntimeProvider,
   RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '../auth/index.js';
@@ -94,6 +95,7 @@ describe('runtimeAccessors', () => {
         isPaidMode: vi.fn().mockReturnValue(false),
       }),
       getActiveProviderName: vi.fn().mockReturnValue('openai'),
+      getProviderByName: vi.fn().mockReturnValue(undefined),
       listProviders: vi.fn().mockReturnValue(['openai', 'anthropic']),
       getProviderMetrics: vi.fn().mockReturnValue({}),
       getSessionTokenUsage: vi.fn().mockReturnValue({
@@ -231,6 +233,214 @@ describe('runtimeAccessors', () => {
       expect(status).toHaveProperty('providerName');
       expect(status).toHaveProperty('modelName');
       expect(status).toHaveProperty('displayLabel');
+    });
+  });
+  describe('getActiveProviderStatus provider resolution', () => {
+    type StubProvider = RuntimeProvider & {
+      getBaseURL?: () => string | undefined;
+    };
+
+    const makeProvider = (opts: {
+      name: string;
+      defaultModel?: string;
+      paid?: boolean;
+      baseURL?: string;
+      throwing?: 'isPaidMode' | 'getBaseURL';
+    }): StubProvider => ({
+      name: opts.name,
+      getDefaultModel: () => opts.defaultModel ?? 'model',
+      isPaidMode:
+        opts.throwing === 'isPaidMode'
+          ? () => {
+              throw new Error('boom');
+            }
+          : () => opts.paid ?? false,
+      getModels: () => Promise.resolve([]),
+      getServerTools: () => [],
+      invokeServerTool: () => Promise.resolve(undefined),
+      async *generateChatCompletion() {},
+      ...(opts.baseURL !== undefined
+        ? {
+            getBaseURL:
+              opts.throwing === 'getBaseURL'
+                ? () => {
+                    throw new Error('boom');
+                  }
+                : () => opts.baseURL,
+          }
+        : {}),
+    });
+
+    const configureFor = (opts: {
+      providerName?: string;
+      activeProvider?: string;
+      model?: string;
+      providerSettingsModel?: string;
+    }): void => {
+      vi.mocked(mockConfig.getProvider).mockReturnValue(
+        opts.providerName ?? '',
+      );
+      vi.mocked(mockConfig.getModel).mockReturnValue(opts.model ?? '');
+      vi.mocked(mockSettingsService.get).mockImplementation((key: string) =>
+        key === 'activeProvider'
+          ? (opts.activeProvider ?? opts.providerName)
+          : undefined,
+      );
+      vi.mocked(mockSettingsService.getProviderSettings).mockReturnValue(
+        opts.providerSettingsModel !== undefined
+          ? { model: opts.providerSettingsModel }
+          : {},
+      );
+      setupCompleteRuntime();
+    };
+
+    beforeEach(() => {
+      vi.mocked(mockRuntimeProviderManager.getActiveProvider).mockReturnValue(
+        makeProvider({
+          name: 'gemini',
+          defaultModel: 'gemini-2.5-pro',
+          paid: true,
+          baseURL: 'https://gemini.example/v1',
+        }),
+      );
+      vi.mocked(
+        mockRuntimeProviderManager.getActiveProviderName,
+      ).mockReturnValue('gemini');
+      vi.mocked(
+        mockRuntimeProviderManager.getProviderByName,
+      ).mockImplementation((name: string) => {
+        if (name === 'codex') {
+          return makeProvider({
+            name: 'codex',
+            defaultModel: 'gpt-5.6-sol',
+            paid: false,
+            baseURL: 'https://codex.example/v1',
+          });
+        }
+        if (name === 'gemini') {
+          return makeProvider({
+            name: 'gemini',
+            defaultModel: 'gemini-2.5-pro',
+            paid: true,
+            baseURL: 'https://gemini.example/v1',
+          });
+        }
+        return undefined;
+      });
+    });
+
+    it('reports resolved codex identity and metadata while the active provider is still gemini', () => {
+      configureFor({
+        providerName: 'codex',
+        activeProvider: 'gemini',
+        model: 'gpt-5.6-sol',
+        providerSettingsModel: 'gpt-5.6-sol',
+      });
+
+      const status = getActiveProviderStatus();
+
+      expect(status).toStrictEqual({
+        providerName: 'codex',
+        modelName: 'gpt-5.6-sol',
+        displayLabel: 'codex:gpt-5.6-sol',
+        isPaidMode: false,
+        baseURL: 'https://codex.example/v1',
+      });
+    });
+
+    it('keeps the resolved name but omits metadata when the named provider lookup fails', () => {
+      vi.mocked(
+        mockRuntimeProviderManager.getProviderByName,
+      ).mockImplementation(() => {
+        throw new Error('boom');
+      });
+      configureFor({
+        providerName: 'codex',
+        model: 'gpt-5.6-sol',
+        providerSettingsModel: 'gpt-5.6-sol',
+      });
+
+      const status = getActiveProviderStatus();
+
+      expect(status.providerName).toBe('codex');
+      expect(status.modelName).toBe('gpt-5.6-sol');
+      expect(status.displayLabel).toBe('codex:gpt-5.6-sol');
+      expect(status.isPaidMode).toBeUndefined();
+      expect(status.baseURL).toBeUndefined();
+    });
+
+    it('falls back to the active provider metadata when no provider name is configured', () => {
+      configureFor({ providerName: '', model: '' });
+
+      const status = getActiveProviderStatus();
+
+      expect(status).toStrictEqual({
+        providerName: 'gemini',
+        modelName: 'gemini-2.5-pro',
+        displayLabel: 'gemini:gemini-2.5-pro',
+        isPaidMode: true,
+        baseURL: 'https://gemini.example/v1',
+      });
+    });
+
+    it('degrades to null identity when manager lookups throw or the active provider is missing', () => {
+      vi.mocked(
+        mockRuntimeProviderManager.getActiveProvider,
+      ).mockImplementation(() => {
+        throw new Error('boom');
+      });
+      configureFor({ providerName: '', model: '' });
+
+      const status = getActiveProviderStatus();
+
+      expect(status.providerName).toBeNull();
+      expect(status.modelName).toBeNull();
+      expect(status.isPaidMode).toBeUndefined();
+      expect(status.baseURL).toBeUndefined();
+      expect(status.displayLabel).toBe('unknown');
+    });
+
+    it('isolates the resolved name from a throwing resolved-provider metadata method', () => {
+      vi.mocked(mockRuntimeProviderManager.getProviderByName).mockReturnValue(
+        makeProvider({
+          name: 'codex',
+          defaultModel: 'gpt-5.6-sol',
+          baseURL: 'https://codex.example/v1',
+          throwing: 'isPaidMode',
+        }),
+      );
+      configureFor({
+        providerName: 'codex',
+        model: 'gpt-5.6-sol',
+        providerSettingsModel: 'gpt-5.6-sol',
+      });
+
+      const status = getActiveProviderStatus();
+
+      expect(status.providerName).toBe('codex');
+      expect(status.modelName).toBe('gpt-5.6-sol');
+      expect(status.baseURL).toBe('https://codex.example/v1');
+      expect(status.isPaidMode).toBeUndefined();
+    });
+
+    it('omits baseURL when the active provider base URL accessor throws', () => {
+      vi.mocked(mockRuntimeProviderManager.getActiveProvider).mockReturnValue(
+        makeProvider({
+          name: 'gemini',
+          defaultModel: 'gemini-2.5-pro',
+          paid: true,
+          baseURL: 'https://gemini.example/v1',
+          throwing: 'getBaseURL',
+        }),
+      );
+      configureFor({ providerName: '', model: '' });
+
+      const status = getActiveProviderStatus();
+
+      expect(status.providerName).toBe('gemini');
+      expect(status.modelName).toBe('gemini-2.5-pro');
+      expect(status.isPaidMode).toBe(true);
+      expect(status.baseURL).toBeUndefined();
     });
   });
 

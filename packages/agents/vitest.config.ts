@@ -240,6 +240,7 @@ export default defineConfig({
     testTimeout: 30000,
     teardownTimeout: 120000,
     silent: true,
+    setupFiles: ['./test-setup-storage-isolation.ts'],
     server: {
       deps: {
         inline: [
