@@ -501,7 +501,7 @@ describe('AgentClient (client.ts)', () => {
       expect(infos[0]?.model).toBe('test-model');
     });
 
-    it('emits exactly one additional ModelInfo when provider changes during continuation', async () => {
+    it('keeps the routed provider stable during continuation', async () => {
       const mockStream2 = (async function* () {
         yield { type: AgentEventType.Content, value: 'ok' };
         yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
@@ -567,12 +567,8 @@ describe('AgentClient (client.ts)', () => {
 
       getContentGenSpy.mockRestore();
 
-      // First emission (provider 'backend' — no providerManager), then one
-      // additional for provider change to 'anthropic' — exactly one, not
-      // duplicates.
-      expect(infos).toHaveLength(2);
-      expect(infos[0]?.providerName).toBe('backend');
-      expect(infos[1]?.providerName).toBe('anthropic');
+      expect(infos).toHaveLength(1);
+      expect(infos[0]?.providerName).toBe('gemini');
     });
   });
 });

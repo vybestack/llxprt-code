@@ -69,6 +69,11 @@ import {
   MessageStreamOrchestrator,
   type MessageStreamDeps,
 } from './MessageStreamOrchestrator.js';
+import {
+  buildEffectiveModelIdentity,
+  type EffectiveModelIdentity,
+  type RoutedModelProvider,
+} from './modelInfoHelpers.js';
 
 export class AgentClient implements AgentClientContract {
   private chat?: ChatSession;
@@ -200,7 +205,7 @@ export class AgentClient implements AgentClientContract {
       todoContinuationService: this.todoContinuationService,
       ideContextTracker: this.ideContextTracker,
       agentHookManager: this.agentHookManager,
-      getEffectiveModel: () => this._getEffectiveModelForCurrentTurn(),
+      getEffectiveModelIdentity: () => this._getEffectiveModelIdentity(),
       getHistory: () => this.getHistory(),
       getSessionTurnCount: () => this.sessionTurnCount,
       incrementSessionTurnCount: () => {
@@ -700,14 +705,32 @@ export class AgentClient implements AgentClientContract {
     return chat;
   }
 
-  private _getEffectiveModelForCurrentTurn(): string {
-    if (this.currentSequenceModel) {
-      return this.currentSequenceModel;
+  private _getEffectiveModelIdentity(): EffectiveModelIdentity {
+    const configFallback = this.config.getModel();
+    const runtimeProviderName = this.runtimeState.provider;
+    let routedProviderName = runtimeProviderName;
+    let routedProvider: RoutedModelProvider | undefined = undefined;
+    if (
+      this.chat &&
+      typeof this.chat.resolveProviderForRuntime === 'function'
+    ) {
+      try {
+        const provider = this.chat.resolveProviderForRuntime(
+          'AgentClient.getEffectiveModelIdentity',
+        );
+        routedProviderName = provider.name;
+        routedProvider = provider;
+      } catch {
+        routedProviderName = runtimeProviderName;
+        routedProvider = undefined;
+      }
     }
-
-    // In LLxprt, config.getModel() already handles provider-specific model resolution
-    // and fallback mode, so we just return it directly
-    return this.config.getModel();
+    return buildEffectiveModelIdentity(
+      routedProviderName,
+      routedProvider,
+      this.currentSequenceModel,
+      configFallback,
+    );
   }
 
   async *sendMessageStream(

@@ -192,6 +192,15 @@ export const UI_SETTINGS_SCHEMA = {
         description: 'Display memory usage information in the UI',
         showInDialog: true,
       },
+      alwaysDisplayFullShellCommand: {
+        type: 'boolean',
+        label: 'Always Display Full Shell Command',
+        category: 'UI',
+        requiresRestart: false,
+        default: true,
+        description: 'Display complete shell commands without truncation.',
+        showInDialog: true,
+      },
       showLineNumbers: {
         type: 'boolean',
         label: 'Show Line Numbers',

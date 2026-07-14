@@ -19,7 +19,10 @@ const CONTEXT_OVERFLOW_THRESHOLD = 0.95;
 
 export interface PreflightOverflowDeps {
   getChat: () => ChatSession;
-  getEffectiveModel: () => string;
+  getEffectiveModelIdentity: () => {
+    readonly providerName: string;
+    readonly model: string;
+  };
   config: Config;
   logger: DebugLogger;
 }
@@ -55,7 +58,7 @@ export async function resolvePreflightOverflow(
     return true;
   }
 
-  const { getChat, getEffectiveModel, config, logger } = deps;
+  const { getChat, getEffectiveModelIdentity, config, logger } = deps;
   const chat = getChat();
   try {
     const result = await chat.performCompression(ctx.promptId, {
@@ -74,8 +77,10 @@ export async function resolvePreflightOverflow(
     // estimate when compression just nulled lastPromptTokenCount) — NOT
     // getLastPromptTokenCount(), which returns 0 right after compression.
     const newRemaining =
-      getTokenLimitForConfiguredContext(getEffectiveModel(), config) -
-      chat.getProjectedPromptBaseline();
+      getTokenLimitForConfiguredContext(
+        getEffectiveModelIdentity().model,
+        config,
+      ) - chat.getProjectedPromptBaseline();
     if (newRemaining <= 0) {
       return true;
     }
