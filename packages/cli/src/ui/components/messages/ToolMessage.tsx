@@ -67,12 +67,14 @@ function extractEchoText(cmd: string): string | null {
  * Compute current subcommand for display when details visible.
  */
 function computeCurrentSubcommand(
-  isDetailsVisible: boolean,
+  showFullShellDescription: boolean,
   status: ToolCallStatus,
   description: string | undefined,
   resultDisplay: string | object | undefined,
 ): string | null {
-  if (!isDetailsVisible || status !== ToolCallStatus.Executing) return null;
+  if (!showFullShellDescription || status !== ToolCallStatus.Executing) {
+    return null;
+  }
   if (!description) return null;
 
   const outputString =
@@ -348,7 +350,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   borderDimColor = false,
 }) => {
   const isShellTool = name === SHELL_NAME || name === SHELL_COMMAND_NAME;
-  const isDetailsVisible = useShellCommandDisplay(
+  const showFullShellDescription = useShellCommandDisplay(
     callId,
     name,
     status,
@@ -367,12 +369,12 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   const currentSubcommand = useMemo(
     () =>
       computeCurrentSubcommand(
-        isDetailsVisible,
+        showFullShellDescription,
         status,
         description,
         resultDisplay,
       ),
-    [isDetailsVisible, status, description, resultDisplay],
+    [showFullShellDescription, status, description, resultDisplay],
   );
 
   return (
@@ -386,7 +388,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
         name,
         description || '',
         emphasis,
-        isDetailsVisible,
+        showFullShellDescription,
         isThisShellFocusable,
         isThisShellFocused,
       )}
@@ -395,7 +397,9 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
         borderColor,
         borderDimColor,
         status,
-        isShellTool && status === ToolCallStatus.Executing && !isDetailsVisible,
+        isShellTool &&
+          status === ToolCallStatus.Executing &&
+          !showFullShellDescription,
         currentSubcommand,
         resultDisplay,
         availableTerminalHeight,
