@@ -120,7 +120,7 @@ vi.mock('../utils/version.js', () => ({
   getCliVersion: vi.fn(async () => 'test-version'),
 }));
 
-vi.mock('../utils/updateCheck.js', () => ({
+vi.mock('../ui/utils/updateCheck.js', () => ({
   checkForUpdates: vi.fn(async () => null),
 }));
 
