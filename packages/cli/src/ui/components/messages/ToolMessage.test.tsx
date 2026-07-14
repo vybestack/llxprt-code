@@ -175,9 +175,38 @@ describe('<ToolMessage />', () => {
   describe('ctrl+r hint display', () => {
     it('does not show "Press ctrl+r" hint when not Executing', () => {
       const { lastFrame } = renderWithContext(
-        <ToolMessage {...baseProps} status={ToolCallStatus.Success} />,
+        <ToolMessage
+          {...baseProps}
+          name={SHELL_COMMAND_NAME}
+          status={ToolCallStatus.Success}
+        />,
         StreamingState.Idle,
+        false,
       );
+      expect(lastFrame()).not.toContain("Press 'ctrl+r'");
+    });
+
+    it('shows the hint for a collapsed executing shell command', () => {
+      const { lastFrame } = renderWithContext(
+        <ToolMessage
+          {...baseProps}
+          name={SHELL_COMMAND_NAME}
+          status={ToolCallStatus.Executing}
+        />,
+        StreamingState.Idle,
+        false,
+      );
+
+      expect(lastFrame()).toContain("Press 'ctrl+r'");
+    });
+
+    it('does not show the hint for an executing non-shell tool', () => {
+      const { lastFrame } = renderWithContext(
+        <ToolMessage {...baseProps} status={ToolCallStatus.Executing} />,
+        StreamingState.Idle,
+        false,
+      );
+
       expect(lastFrame()).not.toContain("Press 'ctrl+r'");
     });
   });

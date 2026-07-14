@@ -167,11 +167,8 @@ function computeShellFocusState(
 /**
  * Render the executing status hint.
  */
-function renderExecutingHint(
-  status: ToolCallStatus,
-  isDetailsVisible: boolean,
-): React.ReactNode {
-  if (status !== ToolCallStatus.Executing || isDetailsVisible) {
+function renderExecutingHint(showExecutingHint: boolean): React.ReactNode {
+  if (!showExecutingHint) {
     return null;
   }
   return (
@@ -276,7 +273,7 @@ function renderToolMessageContent(
   borderColor: string,
   borderDimColor: boolean,
   status: ToolCallStatus,
-  isDetailsVisible: boolean,
+  showExecutingHint: boolean,
   currentSubcommand: string | null,
   resultDisplay: string | object | undefined,
   availableTerminalHeight: number | undefined,
@@ -300,7 +297,7 @@ function renderToolMessageContent(
       flexDirection="column"
       overflowX="hidden"
     >
-      {renderExecutingHint(status, isDetailsVisible)}
+      {renderExecutingHint(showExecutingHint)}
       {renderCurrentSubcommand(currentSubcommand)}
       <ToolResultDisplay
         resultDisplay={resultDisplay}
@@ -350,6 +347,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   borderColor = Colors.Gray,
   borderDimColor = false,
 }) => {
+  const isShellTool = name === SHELL_NAME || name === SHELL_COMMAND_NAME;
   const isDetailsVisible = useShellCommandDisplay(
     callId,
     name,
@@ -397,7 +395,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
         borderColor,
         borderDimColor,
         status,
-        isDetailsVisible,
+        isShellTool && status === ToolCallStatus.Executing && !isDetailsVisible,
         currentSubcommand,
         resultDisplay,
         availableTerminalHeight,
