@@ -51,7 +51,7 @@ function makeConfig(
     projectHash: overrides.projectHash ?? 'abc123def456',
     chatsDir: overrides.chatsDir ?? '/tmp/test-chats',
     workspaceDirs: overrides.workspaceDirs ?? ['/home/user/project'],
-    cwd: overrides.cwd ?? '/home/user/project',
+    cwd: overrides.cwd ?? '/home/user/project/subdir',
     provider: overrides.provider ?? 'anthropic',
     model: overrides.model ?? 'claude-4',
   };

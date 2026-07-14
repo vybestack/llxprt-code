@@ -87,7 +87,12 @@ export function buildBlockingScriptedAgent(
         yield e;
       }
       const signal = (opts as { signal?: AbortSignal } | undefined)?.signal;
-      if (signal !== undefined && !signal.aborted) {
+      if (signal === undefined) {
+        throw new Error(
+          'buildBlockingScriptedAgent requires an AbortSignal in stream opts',
+        );
+      }
+      if (!signal.aborted) {
         await new Promise<void>((resolve) => {
           signal.addEventListener('abort', () => resolve(), { once: true });
         });
@@ -186,6 +191,7 @@ export class RecordingConnection {
   private terminalExitDelayed = false;
   private terminalExitResolvers = new Map<string, Array<() => void>>();
   private terminalCreationWaiters = new Set<() => void>();
+  private terminalContentWaiters = new Set<() => void>();
 
   setTerminalOutput(output: string): void {
     this.terminalOutput = output;
@@ -236,26 +242,23 @@ export class RecordingConnection {
    */
   waitForTerminalCreated(timeoutMs = 5000): Promise<void> {
     if (this.hasTerminalContentUpdate()) return Promise.resolve();
-    const deadline = Date.now() + timeoutMs;
     return new Promise<void>((resolve, reject) => {
-      let timer: ReturnType<typeof setTimeout> | undefined;
+      const waiter = (): void => {
+        cleanup();
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error('waitForTerminalCreated timed out'));
+      }, timeoutMs);
       const cleanup = (): void => {
-        if (timer !== undefined) {
-          clearTimeout(timer);
-        }
+        clearTimeout(timer);
+        this.terminalContentWaiters.delete(waiter);
       };
-      const check = (): void => {
-        if (this.hasTerminalContentUpdate()) {
-          cleanup();
-          resolve();
-        } else if (Date.now() >= deadline) {
-          cleanup();
-          reject(new Error('waitForTerminalCreated timed out'));
-        } else {
-          timer = setTimeout(check, 5);
-        }
-      };
-      timer = setTimeout(check, 5);
+      this.terminalContentWaiters.add(waiter);
+      if (this.hasTerminalContentUpdate()) {
+        waiter();
+      }
     });
   }
 
@@ -355,6 +358,13 @@ export class RecordingConnection {
       }
       this.sessionUpdateCalls++;
       this.messages.push({ kind: 'sessionUpdate', update: params.update });
+      if (this.hasTerminalContentUpdate()) {
+        const waiters = [...this.terminalContentWaiters];
+        this.terminalContentWaiters.clear();
+        for (const resolve of waiters) {
+          resolve();
+        }
+      }
     },
   );
 
@@ -403,7 +413,9 @@ export class RecordingConnection {
           : {}),
       };
       this.createTerminalCalls.push(call);
-      for (const resolve of this.terminalCreationWaiters) {
+      const waiters = [...this.terminalCreationWaiters];
+      this.terminalCreationWaiters.clear();
+      for (const resolve of waiters) {
         resolve();
       }
       const terminalId = `terminal-${this.createTerminalCalls.length}`;

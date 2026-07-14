@@ -274,9 +274,14 @@ describe('Zed Session.prompt (Agent API) - tool-call status progression', () => 
     await runPrompt(session);
 
     const updates = connection.onlySessionUpdates();
-    const failed = updates[1] as { status: string; content: unknown };
+    const failed = updates[1] as {
+      status: string;
+      content: acp.ToolCallContent[];
+    };
     expect(failed.status).toBe('failed');
-    expect(JSON.stringify(failed.content)).toContain('boom');
+    expect(failed.content).toStrictEqual([
+      { type: 'content', content: { type: 'text', text: 'boom' } },
+    ]);
     const suppressed = updates[3] as { status: string; content: unknown };
     expect(suppressed.status).toBe('completed');
     expect(suppressed.content).toStrictEqual([]);

@@ -104,7 +104,7 @@ export class StreamBatcher {
     this.appendPendingChunk(isThought ? 'thought' : 'text', filteredText);
     this.batchTimer ??= setTimeout(() => {
       this.batchTimer = null;
-      void this.flush();
+      void this.flush().catch(() => undefined);
     }, BATCH_INTERVAL_MS);
   }
 

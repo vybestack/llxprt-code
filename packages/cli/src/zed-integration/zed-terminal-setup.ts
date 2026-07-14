@@ -41,7 +41,9 @@ export function buildZedTerminalSetup(
     config.getTargetDir(),
     (update) => connection.sessionUpdate({ sessionId, update }),
     logger,
-    typeof outputLimit === 'number' && Number.isFinite(outputLimit)
+    typeof outputLimit === 'number' &&
+    Number.isFinite(outputLimit) &&
+    outputLimit > 0
       ? outputLimit
       : undefined,
   );

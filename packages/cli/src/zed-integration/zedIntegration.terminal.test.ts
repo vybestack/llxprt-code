@@ -139,29 +139,20 @@ describe('Zed terminal execution', () => {
     );
   });
 
-  it('confines an agent-reported cwd to the session project root', async () => {
+  it('rejects an agent-reported cwd outside the session project root', async () => {
     const connection = new RecordingConnection();
     const terminals = terminalManager(connection);
-    await terminals.observeToolCall({
-      id: 'shell-traversal',
-      name: 'run_shell_command',
-      args: { command: 'echo hello', dir_path: '../../etc' },
-    });
 
-    await terminals.executeShellCommand(
-      preparedEcho,
-      '/project',
-      () => undefined,
-      new AbortController().signal,
-    );
-
-    expect(connection.onlySessionUpdates()).toContainEqual(
-      expect.objectContaining({
-        sessionUpdate: 'tool_call_update',
-        toolCallId: 'shell-traversal',
-        content: [{ type: 'terminal', terminalId: 'terminal-1' }],
+    await expect(
+      terminals.observeToolCall({
+        id: 'shell-traversal',
+        name: 'run_shell_command',
+        args: { command: 'echo hello', dir_path: '../../etc' },
       }),
-    );
+    ).rejects.toThrow('Shell tool cwd resolves outside the session root');
+
+    expect(connection.createTerminalCalls).toHaveLength(0);
+    expect(connection.onlySessionUpdates()).toHaveLength(0);
   });
 
   it('retries terminal correlation after update delivery fails', async () => {

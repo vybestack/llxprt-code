@@ -15,12 +15,12 @@ import {
 import { buildZedTerminalSetup } from './zed-terminal-setup.js';
 import { RecordingConnection } from './zed-test-helpers.js';
 
-function configFixture(): Config {
+function configFixture(outputLimit?: number): Config {
   return {
     getPolicyEngine: () => undefined,
     getDebugMode: () => false,
     getTargetDir: () => '/project',
-    getEphemeralSetting: () => undefined,
+    getEphemeralSetting: () => outputLimit,
   } as unknown as Config;
 }
 
@@ -58,5 +58,30 @@ describe('buildZedTerminalSetup', () => {
     const tool = setup.registry.getTool(ShellTool.Name);
     expect(tool).toBeDefined();
     expect(tool).not.toBe(baseShellTool);
+  });
+
+  it('ignores non-positive terminal output token limits', async () => {
+    const baseRegistry = {
+      getAllTools: vi.fn(() => []),
+    } as unknown as ToolRegistry;
+    const connection = new RecordingConnection();
+    const setup = buildZedTerminalSetup(
+      'session-1',
+      configFixture(-1),
+      baseRegistry,
+      connection as unknown as acp.AgentSideConnection,
+      new DebugLogger('llxprt:zed-terminal-setup-test'),
+    );
+
+    await setup.terminals.executeShellCommand(
+      'echo test',
+      '/project',
+      () => undefined,
+      new AbortController().signal,
+    );
+
+    expect(connection.createTerminalCalls[0]).not.toHaveProperty(
+      'outputByteLimit',
+    );
   });
 });

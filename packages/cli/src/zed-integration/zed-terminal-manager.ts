@@ -226,27 +226,22 @@ export class TerminalManager {
           );
           break;
         }
-        const chunk = outputDelta(previousOutput, current.output);
+        const chunk = outputDelta(
+          previousOutput,
+          current.output,
+          current.truncated,
+        );
         if (chunk !== '') {
           onOutput({ type: 'data', chunk });
         }
         previousOutput = current.output;
       }
     }
-    // Final poll after exit settles so output produced between the last poll
-    // and process exit is never lost, including when waitForExit rejects.
-    try {
-      const final = await active.handle.currentOutput();
-      const finalDelta = outputDelta(previousOutput, final.output);
-      if (finalDelta !== '') {
-        onOutput({ type: 'data', chunk: finalDelta });
-      }
-      previousOutput = final.output;
-    } catch (error) {
-      this.logger.debug(
-        () => `Terminal post-exit output poll failed: ${errorMessage(error)}`,
-      );
-    }
+    previousOutput = await this.pollFinalOutput(
+      active,
+      previousOutput,
+      onOutput,
+    );
     if (exitError !== undefined) {
       throw exitError;
     }
@@ -258,6 +253,32 @@ export class TerminalManager {
       aborted: signal.aborted,
       pid: undefined,
     };
+  }
+
+  private async pollFinalOutput(
+    active: ActiveTerminal,
+    previousOutput: string,
+    onOutput: (event: ShellOutputEvent) => void,
+  ): Promise<string> {
+    try {
+      const final = await withTimeout(
+        active.handle.currentOutput(),
+        OUTPUT_POLL_INTERVAL_MS * 5,
+      );
+      if (final === undefined) {
+        return previousOutput;
+      }
+      const chunk = outputDelta(previousOutput, final.output, final.truncated);
+      if (chunk !== '') {
+        onOutput({ type: 'data', chunk });
+      }
+      return final.output;
+    } catch (error) {
+      this.logger.debug(
+        () => `Terminal post-exit output poll failed: ${errorMessage(error)}`,
+      );
+      return previousOutput;
+    }
   }
 
   private async killAndRelease(active: ActiveTerminal): Promise<void> {
@@ -304,7 +325,12 @@ function resolveCallCwd(call: AgentToolCall, targetDir: string): string {
   const resolved = path.isAbsolute(value)
     ? path.resolve(value)
     : path.resolve(targetDir, value);
-  return isWithinRoot(resolved, targetDir) ? resolved : targetDir;
+  if (!isWithinRoot(resolved, targetDir)) {
+    throw new Error(
+      `Shell tool cwd resolves outside the session root: ${value}`,
+    );
+  }
+  return resolved;
 }
 
 function commandsMatch(preparedCommand: string, rawCommand: string): boolean {
@@ -328,10 +354,39 @@ function abortedResult(): ShellExecutionResult {
   };
 }
 
-function outputDelta(previous: string, current: string): string {
-  return current.startsWith(previous)
-    ? current.slice(previous.length)
-    : current;
+function outputDelta(
+  previous: string,
+  current: string,
+  truncated: boolean,
+): string {
+  if (current.startsWith(previous)) {
+    return current.slice(previous.length);
+  }
+  if (!truncated) {
+    return current;
+  }
+  for (
+    let overlap = Math.min(previous.length, current.length);
+    overlap > 0;
+    overlap--
+  ) {
+    if (previous.endsWith(current.slice(0, overlap))) {
+      return current.slice(overlap);
+    }
+  }
+  return current;
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  milliseconds: number,
+): Promise<T | undefined> {
+  const timeout = delay(milliseconds);
+  try {
+    return await Promise.race([promise, timeout.promise.then(() => undefined)]);
+  } finally {
+    timeout.cancel();
+  }
 }
 
 function delay(milliseconds: number): {

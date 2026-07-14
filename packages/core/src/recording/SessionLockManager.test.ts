@@ -939,7 +939,7 @@ process.on('message', async (msg) => {
         // Parent attempts to acquire — should fail (child holds the lock)
         await expect(
           SessionLockManager.acquire(chatsDir, sessionId),
-        ).rejects.toThrow(/in use/i);
+        ).rejects.toBeInstanceOf(SessionLockedError);
 
         // Tell child to release and exit
         childProcess.send('release');
@@ -1273,7 +1273,7 @@ setInterval(() => {}, 60000);
 
         await expect(
           SessionLockManager.acquire(chatsDir, sessionId),
-        ).rejects.toThrow(/in use/i);
+        ).rejects.toBeInstanceOf(SessionLockedError);
 
         await handle.release();
       },

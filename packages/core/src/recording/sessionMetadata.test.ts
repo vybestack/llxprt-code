@@ -34,9 +34,13 @@ import {
 } from './replay-test-helpers.js';
 
 const tempDirs: string[] = [];
+const services: SessionRecordingService[] = [];
 
 describe('session_metadata recording (issue #1611)', () => {
   afterEach(async () => {
+    await Promise.allSettled(
+      services.splice(0).map((service) => service.dispose()),
+    );
     await Promise.allSettled(
       tempDirs
         .splice(0)
@@ -56,6 +60,7 @@ describe('session_metadata recording (issue #1611)', () => {
     it('writes a typed session_metadata event (not a session_event sentinel)', async () => {
       const chatsDir = await makeTempChatsDir();
       const service = new SessionRecordingService(makeConfig({ chatsDir }));
+      services.push(service);
 
       service.recordSessionMetadata('My session title');
       await service.flush();
@@ -71,12 +76,12 @@ describe('session_metadata recording (issue #1611)', () => {
         .map((line) => JSON.parse(line))
         .find((line) => line.type === 'session_metadata');
       expect(metadataLine.payload).toStrictEqual({ title: 'My session title' });
-      await service.dispose();
     });
 
     it('records a null title for explicit untitled', async () => {
       const chatsDir = await makeTempChatsDir();
       const service = new SessionRecordingService(makeConfig({ chatsDir }));
+      services.push(service);
 
       service.recordSessionMetadata(null);
       await service.flush();
@@ -90,12 +95,12 @@ describe('session_metadata recording (issue #1611)', () => {
         .map((line) => JSON.parse(line))
         .find((line) => line.type === 'session_metadata');
       expect(metadataLine.payload).toStrictEqual({ title: null });
-      await service.dispose();
     });
 
     it('materializes the recording BEFORE any content event (slash/failure sessions)', async () => {
       const chatsDir = await makeTempChatsDir();
       const service = new SessionRecordingService(makeConfig({ chatsDir }));
+      services.push(service);
 
       service.recordSessionMetadata('Slash command title');
       await service.flush();
@@ -110,12 +115,12 @@ describe('session_metadata recording (issue #1611)', () => {
       expect(types).toContain('session_start');
       expect(types).toContain('session_metadata');
       expect(types).not.toContain('content');
-      await service.dispose();
     });
 
     it('preserves ordering: session_start before session_metadata before content', async () => {
       const chatsDir = await makeTempChatsDir();
       const service = new SessionRecordingService(makeConfig({ chatsDir }));
+      services.push(service);
 
       service.recordSessionMetadata('Ordered title');
       service.recordContent(makeContent('hello'));
@@ -133,7 +138,6 @@ describe('session_metadata recording (issue #1611)', () => {
       const contentIdx = types.indexOf('content');
       expect(startIdx).toBeLessThan(metaIdx);
       expect(metaIdx).toBeLessThan(contentIdx);
-      await service.dispose();
     });
   });
 
@@ -295,9 +299,9 @@ describe('session_metadata recording (issue #1611)', () => {
     it('includes createdAt from session_start.startTime', async () => {
       const chatsDir = await makeTempChatsDir();
       const service = new SessionRecordingService(makeConfig({ chatsDir }));
+      services.push(service);
       service.recordContent(makeContent('hello'));
       await service.flush();
-      await service.dispose();
 
       const sessions = await SessionDiscovery.listSessions(
         chatsDir,
