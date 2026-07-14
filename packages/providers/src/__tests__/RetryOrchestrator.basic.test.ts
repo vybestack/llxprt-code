@@ -202,7 +202,9 @@ describe('RetryOrchestrator', () => {
         category?: string;
       }> = [];
       const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
         onProviderError: (error) => observedErrors.push(error),
       };
 
@@ -238,7 +240,7 @@ describe('RetryOrchestrator', () => {
       const result = consumeStream(
         orchestrator.generateChatCompletion({
           contents: [
-            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
           ],
         }),
       );
@@ -415,7 +417,7 @@ describe('RetryOrchestrator', () => {
       const result = await consumeStream(
         orchestrator.generateChatCompletion({
           contents: [
-            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
           ],
           onProviderError: () => {
             throw new Error('observer failed');
@@ -445,7 +447,7 @@ describe('RetryOrchestrator', () => {
         consumeStream(
           orchestrator.generateChatCompletion({
             contents: [
-              { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+              { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
             ],
             metadata: { abortSignal: controller.signal },
           }),

@@ -16,7 +16,7 @@ import { coreEvents } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { getErrorStatus } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
-import { LoadBalancerFailoverError } from './errors.js';
+import { LoadBalancerFailoverError, permitsBucketFailover } from './errors.js';
 import { markProviderErrorObservationHandled } from './providerErrorObservation.js';
 import { CircuitBreakerManager } from './loadBalancing/circuitBreakerManager.js';
 import { TPMTracker } from './loadBalancing/tpmTracker.js';
@@ -933,6 +933,7 @@ export class LoadBalancingProvider implements IProvider {
     requestOwner: symbol,
     transportAttemptRemaining: boolean,
   ): 'immediate-throw' | 'break' | 'retry' {
+    if (!permitsBucketFailover(error)) return 'immediate-throw';
     if (this.isImmediateFailoverError(error)) {
       if (chunksYielded) {
         this.logger.debug(

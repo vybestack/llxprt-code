@@ -756,8 +756,11 @@ export class RetryOrchestrator implements IProvider {
       }
     } catch (error) {
       failed = true;
-      failure = error;
-      throw error;
+      const propagatedFailure = chunksYielded
+        ? markErrorAfterStreamOutput(error)
+        : error;
+      failure = propagatedFailure;
+      throw propagatedFailure;
     } finally {
       if (!completed) {
         attemptController.abort();

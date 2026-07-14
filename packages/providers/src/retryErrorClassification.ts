@@ -34,6 +34,15 @@ function isObjectLike(value: unknown): value is object {
   );
 }
 
+function hasErrorName(error: unknown, expectedName: string): boolean {
+  if (!isObjectLike(error)) return false;
+  try {
+    return 'name' in error && error.name === expectedName;
+  } catch {
+    return false;
+  }
+}
+
 export function markErrorAfterStreamOutput(error: unknown): unknown {
   if (isObjectLike(error)) {
     errorsAfterStreamOutput.add(error);
@@ -46,7 +55,7 @@ export function markErrorAfterStreamOutput(error: unknown): unknown {
 }
 
 export function isTerminalRetryError(error: unknown): boolean {
-  if (error instanceof Error && error.name === 'AbortError') return true;
+  if (hasErrorName(error, 'AbortError')) return true;
   return isObjectLike(error) && errorsAfterStreamOutput.has(error);
 }
 

@@ -144,7 +144,9 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       const chunks: IContent[] = [];
       const observedErrors: unknown[] = [];
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
         onProviderError: (error) => observedErrors.push(error),
       });
 
@@ -405,7 +407,9 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
     const promise = (async () => {
       const chunks: IContent[] = [];
       for await (const chunk of lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
         metadata: { abortSignal: controller.signal },
         onProviderError: (error) => observedErrors.push(error),
       })) {
@@ -446,7 +450,9 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
 
     const chunks: IContent[] = [];
     for await (const chunk of lb.generateChatCompletion({
-      contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+      contents: [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+      ],
       metadata: { abortSignal: parent.signal },
     })) {
       chunks.push(chunk);
@@ -485,7 +491,9 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
 
     await expect(async () => {
       for await (const _chunk of lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
         metadata: { abortSignal: parent.signal },
       })) {
         // consume

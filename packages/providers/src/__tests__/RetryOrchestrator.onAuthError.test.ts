@@ -142,7 +142,7 @@ describe('RetryOrchestrator onAuthError handler', () => {
       consumeStream(
         orchestrator.generateChatCompletion({
           contents: [
-            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
           ],
           runtime: {
             config: {

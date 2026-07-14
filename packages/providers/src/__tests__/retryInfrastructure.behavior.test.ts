@@ -5,8 +5,10 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { JsonFormatter } from '@vybestack/llxprt-code-core';
 import type { GenerateChatOptions } from '../IProvider.js';
 import { permitsBucketFailover, RetriesExhaustedError } from '../errors.js';
+import { requireTransportAttempt } from '../loadBalancing/delegateAttempt.js';
 import { rethrowIfAborted } from '../loadBalancing/requestAbort.js';
 import { claimProviderErrorObservation } from '../providerErrorObservation.js';
 import {
@@ -168,6 +170,41 @@ describe('request-scoped retry infrastructure', () => {
     });
   });
 
+  it('reports transport budget exhaustion as a classified terminal JSON error', () => {
+    const { options } = attachTransportAttemptBudget({ contents: [] }, 1);
+    requireTransportAttempt(options);
+    const captureFailure = (): Error => {
+      try {
+        requireTransportAttempt(options);
+      } catch (error) {
+        return error instanceof Error ? error : new Error(String(error));
+      }
+      throw new Error('Expected transport budget exhaustion');
+    };
+    const failure = captureFailure();
+
+    expect({
+      json: new JsonFormatter().formatError(failure),
+      terminal:
+        failure instanceof RetriesExhaustedError && !failure.isRetryable,
+      failoverEligible: permitsBucketFailover(failure),
+    }).toStrictEqual({
+      json: JSON.stringify(
+        {
+          error: {
+            type: 'RetriesExhaustedError',
+            message: 'Transport attempt budget exhausted',
+            category: 'server_error',
+            reason: 'retries_exhausted',
+          },
+        },
+        null,
+        2,
+      ),
+      terminal: true,
+      failoverEligible: false,
+    });
+  });
   it('classifies primitive retry errors safely and preserves object error identity', () => {
     expect(isTerminalRetryError(null)).toBe(false);
     expect(isTerminalRetryError('provider failed')).toBe(false);
@@ -178,9 +215,22 @@ describe('request-scoped retry infrastructure', () => {
 
     const wrappedPrimitive = markErrorAfterStreamOutput('primitive failure');
     expect(wrappedPrimitive).toMatchObject({ cause: 'primitive failure' });
+
     expect(isTerminalRetryError(wrappedPrimitive)).toBe(true);
   });
 
+  it('recognizes DOMException AbortErrors without assuming safe properties', () => {
+    const throwingName = Object.defineProperty({}, 'name', {
+      get(): never {
+        throw new Error('name is inaccessible');
+      },
+    });
+
+    expect(
+      isTerminalRetryError(new DOMException('request aborted', 'AbortError')),
+    ).toBe(true);
+    expect(isTerminalRetryError(throwingName)).toBe(false);
+  });
   it('prevents bucket failover after retry exhaustion', () => {
     const cause = new Error('last transport failed');
     const error = new RetriesExhaustedError(
