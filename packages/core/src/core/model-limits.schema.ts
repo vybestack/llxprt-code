@@ -22,8 +22,10 @@ import { z } from 'zod';
 
 const PositiveLimit = z.number().int().positive();
 
-/** String containing at least one non-whitespace character. */
-const NonEmptyString = z.string().refine((value) => value.trim().length > 0);
+/** Non-empty string without leading or trailing whitespace. */
+const NonEmptyString = z
+  .string()
+  .refine((value) => value.length > 0 && value === value.trim());
 
 const SubstringRuleSchema = z
   .object({

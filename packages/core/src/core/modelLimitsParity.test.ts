@@ -100,8 +100,6 @@ describe('substringCaseInsensitive normalizes both sides (@issue:2280)', () => {
   );
 
   it('matches a mixed-case model against a mixed-case catalog substring', () => {
-    // A catalog authored with mixed-case substring must still match after the
-    // schema transform lowercases the configured value.
     const mixedCatalog = ModelLimitsCatalogSchema.parse({
       defaultLimit: 1048576,
       exactLimits: {},

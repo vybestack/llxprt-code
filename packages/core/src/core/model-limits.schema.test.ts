@@ -130,10 +130,21 @@ describe('ModelLimitsCatalogSchema', () => {
     expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
   });
 
-  it('rejects a prefixLimit with an empty prefix', () => {
+  it.each(['', '   ', ' gpt-4.1', 'gpt-4.1 '])(
+    'rejects an invalid prefixLimit prefix: %j',
+    (prefix) => {
+      const bad = {
+        ...catalogData,
+        prefixLimits: [{ prefix, limit: 100 }],
+      };
+      expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
+    },
+  );
+
+  it.each([-1, 1.5])('rejects an invalid prefixLimit limit: %s', (limit) => {
     const bad = {
       ...catalogData,
-      prefixLimits: [{ prefix: '', limit: 100 }],
+      prefixLimits: [{ prefix: 'gpt-4.1', limit }],
     };
     expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
   });
@@ -145,10 +156,13 @@ describe('ModelLimitsCatalogSchema', () => {
     expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
   });
 
-  it('rejects a non-positive limit in exactLimits', () => {
-    const bad = { ...catalogData, exactLimits: { 'gpt-4o': 0 } };
-    expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
-  });
+  it.each([0, -1, 1.5])(
+    'rejects an invalid limit in exactLimits: %s',
+    (limit) => {
+      const bad = { ...catalogData, exactLimits: { 'gpt-4o': limit } };
+      expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
+    },
+  );
 
   it.each([-5, 0])(
     'rejects a non-positive limit in an ordered rule: %s',
