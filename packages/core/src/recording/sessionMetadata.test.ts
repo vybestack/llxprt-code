@@ -30,6 +30,7 @@ import {
   makeContent,
   writeJsonlFile,
   PROJECT_HASH,
+  assertReplayError,
   assertReplayOk,
 } from './replay-test-helpers.js';
 
