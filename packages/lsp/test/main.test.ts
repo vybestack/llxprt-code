@@ -259,7 +259,7 @@ describe('main bootstrap parsing', () => {
 describe('main channel wiring', () => {
   let onSpy: ReturnType<typeof vi.spyOn>;
   let exitSpy: ReturnType<typeof vi.spyOn>;
-  const lifecycles: Array<{ dispose(): void }> = [];
+  const lifecycles: Array<{ dispose(): Promise<void> }> = [];
 
   const runMain: typeof main = async (dependencies) => {
     const lifecycle = await main(dependencies);
@@ -281,9 +281,9 @@ describe('main channel wiring', () => {
       .mockImplementation((() => undefined) as never);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     for (const lifecycle of lifecycles.splice(0)) {
-      lifecycle.dispose();
+      await lifecycle.dispose();
     }
     delete process.env.LSP_BOOTSTRAP;
   });
@@ -365,7 +365,7 @@ describe('main channel wiring', () => {
     expect(createMcpChannel).not.toHaveBeenCalled();
   });
 
-  it('SIGTERM handler calls orchestrator.shutdown', async () => {
+  it('SIGTERM handler calls orchestrator.shutdown and exits 0', async () => {
     process.env.LSP_BOOTSTRAP = JSON.stringify({
       workspaceRoot: '/tmp/ws',
       config: { navigationTools: false },
@@ -386,7 +386,7 @@ describe('main channel wiring', () => {
     expect(sigterm).toBeTypeOf('function');
 
     sigterm?.();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(orchestrator.shutdown).toHaveBeenCalledTimes(1);
     expect(exitSpy).toHaveBeenCalledWith(0);
@@ -433,11 +433,176 @@ describe('main channel wiring', () => {
       createMcpChannel: vi.fn(),
       createRpcConnection,
     });
-    lifecycle.dispose();
+    await lifecycle.dispose();
 
     expect(events.map((event) => process.listenerCount(event))).toEqual(
       baseline,
     );
+  });
+
+  it('dispose awaits orchestrator.shutdown, mcpServer.close, and rpcConnection.dispose', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: {},
+    });
+
+    const orchestratorShutdown = vi.fn().mockResolvedValue(undefined);
+    const mcpClose = vi.fn().mockResolvedValue(undefined);
+    const rpcDispose = vi.fn();
+
+    const lifecycle = await runMain({
+      createOrchestrator: vi.fn(() => ({ shutdown: orchestratorShutdown })),
+      setupRpcChannel: vi.fn(),
+      createMcpChannel: vi.fn().mockResolvedValue({ close: mcpClose }),
+      createRpcConnection: () => ({
+        listen: vi.fn(),
+        dispose: rpcDispose,
+        sendNotification: vi.fn(),
+      }),
+    });
+    await lifecycle.dispose();
+
+    expect(orchestratorShutdown).toHaveBeenCalledTimes(1);
+    expect(mcpClose).toHaveBeenCalledTimes(1);
+    expect(rpcDispose).toHaveBeenCalledTimes(1);
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('dispose is idempotent — repeated calls execute resource disposal exactly once', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: {},
+    });
+
+    const orchestratorShutdown = vi.fn().mockResolvedValue(undefined);
+    const mcpClose = vi.fn().mockResolvedValue(undefined);
+    const rpcDispose = vi.fn();
+
+    const lifecycle = await runMain({
+      createOrchestrator: vi.fn(() => ({ shutdown: orchestratorShutdown })),
+      setupRpcChannel: vi.fn(),
+      createMcpChannel: vi.fn().mockResolvedValue({ close: mcpClose }),
+      createRpcConnection: () => ({
+        listen: vi.fn(),
+        dispose: rpcDispose,
+        sendNotification: vi.fn(),
+      }),
+    });
+
+    await Promise.all([lifecycle.dispose(), lifecycle.dispose()]);
+    await lifecycle.dispose();
+
+    expect(orchestratorShutdown).toHaveBeenCalledTimes(1);
+    expect(mcpClose).toHaveBeenCalledTimes(1);
+    expect(rpcDispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('dispose does not call process.exit', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: { navigationTools: false },
+    });
+
+    const lifecycle = await runMain({
+      createOrchestrator: vi.fn(() => ({
+        shutdown: vi.fn().mockResolvedValue(undefined),
+      })),
+      setupRpcChannel: vi.fn(),
+      createMcpChannel: vi.fn(),
+      createRpcConnection,
+    });
+    await lifecycle.dispose();
+
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('SIGINT handler cleans up and exits 0', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: { navigationTools: false },
+    });
+
+    const orchestrator = { shutdown: vi.fn().mockResolvedValue(undefined) };
+
+    await runMain({
+      createOrchestrator: vi.fn(() => orchestrator),
+      setupRpcChannel: vi.fn(),
+      createMcpChannel: vi.fn(),
+      createRpcConnection,
+    });
+
+    const sigint = onSpy.mock.calls.find(
+      (call) => call[0] === 'SIGINT',
+    )?.[1] as (() => void) | undefined;
+    expect(sigint).toBeTypeOf('function');
+
+    sigint?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(orchestrator.shutdown).toHaveBeenCalledTimes(1);
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('uncaughtException handler logs, cleans up, and exits 1', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: { navigationTools: false },
+    });
+
+    const orchestrator = { shutdown: vi.fn().mockResolvedValue(undefined) };
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+
+    await runMain({
+      createOrchestrator: vi.fn(() => orchestrator),
+      setupRpcChannel: vi.fn(),
+      createMcpChannel: vi.fn(),
+      createRpcConnection,
+    });
+
+    const handler = onSpy.mock.calls.find(
+      (call) => call[0] === 'uncaughtException',
+    )?.[1] as ((error: Error) => void) | undefined;
+    expect(handler).toBeTypeOf('function');
+
+    handler?.(new Error('boom'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Uncaught exception in LSP service'),
+    );
+    expect(orchestrator.shutdown).toHaveBeenCalledTimes(1);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('unhandledRejection handler logs, cleans up, and exits 1', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: { navigationTools: false },
+    });
+
+    const orchestrator = { shutdown: vi.fn().mockResolvedValue(undefined) };
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+
+    await runMain({
+      createOrchestrator: vi.fn(() => orchestrator),
+      setupRpcChannel: vi.fn(),
+      createMcpChannel: vi.fn(),
+      createRpcConnection,
+    });
+
+    const handler = onSpy.mock.calls.find(
+      (call) => call[0] === 'unhandledRejection',
+    )?.[1] as ((error: unknown) => void) | undefined;
+    expect(handler).toBeTypeOf('function');
+
+    handler?.('rejected');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Unhandled rejection in LSP service'),
+    );
+    expect(orchestrator.shutdown).toHaveBeenCalledTimes(1);
+    expect(exitSpy).toHaveBeenCalledWith(1);
   });
 });
 

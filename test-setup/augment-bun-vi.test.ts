@@ -49,17 +49,20 @@ describe('Bun vi augmentation', () => {
 
   it('settles async timer helpers without a fixed draining delay', async () => {
     vi.useFakeTimers();
-    let settled = false;
-    setTimeout(() => {
-      Promise.resolve().then(() => {
-        settled = true;
-      });
-    }, 10);
+    try {
+      let settled = false;
+      setTimeout(() => {
+        Promise.resolve().then(() => {
+          settled = true;
+        });
+      }, 10);
 
-    await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(10);
 
-    vi.useRealTimers();
-    expect(settled).toBe(true);
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('fails fast for unsupported module isolation APIs', () => {

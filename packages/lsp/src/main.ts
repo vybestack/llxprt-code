@@ -270,7 +270,7 @@ const defaultMainDependencies: MainDependencies = {
 };
 
 export interface MainLifecycle {
-  dispose(): void;
+  dispose(): Promise<void>;
 }
 
 export async function main(
@@ -317,64 +317,60 @@ export async function main(
     }
   }
 
-  let shuttingDown = false;
-  let handlersAttached = true;
+  let cleanupPromise: Promise<void> | null = null;
 
-  const onSigterm = (): void => {
-    void shutdown();
-  };
-  const onSigint = (): void => {
-    void shutdown();
-  };
-  const onUncaughtException = (error: Error): void => {
-    stderr.write(`Uncaught exception in LSP service: ${String(error)}\n`);
-    shutdown().finally(() => process.exit(1));
-  };
-  const onUnhandledRejection = (error: unknown): void => {
-    stderr.write(`Unhandled rejection in LSP service: ${String(error)}\n`);
-    shutdown().finally(() => process.exit(1));
-  };
-
-  const dispose = (): void => {
-    if (!handlersAttached) {
-      return;
-    }
-    handlersAttached = false;
+  const detachHandlers = (): void => {
     process.off('SIGTERM', onSigterm);
     process.off('SIGINT', onSigint);
     process.off('uncaughtException', onUncaughtException);
     process.off('unhandledRejection', onUnhandledRejection);
   };
 
-  const shutdown = async (): Promise<void> => {
-    if (shuttingDown) {
-      return;
-    }
-    shuttingDown = true;
-    dispose();
-
-    try {
-      await orchestrator.shutdown();
-    } catch (error) {
-      stderr.write(`Error during orchestrator shutdown: ${String(error)}
-`);
-    }
-    if (mcpServer) {
-      try {
-        await mcpServer.close();
-      } catch (error) {
-        stderr.write(`Error during MCP server close: ${String(error)}
-`);
-      }
-    }
-    try {
-      rpcConnection.dispose();
-    } catch (error) {
-      stderr.write(`Error during RPC connection dispose: ${String(error)}
-`);
-    }
-    process.exit(0);
+  const onSigterm = (): void => {
+    void cleanup().finally(() => process.exit(0));
   };
+  const onSigint = (): void => {
+    void cleanup().finally(() => process.exit(0));
+  };
+  const onUncaughtException = (error: Error): void => {
+    stderr.write(`Uncaught exception in LSP service: ${String(error)}\n`);
+    void cleanup().finally(() => process.exit(1));
+  };
+  const onUnhandledRejection = (error: unknown): void => {
+    stderr.write(`Unhandled rejection in LSP service: ${String(error)}\n`);
+    void cleanup().finally(() => process.exit(1));
+  };
+
+  // Idempotent cleanup: concurrent/repeated calls execute resource disposal exactly once
+  const cleanup = async (): Promise<void> => {
+    if (cleanupPromise) {
+      return cleanupPromise;
+    }
+    cleanupPromise = (async () => {
+      detachHandlers();
+
+      try {
+        await orchestrator.shutdown();
+      } catch (error) {
+        stderr.write(`Error during orchestrator shutdown: ${String(error)}\n`);
+      }
+      if (mcpServer) {
+        try {
+          await mcpServer.close();
+        } catch (error) {
+          stderr.write(`Error during MCP server close: ${String(error)}\n`);
+        }
+      }
+      try {
+        rpcConnection.dispose();
+      } catch (error) {
+        stderr.write(`Error during RPC connection dispose: ${String(error)}\n`);
+      }
+    })();
+    return cleanupPromise;
+  };
+
+  const dispose = (): Promise<void> => cleanup();
 
   process.on('SIGTERM', onSigterm);
   process.on('SIGINT', onSigint);
