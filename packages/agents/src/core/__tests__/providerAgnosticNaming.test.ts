@@ -242,7 +242,7 @@ function scanFile(absPath: string): ScannedFile | undefined {
     true,
     absPath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
-  const rawIds = extractDeclaredIdentifiers(sf, relPath);
+  const rawIds = extractDeclaredIdentifiers(sf);
   return {
     absPath,
     relPath,

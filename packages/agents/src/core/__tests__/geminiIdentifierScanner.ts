@@ -741,7 +741,6 @@ function collectFromNode(
  */
 export function extractDeclaredIdentifiers(
   sf: ts.SourceFile,
-  filePath: string,
 ): DeclaredIdentifier[] {
   const results: DeclaredIdentifier[] = [];
   function visit(node: ts.Node): void {
@@ -749,7 +748,6 @@ export function extractDeclaredIdentifiers(
     ts.forEachChild(node, visit);
   }
   ts.forEachChild(sf, visit);
-  void filePath;
   return results;
 }
 
@@ -758,6 +756,6 @@ export function extractDeclaredIdentifiers(
  * declared identifier?
  */
 export function hasGeminiIdentifier(sf: ts.SourceFile): boolean {
-  const ids = extractDeclaredIdentifiers(sf, sf.fileName);
+  const ids = extractDeclaredIdentifiers(sf);
   return ids.length > 0;
 }

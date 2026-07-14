@@ -212,7 +212,7 @@ async function createAndInitClient(
 
 /**
  * Performs the shared beforeEach setup for agent client tests.
- * Returnable the constructed client and mock config.
+ * Returns the constructed client and mock config.
  */
 export async function setupAgentClient(
   mockFns: ClientMockFns,

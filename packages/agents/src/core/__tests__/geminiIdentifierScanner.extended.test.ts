@@ -38,7 +38,7 @@ function parseSource(code: string, fileName = 'fixture.ts'): ts.SourceFile {
 /** Extract Gemini-prefixed/matching declared identifiers from source code. */
 function scanSource(code: string): DeclaredIdentifier[] {
   const sf = parseSource(code);
-  return extractDeclaredIdentifiers(sf, 'fixture.ts');
+  return extractDeclaredIdentifiers(sf);
 }
 
 // ---- Finding 7: ImportEquals, type parameters, exported object-literal static property/method names ----
