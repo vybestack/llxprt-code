@@ -16,30 +16,57 @@
 
 import { afterEach, vi as bunVi, mock } from 'bun:test';
 import { createRequire, isBuiltin } from 'node:module';
-import { relative } from 'node:path';
 import { StubRegistry, waitFor, isMockFunction } from './stub-helpers.js';
+import { resolveModuleSpecifier } from './module-resolution.js';
 
 const localRequire = createRequire(import.meta.url);
-const shimDir = import.meta.dir;
 
 const envRegistry = new StubRegistry(process.env);
 const globalRegistry = new StubRegistry(globalThis);
 
-const importActual = (id: string): Promise<unknown> => {
-  afterEach(() => {
-    try {
-      envRegistry.restoreAll();
-    } finally {
-      globalRegistry.restoreAll();
-    }
-  });
+const resolveActualId = (id: string): string => {
+  const resolvedId = resolveModuleSpecifier(id);
+  return isBuiltin(resolvedId) ? resolvedId : localRequire.resolve(resolvedId);
+};
 
-  if (isBuiltin(id)) {
-    return Promise.resolve(localRequire(id));
+const actualModules = new Map<string, Promise<unknown>>();
+let actualImportSequence = 0;
+
+const loadIsolatedModule = async (resolvedId: string): Promise<unknown> => {
+  if (isBuiltin(resolvedId)) return localRequire(resolvedId);
+
+  const result = await Bun.build({
+    entrypoints: [resolvedId],
+    format: 'esm',
+    target: 'bun',
+    write: false,
+  });
+  const output = result.outputs[0];
+  if (!result.success || !output) {
+    const message = result.logs.map((log) => log.message).join('\n');
+    throw new Error(message || `importActual: cannot build "${resolvedId}"`);
   }
-  let absPath: string;
+
+  actualImportSequence += 1;
+  const source = await output.text();
+  const encodedSource = Buffer.from(source).toString('base64');
+  return import(
+    `data:text/javascript;base64,${encodedSource}?actual=${actualImportSequence}`
+  );
+};
+
+const importResolvedActual = (resolvedId: string): Promise<unknown> => {
+  const cached = actualModules.get(resolvedId);
+  if (cached) return cached;
+
+  const actual = loadIsolatedModule(resolvedId);
+  actualModules.set(resolvedId, actual);
+  return actual;
+};
+
+const importActual = (id: string): Promise<unknown> => {
   try {
-    absPath = localRequire.resolve(id);
+    return importResolvedActual(resolveActualId(id));
   } catch (error: unknown) {
     return Promise.reject(
       error instanceof Error
@@ -47,36 +74,39 @@ const importActual = (id: string): Promise<unknown> => {
         : new Error(`importActual: cannot resolve "${id}"`),
     );
   }
-  const relPath = './' + relative(shimDir, absPath);
-  return import(relPath + '?__importActual');
 };
 
-const wrapMockFactory =
-  (
-    id: string,
-    factory: (importOriginal: () => Promise<unknown>) => unknown,
-  ): (() => unknown) =>
-  (): unknown =>
-    factory(() => importActual(id));
+const registerModuleMock = (
+  id: string,
+  factory?: (importOriginal: () => Promise<unknown>) => unknown,
+): unknown => {
+  const resolvedId = resolveActualId(id);
+  if (!factory) return mock.module(resolvedId);
 
-const realSetTimeout = setTimeout;
-const realDateNow = Date.now;
-
-const MAX_TASK_ITERATIONS = 100;
-const FLUSH_TIMEOUT_MS = 5_000;
-
-const flushPendingTasks = async (): Promise<void> => {
-  const start = realDateNow();
-  for (let i = 0; i < MAX_TASK_ITERATIONS; i++) {
-    if (realDateNow() - start > FLUSH_TIMEOUT_MS) break;
-    await new Promise<void>((resolve) => {
-      realSetTimeout(resolve, 0);
-    });
-  }
+  return mock.module(resolvedId, () =>
+    factory(() => importResolvedActual(resolvedId)),
+  );
 };
+
+const flushPendingTasks = (): Promise<void> => Promise.resolve();
 
 // Augment Bun's vi in-place with Vitest-compatible methods that Bun's
 // built-in test runner does not provide.
+const unsupportedModuleIsolation = (): never => {
+  throw new Error(
+    'Bun does not support resetting or unmocking modules; run the test in an isolated process',
+  );
+};
+
+const unsupportedMockRegistry = new Proxy(Object.freeze({}), {
+  get: (): never => {
+    throw new Error('Bun does not expose its module mock registry');
+  },
+  set: (): never => {
+    throw new Error('Bun does not expose its module mock registry');
+  },
+});
+
 const viAugmentations = {
   mocked: <T>(item: T): T => item,
   hoisted: <T>(factory: () => T): T => factory(),
@@ -94,27 +124,11 @@ const viAugmentations = {
   },
   waitFor,
   importActual,
-  resetModules: (): void => {},
-  mock: (
-    id: string,
-    factory?: (importOriginal: () => Promise<unknown>) => unknown,
-  ): unknown => {
-    if (factory) {
-      return mock.module(id, wrapMockFactory(id, factory));
-    }
-    return mock.module(id);
-  },
-  doMock: (
-    id: string,
-    factory?: (importOriginal: () => Promise<unknown>) => unknown,
-  ): unknown => {
-    if (factory) {
-      return mock.module(id, wrapMockFactory(id, factory));
-    }
-    return mock.module(id);
-  },
-  doUnmock: (): void => {},
-  unmock: (): void => {},
+  resetModules: unsupportedModuleIsolation,
+  mock: registerModuleMock,
+  doMock: registerModuleMock,
+  doUnmock: unsupportedModuleIsolation,
+  unmock: unsupportedModuleIsolation,
   isMockFunction,
   advanceTimersByTimeAsync: async (ms: number): Promise<void> => {
     bunVi.advanceTimersByTime(ms);
@@ -128,8 +142,16 @@ const viAugmentations = {
     bunVi.runOnlyPendingTimers();
     await flushPendingTasks();
   },
-  mocks: {},
+  mocks: unsupportedMockRegistry,
 };
+
+afterEach(() => {
+  try {
+    envRegistry.restoreAll();
+  } finally {
+    globalRegistry.restoreAll();
+  }
+});
 
 // Apply augmentations to Bun's vi object. Bun's vi is a frozen-like object,
 // but we can use Object.assign to add new properties. Existing Bun methods

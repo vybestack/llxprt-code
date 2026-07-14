@@ -4,4 +4,4 @@
 linker = "hoisted"
 
 [test]
-preload = ["./test-setup/bun-vitest-compat.ts"]
+preload = ["./test-setup/augment-bun-vi.ts"]

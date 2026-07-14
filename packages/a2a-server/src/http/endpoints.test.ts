@@ -8,7 +8,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'bun:test';
 import request from 'supertest';
 import type express from 'express';
 import { InMemoryTaskStore } from '@a2a-js/sdk/server';
-import { createApp, updateCoderAgentCardUrl } from './app.js';
+import {
+  createApp,
+  updateCoderAgentCardUrl,
+  type AppAgentExecutor,
+} from './app.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -16,7 +20,9 @@ import type { Server } from 'node:http';
 import type { Task as SDKTask } from '@a2a-js/sdk';
 import type { TaskMetadata } from '../types.js';
 import type { AddressInfo } from 'node:net';
+import type { Config } from '@vybestack/llxprt-code-core';
 import { logger } from '../utils/logger.js';
+import { createMockConfig } from '../utils/testing_utils.js';
 
 interface EndpointTask {
   id: string;
@@ -26,11 +32,11 @@ interface EndpointTask {
   toSDKTask: () => SDKTask;
 }
 
-function createEndpointExecutor() {
+function createEndpointExecutor(): AppAgentExecutor {
   const tasks = new Map<string, EndpointTask>();
   return {
-    execute: vi.fn(),
-    cancelTask: vi.fn(),
+    execute: vi.fn<AppAgentExecutor['execute']>(),
+    cancelTask: vi.fn<AppAgentExecutor['cancelTask']>(),
     createTask: vi.fn(
       (id: string, contextId: string, _agentSettings?: unknown) => {
         const metadata = {
@@ -60,7 +66,7 @@ function createEndpointExecutor() {
     ),
     getTask: (id: string) => tasks.get(id),
     getAllTasks: () => [...tasks.values()],
-    reconstruct: vi.fn(),
+    reconstruct: vi.fn<AppAgentExecutor['reconstruct']>(),
   };
 }
 
@@ -88,11 +94,12 @@ describe('Agent Server Endpoints', () => {
     );
     const taskStore = new InMemoryTaskStore();
     const agentExecutor = createEndpointExecutor();
+    const config = createMockConfig() as Config;
     app = await createApp({
       createStartupContext: async () => ({
-        config: {} as never,
+        config,
         git: undefined,
-        agentExecutor: agentExecutor as never,
+        agentExecutor,
         taskStoreForExecutor: taskStore,
         taskStoreForHandler: taskStore,
       }),

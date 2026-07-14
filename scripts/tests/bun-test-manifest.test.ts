@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import {
   BUN_NATIVE_TEST_MANIFEST,
   resolveBunNativeTestFiles,
@@ -13,7 +13,9 @@ import {
 
 const repoRoot = resolve(__dirname, '..', '..');
 
-const advertisedWorkspaces = ['a2a-server', 'cli', 'providers'];
+const advertisedWorkspaces = BUN_NATIVE_TEST_MANIFEST.map(
+  ({ workspace }) => workspace,
+);
 
 describe('Bun native test manifest', () => {
   it('resolves every advertised workspace to verified files', () => {
@@ -21,7 +23,7 @@ describe('Bun native test manifest', () => {
       const files = resolveBunNativeTestFiles(repoRoot, workspace);
       expect(files.length, workspace).toBeGreaterThan(0);
       expect(
-        files.every(({ cwd }) => cwd.endsWith(`/packages/${workspace}`)),
+        files.every(({ cwd }) => cwd.endsWith(join('packages', workspace))),
       ).toBe(true);
     }
   });

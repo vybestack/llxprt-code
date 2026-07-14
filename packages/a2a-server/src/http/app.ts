@@ -6,8 +6,12 @@
 
 import express from 'express';
 
-import type { AgentCard, Message } from '@a2a-js/sdk';
-import type { TaskStore } from '@a2a-js/sdk/server';
+import type { AgentCard, Message, Task as SDKTask } from '@a2a-js/sdk';
+import type {
+  AgentExecutor,
+  ExecutionEventBus,
+  TaskStore,
+} from '@a2a-js/sdk/server';
 import {
   DefaultRequestHandler,
   InMemoryTaskStore,
@@ -78,13 +82,36 @@ export function updateCoderAgentCardUrl(port: number) {
   coderAgentCard.url = `http://localhost:${port}/`;
 }
 
-type AppContext = {
+export interface AppTaskWrapper {
+  readonly id: string;
+  readonly task: {
+    getMetadata(): Promise<unknown>;
+  };
+  toSDKTask(): SDKTask;
+}
+
+export interface AppAgentExecutor extends AgentExecutor {
+  createTask(
+    taskId: string,
+    contextId: string,
+    agentSettingsInput?: AgentSettings,
+    eventBus?: ExecutionEventBus,
+  ): Promise<AppTaskWrapper>;
+  getTask(taskId: string): AppTaskWrapper | undefined;
+  getAllTasks(): AppTaskWrapper[];
+  reconstruct(
+    sdkTask: SDKTask,
+    eventBus?: ExecutionEventBus,
+  ): Promise<AppTaskWrapper>;
+}
+
+export type AppContext = {
   config: Awaited<ReturnType<typeof loadConfig>>;
   git: GitService | undefined;
-  agentExecutor: CoderAgentExecutor;
+  agentExecutor: AppAgentExecutor;
 };
 
-type TaskStores = {
+export type TaskStores = {
   taskStoreForExecutor: TaskStore;
   taskStoreForHandler: TaskStore;
 };
@@ -175,7 +202,7 @@ async function getGitService(
 
 function registerTaskCreationRoute(
   expressApp: express.Express,
-  agentExecutor: CoderAgentExecutor,
+  agentExecutor: AppAgentExecutor,
   taskStoreForExecutor: TaskStore,
 ): void {
   expressApp.post('/tasks', async (req, res) => {
@@ -357,7 +384,7 @@ function transformCommand(
 
 function registerTaskMetadataRoutes(
   expressApp: express.Express,
-  agentExecutor: CoderAgentExecutor,
+  agentExecutor: AppAgentExecutor,
   taskStoreForExecutor: TaskStore,
 ): void {
   expressApp.get('/tasks/metadata', async (_req, res) => {
@@ -371,7 +398,7 @@ function registerTaskMetadataRoutes(
 
 async function handleAllTaskMetadata(
   res: express.Response,
-  agentExecutor: CoderAgentExecutor,
+  agentExecutor: AppAgentExecutor,
   taskStoreForExecutor: TaskStore,
 ): Promise<void> {
   if (!(taskStoreForExecutor instanceof InMemoryTaskStore)) {
@@ -403,7 +430,7 @@ async function handleAllTaskMetadata(
 async function handleTaskMetadata(
   req: express.Request,
   res: express.Response,
-  agentExecutor: CoderAgentExecutor,
+  agentExecutor: AppAgentExecutor,
   taskStoreForExecutor: TaskStore,
 ): Promise<void> {
   const taskIdParam = req.params.taskId;

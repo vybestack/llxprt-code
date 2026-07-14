@@ -124,12 +124,32 @@ describe('StubRegistry', () => {
     expect(target.safe).toBe('old');
     expect(() => registry.restoreAll()).not.toThrow();
   });
+
+  it('reports a failed deletion when restoring an originally absent key', () => {
+    const backing: Record<string, unknown> = {};
+    let rejectDeletion = false;
+    const target = new Proxy(backing, {
+      deleteProperty(object, key) {
+        return rejectDeletion ? false : Reflect.deleteProperty(object, key);
+      },
+    });
+    const registry = new StubRegistry(target);
+
+    registry.stub('temporary', 'value');
+    rejectDeletion = true;
+
+    expect(() => registry.restoreAll()).toThrow('Failed to restore all');
+    expect(target.temporary).toBe('value');
+    expect(() => registry.restoreAll()).not.toThrow();
+  });
 });
 
 describe('waitFor', () => {
   it('throws on non-finite interval or timeout', () => {
     expect(() => waitFor(() => 1, { interval: NaN })).toThrow(TypeError);
     expect(() => waitFor(() => 1, { timeout: Infinity })).toThrow(TypeError);
+    expect(() => waitFor(() => 1, { interval: -Infinity })).toThrow(TypeError);
+    expect(() => waitFor(() => 1, { timeout: -Infinity })).toThrow(TypeError);
   });
 
   it('resolves immediately when the callback succeeds on the first try', async () => {

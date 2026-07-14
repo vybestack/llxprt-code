@@ -61,8 +61,10 @@ export class StubRegistry {
       try {
         if (record.descriptor) {
           Object.defineProperty(this.target, key, record.descriptor);
-        } else {
-          Reflect.deleteProperty(this.target, key);
+        } else if (!Reflect.deleteProperty(this.target, key)) {
+          throw new TypeError(
+            `Failed to delete stubbed property ${String(key)}`,
+          );
         }
       } catch (error: unknown) {
         errors.push(error);
@@ -79,26 +81,25 @@ export class StubRegistry {
 }
 
 /**
- * Poll-async helper that repeatedly invokes callback until it stops throwing,
- * mirroring Vitest's vi.waitFor. Supports both sync and async callbacks.
+ * Async polling helper that repeatedly invokes callback until it stops
+ * throwing, mirroring Vitest's vi.waitFor. Supports sync and async callbacks.
  */
 export function waitFor<T>(
   callback: () => T | Promise<T>,
   options?: WaitForOptions,
 ): Promise<T> {
-  const interval = Math.max(
-    options?.interval ?? DEFAULT_INTERVAL_MS,
-    MIN_INTERVAL_MS,
-  );
-  const timeout = Math.max(
-    options?.timeout ?? DEFAULT_TIMEOUT_MS,
-    MIN_TIMEOUT_MS,
-  );
+  const requestedInterval = options?.interval ?? DEFAULT_INTERVAL_MS;
+  const requestedTimeout = options?.timeout ?? DEFAULT_TIMEOUT_MS;
 
-  if (!Number.isFinite(interval) || !Number.isFinite(timeout)) {
+  if (
+    !Number.isFinite(requestedInterval) ||
+    !Number.isFinite(requestedTimeout)
+  ) {
     throw new TypeError('waitFor: interval and timeout must be finite numbers');
   }
 
+  const interval = Math.max(requestedInterval, MIN_INTERVAL_MS);
+  const timeout = Math.max(requestedTimeout, MIN_TIMEOUT_MS);
   return waitForImpl(callback, interval, timeout);
 }
 
@@ -162,9 +163,7 @@ export function isMockFunction(value: unknown): value is ((
 ) => unknown) & {
   mock: Record<string, unknown>;
 } {
-  return (
-    typeof value === 'function' &&
-    typeof (value as { mock?: unknown }).mock === 'object' &&
-    (value as { mock?: unknown }).mock !== null
-  );
+  if (typeof value !== 'function') return false;
+  const mock = (value as { mock?: unknown }).mock;
+  return typeof mock === 'object' && mock !== null;
 }

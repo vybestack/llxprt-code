@@ -5,6 +5,7 @@
  */
 
 import type {
+  AgentClientContract,
   Config,
   ToolCallConfirmationDetails,
 } from '@vybestack/llxprt-code-core';
@@ -12,6 +13,7 @@ import {
   AgentEventType,
   ApprovalMode,
   debugLogger,
+  UserTierId,
 } from '@vybestack/llxprt-code-core';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import type {
@@ -77,10 +79,18 @@ const getApprovalModeSpy = vi.fn();
 const getExtensionsSpy = vi.fn();
 const sendMessageStreamSpy = vi.fn();
 const mockAgentClientInstance = {
-  sendMessageStream: sendMessageStreamSpy,
-  getUserTier: vi.fn().mockReturnValue('free'),
-  initialize: vi.fn(),
-};
+  sendMessageStream: ((...args) =>
+    sendMessageStreamSpy(...args)) as AgentClientContract['sendMessageStream'],
+  getUserTier: vi
+    .fn<AgentClientContract['getUserTier']>()
+    .mockReturnValue(UserTierId.FREE),
+  initialize: vi
+    .fn<AgentClientContract['initialize']>()
+    .mockResolvedValue(undefined),
+} satisfies Pick<
+  AgentClientContract,
+  'sendMessageStream' | 'getUserTier' | 'initialize'
+>;
 
 describe('E2E Tests', () => {
   let app: express.Express;
@@ -97,7 +107,15 @@ describe('E2E Tests', () => {
       loadConfig: async () => config,
       createTask: async (...args) => {
         const task = await Task.create(...args);
-        task.agentClient = mockAgentClientInstance as never;
+        vi.spyOn(task.agentClient, 'sendMessageStream').mockImplementation(
+          mockAgentClientInstance.sendMessageStream,
+        );
+        vi.spyOn(task.agentClient, 'getUserTier').mockImplementation(
+          mockAgentClientInstance.getUserTier,
+        );
+        vi.spyOn(task.agentClient, 'initialize').mockImplementation(
+          mockAgentClientInstance.initialize,
+        );
         return task;
       },
     });
@@ -117,7 +135,7 @@ describe('E2E Tests', () => {
   beforeEach(() => {
     sendMessageStreamSpy.mockReset();
     mockAgentClientInstance.getUserTier.mockReset();
-    mockAgentClientInstance.getUserTier.mockReturnValue('free');
+    mockAgentClientInstance.getUserTier.mockReturnValue(UserTierId.FREE);
     mockAgentClientInstance.initialize.mockReset();
     getToolRegistrySpy.mockReset();
     getToolRegistrySpy.mockReturnValue(undefined);

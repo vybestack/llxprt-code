@@ -22,6 +22,9 @@ const mockExtractArchive = vi.fn();
 const mockGzip = vi.fn();
 const mockGunzip = vi.fn();
 const mockCreateId = vi.fn();
+const mockJoinPath = vi.fn(
+  (directory: string, filename: string) => `${directory}/${filename}`,
+);
 const mockSetTargetDir = vi.fn();
 const mockGetPersistedState = vi.fn();
 
@@ -98,6 +101,7 @@ describe('GCSTaskStore', () => {
       readdir: mockReaddir,
       createReadStream: mockCreateReadStream,
       getTmpDir: () => '/tmp',
+      joinPath: mockJoinPath,
       createId: mockCreateId,
       setTargetDir: mockSetTargetDir,
       getPersistedState: mockGetPersistedState,
@@ -149,6 +153,8 @@ describe('GCSTaskStore', () => {
     });
     mockPathExists.mockResolvedValue(true);
     mockReaddir.mockResolvedValue(['file1.txt']);
+    mockCreateArchive.mockResolvedValue(undefined);
+    mockExtractArchive.mockResolvedValue(undefined);
     mockRemove.mockResolvedValue(undefined);
     mockEnsureDir.mockResolvedValue(undefined);
     mockGzip.mockReturnValue(Buffer.from('compressed'));
@@ -197,6 +203,10 @@ describe('GCSTaskStore', () => {
       await store.save(mockTask);
 
       expect(mockFile.save).toHaveBeenCalledTimes(1);
+      expect(mockJoinPath).toHaveBeenCalledWith(
+        '/tmp',
+        'task-task1-workspace-test-uuid.tar.gz',
+      );
       expect(mockCreateArchive).toHaveBeenCalledTimes(1);
       expect(mockRemove).toHaveBeenCalledTimes(1);
     });
