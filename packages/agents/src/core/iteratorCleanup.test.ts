@@ -30,13 +30,17 @@ describe('closeIteratorBounded', () => {
   it('bounds cleanup for a noncooperative iterator', async () => {
     vi.useFakeTimers();
     let completed = false;
+    let cleanupRequested = false;
 
-    const closing = closeIteratorBounded(createNoncooperativeIterator()).then(
-      () => {
-        completed = true;
-      },
-    );
+    const closing = closeIteratorBounded(
+      createNoncooperativeIterator(() => {
+        cleanupRequested = true;
+      }),
+    ).then(() => {
+      completed = true;
+    });
 
+    expect(cleanupRequested).toBe(true);
     await vi.advanceTimersByTimeAsync(
       CLEANUP_TIMEOUT_MS - TIMEOUT_BOUNDARY_MARGIN_MS,
     );

@@ -10,7 +10,7 @@
  * (driven solely by the aggregate's `isRetryable` marker), NOT thrown fatally
  * via the bucket-failover / `onPersistent429` path.
  *
- * These tests use the REAL `retryWithBackoff` from core wrapping a REAL
+ * These tests use the real `RetryOrchestrator` wrapping a real
  * `LoadBalancingProvider` (real `ProviderManager`, fake delegate providers).
  * No mock theater — the unit under test is never mocked.
  */
@@ -27,6 +27,7 @@ import {
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../GenerateChatOptions.js';
+import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
 /** A mutable handle onto the fake delegate's behavior. */
@@ -214,17 +215,14 @@ describe('LoadBalancingProvider retry boundary integration (issue #2450)', () =>
     const { provider, counter } = makeFakeProvider(behavior);
     providerManager.registerProvider(provider);
 
-    providerManager.registerProvider(
+    const maxAttempts = 3;
+    const providerChain = new RetryOrchestrator(
       new LoadBalancingProvider(
         makeFailoverConfig('glm-always-429'),
         providerManager,
       ),
+      { maxAttempts, initialDelayMs: 0 },
     );
-    const providerChain = requireProvider(
-      providerManager.getProviderByName('load-balancer'),
-    );
-
-    const maxAttempts = 3;
     const observed: Array<{
       message: string;
       status?: number;

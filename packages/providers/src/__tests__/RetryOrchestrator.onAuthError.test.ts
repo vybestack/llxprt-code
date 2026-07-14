@@ -321,8 +321,12 @@ describe('RetryOrchestrator onAuthError handler', () => {
     const controller = new AbortController();
     let transports = 0;
     let refreshStarted!: () => void;
+    let refreshSettled!: () => void;
     const started = new Promise<void>((resolve) => {
       refreshStarted = resolve;
+    });
+    const settled = new Promise<void>((resolve) => {
+      refreshSettled = resolve;
     });
     const provider = createTestProvider({
       responses: [{ error: createAuthError(401, 'unauthorized') }, 'success'],
@@ -338,9 +342,16 @@ describe('RetryOrchestrator onAuthError handler', () => {
     });
     const config = {
       getOnAuthErrorHandler: () => ({
-        handleAuthError: async () => {
+        handleAuthError: async ({ signal }) => {
           refreshStarted();
-          await new Promise<void>(() => {});
+          await new Promise<void>((_resolve, reject) => {
+            const onAbort = () => {
+              refreshSettled();
+              reject(new DOMException('Aborted', 'AbortError'));
+            };
+            signal?.addEventListener('abort', onAbort, { once: true });
+            if (signal?.aborted === true) onAbort();
+          });
         },
       }),
     } as GenerateChatOptions['config'];
@@ -357,7 +368,8 @@ describe('RetryOrchestrator onAuthError handler', () => {
     await started;
     controller.abort();
 
-    await expect(consumption).rejects.toThrow(/abort/i);
+    await expect(consumption).rejects.toMatchObject({ name: 'AbortError' });
+    await settled;
     expect(transports).toBe(1);
   });
   /**

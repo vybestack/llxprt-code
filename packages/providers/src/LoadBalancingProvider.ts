@@ -97,6 +97,7 @@ export { isLoadBalancerProfileFormat } from './loadBalancing/loadBalancerProfile
  */
 export class LoadBalancingProvider implements IProvider {
   readonly name = 'load-balancer';
+  readonly transportAttemptOwnership = 'provider' as const;
   private roundRobinIndex = 0;
   private readonly logger = new DebugLogger('llxprt:providers:load-balancer');
   private stats: Map<string, number> = new Map();

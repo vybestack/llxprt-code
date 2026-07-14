@@ -57,6 +57,24 @@ export function createLinkedAbortController(
   };
 }
 
+export function withLegacyRequestSignal(
+  signal: AbortSignal | undefined,
+): GenerateChatOptions['invocation'] | undefined {
+  return signal === undefined
+    ? undefined
+    : ({ signal } as GenerateChatOptions['invocation']);
+}
+
+export function withOptionalRequestSignal(
+  invocation: GenerateChatOptions['invocation'],
+  signal: AbortSignal | undefined,
+): GenerateChatOptions['invocation'] | undefined {
+  if (signal === undefined) return invocation;
+  return invocation === undefined
+    ? withLegacyRequestSignal(signal)
+    : ({ ...invocation, signal } as GenerateChatOptions['invocation']);
+}
+
 export function withRequestSignal(
   options: GenerateChatOptions,
   signal: AbortSignal,

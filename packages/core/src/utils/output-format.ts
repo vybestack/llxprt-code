@@ -5,9 +5,11 @@
  */
 
 import type { SessionMetrics } from '../telemetry/uiTelemetry.js';
-import type {
-  StructuredErrorCategory,
-  StructuredErrorReason,
+import {
+  STRUCTURED_ERROR_CATEGORIES,
+  STRUCTURED_ERROR_REASONS,
+  type StructuredErrorCategory,
+  type StructuredErrorReason,
 } from '../core/turn.js';
 
 /**
@@ -128,36 +130,23 @@ export function getSafeStatus(error: unknown): number | undefined {
   return typeof error.status === 'number' ? error.status : undefined;
 }
 
-const STRUCTURED_ERROR_CATEGORIES = {
-  rate_limit: true,
-  quota: true,
-  authentication: true,
-  server_error: true,
-  network: true,
-  client_error: true,
-} satisfies Readonly<Record<StructuredErrorCategory, true>>;
-
-const STRUCTURED_ERROR_REASONS = {
-  retries_exhausted: true,
-  all_buckets_exhausted: true,
-} satisfies Readonly<Record<StructuredErrorReason, true>>;
+function includesString<const Values extends readonly string[]>(
+  values: Values,
+  value: unknown,
+): value is Values[number] {
+  return typeof value === 'string' && values.some((item) => item === value);
+}
 
 function isStructuredErrorCategory(
   value: unknown,
 ): value is StructuredErrorCategory {
-  return (
-    typeof value === 'string' &&
-    Object.prototype.hasOwnProperty.call(STRUCTURED_ERROR_CATEGORIES, value)
-  );
+  return includesString(STRUCTURED_ERROR_CATEGORIES, value);
 }
 
 function isStructuredErrorReason(
   value: unknown,
 ): value is StructuredErrorReason {
-  return (
-    typeof value === 'string' &&
-    Object.prototype.hasOwnProperty.call(STRUCTURED_ERROR_REASONS, value)
-  );
+  return includesString(STRUCTURED_ERROR_REASONS, value);
 }
 
 export function getSafeCategory(

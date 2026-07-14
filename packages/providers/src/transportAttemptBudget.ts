@@ -14,12 +14,18 @@ export interface TransportAttemptBudget {
   used: number;
 }
 
+interface BudgetLifecycle {
+  readonly leases: number;
+}
+
+const budgetLifecycles = new WeakMap<TransportAttemptBudget, BudgetLifecycle>();
+
 function normalizeTransportAttemptLimit(limit: number): number {
   return Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 1;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isTransportAttemptBudget(
@@ -39,19 +45,60 @@ function getRequestContext(
   return isRecord(value) ? value : undefined;
 }
 
+export interface AttachedTransportAttemptBudget {
+  readonly options: GenerateChatOptions;
+  readonly budget: TransportAttemptBudget;
+  release(): void;
+}
+
+function acquireBudgetLifecycle(
+  budget: TransportAttemptBudget,
+): BudgetLifecycle | undefined {
+  const lifecycle = budgetLifecycles.get(budget);
+  if (lifecycle === undefined || lifecycle.leases === 0) return undefined;
+  const acquired = { leases: lifecycle.leases + 1 };
+  budgetLifecycles.set(budget, acquired);
+  return acquired;
+}
+
+function createBudgetLifecycle(budget: TransportAttemptBudget): void {
+  budgetLifecycles.set(budget, { leases: 1 });
+}
+
+function releaseBudgetLifecycle(budget: TransportAttemptBudget): () => void {
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const lifecycle = budgetLifecycles.get(budget);
+    if (lifecycle === undefined) return;
+    budgetLifecycles.set(budget, {
+      leases: Math.max(0, lifecycle.leases - 1),
+    });
+  };
+}
+
 export function attachTransportAttemptBudget(
   options: GenerateChatOptions,
   limit: number,
-): { options: GenerateChatOptions; budget: TransportAttemptBudget } {
+): AttachedTransportAttemptBudget {
   const existingContext = getRequestContext(options);
   const existing = existingContext?.[TRANSPORT_ATTEMPT_BUDGET_KEY];
   if (isTransportAttemptBudget(existing)) {
-    return { options, budget: existing };
+    const lifecycle = acquireBudgetLifecycle(existing);
+    if (lifecycle !== undefined) {
+      return {
+        options,
+        budget: existing,
+        release: releaseBudgetLifecycle(existing),
+      };
+    }
   }
   const budget: TransportAttemptBudget = {
     limit: normalizeTransportAttemptLimit(limit),
     used: 0,
   };
+  createBudgetLifecycle(budget);
   const requestContext = {
     ...existingContext,
     [TRANSPORT_ATTEMPT_BUDGET_KEY]: budget,
@@ -65,6 +112,7 @@ export function attachTransportAttemptBudget(
       },
     },
     budget,
+    release: releaseBudgetLifecycle(budget),
   };
 }
 

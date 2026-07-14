@@ -14,6 +14,24 @@ import {
   toObservedProviderError,
 } from '../providerErrorObservation.js';
 
+export type BackendSkipReason = 'unhealthy' | 'tpm_below_threshold';
+
+export function getBackendSkipReasons(
+  profileName: string,
+  tpmThreshold: number | undefined,
+  isHealthy: (name: string) => boolean,
+  shouldSkipOnTPM: (name: string, threshold: number | undefined) => boolean,
+): BackendSkipReason[] {
+  const unhealthy = !isHealthy(profileName);
+  const belowTpmThreshold = shouldSkipOnTPM(profileName, tpmThreshold);
+  if (unhealthy && belowTpmThreshold) {
+    return ['unhealthy', 'tpm_below_threshold'];
+  }
+  if (unhealthy) return ['unhealthy'];
+  if (belowTpmThreshold) return ['tpm_below_threshold'];
+  return [];
+}
+
 export function shouldSkipBackend(
   profileName: string,
   tpmThreshold: number | undefined,
@@ -21,21 +39,20 @@ export function shouldSkipBackend(
   shouldSkipOnTPM: (name: string, threshold: number | undefined) => boolean,
   logger: DebugLogger,
 ): boolean {
-  if (!isHealthy(profileName)) {
-    logger.debug(
-      () =>
-        `[LB:failover] Skipping unhealthy backend: ${profileName} (circuit breaker open)`,
+  const reasons = getBackendSkipReasons(
+    profileName,
+    tpmThreshold,
+    isHealthy,
+    shouldSkipOnTPM,
+  );
+  for (const reason of reasons) {
+    logger.debug(() =>
+      reason === 'unhealthy'
+        ? `[LB:failover] Skipping unhealthy backend: ${profileName} (circuit breaker open)`
+        : `[LB:failover] Skipping backend: ${profileName} (TPM below threshold)`,
     );
-    return true;
   }
-  if (shouldSkipOnTPM(profileName, tpmThreshold)) {
-    logger.debug(
-      () =>
-        `[LB:failover] Skipping backend: ${profileName} (TPM below threshold)`,
-    );
-    return true;
-  }
-  return false;
+  return reasons.length > 0;
 }
 
 export function validateNotAllUnhealthy(

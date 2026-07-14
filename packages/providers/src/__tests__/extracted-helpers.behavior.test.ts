@@ -38,6 +38,7 @@ import {
 import { extractSimpleContent } from '../logging/streamChunkUtils.js';
 import { accumulateTokenUsage } from '../logging/tokenAccumulator.js';
 import { extractTokenCountsFromResponse } from '../logging/tokenCounts.js';
+import { getBackendSkipReasons } from '../loadBalancing/backendRuntime.js';
 
 function debugLoggerStub(): DebugLogger {
   return {
@@ -74,6 +75,17 @@ async function collectChunks(
 }
 
 describe('extracted provider helper behavior', () => {
+  it('reports every reason that makes a backend ineligible', () => {
+    expect(
+      getBackendSkipReasons(
+        'primary',
+        100,
+        () => false,
+        () => true,
+      ),
+    ).toStrictEqual(['unhealthy', 'tpm_below_threshold']);
+  });
+
   it('preserves load-balancer failover defaults and status classification', () => {
     const defaults = extractFailoverSettings(undefined);
 

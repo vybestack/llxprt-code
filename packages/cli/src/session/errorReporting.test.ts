@@ -31,6 +31,7 @@ describe('reportNonInteractiveError', () => {
 
     reportNonInteractiveError(config, error);
 
+    expect(writeToStderr).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(writeToStderr.mock.calls[0][0]))).toMatchObject({
       type: 'error',
       severity: 'error',
@@ -60,5 +61,15 @@ describe('reportNonInteractiveError', () => {
     reportNonInteractiveError(config, error);
 
     expect(writeToStderr).not.toHaveBeenCalled();
+  });
+
+  it('reports a frozen unmarked error without mutating it', () => {
+    const config: Pick<Config, 'getOutputFormat'> = {
+      getOutputFormat: () => OutputFormat.STREAM_JSON,
+    };
+    const error = Object.freeze(new Error('frozen provider failure'));
+
+    expect(() => reportNonInteractiveError(config, error)).not.toThrow();
+    expect(writeToStderr).toHaveBeenCalledTimes(1);
   });
 });

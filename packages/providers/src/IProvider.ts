@@ -83,6 +83,7 @@ export interface GenerateChatOptions {
 export interface IProvider {
   name: string;
   isDefault?: boolean;
+  transportAttemptOwnership?: 'provider';
   getModels(): Promise<IModel[]>;
   /**
    * @plan PLAN-20250218-STATELESSPROVIDER.P04

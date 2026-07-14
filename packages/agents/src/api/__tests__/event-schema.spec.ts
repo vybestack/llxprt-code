@@ -20,6 +20,10 @@
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import {
+  STRUCTURED_ERROR_CATEGORIES,
+  STRUCTURED_ERROR_REASONS,
+} from '@vybestack/llxprt-code-core/core/turn.js';
+import {
   AgentEventSchema,
   DoneReasonSchema,
   ToolUpdateStatusSchema,
@@ -451,6 +455,16 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
         reason: 'unknown',
       }).success,
     ).toBe(false);
+    for (const category of STRUCTURED_ERROR_CATEGORIES) {
+      expect(
+        StructuredErrorSchema.parse({ message: category, category }).category,
+      ).toBe(category);
+    }
+    for (const reason of STRUCTURED_ERROR_REASONS) {
+      expect(
+        StructuredErrorSchema.parse({ message: reason, reason }).reason,
+      ).toBe(reason);
+    }
   });
 
   it('AgentStopInfoSchema requires reason, message/contextCleared optional @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', () => {

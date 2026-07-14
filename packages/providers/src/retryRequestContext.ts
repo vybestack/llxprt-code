@@ -14,6 +14,7 @@ import {
 export interface RetryRequestContext {
   readonly options: GenerateChatOptions;
   readonly budget: TransportAttemptBudget;
+  readonly releaseBudget: () => void;
   readonly maxAttempts: number;
   readonly initialDelayMs: number;
   readonly authRetryTimeoutMs: number;
@@ -63,6 +64,7 @@ export function resolveRetryRequestContext(
   return {
     options: requestOptions,
     budget: budgetContext.budget,
+    releaseBudget: budgetContext.release,
     maxAttempts,
     initialDelayMs: nonNegativeFiniteNumber(
       ephemerals?.[RETRY_EPHEMERAL_KEYS.initialDelayMs],

@@ -914,7 +914,7 @@ describe('RetryOrchestrator', () => {
           await delay(50);
 
           if (options.invocation?.signal?.aborted === true) {
-            throw new Error('Aborted');
+            throw new DOMException('Aborted', 'AbortError');
           }
 
           yield {
@@ -955,12 +955,45 @@ describe('RetryOrchestrator', () => {
       // Abort after a short delay
       setTimeout(() => abortController.abort(), 25);
 
-      await expect(streamPromise).rejects.toThrow(/abort/i);
+      await expect(streamPromise).rejects.toMatchObject({
+        name: 'AbortError',
+      });
 
       // Provider should have been called and received the signal
       expect(providerCalls).toBeGreaterThan(0);
       expect(providerReceivedOptions?.invocation?.signal).toBeDefined();
       expect(providerReceivedOptions?.invocation?.signal?.aborted).toBe(true);
     });
+  });
+
+  it('bounds a provider named load-balancer without relying on its name', async () => {
+    let calls = 0;
+    const provider = createTestProvider({
+      name: 'load-balancer',
+      responses: [
+        { error: createServerError(503) },
+        { error: createServerError(503) },
+        { error: createServerError(503) },
+        { error: createBadRequestError() },
+      ],
+      onTransportCall: () => {
+        calls++;
+      },
+    });
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 3,
+      initialDelayMs: 0,
+    });
+
+    await expect(
+      consumeStream(
+        orchestrator.generateChatCompletion({
+          contents: [],
+        }),
+      ),
+    ).rejects.toMatchObject({
+      name: 'RetriesExhaustedError',
+    });
+    expect(calls).toBe(3);
   });
 });

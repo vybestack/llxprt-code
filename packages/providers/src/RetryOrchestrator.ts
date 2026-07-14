@@ -61,10 +61,20 @@ import {
   createLinkedAbortController,
   getRequestSignal,
   raceWithAbort,
+  withLegacyRequestSignal,
+  withOptionalRequestSignal,
   withRequestSignal,
 } from './utils/abortSignal.js';
-import { consumeTransportAttempt } from './transportAttemptBudget.js';
-import { resolveRetryRequestContext } from './retryRequestContext.js';
+import {
+  resolveRetryRequestContext,
+  type RetryRequestContext,
+} from './retryRequestContext.js';
+import {
+  accountProviderAttempt,
+  beginProviderTransportAttempt,
+  createInitialRetryState,
+  providerOwnsTransportAttempts,
+} from './retryTransportOwnership.js';
 import { closeIteratorBeforeContinuing } from './utils/streamCleanup.js';
 import {
   classifyRetryError,
@@ -77,31 +87,6 @@ import {
   createRetriesExhaustedError,
   throwIfEmptyStreamExhaustsBudget,
 } from './retryExhaustion.js';
-
-function withLegacySignal(
-  signal: AbortSignal | undefined,
-): GenerateChatOptions['invocation'] | undefined {
-  if (!signal) {
-    return undefined;
-  }
-  return { signal } as unknown as GenerateChatOptions['invocation'];
-}
-
-function withSignal(
-  invocation: GenerateChatOptions['invocation'],
-  signal: AbortSignal | undefined,
-): GenerateChatOptions['invocation'] | undefined {
-  if (!signal) {
-    return invocation;
-  }
-  if (!invocation) {
-    return withLegacySignal(signal);
-  }
-  return {
-    ...invocation,
-    signal,
-  } as GenerateChatOptions['invocation'];
-}
 
 function extractSignal(options: GenerateChatOptions): AbortSignal | undefined {
   return getRequestSignal(options);
@@ -276,13 +261,16 @@ export class RetryOrchestrator implements IProvider {
       options = {
         contents: optionsOrContents,
         tools,
-        invocation: withLegacySignal(signal),
+        invocation: withLegacyRequestSignal(signal),
       } as GenerateChatOptions;
     } else {
       // Modern signature: (options)
       options = {
         ...optionsOrContents,
-        invocation: withSignal(optionsOrContents.invocation, signal),
+        invocation: withOptionalRequestSignal(
+          optionsOrContents.invocation,
+          signal,
+        ),
       };
     }
 
@@ -299,23 +287,29 @@ export class RetryOrchestrator implements IProvider {
       yield* this.wrappedProvider.generateChatCompletion(options);
       return;
     }
-
     const signal = extractSignal(options);
-    if (isSignalAborted(signal)) throw createAbortError();
+    if (isSignalAborted(signal)) throw createAbortError(signal?.reason);
     const request = resolveRetryRequestContext(options, this.config);
+    try {
+      yield* this.runRetryRequest(request, signal);
+    } finally {
+      request.releaseBudget();
+    }
+  }
+
+  private async *runRetryRequest(
+    request: RetryRequestContext,
+    signal: AbortSignal | undefined,
+  ): AsyncIterableIterator<IContent> {
     const { maxAttempts, initialDelayMs, authRetryTimeoutMs, budget } = request;
     const requestOptions = request.options;
     const bucketFailoverHandler = this.getBucketFailoverHandler(requestOptions);
+    const ownsAttempts = providerOwnsTransportAttempts(this.wrappedProvider);
     let lastError: unknown;
-    const retryState = {
-      attempt: 0,
-      currentDelay: initialDelayMs,
-      consecutive429s: 0,
-      consecutiveAuthErrors: 0,
-      consecutiveNetworkErrors: 0,
-    };
+    const retryState = createInitialRetryState(initialDelayMs);
     while (budget.used < budget.limit) {
-      if (isSignalAborted(signal)) throw createAbortError();
+      if (isSignalAborted(signal)) throw createAbortError(signal?.reason);
+      const usedBefore = budget.used;
       const linked = createLinkedAbortController(signal);
       const attemptOptions = withRequestSignal(
         requestOptions,
@@ -323,12 +317,7 @@ export class RetryOrchestrator implements IProvider {
       );
       let attemptError: unknown;
       try {
-        if (
-          this.wrappedProvider.name !== 'load-balancer' &&
-          !consumeTransportAttempt(attemptOptions)
-        ) {
-          break;
-        }
+        beginProviderTransportAttempt(ownsAttempts, attemptOptions);
         const stream =
           this.wrappedProvider.generateChatCompletion(attemptOptions);
         const producedContent =
@@ -354,6 +343,12 @@ export class RetryOrchestrator implements IProvider {
         linked.controller.abort();
         linked.dispose();
       }
+      accountProviderAttempt(
+        this.wrappedProvider,
+        requestOptions,
+        budget,
+        usedBefore,
+      );
       retryState.attempt = budget.used;
       const action = await this.handleRetryError(
         attemptError,
@@ -744,7 +739,9 @@ export class RetryOrchestrator implements IProvider {
 
     try {
       for (;;) {
-        if (attemptController.signal.aborted) throw createAbortError();
+        if (attemptController.signal.aborted) {
+          throw createAbortError(attemptController.signal.reason);
+        }
         const nextPromise = iterator.next();
         const result = firstChunk
           ? await raceFirstChunkWithTimeout(nextPromise, timeoutMs)

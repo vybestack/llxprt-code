@@ -14,6 +14,7 @@ import {
   type LoadBalancingProviderConfig,
 } from '../LoadBalancingProvider.js';
 import { LoadBalancerFailoverError } from '../errors.js';
+import { MAX_PUBLIC_PROVIDER_MESSAGE_LENGTH } from '../providerErrorObservation.js';
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../GenerateChatOptions.js';
@@ -325,6 +326,22 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       expect(error.message).toContain('no backend attempts were recorded');
       expect(error.message).toContain('(tried: none)');
+    });
+
+    it('keeps public summaries bounded while preserving every structured failure', () => {
+      const failures = Array.from({ length: 5 }, (_, index) => ({
+        profile: `backend-${index + 1}`,
+        error: new Error(`private failure ${index + 1}`),
+      }));
+
+      const error = new LoadBalancerFailoverError('test-profile', failures);
+
+      expect(error.message.length).toBeLessThanOrEqual(
+        MAX_PUBLIC_PROVIDER_MESSAGE_LENGTH,
+      );
+      expect(error.message).toContain('+2 more');
+      expect(error.message).not.toContain('private failure 4');
+      expect(error.failures).toStrictEqual(failures);
     });
   });
   describe('ResolvedSubProfile settings propagation', () => {

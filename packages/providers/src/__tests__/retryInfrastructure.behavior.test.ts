@@ -66,6 +66,25 @@ describe('request-scoped retry infrastructure', () => {
     expect(independentRequest.budget.used).toBe(0);
     expect(callerContext).toStrictEqual({ requestLabel: 'caller' });
     expect(originalOptions.metadata?._retryRequestContext).toBe(callerContext);
+
+    nestedWrapper.release();
+    firstRequest.release();
+    const reusedOptions = attachTransportAttemptBudget(firstRequest.options, 2);
+    expect(reusedOptions.budget).not.toBe(firstRequest.budget);
+    expect(reusedOptions.budget.used).toBe(0);
+  });
+
+  it('rejects array-shaped request contexts and attaches an isolated budget', () => {
+    const originalOptions: GenerateChatOptions = {
+      contents: [],
+      metadata: { _retryRequestContext: [] },
+    };
+
+    const request = attachTransportAttemptBudget(originalOptions, 2);
+
+    expect(request.options).not.toBe(originalOptions);
+    expect(request.budget).toStrictEqual({ limit: 2, used: 0 });
+    expect(originalOptions.metadata?._retryRequestContext).toStrictEqual([]);
   });
 
   it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(

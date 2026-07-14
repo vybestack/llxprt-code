@@ -1,6 +1,7 @@
-import type {
-  StructuredError,
-  StructuredErrorCategory,
+import {
+  STRUCTURED_ERROR_CATEGORIES,
+  type StructuredError,
+  type StructuredErrorCategory,
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import type { GenerateChatOptions } from './IProvider.js';
@@ -212,17 +213,10 @@ function getProviderType(error: unknown): string | undefined {
 function isStructuredErrorCategory(
   value: unknown,
 ): value is StructuredErrorCategory {
-  switch (value) {
-    case 'rate_limit':
-    case 'quota':
-    case 'authentication':
-    case 'server_error':
-    case 'network':
-    case 'client_error':
-      return true;
-    default:
-      return false;
-  }
+  return (
+    typeof value === 'string' &&
+    STRUCTURED_ERROR_CATEGORIES.some((category) => category === value)
+  );
 }
 
 export function classifyProviderError(

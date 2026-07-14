@@ -500,21 +500,27 @@ describe('AnthropicProvider', () => {
           .next();
 
         const controller = new AbortController();
+        const reason = new Error('request cancelled during throttle');
         const baseOptions = buildCallOptions(messages);
         const throttledCall = provider.generateChatCompletion({
           ...baseOptions,
           invocation: { ...baseOptions.invocation, signal: controller.signal },
         });
         vi.useFakeTimers();
-        const nextPromise = throttledCall.next();
-        await vi.waitFor(() => expect(vi.getTimerCount()).toBeGreaterThan(0), {
-          interval: 1,
-          timeout: 20,
-        });
-        controller.abort();
+        try {
+          const nextPromise = throttledCall.next();
+          await vi.advanceTimersByTimeAsync(0);
+          expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
 
-        await expect(nextPromise).rejects.toThrow(/abort/i);
-        expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
+          controller.abort(reason);
+
+          await expect(nextPromise).rejects.toMatchObject({
+            name: 'AbortError',
+          });
+          expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
+        } finally {
+          vi.useRealTimers();
+        }
       });
 
       it('should handle partial rate limit headers', async () => {

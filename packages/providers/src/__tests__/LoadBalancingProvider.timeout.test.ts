@@ -453,7 +453,9 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
     }
 
     expect(chunks).toHaveLength(1);
-    expect(remove.mock.calls.length).toBe(add.mock.calls.length);
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(remove.mock.calls[0][1]).toBe(add.mock.calls[0][1]);
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -489,7 +491,9 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
         // consume
       }
     }).rejects.toThrow('synchronous construction failure');
-    expect(remove.mock.calls.length).toBe(add.mock.calls.length);
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(remove.mock.calls[0][1]).toBe(add.mock.calls[0][1]);
   });
 
   describe('No timeout after first chunk', () => {

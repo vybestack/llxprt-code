@@ -11,6 +11,10 @@ import {
   StreamJsonFormatter,
   type MessageEvent,
 } from './output-format.js';
+import {
+  STRUCTURED_ERROR_CATEGORIES,
+  STRUCTURED_ERROR_REASONS,
+} from '../core/turn.js';
 
 describe('JsonFormatter', () => {
   it('preserves safe machine-readable provider classification', () => {
@@ -33,6 +37,25 @@ describe('JsonFormatter', () => {
         reason: 'retries_exhausted',
       },
     });
+  });
+
+  it('accepts every canonical structured category and reason', () => {
+    for (const category of STRUCTURED_ERROR_CATEGORIES) {
+      const formatted = JSON.parse(
+        new JsonFormatter().formatError(
+          Object.assign(new Error(category), { category }),
+        ),
+      );
+      expect(formatted.error.category).toBe(category);
+    }
+    for (const reason of STRUCTURED_ERROR_REASONS) {
+      const formatted = JSON.parse(
+        new JsonFormatter().formatError(
+          Object.assign(new Error(reason), { reason }),
+        ),
+      );
+      expect(formatted.error.reason).toBe(reason);
+    }
   });
 
   it('omits unrecognized machine-readable provider classification', () => {
