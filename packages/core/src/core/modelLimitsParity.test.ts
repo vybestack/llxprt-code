@@ -151,9 +151,10 @@ describe('model-limits package asset (@issue:2280)', () => {
     copyFileSync(sourceCatalog, join(stagedCoreDir, 'model-limits.json'));
 
     try {
-      execFileSync(process.execPath, [copyScript], {
+      execFileSync('bun', [copyScript], {
         cwd: tempPackage,
         stdio: 'pipe',
+        timeout: 10_000,
       });
       expect(readFileSync(builtCatalog)).toStrictEqual(
         readFileSync(sourceCatalog),
