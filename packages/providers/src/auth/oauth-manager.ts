@@ -34,6 +34,8 @@ import {
   getAllCodexRateLimitResetCredits,
   getHigherPriorityAuth,
 } from './provider-usage-info.js';
+import { BrowserProfileAssociationStore } from './browser-profile-association-store.js';
+import type { BrowserProfileAssociation } from './browser-profile-association-store.js';
 
 /**
  * Compile-time structural compatibility marker: ensures the auth package's
@@ -63,6 +65,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
   private readonly authStatusService: AuthStatusService;
   private _runtimeMessageBus: MessageBus | undefined;
   private readonly config?: Config;
+  private readonly browserProfileStore: BrowserProfileAssociationStore;
 
   /**
    * Getter/setter for runtimeMessageBus.
@@ -143,6 +146,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       this.bucketManager,
       this.tokenAccessCoordinator,
     );
+    this.browserProfileStore = new BrowserProfileAssociationStore();
   }
 
   /**
@@ -515,6 +519,48 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       failedAccessToken,
       bucket,
     );
+  }
+
+  // ── Browser profile association facade ──────────────────────────────
+
+  /**
+   * Associate a browser profile with a provider+bucket.
+   * This association is used when launching the OAuth browser flow to
+   * ensure the correct browser profile is always used.
+   */
+  setBrowserProfileAssociation(
+    provider: string,
+    bucket: string,
+    association: BrowserProfileAssociation,
+  ): void {
+    this.browserProfileStore.setAssociation(provider, bucket, association);
+  }
+
+  /**
+   * Get the browser profile association for a provider+bucket.
+   * @returns The association, or undefined if none set.
+   */
+  getBrowserProfileAssociation(
+    provider: string,
+    bucket?: string,
+  ): BrowserProfileAssociation | undefined {
+    return this.browserProfileStore.getAssociation(provider, bucket);
+  }
+
+  /**
+   * Clear the browser profile association for a provider+bucket.
+   */
+  clearBrowserProfileAssociation(provider: string, bucket?: string): void {
+    this.browserProfileStore.clearAssociation(provider, bucket);
+  }
+
+  /**
+   * List all browser profile associations for a provider.
+   */
+  listBrowserProfileAssociations(
+    provider: string,
+  ): Array<{ bucket: string } & BrowserProfileAssociation> {
+    return this.browserProfileStore.listAssociations(provider);
   }
 }
 
