@@ -210,10 +210,10 @@ export function classifyProviderError(
   if (status !== undefined && status >= 500 && status < 600) {
     return 'server_error';
   }
-  if (isNetworkTransientError(error)) return 'network';
   if (status !== undefined && status >= 400 && status < 500) {
     return 'client_error';
   }
+  if (isNetworkTransientError(error)) return 'network';
   if (error instanceof Error && error.message.includes('Stream timeout')) {
     return 'server_error';
   }

@@ -114,6 +114,15 @@ describe('provider error observation', () => {
     },
   );
 
+  it('treats an explicit client status as authoritative over network heuristics', () => {
+    const error = Object.assign(new Error('socket hang up'), {
+      status: 400,
+      code: 'ECONNRESET',
+    });
+
+    expect(classifyProviderError(error, 400)).toBe('client_error');
+  });
+
   it('classifies a statusless stream timeout as server_error, not rate_limit', () => {
     expect(
       classifyProviderError(new Error('Stream timeout occurred'), undefined),

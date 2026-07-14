@@ -25,9 +25,9 @@ const streamOptions: StreamProcessorOptions = {
 };
 
 async function* failingAnthropicStream(): AsyncGenerator<Anthropic.MessageStreamEvent> {
-  await Promise.resolve();
-  throw new Error('fetch failed');
-  yield { type: 'ping' } as Anthropic.MessageStreamEvent;
+  yield await Promise.reject<Anthropic.MessageStreamEvent>(
+    new Error('fetch failed'),
+  );
 }
 
 async function collect(stream: AsyncIterable<IContent>): Promise<IContent[]> {

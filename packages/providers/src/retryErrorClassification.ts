@@ -7,7 +7,6 @@
 import type { StructuredErrorCategory } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   getErrorStatus,
-  isNetworkTransientError,
   isOverloadError,
 } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { classifyProviderError } from './providerErrorObservation.js';
@@ -27,23 +26,40 @@ export interface RetryErrorClassification {
   readonly isNetworkError: boolean;
 }
 
-export function isTerminalRetryError(error: unknown): boolean {
+const errorsAfterStreamOutput = new WeakSet<object>();
+
+function isObjectLike(value: unknown): value is object {
   return (
-    (error instanceof Error && error.name === 'AbortError') ||
-    (error as Error & { _chunksYieldedBeforeError?: boolean })
-      ._chunksYieldedBeforeError === true
+    (typeof value === 'object' && value !== null) || typeof value === 'function'
   );
+}
+
+export function markErrorAfterStreamOutput(error: unknown): unknown {
+  if (isObjectLike(error)) {
+    errorsAfterStreamOutput.add(error);
+    return error;
+  }
+  const wrappedError = new Error(String(error)) as Error & { cause: unknown };
+  wrappedError.cause = error;
+  errorsAfterStreamOutput.add(wrappedError);
+  return wrappedError;
+}
+
+export function isTerminalRetryError(error: unknown): boolean {
+  if (error instanceof Error && error.name === 'AbortError') return true;
+  return isObjectLike(error) && errorsAfterStreamOutput.has(error);
 }
 
 export function classifyRetryError(error: unknown): RetryErrorClassification {
   const status = getErrorStatus(error);
+  const category = classifyProviderError(error, status);
   return {
     status,
-    category: classifyProviderError(error, status),
+    category,
     is429: status === 429 || isOverloadError(error),
     is402: status === 402,
     isAuthError: status === 401 || status === 403,
-    isNetworkError: isNetworkTransientError(error),
+    isNetworkError: category === 'network',
   };
 }
 

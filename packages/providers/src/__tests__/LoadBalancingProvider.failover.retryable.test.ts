@@ -175,12 +175,13 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
         },
         providerManager,
       );
-      const requestContext: Record<string, unknown> = {};
+      const requestContext: Record<string, unknown> = {
+        transportAttemptBudget: { limit: 1, used: 0 },
+      };
       const options = {
         ...makeOptions(),
         metadata: { _retryRequestContext: requestContext },
       };
-      requestContext.transportAttemptBudget = { limit: 1, used: 0 };
 
       let thrown: unknown;
       try {
@@ -461,9 +462,17 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     );
 
     const received: IContent[] = [];
+    const observedErrors: Array<{
+      message: string;
+      status?: number;
+      category?: string;
+    }> = [];
     let thrown: unknown;
     try {
-      for await (const chunk of lb.generateChatCompletion(makeOptions())) {
+      for await (const chunk of lb.generateChatCompletion({
+        ...makeOptions(),
+        onProviderError: (error) => observedErrors.push(error),
+      })) {
         received.push(chunk);
       }
     } catch (e) {
@@ -476,6 +485,13 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     // instead of being collected into an aggregate.
     expect(thrown).not.toBeInstanceOf(LoadBalancerFailoverError);
     expect(getErrorStatus(thrown)).toBe(429);
+    expect(observedErrors).toStrictEqual([
+      {
+        message: 'rate limited',
+        status: 429,
+        category: 'rate_limit',
+      },
+    ]);
     // Only the first backend was ever invoked; no silent cross-backend retry.
     expect(counter.value).toBe(1);
   });

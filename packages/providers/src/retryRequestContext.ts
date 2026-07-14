@@ -19,6 +19,24 @@ export interface RetryRequestContext {
   readonly authRetryTimeoutMs: number;
 }
 
+function positiveInteger(value: unknown, fallback: number): number {
+  const defaultValue =
+    Number.isFinite(fallback) && fallback > 0
+      ? Math.max(1, Math.floor(fallback))
+      : 1;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.max(1, Math.floor(value))
+    : defaultValue;
+}
+
+function nonNegativeFiniteNumber(value: unknown, fallback: number): number {
+  const defaultValue =
+    Number.isFinite(fallback) && fallback >= 0 ? fallback : 0;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : defaultValue;
+}
+
 export function resolveRetryRequestContext(
   options: GenerateChatOptions,
   defaults: {
@@ -28,9 +46,10 @@ export function resolveRetryRequestContext(
   },
 ): RetryRequestContext {
   const ephemerals = options.invocation?.ephemerals;
-  const configuredAttempts =
-    (ephemerals?.['retries'] as number | undefined) ?? defaults.maxAttempts;
-  const maxAttempts = Math.max(1, Math.floor(configuredAttempts));
+  const maxAttempts = positiveInteger(
+    ephemerals?.['retries'],
+    defaults.maxAttempts,
+  );
   const budgetContext = attachTransportAttemptBudget(options, maxAttempts);
   const requestOptions = attachProviderErrorObservationContext(
     budgetContext.options,
@@ -39,11 +58,13 @@ export function resolveRetryRequestContext(
     options: requestOptions,
     budget: budgetContext.budget,
     maxAttempts,
-    initialDelayMs:
-      (ephemerals?.['retrywait'] as number | undefined) ??
+    initialDelayMs: nonNegativeFiniteNumber(
+      ephemerals?.['retrywait'],
       defaults.initialDelayMs,
-    authRetryTimeoutMs:
-      (ephemerals?.['auth-retry-timeout'] as number | undefined) ??
+    ),
+    authRetryTimeoutMs: nonNegativeFiniteNumber(
+      ephemerals?.['auth-retry-timeout'],
       defaults.authRetryTimeoutMs,
+    ),
   };
 }

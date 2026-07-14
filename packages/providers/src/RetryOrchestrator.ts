@@ -68,6 +68,7 @@ import { closeIteratorBeforeContinuing } from './utils/streamCleanup.js';
 import {
   classifyRetryError,
   isTerminalRetryError,
+  markErrorAfterStreamOutput,
   resetRetryErrorCounters,
   updateRetryErrorCounters,
 } from './retryErrorClassification.js';
@@ -383,6 +384,7 @@ export class RetryOrchestrator implements IProvider {
   ): AsyncGenerator<IContent, boolean> {
     let chunksYielded = false;
     let completed = false;
+    let failed = false;
     let failure: unknown;
     try {
       for await (const chunk of stream) {
@@ -392,21 +394,20 @@ export class RetryOrchestrator implements IProvider {
       completed = true;
       return chunksYielded;
     } catch (streamError) {
+      failed = true;
       failure = streamError;
       if (chunksYielded) {
         this.logger.debug(
           () =>
             `Error after yielding chunks - cannot retry (would produce mixed response)`,
         );
-        (
-          streamError as Error & { _chunksYieldedBeforeError: boolean }
-        )._chunksYieldedBeforeError = true;
+        throw markErrorAfterStreamOutput(streamError);
       }
       throw streamError;
     } finally {
       if (!completed) {
         attemptController.abort();
-        await closeIteratorBeforeContinuing(stream, failure);
+        await closeIteratorBeforeContinuing(stream, failure, failed);
       }
     }
   }
@@ -737,6 +738,7 @@ export class RetryOrchestrator implements IProvider {
     let firstChunk = true;
     let chunksYielded = false;
     let completed = false;
+    let failed = false;
     let failure: unknown;
 
     try {
@@ -755,12 +757,13 @@ export class RetryOrchestrator implements IProvider {
         yield result.value;
       }
     } catch (error) {
+      failed = true;
       failure = error;
       throw error;
     } finally {
       if (!completed) {
         attemptController.abort();
-        await closeIteratorBeforeContinuing(iterator, failure);
+        await closeIteratorBeforeContinuing(iterator, failure, failed);
       }
     }
   }

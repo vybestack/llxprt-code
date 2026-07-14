@@ -11,20 +11,25 @@ const STREAM_CLEANUP_TIMEOUT_MS = 1_000;
 export async function closeIteratorBeforeContinuing<T>(
   iterator: AsyncIterator<T>,
   cause: unknown,
+  preserveExistingFailure = cause !== undefined,
 ): Promise<void> {
   if (iterator.return === undefined) return;
 
   let timeoutId: NodeJS.Timeout | undefined;
-  const cleanup = Promise.resolve(iterator.return())
+  const cleanup = Promise.resolve()
+    .then(() => iterator.return?.())
     .then(() => 'closed' as const)
     .catch(() => 'closed' as const);
   const timeout = new Promise<'timeout'>((resolve) => {
     timeoutId = setTimeout(() => resolve('timeout'), STREAM_CLEANUP_TIMEOUT_MS);
   });
   try {
-    if ((await Promise.race([cleanup, timeout])) === 'timeout') {
+    if (
+      (await Promise.race([cleanup, timeout])) === 'timeout' &&
+      !preserveExistingFailure
+    ) {
       throw new StreamCleanupTimeoutError(
-        cause instanceof Error ? cause : new Error(String(cause)),
+        new Error('Stream cleanup timed out'),
       );
     }
   } finally {

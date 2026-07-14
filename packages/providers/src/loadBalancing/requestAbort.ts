@@ -9,5 +9,9 @@ export function rethrowIfAborted(
   options: GenerateChatOptions,
 ): void {
   if (error instanceof Error && error.name === 'AbortError') throw error;
-  if (getRequestSignal(options)?.aborted === true) throw createAbortError();
+  if (getRequestSignal(options)?.aborted === true) {
+    const abortError = createAbortError() as Error & { cause?: unknown };
+    abortError.cause = error;
+    throw abortError;
+  }
 }

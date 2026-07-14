@@ -15,6 +15,19 @@ import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { raceWithAbort } from '../utils/abortSignal.js';
 import { closeIteratorBeforeContinuing } from '../utils/streamCleanup.js';
 
+export interface AttemptCancellation {
+  readonly signal: AbortSignal;
+  cancel(): void;
+}
+
+function createAttemptCancellation(): AttemptCancellation {
+  const controller = new AbortController();
+  return {
+    signal: controller.signal,
+    cancel: () => controller.abort(),
+  };
+}
+
 async function waitForFirstChunk(
   iterator: AsyncIterableIterator<IContent>,
   timeoutMs: number | undefined,
@@ -40,15 +53,16 @@ export async function* wrapWithTimeout(
   timeoutMs: number | undefined,
   profileName: string,
   logger: DebugLogger,
-  attemptController: AbortController = new AbortController(),
+  attemptCancellation: AttemptCancellation = createAttemptCancellation(),
 ): AsyncGenerator<IContent> {
   let completed = false;
+  let failed = false;
   let failure: unknown;
   try {
     const firstResult = await waitForFirstChunk(
       iterator,
       timeoutMs,
-      attemptController.signal,
+      attemptCancellation.signal,
     );
     if (firstResult.done !== true) yield firstResult.value;
     for await (const chunk of { [Symbol.asyncIterator]: () => iterator }) {
@@ -56,6 +70,7 @@ export async function* wrapWithTimeout(
     }
     completed = true;
   } catch (error) {
+    failed = true;
     failure = error;
     if (isTimeoutError(error)) {
       logger.debug(
@@ -66,8 +81,17 @@ export async function* wrapWithTimeout(
     throw error;
   } finally {
     if (!completed) {
-      attemptController.abort();
-      await closeIteratorBeforeContinuing(iterator, failure);
+      let cancellationFailure: unknown;
+      try {
+        attemptCancellation.cancel();
+      } catch (error) {
+        cancellationFailure = error;
+      }
+      await closeIteratorBeforeContinuing(
+        iterator,
+        failed ? failure : cancellationFailure,
+        failed || cancellationFailure !== undefined,
+      );
     }
   }
 }

@@ -1,13 +1,9 @@
-const MACHINE_ERROR_REPORTED = Symbol('llxprt.machineErrorReported');
+const machineReportedErrors = new WeakSet<Error>();
 
 export function markMachineErrorReported(error: Error): void {
-  Object.defineProperty(error, MACHINE_ERROR_REPORTED, { value: true });
+  machineReportedErrors.add(error);
 }
 
 export function wasMachineErrorReported(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    MACHINE_ERROR_REPORTED in error
-  );
+  return error instanceof Error && machineReportedErrors.has(error);
 }

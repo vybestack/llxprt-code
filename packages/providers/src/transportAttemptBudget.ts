@@ -14,6 +14,10 @@ export interface TransportAttemptBudget {
   used: number;
 }
 
+function normalizeTransportAttemptLimit(limit: number): number {
+  return Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 1;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -45,11 +49,13 @@ export function attachTransportAttemptBudget(
     return { options, budget: existing };
   }
   const budget: TransportAttemptBudget = {
-    limit: Math.max(1, Math.floor(limit)),
+    limit: normalizeTransportAttemptLimit(limit),
     used: 0,
   };
-  const requestContext = existingContext ?? {};
-  requestContext[TRANSPORT_ATTEMPT_BUDGET_KEY] = budget;
+  const requestContext = {
+    ...existingContext,
+    [TRANSPORT_ATTEMPT_BUDGET_KEY]: budget,
+  };
   return {
     options: {
       ...options,

@@ -49,4 +49,16 @@ describe('reportNonInteractiveError', () => {
 
     expect(writeToStderr).not.toHaveBeenCalled();
   });
+
+  it('tracks a frozen error without mutating it', () => {
+    const config: Pick<Config, 'getOutputFormat'> = {
+      getOutputFormat: () => OutputFormat.STREAM_JSON,
+    };
+    const error = Object.freeze(new Error('already reported'));
+
+    expect(() => markMachineErrorReported(error)).not.toThrow();
+    reportNonInteractiveError(config, error);
+
+    expect(writeToStderr).not.toHaveBeenCalled();
+  });
 });

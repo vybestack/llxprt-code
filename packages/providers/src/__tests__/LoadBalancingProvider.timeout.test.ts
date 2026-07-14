@@ -404,9 +404,7 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       return chunks;
     })();
 
-    while (calls === 0) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+    await vi.waitFor(() => expect(calls).toBe(1), { timeout: 1_000 });
     controller.abort();
 
     await expect(promise).rejects.toThrow(/abort/i);

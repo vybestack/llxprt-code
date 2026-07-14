@@ -209,13 +209,7 @@ export class TurnProcessor {
     userContents: IContent[],
     onDone: () => void,
   ): AsyncGenerator<StreamEvent> {
-    const requestParams: SendMessageParams = {
-      ...params,
-      config: {
-        ...params.config,
-        providerRequestContext: params.config?.providerRequestContext ?? {},
-      },
-    };
+    const requestParams = this._withProviderRequestContext(params);
     try {
       let lastError: unknown = new Error('Request failed after all retries.');
       let attempt = 0;
@@ -324,6 +318,18 @@ export class TurnProcessor {
     return normalizeToolInteractionInput(params.message);
   }
 
+  private _withProviderRequestContext(
+    params: SendMessageParams,
+  ): SendMessageParams {
+    return {
+      ...params,
+      config: {
+        ...params.config,
+        providerRequestContext: params.config?.providerRequestContext ?? {},
+      },
+    };
+  }
+
   private _stampTurnMetadata(contents: IContent[]): IContent[] {
     const idGen = this.historyService.getIdGeneratorCallback();
     return contents.map((content) => ({
@@ -386,13 +392,7 @@ export class TurnProcessor {
     provider: IProvider,
     prompt_id: string,
   ): Promise<ModelOutput> {
-    const requestParams: SendMessageParams = {
-      ...params,
-      config: {
-        ...params.config,
-        providerRequestContext: params.config?.providerRequestContext ?? {},
-      },
-    };
+    const requestParams = this._withProviderRequestContext(params);
     this._validateProvider(provider);
     let providerStartTime = 0;
     let providerRequestStarted = false;

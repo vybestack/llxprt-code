@@ -808,9 +808,7 @@ export class LoadBalancingProvider implements IProvider {
         return true;
       } catch (error) {
         rethrowIfAborted(error, options);
-        if (!chunksYielded.value) {
-          observeDelegateFailure(options, error, this.logger);
-        }
+        observeDelegateFailure(options, error, this.logger);
         if (
           error instanceof LoadBalancerCompressionCallbackError ||
           error instanceof LoadBalancerContextLimitError
@@ -892,7 +890,10 @@ export class LoadBalancingProvider implements IProvider {
         settings.timeoutMs,
         subProfile.name,
         this.logger,
-        attempt.linked.controller,
+        {
+          signal: attempt.linked.controller.signal,
+          cancel: () => attempt.linked.controller.abort(),
+        },
       );
       for await (const chunk of iterator) {
         chunksYielded.value = true;
