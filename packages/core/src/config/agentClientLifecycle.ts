@@ -12,55 +12,48 @@ import { createContentGeneratorConfig } from '../core/contentGenerator.js';
 import type {
   AgentClientContract,
   AgentClientFactory,
-  ContractContent,
 } from '../core/clientContract.js';
+import type { IContent } from '../services/history/IContent.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import type { Config } from './config.js';
 
 /**
- * Removes `thoughtSignature` from every part in the history.
+ * Removes `signature` from every thinking block in the history.
  * Used when migrating from GenAI to Vertex (Vertex does not support
  * thought signatures).
  *
- * History Content[] is external data from the Gemini API that was
- * serialized/deserialized, so parts are validated at this boundary.
+ * History IContent[] is external data that was serialized/deserialized,
+ * so blocks are validated at this boundary.
  */
-export function stripThoughtSignatures(
-  history: ContractContent[],
-): ContractContent[] {
-  return history.map((content) => {
-    if (!content.parts) {
-      return content;
-    }
-    return {
-      ...content,
-      parts: content.parts.map((part) => {
-        if (isPartWithThoughtSignature(part)) {
-          const newPart = { ...part };
-          delete (newPart as { thoughtSignature?: unknown }).thoughtSignature;
-          return newPart;
-        }
-        return part;
-      }),
-    };
-  });
+export function stripThoughtSignatures(history: IContent[]): IContent[] {
+  return history.map((content) => ({
+    ...content,
+    blocks: content.blocks.map((block) => {
+      if (isBlockWithSignature(block)) {
+        const newBlock = { ...block };
+        delete (newBlock as { signature?: unknown }).signature;
+        return newBlock;
+      }
+      return block;
+    }),
+  }));
 }
 
 /**
- * Type guard validating that an untyped history part is a non-null object
- * containing a `thoughtSignature` key. History data originates from the
- * Gemini API and may not match the static Part type at runtime.
+ * Type guard validating that an untyped history block is a non-null object
+ * containing a `signature` key. History data may not match the static
+ * ThinkingBlock type at runtime.
  */
-function isPartWithThoughtSignature(part: unknown): part is Record<
+function isBlockWithSignature(block: unknown): block is Record<
   string,
   unknown
 > & {
-  thoughtSignature?: unknown;
+  signature?: unknown;
 } {
   return (
-    part !== null &&
-    typeof part === 'object' &&
-    'thoughtSignature' in (part as Record<string, unknown>)
+    block !== null &&
+    typeof block === 'object' &&
+    'signature' in (block as Record<string, unknown>)
   );
 }
 
@@ -81,7 +74,12 @@ export interface AgentClientLifecycleContext {
 
 /**
  * Extracts existing history and HistoryService from the current agent client.
- * Returns empty values when the client is not yet initialized.
+ *
+ * Returns empty values only when no client exists or the client carries no
+ * recoverable state. A client pending lazy initialization (no chat yet) may
+ * still hold restored conversation in `_previousHistory` / a stored
+ * HistoryService, which `getHistory()` / `getHistoryService()` surface — that
+ * state must survive a rebuild so --continue keeps model context (issue #2500).
  *
  * The agentClient parameter is accepted as `| undefined` because the Config
  * field is declared with a definite-assignment assertion but is genuinely
@@ -91,16 +89,21 @@ export async function extractExistingState(
   logger: DebugLogger,
   agentClient: AgentClientContract | null | undefined,
 ): Promise<{
-  history: ContractContent[];
+  history: IContent[];
   historyService: ReturnType<AgentClientContract['getHistoryService']>;
 }> {
   if (agentClient === null || agentClient === undefined) {
     return { history: [], historyService: null };
   }
-  if (!agentClient.isInitialized()) {
-    return { history: [], historyService: null };
-  }
 
+  // A client may carry restored conversation in `_previousHistory` (e.g. a
+  // prior --continue restoreHistory, or a previous rebuild's carried history)
+  // even before its chat/content generator are lazily initialized. The old
+  // `!isInitialized()` guard discarded that history on the next rebuild, so
+  // --continue lost model context (issue #2500). `getHistory()` /
+  // `getHistoryService()` already recover `_previousHistory` /
+  // `_storedHistoryService` when no chat exists, so fall through and let them
+  // surface whatever state the client holds.
   const hasInitializedChat = hasCallableProperty(
     agentClient,
     'hasChatInitialized',
@@ -176,7 +179,7 @@ export function buildNewContentGeneratorConfig(
 export function transferHistoryToNewClient(
   logger: DebugLogger,
   newAgentClient: AgentClientContract,
-  existingHistory: ContractContent[],
+  existingHistory: IContent[],
   existingHistoryService: ReturnType<AgentClientContract['getHistoryService']>,
   newContentGeneratorConfig: ReturnType<typeof createContentGeneratorConfig>,
   previousVertexai: boolean | undefined,
@@ -241,4 +244,43 @@ export function requireAgentClientFactory(
     );
   }
   return factory;
+}
+
+function createDetachedRuntimeId(baseRuntimeId: string | undefined): string {
+  const timestamp = Date.now().toString(36);
+  const suffix = Math.random().toString(36).slice(2, 8);
+  return `${baseRuntimeId ?? 'llxprt-session'}#subagent-auto#${timestamp}-${suffix}`;
+}
+
+/**
+ * Creates a detached agent client with a fresh runtime state isolated from
+ * the session's primary agent client. The returned client has its tool set
+ * cleared. Used for one-shot operations such as subagent auto-prompt
+ * generation that need a clean, isolated runtime scope.
+ */
+export function createDetachedAgentClient(
+  config: Config,
+  runtimeId?: string,
+): AgentClientContract {
+  const factory = requireAgentClientFactory(
+    config.getAgentClientFactory(),
+    'createDetachedAgentClient',
+  );
+  const baseRuntimeId = config.getSessionId();
+  const detachedId = runtimeId ?? createDetachedRuntimeId(baseRuntimeId);
+  const detachedRuntimeState = createAgentRuntimeStateFromConfig(config, {
+    runtimeId: detachedId,
+  });
+  const client = factory(config, detachedRuntimeState);
+  try {
+    client.clearTools();
+  } catch (error) {
+    try {
+      client.dispose();
+    } catch {
+      // Disposal failure is secondary; preserve the clearTools error.
+    }
+    throw error;
+  }
+  return client;
 }

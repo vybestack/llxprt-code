@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { unescapePath, type ContractPart } from '@vybestack/llxprt-code-core';
+import { unescapePath, type ContentBlock } from '@vybestack/llxprt-code-core';
 import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import {
@@ -183,7 +183,7 @@ export async function handleAtCommand({
     (part) => part.type === 'atPath',
   );
   if (atPathCommandParts.length === 0)
-    return { processedQuery: [{ text: query }] };
+    return { processedQuery: [{ type: 'text', text: query }] };
 
   const readManyFilesTool = getToolHandle('read_many_files');
   if (!readManyFilesTool) {
@@ -215,8 +215,8 @@ export async function handleAtCommand({
     return handleNoValidPaths(query, initialQueryText, onDebugMessage);
   }
 
-  const processedQueryParts: Array<ContractPart | string> = [
-    { text: initialQueryText },
+  const processedQueryParts: ContentBlock[] = [
+    { type: 'text', text: initialQueryText },
   ];
   const resourceResult = await processResourceAttachments({
     resourceAttachments: resolution.resourceAttachments,
@@ -278,7 +278,9 @@ function handleNoValidPaths(
     (initialQueryText === '@' && query.trim() === '@') ||
     (!initialQueryText && query)
   ) {
-    return { processedQuery: [{ text: query }] };
+    return { processedQuery: [{ type: 'text', text: query }] };
   }
-  return { processedQuery: [{ text: initialQueryText || query }] };
+  return {
+    processedQuery: [{ type: 'text', text: initialQueryText || query }],
+  };
 }

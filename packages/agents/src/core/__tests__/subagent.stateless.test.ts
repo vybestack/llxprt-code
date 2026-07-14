@@ -46,7 +46,6 @@ import type {
 } from '../subagentTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ContentGenerator } from '../contentGenerator.js';
-import type { Part } from '@google/genai';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 
@@ -225,9 +224,13 @@ function createStatelessRuntimeBundle(options?: {
   };
 }
 
-type EnvironmentLoader = (runtime: AgentRuntimeContext) => Promise<Part[]>;
+type EnvironmentLoader = (
+  runtime: AgentRuntimeContext,
+) => Promise<Array<{ text?: string }>>;
 
-const DEFAULT_ENVIRONMENT_CONTEXT: Part[] = [{ text: 'Env Context' }];
+const DEFAULT_ENVIRONMENT_CONTEXT: Array<{ text?: string }> = [
+  { text: 'Env Context' },
+];
 
 const createEnvironmentLoader = (): EnvironmentLoader =>
   vi.fn(async () => DEFAULT_ENVIRONMENT_CONTEXT);

@@ -32,7 +32,7 @@ import {
   updateToolExclusion,
 } from './settingsDialogHelpers.js';
 import type { PendingValue, SettingItem } from './settingsDialogTypes.js';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type React from 'react';
 
 // --- Helpers that close over component state (passed explicitly) ---

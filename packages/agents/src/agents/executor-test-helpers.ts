@@ -13,16 +13,18 @@ import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { LSTool } from '@vybestack/llxprt-code-tools';
 import { ReadFileTool } from '@vybestack/llxprt-code-tools';
 import { CoreToolHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreToolHostAdapter.js';
-import { StreamEventType, type StreamEvent } from '../core/chatSession.js';
 import {
-  type FunctionCall,
-  type Part,
-  type GenerateContentConfig,
-} from '@google/genai';
+  StreamEventType,
+  type StreamEvent,
+  type ChatSessionConfig,
+} from '../core/chatSession.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { responseToModelStreamChunk } from '../core/streamChunkWrapper.js';
-import { attachHookRestrictedAllowedTools } from '../core/hookToolRestrictions.js';
+import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type {
+  ContentBlock,
+  ToolCallBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { FunctionCall } from './types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { z } from 'zod';
@@ -53,47 +55,64 @@ export interface ViTestApi {
 }
 
 /**
- * Creates a mock API response chunk, safely spreading functionCalls when
- * present.
+ * Structural mock-part shape used by test fixtures. Mirrors the subset of
+ * the legacy Google `Part` discriminator keys that the tests exercise
+ * (text / thought / functionCall / functionResponse). Kept local so this
+ * file uses only neutral types (zero SDK dependency).
+ */
+export type MockPart =
+  | { text: string; thought?: boolean }
+  | { functionCall: FunctionCall }
+  | {
+      functionResponse: {
+        id?: string;
+        name?: string;
+        response?: unknown;
+      };
+    };
+
+/**
+ * Creates a mock response chunk from neutral content blocks.
+ * The optional functionCalls are merged as tool_call blocks when not
+ * already present by id/name.
  */
 export const createMockResponseChunk = (
-  parts: Part[],
+  blocks: ContentBlock[],
   functionCalls?: FunctionCall[],
   allowedTools?: readonly string[],
 ): ModelStreamChunk => {
-  // Avoid duplicating function calls: if parts already carry functionCall
-  // entries, only append the functionCalls that are not represented in parts.
   const existingCallNames = new Set(
-    parts
-      .filter(
-        (p): p is Part & { functionCall: FunctionCall } =>
-          'functionCall' in p && p.functionCall !== undefined,
-      )
-      .map((p) => p.functionCall.id ?? p.functionCall.name),
+    blocks
+      .filter((b): b is ToolCallBlock => b.type === 'tool_call')
+      .map((b) => b.id),
   );
-  const candidateParts = [...parts];
+  const candidateBlocks = [...blocks];
   if (functionCalls && functionCalls.length > 0) {
     for (const call of functionCalls) {
       const key = call.id ?? call.name;
       if (!existingCallNames.has(key)) {
-        candidateParts.push({ functionCall: call });
+        candidateBlocks.push({
+          type: 'tool_call',
+          id: call.id ?? call.name,
+          name: call.name,
+          parameters: call.args ?? {},
+        });
       }
     }
   }
-  let mockResp = {
-    candidates: [
-      { index: 0, content: { role: 'model', parts: candidateParts } },
-    ],
-    ...(functionCalls && functionCalls.length > 0 ? { functionCalls } : {}),
-  } as unknown as Parameters<typeof responseToModelStreamChunk>[0];
-  // When the caller specifies hook-restricted allowed tools, attach the
-  // restriction to the synthetic GenerateContentResponse BEFORE wrapping so
-  // the neutral ModelStreamChunk carries hookRestrictions the same way the
-  // real StreamProcessor → TurnProcessor pipeline does.
+
+  const chunk = toModelStreamChunk({
+    speaker: 'ai',
+    blocks: candidateBlocks,
+  });
+
   if (allowedTools !== undefined) {
-    mockResp = attachHookRestrictedAllowedTools(mockResp, allowedTools);
+    chunk.hookRestrictions = {
+      allowedToolNames: [...allowedTools],
+    };
   }
-  return responseToModelStreamChunk(mockResp);
+
+  return chunk;
 };
 
 /**
@@ -105,16 +124,16 @@ export const mockModelResponse = (
   thought?: string,
   text?: string,
 ): void => {
-  const parts: Part[] = [];
+  const blocks: ContentBlock[] = [];
   if (thought) {
-    parts.push({
-      text: `**${thought}** This is the reasoning part.`,
-      thought: true,
+    blocks.push({
+      type: 'thinking',
+      thought: `**${thought}** This is the reasoning part.`,
     });
   }
-  if (text) parts.push({ text });
+  if (text) blocks.push({ type: 'text', text });
 
-  const responseChunk = createMockResponseChunk(parts, functionCalls);
+  const responseChunk = createMockResponseChunk(blocks, functionCalls);
 
   mockSendMessageStream.mockImplementationOnce(async () =>
     (async function* () {
@@ -160,8 +179,8 @@ export function createCompletedToolCallResponse(
 }
 
 export interface MessageParams {
-  message?: Part[];
-  config?: GenerateContentConfig;
+  message?: MockPart[];
+  config?: ChatSessionConfig;
 }
 
 /**

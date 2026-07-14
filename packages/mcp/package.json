@@ -31,6 +31,7 @@
     "src",
     "!**/*.test.ts",
     "!**/*.test.tsx",
+    "!**/*.test-d.ts",
     "!**/*.spec.ts",
     "!**/*.spec.tsx",
     "!**/__tests__/**",
@@ -39,7 +40,6 @@
   ],
   "dependencies": {
     "@vybestack/llxprt-code-storage": "file:../storage",
-    "@google/genai": "1.30.0",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@vybestack/llxprt-code-settings": "file:../settings",
     "@vybestack/llxprt-code-tools": "file:../tools",

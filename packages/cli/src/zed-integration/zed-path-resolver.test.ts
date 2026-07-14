@@ -14,7 +14,7 @@ import * as path from 'path';
 import * as os from 'os';
 
 import { ZedPathResolver } from './zed-path-resolver.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { Config, ContentBlock } from '@vybestack/llxprt-code-core';
 
 describe('ZedPathResolver - recursive glob search', () => {
   let tmpDir: string;
@@ -74,7 +74,7 @@ describe('ZedPathResolver - recursive glob search', () => {
     // The resolved @path should be the correct relative path
     // (src/deep/target-file.ts), NOT a malformed double-relative.
     const text = parts
-      .filter((p): p is { text: string } => 'text' in p)
+      .filter((p): p is ContentBlock & { type: 'text' } => p.type === 'text')
       .map((p) => p.text)
       .join('');
     expect(text).toContain('@src/deep/target-file.ts');
@@ -106,7 +106,7 @@ describe('ZedPathResolver - recursive glob search', () => {
     );
 
     const text = parts
-      .filter((p): p is { text: string } => 'text' in p)
+      .filter((p): p is ContentBlock & { type: 'text' } => p.type === 'text')
       .map((p) => p.text)
       .join('');
     expect(text).toContain('visible');
@@ -143,7 +143,7 @@ describe('ZedPathResolver - recursive glob search', () => {
     );
 
     const text = parts
-      .filter((p): p is { text: string } => 'text' in p)
+      .filter((p): p is ContentBlock & { type: 'text' } => p.type === 'text')
       .map((p) => p.text)
       .join('');
     expect(text).toContain('@zzz/fallback-target-file.ts');
@@ -177,7 +177,7 @@ describe('ZedPathResolver - recursive glob search', () => {
     );
 
     const text = parts
-      .filter((p): p is { text: string } => 'text' in p)
+      .filter((p): p is ContentBlock & { type: 'text' } => p.type === 'text')
       .map((p) => p.text)
       .join('');
     expect(text).toContain('@src/*.ts');
@@ -217,7 +217,7 @@ describe('ZedPathResolver - recursive glob search', () => {
     );
 
     const text = parts
-      .filter((p): p is { text: string } => 'text' in p)
+      .filter((p): p is ContentBlock & { type: 'text' } => p.type === 'text')
       .map((p) => p.text)
       .join('');
     expect(text).toContain('@src/file?.ts');

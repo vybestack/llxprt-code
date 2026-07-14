@@ -7,25 +7,28 @@
  *
  * THE BUG:
  * 1. AnthropicProvider yields IContent with thinking block (signature included)
- * 2. convertIContentToResponse creates Part with thought: true
- * 3. processStreamResponse should accumulate it in modelResponseParts
- * 4. recordHistory should extract it to thoughtBlocks
- * 5. History entry should have thinking as first block
+ * 2. processStreamResponse should accumulate it in content blocks
+ * 3. recordHistory should extract it to thoughtBlocks
+ * 4. History entry should have thinking as first block
  *
- * Current behavior: Step 3-5 lose the thinking block somehow.
+ * Current behavior: Step 2-4 lose the thinking block somehow.
  * Debug logs show: blockTypes: ["text","tool_call"] (no thinking!)
  */
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import type {
+  ContentBlock,
   IContent,
   ThinkingBlock,
+  TextBlock,
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Part, GenerateContentResponse } from '@google/genai';
 
-function extractParts(response: GenerateContentResponse): Part[] {
-  const content = response.candidates?.[0]?.content;
-  return content?.parts ?? [];
+/**
+ * Neutral helper: extracts the content blocks from an IContent chunk —
+ * the neutral analogue of the legacy extractParts helper.
+ */
+function extractBlocks(content: IContent): ContentBlock[] {
+  return content.blocks;
 }
 
 describe('Issue #1150: ChatSession thinking block integration', () => {
@@ -35,10 +38,10 @@ describe('Issue #1150: ChatSession thinking block integration', () => {
 
   describe('convertIContentToResponse behavior', () => {
     /**
-     * Test that convertIContentToResponse creates valid GenerateContentResponse
-     * with thought: true for thinking blocks
+     * Test that a provider-yielded IContent carrying a thinking block
+     * surfaces a neutral thinking block with the correct shape.
      */
-    it('should create GenerateContentResponse with thought: true for thinking IContent', () => {
+    it('should carry thinking block with correct shape for thinking IContent', () => {
       const thinkingIContent: IContent = {
         speaker: 'ai',
         blocks: [
@@ -53,29 +56,13 @@ describe('Issue #1150: ChatSession thinking block integration', () => {
 
       expect(thinkingIContent.speaker).toBe('ai');
 
-      // Create a minimal ChatSession instance to test convertIContentToResponse
-      // We need to access the private method, so we'll test the behavior indirectly
-      // by checking the Part structure that should be created
-
-      // The expected Part structure
-      interface ThoughtPart extends Part {
-        thought: true;
-        text: string;
-        thoughtSignature?: string;
-        llxprtSourceField?: string;
-      }
-
-      const expectedPart: ThoughtPart = {
-        thought: true,
-        text: 'Analyzing the problem...',
-        thoughtSignature: 'EqoBCkYIAxgCIkAKHgoSdGhpbmtpbmdfY29udGVudA==',
-        llxprtSourceField: 'thinking',
-      };
-
-      // Verify the structure matches what isThoughtPart checks for
-      expect(expectedPart.thought).toBe(true);
-      expect(typeof expectedPart.thought).toBe('boolean');
-      expect('thought' in expectedPart).toBe(true);
+      const thinkingBlock = thinkingIContent.blocks[0] as ThinkingBlock;
+      expect(thinkingBlock.type).toBe('thinking');
+      expect(thinkingBlock.thought).toBe('Analyzing the problem...');
+      expect(thinkingBlock.signature).toBe(
+        'EqoBCkYIAxgCIkAKHgoSdGhpbmtpbmdfY29udGVudA==',
+      );
+      expect(thinkingBlock.sourceField).toBe('thinking');
     });
   });
 
@@ -86,123 +73,89 @@ describe('Issue #1150: ChatSession thinking block integration', () => {
      *
      * The test should FAIL if thinking blocks are being lost.
      */
-    it('should accumulate thinking parts in modelResponseParts when includeInContext is true', () => {
-      // Simulate the stream of GenerateContentResponse from converted IContents
-
+    it('should accumulate thinking blocks in content blocks when includeInContext is true', () => {
       // Chunk 1: Thinking block (from separate IContent yield)
-      const thinkingChunk: GenerateContentResponse = {
-        candidates: [
+      const thinkingChunk: IContent = {
+        speaker: 'ai',
+        blocks: [
           {
-            content: {
-              role: 'model',
-              parts: [
-                {
-                  thought: true,
-                  text: 'Let me think about this...',
-                  thoughtSignature: 'sig123',
-                  llxprtSourceField: 'thinking',
-                } as Part,
-              ],
-            },
+            type: 'thinking',
+            thought: 'Let me think about this...',
+            sourceField: 'thinking',
+            signature: 'sig123',
           },
         ],
-      } as GenerateContentResponse;
+      };
 
       // Chunk 2: Text + tool call
-      const toolCallChunk: GenerateContentResponse = {
-        candidates: [
+      const toolCallChunk: IContent = {
+        speaker: 'ai',
+        blocks: [
+          { type: 'text', text: 'I will help you.' },
           {
-            content: {
-              role: 'model',
-              parts: [
-                { text: 'I will help you.' },
-                {
-                  functionCall: {
-                    id: 'tool_1',
-                    name: 'read_file',
-                    args: { path: '/tmp/test.txt' },
-                  },
-                },
-              ],
-            },
-            finishReason: 'STOP',
+            type: 'tool_call',
+            id: 'tool_1',
+            name: 'read_file',
+            parameters: { path: '/tmp/test.txt' },
           },
         ],
-      } as unknown as GenerateContentResponse;
+      };
 
       // Simulate processStreamResponse accumulation
-      const modelResponseParts: Part[] = [];
-      modelResponseParts.push(...extractParts(thinkingChunk));
-      modelResponseParts.push(...extractParts(toolCallChunk));
+      const contentBlocks: ContentBlock[] = [];
+      contentBlocks.push(...extractBlocks(thinkingChunk));
+      contentBlocks.push(...extractBlocks(toolCallChunk));
 
-      // CRITICAL ASSERTION: Thinking part MUST be in modelResponseParts
-      const thoughtParts = modelResponseParts.filter(
-        (part) => (part as { thought?: boolean }).thought === true,
+      // CRITICAL ASSERTION: Thinking block MUST be in contentBlocks
+      const thinkingBlocks = contentBlocks.filter(
+        (block): block is ThinkingBlock => block.type === 'thinking',
       );
 
-      expect(thoughtParts.length).toBe(1);
-      expect(thoughtParts[0].text).toBe('Let me think about this...');
-      expect(
-        (thoughtParts[0] as { thoughtSignature?: string }).thoughtSignature,
-      ).toBe('sig123');
+      expect(thinkingBlocks.length).toBe(1);
+      expect(thinkingBlocks[0].thought).toBe('Let me think about this...');
+      expect(thinkingBlocks[0].signature).toBe('sig123');
 
-      // Total parts should be 3: thinking + text + functionCall
-      expect(modelResponseParts.length).toBe(3);
+      // Total blocks should be 3: thinking + text + tool_call
+      expect(contentBlocks.length).toBe(3);
     });
 
     /**
      * Test that thinking is filtered when includeInContext is false
      */
-    it('should filter thinking parts when includeInContext is false', () => {
-      const thinkingChunk: GenerateContentResponse = {
-        candidates: [
+    it('should filter thinking blocks when includeInContext is false', () => {
+      const thinkingChunk: IContent = {
+        speaker: 'ai',
+        blocks: [
           {
-            content: {
-              role: 'model',
-              parts: [
-                {
-                  thought: true,
-                  text: 'Thinking...',
-                } as Part,
-              ],
-            },
+            type: 'thinking',
+            thought: 'Thinking...',
+            sourceField: 'thinking',
           },
         ],
-      } as GenerateContentResponse;
+      };
 
-      const textChunk: GenerateContentResponse = {
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: [{ text: 'Response' }],
-            },
-          },
-        ],
-      } as GenerateContentResponse;
+      const textChunk: IContent = {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'Response' }],
+      };
 
-      const modelResponseParts: Part[] = [];
+      const contentBlocks: ContentBlock[] = [];
       // Process with thoughts filtered
       [thinkingChunk, textChunk].forEach((chunk) => {
-        const content = chunk.candidates?.[0]?.content;
-        if (content?.parts != null) {
-          modelResponseParts.push(
-            ...content.parts.filter(
-              (part) => (part as { thought?: boolean }).thought !== true,
-            ),
-          );
-        }
+        contentBlocks.push(
+          ...extractBlocks(chunk).filter((block) => block.type !== 'thinking'),
+        );
       });
 
       // Thinking should be filtered out
-      const thoughtParts = modelResponseParts.filter(
-        (part) => (part as { thought?: boolean }).thought === true,
+      const thinkingBlocks = contentBlocks.filter(
+        (block): block is ThinkingBlock => block.type === 'thinking',
       );
-      expect(thoughtParts.length).toBe(0);
+      expect(thinkingBlocks.length).toBe(0);
 
-      // Only text part remains
-      expect(modelResponseParts.length).toBe(1);
-      expect(modelResponseParts[0].text).toBe('Response');
+      // Only text block remains
+      expect(contentBlocks.length).toBe(1);
+      expect((contentBlocks[0] as TextBlock).text).toBe('Response');
     });
   });
 
@@ -224,7 +177,7 @@ describe('Issue #1150: ChatSession thinking block integration', () => {
         },
       ];
 
-      // Simulate the IContent created from non-thought parts
+      // Simulate the IContent created from non-thought blocks
       const outputIContent: IContent = {
         speaker: 'ai',
         blocks: [
@@ -253,7 +206,7 @@ describe('Issue #1150: ChatSession thinking block integration', () => {
 
       // 3. Tool call must also be present
       const toolCallBlock = outputIContent.blocks.find(
-        (b) => b.type === 'tool_call',
+        (b): b is ToolCallBlock => b.type === 'tool_call',
       );
       expect(toolCallBlock).toBeDefined();
 
@@ -306,40 +259,41 @@ describe('Issue #1150: ChatSession thinking block integration', () => {
     });
   });
 
-  describe('isThoughtPart filtering behavior', () => {
+  describe('isThinkingBlock filtering behavior', () => {
     /**
-     * The isThoughtPart function checks: part.thought === true
+     * The neutral isThinkingBlock check: block.type === 'thinking'
      *
-     * If a Part doesn't have thought: true (boolean), it won't be recognized.
+     * A block is recognized as thinking only when its type discriminator
+     * equals 'thinking'.
      */
-    it('Part must have thought: true (boolean) to be recognized as thought', () => {
-      function isThoughtPart(part: Part | undefined): boolean {
-        return Boolean(
-          part &&
-            typeof part === 'object' &&
-            'thought' in part &&
-            (part as { thought?: unknown }).thought === true,
-        );
+    it('block must have type: "thinking" to be recognized as a thinking block', () => {
+      function isThinkingBlock(block: ContentBlock | undefined): boolean {
+        return Boolean(block && block.type === 'thinking');
       }
 
-      // Valid thought part
-      const validThought: Part = { thought: true, text: 'thinking...' } as Part;
-      expect(isThoughtPart(validThought)).toBe(true);
+      // Valid thinking block
+      const validThinking: ThinkingBlock = {
+        type: 'thinking',
+        thought: 'thinking...',
+        sourceField: 'thinking',
+      };
+      expect(isThinkingBlock(validThinking)).toBe(true);
 
-      // Invalid: thought is string (not boolean)
-      const invalidThought1: Part = {
-        thought: 'true',
-        text: 'thinking...',
-      } as unknown as Part;
-      expect(isThoughtPart(invalidThought1)).toBe(false);
+      // Invalid: text block
+      const invalidText: TextBlock = { type: 'text', text: 'just text' };
+      expect(isThinkingBlock(invalidText)).toBe(false);
 
-      // Invalid: thought is undefined
-      const invalidThought2: Part = { text: 'just text' };
-      expect(isThoughtPart(invalidThought2)).toBe(false);
+      // Invalid: tool_call block
+      const invalidToolCall: ToolCallBlock = {
+        type: 'tool_call',
+        id: 'call_1',
+        name: 'read_file',
+        parameters: {},
+      };
+      expect(isThinkingBlock(invalidToolCall)).toBe(false);
 
-      // Invalid: thought is false
-      const invalidThought3: Part = { thought: false, text: 'text' } as Part;
-      expect(isThoughtPart(invalidThought3)).toBe(false);
+      // Invalid: undefined
+      expect(isThinkingBlock(undefined)).toBe(false);
     });
   });
 });

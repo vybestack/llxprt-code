@@ -26,7 +26,6 @@
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import type { Content } from '@google/genai';
 import { join } from 'node:path';
 import {
   Logger,
@@ -36,9 +35,9 @@ import {
   getProjectHash,
   type ResumeRequest,
   type LockHandle,
+  type CheckpointContent,
 } from '@vybestack/llxprt-code-core';
 import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type {
@@ -191,9 +190,11 @@ export class SessionControl implements AgentSessionControl {
   async createCheckpoint(label?: string): Promise<SessionCheckpoint> {
     const logger = await this.getLogger();
     const tag = label ?? `checkpoint-${Date.now()}`;
-    const history = (await this.deps.resolveClient().getHistory()) as Content[];
+    const history = await this.deps.resolveClient().getHistory();
+    // Convert neutral IContent[] to the legacy checkpoint format ({role, parts}).
+    const checkpointHistory = ContentConverters.toGeminiContents(history);
     await logger.saveCheckpoint(
-      history as Parameters<typeof logger.saveCheckpoint>[0],
+      checkpointHistory as unknown as CheckpointContent[],
       tag,
     );
     return {
@@ -215,7 +216,11 @@ export class SessionControl implements AgentSessionControl {
   async restoreCheckpoint(id: string): Promise<void> {
     const logger = await this.getLogger();
     const { history } = await logger.loadCheckpoint(id);
-    const items: IContent[] = ContentConverters.toIContents(history);
+    // Checkpoint files store the legacy Google Content shape ({role, parts}).
+    // Convert to neutral IContent[] at this boundary.
+    const items = ContentConverters.toIContents(
+      history as unknown as Parameters<typeof ContentConverters.toIContents>[0],
+    );
     await this.deps.resolveClient().restoreHistory(items);
   }
 
@@ -310,9 +315,8 @@ export class SessionControl implements AgentSessionControl {
       provider: this.deps.getProvider(),
       model: this.deps.getModel(),
     });
-    const history = (await this.deps.resolveClient().getHistory()) as Content[];
-    const items: IContent[] = ContentConverters.toIContents(history);
-    for (const item of items) {
+    const history = await this.deps.resolveClient().getHistory();
+    for (const item of history) {
       service.recordContent(item);
     }
     await service.flush();

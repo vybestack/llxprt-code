@@ -16,31 +16,35 @@
  * project line budget while preserving exact behavior.
  */
 
-import { Type } from '@google/genai';
-import type { Content, Part, FunctionCall } from '@google/genai';
 import { type z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import type { Schema, FunctionDeclaration } from '@google/genai';
 import { executeToolCall } from '../core/nonInteractiveToolExecutor.js';
-import { convertBlocksToParts } from '../core/MessageConverter.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { type ToolCallRequestInfo } from '@vybestack/llxprt-code-core/core/turn.js';
-import {
-  getHookRestrictedAllowedToolsForFunctionCall,
-  isHookRestrictedToolCall,
-} from '../core/hookToolRestrictions.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { TASK_COMPLETE_TOOL_NAME } from './recovery.js';
-import type { AgentDefinition, SubagentActivityEventType } from './types.js';
+import type {
+  AgentDefinition,
+  FunctionCall,
+  FunctionDeclaration,
+  SubagentActivityEventType,
+} from './types.js';
 import {
   DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
   enforceImageBudget,
   buildOmissionFeedback,
 } from '../core/imagePayloadBudget.js';
 
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  ContentBlock,
+  IContent,
+  MediaBlock,
+  TextBlock,
+  ToolResponseBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 /** Result of executing one or more tool calls. */
 export interface ToolExecutionResult {
@@ -50,7 +54,7 @@ export interface ToolExecutionResult {
 
 /** Final result of processing all function calls in a turn. */
 export interface FunctionCallProcessingResult {
-  nextMessage: Content;
+  nextMessage: IContent;
   submittedOutput: string | null;
   taskCompleted: boolean;
   partialResult: string | null;
@@ -72,16 +76,18 @@ type OutputConfig = NonNullable<AgentDefinition<z.ZodTypeAny>['outputConfig']>;
 export function buildCompleteTaskDeclaration(
   outputConfig: OutputConfig | undefined,
 ): FunctionDeclaration {
+  const parametersJsonSchema: Record<string, unknown> = {
+    type: 'object',
+    properties: {},
+    required: [],
+  };
+
   const completeTool: FunctionDeclaration = {
     name: TASK_COMPLETE_TOOL_NAME,
     description: outputConfig
       ? 'Call this tool to submit your final answer and complete the task. This is the ONLY way to finish.'
       : 'Call this tool to signal that you have completed your task. This is the ONLY way to finish.',
-    parameters: {
-      type: Type.OBJECT,
-      properties: {},
-      required: [],
-    },
+    parametersJsonSchema,
   };
 
   if (outputConfig) {
@@ -91,9 +97,14 @@ export function buildCompleteTaskDeclaration(
       definitions: _definitions,
       ...schema
     } = jsonSchema;
-    completeTool.parameters!.properties![outputConfig.outputName] =
-      schema as Schema;
-    completeTool.parameters!.required!.push(outputConfig.outputName);
+    parametersJsonSchema.properties = {
+      ...(parametersJsonSchema.properties as Record<string, unknown>),
+      [outputConfig.outputName]: schema,
+    };
+    parametersJsonSchema.required = [
+      ...(parametersJsonSchema.required as string[]),
+      outputConfig.outputName,
+    ];
   }
 
   return completeTool;
@@ -123,7 +134,7 @@ export async function processFunctionCalls(
   let taskCompleted = false;
 
   const toolExecutionPromises: Array<Promise<ToolExecutionResult | void>> = [];
-  const syncResponseParts: Part[] = [];
+  const syncResponseParts: ContentBlock[] = [];
   let executableFunctionCallCount = 0;
 
   for (const [index, functionCall] of functionCalls.entries()) {
@@ -140,9 +151,7 @@ export async function processFunctionCalls(
       taskCompleted,
       submittedOutput,
     );
-    if (dispatch.kind === 'skip') {
-      // Hook-restricted or otherwise filtered; do nothing.
-    } else if (dispatch.kind === 'complete-task') {
+    if (dispatch.kind === 'complete-task') {
       executableFunctionCallCount += 1;
       taskCompleted = dispatch.taskCompleted;
       submittedOutput = dispatch.submittedOutput;
@@ -169,14 +178,13 @@ export async function processFunctionCalls(
 
 /** Discriminated result for dispatching a single function call. */
 type FunctionCallDispatch =
-  | { kind: 'skip' }
   | {
       kind: 'complete-task';
       taskCompleted: boolean;
       submittedOutput: string | null;
-      syncParts: Part[];
+      syncParts: ContentBlock[];
     }
-  | { kind: 'unauthorized'; syncParts: Part[] }
+  | { kind: 'unauthorized'; syncParts: ContentBlock[] }
   | { kind: 'execute'; promise: Promise<ToolExecutionResult | void> };
 
 /**
@@ -200,11 +208,6 @@ function dispatchSingleFunctionCall(
 ): FunctionCallDispatch {
   const callId = functionCall.id ?? `${promptId}-${index}`;
   const args = functionCall.args ?? {};
-  const hookAllowedTools =
-    getHookRestrictedAllowedToolsForFunctionCall(functionCall);
-  if (isHookRestrictedToolCall(functionCall, hookAllowedTools)) {
-    return { kind: 'skip' };
-  }
 
   emitActivity('TOOL_CALL_START', { name: functionCall.name, args });
 
@@ -226,8 +229,8 @@ function dispatchSingleFunctionCall(
     };
   }
 
-  if (!allowedToolNames.has(functionCall.name as string)) {
-    const syncParts: Part[] = [];
+  if (!allowedToolNames.has(functionCall.name)) {
+    const syncParts: ContentBlock[] = [];
     handleUnauthorizedToolCall(functionCall, callId, syncParts, emitActivity);
     return { kind: 'unauthorized', syncParts };
   }
@@ -260,20 +263,16 @@ function handleCompleteTaskCall(
 ): {
   taskCompleted: boolean;
   submittedOutput: string | null;
-  syncParts: Part[];
+  syncParts: ContentBlock[];
 } {
-  const syncParts: Part[] = [];
+  const syncParts: ContentBlock[] = [];
 
   if (currentTaskCompleted) {
     const error =
       'Task already marked complete in this turn. Ignoring duplicate call.';
-    syncParts.push({
-      functionResponse: {
-        name: TASK_COMPLETE_TOOL_NAME,
-        response: { error },
-        id: callId,
-      },
-    });
+    syncParts.push(
+      createToolResponseBlock(TASK_COMPLETE_TOOL_NAME, callId, { error }),
+    );
     emitActivity('ERROR', {
       context: 'tool_call',
       name: functionCall.name,
@@ -305,13 +304,11 @@ function handleCompleteTaskCall(
     };
   }
 
-  syncParts.push({
-    functionResponse: {
-      name: TASK_COMPLETE_TOOL_NAME,
-      response: { status: 'Task marked complete.' },
-      id: callId,
-    },
-  });
+  syncParts.push(
+    createToolResponseBlock(TASK_COMPLETE_TOOL_NAME, callId, {
+      status: 'Task marked complete.',
+    }),
+  );
   emitActivity('TOOL_CALL_END', {
     name: functionCall.name,
     output: 'Task marked complete.',
@@ -335,9 +332,9 @@ function processCompleteTaskOutput(
 ): {
   taskCompleted: boolean;
   submittedOutput: string | null;
-  syncParts: Part[];
+  syncParts: ContentBlock[];
 } {
-  const syncParts: Part[] = [];
+  const syncParts: ContentBlock[] = [];
   const outputName = outputConfig.outputName;
 
   if (args[outputName] !== undefined) {
@@ -346,13 +343,9 @@ function processCompleteTaskOutput(
 
     if (!validationResult.success) {
       const error = `Output validation failed: ${JSON.stringify(validationResult.error.flatten())}`;
-      syncParts.push({
-        functionResponse: {
-          name: TASK_COMPLETE_TOOL_NAME,
-          response: { error },
-          id: callId,
-        },
-      });
+      syncParts.push(
+        createToolResponseBlock(TASK_COMPLETE_TOOL_NAME, callId, { error }),
+      );
       emitActivity('ERROR', {
         context: 'tool_call',
         name: functionCall.name,
@@ -371,13 +364,11 @@ function processCompleteTaskOutput(
       submittedOutput = JSON.stringify(outputValue, null, 2);
     }
 
-    syncParts.push({
-      functionResponse: {
-        name: TASK_COMPLETE_TOOL_NAME,
-        response: { result: 'Output submitted and task completed.' },
-        id: callId,
-      },
-    });
+    syncParts.push(
+      createToolResponseBlock(TASK_COMPLETE_TOOL_NAME, callId, {
+        result: 'Output submitted and task completed.',
+      }),
+    );
     emitActivity('TOOL_CALL_END', {
       name: functionCall.name,
       output: 'Output submitted and task completed.',
@@ -387,13 +378,9 @@ function processCompleteTaskOutput(
 
   // Missing required output argument
   const error = `Missing required argument '${outputName}' for completion.`;
-  syncParts.push({
-    functionResponse: {
-      name: TASK_COMPLETE_TOOL_NAME,
-      response: { error },
-      id: callId,
-    },
-  });
+  syncParts.push(
+    createToolResponseBlock(TASK_COMPLETE_TOOL_NAME, callId, { error }),
+  );
   emitActivity('ERROR', {
     context: 'tool_call',
     name: functionCall.name,
@@ -406,20 +393,16 @@ function processCompleteTaskOutput(
 function handleUnauthorizedToolCall(
   functionCall: FunctionCall,
   callId: string,
-  syncResponseParts: Part[],
+  syncResponseParts: ContentBlock[],
   emitActivity: EmitActivityFn,
 ): void {
   const error = `Unauthorized tool call: '${functionCall.name}' is not available to this agent.`;
 
   debugLogger.warn(`[AgentExecutor] Blocked call: ${error}`);
 
-  syncResponseParts.push({
-    functionResponse: {
-      name: functionCall.name as string,
-      id: callId,
-      response: { error },
-    },
-  });
+  syncResponseParts.push(
+    createToolResponseBlock(functionCall.name, callId, { error }),
+  );
 
   emitActivity('ERROR', {
     context: 'tool_call_unauthorized',
@@ -440,17 +423,12 @@ function createToolExecutionPromise(
   messageBus: MessageBus,
   emitActivity: EmitActivityFn,
 ): Promise<ToolExecutionResult | void> {
-  const hookAllowedTools =
-    getHookRestrictedAllowedToolsForFunctionCall(functionCall);
   const requestInfo: ToolCallRequestInfo = {
     callId,
-    name: functionCall.name as string,
+    name: functionCall.name,
     args,
     isClientInitiated: true,
     prompt_id: promptId,
-    ...(hookAllowedTools !== undefined
-      ? { hookRestrictedAllowedTools: hookAllowedTools }
-      : {}),
   };
 
   return (async () => {
@@ -488,7 +466,7 @@ function createToolExecutionPromise(
 /** Assembles all tool response parts and returns the final result. */
 async function assembleToolResponses(
   executableFunctionCallCount: number,
-  syncResponseParts: Part[],
+  syncResponseParts: ContentBlock[],
   toolExecutionPromises: Array<Promise<ToolExecutionResult | void>>,
   submittedOutput: string | null,
   taskCompleted: boolean,
@@ -497,11 +475,11 @@ async function assembleToolResponses(
 ): Promise<FunctionCallProcessingResult> {
   const asyncResults = await Promise.all(toolExecutionPromises);
 
-  const toolResponseParts: Part[] = [...syncResponseParts];
+  const toolResponseBlocks: ContentBlock[] = [...syncResponseParts];
   let partialResult: string | null = null;
   for (const result of asyncResults) {
     if (result) {
-      toolResponseParts.push(...convertBlocksToParts(result.responseParts));
+      toolResponseBlocks.push(...result.responseParts);
       if (result.partialResult !== null) {
         partialResult = result.partialResult;
       }
@@ -510,35 +488,52 @@ async function assembleToolResponses(
 
   if (
     executableFunctionCallCount > 0 &&
-    toolResponseParts.length === 0 &&
+    toolResponseBlocks.length === 0 &&
     !taskCompleted
   ) {
-    toolResponseParts.push({
+    const fallbackBlock: TextBlock = {
+      type: 'text',
       text: 'All tool calls failed or were unauthorized. Please analyze the errors and try an alternative approach.',
-    });
+    };
+    toolResponseBlocks.push(fallbackBlock);
   }
 
-  let finalParts = toolResponseParts;
   if (budgetBytes > 0) {
-    const { parts: budgeted, omitted } = enforceImageBudget(
-      toolResponseParts,
-      budgetBytes,
+    const imageParts = toolResponseBlocks.filter(
+      (b): b is MediaBlock => b.type === 'media' && b.encoding === 'base64',
     );
+    const { omitted } = enforceImageBudget(imageParts, budgetBytes);
     if (omitted.length > 0) {
-      budgeted.push({ text: buildOmissionFeedback(omitted) });
+      const fallbackText = buildOmissionFeedback(omitted);
+      toolResponseBlocks.push({ type: 'text', text: fallbackText });
       emitActivity('ERROR', {
         context: 'image_budget',
         omittedCount: omitted.length,
         toolNames: omitted.map((img) => img.toolName),
       });
     }
-    finalParts = budgeted;
   }
 
   return {
-    nextMessage: { role: 'user', parts: finalParts },
+    nextMessage: iContentFromBlocks(toolResponseBlocks, 'tool'),
     submittedOutput,
     taskCompleted,
     partialResult,
+  };
+}
+
+/**
+ * Creates a `ToolResponseBlock` from a tool name, call ID, and response payload.
+ */
+function createToolResponseBlock(
+  toolName: string,
+  callId: string,
+  result: Record<string, unknown>,
+): ToolResponseBlock {
+  return {
+    type: 'tool_response',
+    callId,
+    toolName,
+    result,
   };
 }

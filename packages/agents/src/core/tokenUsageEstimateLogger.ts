@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { PartListUnion } from '@google/genai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { estimateRequestTokensStructured } from './clientHelpers.js';
 import type {
@@ -17,7 +17,7 @@ const logger = new DebugLogger('llxprt:token-usage-estimate');
 
 export interface ChatTokenEstimator {
   estimatePendingTokens?: (contents: IContent[]) => Promise<number>;
-  convertPartListUnionToIContent?: (input: PartListUnion) => IContent;
+  convertPartListUnionToIContent?: (input: AgentMessageInput) => IContent;
 }
 
 const OPENAI_PROVIDERS = new Set([
@@ -42,7 +42,7 @@ interface TokenUsageLoggerHolder {
 export function recordTokenEstimate(
   holder: TokenUsageLoggerHolder | undefined,
   promptId: string,
-  request: PartListUnion,
+  request: AgentMessageInput,
   estimatedTokens: number,
   providerName: string,
   model: string,
@@ -69,7 +69,7 @@ export function recordTokenEstimate(
 }
 
 export function estimateStructuredTokensOrFallback(
-  request: PartListUnion,
+  request: AgentMessageInput,
   fallback: number,
 ): number {
   return safeEstimateStructuredTokens(request).tokens ?? fallback;
@@ -77,7 +77,7 @@ export function estimateStructuredTokensOrFallback(
 
 export async function estimateRequestTokens(
   chat: ChatTokenEstimator,
-  initialRequest: PartListUnion,
+  initialRequest: AgentMessageInput,
   fallback: number,
 ): Promise<number> {
   const est = chat.estimatePendingTokens;
@@ -94,7 +94,7 @@ export async function estimateRequestTokens(
   }
 }
 
-function safeEstimateStructuredTokens(request: PartListUnion): {
+function safeEstimateStructuredTokens(request: AgentMessageInput): {
   tokens: number | null;
   failed: boolean;
 } {

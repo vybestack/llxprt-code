@@ -369,4 +369,59 @@ describe('OpenAIResponsesInputBuilder tool pairing @issue:2137', () => {
       'Here is my answer.',
     );
   });
+
+  it('replays the provider reasoning ID with encrypted reasoning', () => {
+    const input = buildOpenAIResponsesInput(
+      [
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'reasoning',
+              encryptedContent: 'encrypted',
+              providerMetadata: {
+                'openai.responses.reasoningId': 'rs_provider_123',
+              },
+            },
+          ],
+        },
+      ],
+      buildContext(),
+    );
+
+    expect(input).toContainEqual(
+      expect.objectContaining({
+        type: 'reasoning',
+        id: 'rs_provider_123',
+        encrypted_content: 'encrypted',
+      }),
+    );
+  });
+
+  it('uses an rs-prefixed fallback when encrypted reasoning has no provider ID', () => {
+    const input = buildOpenAIResponsesInput(
+      [
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'legacy reasoning',
+              encryptedContent: 'legacy-encrypted',
+            },
+          ],
+        },
+      ],
+      buildContext(),
+    );
+    const reasoningItem = input.find((item) => item.type === 'reasoning');
+
+    expect(reasoningItem).toStrictEqual(
+      expect.objectContaining({
+        id: expect.stringMatching(/^rs_/),
+        encrypted_content: 'legacy-encrypted',
+      }),
+    );
+  });
 });

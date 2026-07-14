@@ -17,7 +17,6 @@
  * lives under __tests__/helpers/ which is excluded from the P09 boundary scan.
  */
 
-import { type Part } from '@google/genai';
 import type { CanonicalFinishReason } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
@@ -472,7 +471,7 @@ export function loopToolsCompleteError(
     invocation: undefined as never,
     response: {
       callId,
-      responseParts: [{ text: 'boom' }] as Part[],
+      responseParts: [{ type: 'text', text: 'boom' }] as ContentBlock[],
       resultDisplay: undefined,
       error: new Error('boom'),
       errorType: undefined,
@@ -509,7 +508,7 @@ export function loopToolsCompleteCancelled(
     invocation: undefined as never,
     response: {
       callId,
-      responseParts: [{ text: 'cancelled' }] as Part[],
+      responseParts: [{ type: 'text', text: 'cancelled' }] as ContentBlock[],
       resultDisplay: undefined,
       error: undefined,
       errorType: undefined,
@@ -755,7 +754,7 @@ function buildSuccessfulToolCall(
     invocation: undefined as never,
     response: {
       callId,
-      responseParts: [{ text: output }] as Part[],
+      responseParts: [{ type: 'text', text: output }] as ContentBlock[],
       resultDisplay: undefined,
       error: undefined,
       errorType: undefined,
@@ -808,7 +807,7 @@ function buildToolCallByStatus(
       invocation: undefined as never,
       response: {
         callId,
-        responseParts: [{ text: 'ok' }] as Part[],
+        responseParts: [{ type: 'text', text: 'ok' }] as ContentBlock[],
         resultDisplay: undefined,
         error: undefined,
         errorType: undefined,

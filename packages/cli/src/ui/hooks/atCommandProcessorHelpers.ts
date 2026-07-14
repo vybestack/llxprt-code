@@ -8,14 +8,14 @@ import type { FileWorkspaceState } from '../cliUiRuntime.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import {
-  debugLogger,
   getErrorMessage,
   isNodeError,
   validatePathWithinWorkspace,
-  type ContractPartListUnion,
-  type ContractPart,
+  type AgentRequestInput,
+  type ContentBlock,
   type DiscoveredMCPResource,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
   AgentToolHandle,
   AgentToolInvocation,
@@ -32,7 +32,7 @@ export interface AtCommandPart {
 }
 
 export interface AtCommandProcessResult {
-  processedQuery: ContractPartListUnion | null;
+  processedQuery: AgentRequestInput | null;
   error?: string;
 }
 
@@ -94,7 +94,7 @@ interface FileReadParams {
   pathSpecsToRead: string[];
   contentLabelsForDisplay: string[];
   absoluteToRelativePathMap: Map<string, string>;
-  processedQueryParts: Array<ContractPart | string>;
+  processedQueryParts: ContentBlock[];
   resourceReadDisplays: IndividualToolCallDisplay[];
   readManyFilesTool: NonNullable<MaybeToolHandle>;
   respectFileIgnore: ReturnType<
@@ -616,7 +616,7 @@ function buildReadErrorDisplay(
 
 function appendReadManyFilesContent(
   llmContent: unknown,
-  processedQueryParts: Array<ContractPart | string>,
+  processedQueryParts: ContentBlock[],
   absoluteToRelativePathMap: Map<string, string>,
   config: AtCommandHelperRuntime,
   onDebugMessage: (message: string) => void,
@@ -627,7 +627,10 @@ function appendReadManyFilesContent(
     );
     return;
   }
-  processedQueryParts.push({ text: '\n--- Content from referenced files ---' });
+  processedQueryParts.push({
+    type: 'text',
+    text: '\n--- Content from referenced files ---',
+  });
   for (const part of llmContent)
     processReadManyFilesPart(
       part,
@@ -639,23 +642,30 @@ function appendReadManyFilesContent(
 
 function processReadManyFilesPart(
   part: unknown,
-  processedQueryParts: Array<ContractPart | string>,
+  processedQueryParts: ContentBlock[],
   absoluteToRelativePathMap: Map<string, string>,
   config: AtCommandHelperRuntime,
 ): void {
   if (typeof part !== 'string') {
-    processedQueryParts.push(part as ContractPart | string);
+    processedQueryParts.push({
+      type: 'text',
+      text:
+        typeof part === 'object' && part !== null && 'text' in part
+          ? String((part as { text: unknown }).text)
+          : String(part),
+    });
     return;
   }
   const parsed = parseFileContentPart(part, absoluteToRelativePathMap, config);
   if (parsed === undefined) {
-    processedQueryParts.push({ text: part });
+    processedQueryParts.push({ type: 'text', text: part });
     return;
   }
   processedQueryParts.push({
+    type: 'text',
     text: `\nContent from @${parsed.displayPath}:\n`,
   });
-  processedQueryParts.push({ text: parsed.content });
+  processedQueryParts.push({ type: 'text', text: parsed.content });
 }
 
 function parseFileContentPart(

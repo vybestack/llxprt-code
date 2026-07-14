@@ -5,7 +5,7 @@
  */
 
 import type { CommandModule } from 'yargs';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { getErrorMessage } from '../../utils/errors.js';
 import { exitCli } from '../utils.js';
 import { uninstallSkill } from '../../utils/skillUtils.js';

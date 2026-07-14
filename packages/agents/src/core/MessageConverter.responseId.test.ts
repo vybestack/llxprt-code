@@ -5,31 +5,28 @@
  */
 
 /**
- * Issue #207: applyResponseMetadata must carry IContent.metadata.id onto the
- * synthetic GenerateContentResponse via the repo-owned responseId carrier so
- * it survives the Gemini intermediate and reaches recorded history.
+ * Issue #207: the neutral IContent conversion boundary must carry
+ * IContent.metadata.id onto ModelStreamChunk.responseId while preserving the
+ * provider's response-storage status in the embedded content metadata.
  */
 
 import { describe, it, expect } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { convertIContentToResponse } from './MessageConverter.js';
-import { getResponseId, getResponsesStored } from './responseIdCarrier.js';
+import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 describe('Issue 207: metadata.id carried as responseId @issue:207', () => {
   it('sets responseId when metadata.id is present', () => {
-    const icontent: IContent = {
+    const content: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'Hello.' }],
       metadata: { id: 'resp_abc' },
     };
 
-    const response = convertIContentToResponse(icontent);
-
-    expect(getResponseId(response)).toBe('resp_abc');
+    expect(toModelStreamChunk(content).responseId).toBe('resp_abc');
   });
 
   it('does not set responseId when metadata.id is absent', () => {
-    const icontent: IContent = {
+    const content: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'Hello.' }],
       metadata: {
@@ -37,65 +34,60 @@ describe('Issue 207: metadata.id carried as responseId @issue:207', () => {
       },
     };
 
-    const response = convertIContentToResponse(icontent);
-
-    expect(getResponseId(response)).toBeUndefined();
+    expect(toModelStreamChunk(content).responseId).toBeUndefined();
   });
 
-  it('sets both responseId and usageMetadata when both are present', () => {
-    const icontent: IContent = {
+  it('sets both responseId and usage when both are present', () => {
+    const usage = {
+      promptTokens: 10,
+      completionTokens: 5,
+      totalTokens: 15,
+    };
+    const content: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'Hello.' }],
-      metadata: {
-        id: 'resp_xyz',
-        usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
-      },
+      metadata: { id: 'resp_xyz', usage },
     };
 
-    const response = convertIContentToResponse(icontent);
+    const chunk = toModelStreamChunk(content);
 
-    expect(getResponseId(response)).toBe('resp_xyz');
-    expect(response.usageMetadata).toBeDefined();
-    expect(response.usageMetadata?.promptTokenCount).toBe(10);
-    expect(response.usageMetadata?.candidatesTokenCount).toBe(5);
-    expect(response.usageMetadata?.totalTokenCount).toBe(15);
+    expect(chunk.responseId).toBe('resp_xyz');
+    expect(chunk.usage).toStrictEqual(usage);
   });
 
   it('does not set responseId when metadata.id is an empty string', () => {
-    const icontent: IContent = {
+    const content: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'Hello.' }],
       metadata: { id: '' },
     };
 
-    const response = convertIContentToResponse(icontent);
-
-    expect(getResponseId(response)).toBeUndefined();
+    expect(toModelStreamChunk(content).responseId).toBeUndefined();
   });
 
-  it('carries responsesStored=true onto the synthetic response', () => {
-    const icontent: IContent = {
+  it('preserves responsesStored=true in content metadata', () => {
+    const content: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'Hello.' }],
       metadata: { id: 'resp_stored', responsesStored: true },
     };
 
-    const response = convertIContentToResponse(icontent);
+    const chunk = toModelStreamChunk(content);
 
-    expect(getResponseId(response)).toBe('resp_stored');
-    expect(getResponsesStored(response)).toBe(true);
+    expect(chunk.responseId).toBe('resp_stored');
+    expect(chunk.content.metadata?.responsesStored).toBe(true);
   });
 
-  it('sets responseId but not responsesStored when only metadata.id is present', () => {
-    const icontent: IContent = {
+  it('leaves responsesStored absent when only metadata.id is present', () => {
+    const content: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'Hello.' }],
       metadata: { id: 'resp_plain' },
     };
 
-    const response = convertIContentToResponse(icontent);
+    const chunk = toModelStreamChunk(content);
 
-    expect(getResponseId(response)).toBe('resp_plain');
-    expect(getResponsesStored(response)).toBeUndefined();
+    expect(chunk.responseId).toBe('resp_plain');
+    expect(chunk.content.metadata?.responsesStored).toBeUndefined();
   });
 });

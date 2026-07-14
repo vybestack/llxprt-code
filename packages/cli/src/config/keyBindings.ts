@@ -74,6 +74,7 @@ export enum Command {
   SHOW_ERROR_DETAILS = 'showErrorDetails',
   TOGGLE_TOOL_DESCRIPTIONS = 'toggleToolDescriptions', // LLXPRT-SPECIFIC
   TOGGLE_TODO_DIALOG = 'toggleTodoDialog', // LLXPRT-SPECIFIC
+  TOGGLE_QUEUED_MESSAGES = 'toggleQueuedMessages', // LLXPRT-SPECIFIC
   SHOW_IDE_CONTEXT_DETAIL = 'showIDEContextDetail',
   TOGGLE_MARKDOWN = 'toggleMarkdown',
   TOGGLE_COPY_MODE = 'toggleCopyMode',
@@ -254,6 +255,7 @@ export const defaultKeyBindings: KeyBindingConfig = {
   [Command.SHOW_ERROR_DETAILS]: [{ key: 'o', ctrl: true }],
   [Command.TOGGLE_TOOL_DESCRIPTIONS]: [{ key: 't', ctrl: true }],
   [Command.TOGGLE_TODO_DIALOG]: [{ key: 'q', ctrl: true }],
+  [Command.TOGGLE_QUEUED_MESSAGES]: [{ key: ']', ctrl: true }],
   [Command.SHOW_IDE_CONTEXT_DETAIL]: [{ key: 'g', ctrl: true }],
   [Command.TOGGLE_MARKDOWN]: [{ key: 'm', command: true }],
   [Command.TOGGLE_COPY_MODE]: [{ key: 's', ctrl: true }],
@@ -276,6 +278,17 @@ export const defaultKeyBindings: KeyBindingConfig = {
     { key: '\\', ctrl: true },
   ],
 };
+
+export function getDefaultKeyBindingHint(command: Command): string {
+  const binding = defaultKeyBindings[command][0];
+  const modifiers = [
+    binding.ctrl === true ? 'Ctrl' : undefined,
+    binding.command === true ? 'Cmd' : undefined,
+    binding.shift === true ? 'Shift' : undefined,
+  ].filter((modifier): modifier is string => modifier !== undefined);
+  const key = binding.key ?? binding.sequence ?? '';
+  return [...modifiers, key].join('+');
+}
 
 interface CommandCategory {
   readonly title: string;
@@ -389,6 +402,10 @@ export const commandCategories: readonly CommandCategory[] = [
     commands: [Command.TOGGLE_TODO_DIALOG, Command.TOGGLE_TOOL_DESCRIPTIONS],
   },
   {
+    title: 'Queued Messages',
+    commands: [Command.TOGGLE_QUEUED_MESSAGES],
+  },
+  {
     title: 'Mouse',
     commands: [Command.TOGGLE_MOUSE_EVENTS],
   },
@@ -469,6 +486,8 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
   [Command.SHOW_ERROR_DETAILS]: 'Toggle detailed error information.',
   [Command.TOGGLE_TOOL_DESCRIPTIONS]: 'Toggle tool descriptions display.',
   [Command.TOGGLE_TODO_DIALOG]: 'Toggle the TODO dialog visibility.',
+  [Command.TOGGLE_QUEUED_MESSAGES]:
+    'Toggle the queued messages panel visibility.',
   [Command.SHOW_IDE_CONTEXT_DETAIL]: 'Show IDE context details.',
   [Command.TOGGLE_MARKDOWN]: 'Toggle Markdown rendering.',
   [Command.TOGGLE_COPY_MODE]: 'Toggle copy mode when in alternate buffer mode.',

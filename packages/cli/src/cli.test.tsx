@@ -150,19 +150,21 @@ vi.mock('ink', () => ({
 }));
 
 // Mock the Agent composition root so interactive-path tests do not construct a
-// real Agent via fromConfig (which would require a fully wired Config).
+// real Agent via fromConfig (which would require a fully wired Config). The
+// fake exposes getMessageBus() because dispatch reads the session bus from the
+// Agent (#2378).
 vi.mock('./cliAgentBootstrap.js', () => ({
   createForegroundAgent: vi.fn(async () => ({
     dispose: vi.fn().mockResolvedValue(undefined),
+    getMessageBus: vi.fn(() => ({})),
+    tools: { get: vi.fn(() => undefined) },
   })),
 }));
 
-// Mock the provider-activation executor so the main() flow does not invoke the
-// real providers-runtime mutators (setActiveModel etc.) that require a wired
-// CLI runtime context. The activation is an internal detail of the bootstrap;
-// these tests verify the surrounding orchestration, not the activation itself.
-const { executeProviderActivationMock } = vi.hoisted(() => ({
-  executeProviderActivationMock: vi.fn().mockResolvedValue({
+// Mock the public activation preflight so main() does not invoke real provider
+// runtime mutators. These tests verify surrounding CLI orchestration.
+const { preflightAgentActivationMock } = vi.hoisted(() => ({
+  preflightAgentActivationMock: vi.fn().mockResolvedValue({
     authFailed: false,
     activeProvider: 'gemini',
     infoMessages: [],
@@ -173,7 +175,7 @@ vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
     await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
   return {
     ...actual,
-    executeProviderActivation: executeProviderActivationMock,
+    preflightAgentActivation: preflightAgentActivationMock,
   };
 });
 
@@ -223,7 +225,7 @@ describe('cli.tsx main function', () => {
     dynamicSettingsRegistry.reset();
     // Re-establish the default resolved value after afterEach's
     // vi.restoreAllMocks() clears mock implementations.
-    executeProviderActivationMock.mockResolvedValue({
+    preflightAgentActivationMock.mockResolvedValue({
       authFailed: false,
       activeProvider: 'gemini',
       infoMessages: [],

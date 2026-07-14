@@ -4,11 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  ApprovalMode,
-  DebugLogger,
-  debugLogger,
-} from '@vybestack/llxprt-code-core';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
+import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 const logger = new DebugLogger('llxprt:config:approvalMode');
 

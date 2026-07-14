@@ -7,7 +7,7 @@
 import type React from 'react';
 import { useCallback } from 'react';
 import { Box, Text } from 'ink';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { Colors } from '../../colors.js';
 import { RadioButtonSelect } from '../shared/RadioButtonSelect.js';
 import { useKeypress } from '../../hooks/useKeypress.js';

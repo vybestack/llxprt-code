@@ -14,7 +14,8 @@ import type {
   SessionSummary,
 } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
-import { getProjectHash, DebugLogger } from '@vybestack/llxprt-code-core';
+import { getProjectHash } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { join } from 'node:path';
 import {
   performResume,

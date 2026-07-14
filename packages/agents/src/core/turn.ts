@@ -10,7 +10,6 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { PartListUnion, FunctionCall } from '@google/genai';
 import type {
   ModelStreamChunk,
   CanonicalFinishReason,
@@ -25,14 +24,6 @@ import {
   analyzeResponseOutcome,
   type ResponseOutcome,
 } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
-import { getFunctionCallsFromParts } from './googlePartHelpers.js';
-import { chunkToParts } from './streamChunkWrapper.js';
-import {
-  filterHookRestrictedParts,
-  filterHookRestrictedFunctionCalls,
-  getHookRestrictedAllowedToolsForFunctionCall,
-  mergeHookRestrictedFunctionCalls,
-} from './hookToolRestrictions.js';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import {
   getErrorMessage,
@@ -70,6 +61,14 @@ import {
   type StructuredError,
 } from '@vybestack/llxprt-code-core/core/turn.js';
 
+/**
+ * Transitional turn-request type — avoids importing the Gemini SDK PartListUnion.
+ * Accepts strings and arrays of part-shaped objects that the chatSession's
+ * normalizeToolInteractionInput can handle. Narrows to AgentMessageInput at P21.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P08
+ */
+type TurnRequest = string | object | readonly unknown[];
 /** @deprecated Use DEFAULT_STREAM_IDLE_TIMEOUT_MS from streamIdleTimeout.js instead */
 export const TURN_STREAM_IDLE_TIMEOUT_MS = DEFAULT_STREAM_IDLE_TIMEOUT_MS;
 
@@ -111,7 +110,7 @@ function filterBlocksByAllowedTools(
 interface EmitFinishReasonOptions {
   finishReason: CanonicalFinishReason;
   allParts: ContentBlock[];
-  functionCalls: FunctionCall[];
+  functionCalls: ToolCallBlock[];
   text: string | undefined;
   usageMetadata: UsageStats | undefined;
   traceId: string | undefined;
@@ -315,7 +314,7 @@ export class Turn {
 
   private logNoFinishReason(
     allParts: ContentBlock[],
-    functionCalls: FunctionCall[],
+    functionCalls: ToolCallBlock[],
     text: string | undefined,
     usageMetadata: UsageStats | undefined,
     traceId: string | undefined,
@@ -344,23 +343,16 @@ export class Turn {
     traceId: string | undefined,
     cumulativeOutcome: ResponseOutcome,
   ): Generator<ServerAgentStreamEvent> {
-    const allowedToolNames = chunk.hookRestrictions?.allowedToolNames;
-    const allowedParts = filterHookRestrictedParts(
-      chunkToParts(chunk),
-      allowedToolNames,
-    );
     const allowedBlocks = filterBlocksByAllowedTools(
       chunk.content.blocks,
-      allowedToolNames,
+      chunk.hookRestrictions?.allowedToolNames,
     );
     this.pushFilteredDebugChunk(chunk, allowedBlocks);
 
     yield* this.emitThoughtContent(allowedBlocks, traceId);
     const text = yield* this.emitTextContent(allowedBlocks, traceId);
-    const functionCalls = this.extractFunctionCalls(
-      allowedParts,
-      allowedBlocks,
-      allowedToolNames,
+    const functionCalls = allowedBlocks.filter(
+      (block): block is ToolCallBlock => block.type === 'tool_call',
     );
     yield* this.emitFunctionCallRequests(functionCalls);
     yield* this.emitChunkCompletion(
@@ -379,9 +371,8 @@ export class Turn {
   ): Generator<ServerAgentStreamEvent> {
     for (const block of blocks) {
       if (block.type === 'thinking' && block.isHidden !== true) {
-        const parsedThought = parseThought(block.thought);
         const thought: ThoughtSummary = {
-          ...parsedThought,
+          ...parseThought(block.thought),
           ...(block.streamId !== undefined ? { streamId: block.streamId } : {}),
           ...(block.streamStatus !== undefined
             ? { streamStatus: block.streamStatus }
@@ -392,40 +383,14 @@ export class Turn {
     }
   }
 
-  private extractFunctionCalls(
-    allowedParts: ReturnType<typeof chunkToParts>,
-    allowedBlocks: ContentBlock[],
-    allowedToolNames: string[] | undefined,
-  ): FunctionCall[] {
-    const partFunctionCalls = getFunctionCallsFromParts(allowedParts) ?? [];
-    const toolCallBlocks: ToolCallBlock[] = allowedBlocks.filter(
-      (block): block is ToolCallBlock => block.type === 'tool_call',
-    );
-    const blockFunctionCalls: FunctionCall[] = toolCallBlocks.map(
-      (block) =>
-        ({
-          id: block.id,
-          name: block.name,
-          args: block.parameters as Record<string, unknown>,
-        }) as FunctionCall,
-    );
-    const sourceFunctionCalls =
-      partFunctionCalls.length > 0 ? partFunctionCalls : blockFunctionCalls;
-    const topLevelFunctionCalls = filterHookRestrictedFunctionCalls(
-      sourceFunctionCalls,
-      allowedToolNames,
-    );
-    return mergeHookRestrictedFunctionCalls(
-      sourceFunctionCalls,
-      topLevelFunctionCalls,
-    );
-  }
-
   private *emitFunctionCallRequests(
-    functionCalls: FunctionCall[],
+    functionCalls: ToolCallBlock[],
   ): Generator<ServerAgentStreamEvent> {
-    for (const [functionCallIndex, fnCall] of functionCalls.entries()) {
-      const event = this.handlePendingFunctionCall(fnCall, functionCallIndex);
+    for (const [functionCallIndex, functionCall] of functionCalls.entries()) {
+      const event = this.handlePendingFunctionCall(
+        functionCall,
+        functionCallIndex,
+      );
       if (event) {
         yield event;
       }
@@ -435,7 +400,7 @@ export class Turn {
   private *emitChunkCompletion(
     chunk: ModelStreamChunk,
     allowedBlocks: ContentBlock[],
-    functionCalls: FunctionCall[],
+    functionCalls: ToolCallBlock[],
     text: string | undefined,
     traceId: string | undefined,
     cumulativeOutcome: ResponseOutcome,
@@ -639,7 +604,7 @@ export class Turn {
 
   private async *handleRunError(
     e: unknown,
-    req: PartListUnion,
+    req: TurnRequest,
     signal: AbortSignal,
     idleFlag: { timedOut: boolean },
   ): AsyncGenerator<ServerAgentStreamEvent> {
@@ -688,7 +653,7 @@ export class Turn {
 
   // The run method yields simpler events suitable for server logic
   async *run(
-    req: PartListUnion,
+    req: TurnRequest,
     signal: AbortSignal,
   ): AsyncGenerator<ServerAgentStreamEvent> {
     const idleFlag: { timedOut: boolean } = { timedOut: false };
@@ -766,7 +731,7 @@ export class Turn {
    * loadBalancing/streamTimeout.ts and RetryOrchestrator.ts.
    */
   private async acquireFirstStreamEvent(
-    req: PartListUnion,
+    req: TurnRequest,
     timeoutSignal: AbortSignal,
     timeoutController: AbortController,
     firstResponseTimeoutMs: number,
@@ -871,12 +836,17 @@ export class Turn {
    * defined in exactly one place.
    */
   private async openResponseStreamIterator(
-    req: PartListUnion,
+    req: TurnRequest,
     timeoutSignal: AbortSignal,
   ): Promise<AsyncIterator<StreamEvent>> {
+    // Bridge: chatSession.sendMessageStream still expects Google-shaped
+    // SendMessageParameters (until P21). The value is structurally compatible;
+    // normalizeToolInteractionInput handles any shape at runtime.
     const responseStream = await this.chat.sendMessageStream(
       {
-        message: req,
+        message: req as Parameters<
+          typeof this.chat.sendMessageStream
+        >[0]['message'],
         config: {
           abortSignal: timeoutSignal,
         },
@@ -887,22 +857,18 @@ export class Turn {
   }
 
   private handlePendingFunctionCall(
-    fnCall: FunctionCall,
+    fnCall: ToolCallBlock,
     functionCallIndex: number,
   ): ServerAgentStreamEvent | null {
     const callId =
-      fnCall.id !== undefined && fnCall.id !== ''
+      fnCall.id !== ''
         ? fnCall.id
         : this.createSyntheticFunctionCallId(fnCall, functionCallIndex);
 
-    // REAL FIX: Turn.ts also gets fragmented data - handle properly
     let name = fnCall.name;
     if (!name || name.trim() === '') {
-      // Turn may get incomplete data from fragmented FunctionCalls
-      // Keep undefined_tool_name for proper error detection
       name = 'undefined_tool_name';
     } else {
-      // Apply shared normalization for defined names
       const normalized = normalizeToolName(name);
       if (normalized) {
         name = normalized;
@@ -911,8 +877,11 @@ export class Turn {
       }
     }
 
-    const args = fnCall.args ?? {};
-    const allowedTools = getHookRestrictedAllowedToolsForFunctionCall(fnCall);
+    const params = fnCall.parameters;
+    const args: Record<string, unknown> =
+      typeof params === 'object' && params !== null
+        ? (params as Record<string, unknown>)
+        : {};
 
     const toolCallRequest: ToolCallRequestInfo = {
       callId,
@@ -921,33 +890,29 @@ export class Turn {
       isClientInitiated: false,
       prompt_id: this.prompt_id,
       agentId: (this.agentId as string | undefined) ?? DEFAULT_AGENT_ID,
-      ...(allowedTools !== undefined
-        ? { hookRestrictedAllowedTools: allowedTools }
-        : {}),
     };
 
     this.pendingToolCalls.push(toolCallRequest);
 
-    // Yield a request for the tool call, not the pending/confirming status
     return { type: AgentEventType.ToolCallRequest, value: toolCallRequest };
   }
 
   private createSyntheticFunctionCallId(
-    fnCall: FunctionCall,
+    fnCall: ToolCallBlock,
     functionCallIndex: number,
   ): string {
     const payload = safeJsonStringify({
       promptId: this.prompt_id,
       agentId: this.agentId,
       functionCallIndex,
-      name: fnCall.name ?? '',
-      args: fnCall.args ?? {},
+      name: fnCall.name,
+      args: fnCall.parameters ?? {},
     });
     const digest = createHash('sha256')
       .update(payload)
       .digest('hex')
       .slice(0, 16);
-    const name = normalizeToolName(fnCall.name ?? '') ?? 'undefined_tool_name';
+    const name = normalizeToolName(fnCall.name) ?? 'undefined_tool_name';
     return `${name}-${functionCallIndex}-${digest}`;
   }
 

@@ -179,7 +179,10 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
 
     // Mock bundle ripgrep
     const mockExistsSync = vi.fn().mockImplementation((filePath: string) => {
-      if (filePath.includes('bundle') && filePath.endsWith('rg')) {
+      if (
+        filePath.includes('bundle') &&
+        (filePath.endsWith('rg') || filePath.endsWith('rg.exe'))
+      ) {
         return true;
       }
       if (filePath.includes('node_modules')) {

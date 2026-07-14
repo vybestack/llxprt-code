@@ -5,7 +5,10 @@
  */
 
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  IContent,
+  ContentBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
   CompressionContext,
@@ -14,6 +17,10 @@ import type {
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { buildContextOverflowError } from './contextOverflowError.js';
+import {
+  truncateLargestToolResponses,
+  type ToolResponseTruncationResult,
+} from './toolResultTruncator.js';
 
 export interface ContextLimits {
   completionBudget: number;
@@ -25,6 +32,8 @@ interface ReductionResult {
   projected: number;
   truncationFailure?: Error;
   compressionFailure?: Error;
+  toolResponseTruncationAttempted?: boolean;
+  toolResponsesTruncated?: number;
 }
 
 export interface PendingContextWindowEnforcerDeps {
@@ -53,6 +62,7 @@ export interface PendingContextWindowEnforcerDeps {
   recordCompressionFailure(): void;
   resetLastPromptTokenCount(): void;
   getRuntimeModel(): string;
+  estimateBlockTokensAsync(block: ContentBlock): Promise<number>;
 }
 
 export class PendingContextWindowEnforcer {
@@ -123,6 +133,9 @@ export class PendingContextWindowEnforcer {
       completionBudget,
       truncationFailure: reductionResult.truncationFailure,
       compressionFailure: reductionResult.compressionFailure,
+      toolResponseTruncationAttempted:
+        reductionResult.toolResponseTruncationAttempted,
+      toolResponsesTruncated: reductionResult.toolResponsesTruncated,
     });
   }
 
@@ -219,13 +232,23 @@ export class PendingContextWindowEnforcer {
       return compressionRetryResult;
     }
 
-    return this.forceTruncationIfStillOverLimit({
+    const truncationResult = await this.forceTruncationIfStillOverLimit({
       promptId: input.promptId,
       postCompressionProjected: compressionRetryResult.projected,
       marginAdjustedLimit: input.marginAdjustedLimit,
       pendingTokens: input.pendingTokens,
       completionBudget: input.completionBudget,
       compressionFailure: compressionRetryResult.compressionFailure,
+    });
+    if (truncationResult.projected <= input.marginAdjustedLimit) {
+      return truncationResult;
+    }
+    return this.truncateToolResponsesIfStillOverLimit({
+      marginAdjustedLimit: input.marginAdjustedLimit,
+      pendingTokens: input.pendingTokens,
+      completionBudget: input.completionBudget,
+      truncationFailure: truncationResult.truncationFailure,
+      compressionFailure: truncationResult.compressionFailure,
     });
   }
 
@@ -412,6 +435,114 @@ export class PendingContextWindowEnforcer {
       }
       this.deps.resetLastPromptTokenCount();
     });
+  }
+
+  private async truncateToolResponsesIfStillOverLimit(input: {
+    marginAdjustedLimit: number;
+    pendingTokens: number;
+    completionBudget: number;
+    truncationFailure: Error | undefined;
+    compressionFailure: Error | undefined;
+  }): Promise<ReductionResult> {
+    this.deps.setSuppressDensityDirty(true);
+    try {
+      let result: ToolResponseTruncationResult;
+      try {
+        result = await truncateLargestToolResponses(
+          {
+            historyService: this.deps.historyService,
+            logger: this.deps.logger,
+            estimateBlockTokensAsync: (block) =>
+              this.deps.estimateBlockTokensAsync(block),
+            computeProjected: () =>
+              this.deps.computeProjectedTokens(
+                input.pendingTokens,
+                input.completionBudget,
+              ),
+            resetBaseline: () => this.deps.resetLastPromptTokenCount(),
+            getRuntimeModel: () => this.deps.getRuntimeModel(),
+          },
+          input.marginAdjustedLimit,
+        );
+      } catch (truncatorError) {
+        return this.handleTruncatorThrow(
+          truncatorError,
+          input.truncationFailure,
+          input.compressionFailure,
+          input.pendingTokens,
+          input.completionBudget,
+        );
+      }
+
+      this.logTruncationResult(result, input.marginAdjustedLimit);
+      return {
+        projected: result.projected,
+        truncationFailure: input.truncationFailure,
+        compressionFailure: input.compressionFailure,
+        toolResponseTruncationAttempted: true,
+        toolResponsesTruncated: result.replacedCount,
+      };
+    } finally {
+      this.deps.setSuppressDensityDirty(false);
+    }
+  }
+
+  private handleTruncatorThrow(
+    truncatorError: unknown,
+    prevTruncationFailure: Error | undefined,
+    compressionFailure: Error | undefined,
+    pendingTokens: number,
+    completionBudget: number,
+  ): ReductionResult {
+    const normalized = this.normalizeError(truncatorError);
+    this.deps.logger.warn(
+      () =>
+        '[CompressionHandler] Tool-response truncation threw during last-resort enforcement; falling through to structured overflow',
+      normalized,
+    );
+    let fallbackProjected: number;
+    try {
+      fallbackProjected = this.deps.computeProjectedTokens(
+        pendingTokens,
+        completionBudget,
+      );
+    } catch {
+      fallbackProjected = Number.MAX_SAFE_INTEGER;
+    }
+    return {
+      projected: fallbackProjected,
+      truncationFailure: prevTruncationFailure ?? normalized,
+      compressionFailure,
+      toolResponseTruncationAttempted: true,
+      toolResponsesTruncated: 0,
+    };
+  }
+
+  private logTruncationResult(
+    result: { success: boolean; replacedCount: number; projected: number },
+    marginAdjustedLimit: number,
+  ): void {
+    if (result.success) {
+      this.deps.logger.debug(
+        () =>
+          '[CompressionHandler] Tool-response truncation recovered context budget',
+        {
+          replacedCount: result.replacedCount,
+          projected: result.projected,
+          marginAdjustedLimit,
+        },
+      );
+    } else {
+      this.deps.logger.warn(
+        () =>
+          '[CompressionHandler] Tool-response truncation could not recover context budget',
+        {
+          replacedCount: result.replacedCount,
+          projected: result.projected,
+          marginAdjustedLimit,
+        },
+      );
+    }
   }
 
   private logTruncationFallbackFailure(error: Error): void {

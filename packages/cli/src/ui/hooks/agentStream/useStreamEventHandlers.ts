@@ -23,10 +23,12 @@ import {
   type ThinkingBlock,
   type ThoughtSummary,
   type ServerContentEvent,
+  type AgentRequestInput,
+} from '@vybestack/llxprt-code-core';
+import {
   logUserPrompt,
   type UserPromptEvent,
-  type ContractPartListUnion,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-telemetry';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
@@ -110,12 +112,12 @@ interface StreamEventHandlersResult {
     userMessageTimestamp: number,
   ) => void;
   prepareQueryForAgent: (
-    query: ContractPartListUnion,
+    query: AgentRequestInput,
     userMessageTimestamp: number,
     abortSignal: AbortSignal,
     promptId: string,
   ) => Promise<{
-    queryToSend: ContractPartListUnion | null;
+    queryToSend: AgentRequestInput | null;
     shouldProceed: boolean;
   }>;
 }
@@ -139,13 +141,7 @@ interface StreamEventHandlerDeps {
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
   turnCancelledRef: React.MutableRefObject<boolean>;
-  queuedSubmissionsRef: React.MutableRefObject<
-    Array<{
-      query: ContractPartListUnion;
-      options?: { isContinuation: boolean };
-      promptId?: string;
-    }>
-  >;
+  clearSubmissions: () => void;
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >;
@@ -159,7 +155,7 @@ interface StreamEventHandlerDeps {
   abortActiveStream: (reason?: unknown) => void;
   handleShellCommand: (query: string, signal: AbortSignal) => boolean;
   handleSlashCommand: (
-    cmd: ContractPartListUnion,
+    cmd: AgentRequestInput,
   ) => Promise<SlashCommandProcessorResult | false>;
   logger:
     | { logMessage: (sender: MessageSenderType, text: string) => Promise<void> }
@@ -247,7 +243,6 @@ function useUserCancelledHandler(deps: StreamEventHandlerDeps) {
     addItem,
     flushPendingHistoryItem,
     pendingHistoryItemRef,
-    queuedSubmissionsRef,
     setIsResponding,
     setPendingHistoryItem,
     setThought,
@@ -280,14 +275,12 @@ function useUserCancelledHandler(deps: StreamEventHandlerDeps) {
         userMessageTimestamp,
       );
       setIsResponding(false);
-      queuedSubmissionsRef.current = [];
       setThought(null);
     },
     [
       addItem,
       flushPendingHistoryItem,
       pendingHistoryItemRef,
-      queuedSubmissionsRef,
       setIsResponding,
       setPendingHistoryItem,
       setThought,
@@ -302,7 +295,7 @@ function useErrorEventHandler(deps: StreamEventHandlerDeps) {
     runtime,
     flushPendingHistoryItem,
     pendingHistoryItemRef,
-    queuedSubmissionsRef,
+    clearSubmissions,
     setPendingHistoryItem,
     setThought,
   } = deps;
@@ -332,7 +325,7 @@ function useErrorEventHandler(deps: StreamEventHandlerDeps) {
         },
         userMessageTimestamp,
       );
-      if (options?.clearQueue ?? true) queuedSubmissionsRef.current = [];
+      if (options?.clearQueue ?? true) clearSubmissions();
       setThought(null);
     },
     [
@@ -340,7 +333,7 @@ function useErrorEventHandler(deps: StreamEventHandlerDeps) {
       runtime,
       flushPendingHistoryItem,
       pendingHistoryItemRef,
-      queuedSubmissionsRef,
+      clearSubmissions,
       setPendingHistoryItem,
       setThought,
     ],
@@ -461,7 +454,7 @@ function usePrepareQueryForAgent(deps: StreamEventHandlerDeps) {
   const prepareQueryDeps = usePrepareQueryDeps(deps);
   return useCallback(
     async (
-      query: ContractPartListUnion,
+      query: AgentRequestInput,
       userMessageTimestamp: number,
       abortSignal: AbortSignal,
       prompt_id: string,

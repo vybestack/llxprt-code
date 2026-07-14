@@ -41,6 +41,28 @@ export {
 } from './settings/settingsServiceInstance.js';
 
 export { ProfileManager } from './profiles/ProfileManager.js';
+// Cohesive public profile-lock and write API. Internal lock handle/path/read/
+// temp/delete helpers are NOT re-exported. Consumers that need canonical
+// profile repair use repairCanonicalProfiles (settings-owned cohesive API).
+// withProfilesLockSync is exported for the migration copy phase which must
+// coordinate with ProfileManager writes.
+export {
+  withProfilesLockSync,
+  writeProfileFile,
+} from './profiles/profileStore.js';
+export type {
+  ProfileWriteMode,
+  ProfileWriteResult,
+} from './profiles/profileStore.js';
+export {
+  repairCanonicalProfiles,
+  CORRUPT_PROVIDER,
+} from './profiles/canonicalProfileRepair.js';
+export type {
+  CanonicalRepairOutcome,
+  CanonicalRepairResult,
+} from './profiles/canonicalProfileRepair.js';
+export { parseProfile } from './settings/validation.js';
 export type {
   Profile,
   StandardProfile,

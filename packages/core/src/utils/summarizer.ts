@@ -7,11 +7,12 @@
 import { type ToolResult } from '@vybestack/llxprt-code-tools';
 import type {
   AgentClientContract,
-  ContractContent,
-  ContractGenerateContentConfig,
+  AgentClientGenerateConfig,
 } from '../core/clientContract.js';
+import type { IContent } from '../services/history/IContent.js';
 import { DEFAULT_GEMINI_FLASH_LITE_MODEL } from '../config/models.js';
-import { getResponseText, partToString } from './partUtils.js';
+import { partToString } from './partUtils.js';
+import { getResponseTextFromBlocks } from './generateContentResponseUtilities.js';
 import { debugLogger } from './debugLogger.js';
 
 /**
@@ -77,10 +78,10 @@ export async function summarizeToolOutput(
     String(maxOutputTokens),
   ).replace('{textToSummarize}', textToSummarize);
 
-  const contents: ContractContent[] = [
-    { role: 'user', parts: [{ text: prompt }] },
+  const contents: IContent[] = [
+    { speaker: 'human', blocks: [{ type: 'text', text: prompt }] },
   ];
-  const toolOutputSummarizerConfig: ContractGenerateContentConfig = {
+  const toolOutputSummarizerConfig: AgentClientGenerateConfig = {
     maxOutputTokens,
   };
   try {
@@ -90,8 +91,10 @@ export async function summarizeToolOutput(
       abortSignal,
       DEFAULT_GEMINI_FLASH_LITE_MODEL,
     );
-    const responseText = getResponseText(parsedResponse);
-    return responseText === null || responseText === ''
+    const responseText = getResponseTextFromBlocks(
+      parsedResponse.content.blocks,
+    );
+    return responseText === undefined || responseText === ''
       ? textToSummarize
       : responseText;
   } catch (error) {

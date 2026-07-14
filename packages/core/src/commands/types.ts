@@ -14,7 +14,7 @@
  *                         LLxprt keeps full command logic in CLI but shares action types.
  */
 
-import type { ContractContent } from '../core/clientContract.js';
+import type { IContent } from '../services/history/IContent.js';
 
 /**
  * The return type for a command action that results in scheduling a tool call.
@@ -44,7 +44,7 @@ export interface MessageActionReturn {
 export interface LoadHistoryActionReturn<HistoryType = unknown> {
   type: 'load_history';
   history: HistoryType[];
-  clientHistory: ContractContent[]; // The history for the generative client
+  clientHistory: IContent[]; // The history for the generative client
 }
 
 /**
@@ -53,7 +53,7 @@ export interface LoadHistoryActionReturn<HistoryType = unknown> {
  */
 export interface SubmitPromptActionReturn {
   type: 'submit_prompt';
-  content: ContractContent[] | ContractContent | string;
+  content: IContent[] | IContent | string;
 }
 
 /**

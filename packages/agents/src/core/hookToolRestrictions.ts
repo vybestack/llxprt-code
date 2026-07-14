@@ -4,304 +4,158 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * Neutral hook tool-restriction API.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P11
+ * @requirement:REQ-003.2
+ * @pseudocode lines 20-43 (hooktoolrestrictions-neutral.md)
+ *
+ * Restriction metadata rides explicit HookRestrictions on ModelStreamChunk;
+ * filtering operates on ContentBlock[]/ToolCallBlock. No WeakMaps, no
+ * Symbols, no GenerateContentResponse identity keying.
+ */
+
 import type {
-  Content,
-  FunctionCall,
-  GenerateContentResponse,
-  Part,
-} from '@google/genai';
-import { getFunctionCallsFromParts } from './googlePartHelpers.js';
+  IContent,
+  ContentBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  ModelStreamChunk,
+  HookRestrictions,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { getToolCallBlocks } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 
-const responseRestrictions = new WeakMap<GenerateContentResponse, string[]>();
-const responseFilteredRestrictedCalls = new WeakMap<
-  GenerateContentResponse,
-  boolean
->();
-const functionCallRestrictions = new WeakMap<FunctionCall, string[]>();
-
-const responseRestrictionsSymbol = Symbol('hookRestrictedAllowedTools');
-const responseFilteredRestrictedCallsSymbol = Symbol(
-  'hookRestrictedFilteredCalls',
-);
-const functionCallRestrictionsSymbol = Symbol('hookRestrictedAllowedTools');
-
-type HookRestrictedResponse = GenerateContentResponse & {
-  [responseRestrictionsSymbol]?: string[];
-  [responseFilteredRestrictedCallsSymbol]?: boolean;
-};
-
-type HookRestrictedFunctionCall = FunctionCall & {
-  [functionCallRestrictionsSymbol]?: string[];
-};
-
-function setResponseRestrictionMetadata(
-  response: GenerateContentResponse,
-  allowedTools: readonly string[],
-): void {
-  responseRestrictions.set(response, [...allowedTools]);
-  Object.defineProperty(response, responseRestrictionsSymbol, {
-    configurable: true,
-    enumerable: false,
-    value: [...allowedTools],
-  });
-}
-
-function setResponseFilteredMetadata(response: GenerateContentResponse): void {
-  responseFilteredRestrictedCalls.set(response, true);
-  Object.defineProperty(response, responseFilteredRestrictedCallsSymbol, {
-    configurable: true,
-    enumerable: false,
-    value: true,
-  });
-}
-
-function stringifyFunctionCallArgs(args: unknown): string {
-  try {
-    // JSON.stringify can return undefined at runtime (e.g. for functions or
-    // symbols) even though its type signature says string, so guard the result.
-    const serialized = JSON.stringify(args === undefined ? {} : args) as
-      | string
-      | undefined;
-    return serialized ?? '{}';
-  } catch {
-    return String(args);
-  }
-}
-
-function functionCallKey(call: FunctionCall): string {
-  if (typeof call.id === 'string' && call.id.trim() !== '') {
-    return `id:${call.id}`;
-  }
-  const name = typeof call.name === 'string' ? call.name : '';
-  return `name:${canonicalizeToolName(name)}:args:${stringifyFunctionCallArgs(
-    call.args,
-  )}`;
-}
-
-export function mergeHookRestrictedFunctionCalls(
-  primaryCalls: readonly FunctionCall[],
-  secondaryCalls: readonly FunctionCall[],
-): FunctionCall[] {
-  const seen = new Set(primaryCalls.map(functionCallKey));
-  const merged = [...primaryCalls];
-  for (const call of secondaryCalls) {
-    const key = functionCallKey(call);
-    if (!seen.has(key)) {
-      seen.add(key);
-      merged.push(call);
-    }
-  }
-  return merged;
-}
-
-export function attachHookRestrictedAllowedTools(
-  response: GenerateContentResponse,
+/**
+ * Apply hook restrictions to a ModelStreamChunk, filtering tool-call blocks
+ * by the allowed-tools set and stamping HookRestrictions metadata.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P11
+ * @requirement:REQ-003.2
+ * @pseudocode lines 23-30
+ */
+export function applyHookRestrictionsToChunk(
+  chunk: ModelStreamChunk,
   allowedTools: readonly string[] | undefined,
-): GenerateContentResponse {
+): ModelStreamChunk {
   if (allowedTools === undefined) {
-    return response;
+    return chunk;
   }
-
-  const restrictedResponse = Object.assign(
-    Object.create(Object.getPrototypeOf(response)) as GenerateContentResponse,
-    response,
+  const toolCallBlocks = getToolCallBlocks(chunk.content.blocks);
+  const allowedSet = new Set(allowedTools.map(canonicalizeToolName));
+  const removed = toolCallBlocks.filter(
+    (b) => !allowedSet.has(canonicalizeToolName(b.name)),
   );
-  restrictedResponse.candidates = response.candidates?.map((candidate) => ({
-    ...candidate,
-    content:
-      candidate.content === undefined
-        ? undefined
-        : {
-            ...candidate.content,
-            parts:
-              candidate.content.parts === undefined
-                ? undefined
-                : filterResponseCandidateParts(
-                    restrictedResponse,
-                    candidate.content.parts,
-                    allowedTools,
-                  ),
-          },
-  }));
-  restrictedResponse.automaticFunctionCallingHistory =
-    response.automaticFunctionCallingHistory === undefined
-      ? undefined
-      : filterHookRestrictedContents(
-          response.automaticFunctionCallingHistory,
-          allowedTools,
-        ).filter((content) => (content.parts?.length ?? 0) > 0);
-
-  const originalTopLevelCalls = response.functionCalls ?? [];
-  const filteredTopLevelCalls = filterHookRestrictedFunctionCalls(
-    originalTopLevelCalls,
+  const newBlocks = filterHookRestrictedBlocks(
+    chunk.content.blocks,
     allowedTools,
   );
-  if (filteredTopLevelCalls.length < originalTopLevelCalls.length) {
-    setResponseFilteredMetadata(restrictedResponse);
-  }
-  setResponseRestrictionMetadata(restrictedResponse, allowedTools);
-  Object.defineProperty(restrictedResponse, 'functionCalls', {
-    configurable: true,
-    enumerable: true,
-    get() {
-      return filteredTopLevelCalls.length > 0
-        ? filteredTopLevelCalls
-        : undefined;
-    },
-  });
-  return restrictedResponse;
-}
-
-export function hasFilteredHookRestrictedToolCalls(
-  response: GenerateContentResponse,
-): boolean {
-  return (
-    responseFilteredRestrictedCalls.get(response) === true ||
-    (response as HookRestrictedResponse)[
-      responseFilteredRestrictedCallsSymbol
-    ] === true
-  );
-}
-
-function filterResponseCandidateParts(
-  response: GenerateContentResponse,
-  parts: Part[],
-  allowedTools: readonly string[],
-): Part[] {
-  const originalCalls = getFunctionCallsFromParts(parts) ?? [];
-  const filteredParts = filterHookRestrictedParts(parts, allowedTools);
-  const filteredCalls = getFunctionCallsFromParts(filteredParts) ?? [];
-  if (
-    filteredCalls.length < originalCalls.length ||
-    filteredParts.length < parts.length
-  ) {
-    setResponseFilteredMetadata(response);
-  }
-  return filteredParts;
-}
-
-export function filterHookRestrictedContent(
-  content: Content,
-  allowedTools: readonly string[] | undefined,
-): Content {
-  const parts = content.parts ?? [];
+  const hookRestrictions: HookRestrictions = {
+    allowedToolNames: [...allowedTools],
+    hadFilteredRestrictedCalls: removed.length > 0,
+  };
   return {
-    ...content,
-    parts: filterHookRestrictedParts(parts, allowedTools),
+    ...chunk,
+    content: { ...chunk.content, blocks: newBlocks },
+    hookRestrictions,
   };
 }
 
-export function filterHookRestrictedContents(
-  contents: readonly Content[],
+/**
+ * Filters ContentBlocks by hook-restricted allowed tool names.
+ * Tool-call and tool-response blocks are kept only if their tool name is in
+ * the allowed set; other block types always pass.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P07/P11
+ * @requirement:REQ-003.2
+ * @pseudocode lines 31-34
+ */
+export function filterHookRestrictedBlocks(
+  blocks: readonly ContentBlock[],
   allowedTools: readonly string[] | undefined,
-): Content[] {
+): ContentBlock[] {
   if (allowedTools === undefined) {
-    return [...contents];
+    return [...blocks];
   }
-  return contents.map((content) =>
-    filterHookRestrictedContent(content, allowedTools),
-  );
+  const allowed = new Set(allowedTools.map(canonicalizeToolName));
+  return blocks.filter((block) => {
+    if (block.type === 'tool_call') {
+      return allowed.has(canonicalizeToolName(block.name));
+    }
+    if (block.type === 'tool_response') {
+      return allowed.has(canonicalizeToolName(block.toolName));
+    }
+    return true;
+  });
 }
 
+/**
+ * Read allowed tool names from a ModelStreamChunk's hookRestrictions.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P11
+ * @requirement:REQ-003.2
+ * @pseudocode lines 35-36
+ */
 export function getHookRestrictedAllowedTools(
-  response: GenerateContentResponse,
+  chunk: ModelStreamChunk,
 ): string[] | undefined {
-  const allowedTools =
-    responseRestrictions.get(response) ??
-    (response as HookRestrictedResponse)[responseRestrictionsSymbol];
-  return allowedTools === undefined ? undefined : [...allowedTools];
+  return chunk.hookRestrictions?.allowedToolNames;
 }
 
-export function setHookRestrictedAllowedToolsOnFunctionCall(
-  functionCall: FunctionCall,
+/**
+ * Check whether a chunk had any tool calls filtered by hook restrictions.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P11
+ * @requirement:REQ-003.2
+ * @pseudocode lines 37-38
+ */
+export function hasFilteredHookRestrictedToolCalls(
+  chunk: ModelStreamChunk,
+): boolean {
+  return chunk.hookRestrictions?.hadFilteredRestrictedCalls === true;
+}
+
+/**
+ * Filter AFC (automatic function calling) history IContent[] by hook
+ * restrictions, operating on ContentBlock[] per entry.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P11
+ * @requirement:REQ-003.2
+ * @pseudocode lines 40-43
+ */
+export function filterAfcByHookRestrictions(
+  afc: readonly IContent[],
   allowedTools: readonly string[] | undefined,
-): void {
-  if (allowedTools !== undefined) {
-    functionCallRestrictions.set(functionCall, [...allowedTools]);
-    Object.defineProperty(functionCall, functionCallRestrictionsSymbol, {
-      configurable: true,
-      enumerable: false,
-      value: [...allowedTools],
-    });
+): IContent[] {
+  if (allowedTools === undefined) {
+    return [...afc];
   }
+  return afc
+    .map((c) => ({
+      ...c,
+      blocks: filterHookRestrictedBlocks(c.blocks, allowedTools),
+    }))
+    .filter((c) => c.blocks.length > 0);
 }
 
-export function getHookRestrictedAllowedToolsForFunctionCall(
-  functionCall: FunctionCall,
-): string[] | undefined {
-  const allowedTools =
-    functionCallRestrictions.get(functionCall) ??
-    (functionCall as HookRestrictedFunctionCall)[
-      functionCallRestrictionsSymbol
-    ];
-  return allowedTools === undefined ? undefined : [...allowedTools];
-}
-
-export function isHookRestrictedToolCall(
-  fnCall: FunctionCall,
+/**
+ * Check whether a tool call name is restricted by the allowed-tools set.
+ * Neutral version — operates on tool name strings, not FunctionCall objects.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P11
+ * @requirement:REQ-003.2
+ */
+export function isToolNameRestricted(
+  toolName: string,
   allowedTools: readonly string[] | undefined,
 ): boolean {
   if (allowedTools === undefined) {
     return false;
   }
-  if (typeof fnCall.name !== 'string' || fnCall.name.trim() === '') {
+  if (toolName.trim() === '') {
     return true;
   }
   const allowed = new Set(allowedTools.map(canonicalizeToolName));
-  return !allowed.has(canonicalizeToolName(fnCall.name));
-}
-
-export function filterHookRestrictedParts(
-  parts: readonly Part[],
-  allowedTools: readonly string[] | undefined,
-): Part[] {
-  if (allowedTools === undefined) {
-    return [...parts];
-  }
-
-  return parts.filter((part) => {
-    if (part.functionCall !== undefined) {
-      setHookRestrictedAllowedToolsOnFunctionCall(
-        part.functionCall,
-        allowedTools,
-      );
-      return !isHookRestrictedToolCall(part.functionCall, allowedTools);
-    }
-
-    if (part.functionResponse !== undefined) {
-      const responseAsCall: FunctionCall = {
-        id: part.functionResponse.id,
-        name: part.functionResponse.name ?? '',
-        args: {},
-      };
-      return !isHookRestrictedToolCall(responseAsCall, allowedTools);
-    }
-
-    return true;
-  });
-}
-
-export function getHookRestrictedFunctionCallsFromParts(
-  parts: readonly Part[],
-  allowedTools: readonly string[] | undefined,
-): FunctionCall[] {
-  return (
-    getFunctionCallsFromParts(filterHookRestrictedParts(parts, allowedTools)) ??
-    []
-  );
-}
-
-export function filterHookRestrictedFunctionCalls(
-  calls: readonly FunctionCall[],
-  allowedTools: readonly string[] | undefined,
-): FunctionCall[] {
-  if (allowedTools === undefined) {
-    return [...calls];
-  }
-
-  return calls.filter((call) => {
-    setHookRestrictedAllowedToolsOnFunctionCall(call, allowedTools);
-    return !isHookRestrictedToolCall(call, allowedTools);
-  });
+  return !allowed.has(canonicalizeToolName(toolName));
 }

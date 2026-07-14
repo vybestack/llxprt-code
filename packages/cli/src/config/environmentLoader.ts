@@ -11,11 +11,11 @@ import { homedir } from 'node:os';
 import * as dotenv from 'dotenv';
 import process from 'node:process';
 import {
-  DebugLogger,
   loadServerHierarchicalMemory,
   type FileFilteringOptions,
   type LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import type { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import type { Settings } from './settings.js';

@@ -18,7 +18,7 @@ import {
 import { ExtensionSettingsStorage } from './settingsStorage.js';
 import { maybePromptForSettings } from './settingsPrompt.js';
 import { getWorkspaceIdentity } from '../../utils/gitUtils.js';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 /**
  * Scope for extension settings storage.

@@ -3,16 +3,19 @@
  * Behavioral tests for stopReason propagation in OpenAI streaming and non-streaming responses.
  *
  * The OpenAI provider must set stopReason in IContent metadata so that
- * MessageConverter.convertIContentToResponse() can map it to finishReason,
- * which turn.ts uses to yield the Finished event that ends a turn.
+ * toModelStreamChunk() can map it to finishReason, which turn.ts uses to
+ * yield the Finished event that ends a turn.
+ *
+ * Migrated in P13 from the deleted convertIContentToResponse to the neutral
+ * toModelStreamChunk path (@plan:PLAN-20260707-AGENTNEUTRAL.P13).
  */
 import { describe, it, expect } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { convertIContentToResponse } from './MessageConverter.js';
+import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 describe('Issue #1837: OpenAI provider stopReason propagation', () => {
-  describe('Streaming: OpenAI stopReason mapped from finish_reason', () => {
-    it('should propagate stop (mapped to end_turn) through to finishReason STOP', () => {
+  describe('Streaming: Anthropic-native stopReason mapped to canonical finishReason', () => {
+    it('should propagate stop (mapped to end_turn) through to finishReason stop', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Hello world' }],
@@ -26,13 +29,11 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = convertIContentToResponse(icontent);
-      expect(response.candidates).toBeDefined();
-      expect(response.candidates.length).toBe(1);
-      expect(response.candidates[0].finishReason).toBe('STOP');
+      const chunk = toModelStreamChunk(icontent);
+      expect(chunk.finishReason).toBe('stop');
     });
 
-    it('should propagate length (mapped to max_tokens) through to finishReason MAX_TOKENS', () => {
+    it('should propagate length (mapped to max_tokens) through to finishReason max_tokens', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Truncated response...' }],
@@ -46,11 +47,11 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = convertIContentToResponse(icontent);
-      expect(response.candidates[0].finishReason).toBe('MAX_TOKENS');
+      const chunk = toModelStreamChunk(icontent);
+      expect(chunk.finishReason).toBe('max_tokens');
     });
 
-    it('should propagate tool_calls (mapped to tool_use) through to finishReason STOP', () => {
+    it('should propagate tool_calls (mapped to tool_use) through to finishReason tool_calls', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [
@@ -71,11 +72,11 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = convertIContentToResponse(icontent);
-      expect(response.candidates[0].finishReason).toBe('STOP');
+      const chunk = toModelStreamChunk(icontent);
+      expect(chunk.finishReason).toBe('tool_calls');
     });
 
-    it('should propagate end_turn stopReason through to finishReason STOP (no usage)', () => {
+    it('should propagate end_turn stopReason through to finishReason stop (no usage)', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Filtered content' }],
@@ -84,8 +85,8 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = convertIContentToResponse(icontent);
-      expect(response.candidates[0].finishReason).toBe('STOP');
+      const chunk = toModelStreamChunk(icontent);
+      expect(chunk.finishReason).toBe('stop');
     });
   });
 
@@ -104,9 +105,9 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = convertIContentToResponse(icontent);
-      expect(response.candidates[0].finishReason).toBe('STOP');
-      expect(response.usageMetadata?.totalTokenCount).toBe(15);
+      const chunk = toModelStreamChunk(icontent);
+      expect(chunk.finishReason).toBe('stop');
+      expect(chunk.usage?.totalTokens).toBe(15);
     });
 
     it('should set finishReason for length-truncated non-streaming response', () => {
@@ -118,8 +119,8 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = convertIContentToResponse(icontent);
-      expect(response.candidates[0].finishReason).toBe('MAX_TOKENS');
+      const chunk = toModelStreamChunk(icontent);
+      expect(chunk.finishReason).toBe('max_tokens');
     });
   });
 
@@ -146,9 +147,14 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = convertIContentToResponse(icontent);
-      expect(response.candidates[0].finishReason).toBe('STOP');
-      expect(response.text).toBe('Here is my answer.');
+      const chunk = toModelStreamChunk(icontent);
+      expect(chunk.finishReason).toBe('stop');
+      // Text blocks are carried through content.blocks
+      const textBlocks = chunk.content.blocks.filter((b) => b.type === 'text');
+      expect(textBlocks).toHaveLength(1);
+      expect((textBlocks[0] as { text: string }).text).toBe(
+        'Here is my answer.',
+      );
     });
 
     it('should propagate stopReason for thinking-only response', () => {
@@ -167,8 +173,8 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = convertIContentToResponse(icontent);
-      expect(response.candidates[0].finishReason).toBe('STOP');
+      const chunk = toModelStreamChunk(icontent);
+      expect(chunk.finishReason).toBe('stop');
     });
   });
 
@@ -186,8 +192,8 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         },
       };
 
-      const response = convertIContentToResponse(icontent);
-      expect(response.candidates[0].finishReason).toBeUndefined();
+      const chunk = toModelStreamChunk(icontent);
+      expect(chunk.finishReason).toBeUndefined();
     });
 
     it('should not set finishReason when metadata is empty', () => {
@@ -197,8 +203,8 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         metadata: {},
       };
 
-      const response = convertIContentToResponse(icontent);
-      expect(response.candidates[0].finishReason).toBeUndefined();
+      const chunk = toModelStreamChunk(icontent);
+      expect(chunk.finishReason).toBeUndefined();
     });
 
     it('should not set finishReason when metadata is undefined', () => {
@@ -207,35 +213,35 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         blocks: [{ type: 'text', text: 'No metadata at all' }],
       };
 
-      const response = convertIContentToResponse(icontent);
-      expect(response.candidates[0].finishReason).toBeUndefined();
+      const chunk = toModelStreamChunk(icontent);
+      expect(chunk.finishReason).toBeUndefined();
     });
   });
 
-  describe('OpenAI native finish_reason values in MessageConverter', () => {
-    it('should map raw "stop" finish_reason to STOP', () => {
+  describe('OpenAI native finish_reason values in toModelStreamChunk', () => {
+    it('should map raw "stop" finish_reason to stop', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Done' }],
         metadata: { stopReason: 'stop' },
       };
 
-      const response = convertIContentToResponse(icontent);
-      expect(response.candidates[0].finishReason).toBe('STOP');
+      const chunk = toModelStreamChunk(icontent);
+      expect(chunk.finishReason).toBe('stop');
     });
 
-    it('should map raw "length" finish_reason to MAX_TOKENS', () => {
+    it('should map raw "length" finish_reason to max_tokens', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Too long' }],
         metadata: { stopReason: 'length' },
       };
 
-      const response = convertIContentToResponse(icontent);
-      expect(response.candidates[0].finishReason).toBe('MAX_TOKENS');
+      const chunk = toModelStreamChunk(icontent);
+      expect(chunk.finishReason).toBe('max_tokens');
     });
 
-    it('should map raw "tool_calls" finish_reason to STOP', () => {
+    it('should map raw "tool_calls" finish_reason to tool_calls', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [
@@ -249,19 +255,19 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         metadata: { stopReason: 'tool_calls' },
       };
 
-      const response = convertIContentToResponse(icontent);
-      expect(response.candidates[0].finishReason).toBe('STOP');
+      const chunk = toModelStreamChunk(icontent);
+      expect(chunk.finishReason).toBe('tool_calls');
     });
 
-    it('should map raw "content_filter" finish_reason to SAFETY', () => {
+    it('should map raw "content_filter" finish_reason to safety', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Filtered' }],
         metadata: { stopReason: 'content_filter' },
       };
 
-      const response = convertIContentToResponse(icontent);
-      expect(response.candidates[0].finishReason).toBe('SAFETY');
+      const chunk = toModelStreamChunk(icontent);
+      expect(chunk.finishReason).toBe('safety');
     });
   });
 });

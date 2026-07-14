@@ -29,6 +29,7 @@ export interface StreamingState {
   accumulatedThinkingContent: string;
   hasEmittedThinking: boolean;
   accumulatedReasoningContent: string;
+  reasoningSourceField: string | undefined;
   streamingUsage: {
     prompt_tokens?: number;
     completion_tokens?: number;
@@ -52,6 +53,7 @@ export function createStreamingState(): StreamingState {
     accumulatedThinkingContent: '',
     hasEmittedThinking: false,
     accumulatedReasoningContent: '',
+    reasoningSourceField: undefined,
     streamingUsage: null,
     lastFinishReason: null,
     hasEmittedTerminalMetadata: false,

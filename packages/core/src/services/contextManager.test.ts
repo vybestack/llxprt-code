@@ -8,6 +8,7 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ContextManager } from './contextManager.js';
 import * as memoryDiscovery from '../utils/memoryDiscovery.js';
@@ -94,7 +95,7 @@ describe('ContextManager', () => {
         false,
       );
       expect(contextManager.getEnvironmentMemory()).toContain(
-        '--- Context from: .llxprt/LLXPRT.md ---',
+        `--- Context from: ${path.join('.llxprt', 'LLXPRT.md')} ---`,
       );
       expect(contextManager.getEnvironmentMemory()).toContain('Env Content');
       expect(contextManager.getEnvironmentMemory()).toContain(

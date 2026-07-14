@@ -10,12 +10,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { PartListUnion } from '@google/genai';
+import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType } from './turn.js';
-import { fromAsync, setupGeminiClient } from './client-test-helpers.js';
+import {
+  fromAsync,
+  setupGeminiClient,
+  type MockResponseShape,
+} from './client-test-helpers.js';
 
 // Mock prompts module before imports
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -77,7 +81,6 @@ const {
   };
 });
 
-vi.mock('@google/genai');
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -133,7 +136,7 @@ vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
-    getResponseText: (result: GenerateContentResponse) =>
+    getResponseText: (result: MockResponseShape) =>
       result.candidates?.[0]?.content?.parts
         ?.map((part) => part.text)
         .join('') ?? undefined,
@@ -291,12 +294,12 @@ describe('Gemini Client (client.ts)', () => {
       mockTriggerBeforeAgentHook.mockResolvedValue(contextOutput);
 
       // Track what request was passed to turn.run
-      const capturedRequests: PartListUnion[] = [];
+      const capturedRequests: AgentMessageInput[] = [];
       const mockStream = (async function* () {
         yield { type: AgentEventType.Content, value: 'Response' };
         yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
       })();
-      mockTurnRunFn.mockImplementation((req: PartListUnion) => {
+      mockTurnRunFn.mockImplementation((req: AgentMessageInput) => {
         capturedRequests.push(req);
         return mockStream;
       });
@@ -328,12 +331,15 @@ describe('Gemini Client (client.ts)', () => {
       // The request should include the additional context
       expect(capturedRequests.length).toBeGreaterThan(0);
       const request = capturedRequests[0];
-      const requestParts = Array.isArray(request) ? request : [request];
-      const hasAdditionalContext = requestParts.some(
-        (part) =>
-          typeof part === 'object' &&
-          'text' in part &&
-          part.text === 'Additional context from hook',
+      const requestContents = Array.isArray(request) ? request : [request];
+      const hasAdditionalContext = requestContents.some(
+        (content) =>
+          'blocks' in content &&
+          content.blocks.some(
+            (block) =>
+              block.type === 'text' &&
+              block.text === 'Additional context from hook',
+          ),
       );
       expect(hasAdditionalContext).toBe(true);
     });

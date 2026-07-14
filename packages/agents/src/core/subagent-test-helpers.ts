@@ -16,16 +16,11 @@
 
 import type { Mock } from 'vitest';
 import { vi } from 'vitest';
-import type {
-  Content,
-  FunctionCall,
-  GenerateContentResponse,
-  Part,
-} from '@google/genai';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { StreamEventType } from './chatSession.js';
-import { responseToModelStreamChunk } from './streamChunkWrapper.js';
 import { type ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -51,7 +46,6 @@ import type {
   SubAgentRuntimeOverrides,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 export function createCompletedToolCallResponse(params: {
   callId: string;
@@ -117,7 +111,10 @@ export async function createMockConfig(
 }
 
 export function createMockStream(
-  functionCallsList: Array<FunctionCall[] | 'stop'>,
+  functionCallsList: Array<
+    | Array<{ name: string; args?: Record<string, unknown>; id?: string }>
+    | 'stop'
+  >,
 ) {
   let index = 0;
   return vi.fn().mockImplementation(async () => {
@@ -125,28 +122,27 @@ export function createMockStream(
     index++;
 
     return (async function* () {
-      // Build the candidate content parts. When the model returns tool
-      // calls, they must live inside content.parts (the same shape the real
-      // synthetic GenerateContentResponse produces) so that the neutral
-      // ModelStreamChunk wrap surfaces them as tool_call blocks.
-      let parts: Part[];
+      let blocks: ContentBlock[];
 
       if (response === 'stop' || response.length === 0) {
-        parts = [{ text: 'Done.' }];
+        blocks = [{ type: 'text', text: 'Done.' }];
       } else {
-        parts = response.map((call) => ({ functionCall: call }));
+        blocks = response.map((call) => ({
+          type: 'tool_call' as const,
+          id: call.id ?? call.name,
+          name: call.name,
+          parameters: call.args ?? {},
+        }));
       }
 
-      const mockResponseValue = {
-        candidates: [{ content: { role: 'model', parts } }],
-        functionCalls: response === 'stop' ? [] : response,
-      };
+      const chunk = toModelStreamChunk({
+        speaker: 'ai',
+        blocks,
+      });
 
       yield {
         type: StreamEventType.CHUNK,
-        value: responseToModelStreamChunk(
-          mockResponseValue as unknown as GenerateContentResponse,
-        ),
+        value: chunk,
       };
     })();
   });
@@ -300,9 +296,9 @@ function createDefaultContentGenerator(): ContentGenerator {
 
 export type EnvironmentLoader = (
   runtime: AgentRuntimeContext,
-) => Promise<Part[]>;
+) => Promise<Array<{ text?: string }>>;
 
-const DEFAULT_ENV_CONTEXT: Part[] = [{ text: 'Env Context' }];
+const DEFAULT_ENV_CONTEXT: Array<{ text?: string }> = [{ text: 'Env Context' }];
 
 export function defaultEnvironmentLoader(): EnvironmentLoader {
   return vi.fn(async () => DEFAULT_ENV_CONTEXT);
@@ -340,4 +336,4 @@ export function createRuntimeOverrides(
   return { overrides, runtimeBundle, environmentLoader };
 }
 
-export type { Content, ContentGenerator, Mock, ToolRegistryView };
+export type { ContentGenerator, Mock, ToolRegistryView };

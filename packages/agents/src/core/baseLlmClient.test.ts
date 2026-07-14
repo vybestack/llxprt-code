@@ -255,8 +255,8 @@ describe('BaseLLMClient', () => {
 
       const result = await baseLlmClient.countTokens({
         contents: [
-          { role: 'user', parts: [{ text: 'message 1' }] },
-          { role: 'model', parts: [{ text: 'response 1' }] },
+          { speaker: 'human', blocks: [{ type: 'text', text: 'message 1' }] },
+          { speaker: 'ai', blocks: [{ type: 'text', text: 'response 1' }] },
         ],
         model: 'gemini-pro',
       });
@@ -278,7 +278,12 @@ describe('BaseLLMClient', () => {
       const abortController = new AbortController();
       const options = {
         model: 'test-model',
-        contents: [{ role: 'user', parts: [{ text: 'Give me content.' }] }],
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Give me content.' }],
+          },
+        ],
         abortSignal: abortController.signal,
         promptId: 'content-prompt-id',
       } as const;
@@ -303,7 +308,12 @@ describe('BaseLLMClient', () => {
       const abortController = new AbortController();
       const options = {
         model: 'test-model',
-        contents: [{ role: 'user', parts: [{ text: 'Give me content.' }] }],
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Give me content.' }],
+          },
+        ],
         abortSignal: abortController.signal,
         promptId: 'content-prompt-id',
       } as const;
@@ -321,7 +331,9 @@ describe('BaseLLMClient', () => {
       const abortController = new AbortController();
       await baseLlmClient.generateContent({
         model: 'test-model',
-        contents: [{ role: 'user', parts: [{ text: 'Query' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'Query' }] },
+        ],
         systemInstruction: 'Be helpful',
         abortSignal: abortController.signal,
         promptId: 'test-id',

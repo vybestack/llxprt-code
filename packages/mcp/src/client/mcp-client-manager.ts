@@ -35,6 +35,16 @@ import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 const logger = new DebugLogger('llxprt:mcp-client-manager');
 
 /**
+ * Maximum time {@link McpClientManager.whenDiscoverySettled} will wait for MCP
+ * discovery before resolving anyway. This bounds the agent discovery gate so a
+ * server that never connects/disconnects cannot hang an interactive turn
+ * forever (issue #2516). Any server still pending when this bound is hit is
+ * recorded as a discovery failure. Used as the default settle timeout; callers
+ * can override per-instance via the constructor.
+ */
+export const DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS = 10_000;
+
+/**
  * Manages the lifecycle of multiple MCP clients, including local child processes.
  * This class is responsible for starting, stopping, and discovering tools from
  * a collection of MCP servers defined in the configuration.
@@ -63,17 +73,31 @@ export class McpClientManager {
    * @requirement:REQ-013
    */
   private readonly discoveryFailures: Map<string, string> = new Map();
+  /**
+   * Server names whose discovery is currently in flight. Used by the bounded
+   * {@link whenDiscoverySettled} gate so a never-settling server can be
+   * recorded as a failure once the settle timeout elapses (issue #2516).
+   */
+  private readonly pendingDiscoveryServers: Set<string> = new Set();
+  /**
+   * Per-instance bound for {@link whenDiscoverySettled}. Defaults to
+   * {@link DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS}; overridable for
+   * high-latency environments or tests.
+   */
+  private readonly settleTimeoutMs: number;
 
   constructor(
     clientVersion: string,
     toolRegistry: ToolRegistry,
     cliConfig: Config,
     eventEmitter?: EventEmitter,
+    settleTimeoutMs: number = DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS,
   ) {
     this.clientVersion = clientVersion;
     this.toolRegistry = toolRegistry;
     this.cliConfig = cliConfig;
     this.eventEmitter = eventEmitter;
+    this.settleTimeoutMs = settleTimeoutMs;
   }
 
   getBlockedMcpServers() {
@@ -210,9 +234,11 @@ export class McpClientManager {
   ): Promise<void> {
     return new Promise<void>((resolve, _reject) => {
       void (async () => {
+        this.pendingDiscoveryServers.add(name);
         try {
           await this.connectAndDiscover(name, config, existing);
         } finally {
+          this.pendingDiscoveryServers.delete(name);
           resolve();
         }
       })();
@@ -259,6 +285,7 @@ export class McpClientManager {
     try {
       await client.connect();
       await client.discover(this.cliConfig);
+      this.discoveryFailures.delete(name);
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
         clients: new Map(this.clients),
       });
@@ -266,7 +293,13 @@ export class McpClientManager {
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
         clients: new Map(this.clients),
       });
+      // Record the per-server failure so the discovery gate can surface a
+      // warning without aborting the whole turn (issue #2516). Auth errors
+      // are excluded so an interactive OAuth flow is not treated as a failure;
+      // clear any stale timeout entry too, so a server that was awaiting auth
+      // when the settle timeout fired is not left with a bogus "Timed out".
       if (!isAuthenticationError(error)) {
+        this.discoveryFailures.set(name, getErrorMessage(error));
         coreEvents.emitFeedback(
           'error',
           `Error during discovery for server '${name}': ${getErrorMessage(
@@ -274,6 +307,10 @@ export class McpClientManager {
           )}`,
           error,
         );
+      } else {
+        // Interactive auth is not a failure — clear any stale timeout entry
+        // recorded by recordPendingDiscoveryTimeouts while auth was pending.
+        this.discoveryFailures.delete(name);
       }
     }
   }
@@ -468,14 +505,62 @@ export class McpClientManager {
    * is in flight this resolves immediately. Used by the public Agent discovery
    * gate to await MCP readiness before a model turn.
    *
+   * The wait is BOUNDED by this instance's settle timeout (defaults to
+   * {@link DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS}): if a server's
+   * transport/discovery never settles, this still resolves so an interactive
+   * turn cannot hang forever. Servers still pending when the bound is hit are
+   * recorded as discovery failures (issue #2516).
+   *
    * @plan:PLAN-20260617-COREAPI.P22
    * @requirement:REQ-013
    */
   async whenDiscoverySettled(): Promise<void> {
     const pending = this.discoveryPromise;
-    if (pending !== undefined) {
-      await pending;
+    if (pending === undefined) {
+      return;
     }
+    const settleTimeout = this.settleTimeoutMs;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<void>((resolve) => {
+      timer = setTimeout(() => {
+        this.recordPendingDiscoveryTimeouts();
+        resolve();
+      }, settleTimeout);
+    });
+    // Note: a settled timer does NOT cancel the underlying discovery promise.
+    // The still-pending servers continue in the background and either succeed
+    // (clearing their failure) or fail (recording it); either way the gate no
+    // longer blocks the turn. The timer is cleared in the `finally` below once
+    // the race resolves (whichever side wins).
+    try {
+      await Promise.race([pending, timeoutPromise]);
+    } finally {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  /**
+   * Records every server still pending discovery as a failure so the gate and
+   * `/mcp list` surface a per-server warning instead of waiting indefinitely.
+   */
+  private recordPendingDiscoveryTimeouts(): void {
+    if (this.pendingDiscoveryServers.size === 0) {
+      return;
+    }
+    for (const name of this.pendingDiscoveryServers) {
+      if (!this.discoveryFailures.has(name)) {
+        this.discoveryFailures.set(
+          name,
+          `Timed out after ${this.settleTimeoutMs}ms waiting for discovery to settle.`,
+        );
+      }
+    }
+    this.pendingDiscoveryServers.clear();
+    this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+      clients: new Map(this.clients),
+    });
   }
 
   /**

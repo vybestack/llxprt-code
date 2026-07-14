@@ -13,7 +13,7 @@ import {
   writeFileSync,
   mkdirSync,
 } from 'node:fs';
-import { join, resolve } from 'node:path';
+import path, { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   discoverWorkspaces,
@@ -300,7 +300,10 @@ describe('orchestrateTests', () => {
     const commands: Array<{ command: string; cwd: string }> = [];
     const runner: CommandRunner = (command, cwd) => {
       commands.push({ command, cwd });
-      if (command === failCommand && cwd.endsWith(failCwdSuffix)) {
+      if (
+        command === failCommand &&
+        cwd.endsWith(path.normalize(failCwdSuffix))
+      ) {
         return { success: false, exitCode: 1 };
       }
       return { success: true, exitCode: 0 };
@@ -394,7 +397,7 @@ describe('orchestrateTests', () => {
       failingForA,
     );
     expect(summary.failed).toBeGreaterThan(0);
-    const ranB = commands.some((c) => c.cwd.endsWith('packages/b'));
+    const ranB = commands.some((c) => c.cwd.endsWith(join('packages', 'b')));
     expect(ranB).toBe(false);
   });
 
@@ -421,7 +424,7 @@ describe('orchestrateTests', () => {
     const summary = orchestrateTests(root, opts, failingForA);
     expect(summary.failed).toBe(1);
     expect(summary.passed).toBeGreaterThanOrEqual(1);
-    const ranB = commands.some((c) => c.cwd.endsWith('packages/b'));
+    const ranB = commands.some((c) => c.cwd.endsWith(join('packages', 'b')));
     expect(ranB).toBe(true);
   });
 
@@ -448,7 +451,7 @@ describe('orchestrateTests', () => {
     const summary = orchestrateTests(root, opts, runner);
     expect(summary.totalWorkspaces).toBe(1);
     expect(commands).toHaveLength(1);
-    expect(commands[0].cwd.endsWith('packages/b')).toBe(true);
+    expect(commands[0].cwd.endsWith(join('packages', 'b'))).toBe(true);
   });
 
   it('filters by workspace package name', () => {
@@ -471,7 +474,7 @@ describe('orchestrateTests', () => {
     const summary = orchestrateTests(root, opts, runner);
     expect(summary.totalWorkspaces).toBe(1);
     expect(commands).toHaveLength(1);
-    expect(commands[0].cwd.endsWith('packages/a')).toBe(true);
+    expect(commands[0].cwd.endsWith(join('packages', 'a'))).toBe(true);
   });
 
   it('runs script tests by default', () => {

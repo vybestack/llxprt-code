@@ -17,8 +17,8 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
-  DebugLogger,
   validateProfileDirectory,
   discoverBrowserProfiles,
   type DiscoveredBrowserProfile,

@@ -31,10 +31,10 @@ import { useState, useCallback, useEffect, useMemo, useReducer } from 'react';
 import {
   coreEvents,
   CoreEvent,
-  debugLogger,
   getEditorCommand,
   isGuiEditor,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { toCodePoints, getCachedStringWidth } from '../../utils/textUtils.js';
 import { parsePastedPaths } from '../../utils/clipboardUtils.js';
 import type { Key } from '../../contexts/KeypressContext.js';

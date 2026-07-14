@@ -6,7 +6,7 @@
 
 import type { SlashCommand } from '../ui/commands/types.js';
 import type { ICommandLoader } from './types.js';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 /**
  * Orchestrates the discovery and loading of all slash commands for the CLI.

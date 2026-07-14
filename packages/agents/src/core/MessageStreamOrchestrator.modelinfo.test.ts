@@ -17,7 +17,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Content, PartListUnion } from '@google/genai';
+import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ServerAgentStreamEvent, ModelInfo } from './turn.js';
 import { AgentEventType } from './turn.js';
 import type { ChatSession } from './chatSession.js';
@@ -153,7 +154,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
       recordModelActivity: vi.fn(),
       isTodoPauseResponse: vi.fn().mockReturnValue(false),
       isTodoToolCall: vi.fn().mockReturnValue(false),
-      applyPendingReminder: vi.fn((r: PartListUnion) => Promise.resolve(r)),
+      applyPendingReminder: vi.fn((r: AgentMessageInput) => Promise.resolve(r)),
       getTodoReminderForCurrentState: vi.fn().mockResolvedValue({
         todos: [],
         activeTodos: [],
@@ -225,7 +226,7 @@ async function collectModelInfos(
 ): Promise<ModelInfo[]> {
   const events: ServerAgentStreamEvent[] = [];
   for await (const event of orchestrator.execute(
-    [{ text: 'test' }] as PartListUnion,
+    [{ text: 'test' }] as AgentMessageInput,
     new AbortController().signal,
     promptId,
     1,
@@ -321,7 +322,7 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
 
     expect(infos).toHaveLength(1);
     expect(infos[0]?.profileName).toBe('profile-b');
-    expect(infos[0]?.displayLabel).toBe('profile-b');
+    expect(infos[0]?.displayLabel).toBe('profile-b:gpt-4');
   });
 
   it('prefers provider manager active model over config.getModel', async () => {
@@ -357,11 +358,23 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
   });
 
   it('restores all committed previous history when initializing the next chat', async () => {
-    const previousHistory: Content[] = [
-      { role: 'user', parts: [{ text: 'first user turn' }] },
-      { role: 'model', parts: [{ text: 'first model response' }] },
-      { role: 'user', parts: [{ text: 'second user turn' }] },
-      { role: 'model', parts: [{ text: 'second model response' }] },
+    const previousHistory: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'first user turn' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'first model response' }],
+      },
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'second user turn' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'second model response' }],
+      },
     ];
     const { orchestrator } = buildOrchestrator();
     const deps = orchestrator['deps'];
@@ -403,7 +416,7 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     expect(infos[0]?.model).toBe('glm-5.2');
     expect(infos[0]?.providerName).toBe('load-balancer');
     expect(infos[0]?.profileName).toBe('glm');
-    expect(infos[0]?.displayLabel).toBe('glm');
+    expect(infos[0]?.displayLabel).toBe('glm:glm-5.2');
   });
 
   it('B2: load-balancer profile with no active selection falls back to the provider default model, never the config Gemini default', async () => {
@@ -419,7 +432,37 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
 
     expect(infos).toHaveLength(1);
     expect(infos[0]?.model).toBe('glm-5.2');
-    expect(infos[0]?.displayLabel).toBe('glm');
+    expect(infos[0]?.displayLabel).toBe('glm:glm-5.2');
     expect(infos[0]?.model).not.toBe('gemini-2.5-pro');
+  });
+
+  it('displayLabel shows profile:model when a profile is active (issue #2501)', async () => {
+    const { orchestrator } = buildOrchestrator({
+      model: 'gpt-5.6-sol',
+      providerName: 'codex',
+      profileName: 'gpt56solhigh',
+    });
+
+    const infos = await collectModelInfos(orchestrator, 'prompt-2501');
+
+    expect(infos).toHaveLength(1);
+    expect(infos[0]?.model).toBe('gpt-5.6-sol');
+    expect(infos[0]?.displayLabel).toBe('gpt56solhigh:gpt-5.6-sol');
+  });
+
+  it('displayLabel shows just the model when no profile is active (issue #2501)', async () => {
+    const { orchestrator } = buildOrchestrator({
+      model: 'gpt-5.6-sol',
+      providerName: 'codex',
+      profileName: null,
+    });
+
+    const infos = await collectModelInfos(
+      orchestrator,
+      'prompt-2501-noprofile',
+    );
+
+    expect(infos).toHaveLength(1);
+    expect(infos[0]?.displayLabel).toBe('gpt-5.6-sol');
   });
 });

@@ -5,43 +5,40 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { Content, Part } from '@google/genai';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  ContentBlock,
+  IContent,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
-import {
-  filterEagerlyRecordedToolResponses,
-  buildToolResponses,
-} from '../loopHelpers.js';
-import { convertBlocksToParts } from '../../MessageConverter.js';
+import { filterEagerlyRecordedToolResponses } from '../../streamResponseHelpers.js';
+import { buildToolResponses } from '../loopHelpers.js';
 
-const alreadyRecordedResponse: Part = {
-  functionResponse: {
-    id: 'toolu_already_recorded',
-    name: 'read_file',
-    response: { output: 'old' },
-  },
+const alreadyRecordedResponse: ContentBlock = {
+  type: 'tool_response',
+  callId: 'toolu_already_recorded',
+  toolName: 'read_file',
+  result: { output: 'old' },
 };
 
-const newResponse: Part = {
-  functionResponse: {
-    id: 'toolu_new',
-    name: 'read_file',
-    response: { output: 'new' },
-  },
+const newResponse: ContentBlock = {
+  type: 'tool_response',
+  callId: 'toolu_new',
+  toolName: 'read_file',
+  result: { output: 'new' },
 };
 
-const responseWithoutId: Part = {
-  functionResponse: {
-    name: 'read_file',
-    response: { output: 'no_id' },
-  },
+const responseWithoutId: ContentBlock = {
+  type: 'tool_response',
+  callId: '',
+  toolName: 'read_file',
+  result: { output: 'no_id' },
 };
 
-const followupText: Part = { text: 'continue' };
+const followupText: ContentBlock = { type: 'text', text: 'continue' };
 
-const contentWithResponses: Content = {
-  role: 'user',
-  parts: [
+const contentWithResponses: IContent = {
+  speaker: 'tool',
+  blocks: [
     alreadyRecordedResponse,
     newResponse,
     responseWithoutId,
@@ -70,38 +67,22 @@ describe('filterEagerlyRecordedToolResponses', () => {
     expect(result.matchedCallIds).toStrictEqual([]);
   });
 
-  it('handles content with null parts gracefully', () => {
-    const contentWithNullParts: Content = {
-      role: 'user',
-      // Simulate runtime null: SDK data can violate the declared Part[] shape.
-      parts: null as unknown as Part[],
+  it('handles content with an empty blocks array gracefully', () => {
+    const contentWithEmptyBlocks: IContent = {
+      speaker: 'tool',
+      blocks: [],
     };
 
     const result = filterEagerlyRecordedToolResponses(
-      contentWithNullParts,
+      contentWithEmptyBlocks,
       new Set(['toolu_already_recorded']),
     );
 
-    expect(result.content).toBe(contentWithNullParts);
+    expect(result.content).toBe(contentWithEmptyBlocks);
     expect(result.matchedCallIds).toStrictEqual([]);
   });
 
-  it('handles content with an empty parts array gracefully', () => {
-    const contentWithEmptyParts: Content = {
-      role: 'user',
-      parts: [],
-    };
-
-    const result = filterEagerlyRecordedToolResponses(
-      contentWithEmptyParts,
-      new Set(['toolu_already_recorded']),
-    );
-
-    expect(result.content).toBe(contentWithEmptyParts);
-    expect(result.matchedCallIds).toStrictEqual([]);
-  });
-
-  it('removes only the already-recorded function responses', () => {
+  it('removes only the already-recorded tool responses', () => {
     const result = filterEagerlyRecordedToolResponses(
       contentWithResponses,
       new Set(['toolu_already_recorded']),
@@ -109,15 +90,15 @@ describe('filterEagerlyRecordedToolResponses', () => {
 
     expect(result.matchedCallIds).toStrictEqual(['toolu_already_recorded']);
     expect(result.content).not.toBeNull();
-    expect(result.content?.role).toBe('user');
-    expect(result.content?.parts).toStrictEqual([
+    expect(result.content?.speaker).toBe('tool');
+    expect(result.content?.blocks).toStrictEqual([
       newResponse,
       responseWithoutId,
       followupText,
     ]);
   });
 
-  it('removes multiple already-recorded function responses and preserves match order', () => {
+  it('removes multiple already-recorded tool responses and preserves match order', () => {
     const result = filterEagerlyRecordedToolResponses(
       contentWithResponses,
       new Set(['toolu_already_recorded', 'toolu_new']),
@@ -127,25 +108,23 @@ describe('filterEagerlyRecordedToolResponses', () => {
       'toolu_already_recorded',
       'toolu_new',
     ]);
-    expect(result.content?.role).toBe('user');
-    expect(result.content?.parts).toStrictEqual([
+    expect(result.content?.speaker).toBe('tool');
+    expect(result.content?.blocks).toStrictEqual([
       responseWithoutId,
       followupText,
     ]);
   });
 
-  it('does not match functionResponse parts with a non-string id', () => {
-    const nonStringIdResponse: Part = {
-      functionResponse: {
-        // Simulate malformed SDK data to exercise the runtime type guard.
-        id: 123 as unknown as string,
-        name: 'read_file',
-        response: { output: 'bad_id' },
-      },
+  it('does not match tool response blocks with a non-string id', () => {
+    const nonStringIdResponse: ContentBlock = {
+      type: 'tool_response',
+      callId: 123 as unknown as string,
+      toolName: 'read_file',
+      result: { output: 'bad_id' },
     };
-    const content: Content = {
-      role: 'user',
-      parts: [nonStringIdResponse, newResponse],
+    const content: IContent = {
+      speaker: 'tool',
+      blocks: [nonStringIdResponse, newResponse],
     };
 
     const result = filterEagerlyRecordedToolResponses(
@@ -154,13 +133,13 @@ describe('filterEagerlyRecordedToolResponses', () => {
     );
 
     expect(result.matchedCallIds).toStrictEqual(['toolu_new']);
-    expect(result.content?.parts).toStrictEqual([nonStringIdResponse]);
+    expect(result.content?.blocks).toStrictEqual([nonStringIdResponse]);
   });
 
-  it('drops the whole content item when all parts were already recorded', () => {
-    const content: Content = {
-      role: 'user',
-      parts: [alreadyRecordedResponse],
+  it('drops the whole content item when all blocks were already recorded', () => {
+    const content: IContent = {
+      speaker: 'tool',
+      blocks: [alreadyRecordedResponse],
     };
 
     const result = filterEagerlyRecordedToolResponses(
@@ -170,71 +149,6 @@ describe('filterEagerlyRecordedToolResponses', () => {
 
     expect(result.content).toBeNull();
     expect(result.matchedCallIds).toStrictEqual(['toolu_already_recorded']);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// convertBlocksToParts media handling (issue #2169)
-// ---------------------------------------------------------------------------
-
-describe('convertBlocksToParts media block handling', () => {
-  it('converts a base64 media block to an inlineData part', () => {
-    const blocks: ContentBlock[] = [
-      {
-        type: 'media',
-        mimeType: 'image/png',
-        data: 'iVBORw0KGgo=',
-        encoding: 'base64',
-      },
-    ];
-    const parts = convertBlocksToParts(blocks);
-    expect(parts).toHaveLength(1);
-    expect(parts[0]?.inlineData?.mimeType).toBe('image/png');
-    expect(parts[0]?.inlineData?.data).toBe('iVBORw0KGgo=');
-  });
-
-  it('converts a url media block to a fileData part', () => {
-    const blocks: ContentBlock[] = [
-      {
-        type: 'media',
-        mimeType: 'image/png',
-        data: 'https://example.com/image.png',
-        encoding: 'url',
-      },
-    ];
-    const parts = convertBlocksToParts(blocks);
-    expect(parts).toHaveLength(1);
-    expect(parts[0]?.fileData?.fileUri).toBe('https://example.com/image.png');
-  });
-
-  it('skips malformed media blocks without throwing', () => {
-    const blocks = [
-      { type: 'media', mimeType: 'image/png', encoding: 'base64' },
-      { type: 'media', data: 'AA', encoding: 'base64' },
-    ] as unknown as ContentBlock[];
-
-    expect(convertBlocksToParts(blocks)).toStrictEqual([]);
-  });
-
-  it('preserves media blocks alongside tool_response blocks', () => {
-    const blocks: ContentBlock[] = [
-      {
-        type: 'tool_response',
-        callId: 'call-1',
-        toolName: 'read_file',
-        result: { output: 'Binary content provided (1 item(s)).' },
-      },
-      {
-        type: 'media',
-        mimeType: 'image/png',
-        data: 'iVBORw0KGgo=',
-        encoding: 'base64',
-      },
-    ];
-    const parts = convertBlocksToParts(blocks);
-    expect(parts).toHaveLength(2);
-    expect(parts[0]?.functionResponse?.name).toBe('read_file');
-    expect(parts[1]?.inlineData?.data).toBe('iVBORw0KGgo=');
   });
 });
 
@@ -287,11 +201,13 @@ describe('buildToolResponses image budget enforcement', () => {
       makeImageToolCall('call-2', 'B'.repeat(1000)),
     ];
 
-    const parts = buildToolResponses(tools, 100_000);
+    const blocks = buildToolResponses(tools, 100_000);
 
-    const images = parts.filter((p) => p.inlineData);
+    const images = blocks.filter((b) => b.type === 'media');
     expect(images).toHaveLength(2);
-    expect(parts.some((p) => p.text?.includes('omitted') === true)).toBe(false);
+    expect(
+      blocks.some((b) => b.type === 'text' && b.text.includes('omitted')),
+    ).toBe(false);
   });
 
   it('omits images that exceed the cumulative budget', () => {
@@ -301,27 +217,31 @@ describe('buildToolResponses image budget enforcement', () => {
       makeImageToolCall('call-3', 'C'.repeat(5000)),
     ];
 
-    const parts = buildToolResponses(tools, 11_000);
+    const blocks = buildToolResponses(tools, 11_000);
 
-    const images = parts.filter((p) => p.inlineData);
+    const images = blocks.filter((b) => b.type === 'media');
     expect(images).toHaveLength(2);
-    const feedbackPart = parts.find(
-      (p) => typeof p.text === 'string' && p.text.includes('omitted'),
+    const feedbackBlock = blocks.find(
+      (b) => b.type === 'text' && b.text.includes('omitted'),
     );
-    expect(feedbackPart).toBeDefined();
-    expect(feedbackPart!.text).toContain('1 image(s)');
-    expect(feedbackPart!.text).toContain('read_file');
+    expect(feedbackBlock).toBeDefined();
+    expect(feedbackBlock!.type === 'text' && feedbackBlock.text).toContain(
+      '1 image(s)',
+    );
+    expect(feedbackBlock!.type === 'text' && feedbackBlock.text).toContain(
+      'read_file',
+    );
   });
 
-  it('retains all functionResponse parts even when images are omitted', () => {
+  it('retains all tool_response blocks even when images are omitted', () => {
     const tools = [
       makeImageToolCall('call-1', 'A'.repeat(100_000)),
       makeImageToolCall('call-2', 'B'.repeat(100_000)),
     ];
 
-    const parts = buildToolResponses(tools, 50_000);
+    const blocks = buildToolResponses(tools, 50_000);
 
-    const responses = parts.filter((p) => p.functionResponse);
+    const responses = blocks.filter((b) => b.type === 'tool_response');
     expect(responses).toHaveLength(2);
   });
 
@@ -331,9 +251,9 @@ describe('buildToolResponses image budget enforcement', () => {
       makeImageToolCall('call-2', 'B'.repeat(500_000)),
     ];
 
-    const parts = buildToolResponses(tools, 0);
+    const blocks = buildToolResponses(tools, 0);
 
-    const images = parts.filter((p) => p.inlineData);
+    const images = blocks.filter((b) => b.type === 'media');
     expect(images).toHaveLength(2);
   });
 });

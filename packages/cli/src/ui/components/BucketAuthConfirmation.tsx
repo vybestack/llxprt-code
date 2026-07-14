@@ -7,7 +7,8 @@
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
-import { MessageBusType, DebugLogger } from '@vybestack/llxprt-code-core';
+import { MessageBusType } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
   MessageBus,
   BucketAuthConfirmationRequest,

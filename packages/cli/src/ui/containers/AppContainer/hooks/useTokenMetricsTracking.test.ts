@@ -16,10 +16,10 @@ vi.mock('../../../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: useRuntimeApiMock,
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
+vi.mock('@vybestack/llxprt-code-telemetry', async () => {
   const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-core')
-  >('@vybestack/llxprt-code-core');
+    typeof import('@vybestack/llxprt-code-telemetry')
+  >('@vybestack/llxprt-code-telemetry');
 
   class DebugLoggerStub {
     debug(..._args: unknown[]): void {

@@ -6,7 +6,8 @@
 
 import { execSync, spawn, type ChildProcess } from 'node:child_process';
 import net from 'node:net';
-import { FatalSandboxError, debugLogger } from '@vybestack/llxprt-code-core';
+import { FatalSandboxError } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
   SshAgentResult,
   CredentialProxyBridgeResult,

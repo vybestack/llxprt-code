@@ -11,6 +11,7 @@ import {
   commandCategories,
   commandDescriptions,
   defaultKeyBindings,
+  getDefaultKeyBindingHint,
 } from './keyBindings.js';
 
 function hasNonEmptyBindingTarget(binding: {
@@ -71,6 +72,12 @@ describe('keyBindings config', () => {
       // Config should be readonly
       const config: KeyBindingConfig = defaultKeyBindings;
       expect(config[Command.HOME]).toBeDefined();
+    });
+
+    it('formats the queued-messages key hint from its default binding', () => {
+      expect(getDefaultKeyBindingHint(Command.TOGGLE_QUEUED_MESSAGES)).toBe(
+        'Ctrl+]',
+      );
     });
 
     it('should have correct specific bindings', () => {

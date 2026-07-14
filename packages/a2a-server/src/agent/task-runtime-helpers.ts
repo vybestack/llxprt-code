@@ -22,8 +22,7 @@ import {
 } from '@vybestack/llxprt-code-mcp';
 import type { MessageBus } from '@vybestack/llxprt-code-core';
 import type { DEFAULT_GUI_EDITOR } from '@vybestack/llxprt-code-core';
-import type { PartUnion, Part as genAiPart } from '@google/genai';
-import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import * as fs from 'node:fs';
 import { logger } from '../utils/logger.js';
 import type { TaskMetadata } from '../types.js';
@@ -114,42 +113,39 @@ export async function getProposedContent(
 
 /**
  * Converts a single tool response entry (which may be a string, a single
- * part, or an array of parts) into a normalized array of genai parts.
+ * block, or an array of blocks) into a normalized array of neutral
+ * ContentBlocks.
  */
-export function normalizeResponseToGenAiParts(
-  response: string | genAiPart | genAiPart[],
-): genAiPart[] {
+export function normalizeResponseToContentBlocks(
+  response: string | ContentBlock | ContentBlock[],
+): ContentBlock[] {
   if (Array.isArray(response)) {
     return response;
   }
   if (typeof response === 'string') {
-    return [{ text: response }];
+    return [{ type: 'text', text: response }];
   }
   return [response];
 }
 
 /**
- * Builds the flat list of LLM parts from a batch of completed tool calls by
- * concatenating each call's response parts.
+ * Builds the flat list of neutral ContentBlocks from a batch of completed
+ * tool calls by concatenating each call's response parts. The responseParts
+ * are already neutral ContentBlock[] (per ToolCallResponseInfo contract).
  */
 export function buildLlmPartsFromToolCalls(
   completedToolCalls: CompletedToolCall[],
-): PartUnion[] {
-  const llmParts: PartUnion[] = [];
+): ContentBlock[] {
+  const blocks: ContentBlock[] = [];
   for (const completedToolCall of completedToolCalls) {
     const responseParts = completedToolCall.response.responseParts;
     if (Array.isArray(responseParts)) {
-      const geminiParts =
-        ContentConverters.toGeminiContent({
-          speaker: 'tool',
-          blocks: responseParts,
-        }).parts ?? [];
-      llmParts.push(...geminiParts);
+      blocks.push(...responseParts);
     } else {
-      llmParts.push(responseParts);
+      blocks.push(responseParts);
     }
   }
-  return llmParts;
+  return blocks;
 }
 
 /**

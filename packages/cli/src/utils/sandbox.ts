@@ -5,7 +5,7 @@
  */
 
 import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { ConsolePatcher } from '../ui/utils/ConsolePatcher.js';
 import { stopProxy } from '@vybestack/llxprt-code-providers/auth.js';
 import type { PortForwardingResult } from './sandbox-ssh.js';

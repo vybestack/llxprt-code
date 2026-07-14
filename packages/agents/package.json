@@ -54,7 +54,6 @@
     "dist"
   ],
   "dependencies": {
-    "@google/genai": "1.30.0",
     "@vybestack/llxprt-code-auth": "file:../auth",
     "@vybestack/llxprt-code-core": "file:../core",
     "@vybestack/llxprt-code-ide-integration": "file:../ide-integration",
