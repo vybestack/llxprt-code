@@ -118,7 +118,7 @@ describe('mcp-client', () => {
       await client.disconnect();
 
       expect(refreshSignal?.aborted).toBe(true);
-      await refresh;
+      await expect(refresh).resolves.toBeUndefined();
     });
 
     it('should set up notification handler if server supports tool list changes', async () => {

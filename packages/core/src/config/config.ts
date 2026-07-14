@@ -213,8 +213,8 @@ export class Config extends ConfigBase {
       this,
       this.eventEmitter,
     );
-    this.initialized = true;
     this.registerIdeTrustListener();
+    this.initialized = true;
     // Issue #2325: Fire MCP discovery in the background — don't block startup.
     // Tools are gated before model turns via McpClientManager.whenDiscoverySettled().
     this.mcpDiscoveryPromise =
@@ -887,26 +887,27 @@ export class Config extends ConfigBase {
    */
   private registerIdeTrustListener(): void {
     const client = this.ideClient;
-    if (!client || typeof client.addTrustChangeListener !== 'function') {
-      return;
-    }
     const previousEffectiveTrust = this.cachedEffectiveTrust;
     this.ideTrust = ideContext.getIdeContext()?.workspaceState?.isTrusted;
+    if (client && typeof client.addTrustChangeListener === 'function') {
+      this.ideTrustChangeListener = (isTrusted: boolean | undefined) => {
+        const priorEffectiveTrust = this.cachedEffectiveTrust;
+        this.ideTrust = isTrusted;
+        void this.reconcileEffectiveTrust(priorEffectiveTrust).catch(
+          (error) => {
+            Config.logger.error(
+              `IDE trust reconciliation failed: ${getErrorMessage(error)}`,
+            );
+          },
+        );
+      };
+      client.addTrustChangeListener(this.ideTrustChangeListener);
+    }
     void this.reconcileEffectiveTrust(previousEffectiveTrust).catch((error) => {
       Config.logger.error(
         `IDE trust reconciliation failed: ${getErrorMessage(error)}`,
       );
     });
-    this.ideTrustChangeListener = (isTrusted: boolean | undefined) => {
-      const priorEffectiveTrust = this.cachedEffectiveTrust;
-      this.ideTrust = isTrusted;
-      void this.reconcileEffectiveTrust(priorEffectiveTrust).catch((error) => {
-        Config.logger.error(
-          `IDE trust reconciliation failed: ${getErrorMessage(error)}`,
-        );
-      });
-    };
-    client.addTrustChangeListener(this.ideTrustChangeListener);
   }
 
   async dispose(): Promise<void> {

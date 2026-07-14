@@ -122,7 +122,7 @@ describe('FolderTrustDialog', () => {
     act(() => {
       stdin.write('\u001b[27u');
     });
-    await waitFor(() => expect(mockedExit).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mockedExit).toHaveBeenCalledOnce());
   });
 
   describe('parentFolder display', () => {

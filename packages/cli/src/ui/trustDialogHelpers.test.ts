@@ -33,9 +33,16 @@ describe('trustDialogHelpers', () => {
       expect(new Set(keys).size).toBe(keys.length);
     });
 
-    it('uses the enum value as the key for the trust folder option to avoid duplicate-key collisions when the folder name is the same as the label text', () => {
-      const options = buildTrustOptions('folder', 'parent');
-      expect(options[0].key).toBe(FolderTrustChoice.TRUST_FOLDER);
+    it('uses stable semantic keys that are independent of display labels', () => {
+      const first = buildTrustOptions('folder', 'parent');
+      const renamed = buildTrustOptions('renamed', 'ancestor');
+
+      expect(first.map((option) => option.key)).toStrictEqual(
+        renamed.map((option) => option.key),
+      );
+      expect(first.map((option) => option.key)).toStrictEqual(
+        first.map((option) => option.value),
+      );
     });
   });
 

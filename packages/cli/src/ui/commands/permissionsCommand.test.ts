@@ -111,7 +111,6 @@ describe('permissionsCommand', () => {
         [],
       ).isPathTrusted(location);
     });
-    vi.mocked(mockedProcess.cwd).mockReturnValue(workspacePath);
   });
 
   afterEach(() => {

@@ -6,7 +6,7 @@
 
 import { Box, Text } from 'ink';
 import type React from 'react';
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Colors } from '../colors.js';
 import { theme } from '../semantic-colors.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
@@ -69,13 +69,23 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
   const [exiting, setExiting] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
   const committingRef = useRef(false);
+  const exitingRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
 
   useKeypress(
     (key) => {
-      if (committingRef.current) {
+      if (committingRef.current || exitingRef.current) {
         return;
       }
       if (key.name === 'escape') {
+        exitingRef.current = true;
         setExiting(true);
         setTimeout(() => {
           process.exit(ExitCodes.FATAL_CONFIG_ERROR);
@@ -83,6 +93,27 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
       }
     },
     { isActive: true },
+  );
+
+  const handleSelect = useCallback(
+    (choice: FolderTrustChoice) => {
+      if (!isFolderTrustChoice(choice) || committingRef.current) {
+        return;
+      }
+      committingRef.current = true;
+      setIsCommitting(true);
+      void Promise.resolve(onSelect(choice))
+        .catch((error) => {
+          debug.error('Folder trust selection failed', error);
+        })
+        .finally(() => {
+          committingRef.current = false;
+          if (mountedRef.current) {
+            setIsCommitting(false);
+          }
+        });
+    },
+    [onSelect],
   );
 
   const currentFolder = path.basename(workingDirectory);
@@ -103,23 +134,7 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
 
         <RadioButtonSelect
           items={options}
-          onSelect={(choice) => {
-            if (!isFolderTrustChoice(choice) || committingRef.current) {
-              return;
-            }
-            committingRef.current = true;
-            setIsCommitting(true);
-            void (async () => {
-              try {
-                await onSelect(choice);
-              } catch (error) {
-                debug.error('Folder trust selection failed', error);
-              } finally {
-                committingRef.current = false;
-                setIsCommitting(false);
-              }
-            })();
-          }}
+          onSelect={handleSelect}
           isFocused={!isCommitting}
         />
       </Box>

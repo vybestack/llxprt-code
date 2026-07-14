@@ -179,6 +179,21 @@ describe('Trusted Folders Loading', () => {
 
       expect(folders.isPathTrusted('/workspace/application')).toBe(undefined);
     });
+
+    it('fails closed when a matching denial rule cannot be canonicalized', () => {
+      const { folders } = setup({
+        config: { '/secret': TrustLevel.DO_NOT_TRUST },
+      });
+      vi.mocked(fs.realpathSync).mockImplementation((location) => {
+        const resolved = location.toString();
+        if (resolved === '/secret') {
+          throw new Error('permission denied');
+        }
+        return resolved;
+      });
+
+      expect(folders.isPathTrusted('/secret/file')).toBe(false);
+    });
   });
 
   it('should load user rules if only user file exists', () => {
@@ -327,9 +342,10 @@ describe('Trusted Folders Loading', () => {
   it('commits the file when chmod reports that POSIX modes are unsupported', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
-    const unsupportedError = Object.assign(new Error('chmod unsupported'), {
-      code: 'ENOTSUP',
-    });
+    const unsupportedError = createErrorWithCode(
+      'chmod unsupported',
+      'ENOTSUP',
+    );
     const warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
     mockFsChmodSync.mockImplementationOnce(() => {
       throw unsupportedError;

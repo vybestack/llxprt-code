@@ -129,39 +129,37 @@ describe('applyFakeServerDiscovery authorization', () => {
     });
   });
 
-  it.each([MCPServerStatus.CONNECTING])(
-    'rolls back when the %s status publication revokes authorization',
-    async (revokingStatus) => {
-      const name = `status-${revokingStatus}-revocation`;
-      const registry = createToolRegistry();
-      let authorized = true;
-      const revokeOnStatus = (
-        serverName: string,
-        status: MCPServerStatus,
-      ): void => {
-        if (serverName === name && status === revokingStatus) {
-          authorized = false;
-        }
-      };
-      addMCPStatusChangeListener(revokeOnStatus);
-
-      try {
-        const outcome = await applyFakeServerDiscovery(
-          name,
-          registry,
-          fixtureWithTool(name),
-          () => authorized,
-        );
-
-        expect(outcome).toStrictEqual({
-          status: MCPServerStatus.DISCONNECTED,
-          registeredToolNames: [],
-        });
-        expect(registry.getTool(`${name}_tool`)).toBeUndefined();
-        expect(getMCPServerStatus(name)).toBe(MCPServerStatus.DISCONNECTED);
-      } finally {
-        removeMCPStatusChangeListener(revokeOnStatus);
+  it('rolls back when CONNECTING status publication revokes authorization', async () => {
+    const revokingStatus = MCPServerStatus.CONNECTING;
+    const name = `status-${revokingStatus}-revocation`;
+    const registry = createToolRegistry();
+    let authorized = true;
+    const revokeOnStatus = (
+      serverName: string,
+      status: MCPServerStatus,
+    ): void => {
+      if (serverName === name && status === revokingStatus) {
+        authorized = false;
       }
-    },
-  );
+    };
+    addMCPStatusChangeListener(revokeOnStatus);
+
+    try {
+      const outcome = await applyFakeServerDiscovery(
+        name,
+        registry,
+        fixtureWithTool(name),
+        () => authorized,
+      );
+
+      expect(outcome).toStrictEqual({
+        status: MCPServerStatus.DISCONNECTED,
+        registeredToolNames: [],
+      });
+      expect(registry.getTool(`${name}_tool`)).toBeUndefined();
+      expect(getMCPServerStatus(name)).toBe(MCPServerStatus.DISCONNECTED);
+    } finally {
+      removeMCPStatusChangeListener(revokeOnStatus);
+    }
+  });
 });

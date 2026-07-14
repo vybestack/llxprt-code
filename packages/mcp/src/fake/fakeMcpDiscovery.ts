@@ -263,7 +263,7 @@ export async function applyFakeServerDiscovery(
   if (!hasAuthorization()) {
     return disconnectFakeServer(name, toolRegistry);
   }
-  let registeredToolNames: readonly string[] = [];
+  const registeredToolNames: string[] = [];
   for (const tool of server.tools ?? []) {
     if (tool.enabled === false) continue;
     if (!hasAuthorization()) {
@@ -280,10 +280,7 @@ export async function applyFakeServerDiscovery(
     if (!hasAuthorization()) {
       return disconnectFakeServer(name, toolRegistry);
     }
-    registeredToolNames = [
-      ...registeredToolNames,
-      generateMcpToolName(name, tool.name),
-    ];
+    registeredToolNames.push(generateMcpToolName(name, tool.name));
   }
 
   if (!hasAuthorization()) {

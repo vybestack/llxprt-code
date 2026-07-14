@@ -126,7 +126,28 @@ export class LoadedTrustedFolders {
     const matches = this.rules.flatMap((rule) => {
       const canonicalRulePath = resolveCanonicalPath(rule.path);
       if (canonicalRulePath === undefined) {
-        return [];
+        if (rule.trustLevel !== TrustLevel.DO_NOT_TRUST) {
+          return [];
+        }
+        const effectivePath = path.resolve(rule.path);
+        const lexicalLocation = path.resolve(location);
+        if (
+          !isWithinRoot(lexicalLocation, effectivePath) &&
+          !isWithinRoot(resolvedLocation, effectivePath)
+        ) {
+          return [];
+        }
+        return [
+          {
+            rule,
+            effectivePath,
+            trusted: false,
+            provenance:
+              lexicalLocation === effectivePath
+                ? ('direct' as const)
+                : ('inherited' as const),
+          },
+        ];
       }
       const effectivePath =
         rule.trustLevel === TrustLevel.TRUST_PARENT

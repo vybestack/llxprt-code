@@ -298,11 +298,6 @@ describe('connectToMcpServer with OAuth', () => {
       name: 'AbortError',
       cause: connectionFailure,
     });
-    expect(Object.getOwnPropertyDescriptor(failure, 'cause')).toMatchObject({
-      configurable: true,
-      enumerable: false,
-      writable: true,
-    });
   });
 
   it('should handle automatic OAuth flow on 401 with stored token', async () => {

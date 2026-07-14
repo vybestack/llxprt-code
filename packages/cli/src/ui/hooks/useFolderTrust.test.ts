@@ -131,7 +131,7 @@ describe('useFolderTrust', () => {
     );
   });
 
-  it('should not send a message if the folder is trusted', async () => {
+  it('should not send a message if the folder is trusted', () => {
     isWorkspaceTrustedSpy.mockReturnValue(true);
     renderHook(() => useFolderTrust(mockSettings, addItem, mockConfig));
     expect(addItem).not.toHaveBeenCalled();

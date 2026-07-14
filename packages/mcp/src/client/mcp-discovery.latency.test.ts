@@ -177,7 +177,7 @@ describe('connectAndDiscover revocation-during-latency', () => {
     expect(registry.removeMcpToolsByServer).toHaveBeenCalledWith('server');
   });
 
-  it('does not set CONNECTED when trust is revoked after connect handshake (latency)', async () => {
+  it('does not set CONNECTED when trust is revoked after the connect handshake', async () => {
     const client = makeClient(
       [{ name: 'tool1', inputSchema: { type: 'object' } }],
       [{ name: 'prompt1' }],

@@ -115,24 +115,7 @@ describe('Hook Re-Initialization (126c32ac)', () => {
 
 describe('Hook Re-Initialization Disposal (126c32ac)', () => {
   it('deduplicates concurrent initialization and supersedes it with one later generation', async () => {
-    const mockConfig = {
-      getEnableHooks: () => true,
-      getHooks: () => ({}),
-      getSessionId: () => 'test-session',
-      getWorkingDir: () => '/test',
-      getTargetDir: () => '/test',
-      getExtensions: () => [],
-      getDisabledHooks: () => [],
-      getModel: () => 'test-model',
-      isTrustedFolder: () => true,
-      getProjectHooks: () => null,
-      getSanitizationConfig: () => ({
-        enableEnvironmentVariableRedaction: false,
-        allowedEnvironmentVariables: [],
-        blockedEnvironmentVariables: [],
-      }),
-      getSessionRecordingService: () => null,
-    } as unknown as Config;
+    const mockConfig = createHookConfig();
     const hookSystem = new HookSystem(mockConfig);
     const registry = hookSystem.getRegistry();
     const originalInitialize = registry.initialize.bind(registry);
@@ -168,24 +151,7 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
       }),
       publish: vi.fn(),
     };
-    const mockConfig = {
-      getEnableHooks: () => true,
-      getHooks: () => ({}),
-      getSessionId: () => 'test-session',
-      getWorkingDir: () => '/test',
-      getTargetDir: () => '/test',
-      getExtensions: () => [],
-      getDisabledHooks: () => [],
-      getModel: () => 'test-model',
-      isTrustedFolder: () => true,
-      getProjectHooks: () => null,
-      getSanitizationConfig: () => ({
-        enableEnvironmentVariableRedaction: false,
-        allowedEnvironmentVariables: [],
-        blockedEnvironmentVariables: [],
-      }),
-      getSessionRecordingService: () => null,
-    } as unknown as Config;
+    const mockConfig = createHookConfig();
     const hookSystem = new HookSystem(mockConfig, mockMessageBus);
     const registry = hookSystem.getRegistry();
     const originalInitialize = registry.initialize.bind(registry);
@@ -213,24 +179,7 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
   it('invalidates in-flight initialization and remains terminal after disposal', async () => {
     const subscribe = vi.fn(() => vi.fn());
     const mockMessageBus = { subscribe, publish: vi.fn() };
-    const mockConfig = {
-      getEnableHooks: () => true,
-      getHooks: () => ({}),
-      getSessionId: () => 'test-session',
-      getWorkingDir: () => '/test',
-      getTargetDir: () => '/test',
-      getExtensions: () => [],
-      getDisabledHooks: () => [],
-      getModel: () => 'test-model',
-      isTrustedFolder: () => true,
-      getProjectHooks: () => null,
-      getSanitizationConfig: () => ({
-        enableEnvironmentVariableRedaction: false,
-        allowedEnvironmentVariables: [],
-        blockedEnvironmentVariables: [],
-      }),
-      getSessionRecordingService: () => null,
-    } as unknown as Config;
+    const mockConfig = createHookConfig();
     const hookSystem = new HookSystem(mockConfig, mockMessageBus);
     const registry = hookSystem.getRegistry();
     const originalInitialize = registry.initialize.bind(registry);
@@ -263,24 +212,7 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
       publish: vi.fn(),
     };
 
-    const mockConfig = {
-      getEnableHooks: () => true,
-      getHooks: () => ({}),
-      getSessionId: () => 'test-session',
-      getWorkingDir: () => '/test',
-      getTargetDir: () => '/test',
-      getExtensions: () => [],
-      getDisabledHooks: () => [],
-      getModel: () => 'test-model',
-      isTrustedFolder: () => true,
-      getProjectHooks: () => null,
-      getSanitizationConfig: () => ({
-        enableEnvironmentVariableRedaction: false,
-        allowedEnvironmentVariables: [],
-        blockedEnvironmentVariables: [],
-      }),
-      getSessionRecordingService: () => null,
-    } as unknown as Config;
+    const mockConfig = createHookConfig();
 
     const hookSystem = new HookSystem(mockConfig, mockMessageBus);
 
@@ -308,24 +240,7 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
       publish: vi.fn(),
     };
 
-    const mockConfig = {
-      getEnableHooks: () => true,
-      getHooks: () => ({}),
-      getSessionId: () => 'test-session',
-      getWorkingDir: () => '/test',
-      getTargetDir: () => '/test',
-      getExtensions: () => [],
-      getDisabledHooks: () => [],
-      getModel: () => 'test-model',
-      isTrustedFolder: () => true,
-      getProjectHooks: () => null,
-      getSanitizationConfig: () => ({
-        enableEnvironmentVariableRedaction: false,
-        allowedEnvironmentVariables: [],
-        blockedEnvironmentVariables: [],
-      }),
-      getSessionRecordingService: () => null,
-    } as unknown as Config;
+    const mockConfig = createHookConfig();
 
     const hookSystem = new HookSystem(mockConfig, mockMessageBus);
 
@@ -343,24 +258,7 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
   });
 
   it('returns an already-aborted initialization as a rejected promise', async () => {
-    const mockConfig = {
-      getEnableHooks: () => true,
-      getHooks: () => ({}),
-      getSessionId: () => 'test-session',
-      getWorkingDir: () => '/test',
-      getTargetDir: () => '/test',
-      getExtensions: () => [],
-      getDisabledHooks: () => [],
-      getModel: () => 'test-model',
-      isTrustedFolder: () => true,
-      getProjectHooks: () => null,
-      getSanitizationConfig: () => ({
-        enableEnvironmentVariableRedaction: false,
-        allowedEnvironmentVariables: [],
-        blockedEnvironmentVariables: [],
-      }),
-      getSessionRecordingService: () => null,
-    } as unknown as Config;
+    const mockConfig = createHookConfig();
     const hookSystem = new HookSystem(mockConfig);
     const controller = new AbortController();
     controller.abort();
@@ -373,24 +271,7 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
   });
 
   it('aborts registry initialization when disposed', async () => {
-    const mockConfig = {
-      getEnableHooks: () => true,
-      getHooks: () => ({}),
-      getSessionId: () => 'test-session',
-      getWorkingDir: () => '/test',
-      getTargetDir: () => '/test',
-      getExtensions: () => [],
-      getDisabledHooks: () => [],
-      getModel: () => 'test-model',
-      isTrustedFolder: () => true,
-      getProjectHooks: () => null,
-      getSanitizationConfig: () => ({
-        enableEnvironmentVariableRedaction: false,
-        allowedEnvironmentVariables: [],
-        blockedEnvironmentVariables: [],
-      }),
-      getSessionRecordingService: () => null,
-    } as unknown as Config;
+    const mockConfig = createHookConfig();
     const hookSystem = new HookSystem(mockConfig);
     const registry = hookSystem.getRegistry();
     let observedSignal: AbortSignal | undefined;

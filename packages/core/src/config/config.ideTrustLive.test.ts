@@ -68,6 +68,42 @@ describe('Config live IDE trust', () => {
     mcpManager.stop.mockResolvedValue(undefined);
   });
 
+  it('reconciles a local trust change made while a listener-less IDE client is loading', async () => {
+    let resolveIdeClient: ((client: object) => void) | undefined;
+    getIdeClient.mockReturnValue(
+      new Promise((resolve) => {
+        resolveIdeClient = resolve;
+      }),
+    );
+    const config = new Config({ ...baseParams, trustedFolder: true });
+
+    const initialization = initializeTestConfig(config);
+    await vi.waitFor(() => expect(getIdeClient).toHaveBeenCalledOnce());
+    await config.setTrustedFolderLive(false);
+    resolveIdeClient?.({});
+    await initialization;
+    await config.whenTrustTransitionSettled();
+
+    expect(config.isTrustedFolder()).toBe(false);
+    expect(mcpManager.onFolderTrustRevoked).toHaveBeenCalledOnce();
+  });
+
+  it('does not mark initialization complete when IDE listener registration throws', async () => {
+    ideClient.addTrustChangeListener.mockImplementationOnce(() => {
+      throw new Error('listener registration failed');
+    });
+    const config = new Config({ ...baseParams, trustedFolder: true });
+
+    await expect(initializeTestConfig(config)).rejects.toThrow(
+      'listener registration failed',
+    );
+    mcpManager.onFolderTrustRevoked.mockClear();
+
+    await config.setTrustedFolderLive(false);
+
+    expect(mcpManager.onFolderTrustRevoked).not.toHaveBeenCalled();
+  });
+
   it('reconciles an IDE trust change that occurs while the client is loading', async () => {
     let resolveIdeClient: ((client: typeof ideClient) => void) | undefined;
     getIdeClient.mockReturnValue(
@@ -170,7 +206,7 @@ describe('Config live IDE trust', () => {
       const listener = trustChangeListener;
       expect(listener).toBeDefined();
 
-      config.setTrustedFolderLive(localTrust);
+      await config.setTrustedFolderLive(localTrust);
       expect(config.isTrustedFolder()).toBe(!localTrust);
 
       ideContext.clearIdeContext();

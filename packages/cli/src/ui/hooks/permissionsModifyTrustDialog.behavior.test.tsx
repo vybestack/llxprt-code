@@ -25,6 +25,9 @@ const mockedGetValue = vi.hoisted(() =>
 );
 const mockedSnapshotValue = vi.hoisted(() => vi.fn());
 const mockedRestoreSnapshot = vi.hoisted(() => vi.fn());
+const mockedIdeTrust = vi.hoisted<{ value: boolean | undefined }>(() => ({
+  value: undefined,
+}));
 
 vi.mock('../../config/trustedFolders.js', async () => {
   const actual = await vi.importActual<
@@ -51,7 +54,7 @@ vi.mock('../../config/trustedFolders.js', async () => {
 });
 
 vi.mock('./useIdeTrustListener.js', () => ({
-  useIdeTrustListener: () => ({ isIdeTrusted: undefined }),
+  useIdeTrustListener: () => ({ isIdeTrusted: mockedIdeTrust.value }),
 }));
 
 import { usePermissionsModifyTrust } from './usePermissionsModifyTrust.js';
@@ -64,6 +67,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     mockedSnapshotValue.mockReset();
     mockedRestoreSnapshot.mockReset();
     mockedUserConfig.value = {};
+    mockedIdeTrust.value = undefined;
     mockedGetValue.mockImplementation(
       (folderPath: string) => mockedUserConfig.value[folderPath],
     );
@@ -84,6 +88,28 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     mockedDeleteValue.mockImplementation((folderPath) => {
       delete mockedUserConfig.value[folderPath];
     });
+  });
+
+  it('does not report inherited local trust while IDE trust is authoritative', () => {
+    mockedResolvePathTrust.mockReturnValue({
+      rule: { path: '/configured', trustLevel: TrustLevel.TRUST_FOLDER },
+      effectivePath: '/configured',
+      trusted: true,
+      provenance: 'inherited',
+    });
+    mockedIdeTrust.value = true;
+    const config: PermissionsTrustRuntime = {
+      getWorkingDir: () => '/configured/workspace',
+      getFolderTrust: () => true,
+      getIdeClient: () => undefined,
+      isTrustedFolder: () => true,
+      setTrustedFolderLive: vi.fn(),
+    };
+
+    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+
+    expect(result.current.isIdeTrusted).toBe(true);
+    expect(result.current.isParentTrusted).toBe(false);
   });
 
   it('reports a rolled-back live failure and remains usable after retry', async () => {

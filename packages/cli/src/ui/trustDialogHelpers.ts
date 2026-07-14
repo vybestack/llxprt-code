@@ -13,27 +13,43 @@ export enum FolderTrustChoice {
   DO_NOT_TRUST = 'do_not_trust',
 }
 
+function buildTrustRadioOptions<T extends string>(
+  currentFolder: string,
+  parentFolder: string,
+  values: {
+    readonly trustFolder: T;
+    readonly trustParent: T;
+    readonly doNotTrust: T;
+  },
+): Array<RadioSelectItem<T>> {
+  return [
+    {
+      label: `Trust folder (${currentFolder})`,
+      value: values.trustFolder,
+      key: values.trustFolder,
+    },
+    {
+      label: `Trust parent folder (${parentFolder})`,
+      value: values.trustParent,
+      key: values.trustParent,
+    },
+    {
+      label: "Don't trust",
+      value: values.doNotTrust,
+      key: values.doNotTrust,
+    },
+  ];
+}
+
 export function buildTrustOptions(
   currentFolder: string,
   parentFolder: string,
 ): Array<RadioSelectItem<FolderTrustChoice>> {
-  return [
-    {
-      label: `Trust folder (${currentFolder})`,
-      value: FolderTrustChoice.TRUST_FOLDER,
-      key: FolderTrustChoice.TRUST_FOLDER,
-    },
-    {
-      label: `Trust parent folder (${parentFolder})`,
-      value: FolderTrustChoice.TRUST_PARENT,
-      key: FolderTrustChoice.TRUST_PARENT,
-    },
-    {
-      label: "Don't trust",
-      value: FolderTrustChoice.DO_NOT_TRUST,
-      key: FolderTrustChoice.DO_NOT_TRUST,
-    },
-  ];
+  return buildTrustRadioOptions(currentFolder, parentFolder, {
+    trustFolder: FolderTrustChoice.TRUST_FOLDER,
+    trustParent: FolderTrustChoice.TRUST_PARENT,
+    doNotTrust: FolderTrustChoice.DO_NOT_TRUST,
+  });
 }
 
 export function getLocalTrustLevelDisplay(
@@ -141,23 +157,11 @@ export function buildTrustLevelOptions(
   folderName: string,
   parentFolderName: string,
 ): Array<RadioSelectItem<TrustLevel>> {
-  return [
-    {
-      label: `Trust this folder (${folderName})`,
-      value: TrustLevel.TRUST_FOLDER,
-      key: TrustLevel.TRUST_FOLDER,
-    },
-    {
-      label: `Trust parent folder (${parentFolderName})`,
-      value: TrustLevel.TRUST_PARENT,
-      key: TrustLevel.TRUST_PARENT,
-    },
-    {
-      label: "Don't trust",
-      value: TrustLevel.DO_NOT_TRUST,
-      key: TrustLevel.DO_NOT_TRUST,
-    },
-  ];
+  return buildTrustRadioOptions(folderName, parentFolderName, {
+    trustFolder: TrustLevel.TRUST_FOLDER,
+    trustParent: TrustLevel.TRUST_PARENT,
+    doNotTrust: TrustLevel.DO_NOT_TRUST,
+  });
 }
 
 export function findInitialTrustOptionIndex(

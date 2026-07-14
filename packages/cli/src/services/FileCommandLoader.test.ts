@@ -765,7 +765,8 @@ describe('FileCommandLoader', () => {
       expect(nestedCmd?.extensionName).toBe('a');
       expect(nestedCmd?.description).toMatch(/^\[a\]/);
       assert(nestedCmd, 'Expected nested command');
-      const result = await nestedCmd.action?.(
+      assert(nestedCmd.action, 'Expected nested command action');
+      const result = await nestedCmd.action(
         createMockCommandContext({
           invocation: {
             raw: '/b:c',

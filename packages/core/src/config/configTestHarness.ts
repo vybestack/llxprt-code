@@ -208,8 +208,12 @@ export function buildEventsMockBody(
   actual: unknown,
   hoisted: HoistedConfigMocks,
 ) {
-  const eventsModule = actual as { coreEvents: object };
-  const coreEvents = Reflect.construct(eventsModule.coreEvents.constructor, []);
+  const eventsModule = actual as { coreEvents?: object };
+  const CoreEventsConstructor = eventsModule.coreEvents?.constructor;
+  if (typeof CoreEventsConstructor !== 'function') {
+    throw new TypeError('Expected coreEvents to expose a callable constructor');
+  }
+  const coreEvents = Reflect.construct(CoreEventsConstructor, []);
   Object.assign(coreEvents, hoisted.coreEvents, { emit: vi.fn() });
   return {
     ...(actual as object),

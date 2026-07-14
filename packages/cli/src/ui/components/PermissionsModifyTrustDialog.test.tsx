@@ -176,7 +176,7 @@ describe('PermissionsModifyTrustDialog', () => {
       </Wrapper>,
     );
 
-    expect(lastFrame()).toContain('Trust this folder');
+    expect(lastFrame()).toContain('Trust folder');
     expect(lastFrame()).toContain('Trust parent folder');
     expect(lastFrame()).toContain("Don't trust");
   });
@@ -193,7 +193,7 @@ describe('PermissionsModifyTrustDialog', () => {
     );
 
     await waitFor(() => {
-      expect(lastFrame()).toContain('Trust this folder (dir)');
+      expect(lastFrame()).toContain('Trust folder (dir)');
       expect(lastFrame()).toContain('Trust parent folder (test)');
     });
   });

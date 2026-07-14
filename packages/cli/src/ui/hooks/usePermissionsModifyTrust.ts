@@ -193,7 +193,8 @@ export function usePermissionsModifyTrust(
   const currentTrustLevel = trustedFolders.getValue(normalizedCwd);
   const effectiveLocalTrustLevel = winningRule?.rule.trustLevel;
   const { isIdeTrusted } = useIdeTrustListener(config ?? emptyIdeState);
-  const isParentTrusted = winningRule?.provenance === 'inherited';
+  const isParentTrusted =
+    isIdeTrusted === undefined && winningRule?.provenance === 'inherited';
 
   const [pendingTrustLevel, setPendingTrustLevel] = useState<
     TrustLevel | undefined
