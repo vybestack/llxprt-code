@@ -82,6 +82,7 @@ export {
 export { Storage } from './storage/Storage.js';
 export {
   LLXPRT_DIR,
+  AGENTS_DIR,
   PROVIDER_ACCOUNTS_FILENAME,
   OAUTH_FILE,
 } from './storage/Storage.js';

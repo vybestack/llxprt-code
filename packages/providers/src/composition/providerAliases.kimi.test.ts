@@ -42,4 +42,14 @@ describe('builtin kimi provider alias', () => {
     expect(defaults?.['reasoning.includeInContext']).toBe(true);
     expect(defaults?.['reasoning.stripFromContext']).toBe('none');
   });
+
+  it('declares PDF upload and gated video capabilities', () => {
+    const entries = loadProviderAliasEntries();
+    const entry = entries.find((candidate) => candidate.alias === 'kimi');
+
+    expect(entry?.config.mediaSupport).toBeDefined();
+    expect(entry?.config.mediaSupport?.inlineImages).toBe(true);
+    expect(entry?.config.mediaSupport?.fileUpload).toBe(true);
+    expect(entry?.config.mediaSupport?.videoSupport).toBe(true);
+  });
 });

@@ -32,10 +32,16 @@ import type {
   FunctionDeclaration,
   SubagentActivityEventType,
 } from './types.js';
+import {
+  DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+  enforceImageBudget,
+  buildOmissionFeedback,
+} from '../core/imagePayloadBudget.js';
 
 import type {
   ContentBlock,
   IContent,
+  MediaBlock,
   TextBlock,
   ToolResponseBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -165,6 +171,8 @@ export async function processFunctionCalls(
     toolExecutionPromises,
     submittedOutput,
     taskCompleted,
+    emitActivity,
+    runtimeContext.getImagePayloadBudgetBytes(),
   );
 }
 
@@ -462,6 +470,8 @@ async function assembleToolResponses(
   toolExecutionPromises: Array<Promise<ToolExecutionResult | void>>,
   submittedOutput: string | null,
   taskCompleted: boolean,
+  emitActivity: EmitActivityFn,
+  budgetBytes: number = DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
 ): Promise<FunctionCallProcessingResult> {
   const asyncResults = await Promise.all(toolExecutionPromises);
 
@@ -486,6 +496,22 @@ async function assembleToolResponses(
       text: 'All tool calls failed or were unauthorized. Please analyze the errors and try an alternative approach.',
     };
     toolResponseBlocks.push(fallbackBlock);
+  }
+
+  if (budgetBytes > 0) {
+    const imageParts = toolResponseBlocks.filter(
+      (b): b is MediaBlock => b.type === 'media' && b.encoding === 'base64',
+    );
+    const { omitted } = enforceImageBudget(imageParts, budgetBytes);
+    if (omitted.length > 0) {
+      const fallbackText = buildOmissionFeedback(omitted);
+      toolResponseBlocks.push({ type: 'text', text: fallbackText });
+      emitActivity('ERROR', {
+        context: 'image_budget',
+        omittedCount: omitted.length,
+        toolNames: omitted.map((img) => img.toolName),
+      });
+    }
   }
 
   return {

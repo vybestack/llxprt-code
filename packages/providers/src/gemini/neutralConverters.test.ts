@@ -387,7 +387,6 @@ describe('geminiPartToBlock direction (REQ-010.1, pseudocode lines 10-25)', () =
     expect(block).toStrictEqual({
       type: 'thinking',
       thought: 'thinking',
-      isHidden: true,
       sourceField: 'thought',
       signature: 'sig',
     });
@@ -516,8 +515,6 @@ describe('blockToGeminiPart direction (REQ-010.1, pseudocode lines 27-38)', () =
     const block = {
       type: 'thinking' as const,
       thought: 'reasoning',
-      isHidden: true,
-      sourceField: 'thought' as const,
       signature: 'sig',
     };
     expect(blockToGeminiPart(block)).toStrictEqual({
@@ -527,12 +524,30 @@ describe('blockToGeminiPart direction (REQ-010.1, pseudocode lines 27-38)', () =
     });
   });
 
-  it('ThinkingBlock without signature omits thoughtSignature', () => {
+  it('ThinkingBlock emits explicit llxprt metadata', () => {
     const block = {
       type: 'thinking' as const,
       thought: 'reasoning',
       isHidden: true,
       sourceField: 'thought' as const,
+      streamId: 'stream-1',
+      streamStatus: 'complete' as const,
+      providerMetadata: { 'gemini.thoughtMetadata': true },
+    };
+    expect(blockToGeminiPart(block)).toStrictEqual({
+      thought: true,
+      text: 'reasoning',
+      llxprtSourceField: 'thought',
+      llxprtThoughtBlockId: 'stream-1',
+      llxprtThoughtBlockStatus: 'complete',
+      llxprtThoughtIsHidden: true,
+    });
+  });
+
+  it('ThinkingBlock without signature omits thoughtSignature', () => {
+    const block = {
+      type: 'thinking' as const,
+      thought: 'reasoning',
     };
     expect(blockToGeminiPart(block)).toStrictEqual({
       thought: true,

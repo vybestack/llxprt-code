@@ -15,10 +15,14 @@ import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.
 import { getCompletionBudget } from './compressionBudgeting.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
+import { buildContextOverflowError } from './contextOverflowError.js';
+import {
+  truncateOversizedToolResponsesUnified,
+  type UnifiedTruncationResult,
+} from './toolResultTruncator.js';
 
 const TOKEN_SAFETY_MARGIN = 1000;
 const INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD = 0.05;
-const COMPLETION_BUDGET_WARNING_RATIO = 0.8;
 type CompletionSettingsService = { get: (key: string) => unknown };
 
 export interface ProviderContentEnforcementDeps {
@@ -112,7 +116,7 @@ export class ProviderContentEnforcer {
       promptId,
       envelope.pendingContents,
     );
-    let recomputed = await this.estimateProviderProjection(
+    const recomputed = await this.estimateProviderProjection(
       compressedContents,
       completionBudget,
       model,
@@ -121,28 +125,88 @@ export class ProviderContentEnforcer {
       return compressedContents;
     }
 
-    const fallbackContents = await this.forceTruncationIfIneffective(
+    return this.recoverAfterCompression({
+      pendingContents: envelope.pendingContents,
       promptId,
       postOptProjected,
-      recomputed,
-      envelope.pendingContents,
-    );
-    recomputed = await this.estimateProviderProjection(
-      fallbackContents,
+      postCompressionProjected: recomputed,
+      limit,
+      initialProjected,
+      marginAdjustedLimit,
       completionBudget,
       model,
+    });
+  }
+
+  private async recoverAfterCompression(input: {
+    pendingContents: IContent[];
+    promptId: string;
+    postOptProjected: number;
+    postCompressionProjected: number;
+    limit: number;
+    initialProjected: number;
+    marginAdjustedLimit: number;
+    completionBudget: number;
+    model: string;
+  }): Promise<IContent[]> {
+    const fallbackContents = await this.forceTruncationIfIneffective(
+      input.promptId,
+      input.postOptProjected,
+      input.postCompressionProjected,
+      input.pendingContents,
     );
-    if (recomputed <= marginAdjustedLimit) {
+    const recomputed = await this.estimateProviderProjection(
+      fallbackContents,
+      input.completionBudget,
+      input.model,
+    );
+    if (recomputed <= input.marginAdjustedLimit) {
       return fallbackContents;
     }
 
-    throw this.buildContextOverflowError(
-      limit,
-      initialProjected,
-      recomputed,
-      marginAdjustedLimit,
-      completionBudget,
-    );
+    let toolTruncationResult: UnifiedTruncationResult;
+    try {
+      toolTruncationResult = await this.truncateToolResponsesUnified(
+        input.pendingContents,
+        input.marginAdjustedLimit,
+        input.completionBudget,
+        input.model,
+      );
+    } catch (error) {
+      const truncationFailure =
+        error instanceof Error ? error : new Error(String(error));
+      this.deps.logger.warn(
+        () =>
+          '[CompressionHandler] Unified tool-response truncation failed during last-resort enforcement',
+        truncationFailure,
+      );
+      throw buildContextOverflowError({
+        limit: input.limit,
+        initialProjected: input.initialProjected,
+        finalProjected: recomputed,
+        marginAdjustedLimit: input.marginAdjustedLimit,
+        completionBudget: input.completionBudget,
+        truncationFailure,
+        toolResponseTruncationAttempted: true,
+        toolResponsesTruncated: 0,
+      });
+    }
+
+    if (toolTruncationResult.success) {
+      return this.recomposeProviderContents(
+        toolTruncationResult.transformedPending ?? input.pendingContents,
+      );
+    }
+
+    throw buildContextOverflowError({
+      limit: input.limit,
+      initialProjected: input.initialProjected,
+      finalProjected: toolTruncationResult.projected,
+      marginAdjustedLimit: input.marginAdjustedLimit,
+      completionBudget: input.completionBudget,
+      toolResponseTruncationAttempted: true,
+      toolResponsesTruncated: toolTruncationResult.replacedCount,
+    });
   }
 
   async compressAndRecompose(
@@ -153,6 +217,54 @@ export class ProviderContentEnforcer {
       return [];
     }
     return this.runCompressionAndRecompose(promptId, pendingContents);
+  }
+
+  private async truncateToolResponsesUnified(
+    pendingContents: IContent[],
+    marginAdjustedLimit: number,
+    completionBudget: number,
+    model: string,
+  ): Promise<{
+    success: boolean;
+    replacedCount: number;
+    projected: number;
+    transformedPending: IContent[] | undefined;
+  }> {
+    this.deps.logger.warn(
+      () =>
+        '[CompressionHandler] Provider payload still over limit after fallback, attempting last-resort unified tool-response truncation',
+      { marginAdjustedLimit, completionBudget, model },
+    );
+
+    return truncateOversizedToolResponsesUnified(
+      {
+        historyService: this.deps.historyService,
+        logger: this.deps.logger,
+        pendingContents,
+        estimateBlockTokensAsync: async (block) =>
+          this.deps.historyService.estimateTokensForContents(
+            [{ speaker: 'tool', blocks: [block] }],
+            model,
+          ),
+        computeProjected: async (workingPending) => {
+          const recomposed = this.recomposeProviderContents([
+            ...workingPending,
+          ]);
+          return this.estimateProviderProjection(
+            recomposed,
+            completionBudget,
+            model,
+          );
+        },
+        resetBaseline: () => {
+          // Provider path has no lastPromptTokenCount baseline; projection
+          // is always recomputed from the provider payload via
+          // estimateProviderProjection above.
+        },
+        getRuntimeModel: () => model,
+      },
+      marginAdjustedLimit,
+    );
   }
 
   private resolveModel(provider?: IProvider): string {
@@ -379,27 +491,5 @@ export class ProviderContentEnforcer {
         marginAdjustedLimit,
       ),
     };
-  }
-
-  private buildContextOverflowError(
-    limit: number,
-    initialProjected: number,
-    finalProjected: number,
-    marginAdjustedLimit: number,
-    completionBudget: number,
-  ): Error {
-    const totalReduction = Math.max(0, initialProjected - finalProjected);
-    const tokensStillNeeded = finalProjected - marginAdjustedLimit;
-    const parts: string[] = [
-      `Request still exceeds the safety-adjusted context limit (${marginAdjustedLimit} tokens).`,
-      `Density optimization and compression reduced ${totalReduction} tokens (from ${initialProjected} to ${finalProjected} projected).`,
-      `completionBudget=${completionBudget}, tokensStillNeeded=${tokensStillNeeded}.`,
-    ];
-    if (completionBudget > COMPLETION_BUDGET_WARNING_RATIO * limit) {
-      parts.push(
-        `The completion budget (${completionBudget}) consumes more than ${COMPLETION_BUDGET_WARNING_RATIO * 100}% of the context window (${limit}). Consider lowering maxOutputTokens.`,
-      );
-    }
-    return new Error(parts.join(' '));
   }
 }

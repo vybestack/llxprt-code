@@ -159,7 +159,6 @@ describe('connectToMcpServer with OAuth', () => {
     // Note: createTransportWithOAuth is not directly exported, but we can test
     // its behavior through connectToMcpServer and retryWithOAuth
 
-    // EXPECTED TO PASS: httpUrl uses HTTP transport (retryWithOAuth hardcodes HTTP)
     it('should use HTTP transport for httpUrl config', async () => {
       const serverUrl = 'http://test-server.com/http';
 
@@ -183,12 +182,9 @@ describe('connectToMcpServer with OAuth', () => {
         workspaceContext,
       );
 
-      // Passes because retryWithOAuth uses HTTP for httpUrl
       expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
     });
 
-    // EXPECTED TO PASS (accidentally): retryWithOAuth hardcodes HTTP for url
-    // This test passes but for the WRONG reason - it should respect type field
     it('should use HTTP transport for url without type (default)', async () => {
       const serverUrl = 'http://test-server.com/mcp';
 
@@ -212,40 +208,38 @@ describe('connectToMcpServer with OAuth', () => {
         workspaceContext,
       );
 
-      // Passes accidentally: retryWithOAuth hardcodes HTTP (should use createTransportWithOAuth)
       expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
     });
 
-    // EXPECTED TO PASS (accidentally): retryWithOAuth ignores type field
-    // This test passes but for the WRONG reason - should honor type:http explicitly
-    it('should use HTTP transport for url + type:http', async () => {
-      const serverUrl = 'http://test-server.com/http';
+    it.each(['http', 'streamable-http'] as const)(
+      'should use HTTP transport for url + type:%s',
+      async (type) => {
+        const serverUrl = 'http://test-server.com/mcp';
 
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
-        new Error('401 Unauthorized'),
-      );
+        vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+          new Error('401 Unauthorized'),
+        );
 
-      let capturedTransport: TransportWithInternals | undefined;
-      vi.mocked(mockedClient.connect).mockImplementationOnce(
-        async (transport) => {
-          capturedTransport = transport;
-          return Promise.resolve();
-        },
-      );
+        let capturedTransport: TransportWithInternals | undefined;
+        vi.mocked(mockedClient.connect).mockImplementationOnce(
+          async (transport) => {
+            capturedTransport = transport;
+            return Promise.resolve();
+          },
+        );
 
-      await connectToMcpServer(
-        '0.0.1',
-        'test-server',
-        { url: serverUrl, type: 'http' },
-        false,
-        workspaceContext,
-      );
+        await connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          { url: serverUrl, type },
+          false,
+          workspaceContext,
+        );
 
-      // Passes accidentally: retryWithOAuth hardcodes HTTP (ignores type field)
-      expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
-    });
+        expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
+      },
+    );
 
-    // EXPECTED TO FAIL: type:sse not respected in createTransportWithOAuth
     it('should use SSE transport for url + type:sse', async () => {
       const serverUrl = 'http://test-server.com/sse';
 
@@ -269,17 +263,28 @@ describe('connectToMcpServer with OAuth', () => {
         workspaceContext,
       );
 
-      // WILL FAIL: createTransportWithOAuth ignores type:sse, uses HTTP
       expect(capturedTransport).toBeInstanceOf(SSEClientTransport);
     });
 
-    // EXPECTED TO FAIL: currently returns null, should throw error
-    it('should throw error when neither url nor httpUrl configured', async () => {
+    it('should throw error when no transport configuration is provided', async () => {
+      // Empty config causes createTransport to throw "Invalid configuration"
+      // before the client.connect mock is ever reached
+      await expect(
+        connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          {}, // No url, httpUrl, or command
+          false,
+          workspaceContext,
+        ),
+      ).rejects.toThrow(/Invalid configuration/);
+    });
+
+    it('should throw error for command-based config when connect fails with 401 (no OAuth retry for stdio)', async () => {
       vi.mocked(mockedClient.connect).mockRejectedValueOnce(
         new Error('401 Unauthorized'),
       );
 
-      // WILL FAIL: current code returns null and continues, should throw
       await expect(
         connectToMcpServer(
           '0.0.1',
@@ -292,14 +297,9 @@ describe('connectToMcpServer with OAuth', () => {
     });
   });
 
-  // Phase C+D: State machine and hygiene tests (RED phase)
+  // Phase C+D: State machine and hygiene tests
   describe('connectToMcpServer state machine behavior', () => {
-    // EXPECTED TO PASS: 401 + stored token retry is already tested above
-
-    // EXPECTED TO PASS: 401 + no token is already tested above
-
     // Test non-401 error + url + no type -> SSE fallback attempted
-    // This may already be covered; checking if SSE fallback happens
     it('should attempt SSE fallback on non-401 error with url (no type)', async () => {
       const serverUrl = 'http://test-server.com/mcp';
       const mockTransport = { close: vi.fn() };
@@ -600,6 +600,77 @@ describe('connectToMcpServer with OAuth', () => {
       ).rejects.toThrow(/status 404/);
 
       expect(mockedClient.connect).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('deprecated SSE endpoint detection', () => {
+    const SSE_DEPRECATED_URL = 'http://test-server.com/sse';
+    const SSE_REPLACEMENT_URL = 'https://mcp.test-server.com/mcp';
+
+    it('should surface actionable error when SSE is no longer supported', async () => {
+      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+        new Error(`SSE is no longer supported. use ${SSE_REPLACEMENT_URL}`),
+      );
+
+      await expect(
+        connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          { url: SSE_DEPRECATED_URL, type: 'sse' },
+          false,
+          workspaceContext,
+        ),
+      ).rejects.toThrow(/no longer supported/);
+    });
+
+    it('should include the suggested replacement URL in the error', async () => {
+      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+        new Error(`SSE is no longer supported. use ${SSE_REPLACEMENT_URL}`),
+      );
+
+      await expect(
+        connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          { url: SSE_DEPRECATED_URL, type: 'sse' },
+          false,
+          workspaceContext,
+        ),
+      ).rejects.toThrow(/https:\/\/mcp\.test-server\.com\/mcp/);
+    });
+
+    it('should recommend streamable-http type in the error', async () => {
+      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+        new Error('SSE is no longer supported. use http://example.com/mcp'),
+      );
+
+      await expect(
+        connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          { url: 'http://example.com/sse', type: 'sse' },
+          false,
+          workspaceContext,
+        ),
+      ).rejects.toThrow(/streamable-http/);
+    });
+
+    it('does not reinterpret a stdio process error as an SSE endpoint configuration error', async () => {
+      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+        new Error('SSE is no longer supported in this subprocess'),
+      );
+
+      await expect(
+        connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          { command: 'test-command' },
+          false,
+          workspaceContext,
+        ),
+      ).rejects.toThrow(
+        /Connection failed for 'test-server': SSE is no longer supported/,
+      );
     });
   });
 

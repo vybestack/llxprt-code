@@ -35,6 +35,7 @@ const isWindows = process.platform === 'win32';
 class InMemoryTokenStore implements TokenStore {
   private tokens: Map<string, OAuthToken> = new Map();
   private locks: Set<string> = new Set();
+  private bucketStats: Map<string, BucketStats> = new Map();
 
   private key(provider: string, bucket?: string): string {
     return bucket ? `${provider}:${bucket}` : provider;
@@ -79,10 +80,15 @@ class InMemoryTokenStore implements TokenStore {
   }
 
   async getBucketStats(
-    _provider: string,
-    _bucket: string,
+    provider: string,
+    bucket: string,
   ): Promise<BucketStats | null> {
-    return null;
+    return this.bucketStats.get(this.key(provider, bucket)) ?? null;
+  }
+
+  /** Test helper: populate bucket stats to prove sandbox path suppresses real data. */
+  setBucketStats(provider: string, bucket: string, stats: BucketStats): void {
+    this.bucketStats.set(this.key(provider, bucket), stats);
   }
 
   async acquireRefreshLock(
@@ -152,6 +158,8 @@ function makeToken(overrides: Partial<OAuthToken> = {}): OAuthToken {
   };
 }
 
+const CAPABILITY_TOKEN = 'a'.repeat(64);
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('CredentialProxyServer', () => {
@@ -191,11 +199,76 @@ describe('CredentialProxyServer', () => {
 
   async function startAndConnect(
     serverInstance: CredentialProxyServer,
+    capabilityToken?: string,
   ): Promise<ProxySocketClient> {
     const socketPath = await serverInstance.start();
-    const c = new ProxySocketClient(socketPath);
+    const c = new ProxySocketClient(socketPath, capabilityToken);
     await c.ensureConnected();
     return c;
+  }
+
+  /** Sends a raw handshake frame over a bare TCP/Unix socket and resolves
+   *  with the decoded response frame. Used to test server-level rejection
+   *  paths (version mismatch, missing token) that bypass the client SDK. */
+  async function sendRawHandshake(
+    socketPath: string,
+    handshakePayload: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const net = await import('node:net');
+    const { encodeFrame, FrameDecoder } = await import(
+      '@vybestack/llxprt-code-auth'
+    );
+    return new Promise<Record<string, unknown>>((resolve, reject) => {
+      let settled = false;
+      const socket = net.createConnection(socketPath, () => {
+        socket.write(encodeFrame(handshakePayload));
+      });
+      const decoder = new FrameDecoder();
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        socket.destroy();
+        reject(new Error('Timeout waiting for handshake response'));
+      }, 5000);
+      socket.on('data', (chunk: Buffer) => {
+        let frames: Array<Record<string, unknown>>;
+        try {
+          frames = decoder.feed(chunk);
+        } catch (err) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          socket.destroy();
+          reject(err);
+          return;
+        }
+        for (const frame of frames) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          socket.destroy();
+          resolve(frame);
+          break;
+        }
+      });
+      socket.on('error', (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        socket.destroy();
+        reject(err);
+      });
+      socket.on('close', () => {
+        // Defer to allow pending 'data' events to fire first
+        process.nextTick(() => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          socket.destroy();
+          reject(new Error('Connection closed before handshake response'));
+        });
+      });
+    });
   }
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
@@ -302,38 +375,11 @@ describe('CredentialProxyServer', () => {
     server = createServer();
     const socketPath = await server.start();
 
-    // Manually construct a client-like connection with wrong version
-    // by using the raw socket to send a bad handshake
-    const net = await import('node:net');
-    const { encodeFrame, FrameDecoder } = await import(
-      '@vybestack/llxprt-code-core'
-    );
-
-    const response = await new Promise<Record<string, unknown>>(
-      (resolve, reject) => {
-        const socket = net.createConnection(socketPath, () => {
-          const handshake = {
-            v: 999,
-            op: 'handshake',
-            payload: { minVersion: 999, maxVersion: 999 },
-          };
-          socket.write(encodeFrame(handshake));
-        });
-        const decoder = new FrameDecoder();
-        socket.on('data', (chunk: Buffer) => {
-          const frames = decoder.feed(chunk);
-          for (const frame of frames) {
-            socket.destroy();
-            resolve(frame);
-          }
-        });
-        socket.on('error', reject);
-        setTimeout(() => {
-          socket.destroy();
-          reject(new Error('Timeout waiting for handshake response'));
-        }, 5000);
-      },
-    );
+    const response = await sendRawHandshake(socketPath, {
+      v: 999,
+      op: 'handshake',
+      payload: { minVersion: 999, maxVersion: 999 },
+    });
 
     expect(response.ok).toBe(false);
   });
@@ -777,5 +823,508 @@ describe('CredentialProxyServer', () => {
     expect(r2.ok).toBe(true);
     expect(r2.data!.key).toBe('sk-oai-789');
     client2.close();
+  });
+
+  // ─── Capability Token Authentication ──────────────────────────────────────
+
+  /**
+   * @scenario Server with capability token accepts connection with valid token
+   * @given A server configured with a capability token
+   * @when A client connects and sends the correct token in the handshake
+   * @then The handshake succeeds and the client can make requests
+   */
+  it('accepts handshake with valid capability token', async () => {
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
+
+    // Verify the handshake succeeded by making a request — sandbox connections
+    // receive FORBIDDEN (not NOT_FOUND) for missing tokens to prevent enumeration.
+    const response = await client.request('get_token', {
+      provider: 'nonexistent',
+    });
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('FORBIDDEN');
+  });
+
+  /**
+   * @scenario Server with capability token rejects connection with invalid token
+   * @given A server configured with a capability token
+   * @when A client connects with a wrong token
+   * @then The handshake fails with UNAUTHORIZED and the connection is destroyed
+   */
+  it('rejects handshake with invalid capability token', async () => {
+    const token = CAPABILITY_TOKEN;
+    server = createServer({ capabilityToken: token });
+    const socketPath = await server.start();
+
+    const badClient = new ProxySocketClient(socketPath, 'wrong-token');
+    try {
+      await expect(badClient.ensureConnected()).rejects.toThrow(
+        /authentication failed/i,
+      );
+    } finally {
+      badClient.close();
+    }
+  });
+
+  /**
+   * @scenario Server with capability token rejects connection with missing token
+   * @given A server configured with a capability token
+   * @when A client connects without presenting any token
+   * @then The handshake fails and the connection is destroyed
+   */
+  it('rejects handshake with missing capability token', async () => {
+    const token = CAPABILITY_TOKEN;
+    server = createServer({ capabilityToken: token });
+    const socketPath = await server.start();
+
+    const tokenlessClient = new ProxySocketClient(socketPath);
+    try {
+      await expect(tokenlessClient.ensureConnected()).rejects.toThrow(
+        /authentication failed/i,
+      );
+    } finally {
+      tokenlessClient.close();
+    }
+  });
+
+  /**
+   * @scenario Server without capability token accepts connections without token
+   * @given A server NOT configured with a capability token (non-sandbox)
+   * @when A client connects without presenting a token
+   * @then The handshake succeeds (backward compatibility)
+   */
+  it('allows connections without token when no capability token configured', async () => {
+    server = createServer();
+    client = await startAndConnect(server);
+
+    const response = await client.request('list_providers', {});
+    expect(response.ok).toBe(true);
+  });
+
+  // ─── Enumeration Restriction for Sandbox Connections ───────────────────────
+
+  /**
+   * @scenario list_api_keys returns empty array for sandbox connection
+   * @given A server with capability token, keys in storage
+   * @when A sandbox client (valid token) requests list_api_keys
+   * @then Response contains an empty keys array
+   */
+  it('list_api_keys returns empty array for sandbox connection', async () => {
+    await keyStorage.saveKey('anthropic', 'sk-ant-123');
+    await keyStorage.saveKey('openai', 'sk-oai-456');
+
+    const token = CAPABILITY_TOKEN;
+    server = createServer({ capabilityToken: token });
+    client = await startAndConnect(server, token);
+
+    const response = await client.request('list_api_keys', {});
+    expect(response.ok).toBe(true);
+    expect(response.data!.keys).toStrictEqual([]);
+  });
+
+  /**
+   * @scenario list_providers returns empty array for sandbox connection
+   * @given A server with capability token, tokens in store
+   * @when A sandbox client requests list_providers
+   * @then Response contains an empty providers array
+   */
+  it('list_providers returns empty array for sandbox connection', async () => {
+    await tokenStore.saveToken('anthropic', makeToken());
+    await tokenStore.saveToken('gemini', makeToken());
+
+    const token = CAPABILITY_TOKEN;
+    server = createServer({ capabilityToken: token });
+    client = await startAndConnect(server, token);
+
+    const response = await client.request('list_providers', {});
+    expect(response.ok).toBe(true);
+    expect(response.data!.providers).toStrictEqual([]);
+  });
+
+  /**
+   * @scenario list_buckets returns empty array for sandbox connection
+   * @given A server with capability token, tokens in multiple buckets
+   * @when A sandbox client requests list_buckets
+   * @then Response contains an empty buckets array
+   */
+  it('list_buckets returns empty array for sandbox connection', async () => {
+    await tokenStore.saveToken('anthropic', makeToken(), 'default');
+    await tokenStore.saveToken('anthropic', makeToken(), 'work');
+
+    const token = CAPABILITY_TOKEN;
+    server = createServer({ capabilityToken: token });
+    client = await startAndConnect(server, token);
+
+    const response = await client.request('list_buckets', {
+      provider: 'anthropic',
+    });
+    expect(response.ok).toBe(true);
+    expect(response.data!.buckets).toStrictEqual([]);
+  });
+
+  /**
+   * @scenario get_token still works for sandbox connection (targeted access)
+   * @given A server with capability token, a token in store
+   * @when A sandbox client requests get_token for a known provider
+   * @then The token is returned (targeted access still works)
+   */
+  it('get_token works for sandbox connection with known provider', async () => {
+    await tokenStore.saveToken('anthropic', makeToken());
+
+    const token = CAPABILITY_TOKEN;
+    server = createServer({ capabilityToken: token });
+    client = await startAndConnect(server, token);
+
+    const response = await client.request('get_token', {
+      provider: 'anthropic',
+    });
+    expect(response.ok).toBe(true);
+    expect(response.data!.access_token).toBe('test-access-token');
+  });
+
+  /**
+   * @scenario get_api_key still works for sandbox connection (targeted access)
+   * @given A server with capability token, a key in storage
+   * @when A sandbox client requests get_api_key for a known name
+   * @then The key is returned (targeted access still works)
+   */
+  it('get_api_key works for sandbox connection with known name', async () => {
+    await keyStorage.saveKey('anthropic', 'sk-ant-123');
+
+    const token = CAPABILITY_TOKEN;
+    server = createServer({ capabilityToken: token });
+    client = await startAndConnect(server, token);
+
+    const response = await client.request('get_api_key', {
+      name: 'anthropic',
+    });
+    expect(response.ok).toBe(true);
+    expect(response.data!.key).toBe('sk-ant-123');
+  });
+
+  /**
+   * @scenario has_api_key blocked for sandbox connection (prevents enumeration)
+   * @given A server with capability token, a key in storage
+   * @when A sandbox client requests has_api_key
+   * @then Response is ok: false with code FORBIDDEN
+   */
+  it('has_api_key blocked for sandbox connection', async () => {
+    await keyStorage.saveKey('anthropic', 'sk-ant-123');
+
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
+
+    const response = await client.request('has_api_key', {
+      name: 'anthropic',
+    });
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('FORBIDDEN');
+  });
+
+  /**
+   * @scenario get_token returns FORBIDDEN for unknown provider in sandbox
+   * @given A server with capability token, no token for "unknown" provider
+   * @when A sandbox client requests get_token for a non-existent provider
+   * @then Response is FORBIDDEN. Note: this does NOT fully prevent provider
+   *      enumeration — a sandbox client can still distinguish existing
+   *      providers (ok: true) from non-existing ones (FORBIDDEN). True
+   *      enumeration prevention is only provided by list_* operations.
+   *      The FORBIDDEN code avoids revealing the NOT_FOUND code specifically.
+   */
+  it('get_token returns FORBIDDEN for unknown provider in sandbox', async () => {
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
+
+    const response = await client.request('get_token', {
+      provider: 'nonexistent',
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('FORBIDDEN');
+  });
+
+  /**
+   * @scenario get_api_key returns FORBIDDEN for unknown key in sandbox
+   * @given A server with capability token, no key for "unknown"
+   * @when A sandbox client requests get_api_key for a non-existent key
+   * @then Response is FORBIDDEN. Note: this does NOT fully prevent key
+   *      enumeration — a sandbox client can still distinguish existing keys
+   *      (ok: true) from non-existing ones (FORBIDDEN). True enumeration
+   *      prevention is only provided by list_* operations. The FORBIDDEN
+   *      code avoids revealing the NOT_FOUND code specifically.
+   */
+  it('get_api_key returns FORBIDDEN for unknown key in sandbox', async () => {
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
+
+    const response = await client.request('get_api_key', {
+      name: 'nonexistent',
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('FORBIDDEN');
+  });
+
+  /**
+   * @scenario Enumeration works for non-sandbox (no token) connections
+   * @given A server WITHOUT capability token, keys and tokens in store
+   * @when A non-sandbox client requests enumeration operations
+   * @then Full lists are returned (backward compatibility)
+   */
+  it('list operations return full data for non-sandbox connections', async () => {
+    await keyStorage.saveKey('anthropic', 'sk-ant-123');
+    await tokenStore.saveToken('gemini', makeToken());
+
+    server = createServer();
+    client = await startAndConnect(server);
+
+    const keysResponse = await client.request('list_api_keys', {});
+    expect(keysResponse.ok).toBe(true);
+    expect(keysResponse.data!.keys).toContain('anthropic');
+
+    const providersResponse = await client.request('list_providers', {});
+    expect(providersResponse.ok).toBe(true);
+    expect(providersResponse.data!.providers).toContain('gemini');
+
+    // Verify get_bucket_stats returns real data for non-sandbox connections
+    tokenStore.setBucketStats('gemini', 'default', {
+      bucket: 'default',
+      requestCount: 42,
+      percentage: 75,
+      lastUsed: 1234567890,
+    });
+    const statsResponse = await client.request('get_bucket_stats', {
+      provider: 'gemini',
+      bucket: 'default',
+    });
+    expect(statsResponse.ok).toBe(true);
+    expect(statsResponse.data!.requestCount).toBe(42);
+    expect(statsResponse.data!.percentage).toBe(75);
+  });
+
+  // ─── Sandbox Mutation Restrictions (OCR Remediation) ──────────────────────
+
+  /**
+   * @scenario save_token is blocked for sandbox connections
+   * @given A server WITH capability token and an existing token
+   * @when A sandbox-authenticated client tries to save a token
+   * @then Response is ok: false with code FORBIDDEN
+   */
+  it('save_token blocked for sandbox connections', async () => {
+    await tokenStore.saveToken('anthropic', makeToken());
+
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
+
+    const response = await client.request('save_token', {
+      provider: 'anthropic',
+      token: {
+        access_token: 'new-token',
+        refresh_token: 'new-rt',
+        expiry: 8888888888,
+        token_type: 'Bearer',
+      },
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('FORBIDDEN');
+
+    // Verify the store was not mutated
+    const stored = await tokenStore.getToken('anthropic');
+    expect(stored?.access_token).toBe('test-access-token');
+  });
+
+  /**
+   * @scenario remove_token is blocked for sandbox connections
+   * @given A server WITH capability token and an existing token
+   * @when A sandbox-authenticated client tries to remove a token
+   * @then Response is ok: false with code FORBIDDEN
+   */
+  it('remove_token blocked for sandbox connections', async () => {
+    await tokenStore.saveToken('anthropic', makeToken());
+
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
+
+    const response = await client.request('remove_token', {
+      provider: 'anthropic',
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('FORBIDDEN');
+
+    // Verify the token was not removed
+    const stored = await tokenStore.getToken('anthropic');
+    expect(stored).not.toBeNull();
+  });
+
+  /**
+   * @scenario get_bucket_stats is blocked for sandbox connections
+   * @given A server WITH capability token
+   * @when A sandbox-authenticated client requests bucket stats
+   * @then Response is ok: true but with empty data (no stats leaked)
+   */
+  it('returns empty stats for sandbox connections', async () => {
+    // Populate real stats so the test proves the sandbox path suppresses
+    // actual data rather than returning zeros from an empty store.
+    tokenStore.setBucketStats('anthropic', 'default', {
+      bucket: 'default',
+      requestCount: 42,
+      percentage: 75,
+      lastUsed: 1234567890,
+    });
+
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
+
+    const response = await client.request('get_bucket_stats', {
+      provider: 'anthropic',
+      bucket: 'default',
+    });
+
+    expect(response.ok).toBe(true);
+    expect(response.data!).toStrictEqual({
+      bucket: 'default',
+      requestCount: 0,
+      percentage: 0,
+    });
+    expect(response.data!.lastUsed).toBeUndefined();
+  });
+
+  /**
+   * @scenario get_bucket_stats returns NOT_FOUND for non-sandbox when no stats
+   * @given A server WITHOUT capability token and no stats for the provider
+   * @when A non-sandbox client requests bucket stats
+   * @then Response is ok: false with code NOT_FOUND
+   */
+  it('get_bucket_stats returns NOT_FOUND for non-sandbox when no stats', async () => {
+    server = createServer();
+    client = await startAndConnect(server);
+
+    const response = await client.request('get_bucket_stats', {
+      provider: 'nonexistent',
+      bucket: 'default',
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('NOT_FOUND');
+  });
+
+  /**
+   * @scenario save_token works for non-sandbox connections
+   * @given A server WITHOUT capability token
+   * @when A non-sandbox client saves a token
+   * @then Response is ok: true (backward compatibility)
+   */
+  it('save_token works for non-sandbox connections', async () => {
+    server = createServer();
+    client = await startAndConnect(server);
+
+    const response = await client.request('save_token', {
+      provider: 'anthropic',
+      token: {
+        access_token: 'new-at',
+        refresh_token: 'new-rt',
+        expiry: 8888888888,
+        token_type: 'Bearer',
+      },
+    });
+
+    expect(response.ok).toBe(true);
+
+    // Verify the token was actually persisted
+    const stored = await tokenStore.getToken('anthropic');
+    expect(stored?.access_token).toBe('new-at');
+  });
+
+  /**
+   * @scenario remove_token works for non-sandbox connections
+   * @given A server WITHOUT capability token and an existing token
+   * @when A non-sandbox client removes a token
+   * @then Response is ok: true and the token is actually removed
+   */
+  it('remove_token works for non-sandbox connections', async () => {
+    await tokenStore.saveToken('anthropic', makeToken());
+
+    server = createServer();
+    client = await startAndConnect(server);
+
+    const response = await client.request('remove_token', {
+      provider: 'anthropic',
+    });
+
+    expect(response.ok).toBe(true);
+
+    // Verify the token was actually removed
+    const stored = await tokenStore.getToken('anthropic');
+    expect(stored).toBeNull();
+  });
+
+  /**
+   * @scenario Empty capability token is rejected at construction time
+   * @given A server configured with an empty string capability token
+   * @when The constructor is called
+   * @then It throws to prevent silently disabling authentication
+   */
+  it('rejects empty capability token at construction time', () => {
+    expect(() => createServer({ capabilityToken: '' })).toThrow(
+      /non-empty string/,
+    );
+  });
+
+  /**
+   * @scenario Version mismatch is rejected before capability token check
+   * @given A server configured with a capability token
+   * @when A client sends a handshake with an incompatible protocol version
+   * @then The handshake fails with a version mismatch error (not UNAUTHORIZED)
+   */
+  it('rejects version mismatch before capability token check', async () => {
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    const socketPath = await server.start();
+
+    const response = await sendRawHandshake(socketPath, {
+      v: 999,
+      op: 'handshake',
+      payload: { minVersion: 999, maxVersion: 999 },
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('UNKNOWN_VERSION');
+  });
+
+  /**
+   * @scenario OAuth mutating operations are blocked for sandbox connections
+   * @given A server configured with a capability token (sandbox connections)
+   * @when A sandbox client requests an OAuth operation that would mutate the
+   *       token store (oauth_initiate, oauth_exchange, oauth_poll, oauth_cancel, refresh_token)
+   * @then The operation is blocked with FORBIDDEN to prevent token store
+   *       mutation bypass via OAuth endpoints
+   */
+  it('blocks oauth mutating operations for sandbox connections', async () => {
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
+
+    const mutatingOps = [
+      { op: 'oauth_initiate', payload: { provider: 'anthropic' } },
+      {
+        op: 'oauth_exchange',
+        payload: { provider: 'anthropic', code: 'x', state: 'y' },
+      },
+      { op: 'oauth_poll', payload: { provider: 'anthropic', deviceCode: 'x' } },
+      {
+        op: 'oauth_cancel',
+        payload: { provider: 'anthropic', sessionId: 'x' },
+      },
+      { op: 'refresh_token', payload: { provider: 'anthropic' } },
+    ];
+
+    const results = await Promise.all(
+      mutatingOps.map(({ op, payload }) => client.request(op, payload)),
+    );
+    for (const response of results) {
+      expect(response.ok).toBe(false);
+      expect(response.code).toBe('FORBIDDEN');
+    }
   });
 });

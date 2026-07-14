@@ -158,6 +158,17 @@ describe('FrameDecoder', () => {
     expect(results[0].count).toBe(99);
   });
 
+  it('rejects a chunk containing more than the configured frame limit', () => {
+    const limitedDecoder = new FrameDecoder({ maxFramesPerFeed: 2 });
+    const chunk = Buffer.concat([
+      encodeFrame({ op: 'one' }),
+      encodeFrame({ op: 'two' }),
+      encodeFrame({ op: 'three' }),
+    ]);
+
+    expect(() => limitedDecoder.feed(chunk)).toThrow(/too many frames/i);
+  });
+
   /**
    * @requirement R5.3
    * @scenario Multiple frames concatenated in a single chunk

@@ -21,4 +21,5 @@ export interface QueuedSubmission {
   query: AgentRequestInput;
   options?: { isContinuation: boolean };
   promptId?: string;
+  readonly queueId?: number;
 }

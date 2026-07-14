@@ -19,6 +19,7 @@
 import type {
   IContent,
   ContentBlock,
+  ThinkingBlock,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
@@ -187,28 +188,112 @@ export function accumulateChunkMetadata(
   acc.allChunks.push(chunk);
 }
 
+type PreservedThinkingMetadataKey = 'signature' | 'sourceField' | 'isHidden';
+
+const PRESERVED_THINKING_METADATA_KEYS = [
+  'signature',
+  'sourceField',
+  'isHidden',
+] as const satisfies readonly PreservedThinkingMetadataKey[];
+
+function preserveIncomingUndefinedFields(
+  previous: ThinkingBlock,
+  incoming: ThinkingBlock,
+): Partial<Pick<ThinkingBlock, PreservedThinkingMetadataKey>> {
+  return Object.fromEntries(
+    PRESERVED_THINKING_METADATA_KEYS.filter(
+      (key) => incoming[key] === undefined && previous[key] !== undefined,
+    ).map((key) => [key, previous[key]]),
+  ) as Partial<Pick<ThinkingBlock, PreservedThinkingMetadataKey>>;
+}
+
+function mergeIncrementalThinking(
+  previous: ThinkingBlock,
+  incoming: ThinkingBlock,
+): ThinkingBlock {
+  return {
+    ...previous,
+    ...incoming,
+    thought: incoming.thought !== '' ? incoming.thought : previous.thought,
+    type: 'thinking',
+    ...preserveIncomingUndefinedFields(previous, incoming),
+  };
+}
+
 /**
- * Consolidate adjacent text blocks.
+ * If `block` is a thinking update for an existing stream, merge it in-place
+ * and return `true`. Otherwise return `false` (caller should append).
+ */
+function tryMergeExistingThinking(
+  consolidated: ContentBlock[],
+  block: ThinkingBlock,
+  streamBlockIndexes: Map<string, number>,
+): boolean {
+  if (block.streamId === undefined) {
+    return false;
+  }
+  const existingIndex = streamBlockIndexes.get(block.streamId);
+  if (existingIndex === undefined) {
+    return false;
+  }
+  const previous = consolidated[existingIndex];
+  if (previous.type !== 'thinking') {
+    return false;
+  }
+  consolidated[existingIndex] = mergeIncrementalThinking(previous, block);
+  return true;
+}
+
+/** Append a text block, merging into the trailing text block when adjacent. */
+function appendTextOrBlock(
+  consolidated: ContentBlock[],
+  block: ContentBlock,
+): void {
+  const lastIndex = consolidated.length - 1;
+  const lastBlock = consolidated[lastIndex];
+  if (lastIndex >= 0 && lastBlock.type === 'text' && block.type === 'text') {
+    consolidated[lastIndex] = {
+      ...lastBlock,
+      text: `${lastBlock.text}${block.text}`,
+    };
+    return;
+  }
+  consolidated.push(block);
+}
+
+/** Append a new thinking block and register its stream id if present. */
+function appendThinkingBlock(
+  consolidated: ContentBlock[],
+  block: ThinkingBlock,
+  streamBlockIndexes: Map<string, number>,
+): void {
+  consolidated.push({ ...block });
+  if (block.streamId !== undefined) {
+    streamBlockIndexes.set(block.streamId, consolidated.length - 1);
+  }
+}
+
+/**
+ * Consolidate adjacent text blocks and stream-identified thinking updates.
  *
- * @plan:PLAN-20260707-AGENTNEUTRAL.P15
- * @requirement:REQ-005.3
- * @pseudocode lines 28-31
+ * A provider-owned stream id represents one thinking-block lifecycle. Later
+ * updates with the same id replace that block even when other content is
+ * interleaved. Distinct stream ids are never merged based on text similarity.
  */
 export function consolidateTextBlocks(
   modelBlocks: ContentBlock[],
 ): ContentBlock[] {
   const consolidated: ContentBlock[] = [];
+  const streamBlockIndexes = new Map<string, number>();
+
   for (const block of modelBlocks) {
-    const lastBlock = consolidated[consolidated.length - 1];
-    if (
-      consolidated.length > 0 &&
-      lastBlock.type === 'text' &&
-      block.type === 'text'
-    ) {
-      (lastBlock as { text: string }).text += (block as { text: string }).text;
-    } else {
-      consolidated.push(block);
+    if (block.type === 'thinking') {
+      if (!tryMergeExistingThinking(consolidated, block, streamBlockIndexes)) {
+        appendThinkingBlock(consolidated, block, streamBlockIndexes);
+      }
+      continue;
     }
+    appendTextOrBlock(consolidated, block);
   }
   return consolidated;
 }
@@ -331,6 +416,8 @@ export function validateStreamCompletion(
 interface UserInputFlags {
   readonly userInputWasArray?: boolean;
   readonly userInputWasFunctionResponse?: boolean;
+  readonly responseId?: string | null;
+  readonly responsesStored?: boolean | null;
 }
 
 export interface FilteredEagerToolResponses {
@@ -445,6 +532,21 @@ interface RecordHistoryParams {
  * @requirement:REQ-005.3
  * @pseudocode lines 28-31
  */
+function findLastChunkWithResponseMetadata(
+  chunks: ModelStreamChunk[],
+): ModelStreamChunk | undefined {
+  for (let index = chunks.length - 1; index >= 0; index -= 1) {
+    const chunk = chunks[index];
+    if (
+      chunk.responseId !== undefined ||
+      chunk.content.metadata?.responsesStored !== undefined
+    ) {
+      return chunk;
+    }
+  }
+  return undefined;
+}
+
 export async function recordHistoryWithUsage(
   args: RecordHistoryParams,
 ): Promise<void> {
@@ -468,12 +570,22 @@ export async function recordHistoryWithUsage(
     actualPromptTokens = streamingUsageMetadata.promptTokens;
   }
 
+  const metadataChunk = findLastChunkWithResponseMetadata(args.allChunks);
+  const responseId =
+    metadataChunk?.responseId ?? metadataChunk?.content.metadata?.id ?? null;
+  const responsesStored =
+    metadataChunk?.content.metadata?.responsesStored ?? null;
+
   args.conversationManager.recordHistory(
     args.userInput,
     [modelIContent],
     undefined,
     streamingUsageMetadata,
-    args.userInputFlags,
+    {
+      ...args.userInputFlags,
+      responseId,
+      responsesStored,
+    },
   );
 
   await args.historyService.waitForTokenUpdates();

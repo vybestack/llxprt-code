@@ -25,7 +25,62 @@ import {
   normalizeToolInteractionInput,
   createUserContentWithFunctionResponseFix,
   convertMixedPartsToIContent,
+  classifyMixedParts,
+  convertBlocksToParts,
 } from './MessageConverter.js';
+import type { ThinkingBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
+describe('issue #1723 – ThinkingBlock stream metadata round-trip', () => {
+  it('preserves ThinkingBlock stream identity and status through the neutral identity pass', () => {
+    const blocks: ThinkingBlock[] = [
+      {
+        type: 'thinking',
+        thought: 'thinking text',
+        sourceField: 'thinking',
+        signature: 'sig-rt',
+        streamId: 'anthropic-thinking:0:block-1',
+        streamStatus: 'complete',
+      },
+    ];
+
+    const { blocks: classified } = classifyMixedParts(blocks);
+
+    expect(classified).toStrictEqual(blocks);
+  });
+
+  it('round-trips ThinkingBlock stream identity/status through Google parts', () => {
+    const blocks: ThinkingBlock[] = [
+      {
+        type: 'thinking',
+        thought: 'round-trip thought',
+        sourceField: 'thinking',
+        signature: 'sig-round-trip',
+        streamId: 'anthropic-thinking:0:block-1',
+        streamStatus: 'delta',
+      },
+    ];
+
+    const parts = convertBlocksToParts(blocks);
+    const classified = classifyMixedParts(parts).blocks;
+
+    expect(classified).toStrictEqual(blocks);
+  });
+
+  it('preserves an explicitly empty thought signature', () => {
+    const blocks: ThinkingBlock[] = [
+      {
+        type: 'thinking',
+        thought: 'thinking text',
+        sourceField: 'thought',
+        signature: '',
+      },
+    ];
+
+    const { blocks: classified } = classifyMixedParts(blocks);
+
+    expect(classified).toStrictEqual(blocks);
+  });
+});
 
 describe('issue #2410 – empty message arrays must not create zero-block IContent', () => {
   describe('createUserContentWithFunctionResponseFix', () => {

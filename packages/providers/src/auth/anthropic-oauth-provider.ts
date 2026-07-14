@@ -24,6 +24,7 @@ import {
 import {
   openBrowserSecurely,
   shouldLaunchBrowser,
+  type BrowserLaunchOptions,
 } from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
@@ -68,6 +69,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   private logger: DebugLogger;
   private currentAuthAttemptId?: string;
   private addItem?: OAuthUICallback;
+  private currentAuthBucket?: string;
 
   /**
    * @plan PLAN-20250823-AUTHFIXES.P06
@@ -108,6 +110,14 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    */
   setAddItem(addItem: OAuthUICallback): void {
     this.addItem = addItem;
+  }
+
+  /**
+   * Set the authentication context so the provider knows which bucket
+   * it is authenticating for. Used to look up browser profile associations.
+   */
+  setAuthContext(ctx: { bucket?: string }): void {
+    this.currentAuthBucket = ctx.bucket;
   }
 
   /**
@@ -239,15 +249,43 @@ export class AnthropicOAuthProvider implements OAuthProvider {
 
     if (interactive) {
       debugLogger.log('Opening browser for authentication...');
-      const browserUrl = callbackUrl ?? deviceCodeUrl;
-      try {
-        await openBrowserSecurely(browserUrl);
-      } catch (error) {
-        this.logger.debug(() => `Browser launch error: ${error}`);
-      }
+      await this.openAuthBrowser(callbackUrl ?? deviceCodeUrl);
     }
 
     return { localCallback };
+  }
+
+  /**
+   * Open the OAuth URL in the browser, using the bucket's associated browser
+   * profile when one is configured. Falls back to the default browser when no
+   * association exists or the lookup fails.
+   */
+  private async openAuthBrowser(browserUrl: string): Promise<void> {
+    let browserOpts: BrowserLaunchOptions | undefined;
+    try {
+      const assoc = oauthRuntimeBridge.getBrowserProfileAssociation(
+        this.name,
+        this.currentAuthBucket,
+      );
+      if (assoc) {
+        browserOpts = {
+          browser: assoc.browser,
+          profileDirectory: assoc.profileDirectory,
+        };
+      }
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `Browser profile association lookup failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+    }
+    try {
+      await openBrowserSecurely(browserUrl, browserOpts);
+    } catch (error) {
+      this.logger.debug(() => `Browser launch error: ${error}`);
+    }
   }
 
   /**

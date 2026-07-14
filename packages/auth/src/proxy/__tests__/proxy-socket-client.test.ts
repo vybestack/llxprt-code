@@ -64,6 +64,91 @@ function createAutoReplyServer(_socketPath: string): net.Server {
   return server;
 }
 
+/**
+ * Helper: starts a server that captures the handshake frame and auto-replies.
+ * Returns both the server and a per-instance handshake promise so each test
+ * owns its own state (no module-level mutable singleton).
+ *
+ * @param onHandshake Optional factory to customize the handshake response.
+ *                    Defaults to ok: true with the current protocol version.
+ */
+function createHandshakeCapturingServer(
+  socketPath: string,
+  onHandshake?: () => Buffer,
+): Promise<{
+  server: net.Server;
+  handshake: Promise<Record<string, unknown>>;
+}> {
+  let resolveHandshake!: (frame: Record<string, unknown>) => void;
+  let rejectHandshake!: (err: Error) => void;
+  let timeoutHandle!: ReturnType<typeof setTimeout>;
+  let settled = false;
+  const handshake = Promise.race([
+    new Promise<Record<string, unknown>>((resolve, reject) => {
+      resolveHandshake = (frame) => {
+        clearTimeout(timeoutHandle);
+        resolve(frame);
+      };
+      rejectHandshake = (err) => {
+        clearTimeout(timeoutHandle);
+        reject(err);
+      };
+    }),
+    new Promise<Record<string, unknown>>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          reject(new Error('Handshake capture timed out'));
+        }
+      }, 5000);
+      timeoutHandle.unref();
+    }),
+  ]);
+  // Prevent unhandled rejection if the caller never awaits the handshake promise
+  handshake.catch(() => {});
+  const srv = net.createServer((socket) => {
+    const decoder = new FrameDecoder();
+    socket.on('data', (chunk) => {
+      const frames = decoder.feed(chunk);
+      for (const frame of frames) {
+        if (frame.op === 'handshake') {
+          if (!settled) {
+            settled = true;
+            resolveHandshake(frame);
+          }
+          if (onHandshake) {
+            socket.end(onHandshake());
+          } else {
+            socket.end(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+          }
+          break;
+        }
+      }
+    });
+    socket.on('close', () => {
+      if (!settled) {
+        settled = true;
+        rejectHandshake(new Error('Socket closed before handshake'));
+      }
+    });
+    socket.on('error', (err) => {
+      if (!settled) {
+        settled = true;
+        rejectHandshake(err);
+      }
+    });
+  });
+  return new Promise((resolve, reject) => {
+    const rejectStartup = (error: Error): void => reject(error);
+    srv.once('error', rejectStartup);
+    srv.listen(socketPath, () => {
+      srv.removeListener('error', rejectStartup);
+      srv.on('error', rejectHandshake);
+      resolve({ server: srv, handshake });
+    });
+  });
+}
+
 describe('ProxySocketClient', () => {
   let socketPath: string;
   let server: net.Server | undefined;
@@ -365,7 +450,6 @@ describe('ProxySocketClient', () => {
       client.request('beta', {}),
       client.request('gamma', {}),
     ]);
-
     // Each response should match its original request despite reverse ordering
     expect(r1.data).toStrictEqual({ echo: 'alpha' });
     expect(r2.data).toStrictEqual({ echo: 'beta' });
@@ -459,5 +543,69 @@ describe('ProxySocketClient', () => {
 
     // No pending requests — graceful close should not throw
     expect(() => client.gracefulClose()).not.toThrow();
+  });
+
+  // ─── Capability Token ──────────────────────────────────────────────────────
+
+  /**
+   * @scenario Client includes capability token in handshake payload
+   * @given A client constructed with a capability token
+   * @when The client connects and performs a handshake
+   * @then The handshake payload contains the capabilityToken field
+   */
+  it('includes capability token in handshake payload when provided', async () => {
+    const capabilityToken = 'deadbeef'.repeat(8);
+    const result = await createHandshakeCapturingServer(socketPath);
+    server = result.server;
+
+    client = new ProxySocketClient(socketPath, capabilityToken);
+    await client.ensureConnected();
+
+    const handshake = await result.handshake;
+    const payload = handshake.payload as Record<string, unknown>;
+    expect(payload.capabilityToken).toBe(capabilityToken);
+    // The client currently hardcodes minVersion/maxVersion to 1 (not PROTOCOL_VERSION)
+    expect(payload.minVersion).toBe(1);
+    expect(payload.maxVersion).toBe(1);
+  });
+
+  /**
+   * @scenario Client omits capability token when not provided
+   * @given A client constructed WITHOUT a capability token
+   * @when The client connects and performs a handshake
+   * @then The handshake payload does NOT contain a capabilityToken field
+   */
+  it('omits capability token in handshake when not provided', async () => {
+    const result = await createHandshakeCapturingServer(socketPath);
+    server = result.server;
+
+    client = new ProxySocketClient(socketPath);
+    await client.ensureConnected();
+
+    const handshake = await result.handshake;
+    const payload = handshake.payload as Record<string, unknown>;
+    expect(payload.capabilityToken).toBeUndefined();
+  });
+
+  /**
+   * @scenario Client surfaces descriptive error when server rejects token
+   * @given A server that responds to handshake with ok: false and UNAUTHORIZED
+   * @when A client connects
+   * @then ensureConnected rejects with an authentication failure message
+   */
+  it('surfaces authentication error on UNAUTHORIZED handshake', async () => {
+    const result = await createHandshakeCapturingServer(socketPath, () =>
+      encodeFrame({
+        ok: false,
+        code: 'UNAUTHORIZED',
+        error: 'Invalid or missing capability token',
+      }),
+    );
+    server = result.server;
+
+    client = new ProxySocketClient(socketPath, 'some-token');
+    await expect(client.ensureConnected()).rejects.toThrow(
+      /Credential proxy authentication failed/i,
+    );
   });
 });

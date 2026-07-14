@@ -584,6 +584,7 @@ describe('Turn', () => {
           type: StreamEventType.CHUNK,
           value: mockChunk({
             thought: '[Thought: thinking]',
+            isHidden: false,
             responseId: 'trace-456',
           }),
         };
