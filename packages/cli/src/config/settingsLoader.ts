@@ -157,7 +157,10 @@ function shouldCheckFolderTrust(settings: SettingsState): boolean {
   return folderTrustFeature && folderTrustEnabled;
 }
 
-function resolveTrustedState(settings: SettingsState): boolean {
+function resolveTrustedState(
+  settings: SettingsState,
+  workspaceDir: string,
+): boolean {
   const tempSettingsForTrust = mergeSettings(
     settings.system,
     settings.systemDefaults,
@@ -166,7 +169,7 @@ function resolveTrustedState(settings: SettingsState): boolean {
     true,
   );
   return shouldCheckFolderTrust(settings)
-    ? (isWorkspaceTrusted(tempSettingsForTrust) ?? true)
+    ? (isWorkspaceTrusted(tempSettingsForTrust, workspaceDir) ?? true)
     : true;
 }
 
@@ -233,7 +236,10 @@ export function loadSettings(
     workspace: new Storage(workspaceDir).getWorkspaceSettingsPath(),
   };
   const loaded = loadSettingsFiles(workspaceDir, paths);
-  const isTrusted = resolveTrustedState(loaded.settings);
+  const isTrusted = resolveTrustedState(
+    loaded.settings,
+    loaded.realWorkspaceDir,
+  );
   const settings = loadEnvironmentAndResolveSettings(
     loaded.settings,
     isTrusted,

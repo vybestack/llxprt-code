@@ -661,50 +661,6 @@ describe('mcp-client', () => {
       ).toHaveBeenCalledOnce();
     });
 
-    it('closes the SDK client and reaches disconnected when transport close fails', async () => {
-      const transport = {
-        close: vi.fn().mockRejectedValue(new Error('transport close failed')),
-      };
-      const sdkClient = {
-        connect: vi.fn(),
-        close: vi.fn().mockResolvedValue(undefined),
-        registerCapabilities: vi.fn(),
-        setRequestHandler: vi.fn(),
-        getServerCapabilities: vi.fn().mockReturnValue({}),
-      };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        sdkClient as unknown as ClientLib.Client,
-      );
-      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
-        transport as unknown as SdkClientStdioLib.StdioClientTransport,
-      );
-      const client = new McpClient(
-        'test-server',
-        { command: 'test-command' },
-        { removeMcpToolsByServer: vi.fn() } as unknown as ToolRegistry,
-        { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
-        createMockResourceRegistry(),
-        workspaceContext,
-        createTrustedConfig(),
-        false,
-        '0.0.1',
-      );
-      await client.connect();
-      (
-        client as unknown as {
-          transport: SdkClientStdioLib.StdioClientTransport;
-        }
-      ).transport =
-        transport as unknown as SdkClientStdioLib.StdioClientTransport;
-
-      await expect(client.disconnect()).rejects.toThrow(
-        'transport close failed',
-      );
-
-      expect(sdkClient.close).toHaveBeenCalledOnce();
-      expect(client.getStatus()).toBe('disconnected');
-    });
-
     it('should close client on onerror to release resources', async () => {
       const mockedClient = {
         connect: vi.fn(),

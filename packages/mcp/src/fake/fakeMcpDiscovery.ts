@@ -28,6 +28,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { z } from 'zod';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -41,25 +42,31 @@ import {
   updateMCPServerStatus,
 } from '../client/mcp-client.js';
 
-/** A single tool the fake server "serves" to discovery. */
-export interface FakeMcpFixtureTool {
-  readonly name: string;
-  readonly description?: string;
-  readonly enabled?: boolean;
-}
+const FakeMcpFixtureToolSchema = z
+  .object({
+    name: z.string().min(1),
+    description: z.string().optional(),
+    enabled: z.boolean().optional(),
+  })
+  .strict();
 
-/** Per-server fixture entry. */
-export interface FakeMcpFixtureServer {
-  readonly tools?: readonly FakeMcpFixtureTool[];
-  readonly latencyMs?: number;
-  /** When present, discovery for this server fails with this message. */
-  readonly failure?: string;
-}
+const FakeMcpFixtureServerSchema = z
+  .object({
+    tools: z.array(FakeMcpFixtureToolSchema).optional(),
+    latencyMs: z.number().finite().nonnegative().optional(),
+    failure: z.string().optional(),
+  })
+  .strict();
 
-/** The full on-disk fake MCP fixture shape. */
-export interface FakeMcpFixture {
-  readonly servers: Readonly<Record<string, FakeMcpFixtureServer>>;
-}
+const FakeMcpFixtureSchema = z
+  .object({
+    servers: z.record(FakeMcpFixtureServerSchema),
+  })
+  .strict();
+
+export type FakeMcpFixtureTool = z.infer<typeof FakeMcpFixtureToolSchema>;
+export type FakeMcpFixtureServer = z.infer<typeof FakeMcpFixtureServerSchema>;
+export type FakeMcpFixture = z.infer<typeof FakeMcpFixtureSchema>;
 
 /** Outcome of applying fake discovery for a single server. */
 export interface FakeMcpDiscoveryOutcome {
@@ -89,8 +96,12 @@ export function loadFakeMcpFixture(): FakeMcpFixture | undefined {
     return undefined;
   }
   const raw = readFileSync(path, 'utf8');
-  const parsed = JSON.parse(raw) as FakeMcpFixture;
-  return parsed;
+  const parsed: unknown = JSON.parse(raw);
+  const result = FakeMcpFixtureSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(`Invalid fake MCP fixture: ${result.error.message}`);
+  }
+  return result.data;
 }
 
 /**
@@ -157,14 +168,40 @@ export async function applyFakeServerDiscovery(
   name: string,
   toolRegistry: ToolRegistry,
   fixture: FakeMcpFixture,
+  isAuthorized: () => boolean,
 ): Promise<FakeMcpDiscoveryOutcome> {
+  const hasAuthorization = (): boolean => {
+    try {
+      return isAuthorized();
+    } catch {
+      return false;
+    }
+  };
+  const disconnect = (failure?: string): FakeMcpDiscoveryOutcome => {
+    try {
+      toolRegistry.removeMcpToolsByServer(name);
+    } finally {
+      updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED);
+    }
+    return {
+      status: MCPServerStatus.DISCONNECTED,
+      registeredToolNames: [],
+      ...(failure === undefined ? {} : { failure }),
+    };
+  };
+
+  if (!hasAuthorization()) {
+    return disconnect();
+  }
   if (!Object.prototype.hasOwnProperty.call(fixture.servers, name)) {
-    updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED);
-    return { status: MCPServerStatus.DISCONNECTED, registeredToolNames: [] };
+    return disconnect();
   }
   const server = fixture.servers[name];
 
   updateMCPServerStatus(name, MCPServerStatus.CONNECTING);
+  if (!hasAuthorization()) {
+    return disconnect();
+  }
 
   const latencyMs = server.latencyMs ?? 0;
   if (latencyMs > 0) {
@@ -172,30 +209,40 @@ export async function applyFakeServerDiscovery(
       setTimeout(resolve, latencyMs);
     });
   }
+  if (!hasAuthorization()) {
+    return disconnect();
+  }
 
   if (typeof server.failure === 'string') {
-    updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED);
-    return {
-      status: MCPServerStatus.DISCONNECTED,
-      registeredToolNames: [],
-      failure: server.failure,
-    };
+    return disconnect(server.failure);
   }
 
   toolRegistry.removeMcpToolsByServer(name);
-  const registeredToolNames: string[] = [];
+  if (!hasAuthorization()) {
+    return disconnect();
+  }
+  let registeredToolNames: readonly string[] = [];
   for (const tool of server.tools ?? []) {
-    const enabled = tool.enabled ?? true;
-    if (!enabled) {
-      continue;
+    if (tool.enabled === false) continue;
+    if (!hasAuthorization()) {
+      return disconnect();
     }
     toolRegistry.registerTool(
       new FakeMcpTool(name, tool.name, tool.description ?? ''),
     );
-    registeredToolNames.push(tool.name);
+    if (!hasAuthorization()) {
+      return disconnect();
+    }
+    registeredToolNames = [...registeredToolNames, tool.name];
   }
 
+  if (!hasAuthorization()) {
+    return disconnect();
+  }
   updateMCPServerStatus(name, MCPServerStatus.CONNECTED);
+  if (!hasAuthorization()) {
+    return disconnect();
+  }
   return {
     status: MCPServerStatus.CONNECTED,
     registeredToolNames,

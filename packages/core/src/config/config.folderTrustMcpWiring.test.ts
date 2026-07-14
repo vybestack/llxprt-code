@@ -478,6 +478,9 @@ describe('Config MCP wiring on folder trust change', () => {
         instances[0].stop.mockRejectedValue(stopError);
 
         config.setTrustedFolderLive(false);
+        await vi.waitFor(() =>
+          expect(instances[0].onFolderTrustRevoked).toHaveBeenCalledOnce(),
+        );
 
         await expect(config.dispose()).rejects.toMatchObject({
           errors: [transitionError, stopError],
@@ -492,6 +495,9 @@ describe('Config MCP wiring on folder trust change', () => {
         instances[0].stop.mockRejectedValue(stopError);
 
         config.setTrustedFolderLive(false);
+        await vi.waitFor(() =>
+          expect(instances[0].onFolderTrustRevoked).toHaveBeenCalledOnce(),
+        );
 
         await expect(config.dispose()).rejects.toMatchObject({
           errors: [undefined, stopError],

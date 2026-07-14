@@ -9,45 +9,18 @@ import type React from 'react';
 import { useState } from 'react';
 import { Colors } from '../colors.js';
 import { theme } from '../semantic-colors.js';
-import type { RadioSelectItem } from './shared/RadioButtonSelect.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import * as process from 'node:process';
 import * as path from 'node:path';
 import { ExitCodes } from '@vybestack/llxprt-code-core';
+import { FolderTrustChoice, buildTrustOptions } from '../trustDialogHelpers.js';
 
-export enum FolderTrustChoice {
-  TRUST_FOLDER = 'trust_folder',
-  TRUST_PARENT = 'trust_parent',
-  DO_NOT_TRUST = 'do_not_trust',
-}
+export { FolderTrustChoice };
 
 interface FolderTrustDialogProps {
   workingDirectory: string;
   onSelect: (choice: FolderTrustChoice) => void;
-}
-
-function buildTrustOptions(
-  currentFolder: string,
-  parentFolder: string,
-): Array<RadioSelectItem<FolderTrustChoice>> {
-  return [
-    {
-      label: 'Trust folder',
-      value: FolderTrustChoice.TRUST_FOLDER,
-      key: `Trust folder (${currentFolder})`,
-    },
-    {
-      label: `Trust parent folder (${parentFolder})`,
-      value: FolderTrustChoice.TRUST_PARENT,
-      key: `Trust parent folder (${parentFolder})`,
-    },
-    {
-      label: "Don't trust",
-      value: FolderTrustChoice.DO_NOT_TRUST,
-      key: "Don't trust",
-    },
-  ];
 }
 
 const TrustDialogHeader: React.FC = () => (

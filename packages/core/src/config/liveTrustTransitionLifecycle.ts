@@ -18,15 +18,20 @@ export interface LiveTrustTransitionDependencies {
   emitTrustChanged(trusted: boolean): void;
 }
 
+interface TransitionFailure {
+  readonly sequence: number;
+  readonly error: unknown;
+}
+
 export class LiveTrustTransitionLifecycle {
   private static readonly logger = new DebugLogger(
     'llxprt:config:live-trust-transition',
   );
 
   private transitionChain: Promise<void> = Promise.resolve();
-  private failures: Array<{ batch: number; error: unknown }> = [];
-  private transitionBatch = 0;
-  private pendingTransitions = 0;
+  private failures: readonly TransitionFailure[] = [];
+  private readonly settlementReports = new Map<number, Promise<void>>();
+  private transitionSequence = 0;
   private readonly abortController = new AbortController();
   private disposing = false;
 
@@ -36,58 +41,56 @@ export class LiveTrustTransitionLifecycle {
     if (this.disposing) {
       return;
     }
-    const batch =
-      this.pendingTransitions === 0
-        ? ++this.transitionBatch
-        : this.transitionBatch;
+    const sequence = ++this.transitionSequence;
     if (!trusted) {
       this.dependencies.downgradeApprovalMode();
     }
     this.runSynchronousStep(
       () => this.dependencies.removeTrustedPolicyRules(),
-      batch,
+      sequence,
     );
     this.runSynchronousStep(
       () => this.dependencies.updateTrustPolicy(trusted),
-      batch,
+      sequence,
     );
-    this.enqueue(trusted, batch);
+    this.enqueue(trusted, sequence);
     this.runSynchronousStep(
       () => this.dependencies.emitTrustChanged(trusted),
-      batch,
+      sequence,
     );
   }
 
-  private runSynchronousStep(step: () => void, batch: number): void {
+  private runSynchronousStep(step: () => void, sequence: number): void {
     try {
       step();
     } catch (error) {
       LiveTrustTransitionLifecycle.logger.error(
         `Trust step failed: ${getErrorMessage(error)}`,
       );
-      this.retainFailures([error], batch);
+      this.retainFailures([error], sequence);
     }
   }
 
-  private enqueue(trusted: boolean, batch: number): void {
+  private enqueue(trusted: boolean, sequence: number): void {
     if (this.disposing) {
       return;
     }
-    this.pendingTransitions++;
     this.transitionChain = this.transitionChain.then(() =>
-      this.runTransition(trusted, batch),
+      this.runTransition(trusted, sequence),
     );
   }
 
-  private async runTransition(trusted: boolean, batch: number): Promise<void> {
-    const failures: unknown[] = [];
-    try {
-      await this.collectMcpFailure(trusted, failures);
-      await this.collectHookFailure(failures);
-      this.retainFailures(failures, batch);
-    } finally {
-      this.pendingTransitions--;
+  private async runTransition(
+    trusted: boolean,
+    sequence: number,
+  ): Promise<void> {
+    if (this.disposing) {
+      return;
     }
+    const failures: unknown[] = [];
+    await this.collectMcpFailure(trusted, failures);
+    await this.collectHookFailure(failures);
+    this.retainFailures(failures, sequence);
   }
 
   private async collectMcpFailure(
@@ -128,20 +131,42 @@ export class LiveTrustTransitionLifecycle {
     }
   }
 
-  private retainFailures(failures: readonly unknown[], batch: number): void {
+  private retainFailures(failures: readonly unknown[], sequence: number): void {
     this.failures = [
       ...this.failures,
-      ...failures.map((error) => ({ batch, error })),
+      ...failures.map((error) => ({ sequence, error })),
     ];
   }
 
   async whenSettled(): Promise<void> {
-    const batch = this.transitionBatch;
-    const transition = this.transitionChain;
+    const snapshot = this.transitionSequence;
+    const existingReport = this.settlementReports.get(snapshot);
+    if (existingReport !== undefined) {
+      await existingReport;
+      return;
+    }
+    const report = this.reportSnapshot(snapshot, this.transitionChain);
+    this.settlementReports.set(snapshot, report);
+    try {
+      await report;
+    } finally {
+      if (this.settlementReports.get(snapshot) === report) {
+        this.settlementReports.delete(snapshot);
+      }
+    }
+  }
+
+  private async reportSnapshot(
+    snapshot: number,
+    transition: Promise<void>,
+  ): Promise<void> {
     await transition;
     const failures = this.failures
-      .filter((failure) => failure.batch === batch)
+      .filter((failure) => failure.sequence <= snapshot)
       .map((failure) => failure.error);
+    this.failures = this.failures.filter(
+      (failure) => failure.sequence > snapshot,
+    );
     if (failures.length === 1) {
       throw failures[0];
     }

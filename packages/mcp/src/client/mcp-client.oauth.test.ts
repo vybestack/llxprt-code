@@ -154,6 +154,7 @@ describe('connectToMcpServer with OAuth', () => {
         workspaceContext,
       ),
     ).rejects.toThrow('primary connection failure');
+    expect(transport.close).toHaveBeenCalledOnce();
   });
 
   it('awaits transport cleanup and preserves one AbortError when connect is cancelled', async () => {

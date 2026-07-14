@@ -54,7 +54,7 @@ vi.mock('fs', async (importOriginal) => {
     writeFileSync: vi.fn(),
     renameSync: vi.fn(),
     chmodSync: vi.fn(),
-    statSync: vi.fn(() => ({ mode: 0o100600 })),
+    statSync: vi.fn(),
     unlinkSync: vi.fn(),
     mkdirSync: vi.fn(),
   };
@@ -379,6 +379,7 @@ describe('Trusted Folders Loading', () => {
     expect(mockFsUnlinkSync).toHaveBeenCalledWith(temporaryPath);
     expect(loadedFolders.user.config['/new/path']).toBeUndefined();
   });
+
   it('warns when a failed atomic rename cannot remove its temporary file', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     const cleanupError = new Error('unlink denied');

@@ -40,6 +40,27 @@ import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from './mcp-errors.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 
+interface DiscoveryRequestOptions {
+  timeout?: number;
+  signal?: AbortSignal;
+}
+
+function buildSdkRequestOptions(
+  options: DiscoveryRequestOptions | undefined,
+): { timeout?: number; signal?: AbortSignal } | undefined {
+  if (options === undefined) {
+    return undefined;
+  }
+  const sdkOptions: { timeout?: number; signal?: AbortSignal } = {};
+  if (options.timeout !== undefined) {
+    sdkOptions.timeout = options.timeout;
+  }
+  if (options.signal !== undefined) {
+    sdkOptions.signal = options.signal;
+  }
+  return sdkOptions;
+}
+
 /**
  * Discovers tools from all configured MCP servers and registers them with the tool registry.
  */
@@ -89,6 +110,11 @@ export async function connectAndDiscover(
   workspaceContext: WorkspaceContext,
   cliConfig: Config,
 ): Promise<void> {
+  if (!cliConfig.isTrustedFolder()) {
+    updateMCPServerStatus(mcpServerName, MCPServerStatus.DISCONNECTED);
+    return;
+  }
+
   updateMCPServerStatus(mcpServerName, MCPServerStatus.CONNECTING);
 
   let mcpClient: Client | undefined;
@@ -101,57 +127,254 @@ export async function connectAndDiscover(
       workspaceContext,
     );
 
-    mcpClient.onerror = (error) => {
-      debugLogger.error(`MCP ERROR (${mcpServerName}):`, error.toString());
-      if (!mcpClient) return;
-      toolRegistry.removeMcpToolsByServer(mcpServerName);
-      promptRegistry.removePromptsByServer(mcpServerName);
-      updateMCPServerStatus(mcpServerName, MCPServerStatus.DISCONNECTED);
+    if (!cliConfig.isTrustedFolder()) {
       mcpClient.close().catch(() => {});
       mcpClient = undefined;
-    };
+      updateMCPServerStatus(mcpServerName, MCPServerStatus.DISCONNECTED);
+      return;
+    }
 
-    const connectedClient = mcpClient;
-    const isAuthorized = () => cliConfig.isTrustedFolder();
-    const prompts = await discoverPrompts(mcpServerName, connectedClient);
-    const tools = await discoverTools(
+    mcpClient.onerror = createServerErrorHandler(
       mcpServerName,
-      mcpServerConfig,
-      connectedClient,
-      cliConfig,
-      undefined,
-      {
-        timeout: mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
-        isAuthorized,
+      mcpClient,
+      toolRegistry,
+      promptRegistry,
+      () => {
+        mcpClient = undefined;
       },
     );
 
-    if (prompts.length === 0 && tools.length === 0) {
-      throw new Error('No prompts or tools found on the server.');
+    const authorized = await discoverAndAuthorize(
+      mcpServerName,
+      mcpServerConfig,
+      mcpClient,
+      toolRegistry,
+      promptRegistry,
+      cliConfig,
+    );
+    if (authorized === null) {
+      return;
     }
 
-    updateMCPServerStatus(mcpServerName, MCPServerStatus.CONNECTED);
-
-    registerMcpPrompts(
+    const published = publishDiscoveredCapabilities(
       mcpServerName,
+      mcpClient,
+      toolRegistry,
+      promptRegistry,
+      authorized.prompts,
+      authorized.tools,
+      cliConfig,
+    );
+    if (!published) {
+      return;
+    }
+  } catch (error) {
+    rollbackOnError(
+      mcpServerName,
+      mcpClient,
+      toolRegistry,
+      promptRegistry,
+      error,
+    );
+  }
+}
+
+function rollbackOnError(
+  mcpServerName: string,
+  mcpClient: Client | undefined,
+  toolRegistry: ToolRegistry,
+  promptRegistry: PromptRegistry,
+  error: unknown,
+): void {
+  mcpClient?.close().catch(() => {});
+  for (const [label, cleanup] of [
+    ['tools', () => toolRegistry.removeMcpToolsByServer(mcpServerName)],
+    ['prompts', () => promptRegistry.removePromptsByServer(mcpServerName)],
+  ] as const) {
+    try {
+      cleanup();
+    } catch (cleanupError) {
+      debugLogger.error(
+        `Error cleaning up ${label} for '${mcpServerName}': ${getErrorMessage(cleanupError)}`,
+      );
+    }
+  }
+  debugLogger.error(
+    `Error connecting to MCP server '${mcpServerName}': ${getErrorMessage(error)}`,
+  );
+  updateMCPServerStatus(mcpServerName, MCPServerStatus.DISCONNECTED);
+}
+
+function createServerErrorHandler(
+  mcpServerName: string,
+  client: Client,
+  toolRegistry: ToolRegistry,
+  promptRegistry: PromptRegistry,
+  onClientCleared: () => void,
+): (error: Error) => void {
+  return (error) => {
+    debugLogger.error(`MCP ERROR (${mcpServerName}):`, error.toString());
+    for (const [label, cleanup] of [
+      ['tools', () => toolRegistry.removeMcpToolsByServer(mcpServerName)],
+      ['prompts', () => promptRegistry.removePromptsByServer(mcpServerName)],
+    ] as const) {
+      try {
+        cleanup();
+      } catch (cleanupError) {
+        debugLogger.error(
+          `Error cleaning up ${label} for '${mcpServerName}': ${getErrorMessage(cleanupError)}`,
+        );
+      }
+    }
+    updateMCPServerStatus(mcpServerName, MCPServerStatus.DISCONNECTED);
+    client.close().catch(() => {});
+    onClientCleared();
+  };
+}
+
+async function discoverAndAuthorize(
+  mcpServerName: string,
+  mcpServerConfig: MCPServerConfig,
+  connectedClient: Client,
+  toolRegistry: ToolRegistry,
+  promptRegistry: PromptRegistry,
+  cliConfig: Config,
+): Promise<{ prompts: Prompt[]; tools: DiscoveredMCPTool[] } | null> {
+  const isAuthorized = () => cliConfig.isTrustedFolder();
+  const timeout = mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC;
+
+  const prompts = await discoverPrompts(mcpServerName, connectedClient, {
+    timeout,
+    isAuthorized,
+  });
+  if (!isAuthorized()) {
+    rollbackAndDisconnect(
+      mcpServerName,
+      toolRegistry,
+      promptRegistry,
       connectedClient,
+    );
+    return null;
+  }
+  const tools = await discoverTools(
+    mcpServerName,
+    mcpServerConfig,
+    connectedClient,
+    cliConfig,
+    undefined,
+    { timeout, isAuthorized },
+  );
+  if (!isAuthorized()) {
+    rollbackAndDisconnect(
+      mcpServerName,
+      toolRegistry,
+      promptRegistry,
+      connectedClient,
+    );
+    return null;
+  }
+  if (prompts.length === 0 && tools.length === 0) {
+    throw new Error('No prompts or tools found on the server.');
+  }
+  if (!isAuthorized()) {
+    rollbackAndDisconnect(
+      mcpServerName,
+      toolRegistry,
+      promptRegistry,
+      connectedClient,
+    );
+    return null;
+  }
+  return { prompts, tools };
+}
+
+function publishDiscoveredCapabilities(
+  mcpServerName: string,
+  mcpClient: Client,
+  toolRegistry: ToolRegistry,
+  promptRegistry: PromptRegistry,
+  prompts: readonly Prompt[],
+  tools: readonly DiscoveredMCPTool[],
+  cliConfig: Config,
+): boolean {
+  const isAuthorized = () => cliConfig.isTrustedFolder();
+  const continuePublication = (): boolean => {
+    if (isAuthorized()) {
+      return true;
+    }
+    rollbackAndDisconnect(
+      mcpServerName,
+      toolRegistry,
+      promptRegistry,
+      mcpClient,
+    );
+    return false;
+  };
+
+  if (!continuePublication()) {
+    return false;
+  }
+  updateMCPServerStatus(mcpServerName, MCPServerStatus.CONNECTED);
+  if (!continuePublication()) {
+    return false;
+  }
+
+  if (
+    !registerMcpPrompts(
+      mcpServerName,
+      mcpClient,
       promptRegistry,
       prompts,
       isAuthorized,
+    )
+  ) {
+    rollbackAndDisconnect(
+      mcpServerName,
+      toolRegistry,
+      promptRegistry,
+      mcpClient,
     );
-    for (const tool of tools) {
-      toolRegistry.registerTool(tool);
-    }
-    toolRegistry.sortTools();
-  } catch (error) {
-    if (mcpClient) {
-      mcpClient.close().catch(() => {});
-    }
-    debugLogger.error(
-      `Error connecting to MCP server '${mcpServerName}': ${getErrorMessage(error)}`,
-    );
-    updateMCPServerStatus(mcpServerName, MCPServerStatus.DISCONNECTED);
+    return false;
   }
+
+  for (const tool of tools) {
+    if (!continuePublication()) {
+      return false;
+    }
+    toolRegistry.registerTool(tool);
+    if (!continuePublication()) {
+      return false;
+    }
+  }
+  if (!continuePublication()) {
+    return false;
+  }
+  toolRegistry.sortTools();
+  return continuePublication();
+}
+
+function rollbackAndDisconnect(
+  mcpServerName: string,
+  toolRegistry: ToolRegistry,
+  promptRegistry: PromptRegistry,
+  client: Client,
+): void {
+  try {
+    toolRegistry.removeMcpToolsByServer(mcpServerName);
+  } catch (cleanupError) {
+    debugLogger.error(
+      `Error cleaning up tools for '${mcpServerName}': ${getErrorMessage(cleanupError)}`,
+    );
+  }
+  try {
+    promptRegistry.removePromptsByServer(mcpServerName);
+  } catch (cleanupError) {
+    debugLogger.error(
+      `Error cleaning up prompts for '${mcpServerName}': ${getErrorMessage(cleanupError)}`,
+    );
+  }
+  client.close().catch(() => {});
+  updateMCPServerStatus(mcpServerName, MCPServerStatus.DISCONNECTED);
 }
 
 /**
@@ -170,13 +393,32 @@ export async function discoverTools(
   },
 ): Promise<DiscoveredMCPTool[]> {
   const debug = new DebugLogger('llxprt:mcp:discovery');
+  const isAuthorized = options?.isAuthorized ?? (() => false);
 
   try {
     debug.log(`Starting tool discovery for server: ${mcpServerName}`);
 
     if (mcpClient.getServerCapabilities()?.tools == null) return [];
 
-    const response = await mcpClient.listTools({}, options);
+    if (!isAuthorized()) {
+      debug.log(
+        `Tool discovery denied for ${mcpServerName}: authorization not granted`,
+      );
+      return [];
+    }
+
+    const response = await mcpClient.listTools(
+      {},
+      buildSdkRequestOptions(options),
+    );
+
+    if (!isAuthorized()) {
+      debug.log(
+        `Tool discovery discarded for ${mcpServerName}: authorization revoked after listTools`,
+      );
+      return [];
+    }
+
     debug.log(`Found ${response.tools.length} tools for ${mcpServerName}`);
     const discoveredTools: DiscoveredMCPTool[] = [];
     for (const toolDef of response.tools) {
@@ -187,7 +429,7 @@ export async function discoverTools(
         mcpClient,
         cliConfig,
         debug,
-        options?.isAuthorized,
+        isAuthorized,
       );
       if (tool) {
         discoveredTools.push(tool);
@@ -214,7 +456,7 @@ function processToolDefinition(
   mcpClient: Client,
   cliConfig: Config,
   debug: DebugLogger,
-  isAuthorized: () => boolean = () => true,
+  isAuthorized: () => boolean = () => false,
 ): DiscoveredMCPTool | undefined {
   try {
     debug.log(`Processing tool: ${toolDef.name}`);
@@ -252,28 +494,41 @@ function processToolDefinition(
   }
 }
 
+interface ResourceDiscoveryOptions {
+  timeout?: number;
+  signal?: AbortSignal;
+  isAuthorized?: () => boolean;
+}
+
 export async function discoverResources(
   mcpServerName: string,
   mcpClient: Client,
-  options?: { timeout?: number; signal?: AbortSignal },
+  options?: ResourceDiscoveryOptions,
 ): Promise<Resource[]> {
   if (mcpClient.getServerCapabilities()?.resources == null) {
     return [];
   }
-
-  const resources = await listResources(mcpServerName, mcpClient, options);
-  return resources;
+  const isAuthorized = options?.isAuthorized ?? (() => false);
+  if (!isAuthorized()) {
+    return [];
+  }
+  const requestOptions = buildSdkRequestOptions(options);
+  return listResources(mcpServerName, mcpClient, isAuthorized, requestOptions);
 }
 
 async function listResources(
   mcpServerName: string,
   mcpClient: Client,
+  isAuthorized: () => boolean,
   options?: { timeout?: number; signal?: AbortSignal },
 ): Promise<Resource[]> {
   const resources: Resource[] = [];
   let cursor: string | undefined;
   try {
     do {
+      if (!isAuthorized()) {
+        return [];
+      }
       const response = await mcpClient.request(
         {
           method: 'resources/list',
@@ -282,6 +537,9 @@ async function listResources(
         ListResourcesResultSchema,
         options,
       );
+      if (!isAuthorized()) {
+        return [];
+      }
       resources.push(...response.resources);
       cursor = response.nextCursor ?? undefined;
     } while (cursor);
@@ -297,18 +555,36 @@ async function listResources(
   return resources;
 }
 
+interface PromptDiscoveryOptions {
+  timeout?: number;
+  signal?: AbortSignal;
+  isAuthorized?: () => boolean;
+}
+
 /**
  * Discovers and logs prompts from a connected MCP client.
  */
 export async function discoverPrompts(
   mcpServerName: string,
   mcpClient: Client,
-  options?: { timeout?: number; signal?: AbortSignal },
+  options?: PromptDiscoveryOptions,
 ): Promise<Prompt[]> {
   try {
     if (mcpClient.getServerCapabilities()?.prompts == null) return [];
 
-    const response = await mcpClient.listPrompts({}, options);
+    const isAuthorized = options?.isAuthorized ?? (() => false);
+
+    if (!isAuthorized()) {
+      return [];
+    }
+
+    const requestOptions = buildSdkRequestOptions(options);
+
+    const response = await mcpClient.listPrompts({}, requestOptions);
+
+    if (!isAuthorized()) {
+      return [];
+    }
 
     return response.prompts;
   } catch (error) {
@@ -327,8 +603,11 @@ export function registerMcpPrompts(
   promptRegistry: PromptRegistry,
   prompts: readonly Prompt[],
   isAuthorized: () => boolean,
-): void {
+): boolean {
   for (const prompt of prompts) {
+    if (!isAuthorized()) {
+      return false;
+    }
     promptRegistry.registerPrompt({
       ...prompt,
       serverName: mcpServerName,
@@ -341,7 +620,11 @@ export function registerMcpPrompts(
           isAuthorized,
         ),
     });
+    if (!isAuthorized()) {
+      return false;
+    }
   }
+  return true;
 }
 
 /**

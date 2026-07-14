@@ -13,7 +13,9 @@ import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
   McpClient,
   MCPDiscoveryState,
+  MCPServerStatus,
   populateMcpServerCommand,
+  updateMCPServerStatus,
 } from './mcp-client.js';
 import {
   applyFakeServerDiscovery,
@@ -31,6 +33,10 @@ import {
 } from '@vybestack/llxprt-code-core/utils/events.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+import {
+  appendFailures,
+  throwTrustRevocationFailures,
+} from './trust-revocation-errors.js';
 
 const logger = new DebugLogger('llxprt:mcp-client-manager');
 
@@ -273,15 +279,28 @@ export class McpClientManager {
     config: MCPServerConfig,
     existing: McpClient | undefined,
   ): Promise<void> {
-    return new Promise<void>((resolve, _reject) => {
+    return new Promise<void>((resolve) => {
       void (async () => {
         this.pendingDiscoveryServers.add(name);
         try {
           await this.connectAndDiscover(name, config, existing);
-        } finally {
+        } catch (error) {
           this.pendingDiscoveryServers.delete(name);
+          if (!isAuthenticationError(error)) {
+            this.discoveryFailures.set(name, getErrorMessage(error));
+            coreEvents.emitFeedback(
+              'error',
+              `Error during discovery for server '${name}': ${getErrorMessage(
+                error,
+              )}`,
+              error,
+            );
+          }
           resolve();
+          return;
         }
+        this.pendingDiscoveryServers.delete(name);
+        resolve();
       })();
     });
   }
@@ -374,8 +393,10 @@ export class McpClientManager {
     }
     try {
       await this.disconnectMcpClient(client);
-    } catch {
-      logger.warn(`Error cleaning up failed MCP client '${name}'.`);
+    } catch (error) {
+      logger.warn(
+        `Error cleaning up failed MCP client '${name}': ${getErrorMessage(error)}`,
+      );
     }
   }
 
@@ -392,14 +413,14 @@ export class McpClientManager {
     const generationBeforeConnect = this.trustGeneration;
 
     if (existing) {
-      await existing.disconnect();
+      await this.removeAndDisconnectClient(name, existing);
     }
 
     if (this.isDiscoveryInvalid(generationBeforeConnect)) {
       return;
     }
 
-    const client = existing ?? this.createClient(name, config);
+    const client = this.createClient(name, config);
     this.connectingClients.set(name, client);
     try {
       await client.connect();
@@ -413,12 +434,10 @@ export class McpClientManager {
         return;
       }
 
-      if (!existing) {
-        this.clients.set(name, client);
-        this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-          clients: new Map(this.clients),
-        });
-      }
+      this.clients.set(name, client);
+      this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+        clients: new Map(this.clients),
+      });
       await client.discover(
         this.cliConfig,
         () => !this.isDiscoveryInvalid(generationBeforeConnect),
@@ -441,11 +460,19 @@ export class McpClientManager {
       if (this.clients.get(name) === client) {
         this.clients.delete(name);
       }
-      this.removeServerArtifacts(name);
+      try {
+        this.removeServerArtifacts(name);
+      } catch (cleanupError) {
+        logger.warn(
+          `Error removing artifacts for failed MCP client '${name}': ${getErrorMessage(cleanupError)}`,
+        );
+      }
       try {
         await this.disconnectMcpClient(client);
-      } catch {
-        logger.warn(`Error cleaning up failed MCP client '${name}'.`);
+      } catch (cleanupError) {
+        logger.warn(
+          `Error cleaning up failed MCP client '${name}': ${getErrorMessage(cleanupError)}`,
+        );
       }
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
         clients: new Map(this.clients),
@@ -488,46 +515,68 @@ export class McpClientManager {
     existing: McpClient | undefined,
   ): Promise<void> {
     const generationBeforeConnect = this.trustGeneration;
+    const isAuthorized = (): boolean =>
+      !this.isDiscoveryInvalid(generationBeforeConnect);
 
-    const client = existing ?? this.createClient(name, config);
-    if (!existing) {
-      this.clients.set(name, client);
-      this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-        clients: new Map(this.clients),
-      });
+    if (existing) {
+      await this.removeAndDisconnectClient(name, existing);
     }
-    this.discoveryFailures.delete(name);
+    if (!isAuthorized()) {
+      return;
+    }
+
     const fixture = loadFakeMcpFixture();
-    if (fixture === undefined) {
+    if (fixture === undefined || !isAuthorized()) {
       return;
     }
-    const outcome = await applyFakeServerDiscovery(
-      name,
-      this.toolRegistry,
-      fixture,
-    );
 
-    // Re-check trust after fake discovery — trust may have been revoked
-    // while the fixture was applied.
-    if (
-      !this.cliConfig.isTrustedFolder() ||
-      this.trustGeneration !== generationBeforeConnect ||
-      this.stopped
-    ) {
-      this.clients.delete(name);
-      this.removeServerArtifacts(name);
+    const client = this.createClient(name, config);
+    this.clients.set(name, client);
+    try {
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
         clients: new Map(this.clients),
       });
-      return;
-    }
+      if (!isAuthorized()) {
+        await this.removeAndDisconnectClient(name, client);
+        return;
+      }
 
-    if (outcome.failure !== undefined) {
-      this.discoveryFailures.set(name, outcome.failure);
+      this.discoveryFailures.delete(name);
+      const outcome = await applyFakeServerDiscovery(
+        name,
+        this.toolRegistry,
+        fixture,
+        isAuthorized,
+      );
+      if (!isAuthorized()) {
+        await this.removeAndDisconnectClient(name, client);
+        return;
+      }
+      if (
+        outcome.status !== MCPServerStatus.CONNECTED ||
+        outcome.failure !== undefined
+      ) {
+        if (outcome.failure !== undefined) {
+          this.discoveryFailures.set(name, outcome.failure);
+        }
+        await this.removeAndDisconnectClient(name, client);
+        return;
+      }
+
+      this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+        clients: new Map(this.clients),
+      });
+      if (!isAuthorized()) {
+        await this.removeAndDisconnectClient(name, client);
+      }
+    } catch (error) {
+      try {
+        updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED);
+      } finally {
+        await this.removeAndDisconnectClient(name, client);
+      }
+      throw error;
     }
-    this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-      clients: new Map(this.clients),
-    });
   }
 
   /**
@@ -680,6 +729,7 @@ export class McpClientManager {
    */
   quarantineForTrustRevocation(): void {
     this.trustGeneration++;
+    const failures: unknown[] = [];
     const serverNames = new Set([
       ...this.clients.keys(),
       ...this.discoveringServers.keys(),
@@ -693,9 +743,12 @@ export class McpClientManager {
       try {
         client.invalidateCapabilities();
       } catch (error) {
-        debugLogger.error(
-          `Error invalidating client '${name}' on trust revocation: ${getErrorMessage(error)}`,
-        );
+        appendFailures(failures, error);
+      }
+      try {
+        client.abortDiscovery();
+      } catch (error) {
+        appendFailures(failures, error);
       }
       this.retiredClients.add(client);
       this.quarantinedClients.set(name, client);
@@ -706,9 +759,7 @@ export class McpClientManager {
       try {
         this.removeServerArtifacts(name);
       } catch (error) {
-        debugLogger.error(
-          `Error removing server '${name}' artifacts on trust revocation: ${getErrorMessage(error)}`,
-        );
+        appendFailures(failures, error);
       }
     }
     try {
@@ -716,14 +767,21 @@ export class McpClientManager {
         clients: new Map(this.clients),
       });
     } catch (error) {
-      debugLogger.error(
-        `Error emitting MCP client update on trust revocation: ${getErrorMessage(error)}`,
-      );
+      appendFailures(failures, error);
     }
+    throwTrustRevocationFailures(
+      failures,
+      'MCP trust revocation quarantine failed',
+    );
   }
 
   async onFolderTrustRevoked(): Promise<void> {
-    this.quarantineForTrustRevocation();
+    const failures: unknown[] = [];
+    try {
+      this.quarantineForTrustRevocation();
+    } catch (error) {
+      appendFailures(failures, error);
+    }
     const entries = new Map(this.quarantinedClients);
     this.quarantinedClients.clear();
     await Promise.all(
@@ -731,13 +789,22 @@ export class McpClientManager {
         try {
           await this.disconnectMcpClient(client);
         } catch (error) {
+          appendFailures(failures, error);
           debugLogger.error(
             `Error disconnecting client '${name}' on trust revocation: ${getErrorMessage(error)}`,
           );
         }
       }),
     );
-    await this.cliConfig.refreshMcpContext();
+    try {
+      await this.cliConfig.refreshMcpContext();
+    } catch (error) {
+      appendFailures(failures, error);
+      debugLogger.error(
+        `Error refreshing MCP context on trust revocation: ${getErrorMessage(error)}`,
+      );
+    }
+    throwTrustRevocationFailures(failures, 'MCP trust revocation failed');
   }
 
   /**

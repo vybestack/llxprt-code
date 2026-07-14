@@ -16,7 +16,6 @@ import {
   ResourceListChangedNotificationSchema,
   ToolListChangedNotificationSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
@@ -95,7 +94,6 @@ export type DiscoveredMCPPrompt = Prompt & {
  */
 export class McpClient {
   private client: Client | undefined;
-  private transport: Transport | undefined;
   private status: MCPServerStatus = MCPServerStatus.DISCONNECTED;
   private isRefreshingTools: boolean = false;
   private pendingToolRefresh: boolean = false;
@@ -167,9 +165,7 @@ export class McpClient {
           );
         }
         debugLogger.error(`MCP ERROR (${this.serverName}):`, error.toString());
-        this.toolRegistry.removeMcpToolsByServer(this.serverName);
-        this.promptRegistry.removePromptsByServer(this.serverName);
-        this.resourceRegistry.removeResourcesByServer(this.serverName);
+        this.removeAllServerArtifacts();
         const failedClient = this.client;
         this.invalidateCapabilities();
         this.client = undefined;
@@ -202,6 +198,12 @@ export class McpClient {
     this.activeCapabilityGeneration = undefined;
   }
 
+  abortDiscovery(): void {
+    this.invalidateCapabilities();
+    this.discoveryAbortController?.abort();
+    this.discoveryAbortController = undefined;
+  }
+
   private createCapabilityAuthorization(client: Client): () => boolean {
     // Capturing both generations prevents late discovery and refresh callbacks
     // from publishing capabilities after disconnect or trust revocation.
@@ -224,6 +226,13 @@ export class McpClient {
     mayPublish: () => boolean = () => true,
   ): Promise<void> {
     this.assertConnected();
+    const connectedClient = this.getConnectedClient();
+    const isAuthorized = this.createCapabilityAuthorization(connectedClient);
+    const publicationIsAuthorized = (): boolean =>
+      mayPublish() && isAuthorized();
+    if (!(await this.continueAuthorizedPublication(publicationIsAuthorized))) {
+      return;
+    }
 
     const timeoutMs = this.serverConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC;
     const abortController = new AbortController();
@@ -234,10 +243,20 @@ export class McpClient {
         timeout: timeoutMs,
         signal: abortController.signal,
       });
+      if (
+        !(await this.continueAuthorizedPublication(publicationIsAuthorized))
+      ) {
+        return;
+      }
       const tools = await this.discoverTools(cliConfig, {
         timeout: timeoutMs,
         signal: abortController.signal,
       });
+      if (
+        !(await this.continueAuthorizedPublication(publicationIsAuthorized))
+      ) {
+        return;
+      }
       const resources = await this.discoverResources({
         timeout: timeoutMs,
         signal: abortController.signal,
@@ -250,42 +269,19 @@ export class McpClient {
       ) {
         throw new Error('No prompts, tools, or resources found on the server.');
       }
-      if (!mayPublish()) {
+      if (
+        !(await this.continueAuthorizedPublication(publicationIsAuthorized))
+      ) {
         return;
       }
 
-      const connectedClient = this.getConnectedClient();
-      const isAuthorized = this.createCapabilityAuthorization(connectedClient);
-      if (!mayPublish() || !isAuthorized()) {
-        return;
-      }
-      registerMcpPrompts(
-        this.serverName,
-        connectedClient,
-        this.promptRegistry,
+      await this.publishDiscoveredArtifacts(
         prompts,
-        isAuthorized,
+        tools,
+        resources,
+        connectedClient,
+        publicationIsAuthorized,
       );
-      if (!mayPublish() || !isAuthorized()) {
-        this.promptRegistry.removePromptsByServer(this.serverName);
-        return;
-      }
-      this.updateResourceRegistry(resources);
-      if (!mayPublish() || !isAuthorized()) {
-        this.promptRegistry.removePromptsByServer(this.serverName);
-        this.resourceRegistry.removeResourcesByServer(this.serverName);
-        return;
-      }
-      for (const tool of tools) {
-        if (!mayPublish() || !isAuthorized()) {
-          this.promptRegistry.removePromptsByServer(this.serverName);
-          this.resourceRegistry.removeResourcesByServer(this.serverName);
-          this.toolRegistry.removeMcpToolsByServer(this.serverName);
-          return;
-        }
-        this.toolRegistry.registerTool(tool);
-      }
-      this.toolRegistry.sortTools();
     } finally {
       clearTimeout(timeoutId);
       if (this.discoveryAbortController === abortController) {
@@ -294,19 +290,110 @@ export class McpClient {
     }
   }
 
+  private async continueAuthorizedPublication(
+    isAuthorized: () => boolean,
+  ): Promise<boolean> {
+    try {
+      if (isAuthorized()) {
+        return true;
+      }
+    } catch (error) {
+      await this.disconnectAfterPublicationFailure(error);
+    }
+    try {
+      await this.disconnect();
+    } catch (cleanupError) {
+      debugLogger.error(
+        `Capability publication cleanup failed for '${this.serverName}': ${getErrorMessage(cleanupError)}`,
+      );
+    }
+    return false;
+  }
+
+  private async disconnectAfterPublicationFailure(
+    error: unknown,
+  ): Promise<never> {
+    try {
+      await this.disconnect();
+    } catch (cleanupError) {
+      debugLogger.error(
+        `Capability publication cleanup failed for '${this.serverName}': ${getErrorMessage(cleanupError)}`,
+      );
+    }
+    throw error;
+  }
+
+  private async publishDiscoveredArtifacts(
+    prompts: readonly Prompt[],
+    tools: readonly DiscoveredMCPTool[],
+    resources: readonly Resource[],
+    connectedClient: Client,
+    isAuthorized: () => boolean,
+  ): Promise<void> {
+    try {
+      if (!isAuthorized()) {
+        await this.disconnect();
+        return;
+      }
+      if (
+        !registerMcpPrompts(
+          this.serverName,
+          connectedClient,
+          this.promptRegistry,
+          prompts,
+          isAuthorized,
+        )
+      ) {
+        await this.disconnect();
+        return;
+      }
+      if (!(await this.continueAuthorizedPublication(isAuthorized))) {
+        return;
+      }
+      this.updateResourceRegistry([...resources]);
+      if (!(await this.continueAuthorizedPublication(isAuthorized))) {
+        return;
+      }
+      for (const tool of tools) {
+        if (!(await this.continueAuthorizedPublication(isAuthorized))) {
+          return;
+        }
+        this.toolRegistry.registerTool(tool);
+        if (!(await this.continueAuthorizedPublication(isAuthorized))) {
+          return;
+        }
+      }
+      if (!(await this.continueAuthorizedPublication(isAuthorized))) {
+        return;
+      }
+      this.toolRegistry.sortTools();
+      await this.continueAuthorizedPublication(isAuthorized);
+    } catch (error) {
+      await this.disconnectAfterPublicationFailure(error);
+    }
+  }
+
   async disconnect(): Promise<void> {
     this.invalidateCapabilities();
-    if (
-      this.status !== MCPServerStatus.CONNECTED &&
-      this.status !== MCPServerStatus.CONNECTING
-    ) {
-      return;
+    const wasActive =
+      this.status === MCPServerStatus.CONNECTED ||
+      this.status === MCPServerStatus.CONNECTING;
+    const cleanupErrors: unknown[] = [];
+    for (const cleanup of [
+      () => this.toolRegistry.removeMcpToolsByServer(this.serverName),
+      () => this.promptRegistry.removePromptsByServer(this.serverName),
+      () => this.resourceRegistry.removeResourcesByServer(this.serverName),
+    ]) {
+      try {
+        cleanup();
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
     }
-    this.toolRegistry.removeMcpToolsByServer(this.serverName);
-    this.promptRegistry.removePromptsByServer(this.serverName);
-    this.resourceRegistry.removeResourcesByServer(this.serverName);
     this.connectionGeneration++;
-    this.updateStatus(MCPServerStatus.DISCONNECTING);
+    if (wasActive) {
+      this.updateStatus(MCPServerStatus.DISCONNECTING);
+    }
     this.connectionAbortController?.abort();
     this.connectionAbortController = undefined;
     this.discoveryAbortController?.abort();
@@ -317,27 +404,25 @@ export class McpClient {
     this.refreshAbortControllers.clear();
     const client = this.client;
     this.client = undefined;
-    const transport = this.transport;
-    this.transport = undefined;
-    let closeError: unknown;
-    try {
-      if (transport) {
-        await transport.close();
-      }
-    } catch (error) {
-      closeError = error;
-    }
     try {
       if (client) {
         await client.close();
       }
     } catch (error) {
-      closeError ??= error;
+      cleanupErrors.push(error);
     } finally {
-      this.updateStatus(MCPServerStatus.DISCONNECTED);
+      if (wasActive) {
+        this.updateStatus(MCPServerStatus.DISCONNECTED);
+      }
     }
-    if (closeError !== undefined) {
-      throw closeError;
+    if (cleanupErrors.length === 1) {
+      throw cleanupErrors[0];
+    }
+    if (cleanupErrors.length > 1) {
+      throw new AggregateError(
+        cleanupErrors,
+        `Disconnect cleanup failed for '${this.serverName}'`,
+      );
     }
   }
 
@@ -393,18 +478,22 @@ export class McpClient {
     timeout?: number;
     signal?: AbortSignal;
   }): Promise<Prompt[]> {
-    return discoverPrompts(this.serverName, this.getConnectedClient(), options);
+    const client = this.getConnectedClient();
+    return discoverPrompts(this.serverName, client, {
+      ...options,
+      isAuthorized: this.createCapabilityAuthorization(client),
+    });
   }
 
   private async discoverResources(options?: {
     timeout?: number;
     signal?: AbortSignal;
   }): Promise<Resource[]> {
-    return discoverResources(
-      this.serverName,
-      this.getConnectedClient(),
-      options,
-    );
+    const client = this.getConnectedClient();
+    return discoverResources(this.serverName, client, {
+      ...options,
+      isAuthorized: this.createCapabilityAuthorization(client),
+    });
   }
 
   private updateResourceRegistry(resources: Resource[]): void {
@@ -434,6 +523,31 @@ export class McpClient {
       return '';
     }
     return this.client.getInstructions() ?? '';
+  }
+
+  private removeAllServerArtifacts(): void {
+    for (const [label, cleanup] of [
+      [
+        'tools',
+        () => this.toolRegistry.removeMcpToolsByServer(this.serverName),
+      ],
+      [
+        'prompts',
+        () => this.promptRegistry.removePromptsByServer(this.serverName),
+      ],
+      [
+        'resources',
+        () => this.resourceRegistry.removeResourcesByServer(this.serverName),
+      ],
+    ] as const) {
+      try {
+        cleanup();
+      } catch (cleanupError) {
+        debugLogger.error(
+          `Error cleaning up ${label} for '${this.serverName}': ${getErrorMessage(cleanupError)}`,
+        );
+      }
+    }
   }
 
   private registerNotificationHandlers(client: Client): void {

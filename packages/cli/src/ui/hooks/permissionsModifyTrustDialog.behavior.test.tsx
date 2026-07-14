@@ -7,20 +7,19 @@
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '../../test-utils/render.js';
-import { TrustLevel } from '../../config/trustedFolders.js';
-import type { PermissionsTrustRuntime } from './usePermissionsModifyTrust.js';
 import {
-  getTrustCommitErrorMessage,
-  getTrustLevelDisplay,
-  getTrustUpdateDisplay,
-  getWarningMessage,
-  shouldDismissTrustDialog,
-} from '../components/PermissionsModifyTrustDialog.js';
+  TrustLevel,
+  type ResolvedTrustRule,
+} from '../../config/trustedFolders.js';
+import type { PermissionsTrustRuntime } from './usePermissionsModifyTrust.js';
 const mockedSetValue = vi.hoisted(() => vi.fn());
 const mockedDeleteValue = vi.hoisted(() => vi.fn());
 const mockedUserConfig = vi.hoisted<{
   value: Record<string, TrustLevel>;
 }>(() => ({ value: {} }));
+const mockedResolvePathTrust = vi.hoisted<
+  ReturnType<typeof vi.fn<() => ResolvedTrustRule | undefined>>
+>(() => vi.fn(() => undefined));
 
 vi.mock('../../config/trustedFolders.js', async () => {
   const actual = await vi.importActual<
@@ -37,7 +36,7 @@ vi.mock('../../config/trustedFolders.js', async () => {
       rules: [],
       setValue: mockedSetValue,
       deleteValue: mockedDeleteValue,
-      resolvePathTrust: vi.fn(() => undefined),
+      resolvePathTrust: mockedResolvePathTrust,
       isPathTrusted: vi.fn(() => undefined),
     })),
   };
@@ -54,49 +53,14 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     mockedSetValue.mockReset();
     mockedDeleteValue.mockReset();
     mockedUserConfig.value = {};
+    mockedResolvePathTrust.mockReset();
+    mockedResolvePathTrust.mockReturnValue(undefined);
     mockedSetValue.mockImplementation((folderPath, trustLevel) => {
       mockedUserConfig.value[folderPath] = trustLevel;
     });
     mockedDeleteValue.mockImplementation((folderPath) => {
       delete mockedUserConfig.value[folderPath];
     });
-  });
-
-  it('represents an IDE false override', () => {
-    expect(getTrustLevelDisplay(TrustLevel.TRUST_FOLDER, false, false)).toBe(
-      'Not trusted (via IDE)',
-    );
-  });
-
-  it('distinguishes a saved local fallback from the live IDE override', () => {
-    expect(
-      getTrustUpdateDisplay(TrustLevel.TRUST_FOLDER, false, false),
-    ).toStrictEqual({
-      savedLocalFallback: 'Trusted',
-      effectiveNow: 'Not trusted (via IDE)',
-    });
-  });
-
-  it('represents inherited DO_NOT_TRUST as inherited untrusted', () => {
-    expect(getTrustLevelDisplay(TrustLevel.DO_NOT_TRUST, undefined, true)).toBe(
-      'Not trusted (via parent folder)',
-    );
-    expect(
-      getWarningMessage(undefined, true, TrustLevel.DO_NOT_TRUST),
-    ).toContain('This folder is not trusted via a parent folder setting.');
-  });
-
-  it('represents inherited trust when no direct trust level is set', () => {
-    expect(getTrustLevelDisplay(undefined, undefined, true)).toBe(
-      'Trusted (via parent folder)',
-    );
-  });
-  it('requires Enter to dismiss the updated prompt while preserving Escape', () => {
-    expect([
-      shouldDismissTrustDialog(true, 'x'),
-      shouldDismissTrustDialog(true, 'return'),
-      shouldDismissTrustDialog(false, 'escape'),
-    ]).toStrictEqual([false, true, true]);
   });
 
   it('reports a rolled-back live failure and remains usable after retry', () => {
@@ -130,11 +94,6 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     expect(result.current.committedTrustLevel).toBeUndefined();
     expect(mockedDeleteValue).toHaveBeenCalledExactlyOnceWith(
       '/configured/workspace',
-    );
-    expect(
-      getTrustCommitErrorMessage('live', new Error('live update failed')),
-    ).toBe(
-      'Trust settings could not be applied live, so the saved setting was restored: live update failed',
     );
 
     act(() => {
@@ -236,5 +195,96 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     expect(result.current.pendingTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
     expect(result.current.effectiveTrust).toBe(false);
     expect(result.current.committedTrustLevel).toBeUndefined();
+  });
+
+  it('restores the exact saved rule when live application throws', () => {
+    mockedUserConfig.value = {
+      '/configured/workspace': TrustLevel.DO_NOT_TRUST,
+    };
+    const config: PermissionsTrustRuntime = {
+      getWorkingDir: () => '/configured/workspace',
+      getFolderTrust: () => true,
+      getIdeClient: () => undefined,
+      isTrustedFolder: () => false,
+      setTrustedFolderLive: vi.fn().mockImplementation(() => {
+        throw new Error('live update failed');
+      }),
+    };
+    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+
+    act(() => {
+      result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
+    });
+
+    expect(mockedSetValue).toHaveBeenLastCalledWith(
+      '/configured/workspace',
+      TrustLevel.DO_NOT_TRUST,
+    );
+    expect(mockedDeleteValue).not.toHaveBeenCalled();
+    expect(mockedUserConfig.value['/configured/workspace']).toBe(
+      TrustLevel.DO_NOT_TRUST,
+    );
+  });
+
+  it('saves a direct cwd rule when selecting the same level as inherited trust', () => {
+    mockedUserConfig.value = {
+      '/workspace': TrustLevel.TRUST_FOLDER,
+    };
+    mockedResolvePathTrust.mockReturnValue({
+      rule: { path: '/workspace', trustLevel: TrustLevel.TRUST_FOLDER },
+      effectivePath: '/workspace',
+      trusted: true,
+      provenance: 'inherited',
+    });
+    const config: PermissionsTrustRuntime = {
+      getWorkingDir: () => '/workspace/project',
+      getFolderTrust: () => true,
+      getIdeClient: () => undefined,
+      isTrustedFolder: () => true,
+      setTrustedFolderLive: vi.fn(),
+    };
+    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+
+    expect(result.current.pendingTrustLevel).toBeUndefined();
+    expect(result.current.isParentTrusted).toBe(true);
+    expect(result.current.effectiveLocalTrustLevel).toBe(
+      TrustLevel.TRUST_FOLDER,
+    );
+
+    act(() => {
+      result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
+    });
+
+    expect(mockedSetValue).toHaveBeenCalledWith(
+      '/workspace/project',
+      TrustLevel.TRUST_FOLDER,
+    );
+  });
+
+  it('reflects inherited DO_NOT_TRUST in effectiveLocalTrustLevel when the form opens', () => {
+    mockedUserConfig.value = {
+      '/workspace': TrustLevel.DO_NOT_TRUST,
+    };
+    mockedResolvePathTrust.mockReturnValue({
+      rule: { path: '/workspace', trustLevel: TrustLevel.DO_NOT_TRUST },
+      effectivePath: '/workspace',
+      trusted: false,
+      provenance: 'inherited',
+    });
+    const config: PermissionsTrustRuntime = {
+      getWorkingDir: () => '/workspace/project',
+      getFolderTrust: () => true,
+      getIdeClient: () => undefined,
+      isTrustedFolder: () => false,
+      setTrustedFolderLive: vi.fn(),
+    };
+    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+
+    expect(result.current.pendingTrustLevel).toBeUndefined();
+    expect(result.current.isParentTrusted).toBe(true);
+    expect(result.current.effectiveLocalTrustLevel).toBe(
+      TrustLevel.DO_NOT_TRUST,
+    );
+    expect(result.current.effectiveTrust).toBe(false);
   });
 });

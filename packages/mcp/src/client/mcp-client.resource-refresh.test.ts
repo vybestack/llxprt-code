@@ -11,7 +11,7 @@ import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
 import { ResourceListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
-import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
+import { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
 import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { McpClient } from './mcp-client.js';
@@ -29,6 +29,8 @@ vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
     emitFeedback: vi.fn(),
   },
 }));
+
+const RESOURCE_LIST_CHANGED_METHOD = 'notifications/resources/list_changed';
 
 describe('McpClient resource refresh', () => {
   afterEach(() => {
@@ -72,10 +74,7 @@ describe('McpClient resource refresh', () => {
         getMessageBus: vi.fn(),
       } as unknown as ToolRegistry,
       { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
-      {
-        setResourcesForServer: vi.fn(),
-        removeResourcesByServer: vi.fn(),
-      } as unknown as ResourceRegistry,
+      new ResourceRegistry(),
       new WorkspaceContext('/workspace'),
       trustedConfig,
       false,
@@ -95,7 +94,7 @@ describe('McpClient resource refresh', () => {
 
     const refresh = Promise.resolve(
       resourceListHandler?.({
-        method: 'notifications/resources/list_changed',
+        method: RESOURCE_LIST_CHANGED_METHOD,
       }),
     );
     await vi.waitFor(() => expect(refreshSignal).toBeDefined());
@@ -131,14 +130,21 @@ describe('McpClient resource refresh', () => {
       mockedClient as unknown as Client,
     );
     vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue(
-      {} as SdkClientStdioLib.StdioClientTransport,
+      {} as unknown as SdkClientStdioLib.StdioClientTransport,
     );
-    const resourceRegistry = {
-      setResourcesForServer: vi.fn(() => {
+    const resourceRegistry = new ResourceRegistry();
+    const removeResources = vi.spyOn(
+      resourceRegistry,
+      'removeResourcesByServer',
+    );
+    const realSetResources =
+      resourceRegistry.setResourcesForServer.bind(resourceRegistry);
+    vi.spyOn(resourceRegistry, 'setResourcesForServer').mockImplementation(
+      (server, resources) => {
         trusted = false;
-      }),
-      removeResourcesByServer: vi.fn(),
-    } as unknown as ResourceRegistry;
+        return realSetResources(server, resources);
+      },
+    );
     const config = { isTrustedFolder: () => trusted } as Config;
     const client = new McpClient(
       'test-server',
@@ -158,16 +164,15 @@ describe('McpClient resource refresh', () => {
     await client.connect();
 
     await resourceListHandler?.({
-      method: 'notifications/resources/list_changed',
+      method: RESOURCE_LIST_CHANGED_METHOD,
     });
 
-    expect(resourceRegistry.removeResourcesByServer).toHaveBeenCalledWith(
-      'test-server',
-    );
+    expect(removeResources).toHaveBeenCalledWith('test-server');
     expect(resourceRegistry.setResourcesForServer).toHaveBeenCalledWith(
       'test-server',
       [{ uri: 'file:///new' }],
     );
+    expect(resourceRegistry.getAllResources()).toHaveLength(0);
   });
 
   it('clears the refresh timeout when registry publication fails', async () => {
@@ -194,12 +199,9 @@ describe('McpClient resource refresh', () => {
       mockedClient as unknown as Client,
     );
     vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue(
-      {} as SdkClientStdioLib.StdioClientTransport,
+      {} as unknown as SdkClientStdioLib.StdioClientTransport,
     );
-    const resourceRegistry = {
-      setResourcesForServer: vi.fn(),
-      removeResourcesByServer: vi.fn(),
-    } as unknown as ResourceRegistry;
+    const resourceRegistry = new ResourceRegistry();
     const trustedConfig = { isTrustedFolder: () => true } as Config;
     const client = new McpClient(
       'test-server',
@@ -218,7 +220,8 @@ describe('McpClient resource refresh', () => {
     );
     await client.connect();
     await client.discover(trustedConfig);
-    vi.mocked(resourceRegistry.setResourcesForServer).mockImplementationOnce(
+    expect(resourceRegistry.getAllResources()).toHaveLength(1);
+    vi.spyOn(resourceRegistry, 'setResourcesForServer').mockImplementationOnce(
       () => {
         throw new Error('registry publication failed');
       },
@@ -226,10 +229,63 @@ describe('McpClient resource refresh', () => {
     const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
 
     await resourceListHandler?.({
-      method: 'notifications/resources/list_changed',
+      method: RESOURCE_LIST_CHANGED_METHOD,
     });
 
     expect(clearTimeoutSpy).toHaveBeenCalledOnce();
+    expect(resourceRegistry.getAllResources()).toHaveLength(1);
     clearTimeoutSpy.mockRestore();
+  });
+
+  it('removes resources from the real registry after rollback when authorization is revoked', async () => {
+    let resourceListHandler:
+      | ((notification: unknown) => Promise<void> | void)
+      | undefined;
+    const mockedClient = {
+      connect: vi.fn(),
+      registerCapabilities: vi.fn(),
+      setRequestHandler: vi.fn(),
+      setNotificationHandler: vi.fn((schema, handler) => {
+        if (schema === ResourceListChangedNotificationSchema) {
+          resourceListHandler = handler;
+        }
+      }),
+      getServerCapabilities: vi
+        .fn()
+        .mockReturnValue({ resources: { listChanged: true } }),
+      request: vi
+        .fn()
+        .mockResolvedValue({ resources: [{ uri: 'file:///new' }] }),
+    };
+    vi.mocked(ClientLib.Client).mockReturnValue(
+      mockedClient as unknown as Client,
+    );
+    vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue(
+      {} as unknown as SdkClientStdioLib.StdioClientTransport,
+    );
+    const resourceRegistry = new ResourceRegistry();
+    const config = { isTrustedFolder: () => false } as Config;
+    const client = new McpClient(
+      'test-server',
+      { command: 'test-command' },
+      {
+        registerTool: vi.fn(),
+        sortTools: vi.fn(),
+        getMessageBus: vi.fn(),
+      } as unknown as ToolRegistry,
+      {} as PromptRegistry,
+      resourceRegistry,
+      new WorkspaceContext('/workspace'),
+      config,
+      false,
+      '0.0.1',
+    );
+    await client.connect();
+
+    await resourceListHandler?.({
+      method: RESOURCE_LIST_CHANGED_METHOD,
+    });
+
+    expect(resourceRegistry.getAllResources()).toHaveLength(0);
   });
 });
