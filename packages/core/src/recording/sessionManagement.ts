@@ -28,7 +28,9 @@ import { SessionDiscovery } from './SessionDiscovery.js';
 import {
   SessionLockManager,
   SessionLockedError,
+  type LockHandle,
 } from './SessionLockManager.js';
+import { RESUME_NO_SESSIONS_FOUND } from './resumeNotFoundMessages.js';
 
 /**
  * Result of listing sessions for a project.
@@ -80,7 +82,7 @@ export async function deleteSession(
   const sessions = await SessionDiscovery.listSessions(chatsDir, projectHash);
 
   if (sessions.length === 0) {
-    return { ok: false, error: 'No sessions found for this project' };
+    return { ok: false, error: RESUME_NO_SESSIONS_FOUND };
   }
 
   const resolved = SessionDiscovery.resolveSessionRef(ref, sessions);
@@ -110,7 +112,7 @@ async function deleteResolvedSession(
   target: SessionSummary,
   chatsDir: string,
 ): Promise<DeleteSessionResult | DeleteSessionError> {
-  let lock;
+  let lock: LockHandle;
   try {
     lock = await SessionLockManager.acquire(chatsDir, target.sessionId);
   } catch (error: unknown) {
@@ -138,11 +140,7 @@ async function deleteResolvedSession(
       error: `Failed to delete session: ${(error as Error).message}`,
     };
   } finally {
-    try {
-      await lock.release();
-    } catch {
-      // Best-effort release; the deletion outcome is already captured.
-    }
+    await lock.release();
   }
   return result;
 }

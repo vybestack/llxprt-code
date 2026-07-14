@@ -8,6 +8,7 @@ import * as acp from '@agentclientprotocol/sdk';
 import {
   deleteSessionById,
   getProjectHash,
+  SessionDiscovery,
   type ApprovalMode,
   type Config,
 } from '@vybestack/llxprt-code-core';
@@ -105,8 +106,15 @@ export class SessionLifecycle {
         ...(await this.configOptions(live)),
       };
     }
-    const listed = await this.list({ cwd: params.cwd });
-    if (!listed.sessions.some((item) => item.sessionId === params.sessionId)) {
+    const projectRoot = this.config.getProjectRoot();
+    const summaries = await SessionDiscovery.listSessions(
+      this.config.storage.getProjectChatsDir(),
+      getProjectHash(projectRoot),
+    );
+    const target = summaries.find(
+      (summary) => summary.sessionId === params.sessionId,
+    );
+    if (target === undefined || (target.cwd ?? projectRoot) !== params.cwd) {
       throw acp.RequestError.resourceNotFound(params.sessionId);
     }
     const { session } = await this.restore(params.sessionId, params.cwd);
@@ -123,11 +131,19 @@ export class SessionLifecycle {
   ): Promise<DeleteSessionResponse> {
     const hadLiveSession = await this.disposeLive(params.sessionId);
     const projectRoot = this.config.getProjectRoot();
-    const result = await deleteSessionById(
-      params.sessionId,
-      this.config.storage.getProjectChatsDir(),
-      getProjectHash(projectRoot),
-    );
+    let result: Awaited<ReturnType<typeof deleteSessionById>>;
+    try {
+      result = await deleteSessionById(
+        params.sessionId,
+        this.config.storage.getProjectChatsDir(),
+        getProjectHash(projectRoot),
+      );
+    } catch (error) {
+      throw acp.RequestError.internalError({
+        sessionId: params.sessionId,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
     if (result.ok) {
       return {};
     }

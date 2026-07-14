@@ -63,11 +63,9 @@ export function extractToolResultText(
 }
 
 export function extractTextFromPartList(
-  llmContent: string | ContentBlock[] | IContent | undefined,
+  llmContent: string | ContentBlock[] | IContent | null | undefined,
 ): string | null {
-  // Runtime callers can pass null (deserialized JSON); the type does not
-  // include it, so check explicitly.
-  if (llmContent === undefined || (llmContent as unknown) === null) {
+  if (llmContent === undefined || llmContent === null) {
     return null;
   }
 

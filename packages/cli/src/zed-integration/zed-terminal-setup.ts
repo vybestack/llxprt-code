@@ -41,7 +41,9 @@ export function buildZedTerminalSetup(
     config.getTargetDir(),
     (update) => connection.sessionUpdate({ sessionId, update }),
     logger,
-    typeof outputLimit === 'number' ? outputLimit : undefined,
+    typeof outputLimit === 'number' && Number.isFinite(outputLimit)
+      ? outputLimit
+      : undefined,
   );
   const messageBusAdapter = new CoreMessageBusAdapter(messageBus);
   const registry = new ToolRegistry(

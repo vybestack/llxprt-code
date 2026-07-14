@@ -39,9 +39,9 @@ export async function authenticateZedAgent(
   config: Config,
   methodId: string,
 ): Promise<void> {
-  await loadProfileByName(
-    parseZedAuthMethodId(methodId, await getAvailableProfileNames(config)),
-  );
+  const profileNames = await getAvailableProfileNames(config);
+  const profileName = parseZedAuthMethodId(methodId, profileNames);
+  await loadProfileByName(profileName);
 }
 
 async function getAvailableProfileNames(config: Config): Promise<string[]> {

@@ -198,10 +198,13 @@ async function probeMatchingSessionFile(
     );
     return { kind: 'probe-error', message };
   }
-  if (!Array.isArray(entries)) {
+  if (
+    !Array.isArray(entries) ||
+    entries.some((entry) => typeof entry !== 'string')
+  ) {
     return {
       kind: 'probe-error',
-      message: 'session-file probe returned a non-array result',
+      message: 'session-file probe returned a non-string-array result',
     };
   }
   const file = findMatchingSessionFile(sessionId, entries);

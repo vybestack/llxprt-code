@@ -252,7 +252,7 @@ export function extractThoughtText(thought: ThoughtSummary): string {
   const parts = [thought.subject, thought.description].filter(
     (v) => v.length > 0,
   );
-  return parts.join(parts.length > 1 ? ' ' : '');
+  return parts.join(' ');
 }
 
 /**

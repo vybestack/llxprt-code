@@ -262,7 +262,7 @@ export class SessionControl implements AgentSessionControl {
   private async resumeInternal(
     target: 'latest' | string,
   ): Promise<readonly IContent[]> {
-    this.ensureSubscribed();
+    await this.ensureSubscribed();
     const request: ResumeRequest = {
       continueRef: target === 'latest' ? CONTINUE_LATEST : target,
       projectHash: this.persistenceProjectHash(),
@@ -371,7 +371,7 @@ export class SessionControl implements AgentSessionControl {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  private ensureSubscribed(): void {
+  private async ensureSubscribed(): Promise<void> {
     if (!this.integrationNeedsSubscribe) {
       return;
     }
@@ -388,9 +388,20 @@ export class SessionControl implements AgentSessionControl {
       integration.subscribeToHistory(historyService);
       this.integrationNeedsSubscribe = false;
     } catch (error) {
+      const deadRecording = this.recording;
+      const deadLockHandle = this.currentLockHandle;
+      this.recording = null;
       this.integration = null;
       this.integrationNeedsSubscribe = false;
+      this.currentLockHandle = null;
+      this.deps.config.setSessionRecordingService(undefined);
       this.disposeIntegrationQuietly(integration);
+      if (deadRecording !== null) {
+        await this.disposeServiceQuietly(deadRecording);
+      }
+      if (deadLockHandle !== null) {
+        await this.releaseLockQuietly(deadLockHandle);
+      }
       logger.warn(
         () =>
           `ensureSubscribed: re-attach failed for session ${this.deps.sessionId()}; ` +
@@ -598,7 +609,7 @@ export class SessionControl implements AgentSessionControl {
     // FINDING A3: re-attach any previously-dead integration before replacing it,
     // so a pending-subscribe flag from an earlier null-history enable does not
     // survive across the fresh service swap.
-    this.ensureSubscribed();
+    await this.ensureSubscribed();
     await this.stopRecording();
     const service = new SessionRecordingService({
       sessionId: this.deps.sessionId(),

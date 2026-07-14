@@ -30,6 +30,7 @@ import { StreamBatcher, STREAM_BLOCKED_MESSAGE } from './zed-stream-batcher.js';
 /** Collects the text of every agent_message_chunk / agent_thought_chunk sent. */
 interface UpdateCollector {
   readonly sendUpdate: (update: acp.SessionUpdate) => Promise<void>;
+  readonly updates: () => acp.SessionUpdate[];
   readonly texts: () => string[];
 }
 
@@ -43,13 +44,16 @@ function hasTextContent(
 }
 
 function buildCollector(): UpdateCollector {
+  const updates: acp.SessionUpdate[] = [];
   const texts: string[] = [];
   return {
     sendUpdate: async (update: acp.SessionUpdate) => {
+      updates.push(update);
       if (hasTextContent(update)) {
         texts.push(update.content.text);
       }
     },
+    updates: () => [...updates],
     texts: () => [...texts],
   };
 }
@@ -129,6 +133,29 @@ describe('StreamBatcher blocked-path timer handling (issue #1604 E1/E2)', () => 
     expect(STREAM_BLOCKED_MESSAGE).toBe(
       '[Error: Response blocked due to emoji detection]',
     );
+  });
+
+  it('does not clear buffered text when a thought is blocked and reports the block on the thought channel', async () => {
+    const filter = new EmojiFilter({ mode: 'error' });
+    const flushBufferSpy = vi.spyOn(filter, 'flushBuffer');
+    const collector = buildCollector();
+    const batcher = new StreamBatcher(filter, collector.sendUpdate);
+
+    batcher.append('buffered text ', false);
+    batcher.append('blocked thought \u{1F600}', true);
+    await vi.runAllTimersAsync();
+
+    expect(flushBufferSpy).not.toHaveBeenCalled();
+    expect(collector.updates()).toStrictEqual([
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'buffered text ' },
+      },
+      {
+        sessionUpdate: 'agent_thought_chunk',
+        content: { type: 'text', text: STREAM_BLOCKED_MESSAGE },
+      },
+    ]);
   });
 
   it('ignores a late append after dispose(): nothing is emitted and no timer is armed past the turn', async () => {

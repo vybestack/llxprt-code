@@ -9,6 +9,7 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   coreEvents,
   CoreEvent,
+  DebugLogger,
   type Config,
   type RuntimeModel,
 } from '@vybestack/llxprt-code-core';
@@ -17,6 +18,7 @@ import type { ClientCapabilitiesWithSession } from './acp-types.js';
 
 const REASONING_VALUES = ['minimal', 'low', 'medium', 'high', 'xhigh'];
 const EMOJI_VALUES = ['allowed', 'auto', 'warn', 'error'];
+const logger = new DebugLogger('llxprt:zed-integration:config-options');
 
 function selectOption(value: string): acp.SessionConfigSelectOption {
   return { value, name: value };
@@ -67,7 +69,8 @@ async function availableModels(
     return (
       (await config.getProviderManager()?.getAvailableModels(provider)) ?? []
     );
-  } catch {
+  } catch (error) {
+    logger.debug(() => `Failed to load available models: ${String(error)}`);
     return undefined;
   }
 }

@@ -10,7 +10,7 @@
  * in-memory history bridge {@link readAgentHistoryAsIContent}. These exercise the
  * REAL chats-dir derivation + filename matching against an honest readdir-like
  * lister (directory entry names, NOT a result-shaped mock of our logic) and the
- * REAL ContentConverters bridge against a fake agent, so no internal decision
+ * live neutral-history bridge against a fake agent, so no internal decision
  * logic is mocked.
  */
 
@@ -175,27 +175,18 @@ describe('readAgentHistoryAsIContent (issue #1604 re-attach replay bridge)', () 
     return { agent, getHistory };
   }
 
-  it('converts the live Gemini history to neutral IContent[] preserving speaker + text', async () => {
-    const { agent, getHistory } = buildAgent([
-      { role: 'user', parts: [{ text: 'hello there' }] },
-      { role: 'model', parts: [{ text: 'general kenobi' }] },
-    ] as unknown as readonly AgentMessage[]);
+  it('preserves the live neutral history without dropping blocks', async () => {
+    const history: readonly AgentMessage[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'hello there' }] },
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'general kenobi' }] },
+    ];
+    const { agent, getHistory } = buildAgent(history);
 
     const items = await readAgentHistoryAsIContent(agent);
 
     expect(getHistory).toHaveBeenCalledTimes(1);
-    expect(items).toHaveLength(2);
-    expect(items[0].speaker).toBe('human');
-    expect(items[1].speaker).toBe('ai');
-    // Text survives the conversion in order.
-    const texts = items.flatMap((item) =>
-      item.blocks
-        .filter(
-          (b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text',
-        )
-        .map((b) => b.text),
-    );
-    expect(texts).toStrictEqual(['hello there', 'general kenobi']);
+    expect(items).toStrictEqual(history);
+    expect(items).not.toBe(history);
   });
 
   it('returns an empty array for a fresh unprompted session (empty live history → zero replay updates)', async () => {

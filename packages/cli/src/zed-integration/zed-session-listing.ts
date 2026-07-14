@@ -82,7 +82,9 @@ export async function listRecordedSessions(
         ? { createdAt: durable.createdAt }
         : {}),
       updatedAt:
-        durable.updatedAt > live.updatedAt ? durable.updatedAt : live.updatedAt,
+        Date.parse(durable.updatedAt) >= Date.parse(live.updatedAt)
+          ? durable.updatedAt
+          : live.updatedAt,
       ...(durable.title === undefined ? {} : { title: durable.title }),
     };
   }

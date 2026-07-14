@@ -17,7 +17,6 @@ import { readdir } from 'node:fs/promises';
 import * as acp from '@agentclientprotocol/sdk';
 import type { Config, IContent } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   classifyResumeFailure,
@@ -110,7 +109,7 @@ async function listSessionFileNames(
 export async function hasRecordedSessionFile(
   config: Config,
   sessionId: string,
-  listFiles: ChatSessionFileLister,
+  listFiles: ChatSessionFileLister = nodeChatSessionFileLister,
 ): Promise<boolean> {
   try {
     const chatsDir = chatsDirFor(config);
@@ -145,20 +144,15 @@ export async function hasRecordedSessionFile(
 
 /**
  * Reads a live agent's in-memory conversation as neutral IContent[] for the
- * re-attach replay (#1604). `agent.getHistory()` returns the Gemini-shaped
- * history (readonly AgentMessage[]); it is converted to IContent[] via the SAME
- * ContentConverters.toIContents bridge the recording/resume path uses (see
- * sessionControl.ts), so the re-attach replay maps identically to a disk resume.
- * A fresh unprompted session has empty history, yielding an empty array (zero
- * replay updates).
+ * re-attach replay (#1604). `agent.getHistory()` already returns neutral
+ * AgentMessage/IContent values, so preserving them directly keeps every block
+ * intact and maps identically to a disk resume. A fresh unprompted session has
+ * empty history, yielding an empty array (zero replay updates).
  */
 export async function readAgentHistoryAsIContent(
   agent: Agent,
 ): Promise<readonly IContent[]> {
-  const history = await agent.getHistory();
-  return ContentConverters.toIContents([...history] as Parameters<
-    typeof ContentConverters.toIContents
-  >[0]);
+  return [...(await agent.getHistory())];
 }
 
 /**

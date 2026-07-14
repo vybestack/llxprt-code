@@ -61,18 +61,13 @@ export class StreamBatcher {
       ? this.emojiFilter.filterText(text)
       : this.emojiFilter.filterStreamChunk(text);
     if (filterResult.blocked) {
-      // FINDING F10: flush the EmojiFilter's residual buffer SYNCHRONOUSLY, right
-      // now — NOT later in the async flushChain. The content that triggered the
-      // block is still in the filter's internal buffer; if it is not cleared
-      // before this append() returns, the NEXT synchronous append() re-combines
-      // it with the following chunk and re-blocks the (otherwise clean) content.
-      // flushBuffer() is synchronous. Any emittable residual is queued in order
-      // ahead of the error update; in error mode (the only mode that blocks
-      // stream chunks) the offending emoji content yields no emittable text and
-      // is simply discarded, leaving the buffer clean for subsequent chunks.
-      const residual = this.emojiFilter.flushBuffer();
-      if (residual.length > 0) {
-        this.appendPendingChunk('text', residual);
+      // filterText() is stateless, so a blocked thought must not clear partial
+      // text held by filterStreamChunk() for a later streaming boundary.
+      if (!isThought) {
+        const residual = this.emojiFilter.flushBuffer();
+        if (residual.length > 0) {
+          this.appendPendingChunk('text', residual);
+        }
       }
       // FINDING E1: clear any pending batch timer BEFORE building the blocked
       // chain (exactly as flush() does). Otherwise a timer armed by a prior
@@ -89,7 +84,9 @@ export class StreamBatcher {
         .then(() => this.doFlush())
         .then(() =>
           this.sendUpdate({
-            sessionUpdate: 'agent_message_chunk',
+            sessionUpdate: isThought
+              ? 'agent_thought_chunk'
+              : 'agent_message_chunk',
             content: {
               type: 'text',
               text: STREAM_BLOCKED_MESSAGE,

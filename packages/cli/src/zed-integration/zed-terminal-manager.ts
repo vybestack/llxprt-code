@@ -128,16 +128,19 @@ export class TerminalManager {
       handle,
       command,
       cwd,
-      toolCallId: this.claimPendingCall(command, cwd),
+      toolCallId: undefined,
     };
-    this.activeTerminals.add(active);
+    let registered = false;
     try {
+      active.toolCallId = this.claimPendingCall(command, cwd);
+      this.activeTerminals.add(active);
+      registered = true;
       if (active.toolCallId !== undefined) {
         await this.sendTerminalUpdate(active);
       }
       return await this.waitForTerminal(active, onOutput, signal);
     } catch (error) {
-      if (this.activeTerminals.delete(active)) {
+      if (this.activeTerminals.delete(active) || !registered) {
         await this.killAndRelease(active);
       }
       throw error;
@@ -198,19 +201,24 @@ export class TerminalManager {
     let killDeadline = 0;
     let done = false;
     while (!done) {
-      if (exitError !== undefined) {
-        throw exitError;
-      }
       if (signal.aborted && !killed) {
         killed = true;
         killDeadline = Date.now() + KILL_GRACE_PERIOD_MS;
         await this.kill(active);
       }
-      done = exit !== undefined || (killed && Date.now() >= killDeadline);
+      done =
+        exit !== undefined ||
+        exitError !== undefined ||
+        (killed && Date.now() >= killDeadline);
       if (done) {
         continue;
       }
-      await Promise.race([exitPromise, delay(OUTPUT_POLL_INTERVAL_MS)]);
+      const pollDelay = delay(OUTPUT_POLL_INTERVAL_MS);
+      try {
+        await Promise.race([exitPromise, pollDelay.promise]);
+      } finally {
+        pollDelay.cancel();
+      }
       const current = await active.handle.currentOutput();
       const chunk = outputDelta(previousOutput, current.output);
       if (chunk !== '') {
@@ -219,20 +227,21 @@ export class TerminalManager {
       previousOutput = current.output;
     }
     // Final poll after exit settles so output produced between the last poll
-    // and process exit is never lost.
-    if (exit !== undefined) {
-      try {
-        const final = await active.handle.currentOutput();
-        const finalDelta = outputDelta(previousOutput, final.output);
-        if (finalDelta !== '') {
-          onOutput({ type: 'data', chunk: finalDelta });
-        }
-        previousOutput = final.output;
-      } catch (error) {
-        this.logger.debug(
-          () => `Terminal post-exit output poll failed: ${errorMessage(error)}`,
-        );
+    // and process exit is never lost, including when waitForExit rejects.
+    try {
+      const final = await active.handle.currentOutput();
+      const finalDelta = outputDelta(previousOutput, final.output);
+      if (finalDelta !== '') {
+        onOutput({ type: 'data', chunk: finalDelta });
       }
+      previousOutput = final.output;
+    } catch (error) {
+      this.logger.debug(
+        () => `Terminal post-exit output poll failed: ${errorMessage(error)}`,
+      );
+    }
+    if (exitError !== undefined) {
+      throw exitError;
     }
     return {
       output: previousOutput,
@@ -318,6 +327,21 @@ function outputDelta(previous: string, current: string): string {
     : current;
 }
 
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+function delay(milliseconds: number): {
+  promise: Promise<void>;
+  cancel: () => void;
+} {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const promise = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, milliseconds);
+  });
+  return {
+    promise,
+    cancel: () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+    },
+  };
 }

@@ -208,7 +208,7 @@ describe('classifyResumeFailure (issue #1604 FINDING B: corrupt vs missing)', ()
       async () => undefined as unknown as readonly string[],
     );
     expect(error.code).toBe(-32603);
-    expect(error.message).toContain('non-array');
+    expect(error.message).toContain('non-string-array');
   });
   it('does NOT probe (and returns internalError) for a non-not-found reason even if a file would match', async () => {
     let probed = false;
