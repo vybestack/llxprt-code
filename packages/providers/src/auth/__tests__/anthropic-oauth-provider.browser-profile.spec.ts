@@ -97,6 +97,13 @@ function configureSuccessfulLocalCallback(): void {
   });
 }
 
+function clearOAuthGlobals(): void {
+  delete (global as { __oauth_needs_code?: boolean }).__oauth_needs_code;
+  delete (global as { __oauth_provider?: string }).__oauth_provider;
+  delete (global as { __oauth_browser_auth_complete?: boolean })
+    .__oauth_browser_auth_complete;
+}
+
 describe('AnthropicOAuthProvider browser profile association', () => {
   let provider: AnthropicOAuthProvider;
   let openBrowserSpy: ReturnType<typeof vi.spyOn>;
@@ -115,10 +122,7 @@ describe('AnthropicOAuthProvider browser profile association', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     oauthRuntimeBridge.setAccessors(undefined);
-    delete (global as { __oauth_needs_code?: boolean }).__oauth_needs_code;
-    delete (global as { __oauth_provider?: string }).__oauth_provider;
-    delete (global as { __oauth_browser_auth_complete?: boolean })
-      .__oauth_browser_auth_complete;
+    clearOAuthGlobals();
   });
 
   it('launches the associated browser/profile when an association exists', async () => {
@@ -138,8 +142,11 @@ describe('AnthropicOAuthProvider browser profile association', () => {
 
     configureSuccessfulLocalCallback();
 
-    await provider.initiateAuth();
+    const result = await provider.initiateAuth();
 
+    expect(result).toStrictEqual(
+      expect.objectContaining({ token_type: 'Bearer' }),
+    );
     expect(openBrowserSpy).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -184,18 +191,14 @@ describe('AnthropicOAuthProvider browser profile association', () => {
     vi.spyOn(secureBrowserModule, 'shouldLaunchBrowser').mockReturnValue(false);
     provider.setAuthContext({ bucket: 'work' });
 
-    // In headless mode the flow blocks on manual code entry (pendingAuthPromise).
-    // Wrap armPendingAuthDialog so the promise it installs is replaced with an
-    // already-resolved one, letting initiateAuth complete deterministically.
+    // In headless mode the flow blocks on manual code entry. Replace the dialog
+    // setup with a resolved promise so the test does not install a real timeout.
     const providerInternals = provider as unknown as {
       armPendingAuthDialog: () => void;
       pendingAuthPromise?: Promise<string>;
     };
-    const original =
-      providerInternals.armPendingAuthDialog.bind(providerInternals);
     vi.spyOn(providerInternals, 'armPendingAuthDialog').mockImplementation(
       () => {
-        original();
         providerInternals.pendingAuthPromise = Promise.resolve('manual-code');
       },
     );

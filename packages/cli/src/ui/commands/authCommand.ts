@@ -826,8 +826,8 @@ export class AuthCommandExecutor {
           messageType: 'error',
           content:
             `Invalid profile selector: "${selector}". ` +
-            `Use a number from the discovered list or a profile directory name ` +
-            `(only letters, numbers, spaces, underscores, dots, and hyphens).`,
+            `Use a number from the discovered list or a profile directory name. ` +
+            `Path separators, control characters, and traversal sequences (..) are not allowed.`,
         };
       }
 

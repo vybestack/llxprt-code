@@ -7,7 +7,7 @@
 import { execFile, type ExecFileOptions } from 'node:child_process';
 import { promisify } from 'node:util';
 import { platform } from 'node:os';
-import { statSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { env } from 'node:process';
 import { URL } from 'node:url';
 import { envOr } from './env.js';
@@ -32,7 +32,7 @@ type BrowserExecOptions = ExecFileOptions & {
  * and the specific-browser path use these so behavior stays consistent.
  */
 const browserExecOptions: BrowserExecOptions = {
-  env: { ...process.env, SHELL: undefined },
+  env: { ...env, SHELL: undefined },
   detached: true,
   stdio: 'ignore',
 };
@@ -482,6 +482,7 @@ async function openSpecificBrowser(
     }
     throw new Error(
       `Failed to open ${browser}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      { cause: error },
     );
   }
 }
@@ -571,16 +572,12 @@ async function tryWindowsFallbackBinaries(
   const tried = new Set<string>([primaryCommand]);
   for (const candidate of candidates) {
     const resolved = candidate();
-    // existsSync returns true for directories too; only attempt to execute
-    // real files so a directory at a candidate path is not mistaken for a
-    // browser binary (execFileAsync would emit a confusing EACCES/UNKNOWN).
-    const isExecutableFile = (() => {
-      try {
-        return statSync(resolved).isFile();
-      } catch {
-        return false;
-      }
-    })();
+    // Only attempt to execute real files so a directory at a candidate path is
+    // not mistaken for a browser binary (execFileAsync would emit a confusing
+    // EACCES/UNKNOWN error).
+    const isExecutableFile = await stat(resolved)
+      .then((candidateStat) => candidateStat.isFile())
+      .catch(() => false);
     if (tried.has(resolved) || !isExecutableFile) {
       continue;
     }
