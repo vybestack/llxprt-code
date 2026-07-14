@@ -772,4 +772,13 @@ describe('scanGenaiImports — createRequire factory alias vs binding separation
     const violations = scanGenaiImports(sf, 'test.ts');
     expect(violations).toHaveLength(0);
   });
+  it('does NOT treat an unrelated local createRequire as a factory', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      'const createRequire = (url: string) => () => ({});\n' +
+        "createRequire(import.meta.url)('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(false);
+  });
 });

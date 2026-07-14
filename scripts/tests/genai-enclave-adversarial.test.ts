@@ -573,7 +573,7 @@ describe('Finding8: consumer-relative canonical protocol resolver', () => {
       const resolver = createRealProtocolResolver(repoRoot, nameToDir);
       // file:../tools from packages/core → packages/tools, but depName is
       // @scope/core which maps to packages/core — mismatch.
-      const result = resolver('@scope/core', 'file:../tools');
+      const result = resolver('@scope/core', 'file:../tools', 'packages/core');
       expect(result.resolved).toBe(false);
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });

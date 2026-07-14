@@ -18,6 +18,29 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { REPO_ROOT } from './genai-enclave-guard-helpers.ts';
 
+/**
+ * Collect version-drift entries for a single manifest. Extracted as a
+ * top-level helper so the loop in the test does not nest more than three
+ * levels deep (sonarjs/nested-control-flow).
+ */
+function collectVersionDrift(
+  pkg: Record<string, Record<string, string> | undefined>,
+  depTypes: readonly string[],
+  genaiPackage: string,
+  workspaceDir: string,
+  expectedVersion: string,
+  drift: string[],
+): void {
+  for (const depType of depTypes) {
+    const actualVersion = pkg[depType]?.[genaiPackage];
+    if (actualVersion !== undefined && actualVersion !== expectedVersion) {
+      drift.push(
+        `${workspaceDir} ${depType}: manifest has "${actualVersion}" but config has "${expectedVersion}"`,
+      );
+    }
+  }
+}
+
 describe('check-genai-enclave — allowlist consistency', () => {
   it('GEMINI_NAME_EXPLICIT_ALLOWLIST has no duplicate path::name keys', async () => {
     const { GEMINI_NAME_EXPLICIT_ALLOWLIST } = await import(
@@ -115,16 +138,16 @@ describe('check-genai-enclave — allowlist consistency', () => {
     const drift: string[] = [];
     for (const entry of GENAI_DEPENDENCY_MANIFESTS) {
       const manifestPath = join(REPO_ROOT, entry.workspaceDir, 'package.json');
-      if (!existsSync(manifestPath)) continue;
-      const pkg = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<
-        string,
-        Record<string, string> | undefined
-      >;
-      for (const depType of depTypes) {
-        const actualVersion = pkg[depType]?.[GENAI_PACKAGE];
-        if (actualVersion !== undefined && actualVersion !== entry.version) {
-          drift.push(
-            `${entry.workspaceDir} ${depType}: manifest has "${actualVersion}" but config has "${entry.version}"`,
+      if (existsSync(manifestPath)) {
+        const raw: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'));
+        if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+          collectVersionDrift(
+            raw as Record<string, Record<string, string> | undefined>,
+            depTypes,
+            GENAI_PACKAGE,
+            entry.workspaceDir,
+            entry.version,
+            drift,
           );
         }
       }

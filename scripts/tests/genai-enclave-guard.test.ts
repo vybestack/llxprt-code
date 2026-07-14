@@ -32,15 +32,11 @@ import {
   runScriptRealRepo,
   withFixture,
   writeRequiredManifests,
+  GEMINI_IMPORT,
 } from './genai-enclave-guard-helpers.ts';
 
 const missingBunMessage =
   '[genai-enclave] Bun runtime not found — install Bun or set BUN_EXECUTABLE.';
-
-// ─── Fixture content helpers ────────────────────────────────────────────────
-
-const GEMINI_IMPORT =
-  "import { GoogleGenAI } from '@google/genai';\nexport const x = 1;\n";
 
 describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
   'check-genai-enclave',

@@ -95,7 +95,7 @@ interface OperationalError {
 }
 
 function isScannableFile(fileName: string): boolean {
-  return /\.(?:[cm]?ts|tsx|[cm]?js|jsx)$/.test(fileName);
+  return /\.(?:[cm]?ts|tsx|[cm]?js|jsx)$/i.test(fileName);
 }
 
 function relRepo(filePath: string): string {

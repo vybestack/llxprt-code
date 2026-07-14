@@ -232,7 +232,9 @@ function checkExportAssignment(
   }
   if (ts.isIdentifier(expr) && containsGemini(expr.text)) {
     addExportViolation(ctx, node, expr.text, exportForm, violations);
-    return;
+    // Do NOT return early — fall through to inspect any object-literal
+    // binding the identifier resolves to, so nested Gemini names are also
+    // detected (e.g. `const x = { GeminiLeak: 1 }; export default x;`).
   }
   if (
     (ts.isClassExpression(expr) || ts.isFunctionExpression(expr)) &&

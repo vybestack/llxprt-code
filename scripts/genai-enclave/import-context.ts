@@ -45,16 +45,12 @@ export function isCreateRequireFactoryCallee(
   expr: ts.Expression,
 ): boolean {
   if (ts.isIdentifier(expr)) {
-    if (ctx.resolver.isFactoryAlias(expr.text, expr.getStart())) {
-      return true;
-    }
-    // `createRequire` imported via `import { createRequire } from 'node:module'`
-    // The import registers as a factory alias, but also check by name for
-    // the canonical bare-identifier case.
-    return (
-      expr.text === 'createRequire' &&
-      !ctx.globalShadows.isShadowed('createRequire', expr.getStart())
-    );
+    // A bare `createRequire` identifier is the factory ONLY when the
+    // provenance resolver has a factory-alias entry for it at this position
+    // (e.g. from `import { createRequire } from 'node:module'`). A mere
+    // absence of a shadow is insufficient — the identifier must have
+    // valid resolver provenance as a factory alias.
+    return ctx.resolver.isFactoryAlias(expr.text, expr.getStart());
   }
   if (
     ts.isPropertyAccessExpression(expr) &&

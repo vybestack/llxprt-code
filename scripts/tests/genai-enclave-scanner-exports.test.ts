@@ -292,3 +292,25 @@ describe('scanGeminiExports — #2352 exact export forms (spread, logical-assign
     expect(violations).toHaveLength(0);
   });
 });
+describe('export-detection — identifier export must both flag identifier and inspect bound object literal (#2)', () => {
+  it('flags both the Gemini-named identifier and its bound object literal Gemini names', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      'const GeminiConfig = { GeminiNested: 1 };\nexport default GeminiConfig;\n',
+    );
+    const violations = scanGeminiExports(sf, 'test.ts');
+    expect(violations).toHaveLength(2);
+    expect(violations.some((v) => v.exportName === 'GeminiConfig')).toBe(true);
+    expect(violations.some((v) => v.exportName === 'GeminiNested')).toBe(true);
+  });
+
+  it('flags a non-Gemini identifier whose bound object contains a Gemini name', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      'const safeName = { GeminiNested: 1 };\nexport default safeName;\n',
+    );
+    const violations = scanGeminiExports(sf, 'test.ts');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].exportName).toBe('GeminiNested');
+  });
+});

@@ -38,6 +38,13 @@ interface ScopeEntry {
   readonly kind: ProvenanceKind;
   readonly activeFrom: number;
   readonly activeTo: number;
+  /**
+   * Source position of the declaration that created this entry. Used to
+   * distinguish a re-registration of the same declaration across fixed-point
+   * passes (same declPos) from a genuinely different declaration at the same
+   * scope range (different declPos). A later declPos shadows an earlier one.
+   */
+  readonly declPos: number;
 }
 
 /**
@@ -60,6 +67,7 @@ function isScopeNode(node: ts.Node): boolean {
     ts.isForOfStatement,
     ts.isModuleDeclaration,
     ts.isSwitchStatement,
+    ts.isClassStaticBlockDeclaration,
   ];
   return guards.some((guard) => guard(node));
 }
@@ -179,15 +187,20 @@ export class ProvenanceResolver {
 
   /**
    * Register a provenance or shadow entry for `name`.
+   * `declPos` is the source position of the declaration that created this
+   * entry; it distinguishes a re-registration of the same declaration across
+   * fixed-point passes (same declPos) from a genuinely different declaration
+   * at the same scope range (different declPos, later one shadows).
    */
   register(
     name: string,
     kind: ProvenanceKind,
     activeFrom: number,
     activeTo: number,
+    declPos: number = activeFrom,
   ): void {
     const list = this.entries.get(name);
-    const entry: ScopeEntry = { kind, activeFrom, activeTo };
+    const entry: ScopeEntry = { kind, activeFrom, activeTo, declPos };
     if (list === undefined) {
       this.entries.set(name, [entry]);
     } else {
@@ -230,10 +243,11 @@ export class ProvenanceResolver {
       const aRange = a.activeTo - a.activeFrom;
       const bRange = b.activeTo - b.activeFrom;
       if (aRange !== bRange) return aRange - bRange;
-      // For equal ranges, the entry with the later activeFrom wins so that
-      // later/more-nested declarations correctly shadow earlier ones.
-      if (a.activeFrom !== b.activeFrom) return b.activeFrom - a.activeFrom;
-      // Finding1: only when both range and activeFrom are identical (same
+      // For equal ranges, the entry with the later declPos wins so that
+      // a later declaration (shadowing or not) at the same scope range
+      // takes precedence over an earlier one.
+      if (a.declPos !== b.declPos) return b.declPos - a.declPos;
+      // Finding1: only when both range and declPos are identical (same
       // declaration re-registered across fixed-point passes) does the
       // non-shadow kind preference apply, so a binding discovered in a later
       // pass wins over a shadow from an earlier pass.

@@ -76,6 +76,7 @@ function collectModuleImport(
           'factory',
           range.from,
           range.to,
+          element.name.getStart(),
         );
         ctx.knownFactoryAliases.add(element.name.text);
       }
@@ -150,8 +151,9 @@ function registerBindings(
   kind: 'factory' | 'binding' | 'namespace',
   range: { readonly from: number; readonly to: number },
 ): void {
+  const declPos = declaration.name.getStart();
   for (const name of collectBindingNames(declaration.name)) {
-    ctx.resolver.register(name, kind, range.from, range.to);
+    ctx.resolver.register(name, kind, range.from, range.to, declPos);
     if (kind === 'factory') ctx.knownFactoryAliases.add(name);
     if (kind === 'binding') ctx.knownBindings.add(name);
   }
@@ -165,8 +167,9 @@ function registerRequireAliases(
   declaration: ts.VariableDeclaration,
   range: { readonly from: number; readonly to: number },
 ): void {
+  const declPos = declaration.name.getStart();
   for (const name of collectBindingNames(declaration.name)) {
-    ctx.resolver.register(name, 'require-alias', range.from, range.to);
+    ctx.resolver.register(name, 'require-alias', range.from, range.to, declPos);
   }
 }
 
@@ -274,13 +277,9 @@ function tryRegisterMemberAccessInitializer(
     registerRequireAliases(ctx, declaration, range);
     return true;
   }
-  // Property access from node:module namespace: `const cr = m.createRequire`
-  if (isNamespaceFactoryProperty(ctx, initializer)) {
-    registerBindings(ctx, declaration, 'factory', range);
-    return true;
-  }
-  // Element access from namespace: `const cr = m['createRequire']`
-  if (isNamespaceFactoryElement(ctx, initializer)) {
+  // Property/element access from node:module namespace: `const cr = m.createRequire`
+  // or `const cr = m['createRequire']`
+  if (isNamespaceFactoryMember(ctx, initializer)) {
     registerBindings(ctx, declaration, 'factory', range);
     return true;
   }
@@ -438,41 +437,24 @@ function variableDeclarationRange(declaration: ts.VariableDeclaration): {
 }
 
 /**
- * Process a variable declaration, registering factory, binding, namespace,
- * or shadow provenance as appropriate.
+ * Check whether `initializer` is a member access on a node:module namespace
+ * binding whose member name is `createRequire` (either via property access
+ * `m.createRequire` or element access `m['createRequire']`). Consolidates
+ * the logic previously duplicated in isNamespaceFactoryProperty and
+ * isNamespaceFactoryElement.
  */
-function isNamespaceFactoryProperty(
+function isNamespaceFactoryMember(
   ctx: ImportScanContext,
   initializer: ts.Expression | undefined,
-): initializer is ts.PropertyAccessExpression {
-  if (
-    initializer === undefined ||
-    !ts.isPropertyAccessExpression(initializer)
-  ) {
-    return false;
+): boolean {
+  if (initializer === undefined) return false;
+  let memberName: string | undefined;
+  if (ts.isPropertyAccessExpression(initializer)) {
+    memberName = initializer.name.text;
+  } else if (ts.isElementAccessExpression(initializer)) {
+    memberName = elementAccessLiteralText(initializer.argumentExpression);
   }
-  if (initializer.name.text !== 'createRequire') {
-    return false;
-  }
-  const namespace = initializer.expression;
-  return (
-    ts.isIdentifier(namespace) &&
-    ctx.resolver.isNamespace(namespace.text, initializer.getStart())
-  );
-}
-
-function isNamespaceFactoryElement(
-  ctx: ImportScanContext,
-  initializer: ts.Expression | undefined,
-): initializer is ts.ElementAccessExpression {
-  if (initializer === undefined || !ts.isElementAccessExpression(initializer)) {
-    return false;
-  }
-  if (
-    elementAccessLiteralText(initializer.argumentExpression) !== 'createRequire'
-  ) {
-    return false;
-  }
+  if (memberName !== 'createRequire') return false;
   const namespace = initializer.expression;
   return (
     ts.isIdentifier(namespace) &&
@@ -519,7 +501,13 @@ function collectVariableDeclaration(
 
   // Shadow: any other variable declaration of a name shadows broader provenance
   for (const name of collectBindingNames(declaration.name)) {
-    ctx.resolver.register(name, 'shadow', range.from, range.to);
+    ctx.resolver.register(
+      name,
+      'shadow',
+      range.from,
+      range.to,
+      declaration.name.getStart(),
+    );
     // Also register as a global shadow (module/exports/Object) for F3
     ctx.globalShadows.registerShadow(name, range.from, range.to);
   }
