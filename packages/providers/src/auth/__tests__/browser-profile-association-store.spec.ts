@@ -9,10 +9,11 @@ import { BrowserProfileAssociationStore } from '../browser-profile-association-s
 
 interface InMemoryFs {
   files: Map<string, string>;
+  modes: Map<string, number>;
 }
 
 function createInMemoryFs(initial: Record<string, string> = {}): InMemoryFs {
-  return { files: new Map(Object.entries(initial)) };
+  return { files: new Map(Object.entries(initial)), modes: new Map() };
 }
 
 function createStore(fs: InMemoryFs): BrowserProfileAssociationStore {
@@ -29,8 +30,14 @@ function createStore(fs: InMemoryFs): BrowserProfileAssociationStore {
         }
         return content;
       },
-      writeFile: (p: string, c: string) => {
+      writeFile: (p: string, c: string, opts?: { mode?: number }) => {
         fs.files.set(p, c);
+        if (opts?.mode !== undefined) {
+          fs.modes.set(p, opts.mode);
+        }
+      },
+      chmod: (p: string, mode: number) => {
+        fs.modes.set(p, mode);
       },
       mkdir: (_p: string, _opts?: { recursive?: boolean }) => {
         /* no-op for in-memory fs */
@@ -88,6 +95,19 @@ describe('BrowserProfileAssociationStore', () => {
         browser: 'chrome',
         profileDirectory: 'Default',
       });
+    });
+
+    it('writes the association file with owner-only permissions', () => {
+      const filePath = '/fake/path/oauth-browser-profiles.json';
+      const fs = createInMemoryFs();
+      const store = createStore(fs);
+
+      store.setAssociation('anthropic', 'default', {
+        browser: 'chrome',
+        profileDirectory: 'Default',
+      });
+
+      expect(fs.modes.get(filePath)).toBe(0o600);
     });
   });
 
@@ -362,6 +382,24 @@ describe('BrowserProfileAssociationStore', () => {
         'Bucket must be non-empty',
       );
     });
+  });
+
+  it('rejects empty profile directories and control characters', () => {
+    const store = createStore(createInMemoryFs());
+
+    expect(() =>
+      store.setAssociation('anthropic', 'default', {
+        browser: 'chrome',
+        profileDirectory: '',
+      }),
+    ).toThrow('Profile directory must be non-empty');
+    expect(() =>
+      store.setAssociation('anthropic', 'default', {
+        browser: 'chrome',
+        profileDirectory: 'Default',
+        displayName: 'Work\u001B[31m',
+      }),
+    ).toThrow('Display name must not contain control characters');
   });
 
   describe('immutability', () => {

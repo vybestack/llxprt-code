@@ -32,8 +32,10 @@ type BrowserExecOptions = ExecFileOptions & {
  * and the specific-browser path use these so behavior stays consistent.
  */
 function getBrowserExecOptions(): BrowserExecOptions {
+  const browserEnv = { ...env };
+  delete browserEnv.SHELL;
   return {
-    env: { ...env, SHELL: undefined },
+    env: browserEnv,
     detached: true,
     stdio: 'ignore',
   };
@@ -74,7 +76,7 @@ const WINDOWS_CHROME_PATHS = [
     ),
   () =>
     nodePath.join(
-      envOr(env['PROGRAMFILES(X86)'] ?? undefined, 'C:\\Program Files (x86)'),
+      envOr(env['PROGRAMFILES(X86)'], 'C:\\Program Files (x86)'),
       'Google',
       'Chrome',
       'Application',

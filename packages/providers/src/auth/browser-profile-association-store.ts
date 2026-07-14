@@ -41,7 +41,8 @@ function isSupportedBrowserKind(value: unknown): value is BrowserKind {
  */
 export interface AssociationStoreFs {
   readFile?: (p: string) => string;
-  writeFile?: (p: string, c: string) => void;
+  writeFile?: (p: string, c: string, opts?: { mode?: number }) => void;
+  chmod?: (p: string, mode: number) => void;
   exists?: (p: string) => boolean;
   mkdir?: (p: string, opts?: { recursive?: boolean }) => void;
 }
@@ -106,6 +107,29 @@ function cloneAssociation(
     clone.displayName = source.displayName;
   }
   return clone;
+}
+
+const CONTROL_CHARACTERS = /\p{Cc}/u;
+
+function isValidAssociationText(value: string, allowEmpty: boolean): boolean {
+  return (allowEmpty || value.length > 0) && !CONTROL_CHARACTERS.test(value);
+}
+
+function validateAssociation(association: BrowserProfileAssociation): void {
+  if (!isSupportedBrowserKind(association.browser)) {
+    throw new Error(`Unsupported browser kind: ${String(association.browser)}`);
+  }
+  if (!isValidAssociationText(association.profileDirectory, false)) {
+    throw new Error(
+      'Profile directory must be non-empty and must not contain control characters.',
+    );
+  }
+  if (
+    association.displayName !== undefined &&
+    !isValidAssociationText(association.displayName, true)
+  ) {
+    throw new Error('Display name must not contain control characters.');
+  }
 }
 
 /**
@@ -176,14 +200,16 @@ function isAssociationEntry(
   }
   if (
     !('profileDirectory' in value) ||
-    typeof value.profileDirectory !== 'string'
+    typeof value.profileDirectory !== 'string' ||
+    !isValidAssociationText(value.profileDirectory, false)
   ) {
     return false;
   }
   return (
     !('displayName' in value) ||
     value.displayName === undefined ||
-    typeof value.displayName === 'string'
+    (typeof value.displayName === 'string' &&
+      isValidAssociationText(value.displayName, true))
   );
 }
 
@@ -200,7 +226,12 @@ function isAssociationEntry(
 export class BrowserProfileAssociationStore {
   private readonly filePath: string;
   private readonly readFileFn: (p: string) => string;
-  private readonly writeFileFn: (p: string, c: string) => void;
+  private readonly writeFileFn: (
+    p: string,
+    c: string,
+    opts?: { mode?: number },
+  ) => void;
+  private readonly chmodFn: (p: string, mode: number) => void;
   private readonly existsFn: (p: string) => boolean;
   private readonly mkdirFn: (p: string, opts?: { recursive?: boolean }) => void;
 
@@ -210,7 +241,9 @@ export class BrowserProfileAssociationStore {
   ) {
     this.filePath = filePath;
     this.readFileFn = fsOpts?.readFile ?? ((p) => fs.readFileSync(p, 'utf-8'));
-    this.writeFileFn = fsOpts?.writeFile ?? fs.writeFileSync;
+    this.writeFileFn =
+      fsOpts?.writeFile ?? ((p, c, opts) => fs.writeFileSync(p, c, opts));
+    this.chmodFn = fsOpts?.chmod ?? fs.chmodSync;
     this.existsFn = fsOpts?.exists ?? fs.existsSync;
     this.mkdirFn = fsOpts?.mkdir ?? ((p, opts) => fs.mkdirSync(p, opts));
   }
@@ -224,9 +257,10 @@ export class BrowserProfileAssociationStore {
     bucket: string,
     association: BrowserProfileAssociation,
   ): void {
+    const key = associationKey(provider, bucket);
+    validateAssociation(association);
     const result = this.readData();
     this.assertWritable(result);
-    const key = associationKey(provider, bucket);
 
     result.data.associations[key] = cloneAssociation(association);
     this.writeData(result.data);
@@ -334,6 +368,11 @@ export class BrowserProfileAssociationStore {
     // so no separate existence check is needed (and one would introduce a
     // TOCTOU window between check and write).
     this.mkdirFn(dir, { recursive: true });
-    this.writeFileFn(this.filePath, JSON.stringify(data, null, 2));
+    this.writeFileFn(this.filePath, JSON.stringify(data, null, 2), {
+      mode: 0o600,
+    });
+    if (process.platform !== 'win32') {
+      this.chmodFn(this.filePath, 0o600);
+    }
   }
 }
