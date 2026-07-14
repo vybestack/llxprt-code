@@ -735,7 +735,7 @@ export class Turn {
         );
       } finally {
         timeoutController.abort();
-        await closeIteratorBounded(streamIterator);
+        await closeIteratorBounded(streamIterator, timeoutSignal);
         signal.removeEventListener('abort', onParentAbort);
       }
     } catch (e) {
@@ -788,7 +788,7 @@ export class Turn {
         // On a first-next failure the iterator has not yet been handed to
         // run() (streamIterator is still unassigned there), so close it here to
         // avoid leaking the provider connection before rethrowing.
-        await closeIteratorBounded(iterator);
+        await closeIteratorBounded(iterator, timeoutSignal);
         throw error;
       }
     }
@@ -853,11 +853,11 @@ export class Turn {
       // resolves LATE (first event arrived just after the abort) or REJECTS (the
       // aborted provider throws), and swallow the rejection to avoid an
       // unhandled rejection under strict Node modes.
-      await closeIteratorBounded(acquiredIterator);
+      await closeIteratorBounded(acquiredIterator, timeoutSignal);
       firstEventPromise
         .then(async (late) => {
           if (late.iterator !== acquiredIterator) {
-            await closeIteratorBounded(late.iterator);
+            await closeIteratorBounded(late.iterator, timeoutSignal);
           }
         })
         .catch(() => undefined);

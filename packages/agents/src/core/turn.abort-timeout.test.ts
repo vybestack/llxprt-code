@@ -303,22 +303,30 @@ describe('Turn run - abort and idle timeout', () => {
         'test',
       );
 
-      const mockResponseStream = (async function* () {
-        yield {
-          type: StreamEventType.CHUNK,
-          value: mockChunk({ text: 'First part' }),
-        };
-        await new Promise<void>(() => {});
-      })();
-
       mockSendMessageStream.mockImplementation(async (params) => {
         const config = params as {
           config?: { abortSignal?: AbortSignal };
         };
-        if (config.config?.abortSignal) {
-          abortSignals.push(config.config.abortSignal);
+        const providerSignal = config.config?.abortSignal;
+        if (providerSignal === undefined) {
+          throw new Error('Provider abort signal is required');
         }
-        return mockResponseStream;
+        abortSignals.push(providerSignal);
+        return (async function* () {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: mockChunk({ text: 'First part' }),
+          };
+          if (!providerSignal.aborted) {
+            await new Promise<void>((_resolve, reject) => {
+              providerSignal.addEventListener(
+                'abort',
+                () => reject(new DOMException('Aborted', 'AbortError')),
+                { once: true },
+              );
+            });
+          }
+        })();
       });
 
       const eventsPromise = (async () => {
@@ -385,14 +393,23 @@ describe('Turn run - abort and idle timeout', () => {
         'test',
       );
 
-      const createMockStream = (shouldHang: boolean) =>
+      const createMockStream = (
+        shouldHang: boolean,
+        providerSignal: AbortSignal,
+      ) =>
         (async function* () {
           yield {
             type: StreamEventType.CHUNK,
             value: mockChunk({ text: shouldHang ? 'Hanging' : 'OK' }),
           };
-          if (shouldHang) {
-            await new Promise<void>(() => {});
+          if (shouldHang && !providerSignal.aborted) {
+            await new Promise<void>((_resolve, reject) => {
+              providerSignal.addEventListener(
+                'abort',
+                () => reject(new DOMException('Aborted', 'AbortError')),
+                { once: true },
+              );
+            });
           }
         })();
 
@@ -401,10 +418,12 @@ describe('Turn run - abort and idle timeout', () => {
         const config = params as {
           config?: { abortSignal?: AbortSignal };
         };
-        if (config.config?.abortSignal) {
-          abortSignals.push(config.config.abortSignal);
+        const providerSignal = config.config?.abortSignal;
+        if (providerSignal === undefined) {
+          throw new Error('Provider abort signal is required');
         }
-        return createMockStream(callCount === 1);
+        abortSignals.push(providerSignal);
+        return createMockStream(callCount === 1, providerSignal);
       });
 
       const events1Promise = (async () => {

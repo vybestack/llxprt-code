@@ -633,7 +633,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       },
       async return() {
         returnCalled = true;
-        return { done: true, value: undefined };
+        throw new Error('cleanup failed');
       },
     };
     mockSendMessageStream.mockResolvedValue({
@@ -649,9 +649,12 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     }
 
     // The failing iterator MUST have been closed to release the provider
-    // connection, and the error surfaces terminally (not a timeout).
+    // connection, and the provider error surfaces instead of the cleanup error.
     expect(returnCalled).toBe(true);
-    expect(events.some((e) => e.type === AgentEventType.Error)).toBe(true);
+    expect(events).toContainEqual({
+      type: AgentEventType.Error,
+      value: { error: { message: 'first next failed' } },
+    });
   });
 
   it('control: first-response DISABLED (0) with a normal fast stream → events flow, no timeout', async () => {
