@@ -52,10 +52,10 @@ const mockDebugLogger = vi.hoisted(() => ({
   debug: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
+vi.mock('@vybestack/llxprt-code-telemetry', async () => {
   const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-core')
-  >('@vybestack/llxprt-code-core');
+    typeof import('@vybestack/llxprt-code-telemetry')
+  >('@vybestack/llxprt-code-telemetry');
   return {
     ...actual,
     debugLogger: mockDebugLogger,

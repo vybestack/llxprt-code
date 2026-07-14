@@ -17,7 +17,7 @@ import { CommandKind } from './types.js';
 import type { CommandArgumentSchema } from './schema/types.js';
 import { MessageType } from '../types.js';
 import { Colors } from '../colors.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 const logger = new DebugLogger('llxprt:ui:subagent');
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';

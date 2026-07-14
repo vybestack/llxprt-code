@@ -32,6 +32,17 @@ export {
 } from './interfaces/index.js';
 
 // --- Types ---
+export type {
+  ContentPart,
+  ContentPartUnion,
+  ContentPartListUnion,
+  ToolCallRequest,
+  ToolCallResponse,
+  FunctionDeclaration,
+  ToolDeclarations,
+  InlineData,
+  CallableTool,
+} from './types/wire-types.js';
 export {
   type ToolContext,
   type ContextAwareTool,

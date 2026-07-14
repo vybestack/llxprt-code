@@ -7,7 +7,11 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { Storage } from '@vybestack/llxprt-code-settings';
+import {
+  Storage,
+  writeProfileFile,
+  type ProfileWriteResult,
+} from '@vybestack/llxprt-code-settings';
 import { PROVIDER_OPTIONS } from './constants.js';
 import { WizardStep } from './types.js';
 import type { WizardState, ConnectionTestResult } from './types.js';
@@ -67,29 +71,44 @@ export function generateProfileNameSuggestions(
 }
 
 export function buildProfileJSON(state: WizardState): Record<string, unknown> {
+  const ephemeralSettings: Record<string, unknown> = {};
+  const modelParams: Record<string, unknown> = {};
+
+  // Add base URL if present
+  if (state.config.baseUrl) {
+    ephemeralSettings['base-url'] = state.config.baseUrl;
+  }
+
+  // Add authentication
+  if (state.config.auth.type === 'apikey') {
+    ephemeralSettings['auth-key'] = state.config.auth.value;
+  } else if (state.config.auth.type === 'keyfile') {
+    ephemeralSettings['auth-keyfile'] = state.config.auth.value;
+  }
+
+  // Add parameters if configured
+  if (state.config.params) {
+    if (state.config.params.temperature !== undefined) {
+      modelParams.temperature = state.config.params.temperature;
+    }
+    if (state.config.params.maxTokens !== undefined) {
+      modelParams.max_tokens = state.config.params.maxTokens;
+    }
+    if (state.config.params.contextLimit !== undefined) {
+      ephemeralSettings['context-limit'] = state.config.params.contextLimit;
+    }
+  }
+
   const profile: Record<string, unknown> = {
     version: 1,
     provider:
       state.config.provider === 'custom' ? 'openai' : state.config.provider,
     model: state.config.model,
-    modelParams: {},
-    ephemeralSettings: {},
+    modelParams,
+    ephemeralSettings,
   };
 
-  // Add base URL if present
-  if (state.config.baseUrl) {
-    (profile.ephemeralSettings as Record<string, unknown>)['base-url'] =
-      state.config.baseUrl;
-  }
-
-  // Add authentication
-  if (state.config.auth.type === 'apikey') {
-    (profile.ephemeralSettings as Record<string, unknown>)['auth-key'] =
-      state.config.auth.value;
-  } else if (state.config.auth.type === 'keyfile') {
-    (profile.ephemeralSettings as Record<string, unknown>)['auth-keyfile'] =
-      state.config.auth.value;
-  } else if (state.config.auth.type === 'oauth') {
+  if (state.config.auth.type === 'oauth') {
     profile.auth = {
       type: 'oauth',
       buckets:
@@ -97,22 +116,6 @@ export function buildProfileJSON(state: WizardState): Record<string, unknown> {
           ? state.config.auth.buckets
           : ['default'],
     };
-  }
-
-  // Add parameters if configured
-  if (state.config.params) {
-    if (state.config.params.temperature !== undefined) {
-      (profile.modelParams as Record<string, unknown>).temperature =
-        state.config.params.temperature;
-    }
-    if (state.config.params.maxTokens !== undefined) {
-      (profile.modelParams as Record<string, unknown>).max_tokens =
-        state.config.params.maxTokens;
-    }
-    if (state.config.params.contextLimit !== undefined) {
-      (profile.ephemeralSettings as Record<string, unknown>)['context-limit'] =
-        state.config.params.contextLimit;
-    }
   }
 
   return profile;
@@ -123,7 +126,7 @@ function isExistingFileError(error: unknown): boolean {
     typeof error === 'object' &&
     error !== null &&
     'code' in error &&
-    (error as { code?: unknown }).code === 'EEXIST'
+    error.code === 'EEXIST'
   );
 }
 
@@ -139,20 +142,23 @@ export async function saveProfile(
 }> {
   try {
     const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
-
-    // Ensure directory exists with restrictive permissions (owner-only)
-    await fs.mkdir(profilesDir, { recursive: true, mode: 0o700 });
-
-    // Write profile with restrictive permissions (owner read/write only)
-    const profilePath = path.join(profilesDir, `${name}.json`);
     const data = JSON.stringify(config, null, 2);
-    await fs.writeFile(profilePath, data, {
-      encoding: 'utf-8',
-      mode: 0o600,
-      flag: opts.overwrite === true ? 'w' : 'wx',
-    });
-
-    return { success: true, path: profilePath };
+    const writeMode = opts.overwrite === true ? 'overwrite' : 'create';
+    const result: ProfileWriteResult = await writeProfileFile(
+      profilesDir,
+      name,
+      data,
+      writeMode,
+    );
+    if (result.kind === 'exists') {
+      return {
+        success: false,
+        alreadyExists: true,
+        error: 'Profile name already exists',
+        path: result.path,
+      };
+    }
+    return { success: true, path: result.path };
   } catch (error) {
     if (isExistingFileError(error)) {
       return {

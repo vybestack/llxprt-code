@@ -274,6 +274,9 @@ function* handleReasoningItem(
       ? {
           ...baseReasoningBlock,
           encryptedContent: event.item?.encrypted_content,
+          providerMetadata: {
+            'openai.responses.reasoningId': event.item?.id,
+          },
         }
       : baseReasoningBlock;
 

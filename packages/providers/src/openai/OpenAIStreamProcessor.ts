@@ -73,6 +73,7 @@ export interface StreamProcessorDeps {
   textToolParser: GemmaToolCallParser;
   logger: DebugLogger;
   getBaseURL: () => string | undefined;
+  reasoningFieldName?: string;
 }
 
 /**
@@ -244,9 +245,14 @@ function processReasoningDelta(
   deps: StreamProcessorDeps,
 ): void {
   const { thinking: reasoningBlock, toolCalls: reasoningToolCalls } =
-    parseStreamingReasoningDelta(choice.delta, deps.logger);
+    parseStreamingReasoningDelta(
+      choice.delta,
+      deps.logger,
+      deps.reasoningFieldName,
+    );
   if (reasoningBlock) {
     state.accumulatedReasoningContent += reasoningBlock.thought;
+    state.reasoningSourceField = reasoningBlock.sourceField;
   }
   if (reasoningToolCalls.length > 0) {
     const stats = deps.toolCallPipeline.getStats();
@@ -586,7 +592,7 @@ function* emitCombinedTerminalContent(
     combinedBlocks.push({
       type: 'thinking',
       thought: cleanedReasoning,
-      sourceField: 'reasoning_content',
+      sourceField: state.reasoningSourceField ?? 'reasoning_content',
       isHidden: false,
     } as ThinkingBlock);
   }

@@ -10,8 +10,8 @@ import {
   type EditorType,
   type MessageBus,
   type ToolCallRequestInfo,
-  debugLogger,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   MessageType,
@@ -29,7 +29,6 @@ import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js'
 import { classifyCompletedTools } from './toolCompletionHandler.js';
 import { useKeypress, type Key } from '../useKeypress.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
-import { type QueuedSubmission } from './types.js';
 import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 export function useStreamingState(
@@ -220,7 +219,7 @@ export function useCancellation(
   >,
   onCancelSubmit: (shouldRestorePrompt?: boolean) => void,
   setIsResponding: React.Dispatch<React.SetStateAction<boolean>>,
-  queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]>,
+  setShellInputFocused: (value: boolean) => void,
   cancelRunningAsyncTasks: () => void = () => {},
 ) {
   const cancelOngoingRequest = useCallback(() => {
@@ -233,14 +232,14 @@ export function useCancellation(
     if (turnCancelledRef.current) return;
     turnCancelledRef.current = true;
     abortControllerRef.current?.abort();
-    if (abortControllerRef.current) cancelAllToolCalls();
+    cancelAllToolCalls();
     cancelRunningAsyncTasks();
     if (pendingHistoryItemRef.current) flushPendingHistoryItem(Date.now());
     addItem({ type: MessageType.INFO, text: 'Request cancelled.' }, Date.now());
     setPendingHistoryItem(null);
     onCancelSubmit();
     setIsResponding(false);
-    queuedSubmissionsRef.current = [];
+    setShellInputFocused(false);
   }, [
     streamingState,
     turnCancelledRef,
@@ -253,7 +252,7 @@ export function useCancellation(
     setPendingHistoryItem,
     onCancelSubmit,
     setIsResponding,
-    queuedSubmissionsRef,
+    setShellInputFocused,
   ]);
   const cancelOngoingRequestRef = useRef(cancelOngoingRequest);
   cancelOngoingRequestRef.current = cancelOngoingRequest;

@@ -13,9 +13,7 @@ import type {
   McpServerDetail,
 } from '@vybestack/llxprt-code-agents';
 import {
-  getMCPDiscoveryState,
   getMCPServerStatus,
-  MCPDiscoveryState,
   MCPServerStatus,
   mcpServerRequiresOAuth,
 } from '@vybestack/llxprt-code-mcp';
@@ -452,14 +450,21 @@ export async function buildMcpStatusMessage(
   const connectingServers = serverNames.filter(
     (name) => getMCPServerStatus(name) === MCPServerStatus.CONNECTING,
   );
-  const discoveryState = getMCPDiscoveryState();
+  // Derive the aggregate discovery indicator from the REAL manager instance
+  // via the Agent surface, NOT the stale process-global singleton. The
+  // singleton is never written by the real McpClientManager startup path, so
+  // reading it here caused /mcp list to diverge from actual server state
+  // (issue #2516).
+  const discoveryState = agent.mcp.discoveryState();
 
   let message = '';
 
-  if (
-    discoveryState === MCPDiscoveryState.IN_PROGRESS ||
-    connectingServers.length > 0
-  ) {
+  // The startup banner reflects an IN-PROGRESS aggregate only. 'failed' and
+  // 'partial' are intentionally NOT banner-worthy: per-server failures are
+  // already surfaced as [BLOCKED]/disconnected indicators + error details in
+  // each server's entry below, so a banner would be redundant and misleading
+  // (discovery has settled, not "starting up").
+  if (discoveryState === 'pending' || connectingServers.length > 0) {
     message += `${COLOR_YELLOW}MCP servers are starting up (${connectingServers.length} initializing)...${RESET_COLOR}\n`;
     message += `${COLOR_CYAN}Note: First startup may take longer. Tool availability will update automatically.${RESET_COLOR}\n\n`;
   }

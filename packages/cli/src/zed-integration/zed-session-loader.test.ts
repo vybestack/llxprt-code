@@ -179,7 +179,7 @@ describe('readAgentHistoryAsIContent (issue #1604 re-attach replay bridge)', () 
     const { agent, getHistory } = buildAgent([
       { role: 'user', parts: [{ text: 'hello there' }] },
       { role: 'model', parts: [{ text: 'general kenobi' }] },
-    ]);
+    ] as unknown as readonly AgentMessage[]);
 
     const items = await readAgentHistoryAsIContent(agent);
 

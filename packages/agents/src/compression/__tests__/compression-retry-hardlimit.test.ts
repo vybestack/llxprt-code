@@ -108,8 +108,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     vi.spyOn(historyService, 'startCompression').mockImplementation(() => {});
     vi.spyOn(historyService, 'endCompression').mockImplementation(() => {});
     vi.spyOn(historyService, 'getCurated').mockReturnValue([
-      { role: 'user', parts: [{ text: 'hello' }] },
-      { role: 'model', parts: [{ text: 'hi' }] },
+      { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
     ]);
     vi.spyOn(historyService, 'getRawHistory').mockReturnValue([]);
     vi.spyOn(historyService, 'applyDensityResult').mockResolvedValue(undefined);
@@ -188,8 +188,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
           compressionAttempts++;
           return {
             newHistory: [
-              { role: 'user', parts: [{ text: 'hello' }] },
-              { role: 'model', parts: [{ text: 'hi' }] },
+              { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+              { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
             ],
             metadata: {
               originalMessageCount: 10,
@@ -336,8 +336,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             // Primary succeeds but barely reduces tokens (returns same history)
             return {
               newHistory: [
-                { role: 'user', parts: [{ text: 'hello' }] },
-                { role: 'model', parts: [{ text: 'hi' }] },
+                { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+                { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
               ],
               metadata: {
                 originalMessageCount: 10,
@@ -390,7 +390,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             compress: vi.fn().mockImplementation(async () => {
               truncationCalled = true;
               return {
-                newHistory: [{ role: 'user', parts: [{ text: 'truncated' }] }],
+                newHistory: [
+                  {
+                    speaker: 'human',
+                    blocks: [{ type: 'text', text: 'truncated' }],
+                  },
+                ],
                 metadata: {
                   originalMessageCount: 10,
                   compressedMessageCount: 1,
@@ -409,7 +414,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
           compress: vi.fn().mockImplementation(async () => {
             primaryCallCount++;
             return {
-              newHistory: [{ role: 'user', parts: [{ text: 'compressed' }] }],
+              newHistory: [
+                {
+                  speaker: 'human',
+                  blocks: [{ type: 'text', text: 'compressed' }],
+                },
+              ],
               metadata: {
                 originalMessageCount: 10,
                 compressedMessageCount: 1,
@@ -470,7 +480,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             primaryCallCount++;
             if (primaryCallCount === 1) {
               return {
-                newHistory: [{ role: 'user', parts: [{ text: 'compressed' }] }],
+                newHistory: [
+                  {
+                    speaker: 'human',
+                    blocks: [{ type: 'text', text: 'compressed' }],
+                  },
+                ],
                 metadata: {
                   originalMessageCount: 10,
                   compressedMessageCount: 1,
@@ -516,7 +531,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             compress: vi.fn().mockImplementation(async () => {
               fallbackApplied = true;
               return {
-                newHistory: [{ role: 'user', parts: [{ text: 'truncated' }] }],
+                newHistory: [
+                  {
+                    speaker: 'human',
+                    blocks: [{ type: 'text', text: 'truncated' }],
+                  },
+                ],
                 metadata: {
                   originalMessageCount: 10,
                   compressedMessageCount: 1,
@@ -621,7 +641,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
           requiresLLM: true,
           trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
           compress: vi.fn().mockResolvedValue({
-            newHistory: [{ role: 'user', parts: [{ text: 'compressed' }] }],
+            newHistory: [
+              {
+                speaker: 'human',
+                blocks: [{ type: 'text', text: 'compressed' }],
+              },
+            ],
             metadata: {
               originalMessageCount: 10,
               compressedMessageCount: 1,
@@ -669,7 +694,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             compress: vi.fn().mockImplementation(async () => {
               fallbackApplied = true;
               return {
-                newHistory: [{ role: 'user', parts: [{ text: 'truncated' }] }],
+                newHistory: [
+                  {
+                    speaker: 'human',
+                    blocks: [{ type: 'text', text: 'truncated' }],
+                  },
+                ],
                 metadata: {
                   originalMessageCount: 10,
                   compressedMessageCount: 2,
@@ -688,8 +718,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
           compress: vi.fn().mockResolvedValue({
             // Insufficient compression triggers hard-limit truncation.
             newHistory: [
-              { role: 'user', parts: [{ text: 'hello' }] },
-              { role: 'model', parts: [{ text: 'hi' }] },
+              { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+              { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
             ],
             metadata: {
               originalMessageCount: 10,
@@ -750,8 +780,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
           compressionAttempts++;
           return {
             newHistory: [
-              { role: 'user', parts: [{ text: 'hello' }] },
-              { role: 'model', parts: [{ text: 'hi' }] },
+              { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+              { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
             ],
             metadata: {
               originalMessageCount: 10,
@@ -799,8 +829,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
             trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
             compress: vi.fn().mockResolvedValue({
               newHistory: [
-                { role: 'user', parts: [{ text: 'hello' }] },
-                { role: 'model', parts: [{ text: 'hi' }] },
+                { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+                { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
               ],
               metadata: {
                 originalMessageCount: 10,
@@ -817,8 +847,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
           trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
           compress: vi.fn().mockResolvedValue({
             newHistory: [
-              { role: 'user', parts: [{ text: 'hello' }] },
-              { role: 'model', parts: [{ text: 'hi' }] },
+              { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+              { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
             ],
             metadata: {
               originalMessageCount: 10,

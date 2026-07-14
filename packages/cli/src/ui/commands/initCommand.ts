@@ -12,7 +12,8 @@ import type {
   SlashCommandActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { PromptService, debugLogger } from '@vybestack/llxprt-code-core';
+import { PromptService } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
 

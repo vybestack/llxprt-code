@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { Part } from '@google/genai';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
   getImageInlineDataSize,
@@ -13,169 +13,154 @@ import {
   buildOmissionFeedback,
 } from './imagePayloadBudget.js';
 
-function inlineDataPart(mimeType: string, dataLength: number): Part {
+function mediaBlock(mimeType: string, dataLength: number): ContentBlock {
   return {
-    inlineData: { mimeType, data: 'A'.repeat(dataLength) },
+    type: 'media',
+    mimeType,
+    data: 'A'.repeat(dataLength),
+    encoding: 'base64',
   };
 }
 
-function functionResponsePart(name: string, id = 'call-1'): Part {
+function toolResponseBlock(name: string, id = 'call-1'): ContentBlock {
   return {
-    functionResponse: { name, id, response: { output: 'ok' } },
+    type: 'tool_response',
+    callId: id,
+    toolName: name,
+    result: { output: 'ok' },
   };
 }
 
-function textPart(text: string): Part {
-  return { text };
+function textBlock(text: string): ContentBlock {
+  return { type: 'text', text };
 }
 
 describe('getImageInlineDataSize', () => {
-  it('returns the base64 string length for inlineData parts', () => {
-    const part = inlineDataPart('image/png', 500);
-    expect(getImageInlineDataSize(part)).toBe(500);
+  it('returns the base64 string length for media blocks', () => {
+    const block = mediaBlock('image/png', 500);
+    expect(getImageInlineDataSize(block)).toBe(500);
   });
 
-  it('returns 0 for text parts', () => {
-    expect(getImageInlineDataSize(textPart('hello'))).toBe(0);
+  it('returns 0 for text blocks', () => {
+    expect(getImageInlineDataSize(textBlock('hello'))).toBe(0);
   });
 
-  it('returns 0 for functionResponse parts', () => {
-    expect(getImageInlineDataSize(functionResponsePart('read_file'))).toBe(0);
+  it('returns 0 for tool_response blocks', () => {
+    expect(getImageInlineDataSize(toolResponseBlock('read_file'))).toBe(0);
   });
 
   it.each(['application/pdf', 'video/mp4', 'audio/mpeg'])(
-    'returns 0 for non-image inlineData with MIME type %s',
+    'returns 0 for non-image media with MIME type %s',
     (mimeType) => {
-      expect(getImageInlineDataSize(inlineDataPart(mimeType, 500))).toBe(0);
+      expect(getImageInlineDataSize(mediaBlock(mimeType, 500))).toBe(0);
     },
   );
 
-  it('returns 0 for a part with empty inlineData.data', () => {
-    const part: Part = { inlineData: { mimeType: 'image/png', data: '' } };
-    expect(getImageInlineDataSize(part)).toBe(0);
+  it('returns 0 for a media block with empty data', () => {
+    const block: ContentBlock = {
+      type: 'media',
+      mimeType: 'image/png',
+      data: '',
+      encoding: 'base64',
+    };
+    expect(getImageInlineDataSize(block)).toBe(0);
   });
 
-  it('returns 0 when inlineData exists but data is undefined', () => {
-    const part: Part = { inlineData: { mimeType: 'image/png' } };
-    expect(getImageInlineDataSize(part)).toBe(0);
-  });
-
-  it('returns 0 when inlineData exists but mimeType is undefined', () => {
-    const part: Part = { inlineData: { data: 'AA' } };
-    expect(getImageInlineDataSize(part)).toBe(0);
-  });
-
-  it.each([null, 42, true])(
-    'returns 0 when inlineData.data is malformed: %s',
-    (data) => {
-      const part = { inlineData: { mimeType: 'image/png', data } } as Part;
-      expect(getImageInlineDataSize(part)).toBe(0);
-    },
-  );
-
-  it.each([null, 42, true])(
-    'returns 0 when inlineData.mimeType is malformed: %s',
-    (mimeType) => {
-      const part = { inlineData: { mimeType, data: 'AA' } } as Part;
-      expect(getImageInlineDataSize(part)).toBe(0);
-    },
-  );
-
-  it('returns 0 when inlineData is undefined', () => {
-    const part: Part = { text: 'not an image' };
-    expect(getImageInlineDataSize(part)).toBe(0);
+  it('returns 0 for a text block (not media)', () => {
+    const block: ContentBlock = { type: 'text', text: 'not an image' };
+    expect(getImageInlineDataSize(block)).toBe(0);
   });
 });
 
 describe('enforceImageBudget', () => {
-  it('passes through all parts when under budget', () => {
-    const parts = [
-      functionResponsePart('read_file', 'a'),
-      inlineDataPart('image/png', 1000),
-      functionResponsePart('read_file', 'b'),
-      inlineDataPart('image/png', 1000),
+  it('passes through all blocks when under budget', () => {
+    const blocks = [
+      toolResponseBlock('read_file', 'a'),
+      mediaBlock('image/png', 1000),
+      toolResponseBlock('read_file', 'b'),
+      mediaBlock('image/png', 1000),
     ];
 
-    const result = enforceImageBudget(parts, 10_000);
+    const result = enforceImageBudget(blocks, 10_000);
 
-    expect(result.parts).toHaveLength(4);
+    expect(result.blocks).toHaveLength(4);
     expect(result.omitted).toHaveLength(0);
     expect(result.totalImageBytes).toBe(2000);
   });
 
   it('retains images whose cumulative size exactly equals the budget', () => {
-    const parts = [
-      inlineDataPart('image/png', 500),
-      inlineDataPart('image/jpeg', 500),
+    const blocks = [
+      mediaBlock('image/png', 500),
+      mediaBlock('image/jpeg', 500),
     ];
 
-    const result = enforceImageBudget(parts, 1000);
+    const result = enforceImageBudget(blocks, 1000);
 
-    expect(result.parts).toStrictEqual(parts);
+    expect(result.blocks).toStrictEqual(blocks);
     expect(result.omitted).toHaveLength(0);
     expect(result.totalImageBytes).toBe(1000);
   });
 
-  it('retains text and functionResponse parts even when images are omitted', () => {
-    const parts = [
-      functionResponsePart('read_file', 'a'),
-      inlineDataPart('image/png', 5000),
-      textPart('some text'),
-      functionResponsePart('read_file', 'b'),
-      inlineDataPart('image/png', 5000),
+  it('retains text and tool_response blocks even when images are omitted', () => {
+    const blocks = [
+      toolResponseBlock('read_file', 'a'),
+      mediaBlock('image/png', 5000),
+      textBlock('some text'),
+      toolResponseBlock('read_file', 'b'),
+      mediaBlock('image/png', 5000),
     ];
 
-    const result = enforceImageBudget(parts, 6000);
+    const result = enforceImageBudget(blocks, 6000);
 
-    const nonImageParts = result.parts.filter(
-      (p) => getImageInlineDataSize(p) === 0,
+    const nonImageBlocks = result.blocks.filter(
+      (b) => getImageInlineDataSize(b) === 0,
     );
-    expect(nonImageParts).toHaveLength(3);
+    expect(nonImageBlocks).toHaveLength(3);
   });
 
   it('does not budget PDF, video, or audio data needed by media-aware providers', () => {
-    const parts = [
-      inlineDataPart('application/pdf', 5000),
-      inlineDataPart('video/mp4', 5000),
-      inlineDataPart('audio/mpeg', 5000),
-      inlineDataPart('image/png', 1000),
+    const blocks = [
+      mediaBlock('application/pdf', 5000),
+      mediaBlock('video/mp4', 5000),
+      mediaBlock('audio/mpeg', 5000),
+      mediaBlock('image/png', 1000),
     ];
 
-    const result = enforceImageBudget(parts, 1000);
+    const result = enforceImageBudget(blocks, 1000);
 
-    expect(result.parts).toStrictEqual(parts);
+    expect(result.blocks).toStrictEqual(blocks);
     expect(result.omitted).toHaveLength(0);
     expect(result.totalImageBytes).toBe(1000);
   });
 
   it('omits images that would exceed the budget, keeping the earliest that fit', () => {
-    const parts = [
-      functionResponsePart('read_file', 'a'),
-      inlineDataPart('image/png', 4000),
-      functionResponsePart('read_file', 'b'),
-      inlineDataPart('image/png', 4000),
-      functionResponsePart('read_file', 'c'),
-      inlineDataPart('image/png', 4000),
+    const blocks = [
+      toolResponseBlock('read_file', 'a'),
+      mediaBlock('image/png', 4000),
+      toolResponseBlock('read_file', 'b'),
+      mediaBlock('image/png', 4000),
+      toolResponseBlock('read_file', 'c'),
+      mediaBlock('image/png', 4000),
     ];
 
-    const result = enforceImageBudget(parts, 9000);
+    const result = enforceImageBudget(blocks, 9000);
 
     expect(result.omitted).toHaveLength(1);
     expect(result.omitted[0]?.toolName).toBe('read_file');
     expect(result.omitted[0]?.sizeBytes).toBe(4000);
     expect(result.totalImageBytes).toBe(8000);
-    const retainedImages = result.parts.filter((p) => p.inlineData);
+    const retainedImages = result.blocks.filter((b) => b.type === 'media');
     expect(retainedImages).toHaveLength(2);
   });
 
   it('omits all subsequent images once the budget is exhausted', () => {
-    const parts = [
-      inlineDataPart('image/png', 5000),
-      inlineDataPart('image/png', 2000),
-      inlineDataPart('image/png', 2000),
+    const blocks = [
+      mediaBlock('image/png', 5000),
+      mediaBlock('image/png', 2000),
+      mediaBlock('image/png', 2000),
     ];
 
-    const result = enforceImageBudget(parts, 6000);
+    const result = enforceImageBudget(blocks, 6000);
 
     expect(result.omitted).toHaveLength(2);
     expect(result.omitted[0]?.toolName).toBeUndefined();
@@ -183,126 +168,125 @@ describe('enforceImageBudget', () => {
   });
 
   it('handles a single image that alone exceeds the budget', () => {
-    const parts = [
-      functionResponsePart('read_file', 'a'),
-      inlineDataPart('image/png', 100_000),
+    const blocks = [
+      toolResponseBlock('read_file', 'a'),
+      mediaBlock('image/png', 100_000),
     ];
 
-    const result = enforceImageBudget(parts, 50_000);
+    const result = enforceImageBudget(blocks, 50_000);
 
     expect(result.omitted).toHaveLength(1);
     expect(result.omitted[0]?.sizeBytes).toBe(100_000);
     expect(result.omitted[0]?.mimeType).toBe('image/png');
-    expect(result.parts).toHaveLength(1);
-    expect(result.parts[0]?.functionResponse?.name).toBe('read_file');
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0]?.type).toBe('tool_response');
     expect(result.totalImageBytes).toBe(0);
   });
 
   it('tracks the tool name for each omitted image', () => {
-    const parts = [
-      functionResponsePart('read_file', 'a'),
-      inlineDataPart('image/png', 3000),
-      functionResponsePart('screenshot', 'b'),
-      inlineDataPart('image/png', 3000),
-      functionResponsePart('read_file', 'c'),
-      inlineDataPart('image/png', 3000),
+    const blocks = [
+      toolResponseBlock('read_file', 'a'),
+      mediaBlock('image/png', 3000),
+      toolResponseBlock('screenshot', 'b'),
+      mediaBlock('image/png', 3000),
+      toolResponseBlock('read_file', 'c'),
+      mediaBlock('image/png', 3000),
     ];
 
-    const result = enforceImageBudget(parts, 7000);
+    const result = enforceImageBudget(blocks, 7000);
 
     expect(result.omitted).toHaveLength(1);
     expect(result.omitted[0]?.toolName).toBe('read_file');
   });
 
-  it('returns identical parts and empty omitted when no images present', () => {
-    const parts = [
-      functionResponsePart('list_directory', 'a'),
-      textPart('3 files found'),
-      functionResponsePart('grep', 'b'),
+  it('returns identical blocks and empty omitted when no images present', () => {
+    const blocks = [
+      toolResponseBlock('list_directory', 'a'),
+      textBlock('3 files found'),
+      toolResponseBlock('grep', 'b'),
     ];
 
-    const result = enforceImageBudget(parts, 100);
+    const result = enforceImageBudget(blocks, 100);
 
-    expect(result.parts).toStrictEqual(parts);
+    expect(result.blocks).toStrictEqual(blocks);
     expect(result.omitted).toHaveLength(0);
     expect(result.totalImageBytes).toBe(0);
   });
 
-  it('preserves part ordering for retained images and non-image parts', () => {
-    const parts = [
-      functionResponsePart('read_file', 'a'),
-      inlineDataPart('image/png', 1000),
-      functionResponsePart('grep', 'b'),
-      textPart('found it'),
+  it('preserves block ordering for retained images and non-image blocks', () => {
+    const blocks = [
+      toolResponseBlock('read_file', 'a'),
+      mediaBlock('image/png', 1000),
+      toolResponseBlock('grep', 'b'),
+      textBlock('found it'),
     ];
 
-    const result = enforceImageBudget(parts, 100_000);
+    const result = enforceImageBudget(blocks, 100_000);
 
-    expect(result.parts.map((p) => p.functionResponse?.name)).toStrictEqual([
-      'read_file',
-      undefined,
-      'grep',
-      undefined,
-    ]);
+    expect(
+      result.blocks.map((b) =>
+        b.type === 'tool_response' ? b.toolName : undefined,
+      ),
+    ).toStrictEqual(['read_file', undefined, 'grep', undefined]);
   });
 
-  it('handles empty parts array', () => {
+  it('handles empty blocks array', () => {
     const result = enforceImageBudget([], 1000);
-    expect(result.parts).toStrictEqual([]);
+    expect(result.blocks).toStrictEqual([]);
     expect(result.omitted).toHaveLength(0);
   });
 
   it('works with the default budget constant', () => {
-    const parts = [
-      functionResponsePart('read_file', 'a'),
-      inlineDataPart('image/png', DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES - 1),
+    const blocks = [
+      toolResponseBlock('read_file', 'a'),
+      mediaBlock('image/png', DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES - 1),
     ];
 
     const result = enforceImageBudget(
-      parts,
+      blocks,
       DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
     );
     expect(result.omitted).toHaveLength(0);
   });
 
-  it('returns all parts unchanged when budgetBytes is zero', () => {
-    const parts = [
-      functionResponsePart('read_file', 'a'),
-      inlineDataPart('image/png', 5000),
+  it('returns all blocks unchanged when budgetBytes is zero', () => {
+    const blocks = [
+      toolResponseBlock('read_file', 'a'),
+      mediaBlock('image/png', 5000),
     ];
-    const result = enforceImageBudget(parts, 0);
-    expect(result.parts).toStrictEqual(parts);
+    const result = enforceImageBudget(blocks, 0);
+    expect(result.blocks).toStrictEqual(blocks);
     expect(result.omitted).toHaveLength(0);
   });
 
-  it('returns all parts unchanged when budgetBytes is negative', () => {
-    const parts = [
-      functionResponsePart('read_file', 'a'),
-      inlineDataPart('image/png', 5000),
+  it('returns all blocks unchanged when budgetBytes is negative', () => {
+    const blocks = [
+      toolResponseBlock('read_file', 'a'),
+      mediaBlock('image/png', 5000),
     ];
-    const result = enforceImageBudget(parts, -1);
-    expect(result.parts).toStrictEqual(parts);
+    const result = enforceImageBudget(blocks, -1);
+    expect(result.blocks).toStrictEqual(blocks);
     expect(result.omitted).toHaveLength(0);
   });
 
-  it('returns all parts unchanged when budgetBytes is NaN', () => {
-    const parts = [
-      functionResponsePart('read_file', 'a'),
-      inlineDataPart('image/png', 5000),
+  it('returns all blocks unchanged when budgetBytes is NaN', () => {
+    const blocks = [
+      toolResponseBlock('read_file', 'a'),
+      mediaBlock('image/png', 5000),
     ];
-    const result = enforceImageBudget(parts, NaN);
-    expect(result.parts).toStrictEqual(parts);
+    const result = enforceImageBudget(blocks, NaN);
+    expect(result.blocks).toStrictEqual(blocks);
     expect(result.omitted).toHaveLength(0);
   });
 
-  it('returns all parts unchanged when budgetBytes is Infinity', () => {
-    const parts = [
-      functionResponsePart('read_file', 'a'),
-      inlineDataPart('image/png', 5000),
+  it('returns all blocks unchanged when budgetBytes is Infinity', () => {
+    const blocks = [
+      toolResponseBlock('read_file', 'a'),
+      mediaBlock('image/png', 5000),
     ];
-    const result = enforceImageBudget(parts, Infinity);
+    const result = enforceImageBudget(blocks, Infinity);
     expect(result.omitted).toHaveLength(0);
-    expect(result.parts).toStrictEqual(parts);
+    expect(result.blocks).toStrictEqual(blocks);
   });
 });
 

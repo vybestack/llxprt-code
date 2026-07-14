@@ -150,14 +150,17 @@ vi.mock('./useStateAndRef.js', () => ({
   ] => {
     const [state, setState] = React.useState(initial);
     const ref = React.useRef(initial);
-    const setStateInternal = (valueOrUpdater: React.SetStateAction<T>) => {
-      const nextValue =
-        typeof valueOrUpdater === 'function'
-          ? valueOrUpdater(ref.current)
-          : valueOrUpdater;
-      ref.current = nextValue;
-      setState(nextValue);
-    };
+    const setStateInternal = React.useCallback(
+      (valueOrUpdater: React.SetStateAction<T>) => {
+        const nextValue =
+          typeof valueOrUpdater === 'function'
+            ? valueOrUpdater(ref.current)
+            : valueOrUpdater;
+        ref.current = nextValue;
+        setState(nextValue);
+      },
+      [],
+    );
     return [state, ref, setStateInternal];
   },
 }));

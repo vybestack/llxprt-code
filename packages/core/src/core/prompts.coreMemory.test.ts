@@ -25,6 +25,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
+const PROJECT_DIR = path.resolve('/my/project');
+
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return {
@@ -106,7 +108,7 @@ describe('Core (System) Memory', () => {
             typeof filePath === 'string' ? filePath : filePath.toString();
           if (
             pathStr.includes('.LLXPRT_SYSTEM') &&
-            pathStr.includes('/my/project')
+            pathStr.includes(PROJECT_DIR)
           ) {
             return 'Use pnpm for this project';
           }
@@ -114,7 +116,7 @@ describe('Core (System) Memory', () => {
         },
       );
 
-      const result = await loadCoreMemoryContent('/my/project');
+      const result = await loadCoreMemoryContent(PROJECT_DIR);
       expect(result).toContain('Use pnpm for this project');
     });
 
@@ -131,7 +133,7 @@ describe('Core (System) Memory', () => {
           }
           if (
             pathStr.includes('.LLXPRT_SYSTEM') &&
-            pathStr.includes('/my/project')
+            pathStr.includes(PROJECT_DIR)
           ) {
             return 'Project directive';
           }
@@ -139,7 +141,7 @@ describe('Core (System) Memory', () => {
         },
       );
 
-      const result = await loadCoreMemoryContent('/my/project');
+      const result = await loadCoreMemoryContent(PROJECT_DIR);
       expect(result).toContain('Global directive');
       expect(result).toContain('Project directive');
     });
@@ -159,7 +161,7 @@ describe('Core (System) Memory', () => {
         },
       );
 
-      const result = await loadCoreMemoryContent('/my/project');
+      const result = await loadCoreMemoryContent(PROJECT_DIR);
       expect(result).toBe('');
     });
   });

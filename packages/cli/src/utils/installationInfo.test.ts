@@ -23,8 +23,16 @@ const { mockDebugLogger } = vi.hoisted(() => ({
 
 vi.mock('@vybestack/llxprt-code-core', () => ({
   isGitRepository: vi.fn(),
-  debugLogger: mockDebugLogger,
 }));
+
+vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-telemetry')>();
+  return {
+    ...actual,
+    debugLogger: mockDebugLogger,
+  };
+});
 
 vi.mock('fs', async (importOriginal) => {
   const actualFs = await importOriginal<typeof fs>();

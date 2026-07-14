@@ -14,7 +14,10 @@ import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
-import { setupGeminiClient } from './client-test-helpers.js';
+import {
+  setupGeminiClient,
+  type MockResponseShape,
+} from './client-test-helpers.js';
 
 // Mock prompts module before imports
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -76,7 +79,6 @@ const {
   };
 });
 
-vi.mock('@google/genai');
 vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
   ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
     analyzeComplexity: vi.fn().mockReturnValue({
@@ -132,7 +134,7 @@ vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
-    getResponseText: (result: GenerateContentResponse) =>
+    getResponseText: (result: MockResponseShape) =>
       result.candidates?.[0]?.content?.parts
         ?.map((part) => part.text)
         .join('') ?? undefined,
@@ -216,18 +218,22 @@ describe('Gemini Client (client.ts)', () => {
           setHistory: vi.fn(),
           sendMessage: vi.fn().mockResolvedValue({ text: 'summary' }),
           // Assume history is not empty for delta checks
-          getHistory: vi
-            .fn()
-            .mockReturnValue([
-              { role: 'user', parts: [{ text: 'previous message' }] },
-            ]),
+          getHistory: vi.fn().mockReturnValue([
+            {
+              speaker: 'user',
+              blocks: [{ type: 'text', text: 'previous message' }],
+            },
+          ]),
           getLastPromptTokenCount: vi.fn().mockReturnValue(0),
         };
         client['chat'] = mockChat as ChatSession;
 
         // Override the client.getHistory mock to return non-empty history for delta tests
         (client.getHistory as ReturnType<typeof vi.fn>).mockResolvedValue([
-          { role: 'user', parts: [{ text: 'previous message' }] },
+          {
+            speaker: 'user',
+            blocks: [{ type: 'text', text: 'previous message' }],
+          },
         ]);
 
         const mockGenerator: Partial<ContentGenerator> = {
@@ -455,9 +461,12 @@ describe('Gemini Client (client.ts)', () => {
 
         // Also verify it's the full context, not a delta.
         const call = contextCall![0];
-        const contextText = call.parts[0].text;
+        const textBlock = call.blocks.find(
+          (b: { type: string }) => b.type === 'text',
+        );
+        const contextText = textBlock?.text;
         const contextJson = JSON.parse(
-          contextText.match(/```json\n(.*)\n```/s)![1],
+          contextText!.match(/```json\n(.*)\n```/s)![1],
         );
         expect(contextJson).toHaveProperty('activeFile');
         expect(contextJson.activeFile.path).toBe('/path/to/active/file.ts');

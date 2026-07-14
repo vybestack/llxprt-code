@@ -22,10 +22,6 @@ export interface UseInputHandlingParams {
   todoContinuationRef: React.MutableRefObject<{
     clearPause: () => void;
   } | null>;
-  /** Whether MCP discovery has completed (or no MCP servers configured). */
-  isMcpReady: boolean;
-  /** Enqueue a message when gates are closed. From useMessageQueue. */
-  addMessage: (message: string) => void;
   /** Whether the user needs to re-authenticate before continuing. */
   needsRelogin: boolean;
   /** Dispatch app actions (e.g., open auth dialog). */
@@ -88,8 +84,6 @@ function useFinalSubmitHandler({
   lastSubmittedPromptRef,
   hadToolCallsRef,
   todoContinuationRef,
-  isMcpReady,
-  addMessage,
   needsRelogin,
   appDispatch,
 }: UseInputHandlingParams): (submittedValue: string) => void {
@@ -101,16 +95,6 @@ function useFinalSubmitHandler({
       const isCommand = isSlashCommand(trimmedValue);
       if (!isCommand && needsRelogin) {
         appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });
-        captureDeferredPrompt(
-          trimmedValue,
-          inputHistoryStore,
-          lastSubmittedPromptRef,
-        );
-        return;
-      }
-
-      if (!isCommand && !isMcpReady) {
-        addMessage(trimmedValue);
         captureDeferredPrompt(
           trimmedValue,
           inputHistoryStore,
@@ -137,8 +121,6 @@ function useFinalSubmitHandler({
       hadToolCallsRef,
       todoContinuationRef,
       lastSubmittedPromptRef,
-      isMcpReady,
-      addMessage,
       needsRelogin,
       appDispatch,
     ],

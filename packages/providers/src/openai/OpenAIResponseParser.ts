@@ -33,7 +33,66 @@ const CODE_FENCE_END = new RegExp(CODE_FENCE_END_SOURCE, 'm');
 type DeltaWithReasoning =
   OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta & {
     reasoning_content?: unknown;
+    reasoning?: unknown;
   };
+
+/**
+ * Selects the reasoning value and provenance field name. Returns undefined
+ * when no usable reasoning is available. When fieldName is unset (undefined)
+ * and the primary value is not a usable non-empty string, falls back to the
+ * Ollama delta.reasoning field (issue #2488 / #2505).
+ */
+function resolveReasoningValue(
+  primaryValue: unknown,
+  explicitField: string,
+  ollamaReasoning: unknown,
+  fieldName: string | undefined,
+): { value: string; actualFieldName: string } | undefined {
+  if (hasUsableReasoning(primaryValue)) {
+    return { value: primaryValue, actualFieldName: explicitField };
+  }
+  if (fieldName === undefined && hasUsableReasoning(ollamaReasoning)) {
+    return { value: ollamaReasoning, actualFieldName: 'reasoning' };
+  }
+  return undefined;
+}
+
+function hasUsableReasoning(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function readReasoningFromDelta(
+  delta: DeltaWithReasoning,
+  fieldName: string | undefined,
+): { content: string; actualFieldName: string } | undefined {
+  // Treat empty/whitespace-only field names as unset so auto-fallback still
+  // applies (issue #2505: guards against reasoning.fieldName='' misconfig).
+  // Trim a non-empty field name before using it as a delta property key.
+  const trimmed = fieldName?.trim();
+  const normalizedFieldName =
+    trimmed !== undefined && trimmed.length > 0 ? trimmed : undefined;
+  const deltaRecord = delta as Record<string, unknown>;
+  const explicitField = normalizedFieldName ?? 'reasoning_content';
+  const primaryValue =
+    normalizedFieldName === undefined
+      ? delta.reasoning_content
+      : deltaRecord[explicitField];
+
+  const resolved = resolveReasoningValue(
+    primaryValue,
+    explicitField,
+    delta.reasoning,
+    normalizedFieldName,
+  );
+
+  if (resolved === undefined) {
+    return undefined;
+  }
+  return {
+    content: resolved.value,
+    actualFieldName: resolved.actualFieldName,
+  };
+}
 
 /**
  * Returns true for parts that carry no textual content and should be skipped.
@@ -393,41 +452,38 @@ export function cleanThinkingContent(
 }
 
 /**
- * Parse reasoning_content from streaming delta.
+ * Parse reasoning from a streaming delta using a configurable field name.
+ *
+ * The delta field name is configurable via the optional fieldName argument
+ * (mirrors the reasoning.fieldName ephemeral). When undefined (unset), the
+ * classic provider auto-falls-back from reasoning_content to delta.reasoning
+ * for Ollama compatibility (issue #2505). The actual captured field name is
+ * propagated to the ThinkingBlock sourceField for provenance.
  *
  * @plan PLAN-20251202-THINKING.P11, PLAN-20251202-THINKING.P16
  * @requirement REQ-THINK-003.1, REQ-THINK-003.3, REQ-THINK-003.4, REQ-KIMI-REASONING-001.1
- * @issue #749
+ * @issue #749, #2505
  */
 export function parseStreamingReasoningDelta(
   delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta | undefined,
   logger: DebugLogger,
+  fieldName?: string,
 ): { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] } {
   if (delta == null) {
     return { thinking: null, toolCalls: [] };
   }
 
-  // Access reasoning_content via type assertion since OpenAI SDK doesn't declare it
-  const reasoningContent = (delta as DeltaWithReasoning).reasoning_content;
-
-  // Handle absent, null, or non-string
-  if (
-    reasoningContent === null ||
-    reasoningContent === undefined ||
-    typeof reasoningContent !== 'string'
-  ) {
-    return { thinking: null, toolCalls: [] };
-  }
-
-  // Handle empty string only - preserve whitespace-only content (spaces, tabs)
-  // to maintain proper formatting in accumulated reasoning (fixes issue #721)
-  if (reasoningContent.length === 0) {
+  const captured = readReasoningFromDelta(
+    delta as DeltaWithReasoning,
+    fieldName,
+  );
+  if (captured === undefined) {
     return { thinking: null, toolCalls: [] };
   }
 
   // Extract Kimi K2 tool calls embedded in reasoning_content (fixes issue #749)
   const { cleanedText, toolCalls } = extractKimiToolCallsFromText(
-    reasoningContent,
+    captured.content,
     logger,
   );
 
@@ -439,7 +495,7 @@ export function parseStreamingReasoningDelta(
       : {
           type: 'thinking' as const,
           thought: cleanedText,
-          sourceField: 'reasoning_content' as const,
+          sourceField: captured.actualFieldName,
           isHidden: false,
         };
 

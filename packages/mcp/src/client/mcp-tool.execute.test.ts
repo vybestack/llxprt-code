@@ -11,9 +11,13 @@ import {
   DiscoveredMCPTool,
   generateValidName,
   generateMcpToolName,
-} from './mcp-tool.js'; // Added getStringifiedResultForDisplayimport type { ToolResult } from'@vybestack/llxprt-code-tools';
-import type { CallableTool, Part } from '@google/genai';
-import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+} from './mcp-tool.js';
+import {
+  ToolErrorType,
+  type CallableTool,
+  type ContentPart as Part,
+  type ToolResult,
+} from '@vybestack/llxprt-code-tools';
 
 // DiscoveredMCPToolInvocation stores an allowlist on its constructor (static).
 // This type centralizes the one unavoidable internal-state access for tests.

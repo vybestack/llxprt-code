@@ -151,7 +151,7 @@ function buildStubAgent(options: {
  * replays the live in-memory transcript (not the disk resume fixture).
  */
 function modelMessage(text: string): AgentMessage {
-  return { role: 'model', parts: [{ text }] };
+  return { role: 'model', parts: [{ text }] } as unknown as AgentMessage;
 }
 
 function buildBaseConfig(): Config {

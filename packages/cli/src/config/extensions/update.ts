@@ -22,7 +22,7 @@ import { checkForExtensionUpdate } from './github.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs';
 import { getErrorMessage } from '../../utils/errors.js';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 export interface ExtensionUpdateInfo {
   name: string;

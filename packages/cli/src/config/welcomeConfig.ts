@@ -7,7 +7,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { USER_SETTINGS_DIR } from './paths.js';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 export const WELCOME_CONFIG_FILENAME = 'welcomeConfig.json';
 

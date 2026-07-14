@@ -135,7 +135,7 @@ export interface AppBootstrapResult {
 
 /** Initializes history, session, and IO primitives */
 function useBootstrapHistory(props: AppBootstrapProps) {
-  const { uiRuntime, settings, resumedHistory } = props;
+  const { uiRuntime, agent, settings, resumedHistory } = props;
   const runtime = useRuntimeApi();
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
@@ -166,6 +166,7 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     setCoreMemoryFileCount: _setCoreMemoryFileCount,
   } = useSessionInitialization({
     uiRuntime,
+    agent,
     addItem,
     loadHistory,
     resumedHistory,

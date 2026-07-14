@@ -8,7 +8,7 @@ import * as acp from '@agentclientprotocol/sdk';
 import { type Agent, type AgentEvent } from '@vybestack/llxprt-code-agents';
 import {
   EmojiFilter,
-  type ContractPart,
+  type ContentBlock,
   type DebugLogger,
   type FilterConfiguration,
   getErrorStatus,
@@ -46,7 +46,7 @@ export interface SessionStreamDeps {
  */
 export async function consumeAgentStream(
   deps: SessionStreamDeps,
-  parts: readonly ContractPart[],
+  parts: readonly ContentBlock[],
   pendingSend: AbortController,
   promptId: string,
   promptGeneration: number,
@@ -142,7 +142,7 @@ export async function runPromptTurn(
   promptId: string,
   promptGeneration: number,
 ): Promise<acp.PromptResponse> {
-  let parts: ContractPart[];
+  let parts: ContentBlock[];
   try {
     parts = await deps.pathResolver.resolvePrompt(
       params.prompt,

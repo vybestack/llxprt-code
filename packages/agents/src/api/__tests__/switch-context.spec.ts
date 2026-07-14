@@ -37,7 +37,10 @@
 
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
-import type { AgentMessage } from '@vybestack/llxprt-code-agents';
+import type {
+  AgentMessage,
+  AgentHistoryItem,
+} from '@vybestack/llxprt-code-agents';
 import {
   buildAgent,
   drain,
@@ -282,37 +285,35 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
   it('T4f switching INTO a provider that cannot accept the prior provider thinking blocks applies stripThoughts normalization @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-005', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      // Seed a history that explicitly carries a model thinking part WITH a
-      // thoughtSignature — the exact field stripThoughts must delete. This is
-      // constructed at the genai Content/Part shape (AgentMessage = Content)
-      // so the signature is present in the seeded state regardless of what
-      // the fixture would have produced.
+      // Seed a history that explicitly carries a model thinking block WITH a
+      // signature — the exact field stripThoughts must delete. Post-P21 the
+      // history is IContent (speaker/blocks), so the thinking block carries
+      // the neutral `signature` field that stripThoughts deletes.
       const signatureFromPriorProvider = 'sig-from-prior-provider';
-      const beforeHistory: AgentMessage[] = [
+      const beforeHistory: AgentHistoryItem[] = [
         {
-          role: 'user',
-          parts: [{ text: 'hello there' }],
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'hello there' }],
         },
         {
-          role: 'model',
-          parts: [
+          speaker: 'ai',
+          blocks: [
             {
-              thought: true,
-              text: 'considering the greeting',
-              thoughtSignature: signatureFromPriorProvider,
+              type: 'thinking',
+              thought: 'considering the greeting',
+              signature: signatureFromPriorProvider,
             },
-            { text: 'Hi! How can I help?' },
+            { type: 'text', text: 'Hi! How can I help?' },
           ],
         },
       ];
       await agent.setHistory(beforeHistory);
 
-      // PRESENT BEFORE: the seeded thoughtSignature survives the
+      // PRESENT BEFORE: the seeded signature survives the
       // setHistory → getHistory round-trip WITHOUT stripping (the default).
       const beforeRoundTrip = await agent.getHistory();
       const beforeSerialized = JSON.stringify(beforeRoundTrip);
-      expect(beforeSerialized.includes('thoughtSignature')).toBe(true);
-      expect(beforeSerialized.includes(signatureFromPriorProvider)).toBe(true);
+      expect(beforeSerialized.includes('sig-from-prior-provider')).toBe(true);
 
       // Switch into a provider that cannot accept thinking blocks. Under the
       // fake-provider seam setProvider('openai',...) is swallowed, but the
@@ -321,38 +322,38 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
       await agent.setProvider('openai', 'gpt-4o');
 
       // Apply normalization. setHistory with stripThoughts:true must delete
-      // every thoughtSignature key from each model thinking part (Fact #1).
+      // every signature key from each model thinking block.
       await agent.setHistory(beforeHistory, { stripThoughts: true });
 
-      // ABSENT AFTER: the signature key is GONE from the normalized history.
+      // ABSENT AFTER: the signature value is GONE from the normalized history.
       const normalized = await agent.getHistory();
       expect(normalized.length).toBeGreaterThanOrEqual(1);
       const afterSerialized = JSON.stringify(normalized);
-      expect(afterSerialized.includes('thoughtSignature')).toBe(false);
       expect(afterSerialized.includes(signatureFromPriorProvider)).toBe(false);
 
       // CONTENT PRESERVED: stripThoughts removes ONLY the signature, not the
-      // thinking part's text nor the rest of the conversation. The thinking
+      // thinking block's text nor the rest of the conversation. The thinking
       // text and the user/model text must all still be present.
       expect(afterSerialized.includes('considering the greeting')).toBe(true);
       expect(afterSerialized.includes('hello there')).toBe(true);
       expect(afterSerialized.includes('Hi! How can I help?')).toBe(true);
 
-      // The model turn's thought FLAG and text survive (only the signature
-      // is stripped) — verify via direct structural read, not substring, so
-      // the assertion is exact.
-      const modelTurn = normalized.find((c) => c.role === 'model');
+      // The model turn's thought text survives (only the signature
+      // is stripped) — verify via direct structural read of the IContent
+      // blocks, not substring, so the assertion is exact.
+      const normalizedItems = normalized;
+      const modelTurn = normalizedItems.find((c) => c.speaker === 'ai');
       expect(modelTurn).toBeDefined();
-      const thoughtPart = modelTurn?.parts.find(
-        (p): p is Extract<typeof p, { thought?: boolean }> =>
-          'thought' in p && p.thought === true,
+      const thoughtBlock = modelTurn?.blocks.find(
+        (b): b is Extract<typeof b, { type: 'thinking' }> =>
+          b.type === 'thinking',
       );
-      expect(thoughtPart).toBeDefined();
-      expect(thoughtPart?.text).toBe('considering the greeting');
-      // The signature key was removed from the surviving thought part.
-      expect(
-        'thoughtSignature' in (thoughtPart as Record<string, unknown>),
-      ).toBe(false);
+      expect(thoughtBlock).toBeDefined();
+      expect(thoughtBlock?.thought).toBe('considering the greeting');
+      // The signature key was removed from the surviving thought block.
+      expect('signature' in (thoughtBlock as Record<string, unknown>)).toBe(
+        false,
+      );
     } finally {
       await cleanup();
     }
@@ -444,8 +445,8 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
           try {
             // seed history with generated messages via the public setHistory
             const seeded: AgentMessage[] = generatedTurns.map((t) => ({
-              role: t.role,
-              parts: [{ text: t.text }],
+              speaker: 'human' as const,
+              blocks: [{ type: 'text' as const, text: t.text }],
             }));
             await agent.setHistory(seeded);
 
@@ -468,13 +469,16 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
             expect(history.length).toBeGreaterThanOrEqual(seeded.length);
 
             // every seeded text is present in the returned history (checked
-            // via direct text-part extraction, not JSON serialization, since
-            // JSON.stringify escapes backslashes and other characters making
-            // substring matching unreliable for arbitrary fc.string inputs)
+            // via direct text-block extraction from the neutral IContent
+            // blocks, not JSON serialization, since JSON.stringify escapes
+            // backslashes and other characters making substring matching
+            // unreliable for arbitrary fc.string inputs)
             const historyTexts = history.flatMap((m) =>
-              m.parts
-                .map((p) => ('text' in p ? p.text : ''))
-                .filter((txt) => txt.length > 0),
+              Array.isArray(m.blocks)
+                ? m.blocks.map((b) =>
+                    b.type === 'text' && b.text.length > 0 ? b.text : '',
+                  )
+                : [],
             );
             for (const t of generatedTurns) {
               expect(historyTexts.includes(t.text)).toBe(true);

@@ -6,7 +6,7 @@
 
 import path from 'node:path';
 import process from 'node:process';
-import { type PartUnion } from '@google/genai';
+import { type ContentPartUnion } from '../types/wire-types.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -214,7 +214,7 @@ class ReadFileToolInvocation extends BaseToolInvocation<
     gitWarning: string | undefined,
     markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>> | undefined,
     deletionAfterLines: Set<number> | undefined,
-  ): PartUnion {
+  ): ContentPartUnion {
     const [start, end] = result.linesShown!;
     const total = result.originalLineCount!;
     const nextOffset =
@@ -252,7 +252,7 @@ ${formattedContent}`;
     gitWarning: string | undefined,
     markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>> | undefined,
     deletionAfterLines: Set<number> | undefined,
-  ): PartUnion {
+  ): ContentPartUnion {
     const startLine = this.params.offset != null ? this.params.offset + 1 : 1;
     const formatted = this.applyTextFormatting(
       result.llmContent as string,
@@ -263,7 +263,10 @@ ${formattedContent}`;
     return this.prependGitHeader(formatted, gitWarning);
   }
 
-  private recordReadMetric(llmContent: PartUnion, filePath: string): void {
+  private recordReadMetric(
+    llmContent: ContentPartUnion,
+    filePath: string,
+  ): void {
     const lines =
       typeof llmContent === 'string'
         ? llmContent.split('\n').length
@@ -311,7 +314,7 @@ ${formattedContent}`;
         await this.fetchGitAnnotations(this.getFilePath()));
     }
 
-    let llmContent: PartUnion;
+    let llmContent: ContentPartUnion;
 
     if (typeof result.llmContent !== 'string') {
       llmContent = result.llmContent;

@@ -42,9 +42,12 @@ import {
   ToolConfirmationOutcome,
 } from './helpers/agentHarness.js';
 
-/** Builds a public AgentMessage (Content) with role + a single text part. */
+/** Builds a public AgentMessage (IContent) with speaker + a single text block. */
 function textMessage(role: 'user' | 'model', text: string): AgentMessage {
-  return { role, parts: [{ text }] };
+  return {
+    speaker: role === 'user' ? 'human' : 'ai',
+    blocks: [{ type: 'text', text }],
+  } as unknown as AgentMessage;
 }
 
 /**

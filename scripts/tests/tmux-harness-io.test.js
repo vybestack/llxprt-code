@@ -183,7 +183,7 @@ describe('issue #2469: tmux socket isolation', () => {
     expect(typeof socketPath).toBe('string');
     expect(socketPath.length).toBeGreaterThan(0);
     // Must be a -S style socket path (a filesystem path), not a fixed -L name.
-    expect(socketPath).toMatch(/llxprt-tmux-harness-[^/]+\/tmux\.sock$/);
+    expect(socketPath).toMatch(/llxprt-tmux-harness-[^/\\]+[/\\\\]tmux\.sock$/);
     expect(getTmuxSocketPath()).toBe(socketPath);
   });
 
@@ -229,7 +229,7 @@ describe('issue #2469: tmux socket isolation', () => {
     expect(spawnSyncMock).toHaveBeenCalledTimes(1);
     const [, args] = spawnSyncMock.mock.calls[0];
     expect(args[0]).toBe('-S');
-    expect(args[1]).toMatch(/llxprt-tmux-harness-[^/]+\/tmux\.sock$/);
+    expect(args[1]).toMatch(/llxprt-tmux-harness-[^/\\]+[/\\\\]tmux\.sock$/);
     expect(fs.existsSync(path.dirname(args[1]))).toBe(true);
   });
 });

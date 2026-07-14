@@ -10,11 +10,10 @@ import {
   getCurrentLlxprtMdFilename,
   DEFAULT_FILE_FILTERING_OPTIONS,
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
-  DebugLogger,
-  debugLogger,
   type FileFilteringOptions,
   type LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
+import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import { resolvePath } from '../utils/resolvePath.js';
 import { isDebugMode } from './environmentLoader.js';

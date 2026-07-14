@@ -12,7 +12,10 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { createIsolatedRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
+import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime.js';
+import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import { activateSettingsRuntimeContext } from '@vybestack/llxprt-code-core';
 import type { FromConfigOptions } from './config-types.js';
 import { FromConfigValidatableSchema } from './config-types.js';
 import type { Agent } from './agent.js';
@@ -22,6 +25,7 @@ import {
   validateAgentRuntimeId,
 } from './agentBootstrap.js';
 import { executeProviderActivation } from './providerActivationExecutor.js';
+import { consumeCompletedActivationPreflight } from './activationPreflightState.js';
 import { finalizeAgent, registerProvidersOntoManager } from './createAgent.js';
 
 /**
@@ -69,12 +73,14 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
   // @pseudocode line 16: reach the Config's SettingsService (no second store).
   const settingsService = config.getSettingsService();
 
-  // @pseudocode line 17 / lines 63-72: adopt the caller bus, else build one.
-  const messageBus = resolveMessageBus(options.messageBus, config);
+  // Adopt an explicit caller bus first, then the Config's assembled runtime bus.
+  // Only non-CLI consumers without either seam receive a newly owned bus.
+  const messageBus = resolveMessageBus(
+    options.messageBus ?? config.getRuntimeMessageBus(),
+    config,
+  );
 
-  // @pseudocode line 18 (CRIT-1): adopt the Config's existing manager with
-  // ZERO assertion — getProviderManager() returns RuntimeProviderManager |
-  // undefined, exactly the providerManager? option's type.
+  // @pseudocode line 18 (CRIT-1): adopt the Config's existing manager.
   const adoptedManager: RuntimeProviderManager | undefined =
     config.getProviderManager();
 
@@ -96,72 +102,24 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
 
   // @pseudocode line 37-48 (createAgent.ts:178-180 mirror): derive managers.
   const manager = handle.providerManager;
-  const oauthManager = handle.oauthManager;
+  const oauthManager = resolveOAuthManager(config, handle);
   const sharedSettingsService = handle.settingsService;
 
-  // @pseudocode lines 31-35: conditional init/auth (skip if already done).
-  // The adopted Config's initialize() guard throws "Config was already
-  // initialized" when called twice; an adopted CLI-style Config is typically
-  // already initialized. Wrap initialize() so the already-initialized state is
-  // treated as "skip" rather than failing the adoption.
-  if (!isConfigInitialized(config)) {
-    await safeInitialize(config, messageBus);
-  }
+  // @plan:PLAN-20270110-ISSUE2378.P02 @requirement:REQ-2378-002
+  // Bind the settings runtime context to the adopted Config's SettingsService.
+  activateSettingsRuntimeContext(sharedSettingsService, runtimeId, {
+    config,
+    metadata: { source: 'fromConfig' },
+  });
+
+  // @pseudocode lines 31-35: initialize once or adopt the original result.
+  await config.ensureInitialized({ messageBus });
+
   // @plan:PLAN-20270104-ISSUE2374.P03 @requirement:REQ-001
-  // When a declarative activation intent is supplied, execute it via
-  // executeProviderActivation INSTEAD of the legacy bare refreshAuth path.
-  // The executor performs the switchActiveProvider / refreshAuth /
-  // credential-override sequence the CLI bootstrap and Zed integration used to
-  // orchestrate by hand. authMode 'none' skips auth refresh entirely. When the
-  // intent is absent, preserve the backward-compatible bare refreshAuth call.
-  if (options.activation !== undefined) {
-    const activationResult = await executeProviderActivation(
-      config,
-      options.activation,
-    );
-    // A declarative intent whose auth sequence failed is FATAL — at HEAD,
-    // fromConfig's bare config.refreshAuth(undefined) threw on failure, so
-    // silent-continue would regress (#2374 finding 3). Surface the underlying
-    // error message via AgentBootstrapError. The already-active-with-profile-
-    // ephemerals skip path and the already-refreshed path report authFailed
-    // false, so this does not break the interactive createForegroundAgent path.
-    if (activationResult.authFailed) {
-      const underlying = activationResult.authError;
-      throw new AgentBootstrapError(
-        `fromConfig activation failed: ${
-          underlying instanceof Error ? underlying.message : String(underlying)
-        }`,
-        { cause: underlying },
-      );
-    }
-  } else if (!hasPostAuthClient(config)) {
-    // resolveAuthForAdoptedConfig: refreshAuth accepts an optional authMethod
-    // string; pass undefined so the adopted Config re-derives it internally.
-    await config.refreshAuth(undefined);
-  }
+  await resolveActivation(config, options);
 
   // @pseudocode lines 37-48 (Mismatch 1): synthesize parsed + resolvedAuth.
-  //
-  // #2374 round-3 Fix 1: derive the provider from the POST-activation runtime
-  // truth (manager active provider name), NOT config.getProvider(). The
-  // executor may switch the provider without updating config.getProvider()
-  // (skip-when-already-active path when the manager already has the target
-  // active but config.getProvider() was set to something else). The model is
-  // read from config.getModel() which IS updated by setActiveModel /
-  // switchActiveProvider. When no activation intent ran, config.getProvider()
-  // is the correct source (backward compatibility).
-  const activeRuntimeProvider =
-    options.activation !== undefined
-      ? (config.getProviderManager()?.getActiveProviderName() ??
-        config.getProvider())
-      : config.getProvider();
-  const parsed = {
-    provider: activeRuntimeProvider ?? '',
-    model: config.getModel(),
-    ...(options.sessionId !== undefined
-      ? { sessionId: options.sessionId }
-      : {}),
-  };
+  const parsed = buildParsedConfig(config, options);
   const resolvedAuth = { baseUrl: undefined };
 
   // @pseudocode lines 37-48: SHARED finalize (CRIT-4: single finalize path).
@@ -183,6 +141,79 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
     [],
     'caller',
   );
+}
+
+/**
+ * Finding 3 (#2378): adopt the EXACT assembled OAuthManager from the Config's
+ * runtime bundle when available. Falls back to the isolated-runtime handle's
+ * OAuthManager when no Config-associated runtime bundle was attached (e.g. Zed).
+ */
+function resolveOAuthManager(
+  config: Config,
+  handle: IsolatedRuntimeContextHandle,
+): OAuthManager {
+  const runtimeOAuthManager = config.getRuntimeOAuthManager();
+  return runtimeOAuthManager instanceof OAuthManager
+    ? runtimeOAuthManager
+    : handle.oauthManager;
+}
+
+/**
+ * Executes the declarative activation intent (or backward-compatible bare
+ * refreshAuth) against the adopted Config. When a preflight token is supplied,
+ * consumes it with exact-match intent binding instead of re-running activation.
+ * A declarative intent whose auth sequence failed is FATAL.
+ *
+ * @plan:PLAN-20270104-ISSUE2374.P03 @requirement:REQ-001
+ */
+async function resolveActivation(
+  config: Config,
+  options: FromConfigOptions,
+): Promise<void> {
+  if (options.activation !== undefined) {
+    const activationResult =
+      options.activationPreflightToken !== undefined
+        ? consumeCompletedActivationPreflight(
+            config,
+            options.activationPreflightToken,
+            options.activation,
+          )
+        : await executeProviderActivation(config, options.activation);
+    if (activationResult.authFailed) {
+      const underlying = activationResult.authError;
+      throw new AgentBootstrapError(
+        `fromConfig activation failed: ${
+          underlying instanceof Error ? underlying.message : String(underlying)
+        }`,
+        { cause: underlying },
+      );
+    }
+  } else if (!hasPostAuthClient(config)) {
+    await config.refreshAuth(undefined);
+  }
+}
+
+/**
+ * #2374 round-3 Fix 1: derive the provider from the POST-activation runtime
+ * truth (manager active provider name), NOT config.getProvider(). When no
+ * activation intent ran, config.getProvider() is the correct source.
+ */
+function buildParsedConfig(
+  config: Config,
+  options: FromConfigOptions,
+): { provider: string; model: string; sessionId?: string } {
+  const activeRuntimeProvider =
+    options.activation !== undefined
+      ? (config.getProviderManager()?.getActiveProviderName() ??
+        config.getProvider())
+      : config.getProvider();
+  return {
+    provider: activeRuntimeProvider ?? '',
+    model: config.getModel(),
+    ...(options.sessionId !== undefined
+      ? { sessionId: options.sessionId }
+      : {}),
+  };
 }
 
 /**
@@ -234,7 +265,7 @@ function resolveMessageBus(
  * @requirement:REQ-001
  * @pseudocode lines 73-75
  */
-function isConfigInitialized(config: Config): boolean {
+export function isConfigInitialized(config: Config): boolean {
   const client: AgentClientContract | undefined = readAgentClient(config);
   return client?.isInitialized() === true;
 }
@@ -265,29 +296,4 @@ function hasPostAuthClient(config: Config): boolean {
 function readAgentClient(config: Config): AgentClientContract | undefined {
   const client: AgentClientContract = config.getAgentClient();
   return typeof client === 'undefined' ? undefined : client;
-}
-
-/**
- * Attempts initialize() and swallows the "Config was already initialized"
- * error so an already-initialized adopted Config is not double-initialized.
- * The isConfigInitialized() public signal is best-effort (the client's
- * isInitialized() tracks chat readiness, not Config.initialize()'s private
- * flag), so this guard is the reliable backstop.
- *
- * @plan:PLAN-20260621-COREAPIREMED.P09
- * @requirement:REQ-001
- * @pseudocode lines 31-32
- */
-async function safeInitialize(
-  config: Config,
-  messageBus: MessageBus,
-): Promise<void> {
-  try {
-    await config.initialize({ messageBus });
-  } catch (e: unknown) {
-    if (e instanceof Error && e.message === 'Config was already initialized') {
-      return;
-    }
-    throw e;
-  }
 }

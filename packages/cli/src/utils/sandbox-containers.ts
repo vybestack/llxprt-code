@@ -12,7 +12,8 @@ import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import { parse } from 'shell-quote';
 import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
-import { FatalSandboxError, debugLogger } from '@vybestack/llxprt-code-core';
+import { FatalSandboxError } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
   PortForwardingResult,
   CredentialProxyBridgeResult,

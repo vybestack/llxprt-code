@@ -44,6 +44,8 @@ import type {
   LspConfig,
   LspServiceClient,
 } from '@vybestack/llxprt-code-ide-integration';
+import type { EventEmitter } from 'node:events';
+import { AppEvent, appEvents, type AppEvents } from '../utils/events.js';
 
 export interface RefreshMemoryResult {
   memoryContent: string;
@@ -135,6 +137,7 @@ export interface UiContentGeneratorConfig {
 export interface AgentClientSource {
   getAgentClient(): AgentClientContract;
   getAgentClientFactory?(): AgentClientFactory | undefined;
+  createDetachedAgentClient?(runtimeId?: string): AgentClientContract;
 }
 
 /**
@@ -365,11 +368,20 @@ export interface EphemeralSettingsRuntime {
 }
 
 /**
- * MCP-discovery capability for stream-gating on MCP readiness.
+ * MCP discovery and configured-server state exposed to CLI consumers.
  */
 export interface McpDiscoveryRuntime {
   getMcpClientManager(): UiMcpClientManager | undefined;
   getMcpServers(): Record<string, MCPServerConfig> | undefined;
+}
+
+/** App-event capability for MCP discovery changes owned by this session. */
+export interface AppEventRuntime {
+  onMcpClientUpdate(listener: () => void): () => void;
+}
+
+export interface AppEventSource {
+  getExtensionEvents(): EventEmitter<AppEvents> | EventEmitter | undefined;
 }
 
 /**
@@ -432,6 +444,7 @@ export interface StreamRuntime {
   settings: SettingsTelemetryState;
   scheduler: SchedulerRuntime;
   asyncTasks: AsyncTaskRuntime;
+  events: AppEventRuntime;
   bucketFailover: BucketFailoverRuntime;
   checkpoint: CheckpointRuntime;
   sessionLimits: SessionLimitsRuntime;
@@ -472,6 +485,7 @@ export interface StreamRuntimeBareSource
     ToolRuntime,
     SchedulerRuntime,
     AsyncTaskRuntime,
+    AppEventSource,
     BucketFailoverRuntime,
     CheckpointRuntime,
     SessionLimitsRuntime,
@@ -510,10 +524,15 @@ function buildModelRuntime(source: StreamRuntimeBareSource): ModelState {
 function buildAgentClientSource(
   source: StreamRuntimeBareSource,
 ): AgentClientSource {
-  return {
+  const base: AgentClientSource = {
     getAgentClient: () => source.getAgentClient(),
     getAgentClientFactory: () => source.getAgentClientFactory?.(),
   };
+  if (source.createDetachedAgentClient) {
+    base.createDetachedAgentClient = (runtimeId) =>
+      source.createDetachedAgentClient!(runtimeId);
+  }
+  return base;
 }
 
 function buildShellRuntime(source: StreamRuntimeBareSource): ShellState {
@@ -645,6 +664,18 @@ function buildAsyncTaskRuntime(
   };
 }
 
+function buildAppEventRuntime(
+  source: StreamRuntimeBareSource,
+): AppEventRuntime {
+  return {
+    onMcpClientUpdate: (listener) => {
+      const events = source.getExtensionEvents() ?? appEvents;
+      events.on(AppEvent.McpClientUpdate, listener);
+      return () => events.off(AppEvent.McpClientUpdate, listener);
+    },
+  };
+}
+
 /**
  * Helper to build a {@link StreamRuntime} from a runtime source at the
  * composition edge. Each field is a concrete focused adapter so the nested
@@ -666,6 +697,7 @@ function buildStreamRuntimeFromSource(
     settings: buildSettingsRuntime(source),
     scheduler: buildSchedulerRuntime(source),
     asyncTasks: buildAsyncTaskRuntime(source),
+    events: buildAppEventRuntime(source),
     bucketFailover: {
       getBucketFailoverHandler: () => source.getBucketFailoverHandler(),
     },

@@ -15,7 +15,11 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { PartListUnion, Part } from '@google/genai';
+import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type {
+  ContentBlock,
+  IContent,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -255,19 +259,94 @@ export function createStableDisplayCallbacks(
 }
 
 /**
- * Maps an AgentInput (string | readonly Part[] | structured {text, role?})
- * to a PartListUnion for run().
+ * Narrows an array element to a recognised ContentBlock type field.
  */
-function isPartArray(input: AgentInput): input is readonly Part[] {
-  return Array.isArray(input);
+function isContentBlock(item: unknown): item is ContentBlock {
+  return (
+    typeof item === 'object' &&
+    item !== null &&
+    'type' in item &&
+    typeof (item as Record<string, unknown>).type === 'string'
+  );
 }
 
-export function toPartListUnion(input: AgentInput): PartListUnion {
+/**
+ * True when every element of the array is a ContentBlock (has a `type` field).
+ * Distinguishes ContentBlock[] from legacy Part-shaped arrays ({text: string})
+ * that lack a `type` discriminator.
+ */
+function isContentBlockArray(
+  input: AgentInput,
+): input is readonly ContentBlock[] {
+  return Array.isArray(input) && input.every(isContentBlock);
+}
+
+/**
+ * True when a value is a legacy Part-shaped text object (has `text` but no
+ * `type` discriminator).
+ */
+function isLegacyPartText(item: unknown): item is { text: string } {
+  if (typeof item !== 'object' || item === null || 'type' in item) {
+    return false;
+  }
+  const record = item as Record<string, unknown>;
+  return 'text' in record && typeof record.text === 'string';
+}
+
+/**
+ * True when the array elements are legacy Part-shaped objects (have `text`
+ * but no `type`). These originate from `handleAtCommand` in the CLI which
+ * produces `[{text: string}]` arrays.
+ */
+function isLegacyPartTextArray(
+  input: unknown,
+): input is Array<{ text: string }> {
+  return Array.isArray(input) && input.every(isLegacyPartText);
+}
+
+/**
+ * True when a value is an IContent object (has a valid `speaker` and `blocks`
+ * array). Used to detect IContent input and pass it through unchanged so
+ * speaker and turn boundaries are preserved.
+ *
+ * Accepts `unknown` so every runtime check (typeof, null, Array.isArray,
+ * property presence) is structurally meaningful — the type system cannot
+ * prove any branch impossible, avoiding no-unnecessary-condition violations.
+ */
+function isIContent(input: unknown): input is IContent {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    return false;
+  }
+  return 'speaker' in input && 'blocks' in input;
+}
+
+/**
+ * True when an array value is an IContent[] (every element is an IContent).
+ */
+function isIContentArray(input: AgentInput): input is readonly IContent[] {
+  return Array.isArray(input) && input.every(isIContent);
+}
+
+export function toPartListUnion(input: AgentInput): AgentMessageInput {
   if (typeof input === 'string') {
     return input;
   }
-  if (isPartArray(input)) {
+  // IContent[] — pass through directly to preserve speaker and turn boundaries.
+  if (isIContentArray(input)) {
     return [...input];
+  }
+  // Single IContent — pass through directly.
+  if (isIContent(input)) {
+    return input;
+  }
+  if (isContentBlockArray(input)) {
+    return [...input];
+  }
+  if (isLegacyPartTextArray(input)) {
+    return input.map((part) => ({
+      type: 'text' as const,
+      text: part.text,
+    }));
   }
   return input.text;
 }

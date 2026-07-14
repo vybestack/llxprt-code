@@ -7,31 +7,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ServerAgentStreamEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
-import type { Part } from '@google/genai';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
-import {
-  type MockedChatInstance,
-  mockResponseToChunk,
-} from './turn-test-helpers.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
   mockGetHistory: vi.fn(),
 }));
-
-vi.mock('@google/genai', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@google/genai')>();
-  const MockChat = vi.fn().mockImplementation(() => ({
-    sendMessageStream: mockSendMessageStream,
-    getHistory: mockGetHistory,
-  }));
-  return {
-    ...actual,
-    Chat: MockChat,
-  };
-});
 
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
@@ -39,43 +24,17 @@ vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
 
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
-  () => ({
-    getResponseText: (resp: GenerateContentResponse) =>
-      resp.candidates?.[0]?.content?.parts
-        ?.filter((part) => (part as { thought?: boolean }).thought !== true)
-        .map((part) => part.text)
-        .join('') ?? undefined,
-    getFunctionCalls: (resp: GenerateContentResponse) =>
-      resp.functionCalls ?? [],
-    getFunctionCallsFromParts: (parts: Part[]) => {
-      const functionCalls = parts
-        .filter((part) => part.functionCall !== undefined)
-        .map((part) => part.functionCall!);
-      return functionCalls.length > 0 ? functionCalls : undefined;
-    },
-    analyzeResponseOutcome: (parts: Part[]) => {
-      let hasVisibleText = false;
-      let hasThinking = false;
-      let hasToolCalls = false;
-      for (const part of parts) {
-        const isThinking = (part as { thought?: boolean }).thought === true;
-        if (isThinking) hasThinking = true;
-        if (part.functionCall !== undefined) hasToolCalls = true;
-        if (
-          !isThinking &&
-          typeof part.text === 'string' &&
-          part.text.trim() !== ''
-        )
-          hasVisibleText = true;
-      }
-      return {
-        hasVisibleText,
-        hasThinking,
-        hasToolCalls,
-        isActionable: hasVisibleText || hasToolCalls,
-      };
-    },
-  }),
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js')
+      >();
+    return {
+      // analyzeResponseOutcome now operates on ContentBlock[]; delegate to the
+      // real implementation so thinking/tool_call/text detection is correct.
+      analyzeResponseOutcome: actual.analyzeResponseOutcome,
+    };
+  },
 );
 
 describe('Turn run - abort and idle timeout', () => {
@@ -108,28 +67,20 @@ describe('Turn run - abort and idle timeout', () => {
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [{ content: { parts: [{ text: 'First part' }] } }],
-        }),
+        value: mockChunk({ text: 'First part' }),
       };
       abortController.abort();
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [
-            {
-              content: {
-                parts: [{ text: 'Second part - should not be processed' }],
-              },
-            },
-          ],
+        value: mockChunk({
+          text: 'Second part - should not be processed',
         }),
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
     const events = [];
-    const reqParts: Part[] = [{ text: 'Test abort' }];
+    const reqParts: ContentBlock[] = [{ type: 'text', text: 'Test abort' }];
     for await (const event of turn.run(reqParts, abortController.signal)) {
       events.push(event);
     }
@@ -173,9 +124,7 @@ describe('Turn run - abort and idle timeout', () => {
         try {
           yield {
             type: StreamEventType.CHUNK,
-            value: mockResponseToChunk({
-              candidates: [{ content: { parts: [{ text: 'First part' }] } }],
-            }),
+            value: mockChunk({ text: 'First part' }),
           };
           await new Promise<void>((resolve) => {
             abortController.signal.addEventListener('abort', () => resolve(), {
@@ -184,14 +133,8 @@ describe('Turn run - abort and idle timeout', () => {
           });
           yield {
             type: StreamEventType.CHUNK,
-            value: mockResponseToChunk({
-              candidates: [
-                {
-                  content: {
-                    parts: [{ text: 'Second part - should not be processed' }],
-                  },
-                },
-              ],
+            value: mockChunk({
+              text: 'Second part - should not be processed',
             }),
           };
         } finally {
@@ -242,26 +185,18 @@ describe('Turn run - abort and idle timeout', () => {
         if (shouldAbort) {
           yield {
             type: StreamEventType.CHUNK,
-            value: mockResponseToChunk({
-              candidates: [{ content: { parts: [{ text: 'Partial' }] } }],
-            }),
+            value: mockChunk({ text: 'Partial' }),
           };
           abortController.abort();
           await new Promise((resolve) => setTimeout(resolve, 10));
           yield {
             type: StreamEventType.CHUNK,
-            value: mockResponseToChunk({
-              candidates: [{ content: { parts: [{ text: 'Ignored' }] } }],
-            }),
+            value: mockChunk({ text: 'Ignored' }),
           };
         } else {
           yield {
             type: StreamEventType.CHUNK,
-            value: mockResponseToChunk({
-              candidates: [
-                { content: { parts: [{ text: 'Second call success' }] } },
-              ],
-            }),
+            value: mockChunk({ text: 'Second call success' }),
           };
         }
       })();
@@ -330,7 +265,9 @@ describe('Turn run - abort and idle timeout', () => {
     });
 
     const events = [];
-    const reqParts: Part[] = [{ text: 'Test malformed error handling' }];
+    const reqParts: ContentBlock[] = [
+      { type: 'text', text: 'Test malformed error handling' },
+    ];
 
     for await (const event of turn.run(reqParts, abortController.signal)) {
       events.push(event);
@@ -369,9 +306,7 @@ describe('Turn run - abort and idle timeout', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: mockResponseToChunk({
-            candidates: [{ content: { parts: [{ text: 'First part' }] } }],
-          }),
+          value: mockChunk({ text: 'First part' }),
         };
         await new Promise<void>(() => {});
       })();
@@ -454,15 +389,7 @@ describe('Turn run - abort and idle timeout', () => {
         (async function* () {
           yield {
             type: StreamEventType.CHUNK,
-            value: mockResponseToChunk({
-              candidates: [
-                {
-                  content: {
-                    parts: [{ text: shouldHang ? 'Hanging' : 'OK' }],
-                  },
-                },
-              ],
-            }),
+            value: mockChunk({ text: shouldHang ? 'Hanging' : 'OK' }),
           };
           if (shouldHang) {
             await new Promise<void>(() => {});

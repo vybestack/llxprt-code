@@ -5,13 +5,13 @@
  */
 
 import {
-  uiTelemetryService,
   triggerSessionEndHook,
   triggerSessionStartHook,
   SessionEndReason,
   SessionStartSource,
   type SessionStartHookOutput,
 } from '@vybestack/llxprt-code-core';
+import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { CommandKind, type SlashCommand } from './types.js';
 import type { HookSkillState } from '../cliUiRuntime.js';
 

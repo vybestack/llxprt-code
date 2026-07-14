@@ -12,7 +12,7 @@ import type {
   LockHandle,
   IContent,
 } from '@vybestack/llxprt-code-core';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SlashCommandRuntime, UiRuntime } from './cliUiRuntime.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
@@ -166,6 +166,9 @@ function buildLayoutParams(
     setRenderMarkdown: dialogs.setRenderMarkdown,
     isTodoPanelCollapsed: dialogs.isTodoPanelCollapsed,
     setIsTodoPanelCollapsed: dialogs.setIsTodoPanelCollapsed,
+    isQueuedMessagesPanelCollapsed: dialogs.isQueuedMessagesPanelCollapsed,
+    setIsQueuedMessagesPanelCollapsed:
+      dialogs.setIsQueuedMessagesPanelCollapsed,
     setFooterHeight: dialogs.setFooterHeight,
     footerHeight: dialogs.footerHeight,
     copyModeEnabled: dialogs.copyModeEnabled,
@@ -285,6 +288,8 @@ function buildUIStateParamsExtra(r: HookResults) {
     showErrorDetails: d.showErrorDetails,
     showToolDescriptions: d.showToolDescriptions,
     isTodoPanelCollapsed: d.isTodoPanelCollapsed,
+    isQueuedMessagesPanelCollapsed: d.isQueuedMessagesPanelCollapsed,
+    queuedSubmissions: i.queuedSubmissions,
     isNarrow: b.isNarrow,
     vimModeEnabled: i.vimModeEnabled,
     vimMode: i.vimMode,

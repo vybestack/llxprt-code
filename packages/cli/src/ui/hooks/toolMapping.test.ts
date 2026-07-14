@@ -26,9 +26,9 @@ const { mockWarn } = vi.hoisted(() => ({
   mockWarn: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-telemetry')>();
   return {
     ...actual,
     DebugLogger: {

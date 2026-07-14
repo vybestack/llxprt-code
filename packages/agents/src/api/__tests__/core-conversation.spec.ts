@@ -158,7 +158,12 @@ describe('Core conversation @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-001
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
       const beforeLen = (await agent.getHistory()).length;
-      const contents = [{ role: 'user' as const, parts: [{ text: 'hi' }] }];
+      const contents = [
+        {
+          speaker: 'human' as const,
+          blocks: [{ type: 'text' as const, text: 'hi' }],
+        },
+      ];
 
       // generateJson reaches the real client with a snapshot copy of contents.
       // The fake provider has no JSON path, so the client's real error is

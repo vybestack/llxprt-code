@@ -6,7 +6,8 @@
 
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { FileOutput, ShellExecutionService } from '@vybestack/llxprt-code-core';
+import { ShellExecutionService } from '@vybestack/llxprt-code-core';
+import { FileOutput } from '@vybestack/llxprt-code-telemetry';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
 type FileOutputWithOptionalDisposeInstance = typeof FileOutput & {

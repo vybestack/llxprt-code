@@ -6,7 +6,7 @@
 
 import { useReducer, useRef, useEffect, useCallback } from 'react';
 import { useKeypress, type Key } from './useKeypress.js';
-import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { keyMatchers, Command } from '../keyMatchers.js';
 
 export interface SelectionListItem<T> {

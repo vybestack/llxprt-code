@@ -19,8 +19,8 @@ import type {
   SessionMetrics,
   ModelMetrics,
   ToolCallStats,
-} from '@vybestack/llxprt-code-core';
-import { uiTelemetryService } from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-telemetry';
+import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 
 export enum ToolCallDecision {
   ACCEPT = 'accept',

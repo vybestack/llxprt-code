@@ -11,9 +11,9 @@ import {
   type IContent,
   type LockHandle,
   type MessageBus,
-  debugLogger,
   writeToStdout,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { getCliVersion } from '../utils/version.js';
 import { enableMouseEvents } from '../ui/utils/mouse.js';
 import { restoreTerminalProtocolsSync } from '../ui/utils/terminalProtocolCleanup.js';

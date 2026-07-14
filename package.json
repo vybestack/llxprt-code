@@ -99,6 +99,8 @@
     "format:all": "./scripts/format-all.sh",
     "typecheck": "npm run typecheck --workspaces --if-present && tsc --project tsconfig.scripts.json",
     "check": "npm run lint:all",
+    "gate:agents-neutral": "npx tsx scripts/agents-neutral-gate.ts --enforce-imports && npx tsx scripts/agents-neutral-test-gate.ts",
+    "gate:agents-neutral:count": "npx tsx scripts/agents-neutral-gate.ts --count",
     "fix": "npm run format:all",
     "presubmit": "npm run format && npm run lint && npm run build && npm run typecheck && npm run test",
     "preflight": "node scripts/preflight-ci.js",

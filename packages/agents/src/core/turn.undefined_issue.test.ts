@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Turn } from './turn.js';
 import type { ChatSession } from './chatSession.js';
-import type { FunctionCall } from '@google/genai';
+import type { FunctionCall } from '../agents/types.js';
 import { AgentEventType } from './turn.js';
 
 describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => {
@@ -140,7 +140,7 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
     it.each([
       {
         description: 'Null name',
-        functionCall: {
+        call: {
           name: undefined,
           args: { file: 'test.txt' },
         } as Partial<FunctionCall>,
@@ -148,7 +148,7 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
       },
       {
         description: 'Explicit undefined name',
-        functionCall: {
+        call: {
           name: undefined,
           args: { file: 'test.txt' },
         } as Partial<FunctionCall>,
@@ -156,7 +156,7 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
       },
       {
         description: 'Null name (duplicate)',
-        functionCall: {
+        call: {
           name: undefined,
           args: { file: 'test.txt' },
         } as Partial<FunctionCall>,
@@ -164,7 +164,7 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
       },
       {
         description: 'Empty string name',
-        functionCall: {
+        call: {
           name: '',
           args: { file: 'test.txt' },
         } as Partial<FunctionCall>,
@@ -172,7 +172,7 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
       },
       {
         description: 'Whitespace-only name',
-        functionCall: {
+        call: {
           name: '   \t\n   ',
           args: { file: 'test.txt' },
         } as Partial<FunctionCall>,
@@ -180,10 +180,10 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
       },
     ])(
       'should simulate qwen model problematic scenario: $description',
-      ({ functionCall, expectedName }) => {
+      ({ call, expectedName }) => {
         // These are the exact scenarios reported in GitHub #305
-        expect(functionCall.args).toStrictEqual({ file: 'test.txt' });
-        expect(functionCall.name).toBe(expectedName);
+        expect(call.args).toStrictEqual({ file: 'test.txt' });
+        expect(call.name).toBe(expectedName);
       },
     );
 

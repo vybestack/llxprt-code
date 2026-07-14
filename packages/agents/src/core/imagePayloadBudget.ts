@@ -9,13 +9,13 @@
  *
  * When a model issues parallel tool calls that each return image data
  * (e.g. multiple `read_file` calls on PNG/JPEG files), the assembled
- * tool-response parts can exceed the provider's maximum request size,
+ * tool-response blocks can exceed the provider's maximum request size,
  * producing an HTTP 413 ("request_too_large") error.
  *
  * This module provides pure utilities to measure the wire size of image
- * content across an ordered `Part[]` and enforce a conservative cumulative
- * budget, omitting over-budget images and producing actionable feedback so
- * the model can re-read them individually.
+ * content across an ordered `ContentBlock[]` and enforce a conservative
+ * cumulative budget, omitting over-budget images and producing actionable
+ * feedback so the model can re-read them individually.
  *
  * The budget is measured on the **base64-encoded** string length, which is
  * the actual wire size sent in the JSON request payload (not the decoded
@@ -24,7 +24,10 @@
  * provider's hard request-size limit.
  */
 
-import type { Part } from '@google/genai';
+import type {
+  ContentBlock,
+  MediaBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from '@vybestack/llxprt-code-core/config/configTypes.js';
 
 export { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES };
@@ -43,11 +46,11 @@ export interface OmittedImage {
 }
 
 /**
- * Result of enforcing the image-payload budget on a `Part[]`.
+ * Result of enforcing the image-payload budget on a `ContentBlock[]`.
  */
 export interface BudgetEnforcementResult {
-  /** Parts with over-budget images removed. */
-  readonly parts: Part[];
+  /** Blocks with over-budget images removed. */
+  readonly blocks: ContentBlock[];
   /** Images that were omitted, with metadata for feedback. */
   readonly omitted: readonly OmittedImage[];
   /** Total base64 bytes of images that were retained. */
@@ -55,56 +58,59 @@ export interface BudgetEnforcementResult {
 }
 
 /**
- * Returns the wire size (base64 string length) of an image `inlineData`
- * part, or 0 for non-image parts.
+ * Returns the wire size (base64 string length) of an image `MediaBlock`,
+ * or 0 for non-image blocks.
  */
-export function getImageInlineDataSize(part: Part): number {
-  const inlineData = part.inlineData;
+export function getImageInlineDataSize(block: ContentBlock): number {
+  if (block.type !== 'media') {
+    return 0;
+  }
   if (
-    typeof inlineData?.data === 'string' &&
-    inlineData.data.length > 0 &&
-    typeof inlineData.mimeType === 'string' &&
-    inlineData.mimeType.toLowerCase().startsWith('image/')
+    typeof block.data === 'string' &&
+    block.data.length > 0 &&
+    typeof block.mimeType === 'string' &&
+    block.mimeType.toLowerCase().startsWith('image/')
   ) {
-    return inlineData.data.length;
+    return block.data.length;
   }
   return 0;
 }
 
 /**
- * Walks an ordered `Part[]` and enforces a cumulative image-payload budget.
+ * Walks an ordered `ContentBlock[]` and enforces a cumulative image-payload
+ * budget.
  *
  * Images are retained in order until adding the next image would exceed
  * `budgetBytes`.  Once the budget is exceeded, all subsequent images are
  * omitted regardless of their individual size.
  *
- * Non-image parts (text, functionResponse, etc.) are always retained.
+ * Non-image blocks (text, tool_response, etc.) are always retained.
  *
- * The function tracks the most recent `functionResponse` name so each
+ * The function tracks the most recent `tool_response` name so each
  * omitted image can be associated with the tool that produced it.
  */
 export function enforceImageBudget(
-  parts: Part[],
+  blocks: ContentBlock[],
   budgetBytes: number,
 ): BudgetEnforcementResult {
   if (!Number.isFinite(budgetBytes) || budgetBytes <= 0) {
-    return { parts, omitted: [], totalImageBytes: 0 };
+    return { blocks, omitted: [], totalImageBytes: 0 };
   }
 
-  const result: Part[] = [];
+  const result: ContentBlock[] = [];
   const omitted: OmittedImage[] = [];
   let runningTotal = 0;
   let budgetExhausted = false;
   let currentToolName: string | undefined;
 
-  for (const part of parts) {
-    if (part.functionResponse?.name) {
-      currentToolName = part.functionResponse.name;
+  for (const block of blocks) {
+    if (block.type === 'tool_response') {
+      currentToolName = block.toolName;
     }
 
-    const imageSize = getImageInlineDataSize(part);
+    const imageSize = getImageInlineDataSize(block);
     if (imageSize === 0) {
-      result.push(part);
+      result.push(block);
       continue;
     }
 
@@ -112,16 +118,16 @@ export function enforceImageBudget(
       budgetExhausted = true;
       omitted.push({
         toolName: currentToolName,
-        mimeType: part.inlineData?.mimeType,
+        mimeType: (block as MediaBlock).mimeType,
         sizeBytes: imageSize,
       });
     } else {
       runningTotal += imageSize;
-      result.push(part);
+      result.push(block);
     }
   }
 
-  return { parts: result, omitted, totalImageBytes: runningTotal };
+  return { blocks: result, omitted, totalImageBytes: runningTotal };
 }
 
 /**

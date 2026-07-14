@@ -9,7 +9,7 @@ import { useLayoutEffect, useRef } from 'react';
 import { useMouseSelection } from '../../../hooks/useMouseSelection.js';
 import type { Key } from '../../../hooks/useKeypress.js';
 import { useKeypress } from '../../../hooks/useKeypress.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { ConsoleMessageItem } from '../../../types.js';
 
 const selectionLogger = new DebugLogger('llxprt:ui:selection');

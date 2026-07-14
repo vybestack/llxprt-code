@@ -56,7 +56,7 @@ vi.mock(
   '@vybestack/llxprt-code-core/services/history/ContentConverters.js',
   () => ({
     ContentConverters: {
-      toIContent: vi.fn().mockReturnValue({ role: 'user', parts: [] }),
+      toIContent: vi.fn().mockReturnValue({ speaker: 'human', blocks: [] }),
     },
   }),
 );
@@ -78,6 +78,8 @@ vi.mock(
       recalculateTotalTokens: vi.fn().mockResolvedValue(undefined),
       getTotalTokens: vi.fn().mockReturnValue(0),
       waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
+      isEmpty: vi.fn().mockReturnValue(false),
+      getAll: vi.fn().mockReturnValue([]),
     })),
   }),
 );
@@ -152,6 +154,8 @@ function makeReusedHistoryService(): HistoryService & {
     recalculateTotalTokens: vi.fn().mockResolvedValue(undefined),
     getTotalTokens: vi.fn().mockReturnValue(0),
     waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
+    isEmpty: vi.fn().mockReturnValue(false),
+    getAll: vi.fn().mockReturnValue([]),
   } as unknown as HistoryService & {
     resetTokenAccounting: ReturnType<typeof vi.fn>;
     recalculateTotalTokens: ReturnType<typeof vi.fn>;

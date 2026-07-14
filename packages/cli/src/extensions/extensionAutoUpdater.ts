@@ -14,8 +14,8 @@ import {
 import {
   getErrorMessage,
   type LlxprtExtension,
-  debugLogger,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import * as fs from 'node:fs';
 import * as path from 'node:path';

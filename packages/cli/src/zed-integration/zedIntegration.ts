@@ -7,14 +7,13 @@ import {
   type Config,
   todoEvents,
   DEFAULT_AGENT_ID,
-  debugLogger,
   createInkStdio,
-  DebugLogger,
   type FilterConfiguration,
   type IContent,
   type TodoUpdateEvent,
   type ApprovalMode,
 } from '@vybestack/llxprt-code-core';
+import { debugLogger, DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import * as acp from '@agentclientprotocol/sdk';
 import {
   fromConfig,

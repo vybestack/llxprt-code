@@ -6,20 +6,14 @@
 
 import { StreamEventType, type StreamEvent } from '../core/chatSession.js';
 import type {
-  Content,
-  Part,
-  FunctionCall,
-  FunctionDeclaration,
-} from '@google/genai';
+  ContentBlock,
+  TextBlock,
+  ThinkingBlock,
+  ToolCallBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import {
-  filterHookRestrictedFunctionCalls,
-  filterHookRestrictedParts,
-  getHookRestrictedFunctionCallsFromParts,
-  mergeHookRestrictedFunctionCalls,
-} from '../core/hookToolRestrictions.js';
-import { chunkToParts } from '../core/streamChunkWrapper.js';
-import { getFunctionCallsFromParts } from '../core/googlePartHelpers.js';
+import type { FunctionCall } from './types.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { parseThought } from '@vybestack/llxprt-code-core/utils/thoughtUtils.js';
 import {
   nextStreamEventWithIdleTimeout,
@@ -28,50 +22,53 @@ import {
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import type { ChatSession } from '../core/chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { SubagentActivityEventType } from './types.js';
+import type { EmitActivityFn } from './executor-tool-dispatch.js';
+import { isToolNameRestricted } from '../core/hookToolRestrictions.js';
 
-/** Result from the model call. */
-export type AgentModelResult = {
+/** Minimal structural type for chat sendMessage params. */
+interface LocalSendMessageParams {
+  message: unknown;
+  config?: {
+    abortSignal?: AbortSignal;
+    tools?: unknown;
+  };
+}
+
+/**
+ * @plan PLAN-20260707-AGENTNEUTRAL.P25
+ * @requirement REQ-005.5b
+ */
+
+export interface AgentModelResult {
   functionCalls: FunctionCall[];
   textResponse: string;
-};
+}
 
-/** Callback for emitting activity events. */
-export type StreamEmitActivityFn = (
-  type: SubagentActivityEventType,
-  data: Record<string, unknown>,
-) => void;
-
-/**
- * Discriminated result for a single stream-event read.
- */
 type StreamEventRead =
   | { kind: 'done' }
-  | { kind: 'chunk'; value: ModelStreamChunk }
-  | { kind: 'skip' };
+  | { kind: 'skip' }
+  | { kind: 'chunk'; value: ModelStreamChunk };
 
 /**
- * Calls the generative model with the current context and tools, consuming
- * the response stream and accumulating function calls and text.
- *
- * @returns The model's response, including any tool calls or text.
+ * Calls the model via a streaming chat session, consumes the entire stream,
+ * and returns the accumulated function calls and text response.
  */
 export async function callModelAndConsumeStream(
   chat: ChatSession,
-  message: Content,
-  tools: Array<{ functionDeclarations: FunctionDeclaration[] }> | undefined,
+  message: IContent,
+  tools: unknown,
   signal: AbortSignal,
   promptId: string,
   runtimeContext: Config,
-  emitActivity: StreamEmitActivityFn,
+  emitActivity: EmitActivityFn,
 ): Promise<AgentModelResult> {
   const timeoutController = new AbortController();
   const timeoutSignal = timeoutController.signal;
   const onAbort = () => timeoutController.abort();
   signal.addEventListener('abort', onAbort, { once: true });
 
-  const messageParams = {
-    message: message.parts ?? [],
+  const messageParams: LocalSendMessageParams = {
+    message,
     config: {
       abortSignal: timeoutSignal,
       tools,
@@ -83,7 +80,7 @@ export async function callModelAndConsumeStream(
 
   try {
     const responseStream = await chat.sendMessageStream(
-      messageParams,
+      messageParams as never,
       promptId,
     );
 
@@ -124,7 +121,7 @@ async function consumeStream(
   timeoutController: AbortController,
   functionCalls: FunctionCall[],
   onText: (text: string) => void,
-  emitActivity: StreamEmitActivityFn,
+  emitActivity: EmitActivityFn,
 ): Promise<void> {
   for (;;) {
     const event = await readStreamEvent(
@@ -181,44 +178,78 @@ async function readStreamEvent(
   return { kind: 'skip' };
 }
 
+/** Checks if a block is a ToolCallBlock. */
+function isToolCallBlock(block: ContentBlock): block is ToolCallBlock {
+  return block.type === 'tool_call';
+}
+
+/**
+ * Normalizes ToolCallBlock.parameters (typed `unknown`) into a plain record.
+ * Returns `{}` for null, arrays, and primitives so downstream dispatch
+ * always receives a well-formed argument object.
+ */
+function normalizeToolCallParameters(
+  parameters: unknown,
+): Record<string, unknown> {
+  if (
+    typeof parameters === 'object' &&
+    parameters !== null &&
+    !Array.isArray(parameters)
+  ) {
+    return parameters as Record<string, unknown>;
+  }
+  return {};
+}
+
+/** Checks if a block is a TextBlock. */
+function isTextBlock(block: ContentBlock): block is TextBlock {
+  return block.type === 'text';
+}
+
+/** Checks if a block is a ThinkingBlock. */
+function isThinkingBlock(block: ContentBlock): block is ThinkingBlock {
+  return block.type === 'thinking';
+}
+
 /** Processes a single stream chunk, extracting thoughts, function calls, and text. */
 function processStreamChunk(
   chunk: ModelStreamChunk,
   functionCalls: FunctionCall[],
   onText: (text: string) => void,
-  emitActivity: StreamEmitActivityFn,
+  emitActivity: EmitActivityFn,
 ): boolean {
-  const parts = chunkToParts(chunk);
+  const blocks = chunk.content.blocks;
   const allowedTools = chunk.hookRestrictions?.allowedToolNames;
-  const filteredParts = filterHookRestrictedParts(parts, allowedTools);
-  const { subject } = parseThought(
-    filteredParts.find((p: Part) => p.thought === true)?.text ?? '',
-  );
 
-  if (subject !== '') {
-    emitActivity('THOUGHT_CHUNK', { text: subject });
+  // Extract thoughts from thinking blocks
+  const thoughtBlock = blocks.find(isThinkingBlock);
+  if (thoughtBlock) {
+    const { subject } = parseThought(thoughtBlock.thought);
+    if (subject !== '') {
+      emitActivity('THOUGHT_CHUNK', { text: subject });
+    }
   }
 
-  const partCalls = getHookRestrictedFunctionCallsFromParts(
-    filteredParts,
-    allowedTools,
-  );
-  const topLevelCalls = getFunctionCallsFromParts(parts) ?? [];
-  const allowedFunctionCalls = filterHookRestrictedFunctionCalls(
-    topLevelCalls,
-    allowedTools,
-  );
-  const mergedCalls = mergeHookRestrictedFunctionCalls(
-    partCalls,
-    allowedFunctionCalls,
-  );
-  if (mergedCalls.length > 0) {
-    functionCalls.push(...mergedCalls);
+  // Filter and collect tool calls (convert ToolCallBlock → FunctionCall for
+  // the executor pipeline which still uses local types)
+  const toolCallBlocks = blocks.filter(isToolCallBlock);
+  const filteredToolCallBlocks = allowedTools
+    ? toolCallBlocks.filter(
+        (tc) => !isToolNameRestricted(tc.name, allowedTools),
+      )
+    : toolCallBlocks;
+  for (const tc of filteredToolCallBlocks) {
+    functionCalls.push({
+      id: tc.id,
+      name: tc.name,
+      args: normalizeToolCallParameters(tc.parameters),
+    });
   }
 
-  const text = filteredParts
-    .filter((p: Part) => p.thought !== true && typeof p.text === 'string')
-    .map((p: Part) => p.text)
+  // Accumulate visible text (non-thought text blocks)
+  const text = blocks
+    .filter(isTextBlock)
+    .map((b) => b.text)
     .join('');
 
   if (text.length > 0) {

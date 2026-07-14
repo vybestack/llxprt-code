@@ -6,9 +6,12 @@
 
 import path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import type { GenerateContentConfig } from '@google/genai';
+import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  IContent,
+  ContentBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -93,7 +96,7 @@ export class CompressionHandler {
   constructor(
     private readonly runtimeContext: AgentRuntimeContext,
     private readonly historyService: HistoryService,
-    private readonly generationConfig: GenerateContentConfig,
+    private readonly generationConfig: ModelGenerationSettings,
     private readonly providerResolver: (
       compressionProfileName: string | undefined,
     ) => CompressionProviderResult | Promise<CompressionProviderResult>,
@@ -596,6 +599,11 @@ export class CompressionHandler {
         this.lastPromptTokenCount = null;
       },
       getRuntimeModel: () => this.runtimeContext.state.model,
+      estimateBlockTokensAsync: async (block: ContentBlock) => {
+        const model = this.runtimeContext.state.model;
+        const wrapped: IContent = { speaker: 'tool', blocks: [block] };
+        return this.historyService.estimateTokensForContents([wrapped], model);
+      },
     });
     await enforcer.enforce(pendingTokens, promptId, provider);
   }

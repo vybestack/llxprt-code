@@ -741,4 +741,61 @@ describe('Provider alias defaults (model + ephemerals)', () => {
   });
 
   // --- Model defaults in setActiveModel (stateless recomputation) ---
+
+  // --- Session identity preservation (issue #2501) ---
+
+  describe('currentProfile survives provider switch (issue #2501)', () => {
+    it('preserves currentProfile ephemeral when switching providers', async () => {
+      pushAnthropicAlias();
+
+      // Simulate applyProfileSnapshot having set the active profile name.
+      stubConfig.setEphemeralSetting('currentProfile', 'gpt56solhigh');
+
+      await switchActiveProvider('anthropic');
+
+      // currentProfile is session-level identity state; it must survive the
+      // ephemeral clear so the UI can show the profile-qualified model label.
+      expect(stubConfig.getEphemeralSetting('currentProfile')).toBe(
+        'gpt56solhigh',
+      );
+    });
+
+    it('preserves currentProfile when not included in preserveEphemerals list', async () => {
+      pushAnthropicAlias();
+
+      stubConfig.setEphemeralSetting('currentProfile', 'work-profile');
+      // executeAutoProvider switches with a limited preserveEphemerals list
+      // that does NOT include currentProfile.
+      await switchActiveProvider('anthropic', {
+        preserveEphemerals: [
+          'auth-key',
+          'auth-keyfile',
+          'auth-key-name',
+          'base-url',
+        ],
+      });
+
+      expect(stubConfig.getEphemeralSetting('currentProfile')).toBe(
+        'work-profile',
+      );
+    });
+
+    it('clears non-identity ephemerals while preserving currentProfile and activeProvider', async () => {
+      pushAnthropicAlias();
+
+      stubConfig.setEphemeralSetting('currentProfile', 'my-profile');
+      stubConfig.setEphemeralSetting('temperature', 0.7);
+
+      await switchActiveProvider('anthropic');
+
+      expect(stubConfig.getEphemeralSetting('currentProfile')).toBe(
+        'my-profile',
+      );
+      expect(stubConfig.getEphemeralSetting('activeProvider')).toBe(
+        'anthropic',
+      );
+      // Per-provider ephemerals are still cleared.
+      expect(stubConfig.getEphemeralSetting('temperature')).toBeUndefined();
+    });
+  });
 });

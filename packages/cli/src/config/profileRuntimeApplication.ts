@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import { applyProfileSnapshot } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { CliArgs } from './cliArgParser.js';

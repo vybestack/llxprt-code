@@ -14,10 +14,11 @@ import {
   createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act } from 'react';
+import React, { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { useAgentStream } from './agentStream/index.js';
+import { createStreamRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type {
@@ -60,19 +61,28 @@ vi.mock('../utils/markdownUtilities.js', () => ({
 }));
 
 vi.mock('./useStateAndRef.js', () => ({
-  useStateAndRef: vi.fn((initial) => {
-    let val = initial;
-    const ref = { current: val };
-    const setVal = vi.fn((updater) => {
-      if (typeof updater === 'function') {
-        val = updater(val);
-      } else {
-        val = updater;
-      }
-      ref.current = val;
-    });
-    return [val, ref, setVal];
-  }),
+  useStateAndRef: <T,>(
+    initial: T,
+  ): [
+    T,
+    React.MutableRefObject<T>,
+    React.Dispatch<React.SetStateAction<T>>,
+  ] => {
+    const [state, setState] = React.useState(initial);
+    const ref = React.useRef(initial);
+    const setStateInternal = React.useCallback(
+      (valueOrUpdater: React.SetStateAction<T>) => {
+        const nextValue =
+          typeof valueOrUpdater === 'function'
+            ? valueOrUpdater(ref.current)
+            : valueOrUpdater;
+        ref.current = nextValue;
+        setState(nextValue);
+      },
+      [],
+    );
+    return [state, ref, setStateInternal];
+  },
 }));
 
 vi.mock('./useLogger.js', () => ({
@@ -234,7 +244,7 @@ describe('useAgentStream', () => {
         createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
         [],
         mockAddItem,
-        mockConfig,
+        createStreamRuntimeForTest(mockConfig),
         mockLoadedSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,
@@ -273,7 +283,7 @@ describe('useAgentStream', () => {
           createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
           [],
           mockAddItem,
-          mockConfig,
+          createStreamRuntimeForTest(mockConfig),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -450,7 +460,7 @@ describe('useAgentStream', () => {
           createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
           [],
           mockAddItem,
-          mockConfig,
+          createStreamRuntimeForTest(mockConfig),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -628,7 +638,7 @@ describe('useAgentStream', () => {
         createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
         [],
         mockAddItem,
-        mockConfig,
+        createStreamRuntimeForTest(mockConfig),
         mockLoadedSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,

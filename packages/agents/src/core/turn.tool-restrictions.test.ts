@@ -10,33 +10,20 @@ import type {
   ServerAgentStreamEvent,
 } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
-import type { Part } from '@google/genai';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
-import { attachHookRestrictedAllowedTools } from './hookToolRestrictions.js';
+
 import {
   type MockedChatInstance,
   findFinishedEvent,
-  mockResponseToChunk,
+  mockChunk,
 } from './turn-test-helpers.js';
-import { responseToModelStreamChunk } from './streamChunkWrapper.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
   mockGetHistory: vi.fn(),
 }));
-
-vi.mock('@google/genai', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@google/genai')>();
-  const MockChat = vi.fn().mockImplementation(() => ({
-    sendMessageStream: mockSendMessageStream,
-    getHistory: mockGetHistory,
-  }));
-  return {
-    ...actual,
-    Chat: MockChat,
-  };
-});
 
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
@@ -71,41 +58,27 @@ describe('Turn run - hook tool restrictions', () => {
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: responseToModelStreamChunk(
-          attachHookRestrictedAllowedTools(
+        value: mockChunk({
+          toolCalls: [
             {
-              candidates: [
-                {
-                  content: {
-                    parts: [
-                      {
-                        functionCall: {
-                          id: 'allowed-call',
-                          name: 'read_file',
-                          args: { file_path: 'file.txt' },
-                        },
-                      },
-                      {
-                        functionCall: {
-                          id: 'blocked-call',
-                          name: 'run_shell_command',
-                          args: { command: 'echo blocked' },
-                        },
-                      },
-                    ],
-                  },
-                },
-              ],
-            } as never,
-            ['read_file'],
-          ),
-        ),
+              id: 'allowed-call',
+              name: 'read_file',
+              args: { file_path: 'file.txt' },
+            },
+            {
+              id: 'blocked-call',
+              name: 'run_shell_command',
+              args: { command: 'echo blocked' },
+            },
+          ],
+          hookRestrictions: { allowedToolNames: ['read_file'] },
+        }),
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
     const events = [];
-    const reqParts: Part[] = [{ text: 'Use tools' }];
+    const reqParts: ContentBlock[] = [{ text: 'Use tools' }];
     for await (const event of turn.run(
       reqParts,
       new AbortController().signal,
@@ -133,34 +106,22 @@ describe('Turn run - hook tool restrictions', () => {
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: responseToModelStreamChunk(
-          attachHookRestrictedAllowedTools(
+        value: mockChunk({
+          toolCalls: [
             {
-              candidates: [
-                {
-                  content: {
-                    parts: [
-                      {
-                        functionCall: {
-                          id: 'blocked-call',
-                          name: 'read_file',
-                          args: { file_path: 'file.txt' },
-                        },
-                      },
-                    ],
-                  },
-                },
-              ],
-            } as never,
-            [],
-          ),
-        ),
+              id: 'blocked-call',
+              name: 'read_file',
+              args: { file_path: 'file.txt' },
+            },
+          ],
+          hookRestrictions: { allowedToolNames: [] },
+        }),
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
     const events = [];
-    const reqParts: Part[] = [{ text: 'Use tools' }];
+    const reqParts: ContentBlock[] = [{ text: 'Use tools' }];
     for await (const event of turn.run(
       reqParts,
       new AbortController().signal,
@@ -178,29 +139,17 @@ describe('Turn run - hook tool restrictions', () => {
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: responseToModelStreamChunk(
-          attachHookRestrictedAllowedTools(
+        value: mockChunk({
+          toolCalls: [
             {
-              candidates: [
-                {
-                  content: {
-                    parts: [
-                      {
-                        functionCall: {
-                          id: 'blocked-call',
-                          name: 'run_shell_command',
-                          args: { command: 'echo blocked' },
-                        },
-                      },
-                    ],
-                  },
-                  finishReason: 'STOP',
-                },
-              ],
-            } as never,
-            ['read_file'],
-          ),
-        ),
+              id: 'blocked-call',
+              name: 'run_shell_command',
+              args: { command: 'echo blocked' },
+            },
+          ],
+          finishReason: 'STOP',
+          hookRestrictions: { allowedToolNames: ['read_file'] },
+        }),
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -229,57 +178,30 @@ describe('Turn run - hook tool restrictions', () => {
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: responseToModelStreamChunk(
-          attachHookRestrictedAllowedTools(
+        value: mockChunk({
+          toolCalls: [
             {
-              candidates: [
-                {
-                  content: {
-                    parts: [
-                      {
-                        functionCall: {
-                          id: 'part-call',
-                          name: 'read_file',
-                          args: { file_path: 'part.txt' },
-                        },
-                      },
-                    ],
-                  },
-                },
-              ],
-              // Top-level functionCalls accessor is carried via content
-              // blocks in the neutral pipeline. The second call is added
-              // as an extra tool_call block in the chunk content.
-            } as never,
-            ['read_file'],
-          ),
-        ),
+              id: 'part-call',
+              name: 'read_file',
+              args: { file_path: 'part.txt' },
+            },
+          ],
+          hookRestrictions: { allowedToolNames: ['read_file'] },
+        }),
       };
       // Second chunk carries the top-level call as a content block
       yield {
         type: StreamEventType.CHUNK,
-        value: responseToModelStreamChunk(
-          attachHookRestrictedAllowedTools(
+        value: mockChunk({
+          toolCalls: [
             {
-              candidates: [
-                {
-                  content: {
-                    parts: [
-                      {
-                        functionCall: {
-                          id: 'top-level-call',
-                          name: 'read_file',
-                          args: { file_path: 'top.txt' },
-                        },
-                      },
-                    ],
-                  },
-                },
-              ],
-            } as never,
-            ['read_file'],
-          ),
-        ),
+              id: 'top-level-call',
+              name: 'read_file',
+              args: { file_path: 'top.txt' },
+            },
+          ],
+          hookRestrictions: { allowedToolNames: ['read_file'] },
+        }),
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -310,45 +232,25 @@ describe('Turn run - hook tool restrictions', () => {
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: responseToModelStreamChunk(
-          attachHookRestrictedAllowedTools(
+        value: mockChunk({
+          toolCalls: [
             {
-              candidates: [
-                {
-                  content: {
-                    parts: [
-                      {
-                        functionCall: {
-                          id: 'blocked-call',
-                          name: 'run_shell_command',
-                          args: { command: 'echo blocked' },
-                        },
-                      },
-                    ],
-                  },
-                },
-              ],
-            } as never,
-            ['read_file'],
-          ),
-        ),
+              id: 'blocked-call',
+              name: 'run_shell_command',
+              args: { command: 'echo blocked' },
+            },
+          ],
+          hookRestrictions: { allowedToolNames: ['read_file'] },
+        }),
       };
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseToChunk({
-          candidates: [
+        value: mockChunk({
+          toolCalls: [
             {
-              content: {
-                parts: [
-                  {
-                    functionCall: {
-                      id: 'unrestricted-call',
-                      name: 'run_shell_command',
-                      args: { command: 'echo allowed' },
-                    },
-                  },
-                ],
-              },
+              id: 'unrestricted-call',
+              name: 'run_shell_command',
+              args: { command: 'echo allowed' },
             },
           ],
         }),

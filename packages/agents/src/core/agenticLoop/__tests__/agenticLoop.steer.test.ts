@@ -90,9 +90,11 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
     expect(textParts(turn2Parts)).toContain('actually, please use x=2 instead');
 
     // The steer text must come AFTER the tool results (it's appended last)
-    const fnResponseIdx = turn2Parts.findIndex((p) => 'functionResponse' in p);
+    const fnResponseIdx = turn2Parts.findIndex(
+      (p) => p.type === 'tool_response',
+    );
     const steerTextIdx = turn2Parts.findIndex(
-      (p) => 'text' in p && p.text === 'actually, please use x=2 instead',
+      (p) => p.type === 'text' && p.text === 'actually, please use x=2 instead',
     );
     expect(steerTextIdx).toBeGreaterThan(fnResponseIdx);
 
@@ -143,16 +145,16 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
     await eventsPromise;
 
     const turn2Parts = partListUnionToParts(turnMessages[1]);
-    const responseIndex = turn2Parts.findIndex((part) => part.functionResponse);
+    const responseIndex = turn2Parts.findIndex(
+      (p) => p.type === 'tool_response',
+    );
     const feedbackIndex = turn2Parts.findIndex(
-      (part) => part.text?.includes('image(s) were omitted') === true,
+      (p) => p.type === 'text' && p.text.includes('image(s) were omitted'),
     );
     const steerIndex = turn2Parts.findIndex(
-      (part) => part.text === 'use a smaller image',
+      (p) => p.type === 'text' && p.text === 'use a smaller image',
     );
-    expect(turn2Parts.some((part) => part.inlineData !== undefined)).toBe(
-      false,
-    );
+    expect(turn2Parts.some((p) => p.type === 'media')).toBe(false);
     expect(responseIndex).toBeGreaterThanOrEqual(0);
     expect(feedbackIndex).toBeGreaterThan(responseIndex);
     expect(steerIndex).toBeGreaterThan(feedbackIndex);

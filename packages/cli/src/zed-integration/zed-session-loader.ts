@@ -156,7 +156,9 @@ export async function readAgentHistoryAsIContent(
   agent: Agent,
 ): Promise<readonly IContent[]> {
   const history = await agent.getHistory();
-  return ContentConverters.toIContents([...history]);
+  return ContentConverters.toIContents([...history] as Parameters<
+    typeof ContentConverters.toIContents
+  >[0]);
 }
 
 /**

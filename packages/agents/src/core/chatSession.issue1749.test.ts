@@ -6,6 +6,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ChatSession } from './chatSession.js';
+import type { TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
@@ -25,6 +27,18 @@ import {
 import { AfterModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+
+/**
+ * Extracts visible (non-thinking) text from a neutral ModelOutput — the
+ * post-P13 replacement for the deleted GenerateContentResponse `.text`
+ * getter.
+ */
+function extractText(output: ModelOutput): string {
+  return output.content.blocks
+    .filter((b): b is TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
+}
 
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
@@ -169,8 +183,8 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
       'prompt-issue-1749',
     );
 
-    expect(response.text).toBe('hook modified text');
-    expect(response.text).not.toContain('original provider text');
+    expect(extractText(response)).toBe('hook modified text');
+    expect(extractText(response)).not.toContain('original provider text');
     expect(JSON.stringify(response)).not.toContain('original provider text');
   });
 
@@ -197,7 +211,7 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
       'prompt-issue-1749-noop',
     );
 
-    expect(response.text).toBe('plain provider text');
+    expect(extractText(response)).toBe('plain provider text');
   });
 
   it('excludes thought parts from hook-modified response text', async () => {
@@ -239,7 +253,7 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
       'prompt-issue-1749-thought',
     );
 
-    expect(response.text).toBe('visible answer');
-    expect(response.text).not.toContain('internal reasoning');
+    expect(extractText(response)).toBe('visible answer');
+    expect(extractText(response)).not.toContain('internal reasoning');
   });
 });

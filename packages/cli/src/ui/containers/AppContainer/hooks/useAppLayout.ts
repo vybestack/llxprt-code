@@ -52,6 +52,8 @@ export interface AppLayoutParams {
   setRenderMarkdown: AppDialogsResult['setRenderMarkdown'];
   isTodoPanelCollapsed: AppDialogsResult['isTodoPanelCollapsed'];
   setIsTodoPanelCollapsed: AppDialogsResult['setIsTodoPanelCollapsed'];
+  isQueuedMessagesPanelCollapsed: AppDialogsResult['isQueuedMessagesPanelCollapsed'];
+  setIsQueuedMessagesPanelCollapsed: AppDialogsResult['setIsQueuedMessagesPanelCollapsed'];
   setFooterHeight: AppDialogsResult['setFooterHeight'];
   footerHeight: AppDialogsResult['footerHeight'];
   copyModeEnabled: AppDialogsResult['copyModeEnabled'];
@@ -99,6 +101,59 @@ function pickCopyModeKeybindingState(p: AppLayoutParams) {
   };
 }
 
+function buildKeybindingsConfig(
+  p: AppLayoutParams,
+  exitState: {
+    requestCtrlCExit: AppLayoutParams['requestCtrlCExit'];
+    requestCtrlDExit: AppLayoutParams['requestCtrlDExit'];
+    ctrlCPressedOnce: AppLayoutParams['ctrlCPressedOnce'];
+    cancelOngoingRequest: AppLayoutParams['cancelOngoingRequest'];
+    bufferTextLength: number;
+  },
+  displayState: {
+    showErrorDetails: AppLayoutParams['showErrorDetails'];
+    setShowErrorDetails: AppLayoutParams['setShowErrorDetails'];
+    showToolDescriptions: AppLayoutParams['showToolDescriptions'];
+    setShowToolDescriptions: AppLayoutParams['setShowToolDescriptions'];
+    renderMarkdown: AppLayoutParams['renderMarkdown'];
+    setRenderMarkdown: AppLayoutParams['setRenderMarkdown'];
+    isTodoPanelCollapsed: AppLayoutParams['isTodoPanelCollapsed'];
+    setIsTodoPanelCollapsed: AppLayoutParams['setIsTodoPanelCollapsed'];
+    isQueuedMessagesPanelCollapsed: AppLayoutParams['isQueuedMessagesPanelCollapsed'];
+    setIsQueuedMessagesPanelCollapsed: AppLayoutParams['setIsQueuedMessagesPanelCollapsed'];
+    constrainHeight: AppLayoutParams['constrainHeight'];
+    setConstrainHeight: AppLayoutParams['setConstrainHeight'];
+    refreshStatic: AppLayoutParams['refreshStatic'];
+    addItem: AppLayoutParams['addItem'];
+    handleSlashCommand: AppLayoutParams['handleSlashCommand'];
+  },
+  shellState: {
+    activeShellPtyId: AppLayoutParams['activeShellPtyId'];
+    setEmbeddedShellFocused: AppLayoutParams['setEmbeddedShellFocused'];
+    ideContextState: AppLayoutParams['ideContextState'];
+  },
+) {
+  const { uiRuntime } = p;
+  return {
+    exit: exitState,
+    display: displayState,
+    shell: {
+      activeShellPtyId: shellState.activeShellPtyId,
+      setEmbeddedShellFocused: shellState.setEmbeddedShellFocused,
+      getEnableInteractiveShell: () =>
+        uiRuntime.shell.getEnableInteractiveShell(),
+    },
+    copyMode: pickCopyModeKeybindingState(p),
+    ideContext: {
+      getIdeMode: () => uiRuntime.ide.getIdeMode(),
+      ideContextState: shellState.ideContextState,
+    },
+    mcp: {
+      getMcpServers: () => uiRuntime.mcp.getMcpServers(),
+    },
+  };
+}
+
 function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
   const {
     uiRuntime,
@@ -115,6 +170,8 @@ function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
     setRenderMarkdown,
     isTodoPanelCollapsed,
     setIsTodoPanelCollapsed,
+    isQueuedMessagesPanelCollapsed,
+    setIsQueuedMessagesPanelCollapsed,
     ideContextState,
     activeShellPtyId,
     setEmbeddedShellFocused,
@@ -128,44 +185,36 @@ function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
     buffer,
     useAlternateBuffer,
   } = p;
-  useKeybindings({
-    exit: {
-      requestCtrlCExit,
-      requestCtrlDExit,
-      ctrlCPressedOnce,
-      cancelOngoingRequest,
-      bufferTextLength: buffer.text.length,
-    },
-    display: {
-      showErrorDetails,
-      setShowErrorDetails,
-      showToolDescriptions,
-      setShowToolDescriptions,
-      renderMarkdown,
-      setRenderMarkdown,
-      isTodoPanelCollapsed,
-      setIsTodoPanelCollapsed,
-      constrainHeight,
-      setConstrainHeight,
-      refreshStatic,
-      addItem,
-      handleSlashCommand,
-    },
-    shell: {
-      activeShellPtyId,
-      setEmbeddedShellFocused,
-      getEnableInteractiveShell: () =>
-        uiRuntime.shell.getEnableInteractiveShell(),
-    },
-    copyMode: pickCopyModeKeybindingState(p),
-    ideContext: {
-      getIdeMode: () => uiRuntime.ide.getIdeMode(),
-      ideContextState,
-    },
-    mcp: {
-      getMcpServers: () => uiRuntime.mcp.getMcpServers(),
-    },
-  });
+  useKeybindings(
+    buildKeybindingsConfig(
+      p,
+      {
+        requestCtrlCExit,
+        requestCtrlDExit,
+        ctrlCPressedOnce,
+        cancelOngoingRequest,
+        bufferTextLength: buffer.text.length,
+      },
+      {
+        showErrorDetails,
+        setShowErrorDetails,
+        showToolDescriptions,
+        setShowToolDescriptions,
+        renderMarkdown,
+        setRenderMarkdown,
+        isTodoPanelCollapsed,
+        setIsTodoPanelCollapsed,
+        isQueuedMessagesPanelCollapsed,
+        setIsQueuedMessagesPanelCollapsed,
+        constrainHeight,
+        setConstrainHeight,
+        refreshStatic,
+        addItem,
+        handleSlashCommand,
+      },
+      { activeShellPtyId, setEmbeddedShellFocused, ideContextState },
+    ),
+  );
   const logger = useLogger(uiRuntime.storage);
   useInputHistoryBootstrap({ inputHistoryStore, logger });
   const handleClearScreen = useClearScreenAction({
