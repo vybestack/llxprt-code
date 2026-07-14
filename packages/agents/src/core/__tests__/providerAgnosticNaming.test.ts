@@ -46,6 +46,10 @@ const ALLOWED_GEMINI_PATTERNS: ReadonlyArray<{
     pattern: 'geminiRequestBuilding',
     reason: 'Gemini provider request-building module',
   },
+  {
+    pattern: 'providers/src/fake/FakeProvider.ts::GeminiContent',
+    reason: 'Fake provider imports the neutral core content boundary type',
+  },
   // Gemini model names (not code identifiers)
   { pattern: 'gemini-1', reason: 'Gemini model name string literal' },
   { pattern: 'gemini-embedding', reason: 'Gemini embedding model name' },
@@ -73,7 +77,14 @@ function isExcludedPath(filePath: string): boolean {
 
 function isAllowedGeminiName(name: string, filePath: string): boolean {
   for (const ap of ALLOWED_GEMINI_PATTERNS) {
-    if (name.includes(ap.pattern) || filePath.includes(ap.pattern)) {
+    const separator = ap.pattern.indexOf('::');
+    const hasScopedPattern = separator >= 0;
+    const pathPattern = ap.pattern.slice(0, separator);
+    const namePattern = ap.pattern.slice(separator + 2);
+    const matches = hasScopedPattern
+      ? filePath.includes(pathPattern) && name.includes(namePattern)
+      : name.includes(ap.pattern) || filePath.includes(ap.pattern);
+    if (matches) {
       return true;
     }
   }
