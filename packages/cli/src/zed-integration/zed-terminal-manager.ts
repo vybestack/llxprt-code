@@ -210,29 +210,28 @@ export class TerminalManager {
         exit !== undefined ||
         exitError !== undefined ||
         (killed && Date.now() >= killDeadline);
-      if (done) {
-        continue;
+      if (!done) {
+        const pollDelay = delay(OUTPUT_POLL_INTERVAL_MS);
+        try {
+          await Promise.race([exitPromise, pollDelay.promise]);
+        } finally {
+          pollDelay.cancel();
+        }
+        let current: acp.TerminalOutputResponse;
+        try {
+          current = await active.handle.currentOutput();
+        } catch (error) {
+          this.logger.debug(
+            () => `Terminal output poll failed: ${errorMessage(error)}`,
+          );
+          break;
+        }
+        const chunk = outputDelta(previousOutput, current.output);
+        if (chunk !== '') {
+          onOutput({ type: 'data', chunk });
+        }
+        previousOutput = current.output;
       }
-      const pollDelay = delay(OUTPUT_POLL_INTERVAL_MS);
-      try {
-        await Promise.race([exitPromise, pollDelay.promise]);
-      } finally {
-        pollDelay.cancel();
-      }
-      let current: acp.TerminalOutputResponse;
-      try {
-        current = await active.handle.currentOutput();
-      } catch (error) {
-        this.logger.debug(
-          () => `Terminal output poll failed: ${errorMessage(error)}`,
-        );
-        break;
-      }
-      const chunk = outputDelta(previousOutput, current.output);
-      if (chunk !== '') {
-        onOutput({ type: 'data', chunk });
-      }
-      previousOutput = current.output;
     }
     // Final poll after exit settles so output produced between the last poll
     // and process exit is never lost, including when waitForExit rejects.
