@@ -106,7 +106,13 @@ describe('BrowserProfileAssociationStore', () => {
         browser: 'chrome',
         profileDirectory: 'Default',
       });
+      expect(fs.modes.get(filePath)).toBe(0o600);
 
+      fs.modes.set(filePath, 0o644);
+      store.setAssociation('anthropic', 'work', {
+        browser: 'chrome',
+        profileDirectory: 'Profile 1',
+      });
       expect(fs.modes.get(filePath)).toBe(0o600);
     });
   });
@@ -126,6 +132,17 @@ describe('BrowserProfileAssociationStore', () => {
         browser: 'chrome',
         profileDirectory: 'Default',
       });
+    });
+
+    it('returns undefined when only a non-default bucket exists', () => {
+      const store = createStore(createInMemoryFs());
+
+      store.setAssociation('anthropic', 'work', {
+        browser: 'chrome',
+        profileDirectory: 'Profile 1',
+      });
+
+      expect(store.getAssociation('anthropic')).toBeUndefined();
     });
   });
 
@@ -342,6 +359,7 @@ describe('BrowserProfileAssociationStore', () => {
       // An unknown browser would fail later at launch time; the type guard
       // must reject it on read so callers never receive an invalid value.
       expect(store.getAssociation('anthropic', 'default')).toBeUndefined();
+      expect(store.listAssociations('anthropic')).toStrictEqual([]);
       // The invalid file must not be overwritten or corrupted by the read.
       expect(fs.files.get(path)).toBe(originalContent);
     });

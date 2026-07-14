@@ -26,8 +26,6 @@ const peekStoredTokenMock = vi.fn();
 const getOAuthTokenMock = vi.fn();
 const setBrowserProfileAssociationMock = vi.fn();
 const clearBrowserProfileAssociationMock = vi.fn();
-const getBrowserProfileAssociationMock = vi.fn();
-const listBrowserProfileAssociationsMock = vi.fn();
 const mockOAuthManager = {
   registerProvider: vi.fn(),
   toggleOAuthEnabled: vi.fn(),
@@ -42,8 +40,6 @@ const mockOAuthManager = {
   logout: vi.fn(),
   setBrowserProfileAssociation: setBrowserProfileAssociationMock,
   clearBrowserProfileAssociation: clearBrowserProfileAssociationMock,
-  getBrowserProfileAssociation: getBrowserProfileAssociationMock,
-  listBrowserProfileAssociations: listBrowserProfileAssociationsMock,
 } as unknown as OAuthManager;
 
 describe('AuthCommandExecutor OAuth Support', () => {
