@@ -781,7 +781,10 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
           max_turns: {
             type: 'number',
             description:
-              'Optional maximum number of turns for the subagent. Overrides the subagent profile and parent agent defaults when set.',
+              'Maximum turns for the subagent. -1 means unlimited (no turn cap). A positive integer caps the run. ' +
+              'Precedence is: explicit task max_turns > selected subagent profile maxTurnsPerPrompt > ' +
+              'current foreground maxTurnsPerPrompt > fallback of 1000 turns. Only the task, profile, and foreground ' +
+              'layers accept -1 for unlimited; the 1000-turn fallback is a fixed constant that does not interpret -1.',
           },
           async: {
             type: 'boolean',
