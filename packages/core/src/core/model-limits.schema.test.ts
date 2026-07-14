@@ -14,10 +14,13 @@ describe('ModelLimitsCatalogSchema', () => {
     expect(parsed.success).toBe(true);
   });
 
-  it('rejects a catalog with a non-positive defaultLimit', () => {
-    const bad = { ...catalogData, defaultLimit: -1 };
-    expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
-  });
+  it.each([-1, 0])(
+    'rejects a catalog with a non-positive defaultLimit: %s',
+    (defaultLimit) => {
+      const bad = { ...catalogData, defaultLimit };
+      expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
+    },
+  );
 
   it('rejects a catalog missing orderedRules', () => {
     const bad = {
@@ -147,13 +150,16 @@ describe('ModelLimitsCatalogSchema', () => {
     expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
   });
 
-  it('rejects a non-positive limit in an ordered rule', () => {
-    const bad = {
-      ...catalogData,
-      orderedRules: [{ type: 'substring', substring: 'codex', limit: -5 }],
-    };
-    expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
-  });
+  it.each([-5, 0])(
+    'rejects a non-positive limit in an ordered rule: %s',
+    (limit) => {
+      const bad = {
+        ...catalogData,
+        orderedRules: [{ type: 'substring', substring: 'codex', limit }],
+      };
+      expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
+    },
+  );
 
   // --- Behavioral rejection: strict catalog object ---
 
@@ -180,9 +186,7 @@ describe('ModelLimitsCatalogSchema', () => {
     expect(ModelLimitsCatalogSchema.safeParse(bad).success).toBe(false);
   });
 
-  // --- substringCaseInsensitive transform normalizes to lowercase ---
-
-  it('normalizes a mixed-case substring to lowercase for substringCaseInsensitive', () => {
+  it('preserves authored casing for substringCaseInsensitive rules', () => {
     const parsed = ModelLimitsCatalogSchema.parse({
       ...catalogData,
       orderedRules: [
@@ -195,7 +199,7 @@ describe('ModelLimitsCatalogSchema', () => {
     });
     expect(parsed.orderedRules).toContainEqual({
       type: 'substringCaseInsensitive',
-      substring: 'claude-sonnet-5',
+      substring: 'Claude-SonNet-5',
       limit: 200000,
     });
   });

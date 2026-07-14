@@ -92,7 +92,6 @@ describe('model-limits catalog exhaustive parity (@issue:2280)', () => {
 
 describe('substringCaseInsensitive normalizes both sides (@issue:2280)', () => {
   it('matches a mixed-case model against a lowercase catalog substring', () => {
-    // The shipped catalog stores "claude-sonnet-5" lowercase (pre-transform).
     const catalog = ModelLimitsCatalogSchema.parse(catalogData);
     expect(
       resolveOrderedRuleFromCatalog(catalog, 'Claude-Sonnet-5-20260630', ''),

@@ -54,9 +54,11 @@ export function resolveOrderedRuleFromCatalog(
         }
         break;
       case 'substringCaseInsensitive':
-        // rule.substring is pre-lowercased by the schema transform, so we
-        // only need to lowercase the model id for a symmetric comparison.
-        if (modelWithoutPrefix.toLowerCase().includes(rule.substring)) {
+        if (
+          modelWithoutPrefix
+            .toLowerCase()
+            .includes(rule.substring.toLowerCase())
+        ) {
           return rule.limit;
         }
         break;

@@ -50,16 +50,11 @@ const PrefixGroupRuleSchema = z
   })
   .strict();
 
-/**
- * Case-insensitive substring rule. The configured substring is normalized to
- * lowercase via a schema transform so that the runtime check only needs to
- * lowercase the model id — guaranteeing a symmetric comparison regardless of
- * how the JSON author cased the entry.
- */
+/** Case-insensitive substring rule; runtime comparison normalizes both sides. */
 const SubstringCaseInsensitiveRuleSchema = z
   .object({
     type: z.literal('substringCaseInsensitive'),
-    substring: NonEmptyString.transform((value) => value.toLowerCase()),
+    substring: NonEmptyString,
     limit: PositiveLimit,
   })
   .strict();
