@@ -19,6 +19,7 @@ import type {
   ProviderSettings,
 } from './BaseProvider.js';
 import type { ResolvedAuthToken } from './types/providerRuntime.js';
+import { isAbortSignal } from './utils/abortSignal.js';
 
 interface RuntimeGuardInput {
   providerKey: string;
@@ -238,14 +239,7 @@ function extractLegacySignal(invocation: unknown): AbortSignal | undefined {
     return undefined;
   }
   const signal = (invocation as { signal?: unknown }).signal;
-  if (
-    typeof signal === 'object' &&
-    signal !== null &&
-    typeof (signal as { aborted?: unknown }).aborted === 'boolean'
-  ) {
-    return signal as AbortSignal;
-  }
-  return undefined;
+  return isAbortSignal(signal) ? signal : undefined;
 }
 
 interface InvocationNormalizationInput {
@@ -266,7 +260,11 @@ function createNormalizedInvocation(
   )
     ? input.providedOptions.invocation
     : undefined;
-  const legacySignal = extractLegacySignal(input.providedOptions.invocation);
+  const metadataSignal = extractLegacySignal({
+    signal: input.providedOptions.metadata?.abortSignal,
+  });
+  const legacySignal =
+    extractLegacySignal(input.providedOptions.invocation) ?? metadataSignal;
   if (providedInvocation) {
     const providedSignal = extractLegacySignal(providedInvocation);
     return createRuntimeInvocationContext({
@@ -284,7 +282,9 @@ function createNormalizedInvocation(
       metadata: providedInvocation.metadata,
       userMemory: providedInvocation.userMemory,
       redaction: providedInvocation.redaction,
-      ...(providedSignal ? { signal: providedSignal } : {}),
+      ...((providedSignal ?? metadataSignal)
+        ? { signal: providedSignal ?? metadataSignal }
+        : {}),
       fallbackRuntimeId: providedInvocation.runtimeId,
     });
   }

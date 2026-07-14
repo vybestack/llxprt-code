@@ -36,6 +36,7 @@ import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { logApiResponse, logApiError } from './turnLogging.js';
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+import { isTerminalRetryError } from './turnAbortHelpers.js';
 import {
   extractResponseTextFromBlocks,
   analyzeBlocksOutcome,
@@ -235,10 +236,12 @@ export class StreamProcessor {
       this._buildAndSendStreamRequest(params, promptId, userContent, provider);
 
     return retryWithBackoff(apiCall, {
-      onPersistent429: () => this._handleBucketFailover(),
+      onPersistent429: () =>
+        this._handleBucketFailover(params.config?.abortSignal),
       signal: params.config?.abortSignal,
       shouldRetryOnError: (error) =>
-        error instanceof EmptyStreamError || isRetryableError(error),
+        error instanceof EmptyStreamError ||
+        (!isTerminalRetryError(error) && isRetryableError(error)),
     });
   }
 
@@ -443,11 +446,13 @@ export class StreamProcessor {
         tools: requestPayload.tools as ProviderToolset | undefined,
         config: runtimeContext.config,
         runtime: runtimeContext,
+        onProviderError: params.config?.onProviderError,
         settings:
           runtimeContext.settingsService as GenerateChatOptions['settings'],
         metadata: {
           ...runtimeContext.metadata,
           abortSignal: params.config?.abortSignal,
+          _retryRequestContext: params.config?.providerRequestContext,
         },
         userMemory,
         systemInstruction: extractSystemInstructionText(
@@ -574,13 +579,15 @@ export class StreamProcessor {
     return buildRequestContentsResult(userContent, this.historyService);
   }
 
-  private async _handleBucketFailover(): Promise<boolean | null> {
+  private async _handleBucketFailover(
+    signal: AbortSignal | undefined,
+  ): Promise<boolean | null> {
     const failoverHandler =
       this.runtimeContext.providerRuntime.config?.getBucketFailoverHandler();
     if (!failoverHandler) return null;
 
     this.logger.debug(() => 'Attempting bucket failover on persistent 429');
-    const success = await failoverHandler.tryFailover();
+    const success = await failoverHandler.tryFailover({ signal });
     if (success) {
       const runtimeId =
         this.runtimeContext.providerRuntime.runtimeId ??

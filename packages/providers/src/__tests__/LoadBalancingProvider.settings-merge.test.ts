@@ -415,6 +415,58 @@ describe('LoadBalancingProvider', () => {
           providerManager.getProviderByName = originalGetProvider;
         }
       });
+
+      it('preserves the request signal in a resolved delegate invocation', async () => {
+        const controller = new AbortController();
+        const resolvedSubProfiles: ResolvedSubProfile[] = [
+          {
+            name: 'resolved',
+            providerName: 'anthropic',
+            model: 'claude-test',
+            ephemeralSettings: {},
+            modelParams: {},
+          },
+        ];
+        const provider = new LoadBalancingProvider(
+          {
+            profileName: 'signal-lb',
+            strategy: 'round-robin',
+            subProfiles: resolvedSubProfiles,
+          },
+          providerManager,
+        );
+        let capturedSignal: AbortSignal | undefined;
+        const delegate: IProvider = {
+          name: 'anthropic',
+          async *generateChatCompletion(options: GenerateChatOptions) {
+            capturedSignal = options.invocation?.signal;
+            yield { role: 'model', parts: [{ text: 'response' }] };
+          },
+          getModels: async () => [],
+          getDefaultModel: () => 'claude-test',
+          getServerTools: () => [],
+          invokeServerTool: async () => ({}),
+        };
+        const originalGetProvider =
+          providerManager.getProviderByName.bind(providerManager);
+        providerManager.getProviderByName = () => delegate;
+
+        try {
+          for await (const _chunk of provider.generateChatCompletion({
+            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+            settings: settingsService,
+            config,
+            runtime: { settingsService, config },
+            metadata: { abortSignal: controller.signal },
+          })) {
+            // Consume
+          }
+        } finally {
+          providerManager.getProviderByName = originalGetProvider;
+        }
+
+        expect(capturedSignal).toBe(controller.signal);
+      });
     });
     describe('ephemeralSettings merge (dumb merge)', () => {
       it('should merge LB profile ephemeralSettings over sub-profile ephemeralSettings', async () => {

@@ -17,9 +17,25 @@ export const DoneReasonSchema = z.enum([
   'refusal',
 ]);
 
+const StructuredErrorCategorySchema = z.enum([
+  'rate_limit',
+  'quota',
+  'authentication',
+  'server_error',
+  'network',
+  'client_error',
+]);
+
+const StructuredErrorReasonSchema = z.enum([
+  'retries_exhausted',
+  'all_buckets_exhausted',
+]);
+
 export const StructuredErrorSchema = z.object({
   message: z.string(),
   status: z.number().optional(),
+  category: StructuredErrorCategorySchema.optional(),
+  reason: StructuredErrorReasonSchema.optional(),
 });
 
 export const ThoughtSummarySchema = z.object({

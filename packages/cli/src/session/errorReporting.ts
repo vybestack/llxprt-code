@@ -7,6 +7,11 @@ import {
   JsonStreamEventType,
   writeToStderr,
 } from '@vybestack/llxprt-code-core';
+import type {
+  StructuredErrorCategory,
+  StructuredErrorReason,
+} from '@vybestack/llxprt-code-core/core/turn.js';
+import { wasMachineErrorReported } from './machineErrorReporting.js';
 
 export function formatNonInteractiveError(error: unknown): string {
   const formatted = parseAndFormatApiError(error);
@@ -37,15 +42,54 @@ function normalizeErrorForJson(error: unknown): Error {
   return new Error(formatNonInteractiveError(error));
 }
 
+function getErrorCategory(error: unknown): StructuredErrorCategory | undefined {
+  if (typeof error !== 'object' || error === null || !('category' in error)) {
+    return undefined;
+  }
+  const category = error.category;
+  switch (category) {
+    case 'rate_limit':
+    case 'quota':
+    case 'authentication':
+    case 'server_error':
+    case 'network':
+    case 'client_error':
+      return category;
+    default:
+      return undefined;
+  }
+}
+
+function getErrorStatus(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null || !('status' in error)) {
+    return undefined;
+  }
+  return typeof error.status === 'number' ? error.status : undefined;
+}
+
+function getErrorReason(error: unknown): StructuredErrorReason | undefined {
+  if (typeof error !== 'object' || error === null || !('reason' in error)) {
+    return undefined;
+  }
+  switch (error.reason) {
+    case 'retries_exhausted':
+    case 'all_buckets_exhausted':
+      return error.reason;
+    default:
+      return undefined;
+  }
+}
+
 /**
  * Format and report a non-interactive error to stderr, using JSON formatters
  * when JSON output is configured. Extracted so both the auth-validation catch
  * and the run-phase catch share a single error-reporting path.
  */
 export function reportNonInteractiveError(
-  config: Config,
+  config: Pick<Config, 'getOutputFormat'>,
   error: unknown,
 ): void {
+  if (wasMachineErrorReported(error)) return;
   const outputFormat = config.getOutputFormat();
   if (outputFormat === OutputFormat.JSON) {
     const formatter = new JsonFormatter();
@@ -58,12 +102,18 @@ export function reportNonInteractiveError(
     writeToStderr(`${formatter.formatError(normalizedError)}\n`);
   } else if (outputFormat === OutputFormat.STREAM_JSON) {
     const streamFormatter = new StreamJsonFormatter();
+    const category = getErrorCategory(error);
+    const status = getErrorStatus(error);
+    const reason = getErrorReason(error);
     writeToStderr(
       streamFormatter.formatEvent({
         type: JsonStreamEventType.ERROR,
         timestamp: new Date().toISOString(),
         severity: 'error',
         message: formatNonInteractiveError(error),
+        ...(status !== undefined ? { status } : {}),
+        ...(category !== undefined ? { category } : {}),
+        ...(reason !== undefined ? { reason } : {}),
       }),
     );
   } else {

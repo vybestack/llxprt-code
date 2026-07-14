@@ -123,7 +123,8 @@ describe('RetryOrchestrator invocation safety', () => {
     const normalized = baseProvider.lastNormalized;
     expect(normalized).toBeDefined();
     expect(typeof normalized!.invocation.getModelBehavior).toBe('function');
-    expect(normalized!.invocation.signal).toBe(abortController.signal);
+    expect(normalized!.invocation.signal).not.toBe(abortController.signal);
+    expect(normalized!.invocation.signal?.aborted).toBe(true);
   });
 
   it('does not crash a wrapped BaseProvider when only options + signal are provided', async () => {
@@ -149,7 +150,8 @@ describe('RetryOrchestrator invocation safety', () => {
     const normalized = baseProvider.lastNormalized;
     expect(normalized).toBeDefined();
     expect(typeof normalized!.invocation.getModelBehavior).toBe('function');
-    expect(normalized!.invocation.signal).toBe(abortController.signal);
+    expect(normalized!.invocation.signal).not.toBe(abortController.signal);
+    expect(normalized!.invocation.signal?.aborted).toBe(true);
   });
 
   it('adds an explicit signal to an existing invocation object', async () => {
@@ -177,7 +179,8 @@ describe('RetryOrchestrator invocation safety', () => {
     const normalized = baseProvider.lastNormalized;
     expect(normalized).toBeDefined();
     expect(typeof normalized!.invocation.getModelBehavior).toBe('function');
-    expect(normalized!.invocation.signal).toBe(abortController.signal);
+    expect(normalized!.invocation.signal).not.toBe(abortController.signal);
+    expect(normalized!.invocation.signal?.aborted).toBe(true);
   });
 
   it('preserves abort propagation through the legacy signal signature', async () => {
@@ -264,6 +267,7 @@ describe('RetryOrchestrator invocation safety', () => {
       ),
     );
 
-    expect(receivedSignal).toBe(abortController.signal);
+    expect(receivedSignal).not.toBe(abortController.signal);
+    expect(receivedSignal?.aborted).toBe(true);
   });
 });

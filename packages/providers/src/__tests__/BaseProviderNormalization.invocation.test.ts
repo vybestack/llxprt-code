@@ -168,6 +168,33 @@ describe('BaseProvider normalization invocation safety', () => {
     ).toBe(true);
   });
 
+  it('inherits a metadata signal when a valid invocation has no signal', async () => {
+    const { createProviderCallOptions } = await import(
+      '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js'
+    );
+    const provider = new InvocationSafetyProvider();
+    wireProviderWithAuth(provider);
+    const settings = createSettings(provider);
+    const controller = new AbortController();
+    const validOptions = createProviderCallOptions({
+      providerName: PROVIDER_NAME,
+      settings,
+      ephemerals: {},
+    });
+
+    await provider
+      .generateChatCompletion({
+        ...validOptions,
+        contents: [prompt],
+        metadata: { abortSignal: controller.signal },
+      })
+      .next();
+
+    expect(provider.lastNormalizedOptions?.invocation.signal).toBe(
+      controller.signal,
+    );
+  });
+
   it('keeps a valid RuntimeInvocationContext coherent while refreshing current ephemerals', async () => {
     const { createProviderCallOptions } = await import(
       '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js'

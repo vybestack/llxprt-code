@@ -15,6 +15,7 @@ import type { OnAuthErrorHandler } from '@vybestack/llxprt-code-core/config/conf
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { createHash } from 'node:crypto';
 import type { BucketFailoverOAuthManagerLike } from './types.js';
+import { raceWithAbort } from '../utils/abortSignal.js';
 
 const logger = new DebugLogger('llxprt:auth:error-handler');
 
@@ -48,8 +49,10 @@ export class OnAuthErrorHandlerImpl implements OnAuthErrorHandler {
     providerId: string;
     profileId?: string;
     errorStatus: number;
+    signal?: AbortSignal;
   }): Promise<void> {
-    const { failedAccessToken, providerId, profileId, errorStatus } = context;
+    const { failedAccessToken, providerId, profileId, errorStatus, signal } =
+      context;
 
     logger.debug(
       () =>
@@ -64,9 +67,9 @@ export class OnAuthErrorHandlerImpl implements OnAuthErrorHandler {
     );
 
     try {
-      const refreshedToken = await this.oauthManager.forceRefreshToken(
-        providerId,
-        failedAccessToken,
+      const refreshedToken = await raceWithAbort(
+        this.oauthManager.forceRefreshToken(providerId, failedAccessToken),
+        signal,
       );
 
       if (refreshedToken) {
@@ -81,6 +84,7 @@ export class OnAuthErrorHandlerImpl implements OnAuthErrorHandler {
         );
       }
     } catch (error) {
+      if (signal?.aborted === true) throw error;
       // Log but don't throw - the retry should still proceed
       logger.debug(
         () =>

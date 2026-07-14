@@ -22,6 +22,7 @@ import type {
   StructuredError,
 } from '@vybestack/llxprt-code-agents';
 import { MAX_TURNS_MESSAGE } from './utils/errors.js';
+import { markMachineErrorReported } from './session/machineErrorReporting.js';
 import { REFUSAL_NOTICE_MESSAGE } from './utils/refusalNotice.js';
 
 type StreamConsumerContext = {
@@ -47,12 +48,18 @@ function emitStreamError(
   formatter: StreamJsonFormatter | null,
   severity: 'warning' | 'error',
   message: string,
+  structured?: Pick<StructuredError, 'status' | 'category' | 'reason'>,
 ): void {
   formatter?.emitEvent({
     type: JsonStreamEventType.ERROR,
     timestamp: new Date().toISOString(),
     severity,
     message,
+    ...(structured?.status !== undefined ? { status: structured.status } : {}),
+    ...(structured?.category !== undefined
+      ? { category: structured.category }
+      : {}),
+    ...(structured?.reason !== undefined ? { reason: structured.reason } : {}),
   });
 }
 
@@ -273,11 +280,33 @@ function emitFinalResult(
  * property without a type assertion.
  */
 function reconstructError(structured: StructuredError): Error {
-  const err: Error & { status?: number } = new Error(structured.message);
+  const err: Error & {
+    status?: number;
+    category?: StructuredError['category'];
+    reason?: StructuredError['reason'];
+  } = new Error(structured.message);
   if (structured.status !== undefined) {
     err.status = structured.status;
   }
+  if (structured.category !== undefined) {
+    err.category = structured.category;
+  }
+  if (structured.reason !== undefined) {
+    err.reason = structured.reason;
+  }
   return err;
+}
+
+function throwStructuredStreamError(
+  structured: StructuredError,
+  formatter: StreamJsonFormatter | null,
+): never {
+  emitStreamError(formatter, 'error', structured.message, structured);
+  const error = reconstructError(structured);
+  if (formatter !== null) {
+    markMachineErrorReported(error);
+  }
+  throw error;
 }
 
 function handleDone(
@@ -430,14 +459,9 @@ function dispatchAgentEvent(
       return;
     }
     case 'idle-timeout':
-      emitStreamError(
-        context.streamFormatter,
-        'error',
-        'Stream idle timeout: no response received within the allowed time.',
-      );
-      throw reconstructError(event.error);
+      return throwStructuredStreamError(event.error, context.streamFormatter);
     case 'error':
-      throw reconstructError(event.error);
+      return throwStructuredStreamError(event.error, context.streamFormatter);
     case 'done':
       state.pendingDone = event;
       return;

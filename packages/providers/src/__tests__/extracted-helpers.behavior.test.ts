@@ -12,6 +12,7 @@ import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { CircuitBreakerState } from '../LoadBalancingProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import {
   extractFailoverSettings,
   isImmediateFailoverError,
@@ -152,6 +153,7 @@ describe('extracted provider helper behavior', () => {
         ),
       ),
     ).rejects.toThrow('Request timeout after 1ms');
+    await new Promise((resolve) => setTimeout(resolve, 25));
     expect(closed).toBe(true);
     expect(isTimeoutError(new Error('Request timeout after 1ms'))).toBe(true);
   });
@@ -386,6 +388,43 @@ describe('extracted provider helper behavior', () => {
         'base-url': 'https://settings.example.test',
       },
     });
+  });
+
+  it('adds a metadata signal to an existing valid invocation', () => {
+    const settingsService = new SettingsService();
+    settingsService.set('activeProvider', 'provider-a');
+    settingsService.setProviderSetting('provider-a', 'model', 'model-a');
+    settingsService.setProviderSetting(
+      'provider-a',
+      'base-url',
+      'https://provider-a.example.test',
+    );
+    settingsService.setProviderSetting('provider-a', 'auth-key', 'test-token');
+    const config = createRuntimeConfigStub(settingsService);
+    const controller = new AbortController();
+    const rawOptions = createProviderCallOptions({
+      providerName: 'provider-a',
+      settings: settingsService,
+      ephemerals: {},
+    });
+
+    const normalized = normalizeRuntimeInputs(
+      {
+        ...rawOptions,
+        runtime: {
+          settingsService,
+          config,
+          runtimeId: 'runtime-signal',
+        },
+        metadata: { abortSignal: controller.signal },
+      },
+      {
+        getActiveProviderName: () => 'provider-a',
+        getProvider: () => providerStub(),
+      },
+    );
+
+    expect(normalized.invocation?.signal).toBe(controller.signal);
   });
 
   it('does not apply global ephemeral settings when config owns a different SettingsService', () => {

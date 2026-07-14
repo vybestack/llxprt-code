@@ -5,6 +5,10 @@
  */
 
 import type { SessionMetrics } from '../telemetry/uiTelemetry.js';
+import type {
+  StructuredErrorCategory,
+  StructuredErrorReason,
+} from '../core/turn.js';
 
 /**
  * Output format for CLI responses
@@ -19,6 +23,9 @@ export interface JsonError {
   type: string;
   message: string;
   code?: string | number;
+  status?: number;
+  category?: StructuredErrorCategory;
+  reason?: StructuredErrorReason;
 }
 
 export interface JsonOutput {
@@ -83,6 +90,9 @@ export interface ErrorEvent extends BaseJsonStreamEvent {
   type: JsonStreamEventType.ERROR;
   severity: 'warning' | 'error';
   message: string;
+  status?: number;
+  category?: StructuredErrorCategory;
+  reason?: StructuredErrorReason;
 }
 
 export interface StreamStats {
@@ -111,6 +121,38 @@ export type JsonStreamEvent =
   | ErrorEvent
   | ResultEvent;
 
+function getSafeStatus(error: Error): number | undefined {
+  return 'status' in error && typeof error.status === 'number'
+    ? error.status
+    : undefined;
+}
+
+function getSafeCategory(error: Error): StructuredErrorCategory | undefined {
+  if (!('category' in error)) return undefined;
+  switch (error.category) {
+    case 'rate_limit':
+    case 'quota':
+    case 'authentication':
+    case 'server_error':
+    case 'network':
+    case 'client_error':
+      return error.category;
+    default:
+      return undefined;
+  }
+}
+
+function getSafeReason(error: Error): StructuredErrorReason | undefined {
+  if (!('reason' in error)) return undefined;
+  switch (error.reason) {
+    case 'retries_exhausted':
+    case 'all_buckets_exhausted':
+      return error.reason;
+    default:
+      return undefined;
+  }
+}
+
 /**
  * Formats errors as JSON for programmatic consumption
  */
@@ -122,12 +164,18 @@ export class JsonFormatter {
    * @returns JSON string representation of the error
    */
   formatError(error: Error, code?: string | number): string {
+    const status = getSafeStatus(error);
+    const category = getSafeCategory(error);
+    const reason = getSafeReason(error);
     return JSON.stringify(
       {
         error: {
           type: error.constructor.name,
           message: error.message,
           ...(code !== undefined && { code }),
+          ...(status !== undefined && { status }),
+          ...(category !== undefined && { category }),
+          ...(reason !== undefined && { reason }),
         },
       },
       null,

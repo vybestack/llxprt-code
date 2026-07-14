@@ -7,75 +7,71 @@
 /**
  * @plan PLAN-20251212issue489 - Phase 3
  * Stream timeout wrapping for load-balancer first-chunk timeouts.
- * Extracted from LoadBalancingProvider.
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { raceWithAbort } from '../utils/abortSignal.js';
+import { closeIteratorBeforeContinuing } from '../utils/streamCleanup.js';
 
-/**
- * Wrap an async iterator with a first-chunk timeout. After the first chunk
- * arrives the timeout is cleared and the remaining chunks stream without
- * timeout.
- */
+async function waitForFirstChunk(
+  iterator: AsyncIterableIterator<IContent>,
+  timeoutMs: number | undefined,
+  signal: AbortSignal,
+): Promise<IteratorResult<IContent>> {
+  const waitController = new AbortController();
+  try {
+    const next = iterator.next();
+    if (timeoutMs === undefined || timeoutMs <= 0) {
+      return await raceWithAbort(next, signal);
+    }
+    const timeout = delay(timeoutMs, waitController.signal).then(() => {
+      throw new Error(`Request timeout after ${timeoutMs}ms`);
+    });
+    return await raceWithAbort(Promise.race([next, timeout]), signal);
+  } finally {
+    waitController.abort();
+  }
+}
+
 export async function* wrapWithTimeout(
   iterator: AsyncIterableIterator<IContent>,
   timeoutMs: number | undefined,
   profileName: string,
   logger: DebugLogger,
+  attemptController: AbortController = new AbortController(),
 ): AsyncGenerator<IContent> {
-  // Use explicit undefined check to avoid different-types-comparison
-  if (timeoutMs === undefined || timeoutMs <= 0) {
-    // Use for-await instead of yield* to ensure proper error propagation
-    // yield* can have subtle issues with error propagation in async generators
-    for await (const chunk of iterator) {
-      yield chunk;
-    }
-    return;
-  }
-
-  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutHandle = setTimeout(() => {
-      reject(new Error(`Request timeout after ${timeoutMs}ms`));
-    }, timeoutMs);
-  });
-
+  let completed = false;
+  let failure: unknown;
   try {
-    // Race first chunk against timeout
-    const iteratorResult = iterator.next();
-    const firstResult = await Promise.race([iteratorResult, timeoutPromise]);
-
-    // Got first chunk, clear timeout
-    if (timeoutHandle !== undefined) {
-      clearTimeout(timeoutHandle);
-    }
-
-    if (firstResult.done !== true) {
-      yield firstResult.value;
-    }
-
-    // Yield remaining chunks (no timeout after first chunk)
+    const firstResult = await waitForFirstChunk(
+      iterator,
+      timeoutMs,
+      attemptController.signal,
+    );
+    if (firstResult.done !== true) yield firstResult.value;
     for await (const chunk of { [Symbol.asyncIterator]: () => iterator }) {
       yield chunk;
     }
+    completed = true;
   } catch (error) {
-    if (timeoutHandle !== undefined) {
-      clearTimeout(timeoutHandle);
+    failure = error;
+    if (isTimeoutError(error)) {
+      logger.debug(
+        () =>
+          `[LB:timeout] ${profileName}: Request timed out after ${timeoutMs}ms`,
+      );
     }
-    await iterator.return?.();
-    logger.debug(
-      () =>
-        `[LB:timeout] ${profileName}: Request timed out after ${timeoutMs}ms`,
-    );
     throw error;
+  } finally {
+    if (!completed) {
+      attemptController.abort();
+      await closeIteratorBeforeContinuing(iterator, failure);
+    }
   }
 }
 
-/**
- * Check if an error is a timeout error (message contains "Request timeout").
- */
 export function isTimeoutError(error: unknown): boolean {
   return error instanceof Error && error.message.includes('Request timeout');
 }

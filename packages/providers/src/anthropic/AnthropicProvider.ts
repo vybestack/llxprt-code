@@ -7,6 +7,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { type IModel } from '../IModel.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import { TOOL_PREFIX } from './schemaConverter.js';
@@ -140,6 +141,7 @@ export class AnthropicProvider extends BaseProvider {
     const isOAuthToken = this.classifyOAuthToken(authToken);
     const clientConfig: Record<string, unknown> = {
       dangerouslyAllowBrowser: true,
+      maxRetries: 0,
     };
 
     if (isOAuthToken) {
@@ -578,12 +580,17 @@ export class AnthropicProvider extends BaseProvider {
     const customHeaders = this.buildCustomHeaders(requestContext, isOAuth);
 
     const rateLimitLogger = this.getRateLimitLogger();
-    await this.applyRateLimitThrottling(requestContext, rateLimitLogger);
+    await this.applyRateLimitThrottling(
+      requestContext,
+      rateLimitLogger,
+      options.invocation.signal,
+    );
 
     const apiCallWithResponse = createAnthropicApiCall(
       initialClient,
       requestContext.requestBody,
       customHeaders,
+      options.invocation.signal,
     );
 
     const { response, rateLimitInfo } = await this.executeApiCall(
@@ -602,7 +609,6 @@ export class AnthropicProvider extends BaseProvider {
       requestContext,
       options,
       isOAuth,
-      apiCallWithResponse,
       rateLimitLogger,
     );
   }
@@ -643,6 +649,7 @@ export class AnthropicProvider extends BaseProvider {
   private async applyRateLimitThrottling(
     requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
     rateLimitLogger: { debug: (fn: () => string) => void },
+    signal?: AbortSignal,
   ): Promise<void> {
     const waitDecision = calculateWaitTime(this.lastRateLimitInfo ?? {}, {
       throttleEnabled:
@@ -660,7 +667,7 @@ export class AnthropicProvider extends BaseProvider {
     });
     if (waitDecision.shouldWait) {
       rateLimitLogger.debug(() => waitDecision.reason);
-      await this.sleep(waitDecision.waitMs);
+      await this.sleep(waitDecision.waitMs, signal);
     }
   }
 
@@ -697,10 +704,6 @@ export class AnthropicProvider extends BaseProvider {
     requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
     options: NormalizedGenerateChatOptions,
     isOAuth: boolean,
-    apiCallWithResponse: () => Promise<{
-      data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
-      response?: Response;
-    }>,
     rateLimitLogger: { debug: (fn: () => string) => void },
   ): AsyncGenerator<IContent> {
     if (requestContext.streamingEnabled) {
@@ -712,9 +715,6 @@ export class AnthropicProvider extends BaseProvider {
           unprefixToolName: (name, oauth) => this.unprefixToolName(name, oauth),
           findToolSchema: (t, name, oauth) =>
             this.findToolSchema(t, name, oauth),
-          maxAttempts: requestContext.maxAttempts,
-          initialDelayMs: requestContext.initialDelayMs,
-          apiCallWithResponse,
           logger: this.getStreamingLogger(),
           cacheLogger: requestContext.cacheLogger,
           rateLimitLogger,
@@ -731,12 +731,8 @@ export class AnthropicProvider extends BaseProvider {
     }
   }
 
-  /**
-   * Mockable sleep for rate-limit throttling.
-   * Tests spy on this method to avoid real delays.
-   */
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  private sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return delay(ms, signal);
   }
 }
 

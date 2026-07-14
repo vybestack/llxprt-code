@@ -280,6 +280,7 @@ export interface ActiveExtension {
 export interface FailoverContext {
   triggeringStatus?: number;
   authRetryTimeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 /**
@@ -299,6 +300,7 @@ export interface OnAuthErrorHandler {
     providerId: string;
     profileId?: string;
     errorStatus: number;
+    signal?: AbortSignal;
   }): Promise<void>;
 }
 

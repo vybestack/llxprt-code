@@ -22,6 +22,7 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '../providerRuntimeContext.js';
 import type { RuntimeInvocationContext } from '../RuntimeInvocationContext.js';
 import type { TelemetryContext } from './TelemetryContext.js';
+import type { StructuredError } from '../../core/turn.js';
 
 export interface RuntimeProviderTool {
   type: 'function';
@@ -53,6 +54,7 @@ export interface RuntimeGenerateChatOptions {
   config?: Config;
   runtime?: ProviderRuntimeContext;
   invocation?: RuntimeInvocationContext;
+  onProviderError?: (error: StructuredError) => void;
   metadata?: Record<string, unknown>;
   resolved?: {
     model?: string;

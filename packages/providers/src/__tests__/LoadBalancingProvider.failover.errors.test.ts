@@ -315,7 +315,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       ]);
 
       expect(error.message).toContain('only backend failed');
-      expect(error.message).not.toContain('sole:');
+      expect(error.message).toContain('sole: only backend failed');
       expect(error.message).toContain('test-profile');
       expect(error.message).toContain('sole');
     });

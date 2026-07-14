@@ -419,9 +419,19 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
     ).toBe(false);
   });
 
-  it('StructuredErrorSchema requires message, status optional @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', () => {
-    expect(StructuredErrorSchema.parse({ message: 'm' })).toStrictEqual({
-      message: 'm',
+  it('StructuredErrorSchema requires message and preserves an optional category @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', () => {
+    expect(
+      StructuredErrorSchema.parse({
+        message: 'Rate limited',
+        status: 429,
+        category: 'rate_limit',
+        reason: 'retries_exhausted',
+      }),
+    ).toStrictEqual({
+      message: 'Rate limited',
+      status: 429,
+      category: 'rate_limit',
+      reason: 'retries_exhausted',
     });
     expect(StructuredErrorSchema.safeParse({ status: 500 }).success).toBe(
       false,

@@ -22,6 +22,7 @@ import type {
 } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { BucketFailureReason } from '@vybestack/llxprt-code-core/runtime/contracts/index.js';
 import type { BucketFailoverOAuthManagerLike } from './types.js';
+import { raceWithAbort } from '../utils/abortSignal.js';
 
 const logger = new DebugLogger('llxprt:bucket:failover:handler');
 
@@ -146,6 +147,12 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
    * Pass 3: Attempt foreground reauth for expired/missing tokens
    */
   async tryFailover(context?: FailoverContext): Promise<boolean> {
+    return raceWithAbort(this.tryFailoverInternal(context), context?.signal);
+  }
+
+  private async tryFailoverInternal(
+    context?: FailoverContext,
+  ): Promise<boolean> {
     this.lastFailoverReasons = {};
     const authRetryTimeoutMs =
       context?.authRetryTimeoutMs ?? this.configuredAuthRetryTimeoutMs;
