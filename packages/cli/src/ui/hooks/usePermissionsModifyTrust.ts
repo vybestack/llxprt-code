@@ -191,36 +191,31 @@ async function commitSavedTrustLevel(
 export function usePermissionsModifyTrust(
   config?: PermissionsTrustRuntime,
 ): UsePermissionsModifyTrustReturn {
-  const cwd = config?.getWorkingDir() ?? process.cwd();
-  const normalizedCwd = path.resolve(cwd);
-  const parentFolderName = path.basename(path.dirname(normalizedCwd));
+  const normalizedCwd = path.resolve(config?.getWorkingDir() ?? process.cwd());
   const trustedFolders = useMemo(() => loadTrustedFolders(), []);
   const winningRule = trustedFolders.resolvePathTrust(normalizedCwd);
   const currentEffectiveTrust =
     config?.isTrustedFolder() ?? winningRule?.trusted;
-  const currentTrustLevel = trustedFolders.getValue(normalizedCwd);
-  const effectiveLocalTrustLevel = winningRule?.rule.trustLevel;
   const { isIdeTrusted } = useIdeTrustListener(config ?? emptyIdeState);
   const isParentTrusted =
     isIdeTrusted === undefined && winningRule?.provenance === 'inherited';
   const [pendingTrustLevel, setPendingTrustLevel] = useState<
     TrustLevel | undefined
-  >(currentTrustLevel);
+  >(() => trustedFolders.getValue(normalizedCwd));
   const [committedLevel, setCommittedLevel] = useState<TrustLevel>();
-  const [effectiveTrust, setEffectiveTrust] = useState<boolean | undefined>(
-    currentEffectiveTrust,
-  );
+  const [effectiveTrust, setEffectiveTrust] = useState(currentEffectiveTrust);
   const commitQueueRef = useRef<Promise<void>>(Promise.resolve());
   const mountedRef = useMountedRef();
-
+  const currentWorkingDirectoryRef = useRef(normalizedCwd);
+  currentWorkingDirectoryRef.current = normalizedCwd;
   useEffect(() => {
     setPendingTrustLevel(trustedFolders.getValue(normalizedCwd));
     setCommittedLevel(undefined);
   }, [normalizedCwd, trustedFolders]);
-
-  useEffect(() => {
-    setEffectiveTrust(currentEffectiveTrust);
-  }, [currentEffectiveTrust]);
+  useEffect(
+    () => setEffectiveTrust(currentEffectiveTrust),
+    [currentEffectiveTrust],
+  );
   const commitTrustLevel = useCallback(
     (level?: TrustLevel): Promise<TrustCommitResult> => {
       const nextLevel = level ?? pendingTrustLevel;
@@ -238,7 +233,10 @@ export function usePermissionsModifyTrust(
         if (!commit.result.success) {
           return commit.result;
         }
-        if (mountedRef.current) {
+        if (
+          mountedRef.current &&
+          currentWorkingDirectoryRef.current === normalizedCwd
+        ) {
           setEffectiveTrust(commit.effectiveTrust);
           setPendingTrustLevel(nextLevel);
           setCommittedLevel(nextLevel);
@@ -261,14 +259,14 @@ export function usePermissionsModifyTrust(
     pendingTrustLevel,
     setPendingTrustLevel,
     commitTrustLevel,
-    effectiveLocalTrustLevel,
+    effectiveLocalTrustLevel: winningRule?.rule.trustLevel,
     isIdeTrusted,
     isParentTrusted,
     trustChanged,
     committedTrustLevel: committedLevel,
     effectiveTrust,
     workingDirectory: normalizedCwd,
-    parentFolderName,
+    parentFolderName: path.basename(path.dirname(normalizedCwd)),
     trustedFolders,
   };
 }

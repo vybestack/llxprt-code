@@ -287,6 +287,51 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     expect(result.current.committedTrustLevel).toBeUndefined();
   });
 
+  it('does not publish a completed commit into a different working directory', async () => {
+    mockedUserConfig.value = {
+      '/workspace/first': TrustLevel.DO_NOT_TRUST,
+      '/workspace/second': TrustLevel.DO_NOT_TRUST,
+    };
+    const liveUpdate = createDeferred<void>();
+    let workingDirectory = '/workspace/first';
+    let liveTrust = false;
+    const setTrustedFolderLive = vi.fn(async (trusted: boolean) => {
+      await liveUpdate.promise;
+      liveTrust = trusted;
+    });
+    const config: PermissionsTrustRuntime = {
+      getWorkingDir: () => workingDirectory,
+      getFolderTrust: () => true,
+      getIdeClient: () => undefined,
+      isTrustedFolder: () => liveTrust,
+      setTrustedFolderLive,
+    };
+    const { result, rerender } = renderHook(() =>
+      usePermissionsModifyTrust(config),
+    );
+
+    let commit: ReturnType<typeof result.current.commitTrustLevel>;
+    act(() => {
+      commit = result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
+    });
+    await vi.waitFor(() => expect(setTrustedFolderLive).toHaveBeenCalledOnce());
+
+    workingDirectory = '/workspace/second';
+    rerender();
+    expect(result.current.workingDirectory).toBe('/workspace/second');
+    expect(result.current.pendingTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
+
+    liveUpdate.resolve();
+    await act(async () => {
+      await commit;
+    });
+
+    expect(result.current.workingDirectory).toBe('/workspace/second');
+    expect(result.current.pendingTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
+    expect(result.current.committedTrustLevel).toBeUndefined();
+    expect(result.current.effectiveTrust).toBe(false);
+  });
+
   it('serializes concurrent commits and preserves the final selection', async () => {
     const firstLiveUpdate = createDeferred<void>();
     let liveTrust = false;
