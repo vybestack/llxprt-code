@@ -104,10 +104,10 @@ describe('session_metadata recording (issue #1611)', () => {
       services.push(service);
 
       service.recordSessionMetadata('Slash command title');
-      await service.flush();
 
       const filePath = service.getFilePath();
       assert(filePath !== null);
+      await service.flush();
       const fileContent = await fs.readFile(filePath, 'utf-8');
       const types = fileContent
         .trim()

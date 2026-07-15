@@ -156,15 +156,22 @@ export class ZedAgent {
         await session.dispose();
         throw error;
       }
+      let configOptions: acp.NewSessionResponse['configOptions'];
+      try {
+        ({ configOptions } = await zedConfigOptionsForClient(
+          this.clientCapabilities,
+          agent,
+          sessionConfig,
+        ));
+      } catch (error) {
+        await session.dispose();
+        throw error;
+      }
       this.sessions.set(sessionId, session);
       return {
         sessionId,
         modes: buildSessionModes(agent.getApprovalMode()),
-        ...(await zedConfigOptionsForClient(
-          this.clientCapabilities,
-          agent,
-          sessionConfig,
-        )),
+        ...(configOptions === undefined ? {} : { configOptions }),
       };
     } catch (error) {
       this.logger.debug(() => `ERROR in newSession: ${error}`);
@@ -221,10 +228,18 @@ export class ZedAgent {
         await this.rollbackSession(sessionId, reattached);
         throw error;
       }
-      return {
-        modes: buildSessionModes(reattached.getApprovalMode()),
-        ...(await zedSessionConfigOptions(this.clientCapabilities, reattached)),
-      };
+      try {
+        return {
+          modes: buildSessionModes(reattached.getApprovalMode()),
+          ...(await zedSessionConfigOptions(
+            this.clientCapabilities,
+            reattached,
+          )),
+        };
+      } catch (error) {
+        await this.rollbackSession(sessionId, reattached);
+        throw error;
+      }
     }
     await this.disposePriorSession(sessionId);
     const session = await this.installResumedSession(sessionId, params.cwd);
