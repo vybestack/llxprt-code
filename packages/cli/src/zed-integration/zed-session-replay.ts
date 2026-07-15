@@ -290,7 +290,7 @@ function buildToolCallStart(
   // string in malformed persisted data. Keeping the (already-validated string)
   // id as the title preserves identifying info on the wire rather than sending
   // an undefined title.
-  const named = isNonEmptyString(block.name);
+  const hasName = isNonEmptyString(block.name);
   // rawInput is sent unconditionally ({} when the recorded parameters are
   // missing/malformed) to stay wire-identical with the live start path in
   // zed-tool-handler.ts (emitToolCallStart), which always includes rawInput.
@@ -298,7 +298,7 @@ function buildToolCallStart(
   return {
     sessionUpdate: 'tool_call',
     toolCallId: block.id,
-    title: named ? block.name : block.id,
+    title: hasName ? block.name : block.id,
     status: 'in_progress',
     content: [],
     locations: buildToolLocations(rawInput),

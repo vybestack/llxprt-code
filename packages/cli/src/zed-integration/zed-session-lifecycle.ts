@@ -84,6 +84,9 @@ export class SessionLifecycle {
 
   runSerialized<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
     const prior = this.queues.get(sessionId);
+    // A failed operation must not poison the session queue; the next operation
+    // starts after either settlement while each caller still receives its own
+    // operation's rejection.
     const run = (prior ?? Promise.resolve()).then(operation, operation);
     this.queues.set(sessionId, run);
     return run.finally(() => {
