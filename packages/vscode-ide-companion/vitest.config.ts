@@ -48,6 +48,7 @@ const workspaceDependencyAliasPlugin = {
 export default defineConfig({
   plugins: [workspaceDependencyAliasPlugin],
   test: {
+    setupFiles: ['./test-setup-storage-isolation.ts'],
     server: {
       deps: {
         inline: ['@vybestack/llxprt-code-ide-integration', 'ajv', 'fdir'],

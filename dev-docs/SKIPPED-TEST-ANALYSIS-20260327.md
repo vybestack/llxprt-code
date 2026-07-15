@@ -69,7 +69,7 @@ The original 172 count measured only hard skips (`it.skip`/`describe.skip`). Thi
 ## Pre-existing Issues Discovered
 
 1. **config.test.ts**: 61 tests fail on main due to `ProviderManager.setActiveProvider` throwing "Provider not found" — needs `activateIsolatedRuntimeContext` setup. This is NOT caused by our changes.
-2. **useGeminiStream.test.tsx**: Fails to load `../../test-utils/async.js` (missing module). Pre-existing on main.
+2. **useAgentStream.test.tsx**: Fails to load `../../test-utils/async.js` (missing module). Pre-existing on main.
 3. **tmp/gemini-cli/**: Upstream copy always fails 1 test due to broken deps. Ignore.
 
 ---
@@ -85,7 +85,7 @@ What WAS happening: during cherry-picking from upstream, some tests got `it.skip
 ## Files Deleted (7 entire test files)
 
 1. `AgentRuntimeState.stub.test.ts` — Phase 03 stubs superseded by Phase 05 implementation
-2. `useGeminiStream.integration.test.tsx` — Todo continuation never implemented
+2. `useAgentStream.integration.test.tsx` — Todo continuation never implemented
 3. `BaseProvider.guard.stub.test.ts` — Empty placeholder
 4. `ResponsesContextTrim.integration.test.ts` — Mock theater (fetch call assertions)
 5. `OpenAIProvider.responsesIntegration.test.ts` — Speculative for incomplete Responses API

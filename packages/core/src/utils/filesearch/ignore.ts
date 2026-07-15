@@ -20,7 +20,7 @@ const createIgnore = ignore as unknown as (
 export interface LoadIgnoreRulesOptions {
   projectRoot: string;
   useGitignore: boolean;
-  useGeminiignore: boolean;
+  useExtensionIgnore: boolean;
   ignoreDirs: string[];
   ignorePatterns?: string[];
 }
@@ -47,7 +47,7 @@ export function loadIgnoreRules(options: LoadIgnoreRulesOptions): Ignore {
     }
   }
 
-  if (options.useGeminiignore) {
+  if (options.useExtensionIgnore) {
     const llxprtignorePath = path.join(options.projectRoot, '.llxprtignore');
     if (fs.existsSync(llxprtignorePath)) {
       ignorer.add(fs.readFileSync(llxprtignorePath, 'utf8'));

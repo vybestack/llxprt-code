@@ -30,18 +30,35 @@ import {
 } from './extensions/variables.js';
 
 import { maybeRequestConsentOrFail } from './extensions/extensionConsent.js';
-import { validateHooks, type Hooks } from './extensions/hookSchema.js';
+import { validateHooks } from './extensions/hookSchema.js';
+import type { Hooks } from './extensions/hookSchema.js';
 
 export { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
+// Root-aware management/resolver helpers extracted for module size and
+// single-responsibility-loop control flow. Public API is preserved via
+// re-export.
+import {
+  loadExtensionByName,
+  resolvePhysicalRegistrationDir,
+  resolvePhysicalRegistrationDirByIdentifier,
+} from './extensions/rootAwareResolver.js';
+export {
+  loadExtensionByName,
+  resolvePhysicalRegistrationDir,
+  resolvePhysicalRegistrationDirByIdentifier,
+};
 import {
   loadExtensionFromDir,
   loadInstallMetadataFromDir,
 } from './extensions/extensionLoader.js';
 
 export const EXTENSIONS_DIRECTORY_NAME = '.llxprt/extensions';
+export const COMPAT_EXTENSIONS_DIRECTORY_NAME = '.gemini/extensions';
 export const EXTENSIONS_CONFIG_FILENAME = 'llxprt-extension.json';
 export const EXTENSIONS_CONFIG_FILENAME_FALLBACK = 'gemini-extension.json';
 export const INSTALL_METADATA_FILENAME = '.llxprt-extension-install.json';
+export const INSTALL_METADATA_FILENAME_FALLBACK =
+  '.gemini-extension-install.json';
 
 /**
  * Extension setting definition from extension config
@@ -106,6 +123,7 @@ export interface ExtensionInstallMetadata {
   releaseTag?: string; // Only present for github-release installs.
   ref?: string;
   autoUpdate?: boolean;
+  allowPreRelease?: boolean;
 }
 
 export interface ExtensionUpdateInfo {
@@ -229,23 +247,48 @@ export function loadUserExtensions(): LlxprtExtension[] {
   return Array.from(uniqueExtensions.values());
 }
 
+/**
+ * Safely read directory entries, returning null if the directory does not
+ * exist or cannot be enumerated (e.g. permission denied). Logs a diagnostic
+ * for enumeration errors so the scan can continue with other roots.
+ */
+function readExtensionDirEntries(dir: string): string[] | null {
+  if (!fs.existsSync(dir)) {
+    return null;
+  }
+  try {
+    return fs.readdirSync(dir);
+  } catch (e) {
+    globalThis.console.warn(
+      `Warning: could not enumerate extensions directory ${dir}: ${e}`,
+    );
+    return null;
+  }
+}
+
 export function loadExtensionsFromDir(
   dir: string,
   workspaceDir: string = dir,
 ): LlxprtExtension[] {
-  const storage = new Storage(dir);
-  const extensionsDir = storage.getExtensionsDir();
-  if (!fs.existsSync(extensionsDir)) {
-    return [];
-  }
+  // LLxprt-first precedence: scan .llxprt/extensions first, then
+  // .gemini/extensions. Extensions are deduplicated by name, with the
+  // first occurrence (LLxprt) winning.
+  const llxprtExtensionsDir = new Storage(dir).getExtensionsDir();
+  const compatExtensionsDir = path.join(dir, COMPAT_EXTENSIONS_DIRECTORY_NAME);
+  const extensionRoots = [llxprtExtensionsDir, compatExtensionsDir];
 
   const extensions: LlxprtExtension[] = [];
-  for (const subdir of fs.readdirSync(extensionsDir)) {
-    const extensionDir = path.join(extensionsDir, subdir);
-
-    const extension = loadExtension({ extensionDir, workspaceDir });
-    if (extension != null) {
-      extensions.push(extension);
+  for (const extensionsDir of extensionRoots) {
+    const entries = readExtensionDirEntries(extensionsDir);
+    if (entries === null) {
+      continue;
+    }
+    for (const subdir of entries) {
+      const extensionDir = path.join(extensionsDir, subdir);
+      const extension = loadExtension({ extensionDir, workspaceDir });
+      if (extension != null) {
+        extensions.push(extension);
+      }
     }
   }
   return extensions;
@@ -255,6 +298,7 @@ const extensionLoaderDeps = {
   configFileName: EXTENSIONS_CONFIG_FILENAME,
   fallbackConfigFileName: EXTENSIONS_CONFIG_FILENAME_FALLBACK,
   installMetadataFileName: INSTALL_METADATA_FILENAME,
+  fallbackInstallMetadataFileName: INSTALL_METADATA_FILENAME_FALLBACK,
   loadSettings,
   validateName,
   reportError: (message: string) => globalThis.console.error(message),
@@ -335,34 +379,14 @@ export async function resolveExtensionSettingsWithSource(
     };
   });
 }
-
-export function loadExtensionByName(
-  name: string,
-  workspaceDir: string = process.cwd(),
-): LlxprtExtension | null {
-  const userExtensionsDir = ExtensionStorage.getUserExtensionsDir();
-  if (!fs.existsSync(userExtensionsDir)) {
-    return null;
-  }
-
-  for (const subdir of fs.readdirSync(userExtensionsDir)) {
-    const extensionDir = path.join(userExtensionsDir, subdir);
-    if (!fs.statSync(extensionDir).isDirectory()) {
-      continue;
-    }
-    const extension = loadExtension({ extensionDir, workspaceDir });
-    if (extension && extension.name.toLowerCase() === name.toLowerCase()) {
-      return extension;
-    }
-  }
-
-  return null;
-}
-
 export function loadInstallMetadata(
   extensionDir: string,
 ): ExtensionInstallMetadata | undefined {
-  return loadInstallMetadataFromDir(extensionDir, INSTALL_METADATA_FILENAME);
+  return loadInstallMetadataFromDir(
+    extensionDir,
+    INSTALL_METADATA_FILENAME,
+    INSTALL_METADATA_FILENAME_FALLBACK,
+  );
 }
 
 export function annotateActiveExtensions(
@@ -494,7 +518,7 @@ export async function inferInstallMetadata(
     allowPreRelease?: boolean;
   } = {},
 ): Promise<ExtensionInstallMetadata> {
-  const { ref, autoUpdate } = args;
+  const { ref, autoUpdate, allowPreRelease } = args;
 
   // Check if source is a URL (git, http, https, sso)
   const isUrl =
@@ -510,6 +534,7 @@ export async function inferInstallMetadata(
       type: 'git',
       ref,
       autoUpdate,
+      allowPreRelease,
     };
   }
 
@@ -520,9 +545,9 @@ export async function inferInstallMetadata(
       'The --ref and --autoUpdate flags are only applicable for git-based installations.',
     );
   }
-  if (autoUpdate === true) {
+  if (autoUpdate === true || allowPreRelease === true) {
     throw new Error(
-      'The --ref and --autoUpdate flags are only applicable for git-based installations.',
+      'The --ref, --autoUpdate, and --allow-pre-release flags are only applicable for git-based installations.',
     );
   }
 
@@ -826,16 +851,30 @@ export async function loadExtensionConfig(
 export async function uninstallExtension(
   extensionIdentifier: string,
   isUpdate: boolean,
-  _cwd: string = process.cwd(),
+  cwd: string = process.cwd(),
 ): Promise<void> {
-  const installedExtensions = loadUserExtensions();
-  const extension = installedExtensions.find(
-    (installed) =>
-      installed.name.toLowerCase() === extensionIdentifier.toLowerCase() ||
-      installed.installMetadata?.source.toLowerCase() ===
-        extensionIdentifier.toLowerCase(),
+  // Resolve the physical registration directory directly by identifier.
+  // This searches all extension roots (.llxprt/extensions and
+  // .gemini/extensions), trying exact case-sensitive name or source matches
+  // before an unambiguous case-insensitive fallback. This preserves physical
+  // registration identity rather than deleting a different registration.
+  const physicalDir = resolvePhysicalRegistrationDirByIdentifier(
+    extensionIdentifier,
+    cwd,
   );
-  if (!extension) {
+  if (physicalDir === null) {
+    throw new Error(
+      `Extension "${extensionIdentifier}" not found. Run llxprt extensions list to see available extensions.`,
+    );
+  }
+
+  // Load the extension from the resolved physical dir to get its name for
+  // enablement cleanup.
+  const loaded = loadExtension({
+    extensionDir: physicalDir,
+    workspaceDir: cwd,
+  });
+  if (loaded === null) {
     throw new Error(
       `Extension "${extensionIdentifier}" not found. Run llxprt extensions list to see available extensions.`,
     );
@@ -844,17 +883,12 @@ export async function uninstallExtension(
   if (!isUpdate) {
     const manager = new ExtensionEnablementManager(
       ExtensionStorage.getUserExtensionsDir(),
-      [extension.name],
+      [loaded.name],
     );
-    manager.remove(extension.name);
+    manager.remove(loaded.name);
   }
 
-  const storage = new ExtensionStorage(
-    extension.installMetadata?.type === 'link'
-      ? extension.name
-      : path.basename(extension.path),
-  );
-  return fs.promises.rm(storage.getExtensionDir(), {
+  return fs.promises.rm(physicalDir, {
     recursive: true,
     force: true,
   });

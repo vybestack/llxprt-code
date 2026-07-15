@@ -2,65 +2,56 @@
  * @plan:PLAN-20250120-DEBUGLOGGING.P08
  * @requirement REQ-003,REQ-007
  */
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+import { Storage } from '@vybestack/llxprt-code-storage';
 import { ConfigurationManager } from './ConfigurationManager.js';
 import type { DebugSettings } from './types.js';
 
+function cleanupGlobalSettings(): void {
+  const configHome = process.env.LLXPRT_CONFIG_HOME;
+  if (
+    process.env.LLXPRT_TEST_STORAGE_ISOLATED !== '1' ||
+    configHome === undefined
+  ) {
+    throw new Error('ConfigurationManager tests require isolated storage');
+  }
+
+  const settingsPath = path.resolve(Storage.getGlobalSettingsPath());
+  const resolvedConfigHome = path.resolve(configHome);
+  const relativePath = path.relative(resolvedConfigHome, settingsPath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    throw new Error('Refusing to clean settings outside isolated storage');
+  }
+
+  fs.rmSync(settingsPath, { force: true });
+}
+
 describe('ConfigurationManager', () => {
   beforeEach(() => {
-    // Reset singleton instance before each test
     ConfigurationManager.resetForTesting();
+    cleanupGlobalSettings();
 
-    // Clean up environment variables
     delete process.env.DEBUG;
     delete process.env.LLXPRT_DEBUG;
     delete process.env.DEBUG_ENABLED;
     delete process.env.DEBUG_LEVEL;
     delete process.env.DEBUG_OUTPUT;
 
-    // Clean up test config files that might have been created
-    const userConfigPath = path.join(os.homedir(), '.llxprt', 'settings.json');
     const projectConfigPath = path.join(
       process.cwd(),
       '.llxprt',
       'config.json',
     );
-
-    // Backup and temporarily remove user config if it exists
-    if (fs.existsSync(userConfigPath)) {
-      const backupPath = userConfigPath + '.test-backup';
-      if (!fs.existsSync(backupPath)) {
-        fs.copyFileSync(userConfigPath, backupPath);
-      }
-      try {
-        // Remove debug section from config for test isolation
-        const content = JSON.parse(fs.readFileSync(userConfigPath, 'utf8'));
-        delete content.debug;
-        fs.writeFileSync(userConfigPath, JSON.stringify(content, null, 2));
-      } catch {
-        // If parsing fails, just remove the file temporarily
-        fs.unlinkSync(userConfigPath);
-      }
-    }
-
-    // Remove project config if it exists
     if (fs.existsSync(projectConfigPath)) {
       fs.unlinkSync(projectConfigPath);
     }
   });
 
-  afterAll(() => {
-    // Restore user config backup if it exists
-    const userConfigPath = path.join(os.homedir(), '.llxprt', 'settings.json');
-    const backupPath = userConfigPath + '.test-backup';
-
-    if (fs.existsSync(backupPath)) {
-      fs.copyFileSync(backupPath, userConfigPath);
-      fs.unlinkSync(backupPath);
-    }
+  afterEach(() => {
+    ConfigurationManager.resetForTesting();
+    cleanupGlobalSettings();
   });
 
   describe('Singleton Pattern', () => {
@@ -168,6 +159,10 @@ describe('ConfigurationManager', () => {
         'token',
         'password',
       ]);
+      expect(config.output).toStrictEqual({
+        target: 'file',
+        directory: path.join(Storage.getGlobalLogDir(), 'debug'),
+      });
     });
   });
 

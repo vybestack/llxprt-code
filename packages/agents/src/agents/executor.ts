@@ -59,7 +59,7 @@ import { callModelAndConsumeStream } from './executor-stream-processor.js';
  *
  * Structurally compatible with the Google `GenerateContentConfig` expected by
  * `ChatSession` so that the executor can configure model parameters without
- * importing the Gemini SDK.
+ * importing a provider SDK.
  */
 type AgentGenerateContentConfig = {
   temperature?: number;
@@ -752,7 +752,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     } catch (error) {
       await reportError(
         error,
-        `Error initializing Gemini chat for agent ${this.definition.name}.`,
+        `Error initializing agent chat for agent ${this.definition.name}.`,
         startHistory,
         'startChat',
       );

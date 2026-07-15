@@ -91,7 +91,6 @@ export * from './core/logger.js';
 export * from './core/prompts.js';
 export * from './core/tokenLimits.js';
 export * from './core/turn.js';
-export * from './core/geminiLegacyAliases.js';
 export {
   type SubagentSchedulerFactory,
   type InteractiveSubagentSchedulerHost,
@@ -407,7 +406,6 @@ export {
   getAllLlxprtMdFilenames,
   DEFAULT_CONTEXT_FILENAME,
   LLXPRT_CONFIG_DIR,
-  GEMINI_DIR,
   CORE_MEMORY_FILENAME,
   MEMORY_SECTION_HEADER,
   getGlobalCoreMemoryFilePath,
@@ -660,8 +658,6 @@ export {
 
 // Explicit exports resolve star-export ambiguity between config.js and extensionLoader.js.
 export type { LlxprtExtension } from './config/configTypes.js';
-// Deprecated alias — kept for one release cycle for external consumers.
-export type { GeminiCLIExtension } from './config/configTypes.js';
 
 // Export MCP Client Manager — re-exported from @vybestack/llxprt-code-mcp (also available above)
 

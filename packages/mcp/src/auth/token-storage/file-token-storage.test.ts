@@ -125,6 +125,12 @@ describe('FileTokenStorage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // FileTokenStorage resolves its path from Storage.getGlobalDataDir(),
+    // which prefers LLXPRT_DATA_HOME, then LLXPRT_CONFIG_HOME, then the
+    // platform default. The storage-isolation bootstrap sets all of these to
+    // separate temp subdirs, so we must override LLXPRT_DATA_HOME (not just
+    // LLXPRT_CONFIG_HOME) to make the mock-fs assertions match.
+    process.env['LLXPRT_DATA_HOME'] = CONFIG_HOME;
     process.env['LLXPRT_CONFIG_HOME'] = CONFIG_HOME;
     // chmod is invoked after every write to tighten permissions on overwrite;
     // default it to resolve so write-path tests do not need to wire it up.
@@ -136,6 +142,7 @@ describe('FileTokenStorage', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    delete process.env['LLXPRT_DATA_HOME'];
     delete process.env['LLXPRT_CONFIG_HOME'];
   });
 

@@ -7,8 +7,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import * as os from 'node:os';
 
+import { Storage } from '@vybestack/llxprt-code-storage';
 import * as dumpSDKContextModule from './dumpSDKContext.js';
 import {
   dumpSDKContext,
@@ -18,7 +18,7 @@ import {
 } from './dumpSDKContext.js';
 
 describe('dumpSDKContext', () => {
-  const dumpDir = path.join(os.homedir(), '.llxprt', 'dumps');
+  const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
   const createdFiles: string[] = [];
 
   afterEach(async () => {

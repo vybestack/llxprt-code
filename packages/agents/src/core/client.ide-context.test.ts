@@ -15,7 +15,7 @@ import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentG
 import type { ChatSession } from './chatSession.js';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 import {
-  setupGeminiClient,
+  setupAgentClient,
   type MockResponseShape,
 } from './client-test-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -165,9 +165,21 @@ vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
     },
   };
 });
-vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
-  tokenLimit: vi.fn(),
-}));
+vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
+  const tokenLimit = vi.fn();
+  return {
+    tokenLimit,
+    resolveEffectiveContextLimit: vi.fn(
+      (model: string, userCtx?: number, provCtx?: number) => {
+        const ok = (v: unknown): v is number =>
+          typeof v === 'number' && Number.isFinite(v) && v > 0;
+        if (ok(userCtx)) return userCtx;
+        if (ok(provCtx)) return provCtx;
+        return tokenLimit(model);
+      },
+    ),
+  };
+});
 vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
     setLastPromptTokenCount: vi.fn(),
@@ -179,7 +191,7 @@ describe('AgentClient (client.ts)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
-    const ctx = await setupGeminiClient({
+    const ctx = await setupAgentClient({
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,

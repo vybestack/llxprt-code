@@ -4,7 +4,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+import { Storage } from '@vybestack/llxprt-code-storage';
 import { LLXPRT_DIR } from '../utils/paths.js';
 import { type DebugSettings } from './types.js';
 
@@ -52,7 +52,10 @@ export class ConfigurationManager {
       enabled: false,
       namespaces: [],
       level: 'info',
-      output: { target: 'file', directory: `~/${LLXPRT_DIR}/debug` },
+      output: {
+        target: 'file',
+        directory: path.join(Storage.getGlobalLogDir(), 'debug'),
+      },
       lazyEvaluation: true,
       redactPatterns: ['apiKey', 'token', 'password'],
     };
@@ -112,21 +115,16 @@ export class ConfigurationManager {
     }
   }
 
-  // Line 66-79: Load user config from ~/.llxprt/settings.json
+  // Line 66-79: Load user config from the global config directory
   private loadUserConfig(): void {
     try {
-      const homeDir = os.homedir();
-      if (!homeDir) {
-        // In test environments, os.homedir() might not be available
-        return;
-      }
-      const configPath = path.join(homeDir, LLXPRT_DIR, 'settings.json');
+      const configPath = Storage.getGlobalSettingsPath();
       const debugConfig = readDebugConfigFile(configPath);
       if (debugConfig !== null) {
         this.userConfig = debugConfig;
       }
     } catch {
-      // Home directory unavailable (e.g., in tests); use default config.
+      // Config directory unavailable; use default config.
     }
   }
 
@@ -203,7 +201,7 @@ export class ConfigurationManager {
       return;
     }
 
-    const userConfigPath = path.join(os.homedir(), LLXPRT_DIR, 'settings.json');
+    const userConfigPath = Storage.getGlobalSettingsPath();
     let existing: Record<string, unknown> = {};
 
     if (fs.existsSync(userConfigPath)) {

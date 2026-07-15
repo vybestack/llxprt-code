@@ -48,7 +48,7 @@ export interface OpenAIVercelTool {
  * (missing descriptions stay undefined).
  */
 export function convertToolsToOpenAIVercel(
-  geminiTools?: Array<{
+  toolDeclarations?: Array<{
     functionDeclarations?: Array<{
       name: string;
       description?: string;
@@ -56,7 +56,7 @@ export function convertToolsToOpenAIVercel(
     }>;
   }>,
 ): OpenAIVercelTool[] | undefined {
-  const converted = convertToolDeclarations(geminiTools, {
+  const converted = convertToolDeclarations(toolDeclarations, {
     descriptionStrategy: 'preserve',
   });
 

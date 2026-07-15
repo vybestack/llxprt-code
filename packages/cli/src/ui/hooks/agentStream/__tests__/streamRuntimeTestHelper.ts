@@ -164,7 +164,7 @@ function makeSessionRuntime(
     getProjectRoot: () => call(source, 'getProjectRoot', '/tmp'),
     getWorkingDir: () => call(source, 'getWorkingDir', '/tmp'),
     getProjectTempDir: () => call(source, 'getProjectTempDir', '/tmp'),
-    getGeminiDir: () => call(source, 'getGeminiDir', '/tmp/.llxprt'),
+    getLlxprtDir: () => call(source, 'getLlxprtDir', '/tmp/.llxprt'),
     ...override,
   };
 }

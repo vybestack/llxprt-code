@@ -306,7 +306,6 @@ export {
   getAllLlxprtMdFilenames,
   DEFAULT_CONTEXT_FILENAME,
   LLXPRT_CONFIG_DIR,
-  GEMINI_DIR,
   CORE_MEMORY_FILENAME,
   MEMORY_SECTION_HEADER,
   getGlobalCoreMemoryFilePath,

@@ -59,7 +59,7 @@ import {
 } from '@vybestack/llxprt-code-core/core/turn.js';
 
 /**
- * Transitional turn-request type — avoids importing the Gemini SDK PartListUnion.
+ * Transitional turn-request type — avoids importing a provider SDK PartListUnion.
  * Accepts strings and arrays of part-shaped objects that the chatSession's
  * normalizeToolInteractionInput can handle. Narrows to AgentMessageInput at P21.
  *

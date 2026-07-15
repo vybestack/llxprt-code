@@ -118,7 +118,7 @@ function logActiveProviderName(providerManager: {
   });
 }
 
-async function refreshGeminiTools(
+async function refreshAgentTools(
   configService: ProfileConfigService,
 ): Promise<void> {
   const agentClient = configService.getAgentClient?.();
@@ -128,7 +128,7 @@ async function refreshGeminiTools(
     } catch (error) {
       logger.warn(
         () =>
-          `[profile] failed to refresh Gemini tool schema after load: ${error instanceof Error ? error.message : String(error)}`,
+          `[profile] failed to refresh agent tool schema after load: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -152,7 +152,7 @@ export async function applyLoadedProfileConfig(
     configService.setProvider?.(result.providerName);
   }
 
-  await refreshGeminiTools(configService);
+  await refreshAgentTools(configService);
 }
 
 export function recordProviderSwitch(

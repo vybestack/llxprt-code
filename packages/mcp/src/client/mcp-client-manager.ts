@@ -108,7 +108,7 @@ export class McpClientManager {
    * For all the MCP servers associated with this extension:
    *
    *    - Disconnects all MCP clients from their servers.
-   *    - Updates the Gemini chat configuration to load the new tools.
+   *    - Updates the agent chat configuration to load the new tools.
    */
   async stopExtension(extension: LlxprtExtension) {
     logger.log(`Unloading extension: ${extension.name}`);
@@ -124,7 +124,7 @@ export class McpClientManager {
    * For all the MCP servers associated with this extension:
    *
    *    - Connects MCP clients to each server and discovers their tools.
-   *    - Updates the Gemini chat configuration to load the new tools.
+   *    - Updates the agent chat configuration to load the new tools.
    */
   async startExtension(extension: LlxprtExtension) {
     logger.log(`Loading extension: ${extension.name}`);
@@ -272,7 +272,7 @@ export class McpClientManager {
         this.cliConfig.getDebugMode(),
         this.clientVersion,
         async () => {
-          debugLogger.log('Tools changed, updating Gemini context...');
+          debugLogger.log('Tools changed, updating agent context...');
           await this.scheduleMcpContextRefresh();
         },
       );
@@ -405,7 +405,7 @@ export class McpClientManager {
 
   /**
    * Initiates the tool discovery process for all configured MCP servers (via
-   * gemini settings or command line arguments).
+   * settings or command line arguments).
    *
    * It connects to each server, discovers its available tools, and registers
    * them with the `ToolRegistry`.

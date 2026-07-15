@@ -627,7 +627,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         expect(aiCalls.length).toBeGreaterThanOrEqual(2);
       });
 
-      const committedGeminiItems = mockAddItem.mock.calls
+      const committedAgentItems = mockAddItem.mock.calls
         .filter(
           (call) =>
             call[0].type === MessageType.AI ||
@@ -636,15 +636,15 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         .map((call) => call[0] as HistoryItemAi);
 
       // First committed item (type: 'gemini') should own thinkingBlocks
-      const firstItem = committedGeminiItems[0];
+      const firstItem = committedAgentItems[0];
       expect(firstItem.type).toBe('gemini');
       expect(firstItem.thinkingBlocks).toBeDefined();
       expect(firstItem.thinkingBlocks!.length).toBeGreaterThan(0);
       expect(firstItem.thinkingBlocks![0].sourceField).toBe('thought');
 
       // Subsequent gemini_content items should NOT have thinkingBlocks
-      for (let i = 1; i < committedGeminiItems.length; i++) {
-        const item = committedGeminiItems[i];
+      for (let i = 1; i < committedAgentItems.length; i++) {
+        const item = committedAgentItems[i];
         const hasThinking =
           item.thinkingBlocks && item.thinkingBlocks.length > 0;
         expect(hasThinking).toBeFalsy();

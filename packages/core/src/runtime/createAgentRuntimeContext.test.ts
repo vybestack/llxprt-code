@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createAgentRuntimeContext } from './createAgentRuntimeContext.js';
+import { DEFAULT_TOKEN_LIMIT } from '../core/tokenLimits.js';
 import type {
   AgentRuntimeContextFactoryOptions,
   ReadonlySettingsSnapshot,
@@ -703,7 +704,9 @@ describe('createAgentRuntimeContext', () => {
       };
 
       const context = createAgentRuntimeContext(options);
-      expect(context.ephemerals.contextLimit()).toBe(1_048_576);
+      // load-balancer is not in the model catalog, so this falls back to
+      // DEFAULT_TOKEN_LIMIT (200K after issue #2270/#2527).
+      expect(context.ephemerals.contextLimit()).toBe(DEFAULT_TOKEN_LIMIT);
     });
 
     it('falls back to the model default when getActiveProvider throws', () => {
@@ -729,7 +732,9 @@ describe('createAgentRuntimeContext', () => {
       };
 
       const context = createAgentRuntimeContext(options);
-      expect(context.ephemerals.contextLimit()).toBe(1_048_576);
+      // load-balancer is not in the model catalog; falls back to the lowered
+      // DEFAULT_TOKEN_LIMIT (200K).
+      expect(context.ephemerals.contextLimit()).toBe(DEFAULT_TOKEN_LIMIT);
     });
   });
 });

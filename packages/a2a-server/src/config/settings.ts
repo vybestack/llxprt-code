@@ -18,7 +18,19 @@ import {
 import stripJsonComments from 'strip-json-comments';
 
 export const SETTINGS_DIRECTORY_NAME = LLXPRT_CONFIG_DIR;
+
+/**
+ * Lazily compute the user settings directory using the current `homedir()`.
+ * This avoids computing the path at module-load time, which would capture the
+ * real home directory before test mocks can override `os.homedir()`.
+ */
+function getUserSettingsPath(): string {
+  return path.join(homedir(), SETTINGS_DIRECTORY_NAME, 'settings.json');
+}
+
+/** @deprecated Use getUserSettingsPath() instead — computed at load time for testability */
 export const USER_SETTINGS_DIR = path.join(homedir(), SETTINGS_DIRECTORY_NAME);
+/** @deprecated Use getUserSettingsPath() instead — computed at load time for testability */
 export const USER_SETTINGS_PATH = path.join(USER_SETTINGS_DIR, 'settings.json');
 
 // Reconcile with https://github.com/google-gemini/gemini-cli/blob/b09bc6656080d4d12e1d06734aae2ec33af5c1ed/packages/cli/src/config/settings.ts#L53
@@ -61,9 +73,10 @@ export function loadSettings(workspaceDir: string): Settings {
   const settingsErrors: SettingsError[] = [];
 
   // Load user settings
+  const userSettingsPath = getUserSettingsPath();
   try {
-    if (fs.existsSync(USER_SETTINGS_PATH)) {
-      const userContent = fs.readFileSync(USER_SETTINGS_PATH, 'utf-8');
+    if (fs.existsSync(userSettingsPath)) {
+      const userContent = fs.readFileSync(userSettingsPath, 'utf-8');
       const parsedUserSettings = JSON.parse(
         stripJsonComments(userContent),
       ) as Settings;
@@ -72,7 +85,7 @@ export function loadSettings(workspaceDir: string): Settings {
   } catch (error: unknown) {
     settingsErrors.push({
       message: getErrorMessage(error),
-      path: USER_SETTINGS_PATH,
+      path: userSettingsPath,
     });
   }
 
@@ -106,12 +119,48 @@ export function loadSettings(workspaceDir: string): Settings {
     }
   }
 
-  // If there are overlapping keys, the values of workspaceSettings will
-  // override values from userSettings
+  // Merge settings: workspace settings override user settings for all keys
+  // EXCEPT `folderTrust`, which is a security-sensitive setting that must be
+  // derived from user-owned settings only. A workspace cannot self-elevate
+  // folder trust by setting it in its own settings.json. However, a workspace
+  // CAN RESTRICT trust (set folderTrust:false) — it just cannot ELEVATE it
+  // (set folderTrust:true when the user has not).
+  const { folderTrust: _workspaceFolderTrust, ...workspaceNonTrust } =
+    workspaceSettings;
+
+  const effectiveFolderTrust = resolveFolderTrust(
+    userSettings.folderTrust,
+    workspaceSettings.folderTrust,
+  );
+
   return {
     ...userSettings,
-    ...workspaceSettings,
+    ...workspaceNonTrust,
+    ...(effectiveFolderTrust !== undefined
+      ? { folderTrust: effectiveFolderTrust }
+      : {}),
   };
+}
+
+/**
+ * Derive the effective folderTrust from user and workspace values.
+ *
+ * A workspace can RESTRICT trust (set false) but cannot ELEVATE trust
+ * (set true when the user has not).
+ * - If the user explicitly trusts (true), the workspace may restrict (false).
+ * - If the user does not explicitly trust, the workspace can only restrict
+ *   further (false); it cannot self-elevate to true.
+ */
+function resolveFolderTrust(
+  userFolderTrust: boolean | undefined,
+  workspaceFolderTrust: boolean | undefined,
+): boolean | undefined {
+  // Workspace can always restrict (false). It can never elevate to true.
+  if (workspaceFolderTrust === false) {
+    return false;
+  }
+  // Workspace did not restrict; effective trust is whatever the user set.
+  return userFolderTrust;
 }
 
 function resolveEnvVarsInString(value: string): string {

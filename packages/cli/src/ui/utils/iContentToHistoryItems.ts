@@ -16,6 +16,8 @@ import {
   ToolCallStatus,
 } from '../types.js';
 
+const NEWLINE = String.fromCharCode(10);
+
 function safeToolResultToString(result: unknown): string {
   if (typeof result === 'string') {
     return result;
@@ -51,23 +53,51 @@ function buildResponseMap(
   return map;
 }
 
+interface MarkdownSegment {
+  kind: 'text' | 'code';
+  value: string;
+}
+
+function appendTextSegment(segments: MarkdownSegment[], text: string): void {
+  if (text === '') return;
+  const lastSegment = segments.at(-1);
+  if (lastSegment?.kind === 'text') {
+    lastSegment.value += text;
+  } else {
+    segments.push({ kind: 'text', value: text });
+  }
+}
+
+function combineMarkdownSegments(segments: MarkdownSegment[]): string {
+  return segments.reduce((combined, segment) => {
+    const needsSeparator =
+      combined !== '' &&
+      !combined.endsWith(NEWLINE) &&
+      !segment.value.startsWith(NEWLINE);
+    return combined + (needsSeparator ? NEWLINE : '') + segment.value;
+  }, '');
+}
+
 function processAiContent(
   content: IContent,
   responseMap: Map<string, { result: unknown; error?: string }>,
   items: HistoryItem[],
   idCounter: { value: number },
 ): void {
-  const textParts: string[] = [];
+  const segments: MarkdownSegment[] = [];
   const thinkingBlocks: ThinkingBlock[] = [];
   const toolCallBlocks: ToolCallBlock[] = [];
 
   for (const block of content.blocks) {
     switch (block.type) {
       case 'text':
-        textParts.push(block.text);
+        appendTextSegment(segments, block.text);
         break;
       case 'code':
-        textParts.push(`\`\`\`${block.language ?? ''}\n${block.code}\n\`\`\``);
+        segments.push({
+          kind: 'code',
+          value: `\`\`\`${block.language ?? ''}\n${block.code}\n\`\`\``,
+        });
         break;
       case 'thinking':
         thinkingBlocks.push(block);
@@ -79,7 +109,7 @@ function processAiContent(
         break;
     }
   }
-  const combinedText = textParts.join('\n');
+  const combinedText = combineMarkdownSegments(segments);
 
   if (combinedText) {
     items.push({
