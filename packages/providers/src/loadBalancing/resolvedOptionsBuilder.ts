@@ -19,6 +19,7 @@ import type {
   LoadBalancerSubProfile,
 } from '../LoadBalancingProvider.js';
 import { isResolvedSubProfile } from '../LoadBalancingProvider.js';
+import { getRequestSignal } from '../utils/abortSignal.js';
 
 export interface OptionsBuildContext {
   lbProfileEphemeralSettings: Record<string, unknown> | undefined;
@@ -184,6 +185,7 @@ function createDelegateInvocation(
     ephemeralsSnapshot,
     telemetry: options.resolved?.telemetry,
     metadata: options.metadata,
+    signal: getRequestSignal(options),
     fallbackRuntimeId: `${ctx.providerName}:${subProfile.name}`,
   });
 }

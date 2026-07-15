@@ -7,7 +7,10 @@
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { SendMessageParams } from './chatSession.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
-import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
+import {
+  createAbortError,
+  delay,
+} from '@vybestack/llxprt-code-core/utils/delay.js';
 import {
   nextStreamEventWithIdleTimeout,
   resolveStreamIdleTimeoutMs,
@@ -30,7 +33,6 @@ import { normalizeToolInteractionInput } from './MessageConverter.js';
 import {
   StreamEventType,
   type StreamEvent,
-  isSchemaDepthError,
   INVALID_CONTENT_RETRY_OPTIONS,
 } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import {
@@ -56,9 +58,9 @@ import {
   emptyModelOutput,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { isProviderApiError } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { enrichSchemaDepthError } from './schemaDepthErrorEnrichment.js';
+import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{ name: string }>;
 }>;
@@ -207,13 +209,14 @@ export class TurnProcessor {
     userContents: IContent[],
     onDone: () => void,
   ): AsyncGenerator<StreamEvent> {
+    const requestParams = this._withProviderRequestContext(params);
     try {
       let lastError: unknown = new Error('Request failed after all retries.');
       let attempt = 0;
       let retrying = true;
       while (retrying && attempt < INVALID_CONTENT_RETRY_OPTIONS.maxAttempts) {
         const outcome = yield* this._runStreamAttempt(
-          params,
+          requestParams,
           prompt_id,
           userContents,
           attempt,
@@ -222,11 +225,9 @@ export class TurnProcessor {
         if (outcome.action !== 'retry') {
           retrying = false;
         } else {
-          await new Promise((res) =>
-            setTimeout(
-              res,
-              INVALID_CONTENT_RETRY_OPTIONS.initialDelayMs * (attempt + 1),
-            ),
+          await delay(
+            INVALID_CONTENT_RETRY_OPTIONS.initialDelayMs * (attempt + 1),
+            requestParams.config?.abortSignal,
           );
           attempt++;
         }
@@ -317,6 +318,18 @@ export class TurnProcessor {
     return normalizeToolInteractionInput(params.message);
   }
 
+  private _withProviderRequestContext(
+    params: SendMessageParams,
+  ): SendMessageParams {
+    return {
+      ...params,
+      config: {
+        ...params.config,
+        providerRequestContext: params.config?.providerRequestContext ?? {},
+      },
+    };
+  }
+
   private _stampTurnMetadata(contents: IContent[]): IContent[] {
     const idGen = this.historyService.getIdGeneratorCallback();
     return contents.map((content) => ({
@@ -379,6 +392,7 @@ export class TurnProcessor {
     provider: IProvider,
     prompt_id: string,
   ): Promise<ModelOutput> {
+    const requestParams = this._withProviderRequestContext(params);
     this._validateProvider(provider);
     let providerStartTime = 0;
     let providerRequestStarted = false;
@@ -398,21 +412,12 @@ export class TurnProcessor {
         () =>
           this._executeProviderCall(
             provider,
-            params,
+            requestParams,
             iContents,
             providerBaseUrl,
           ),
         {
-          shouldRetryOnError: (error: unknown) => {
-            if (isProviderApiError(error) && error.message) {
-              const status = error.status ?? 0;
-              if (status === 400 || isSchemaDepthError(error.message))
-                return false;
-              if (status === 429 || (status >= 500 && status < 600))
-                return true;
-            }
-            return false;
-          },
+          shouldRetryOnError: shouldRetryDirectProviderError,
           signal: params.config?.abortSignal,
         },
       );
@@ -530,6 +535,7 @@ export class TurnProcessor {
         tools,
         runtimeContext,
         timeoutController.signal,
+        params.config?.providerRequestContext,
       );
       const lastResponse = await this._consumeProviderStream(
         streamResponse,
@@ -576,6 +582,7 @@ export class TurnProcessor {
     tools: ToolGroupArray | undefined,
     runtimeContext: ProviderRuntimeContext,
     timeoutSignal: AbortSignal,
+    requestContext: Record<string, unknown> | undefined,
   ): AsyncIterable<IContent> {
     return provider.generateChatCompletion({
       contents: requestContents,
@@ -587,7 +594,10 @@ export class TurnProcessor {
       } as unknown as GenerateChatOptions['invocation'],
       settings:
         runtimeContext.settingsService as GenerateChatOptions['settings'],
-      metadata: runtimeContext.metadata,
+      metadata: {
+        ...runtimeContext.metadata,
+        _retryRequestContext: requestContext,
+      },
       userMemory: resolveUserMemory(runtimeContext.config),
       systemInstruction: extractSystemInstructionText(
         this.generationConfig.systemInstruction,

@@ -67,6 +67,18 @@ export function extractFailoverSettings(
 /**
  * Determine if an error should trigger failover to the next backend.
  */
+export function permitsLoadBalancerFailover(error: unknown): boolean {
+  if (
+    typeof error !== 'object' ||
+    error === null ||
+    !('reason' in error) ||
+    error.reason !== 'retries_exhausted'
+  ) {
+    return true;
+  }
+  return 'isRetryable' in error && error.isRetryable === true;
+}
+
 export function shouldFailover(
   error: unknown,
   settings: FailoverSettings,

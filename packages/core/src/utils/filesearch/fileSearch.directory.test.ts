@@ -29,7 +29,7 @@ describe('FileSearch Directories', () => {
       const fileSearch = FileSearchFactory.create({
         projectRoot: tmpDir,
         useGitignore: false,
-        useGeminiignore: false,
+        useExtensionIgnore: false,
         ignoreDirs: [],
         cache: false,
         cacheTtl: 0,
@@ -54,7 +54,7 @@ describe('FileSearch Directories', () => {
       const fileSearch = FileSearchFactory.create({
         projectRoot: tmpDir,
         useGitignore: false,
-        useGeminiignore: false,
+        useExtensionIgnore: false,
         ignoreDirs: [],
         cache: false,
         cacheTtl: 0,
@@ -79,7 +79,7 @@ describe('FileSearch Directories', () => {
       const fileSearch = FileSearchFactory.create({
         projectRoot: tmpDir,
         useGitignore: false,
-        useGeminiignore: false,
+        useExtensionIgnore: false,
         ignoreDirs: [],
         cache: false,
         cacheTtl: 0,
@@ -102,7 +102,7 @@ describe('FileSearch Directories', () => {
       const fileSearch = FileSearchFactory.create({
         projectRoot: tmpDir,
         useGitignore: true,
-        useGeminiignore: false,
+        useExtensionIgnore: false,
         ignoreDirs: [],
         cache: false,
         cacheTtl: 0,
@@ -130,7 +130,7 @@ describe('FileSearch Directories', () => {
       const fileSearch = FileSearchFactory.create({
         projectRoot: tmpDir,
         useGitignore: false,
-        useGeminiignore: false,
+        useExtensionIgnore: false,
         ignoreDirs: ['target/'],
         cache: false,
         cacheTtl: 0,
@@ -153,7 +153,7 @@ describe('FileSearch Directories', () => {
       const fileSearch = FileSearchFactory.create({
         projectRoot: tmpDir,
         useGitignore: false,
-        useGeminiignore: false,
+        useExtensionIgnore: false,
         ignoreDirs: [],
         cache: false,
         cacheTtl: 0,
@@ -185,7 +185,7 @@ describe('FileSearch Directories', () => {
       const fileSearch = FileSearchFactory.create({
         projectRoot: tmpDir,
         useGitignore: false,
-        useGeminiignore: false,
+        useExtensionIgnore: false,
         ignoreDirs: DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
         ignorePatterns: DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
         maxDepth: DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
@@ -217,7 +217,7 @@ describe('FileSearch Directories', () => {
       const fileSearch = FileSearchFactory.create({
         projectRoot: tmpDir,
         useGitignore: false,
-        useGeminiignore: false,
+        useExtensionIgnore: false,
         ignoreDirs: DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
         ignorePatterns: DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
         maxDepth: DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
@@ -247,7 +247,7 @@ describe('FileSearch Directories', () => {
       const fileSearch = FileSearchFactory.create({
         projectRoot: tmpDir,
         useGitignore: true,
-        useGeminiignore: false,
+        useExtensionIgnore: false,
         ignoreDirs: DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
         ignorePatterns: DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
         maxDepth: DEFAULT_AUTOCOMPLETE_MAX_DEPTH,

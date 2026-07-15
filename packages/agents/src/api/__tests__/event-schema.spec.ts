@@ -20,6 +20,10 @@
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import {
+  STRUCTURED_ERROR_CATEGORIES,
+  STRUCTURED_ERROR_REASONS,
+} from '@vybestack/llxprt-code-core';
+import {
   AgentEventSchema,
   DoneReasonSchema,
   ToolUpdateStatusSchema,
@@ -419,13 +423,48 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
     ).toBe(false);
   });
 
-  it('StructuredErrorSchema requires message, status optional @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', () => {
-    expect(StructuredErrorSchema.parse({ message: 'm' })).toStrictEqual({
-      message: 'm',
+  it('StructuredErrorSchema validates minimal and classified errors @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', () => {
+    expect(
+      StructuredErrorSchema.parse({ message: 'Provider failed' }),
+    ).toStrictEqual({ message: 'Provider failed' });
+    expect(
+      StructuredErrorSchema.parse({
+        message: 'Rate limited',
+        status: 429,
+        category: 'rate_limit',
+        reason: 'retries_exhausted',
+      }),
+    ).toStrictEqual({
+      message: 'Rate limited',
+      status: 429,
+      category: 'rate_limit',
+      reason: 'retries_exhausted',
     });
     expect(StructuredErrorSchema.safeParse({ status: 500 }).success).toBe(
       false,
     );
+    expect(
+      StructuredErrorSchema.safeParse({
+        message: 'Provider failed',
+        category: 'unknown',
+      }).success,
+    ).toBe(false);
+    expect(
+      StructuredErrorSchema.safeParse({
+        message: 'Provider failed',
+        reason: 'unknown',
+      }).success,
+    ).toBe(false);
+    for (const category of STRUCTURED_ERROR_CATEGORIES) {
+      expect(
+        StructuredErrorSchema.parse({ message: category, category }).category,
+      ).toBe(category);
+    }
+    for (const reason of STRUCTURED_ERROR_REASONS) {
+      expect(
+        StructuredErrorSchema.parse({ message: reason, reason }).reason,
+      ).toBe(reason);
+    }
   });
 
   it('AgentStopInfoSchema requires reason, message/contextCleared optional @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', () => {

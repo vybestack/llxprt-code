@@ -78,9 +78,9 @@ export function classifyCompletedTools(tools: CompletedToolCall[]): {
  * Filters out tool-call blocks (already present in the assistant turn).
  */
 export function buildToolResponses(
-  geminiTools: CompletedToolCall[],
+  completedTools: CompletedToolCall[],
 ): ContentBlock[] {
-  return geminiTools.flatMap((toolCall) =>
+  return completedTools.flatMap((toolCall) =>
     toolCall.response.responseParts.filter(
       (block) => block.type !== 'tool_call',
     ),

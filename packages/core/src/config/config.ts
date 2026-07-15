@@ -74,7 +74,6 @@ export {
   type IntrospectionAgentSettings,
   type TelemetrySettings,
   type LlxprtExtension,
-  type GeminiCLIExtension,
   type ExtensionInstallMetadata,
   type ShellReplacementMode,
   normalizeShellReplacement,

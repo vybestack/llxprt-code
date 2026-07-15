@@ -119,7 +119,7 @@ export class ConversationManager {
   }
 
   /**
-   * Creates a position-based matcher for Gemini tool responses.
+   * Creates a position-based matcher for tool responses.
    * Returns a function that matches tool responses to their calls, or undefined
    * if there are no unmatched tool calls.
    */

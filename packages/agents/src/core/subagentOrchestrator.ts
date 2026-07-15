@@ -85,6 +85,9 @@ const createAbortError = (message: string): Error => {
 
 export const DEFAULT_DISABLED_TOOLS = [] as const;
 
+/** Subagent-specific fallback when no valid max-turn setting is materialized. */
+const DEFAULT_UNCONFIGURED_MAX_TURNS = 1000;
+
 export interface SubagentLaunchRequest {
   name: string;
   runConfig?: RunConfig;
@@ -444,7 +447,7 @@ export class SubagentOrchestrator {
     const maxTurns = custom?.max_turns ?? profileMaxTurns ?? parentMaxTurns;
 
     if (maxTurns === undefined) {
-      runConfig.max_turns = 200;
+      runConfig.max_turns = DEFAULT_UNCONFIGURED_MAX_TURNS;
     } else if (maxTurns > 0) {
       runConfig.max_turns = Math.floor(maxTurns);
     }

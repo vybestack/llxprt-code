@@ -5,13 +5,10 @@
  */
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { EventEmitter } from 'node:events';
 import type { spawn as spawnType } from 'node:child_process';
 
-const cliPackageRoot = resolve(__dirname, '..', '..');
-const binPath = resolve(cliPackageRoot, 'bin', 'llxprt.cjs');
 const loadCommonJsModule = createRequire(import.meta.url);
 const credentialSocketEnv = 'LLXPRT_CREDENTIAL_SOCKET';
 
@@ -59,7 +56,7 @@ function isCliBinModule(module: unknown): module is CliBinModule {
 }
 
 function loadCliBin(): CliBinModule {
-  const module = loadCommonJsModule(binPath);
+  const module = loadCommonJsModule('../../bin/llxprt.cjs');
   if (!isCliBinModule(module)) {
     throw new Error('cli bin module did not expose expected test seams');
   }

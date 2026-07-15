@@ -130,6 +130,7 @@
     "@opentelemetry/sdk-trace-base": "^2.8.0",
     "@opentelemetry/sdk-trace-node": "^2.8.0",
     "@opentelemetry/semantic-conventions": "^1.29.0",
+    "@vybestack/llxprt-code-storage": "file:../storage",
     "debug": "^4.3.4"
   },
   "devDependencies": {

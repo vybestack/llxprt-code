@@ -49,14 +49,12 @@ export const getPty = async (): Promise<PtyImplementation> => {
   }
 
   try {
-    const lydell = '@lydell/node-pty';
-    const module = await import(lydell);
+    const module = await import('@lydell/node-pty');
     return { module, name: 'lydell-node-pty' };
   } catch {
     // Probe for alternative node-pty implementation
     try {
-      const nodePty = 'node-pty';
-      const module = await import(nodePty);
+      const module = await import('node-pty');
       return { module, name: 'node-pty' };
     } catch {
       // No node-pty implementation available

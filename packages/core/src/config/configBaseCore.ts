@@ -596,7 +596,7 @@ export abstract class ConfigBaseCore {
   getAgentClient(): AgentClientContract {
     return this.agentClient;
   }
-  getGeminiDir(): string {
+  getLlxprtDir(): string {
     return path.join(this.targetDir, LLXPRT_DIR);
   }
   getProjectTempDir(): string {

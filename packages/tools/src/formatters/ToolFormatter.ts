@@ -32,7 +32,7 @@ import {
 /** Set of values considered missing/falsy in legacy schema checks. */
 const MISSING_SCHEMA_VALUES = new Set<unknown>([false, 0, '', undefined, null]);
 
-function isMissingGeminiSchema(value: unknown): boolean {
+function isMissingSchema(value: unknown): boolean {
   return MISSING_SCHEMA_VALUES.has(value);
 }
 
@@ -58,17 +58,17 @@ function isRequiredMissing(requiredValue: unknown): boolean {
 }
 
 /**
- * Converts Gemini-format tool declarations to various provider formats.
+ * Converts tool declarations to various provider formats.
  *
  * This implementation is self-contained with no core logger dependency.
  * Logging is replaced with silent operation.
  */
 export class ToolFormatter implements IToolFormatter {
   /**
-   * Convert Gemini format tools directly to OpenAI format.
+   * Convert tool declarations directly to OpenAI format.
    */
-  convertGeminiToOpenAI(
-    geminiTools?: Array<{
+  convertToolDeclarationsToOpenAI(
+    toolDeclarations?: Array<{
       functionDeclarations: Array<{
         name: string;
         description?: string;
@@ -76,26 +76,27 @@ export class ToolFormatter implements IToolFormatter {
       }>;
     }>,
   ): OpenAITool[] | undefined {
-    if (!geminiTools) {
+    if (!toolDeclarations) {
       return undefined;
     }
 
-    const openAITools = geminiTools.flatMap((toolGroup) => {
+    const openAITools = toolDeclarations.flatMap((toolGroup) => {
       if (!Array.isArray(toolGroup.functionDeclarations)) {
         return [];
       }
 
       return toolGroup.functionDeclarations.map((decl) => {
         const schema: unknown = decl.parametersJsonSchema;
-        if (isMissingGeminiSchema(schema)) {
+        if (isMissingSchema(schema)) {
           throw new Error(
             `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
               `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
           );
         }
-        const convertedParams = this.convertGeminiSchemaToStandard(
-          schema,
-        ) as Record<string, unknown>;
+        const convertedParams = this.convertSchemaToStandard(schema) as Record<
+          string,
+          unknown
+        >;
 
         return {
           type: 'function' as const,
@@ -112,10 +113,10 @@ export class ToolFormatter implements IToolFormatter {
   }
 
   /**
-   * Convert Gemini format tools directly to Anthropic format.
+   * Convert tool declarations directly to Anthropic format.
    */
-  convertGeminiToAnthropic(
-    geminiTools?: Array<{
+  convertToolDeclarationsToAnthropic(
+    toolDeclarations?: Array<{
       functionDeclarations: Array<{
         name: string;
         description?: string;
@@ -129,20 +130,21 @@ export class ToolFormatter implements IToolFormatter {
         input_schema: { type: 'object'; [key: string]: unknown };
       }>
     | undefined {
-    if (!geminiTools) return undefined;
+    if (!toolDeclarations) return undefined;
 
-    const anthropicTools = geminiTools.flatMap((toolGroup) =>
+    const anthropicTools = toolDeclarations.flatMap((toolGroup) =>
       toolGroup.functionDeclarations.map((decl) => {
         const schema: unknown = decl.parametersJsonSchema;
-        if (isMissingGeminiSchema(schema)) {
+        if (isMissingSchema(schema)) {
           throw new Error(
             `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
               `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
           );
         }
-        const convertedParams = this.convertGeminiSchemaToStandard(
-          schema,
-        ) as Record<string, unknown>;
+        const convertedParams = this.convertSchemaToStandard(schema) as Record<
+          string,
+          unknown
+        >;
 
         return {
           name: decl.name,
@@ -159,10 +161,10 @@ export class ToolFormatter implements IToolFormatter {
   }
 
   /**
-   * Convert Gemini format tools to the specified provider format.
+   * Convert tool declarations to the specified provider format.
    */
-  convertGeminiToFormat(
-    geminiTools?: Array<{
+  convertToolDeclarationsToFormat(
+    toolDeclarations?: Array<{
       functionDeclarations: Array<{
         name: string;
         description?: string;
@@ -171,7 +173,7 @@ export class ToolFormatter implements IToolFormatter {
     }>,
     format: ToolFormat = 'openai',
   ): unknown {
-    if (!geminiTools) {
+    if (!toolDeclarations) {
       return undefined;
     }
 
@@ -181,22 +183,22 @@ export class ToolFormatter implements IToolFormatter {
       format === 'deepseek' ||
       format === 'kimi'
     ) {
-      return this.convertGeminiToOpenAI(geminiTools);
+      return this.convertToolDeclarationsToOpenAI(toolDeclarations);
     }
 
     if (format === 'anthropic') {
-      return this.convertGeminiToAnthropic(geminiTools);
+      return this.convertToolDeclarationsToAnthropic(toolDeclarations);
     }
 
     // For other formats, convert to generic then use toProviderFormat
-    const itools = geminiTools.flatMap((toolGroup) => {
+    const itools = toolDeclarations.flatMap((toolGroup) => {
       if (!Array.isArray(toolGroup.functionDeclarations)) {
         return [];
       }
 
       return toolGroup.functionDeclarations.map((decl) => {
         const schema: unknown = decl.parametersJsonSchema;
-        if (isMissingGeminiSchema(schema)) {
+        if (isMissingSchema(schema)) {
           throw new Error(
             `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
               `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
@@ -217,9 +219,9 @@ export class ToolFormatter implements IToolFormatter {
   }
 
   /**
-   * Converts Gemini schema format to standard JSON Schema format.
+   * Converts a tool-declaration schema to standard JSON Schema format.
    */
-  convertGeminiSchemaToStandard(schema: unknown): unknown {
+  convertSchemaToStandard(schema: unknown): unknown {
     if (schema === null || schema === undefined || typeof schema !== 'object') {
       return schema;
     }
@@ -240,7 +242,7 @@ export class ToolFormatter implements IToolFormatter {
     if (isValidObject(newSchema.properties)) {
       const newProperties: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(newSchema.properties)) {
-        newProperties[key] = this.convertGeminiSchemaToStandard(value);
+        newProperties[key] = this.convertSchemaToStandard(value);
       }
       newSchema.properties = newProperties;
     }
@@ -250,17 +252,17 @@ export class ToolFormatter implements IToolFormatter {
     if (newSchema.items !== undefined && newSchema.items !== null) {
       if (Array.isArray(newSchema.items)) {
         newSchema.items = newSchema.items.map((item) =>
-          this.convertGeminiSchemaToStandard(item),
+          this.convertSchemaToStandard(item),
         );
       } else {
-        newSchema.items = this.convertGeminiSchemaToStandard(newSchema.items);
+        newSchema.items = this.convertSchemaToStandard(newSchema.items);
       }
     }
   }
 
   private normalizeSchemaType(newSchema: Record<string, unknown>): void {
     const typeValue: unknown = newSchema.type;
-    if (!isMissingGeminiSchema(typeValue) && typeValue !== '') {
+    if (!isMissingSchema(typeValue) && typeValue !== '') {
       newSchema.type = String(newSchema.type).toLowerCase();
     }
   }
@@ -306,7 +308,7 @@ export class ToolFormatter implements IToolFormatter {
       case 'qwen':
       case 'kimi':
         return tools.map((tool) => {
-          const convertedParams = this.convertGeminiSchemaToStandard(
+          const convertedParams = this.convertSchemaToStandard(
             tool.function.parameters,
           );
 
@@ -341,9 +343,7 @@ export class ToolFormatter implements IToolFormatter {
           function: {
             name: tool.function.name,
             description: tool.function.description,
-            parameters: this.convertGeminiSchemaToStandard(
-              tool.function.parameters,
-            ),
+            parameters: this.convertSchemaToStandard(tool.function.parameters),
           },
         }));
       default:
@@ -566,7 +566,7 @@ export class ToolFormatter implements IToolFormatter {
       name: tool.function.name,
       description: tool.function.description ?? null,
       parameters:
-        (this.convertGeminiSchemaToStandard(tool.function.parameters) as
+        (this.convertSchemaToStandard(tool.function.parameters) as
           | Record<string, unknown>
           | null
           | undefined) ?? null,

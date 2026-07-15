@@ -7,7 +7,16 @@
 type Model = string;
 type TokenCount = number;
 
-export const DEFAULT_TOKEN_LIMIT = 1_048_576;
+/**
+ * Conservative fallback for unrecognized models.
+ *
+ * Lowered from 1M to 200K (issue #2270 / #2527): the overwhelmingly common
+ * real-world floor is 200K (Claude, many GLM/Gemini variants). Defaulting to
+ * 200K instead of 1M makes the unrecognized-model case fail-safe — proactive
+ * compression fires conservatively rather than silently overrunning a
+ * sub-200K backend.
+ */
+export const DEFAULT_TOKEN_LIMIT = 200_000;
 
 const OPENAI_128K_PREFIXES = [
   'o4-mini',
@@ -27,9 +36,31 @@ interface PrefixLimit {
 const PREFIX_LIMITS: PrefixLimit[] = [
   { prefix: 'gpt-4.1', limit: 1_000_000 },
   { prefix: 'gpt-3.5-turbo', limit: 16_385 },
+  // Gemini 2.x variants (experimental, preview, dated snapshots) — all 1M.
+  // Exact entries above take precedence, so the 32K image-generation variant
+  // is unaffected. Prevents the lowered DEFAULT_TOKEN_LIMIT from silently
+  // shrinking recognized Gemini variants (issue #2527).
+  { prefix: 'gemini-2.5-pro', limit: 1_048_576 },
+  { prefix: 'gemini-2.5-flash', limit: 1_048_576 },
+  { prefix: 'gemini-2.0-flash', limit: 1_048_576 },
+  // GLM-5 family — 200K context window (z.ai API docs)
+  { prefix: 'glm-5', limit: 200_000 },
+  // GLM-4 family — 128K context window (z.ai API docs)
+  { prefix: 'glm-4', limit: 128_000 },
 ];
 
 const EXACT_LIMITS: Record<string, TokenCount> = {
+  // GLM (z.ai) models — exact entries for commonly used variants.
+  // The GLM-5 family (glm-5, glm-5.1, glm-5.2, …) exposes a 200K context
+  // window; the GLM-4 family (glm-4, glm-4.5, glm-4.6, …) exposes 128K.
+  // Prefix-based fallbacks below cover future/dated variants.
+  'glm-5.2': 200_000,
+  'glm-5.1': 200_000,
+  'glm-5': 200_000,
+  'glm-4.6': 128_000,
+  'glm-4.5': 128_000,
+  'glm-4': 128_000,
+
   // Gemini models
   'gemini-1.5-pro': 2_097_152,
   'gemini-1.5-flash': 1_048_576,
@@ -152,4 +183,39 @@ export function tokenLimit(
   }
 
   return DEFAULT_TOKEN_LIMIT;
+}
+
+/**
+ * Returns true when *value* is a positive, finite number suitable as a
+ * context-window override.
+ */
+function isPositiveFiniteLimit(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+/**
+ * Single source of truth for the three-tier context-window precedence
+ * (issues #2270 / #2527 DRY consolidation):
+ *
+ * 1. explicit user `context-limit` override (from /set, profile, or settings),
+ * 2. the active provider's reported context limit (e.g. a load-balancer pool's
+ *    min-across-sub-profiles limit),
+ * 3. the model-name lookup via `tokenLimit(model)`.
+ *
+ * Both `ephemerals.contextLimit()` (core runtime) and
+ * `getTokenLimitForConfiguredContext()` (agents layer) delegate to this
+ * function so the precedence lives in exactly one place.
+ */
+export function resolveEffectiveContextLimit(
+  model: string,
+  userContextLimit?: number,
+  providerContextLimit?: number,
+): number {
+  if (isPositiveFiniteLimit(userContextLimit)) {
+    return userContextLimit;
+  }
+  if (isPositiveFiniteLimit(providerContextLimit)) {
+    return providerContextLimit;
+  }
+  return tokenLimit(model);
 }

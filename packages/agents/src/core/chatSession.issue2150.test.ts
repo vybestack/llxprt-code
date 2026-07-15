@@ -44,10 +44,15 @@ import { createConfigParams } from './chatSession-runtime-helpers.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   InvalidStreamError,
   EmptyStreamError,
 } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+import {
+  RetryOrchestrator,
+  type IProvider as ConcreteProvider,
+} from '@vybestack/llxprt-code-providers';
 
 describe('Issue 2150: transient connection error must retry the turn, not break the loop', () => {
   let settingsService: SettingsService;
@@ -511,5 +516,51 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       .map((e) => JSON.stringify(e))
       .join('');
     expect(chunkText).toContain('recovered response');
+  });
+
+  it('shares one transport budget across agent empty-stream retries', async () => {
+    settingsService.set('retries', 1);
+    let transports = 0;
+    const delegate: ConcreteProvider = {
+      name: 'stub',
+      generateChatCompletion() {
+        transports++;
+        return (async function* (): AsyncGenerator<IContent> {
+          yield* [];
+        })();
+      },
+      getModels: async () => [],
+      getDefaultModel: () => 'stub-model',
+      getServerTools: () => [],
+      invokeServerTool: async () => undefined,
+    };
+    const orchestrator = new RetryOrchestrator(delegate, {
+      maxAttempts: 1,
+      initialDelayMs: 0,
+    });
+    manager.registerProvider(orchestrator);
+
+    const chat = buildChatSession();
+    const stream = await chat.sendMessageStream(
+      { message: 'empty response' },
+      'prompt-shared-transport-budget',
+    );
+
+    await expect(collectEvents(stream)).rejects.toMatchObject({
+      name: 'RetriesExhaustedError',
+      category: 'server_error',
+      isRetryable: false,
+      shouldFailover: false,
+      reason: 'retries_exhausted',
+      cause: {
+        name: 'EmptyStreamError',
+      },
+      failures: [
+        {
+          name: 'EmptyStreamError',
+        },
+      ],
+    });
+    expect(transports).toBe(1);
   });
 });

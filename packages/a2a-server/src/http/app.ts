@@ -123,7 +123,9 @@ async function createStartupContext(): Promise<AppContext & TaskStores> {
   const workspaceRoot = setTargetDir(undefined);
   loadEnvironment();
   const settings = loadSettings(workspaceRoot);
-  const extensions = loadExtensions(workspaceRoot);
+  const extensions = loadExtensions(workspaceRoot, {
+    folderTrust: settings.folderTrust,
+  });
   const config = await loadConfig(settings, extensions, 'a2a-server');
   const { taskStoreForExecutor, taskStoreForHandler } = createTaskStores();
   const agentExecutor = new CoderAgentExecutor(taskStoreForExecutor);

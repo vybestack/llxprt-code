@@ -20,7 +20,7 @@ import type {
 } from './AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
 import type { RuntimeSettingsState } from './providerRuntimeContext.js';
-import { tokenLimit } from '../core/tokenLimits.js';
+import { resolveEffectiveContextLimit } from '../core/tokenLimits.js';
 /** @plan PLAN-20260211-COMPRESSION.P12 */
 import { getSettingSpec } from '@vybestack/llxprt-code-settings';
 
@@ -143,22 +143,14 @@ function buildCompressionEphemerals(
         'context-limit',
         options.settings.contextLimit,
       );
-      const liveOverride =
-        typeof liveLimit === 'number' &&
-        Number.isFinite(liveLimit) &&
-        liveLimit > 0
-          ? liveLimit
-          : undefined;
-      if (liveOverride !== undefined) {
-        return liveOverride;
-      }
       const providerContextLimit = resolveProviderContextLimit(
         options.provider,
       );
-      if (providerContextLimit !== undefined) {
-        return providerContextLimit;
-      }
-      return tokenLimit(options.state.model, undefined);
+      return resolveEffectiveContextLimit(
+        options.state.model,
+        liveLimit,
+        providerContextLimit,
+      );
     },
     preserveThreshold: (): number =>
       options.settings.preserveThreshold ??

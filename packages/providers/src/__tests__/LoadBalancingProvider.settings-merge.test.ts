@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -414,6 +414,72 @@ describe('LoadBalancingProvider', () => {
         } finally {
           providerManager.getProviderByName = originalGetProvider;
         }
+      });
+
+      it('preserves the request signal in a resolved delegate invocation', async () => {
+        const controller = new AbortController();
+        const resolvedSubProfiles: ResolvedSubProfile[] = [
+          {
+            name: 'resolved',
+            providerName: 'anthropic',
+            model: 'claude-test',
+            ephemeralSettings: {},
+            modelParams: {},
+          },
+        ];
+        const provider = new LoadBalancingProvider(
+          {
+            profileName: 'signal-lb',
+            strategy: 'round-robin',
+            subProfiles: resolvedSubProfiles,
+          },
+          providerManager,
+        );
+        let capturedSignal: AbortSignal | undefined;
+        const delegate: IProvider = {
+          name: 'anthropic',
+          async *generateChatCompletion(options: GenerateChatOptions) {
+            capturedSignal = options.invocation?.signal;
+            if (capturedSignal === undefined) {
+              throw new Error('Delegate invocation signal is required');
+            }
+            await new Promise<void>((resolve) => {
+              capturedSignal.addEventListener('abort', () => resolve(), {
+                once: true,
+              });
+            });
+            yield { role: 'model', parts: [{ text: 'response' }] };
+          },
+          getModels: async () => [],
+          getDefaultModel: () => 'claude-test',
+          getServerTools: () => [],
+          invokeServerTool: async () => ({}),
+        };
+        const originalGetProvider =
+          providerManager.getProviderByName.bind(providerManager);
+        providerManager.getProviderByName = () => delegate;
+
+        try {
+          const completion = (async () => {
+            for await (const _chunk of provider.generateChatCompletion({
+              contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+              settings: settingsService,
+              config,
+              runtime: { settingsService, config },
+              metadata: { abortSignal: controller.signal },
+            })) {
+              void _chunk;
+            }
+          })();
+          await vi.waitFor(() => expect(capturedSignal).toBeDefined());
+          expect(capturedSignal?.aborted).toBe(false);
+          controller.abort();
+          await completion;
+        } finally {
+          providerManager.getProviderByName = originalGetProvider;
+        }
+
+        expect(capturedSignal?.aborted).toBe(true);
       });
     });
     describe('ephemeralSettings merge (dumb merge)', () => {

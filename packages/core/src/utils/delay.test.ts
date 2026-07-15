@@ -51,24 +51,28 @@ describe('abortableDelay', () => {
 
   it('rejects immediately if the signal is already aborted', async () => {
     const controller = new AbortController();
-    controller.abort();
+    const reason = new Error('request deadline expired');
+    controller.abort(reason);
 
     await expect(delay(50, controller.signal)).rejects.toMatchObject({
       name: 'AbortError',
       message: 'Aborted',
+      cause: reason,
     });
   });
 
   it('rejects if the signal aborts while waiting', async () => {
     const controller = new AbortController();
+    const reason = new Error('user cancelled request');
     const promise = delay(500, controller.signal);
 
     await vi.advanceTimersByTimeAsync(100);
-    controller.abort();
+    controller.abort(reason);
 
     await expect(promise).rejects.toMatchObject({
       name: 'AbortError',
       message: 'Aborted',
+      cause: reason,
     });
   });
 

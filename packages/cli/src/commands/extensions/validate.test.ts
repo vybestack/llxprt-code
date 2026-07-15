@@ -5,7 +5,15 @@
  */
 
 import * as fs from 'node:fs';
-import { describe, it, expect, vi, type MockInstance } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type MockInstance,
+} from 'vitest';
 import { handleValidate, validateCommand } from './validate.js';
 import yargs from 'yargs';
 import { createExtension } from '../../test-utils/createExtension.js';
@@ -116,9 +124,50 @@ describe('handleValidate', () => {
     });
     expect(debugLoggerErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining(
-        'The following context files referenced in gemini-extension.json are missing: contextFile.md',
+        'The following context files referenced in llxprt-extension.json are missing: contextFile.md',
       ),
     );
     expect(processSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('names llxprt-extension.json when the primary manifest is selected and context is missing', async () => {
+    createExtension({
+      extensionsDir: tempWorkspaceDir,
+      name: 'primary-ctx',
+      version: '1.0.0',
+      contextFileName: 'missing.md',
+    });
+    // Remove the context file so validation reports it missing
+    fs.rmSync(path.join(tempWorkspaceDir, 'primary-ctx', 'missing.md'));
+
+    await handleValidate({ path: 'primary-ctx' });
+
+    expect(debugLoggerErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'The following context files referenced in llxprt-extension.json are missing: missing.md',
+      ),
+    );
+  });
+
+  it('names gemini-extension.json when the fallback manifest is selected and context is missing', async () => {
+    const extDir = path.join(tempWorkspaceDir, 'fallback-ctx');
+    fs.mkdirSync(extDir, { recursive: true });
+    // Write ONLY a gemini-extension.json so it is the selected manifest
+    fs.writeFileSync(
+      path.join(extDir, 'gemini-extension.json'),
+      JSON.stringify({
+        name: 'fallback-ctx',
+        version: '1.0.0',
+        contextFileName: 'missing.md',
+      }),
+    );
+
+    await handleValidate({ path: 'fallback-ctx' });
+
+    expect(debugLoggerErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'The following context files referenced in gemini-extension.json are missing: missing.md',
+      ),
+    );
   });
 });

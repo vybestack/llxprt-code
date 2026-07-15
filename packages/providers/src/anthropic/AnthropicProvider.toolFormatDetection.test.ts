@@ -17,7 +17,7 @@ vi.mock('@anthropic-ai/sdk', () => ({
 
 vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
   ToolFormatter: vi.fn().mockImplementation(() => ({
-    convertGeminiToFormat: vi.fn(),
+    convertToolDeclarationsToFormat: vi.fn(),
   })),
 }));
 

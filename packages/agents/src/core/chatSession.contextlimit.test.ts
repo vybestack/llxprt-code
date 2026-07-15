@@ -235,7 +235,7 @@ describe('ChatSession Context Limit Enforcement', () => {
     // Reduced token counts to account for completion budget
     // Using smaller completion budget (4096) to keep total reasonable
     // Total: 10000 (history) + 5000 (pending) + 4096 (budget) = 19096
-    // This is well under DEFAULT_TOKEN_LIMIT (1,048,576) and demonstrates the fallback
+    // This is well under DEFAULT_TOKEN_LIMIT (200,000) and demonstrates the fallback
     vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(10000);
     vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue(
       undefined,
@@ -282,14 +282,10 @@ describe('ChatSession Context Limit Enforcement', () => {
       chat['enforceContextWindow'](pendingTokens, 'test-prompt-id'),
     ).resolves.not.toThrow();
 
-    // Verify tokenLimit was called with a fallback (undefined) followed by provider default
-    expect(tokenLimitsModule.tokenLimit).toHaveBeenNthCalledWith(
-      1,
-      configWithoutLimit.getModel(),
-      undefined,
-    );
-    expect(tokenLimitsModule.tokenLimit).toHaveBeenNthCalledWith(
-      2,
+    // resolveEffectiveContextLimit handles the model lookup internally
+    // (same-module call, not visible to the export spy). The spy only sees
+    // the CompressionHandler call with the resolved default limit.
+    expect(tokenLimitsModule.tokenLimit).toHaveBeenCalledWith(
       configWithoutLimit.getModel(),
       DEFAULT_TOKEN_LIMIT,
     );

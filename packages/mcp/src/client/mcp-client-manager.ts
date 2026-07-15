@@ -285,7 +285,7 @@ export class McpClientManager {
       this.cliConfig.getDebugMode(),
       this.clientVersion,
       async () => {
-        debugLogger.log('Tools changed, updating Gemini context...');
+        debugLogger.log('Tools changed, updating agent context...');
         await this.scheduleMcpContextRefresh();
       },
     );
@@ -559,7 +559,7 @@ export class McpClientManager {
 
   /**
    * Initiates the tool discovery process for all configured MCP servers (via
-   * gemini settings or command line arguments).
+   * settings or command line arguments).
    *
    * It connects to each server, discovers its available tools, and registers
    * them with the `ToolRegistry`.

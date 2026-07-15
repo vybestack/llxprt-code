@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { DEFAULT_TOKEN_LIMIT } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import { getTokenLimitForConfiguredContext } from './contextLimitResolver.js';
 
 /**
@@ -63,17 +64,17 @@ describe('getTokenLimitForConfiguredContext', () => {
   it('falls back to the model-name window when neither override nor provider limit is set', () => {
     const config = makeConfig({ model: 'gpt-4o' });
 
-    // gpt-4o resolves to 128K, distinct from DEFAULT_TOKEN_LIMIT (1M), so the
-    // model-lookup path is genuinely exercised rather than coincidental.
+    // gpt-4o resolves to 128K, distinct from DEFAULT_TOKEN_LIMIT (200K), so
+    // the model-lookup path is genuinely exercised rather than coincidental.
     expect(getTokenLimitForConfiguredContext('gpt-4o', config)).toBe(128_000);
   });
 
   it('returns DEFAULT_TOKEN_LIMIT for an unrecognized model with no overrides', () => {
     const config = makeConfig({ model: 'load-balancer' });
 
-    expect(
-      getTokenLimitForConfiguredContext('load-balancer', config),
-    ).toBeGreaterThanOrEqual(1_000_000);
+    expect(getTokenLimitForConfiguredContext('load-balancer', config)).toBe(
+      DEFAULT_TOKEN_LIMIT,
+    );
   });
 
   it('ignores a non-positive provider limit and falls back to the model lookup', () => {

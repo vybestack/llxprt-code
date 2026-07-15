@@ -53,7 +53,7 @@ describe('HookRegistry', () => {
     vi.resetAllMocks();
 
     mockStorage = {
-      getGeminiDir: vi.fn().mockReturnValue('/project/.gemini'),
+      getLlxprtDir: vi.fn().mockReturnValue('/project/.llxprt'),
     } as unknown as Storage;
 
     mockConfig = {

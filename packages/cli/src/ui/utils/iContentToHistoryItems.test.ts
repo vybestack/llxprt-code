@@ -204,6 +204,100 @@ describe('iContentToHistoryItems', () => {
     });
   });
 
+  it('concatenates consecutive text blocks without newlines (#2549)', () => {
+    // A resumed AI turn can arrive as several fragmented text blocks (e.g. one
+    // per streamed token). They represent flowing prose, not separate lines.
+    // Separating them with newlines produced one-token-per-line rendering on
+    // restore, so consecutive text blocks must be concatenated directly.
+    const input: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          { type: 'text', text: 'The' },
+          { type: 'text', text: ' quick' },
+          { type: 'text', text: ' brown' },
+          { type: 'text', text: ' fox.' },
+        ],
+      },
+    ];
+
+    const output = iContentToHistoryItems(input);
+    expect(output).toHaveLength(1);
+    assertHasType(output[0], 'gemini');
+    expect(output[0].text).toBe('The quick brown fox.');
+    // No hard line breaks were inserted between the fragments.
+    expect(output[0].text).not.toContain(String.fromCharCode(10));
+  });
+
+  it('keeps text and code blocks on separate lines when fragmented (#2549)', () => {
+    // Text fragments still merge into flowing prose, but a code block remains a
+    // distinct block-level paragraph (its fence needs a surrounding newline).
+    const input: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          { type: 'text', text: 'Here' },
+          { type: 'text', text: ' is code:' },
+          { type: 'code', code: 'x=1', language: 'ts' },
+        ],
+      },
+    ];
+
+    const output = iContentToHistoryItems(input);
+    expect(output).toHaveLength(1);
+    assertHasType(output[0], 'gemini');
+    expect(output[0].text).toBe(
+      ['Here is code:', '```ts', 'x=1', '```'].join(String.fromCharCode(10)),
+    );
+  });
+
+  it('does not add blank lines after text fragments ending in newlines (#2549)', () => {
+    const input: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'text',
+            text: ['First line', ''].join(String.fromCharCode(10)),
+          },
+          {
+            type: 'text',
+            text: ['Second line', ''].join(String.fromCharCode(10)),
+          },
+        ],
+      },
+    ];
+
+    const output = iContentToHistoryItems(input);
+    expect(output).toHaveLength(1);
+    assertHasType(output[0], 'gemini');
+    expect(output[0].text).toBe(
+      ['First line', 'Second line', ''].join(String.fromCharCode(10)),
+    );
+  });
+
+  it('does not add a blank line before code when text supplies the newline (#2549)', () => {
+    const input: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'text',
+            text: ['Here is code:', ''].join(String.fromCharCode(10)),
+          },
+          { type: 'code', code: 'x=1', language: 'ts' },
+        ],
+      },
+    ];
+
+    const output = iContentToHistoryItems(input);
+    expect(output).toHaveLength(1);
+    assertHasType(output[0], 'gemini');
+    expect(output[0].text).toBe(
+      ['Here is code:', '```ts', 'x=1', '```'].join(String.fromCharCode(10)),
+    );
+  });
+
   it('silently drops tool response with no matching tool call', () => {
     const input: IContent[] = [
       {

@@ -53,7 +53,7 @@ vi.mock('fs', () => ({
 
 function makeConfig(): Config {
   return {
-    storage: { getGeminiDir: vi.fn().mockReturnValue('/project/.gemini') },
+    storage: { getLlxprtDir: vi.fn().mockReturnValue('/project/.llxprt') },
     getExtensions: vi.fn().mockReturnValue([]),
     getHooks: vi.fn().mockReturnValue({}),
     getDisabledHooks: vi.fn().mockReturnValue([]),
@@ -195,7 +195,7 @@ describe('HookSystem management APIs (DELTA-HSYS-002)', () => {
 
   beforeEach(async () => {
     const config = {
-      storage: { getGeminiDir: vi.fn().mockReturnValue('/project/.gemini') },
+      storage: { getLlxprtDir: vi.fn().mockReturnValue('/project/.llxprt') },
       getExtensions: vi.fn().mockReturnValue([]),
       getHooks: vi.fn().mockReturnValue({
         BeforeTool: [

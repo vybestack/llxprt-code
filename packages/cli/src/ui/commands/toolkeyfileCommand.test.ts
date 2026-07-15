@@ -190,13 +190,17 @@ describe('toolkeyfileCommand', () => {
   describe('path resolution', () => {
     /** @plan PLAN-20260206-TOOLKEY.P07 @requirement REQ-003.2 */
     it('resolves ~ to home directory', async () => {
-      // Create a temp file in home directory for the test
-      const homeKeyDir = path.join(os.homedir(), '.toolkeyfile-test-tmp');
-      const homeKeyPath = path.join(homeKeyDir, 'exa-key.txt');
-      await fs.mkdir(homeKeyDir, { recursive: true });
-      await fs.writeFile(homeKeyPath, 'my-secret-key\n');
-
+      const fakeHome = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'toolkeyfile-home-'),
+      );
+      const originalHome = process.env.HOME;
+      process.env.HOME = fakeHome;
       try {
+        const homeKeyDir = path.join(fakeHome, '.toolkeyfile-test-tmp');
+        const homeKeyPath = path.join(homeKeyDir, 'exa-key.txt');
+        await fs.mkdir(homeKeyDir, { recursive: true });
+        await fs.writeFile(homeKeyPath, 'my-secret-key\n');
+
         const tildeRelative = path.join(
           '~',
           '.toolkeyfile-test-tmp',
@@ -211,11 +215,15 @@ describe('toolkeyfileCommand', () => {
         expect(result.type).toBe('message');
         expect(result.messageType).toBe('info');
         expect(result.content).toContain("Keyfile set for 'Exa Search'");
-        // The result should contain the resolved absolute path, not the tilde
-        expect(result.content).toContain(os.homedir());
+        expect(result.content).toContain(fakeHome);
         expect(result.content).not.toContain('~');
       } finally {
-        await fs.rm(homeKeyDir, { recursive: true, force: true });
+        if (originalHome === undefined) {
+          delete process.env.HOME;
+        } else {
+          process.env.HOME = originalHome;
+        }
+        await fs.rm(fakeHome, { recursive: true, force: true });
       }
     });
   });

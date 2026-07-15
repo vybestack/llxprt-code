@@ -255,7 +255,7 @@ async function handleToggleTool(
       context.ui.addItem(
         {
           type: MessageType.INFO,
-          text: `Warning: failed to refresh Gemini tool schema after ${
+          text: `Warning: failed to refresh tool schema after ${
             subcommand === 'disable' ? 'disabling' : 'enabling'
           } '${display}': ${error instanceof Error ? error.message : String(error)}`,
         },

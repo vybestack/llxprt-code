@@ -4,8 +4,7 @@
  */
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
-import { LLXPRT_DIR } from '../utils/paths.js';
+import { Storage } from '@vybestack/llxprt-code-storage';
 import type { LogEntry } from './types.js';
 
 interface QueuedEntry {
@@ -39,11 +38,7 @@ export class FileOutput {
   private debugRunId: string;
 
   private constructor() {
-    const home = homedir();
-    // Handle test environments where homedir might not be available
-    this.debugDir = home
-      ? join(home, LLXPRT_DIR, 'debug')
-      : join(process.cwd(), LLXPRT_DIR, 'debug');
+    this.debugDir = join(Storage.getGlobalLogDir(), 'debug');
     // Env vars may be empty strings; fall through to pid.
     this.debugRunId = firstNonEmpty(
       process.env.LLXPRT_DEBUG_RUN_ID,

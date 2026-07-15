@@ -27,6 +27,7 @@ describe('StreamProcessor._handleBucketFailover', () => {
 
   it('allows single-bucket handlers to run tryFailover and flush auth scope', async () => {
     const tryFailover = vi.fn().mockResolvedValue(true);
+    const controller = new AbortController();
 
     const processor = Object.create(
       StreamProcessor.prototype,
@@ -54,12 +55,12 @@ describe('StreamProcessor._handleBucketFailover', () => {
 
     const result = await (
       processor as unknown as {
-        _handleBucketFailover: () => Promise<boolean | null>;
+        _handleBucketFailover: (signal: AbortSignal) => Promise<boolean | null>;
       }
-    )._handleBucketFailover();
+    )._handleBucketFailover(controller.signal);
 
     expect(result).toBe(true);
-    expect(tryFailover).toHaveBeenCalledTimes(1);
+    expect(tryFailover).toHaveBeenCalledWith({ signal: controller.signal });
     expect(flushRuntimeAuthScope).toHaveBeenCalledWith('provider-runtime-1739');
   });
 });

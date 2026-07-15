@@ -13,7 +13,8 @@ import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
 } from '../LoadBalancingProvider.js';
-import { LoadBalancerFailoverError } from '../errors.js';
+import { LoadBalancerFailoverError, RetriesExhaustedError } from '../errors.js';
+import { MAX_PUBLIC_PROVIDER_MESSAGE_LENGTH } from '../providerErrorObservation.js';
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../GenerateChatOptions.js';
@@ -30,6 +31,271 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
   });
 
   describe('Aggregated Error When All Backends Fail', () => {
+    it('fails over to the next backend after a retryable nested load balancer failure', async () => {
+      const transientFailure = Object.assign(new Error('nested unavailable'), {
+        status: 503,
+      });
+      const nestedFailure = new LoadBalancerFailoverError('nested-profile', [
+        { profile: 'nested-backend', error: transientFailure },
+      ]);
+      const noContent: IContent[] = [];
+      let calls = 0;
+      const delegate: IProvider = {
+        name: 'test-provider',
+        async *generateChatCompletion(): AsyncGenerator<IContent> {
+          calls++;
+          if (calls === 1) {
+            yield* noContent;
+            throw nestedFailure;
+          }
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'test-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => null,
+      };
+      providerManager.registerProvider(delegate);
+      const provider = new LoadBalancingProvider(
+        {
+          profileName: 'outer-profile',
+          strategy: 'failover',
+          subProfiles: [
+            {
+              name: 'primary',
+              providerName: 'test-provider',
+              modelId: 'model-1',
+              baseURL: 'https://primary.test',
+              authToken: 'token-1',
+            },
+            {
+              name: 'secondary',
+              providerName: 'test-provider',
+              modelId: 'model-2',
+              baseURL: 'https://secondary.test',
+              authToken: 'token-2',
+            },
+          ],
+        },
+        providerManager,
+      );
+      const chunks: IContent[] = [];
+
+      for await (const chunk of provider.generateChatCompletion({
+        contents: [],
+      })) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks).toStrictEqual([
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] },
+      ]);
+      expect(calls).toBe(2);
+    });
+
+    it('propagates a retryable nested load balancer failure after yielding content', async () => {
+      const nestedFailure = new LoadBalancerFailoverError('nested-profile', [
+        {
+          profile: 'nested-primary',
+          error: Object.assign(new Error('nested primary unavailable'), {
+            status: 503,
+          }),
+        },
+        {
+          profile: 'nested-secondary',
+          error: Object.assign(new Error('nested secondary unavailable'), {
+            status: 503,
+          }),
+        },
+      ]);
+      const content: IContent = {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'partial response' }],
+      };
+      let primaryCalls = 0;
+      let secondaryCalls = 0;
+      const primary: IProvider = {
+        name: 'primary-provider',
+        async *generateChatCompletion(): AsyncGenerator<IContent> {
+          primaryCalls++;
+          yield content;
+          throw nestedFailure;
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'primary-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => null,
+      };
+      const secondary: IProvider = {
+        name: 'secondary-provider',
+        async *generateChatCompletion(): AsyncGenerator<IContent> {
+          secondaryCalls++;
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'unexpected' }],
+          };
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'secondary-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => null,
+      };
+      providerManager.registerProvider(primary);
+      providerManager.registerProvider(secondary);
+      const provider = new LoadBalancingProvider(
+        {
+          profileName: 'outer-profile',
+          strategy: 'failover',
+          subProfiles: [
+            {
+              name: 'primary',
+              providerName: 'primary-provider',
+              modelId: 'primary-model',
+              baseURL: 'https://primary.test',
+              authToken: 'primary-token',
+            },
+            {
+              name: 'secondary',
+              providerName: 'secondary-provider',
+              modelId: 'secondary-model',
+              baseURL: 'https://secondary.test',
+              authToken: 'secondary-token',
+            },
+          ],
+        },
+        providerManager,
+      );
+      const chunks: IContent[] = [];
+      let thrown: unknown;
+
+      try {
+        for await (const chunk of provider.generateChatCompletion({
+          contents: [],
+        })) {
+          chunks.push(chunk);
+        }
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(chunks).toStrictEqual([content]);
+      expect(thrown).toBe(nestedFailure);
+      expect(primaryCalls).toBe(1);
+      expect(secondaryCalls).toBe(0);
+    });
+
+    it('does not fail over after a terminal retries-exhausted failure', async () => {
+      const terminalFailure = new RetriesExhaustedError(
+        'transport retries exhausted',
+        'server_error',
+        { cause: new Error('last transport failure') },
+      );
+      let calls = 0;
+      const delegate: IProvider = {
+        name: 'test-provider',
+        async *generateChatCompletion(): AsyncGenerator<IContent> {
+          calls++;
+          if (calls === 1) throw terminalFailure;
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'unexpected' }],
+          };
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'test-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => null,
+      };
+      providerManager.registerProvider(delegate);
+      const provider = new LoadBalancingProvider(
+        {
+          profileName: 'outer-profile',
+          strategy: 'failover',
+          subProfiles: [
+            {
+              name: 'primary',
+              providerName: 'test-provider',
+              modelId: 'model-1',
+              baseURL: 'https://primary.test',
+              authToken: 'token-1',
+            },
+            {
+              name: 'secondary',
+              providerName: 'test-provider',
+              modelId: 'model-2',
+              baseURL: 'https://secondary.test',
+              authToken: 'token-2',
+            },
+          ],
+        },
+        providerManager,
+      );
+
+      await expect(async () => {
+        for await (const _chunk of provider.generateChatCompletion({
+          contents: [],
+        })) {
+          await Promise.resolve();
+        }
+      }).rejects.toBe(terminalFailure);
+      expect(calls).toBe(1);
+    });
+
+    it('observes the same backend error once per reused request lifecycle', async () => {
+      const sharedFailure = new Error('shared backend failure');
+      const noContent: IContent[] = [];
+      const delegate: IProvider = {
+        name: 'test-provider',
+        async *generateChatCompletion(): AsyncGenerator<IContent> {
+          yield* noContent;
+          throw sharedFailure;
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'test-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => null,
+      };
+      providerManager.registerProvider(delegate);
+      const provider = new LoadBalancingProvider(
+        {
+          profileName: 'observation-profile',
+          strategy: 'failover',
+          subProfiles: [
+            {
+              name: 'primary',
+              providerName: 'test-provider',
+              modelId: 'model-1',
+              baseURL: 'https://primary.test',
+              authToken: 'token-1',
+            },
+            {
+              name: 'secondary',
+              providerName: 'test-provider',
+              modelId: 'model-2',
+              baseURL: 'https://secondary.test',
+              authToken: 'token-2',
+            },
+          ],
+        },
+        providerManager,
+      );
+      const observed: unknown[] = [];
+      const options: GenerateChatOptions = {
+        contents: [],
+        onProviderError: (error) => observed.push(error),
+      };
+
+      for (let request = 0; request < 2; request++) {
+        await expect(async () => {
+          for await (const _chunk of provider.generateChatCompletion(options)) {
+            await Promise.resolve();
+          }
+        }).rejects.toBeInstanceOf(LoadBalancerFailoverError);
+      }
+
+      expect(observed).toHaveLength(2);
+    });
+
     it('should throw LoadBalancerFailoverError when all backends fail', async () => {
       const mockProvider: IProvider = {
         name: 'test-provider',
@@ -315,7 +581,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       ]);
 
       expect(error.message).toContain('only backend failed');
-      expect(error.message).not.toContain('sole:');
+      expect(error.message).toContain('sole: only backend failed');
       expect(error.message).toContain('test-profile');
       expect(error.message).toContain('sole');
     });
@@ -325,6 +591,22 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       expect(error.message).toContain('no backend attempts were recorded');
       expect(error.message).toContain('(tried: none)');
+    });
+
+    it('keeps public summaries bounded while preserving every structured failure', () => {
+      const failures = Array.from({ length: 5 }, (_, index) => ({
+        profile: `backend-${index + 1}`,
+        error: new Error(`private failure ${index + 1}`),
+      }));
+
+      const error = new LoadBalancerFailoverError('test-profile', failures);
+
+      expect(error.message.length).toBeLessThanOrEqual(
+        MAX_PUBLIC_PROVIDER_MESSAGE_LENGTH,
+      );
+      expect(error.message).toContain('+2 more');
+      expect(error.message).not.toContain('private failure 4');
+      expect(error.failures).toStrictEqual(failures);
     });
   });
   describe('ResolvedSubProfile settings propagation', () => {

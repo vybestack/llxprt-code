@@ -5,6 +5,12 @@
  */
 
 import type { SessionMetrics } from '../telemetry/uiTelemetry.js';
+import {
+  STRUCTURED_ERROR_CATEGORIES,
+  STRUCTURED_ERROR_REASONS,
+  type StructuredErrorCategory,
+  type StructuredErrorReason,
+} from '../core/turn.js';
 
 /**
  * Output format for CLI responses
@@ -19,6 +25,9 @@ export interface JsonError {
   type: string;
   message: string;
   code?: string | number;
+  status?: number;
+  category?: StructuredErrorCategory;
+  reason?: StructuredErrorReason;
 }
 
 export interface JsonOutput {
@@ -83,6 +92,9 @@ export interface ErrorEvent extends BaseJsonStreamEvent {
   type: JsonStreamEventType.ERROR;
   severity: 'warning' | 'error';
   message: string;
+  status?: number;
+  category?: StructuredErrorCategory;
+  reason?: StructuredErrorReason;
 }
 
 export interface StreamStats {
@@ -111,6 +123,50 @@ export type JsonStreamEvent =
   | ErrorEvent
   | ResultEvent;
 
+export function getSafeStatus(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null || !('status' in error)) {
+    return undefined;
+  }
+  return typeof error.status === 'number' ? error.status : undefined;
+}
+
+function includesString<const Values extends readonly string[]>(
+  values: Values,
+  value: unknown,
+): value is Values[number] {
+  return typeof value === 'string' && values.some((item) => item === value);
+}
+
+function isStructuredErrorCategory(
+  value: unknown,
+): value is StructuredErrorCategory {
+  return includesString(STRUCTURED_ERROR_CATEGORIES, value);
+}
+
+function isStructuredErrorReason(
+  value: unknown,
+): value is StructuredErrorReason {
+  return includesString(STRUCTURED_ERROR_REASONS, value);
+}
+
+export function getSafeCategory(
+  error: unknown,
+): StructuredErrorCategory | undefined {
+  if (typeof error !== 'object' || error === null || !('category' in error)) {
+    return undefined;
+  }
+  return isStructuredErrorCategory(error.category) ? error.category : undefined;
+}
+
+export function getSafeReason(
+  error: unknown,
+): StructuredErrorReason | undefined {
+  if (typeof error !== 'object' || error === null || !('reason' in error)) {
+    return undefined;
+  }
+  return isStructuredErrorReason(error.reason) ? error.reason : undefined;
+}
+
 /**
  * Formats errors as JSON for programmatic consumption
  */
@@ -122,12 +178,18 @@ export class JsonFormatter {
    * @returns JSON string representation of the error
    */
   formatError(error: Error, code?: string | number): string {
+    const status = getSafeStatus(error);
+    const category = getSafeCategory(error);
+    const reason = getSafeReason(error);
     return JSON.stringify(
       {
         error: {
           type: error.constructor.name,
           message: error.message,
           ...(code !== undefined && { code }),
+          ...(status !== undefined && { status }),
+          ...(category !== undefined && { category }),
+          ...(reason !== undefined && { reason }),
         },
       },
       null,

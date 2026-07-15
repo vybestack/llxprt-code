@@ -4,6 +4,10 @@
  */
 
 import { z } from 'zod';
+import {
+  STRUCTURED_ERROR_CATEGORIES,
+  STRUCTURED_ERROR_REASONS,
+} from '@vybestack/llxprt-code-core/core/turn.js';
 
 export const DoneReasonSchema = z.enum([
   'stop',
@@ -17,9 +21,15 @@ export const DoneReasonSchema = z.enum([
   'refusal',
 ]);
 
+const StructuredErrorCategorySchema = z.enum(STRUCTURED_ERROR_CATEGORIES);
+
+const StructuredErrorReasonSchema = z.enum(STRUCTURED_ERROR_REASONS);
+
 export const StructuredErrorSchema = z.object({
   message: z.string(),
   status: z.number().optional(),
+  category: StructuredErrorCategorySchema.optional(),
+  reason: StructuredErrorReasonSchema.optional(),
 });
 
 export const ThoughtSummarySchema = z.object({

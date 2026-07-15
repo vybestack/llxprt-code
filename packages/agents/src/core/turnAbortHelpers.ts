@@ -24,6 +24,15 @@ import {
 } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry.js';
 
+export function isTerminalRetryError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'isRetryable' in error &&
+    error.isRetryable === false
+  );
+}
+
 /**
  * Determines whether an error represents a genuine user/system abort, as
  * opposed to a retryable transient network error whose phrasing merely
@@ -72,7 +81,7 @@ export function shouldRetryStreamAttempt(
   attempt: number,
 ): boolean {
   const withinBudget = attempt < INVALID_CONTENT_RETRY_OPTIONS.maxAttempts - 1;
-  if (!withinBudget) return false;
+  if (!withinBudget || isTerminalRetryError(error)) return false;
   if (
     error instanceof InvalidStreamError ||
     error instanceof EmptyStreamError

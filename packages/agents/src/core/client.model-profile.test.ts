@@ -22,7 +22,7 @@ import {
 import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 import {
   fromAsync,
-  setupGeminiClient,
+  setupAgentClient,
   type MockResponseShape,
 } from './client-test-helpers.js';
 
@@ -171,9 +171,21 @@ vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
     },
   };
 });
-vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
-  tokenLimit: vi.fn(),
-}));
+vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
+  const tokenLimit = vi.fn();
+  return {
+    tokenLimit,
+    resolveEffectiveContextLimit: vi.fn(
+      (model: string, userCtx?: number, provCtx?: number) => {
+        const ok = (v: unknown): v is number =>
+          typeof v === 'number' && Number.isFinite(v) && v > 0;
+        if (ok(userCtx)) return userCtx;
+        if (ok(provCtx)) return provCtx;
+        return tokenLimit(model);
+      },
+    ),
+  };
+});
 vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
     setLastPromptTokenCount: vi.fn(),
@@ -185,7 +197,7 @@ describe('AgentClient (client.ts)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
-    const ctx = await setupGeminiClient({
+    const ctx = await setupAgentClient({
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,
@@ -501,7 +513,7 @@ describe('AgentClient (client.ts)', () => {
       expect(infos[0]?.model).toBe('test-model');
     });
 
-    it('emits exactly one additional ModelInfo when provider changes during continuation', async () => {
+    it('keeps the routed provider stable during continuation', async () => {
       const mockStream2 = (async function* () {
         yield { type: AgentEventType.Content, value: 'ok' };
         yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
@@ -567,12 +579,8 @@ describe('AgentClient (client.ts)', () => {
 
       getContentGenSpy.mockRestore();
 
-      // First emission (provider 'backend' — no providerManager), then one
-      // additional for provider change to 'anthropic' — exactly one, not
-      // duplicates.
-      expect(infos).toHaveLength(2);
-      expect(infos[0]?.providerName).toBe('backend');
-      expect(infos[1]?.providerName).toBe('anthropic');
+      expect(infos).toHaveLength(1);
+      expect(infos[0]?.providerName).toBe('gemini');
     });
   });
 });

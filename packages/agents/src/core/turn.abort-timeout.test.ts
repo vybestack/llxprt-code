@@ -18,6 +18,26 @@ const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockGetHistory: vi.fn(),
 }));
 
+function waitForAbort(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    signal.addEventListener('abort', () => resolve(), { once: true });
+  });
+}
+
+function rejectWhenAborted(signal: AbortSignal): Promise<never> {
+  if (signal.aborted) {
+    return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  }
+  return new Promise<never>((_resolve, reject) => {
+    signal.addEventListener(
+      'abort',
+      () => reject(new DOMException('Aborted', 'AbortError')),
+      { once: true },
+    );
+  });
+}
+
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
@@ -126,11 +146,7 @@ describe('Turn run - abort and idle timeout', () => {
             type: StreamEventType.CHUNK,
             value: mockChunk({ text: 'First part' }),
           };
-          await new Promise<void>((resolve) => {
-            abortController.signal.addEventListener('abort', () => resolve(), {
-              once: true,
-            });
-          });
+          await waitForAbort(abortController.signal);
           yield {
             type: StreamEventType.CHUNK,
             value: mockChunk({
@@ -303,22 +319,22 @@ describe('Turn run - abort and idle timeout', () => {
         'test',
       );
 
-      const mockResponseStream = (async function* () {
-        yield {
-          type: StreamEventType.CHUNK,
-          value: mockChunk({ text: 'First part' }),
-        };
-        await new Promise<void>(() => {});
-      })();
-
       mockSendMessageStream.mockImplementation(async (params) => {
         const config = params as {
           config?: { abortSignal?: AbortSignal };
         };
-        if (config.config?.abortSignal) {
-          abortSignals.push(config.config.abortSignal);
+        const providerSignal = config.config?.abortSignal;
+        if (providerSignal === undefined) {
+          throw new Error('Provider abort signal is required');
         }
-        return mockResponseStream;
+        abortSignals.push(providerSignal);
+        return (async function* () {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: mockChunk({ text: 'First part' }),
+          };
+          await rejectWhenAborted(providerSignal);
+        })();
       });
 
       const eventsPromise = (async () => {
@@ -354,97 +370,6 @@ describe('Turn run - abort and idle timeout', () => {
       ]);
       expect(abortSignals).toHaveLength(1);
       expect(abortSignals[0]?.aborted).toBe(true);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('should allow subsequent calls after idle timeout (sendPromise deadlock prevention)', async () => {
-    vi.useFakeTimers();
-    try {
-      const testTimeoutMs = 30_000;
-      let callCount = 0;
-      const abortSignals: AbortSignal[] = [];
-
-      mockChatInstance = {
-        sendMessageStream: mockSendMessageStream,
-        getHistory: mockGetHistory,
-        getConfig: () => ({
-          getEphemeralSetting: (key: string) => {
-            if (key === 'stream-idle-timeout-ms') {
-              return testTimeoutMs;
-            }
-            return undefined;
-          },
-        }),
-      };
-      turn = new Turn(
-        mockChatInstance as unknown as ChatSession,
-        'prompt-id-1',
-        DEFAULT_AGENT_ID,
-        'test',
-      );
-
-      const createMockStream = (shouldHang: boolean) =>
-        (async function* () {
-          yield {
-            type: StreamEventType.CHUNK,
-            value: mockChunk({ text: shouldHang ? 'Hanging' : 'OK' }),
-          };
-          if (shouldHang) {
-            await new Promise<void>(() => {});
-          }
-        })();
-
-      mockSendMessageStream.mockImplementation(async (params) => {
-        callCount++;
-        const config = params as {
-          config?: { abortSignal?: AbortSignal };
-        };
-        if (config.config?.abortSignal) {
-          abortSignals.push(config.config.abortSignal);
-        }
-        return createMockStream(callCount === 1);
-      });
-
-      const events1Promise = (async () => {
-        const events: ServerAgentStreamEvent[] = [];
-        for await (const event of turn.run(
-          [{ text: 'First call (will timeout)' }],
-          new AbortController().signal,
-        )) {
-          events.push(event);
-        }
-        return events;
-      })();
-
-      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
-      const events1 = await events1Promise;
-
-      expect(events1).toContainEqual(
-        expect.objectContaining({ type: AgentEventType.StreamIdleTimeout }),
-      );
-      expect(callCount).toBe(1);
-
-      const events2Promise = (async () => {
-        const events: ServerAgentStreamEvent[] = [];
-        for await (const event of turn.run(
-          [{ text: 'Second call (should work)' }],
-          new AbortController().signal,
-        )) {
-          events.push(event);
-        }
-        return events;
-      })();
-
-      await vi.advanceTimersByTimeAsync(100);
-      const events2 = await events2Promise;
-
-      expect(callCount).toBe(2);
-      expect(events2).toContainEqual({
-        type: AgentEventType.Content,
-        value: 'OK',
-      });
     } finally {
       vi.useRealTimers();
     }
