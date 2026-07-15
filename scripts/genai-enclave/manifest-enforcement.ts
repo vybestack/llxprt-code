@@ -316,14 +316,13 @@ function genaiAliasViolation(
   workspaceDir: string,
   section: DependencySectionKey,
   aliasName: string,
-  target: string,
   version: string,
 ): ManifestDependencyViolation {
   return {
     workspaceDir,
     section,
     message:
-      `npm alias "${aliasName}: npm:${target}@${version}" in "${section}" ` +
+      `npm alias "${aliasName}: ${version}" in "${section}" ` +
       'targets @google/genai — aliases disguising the SDK are prohibited.',
   };
 }
@@ -383,13 +382,7 @@ function scanSectionForSdk(
     const aliasTarget = detectGenaiAlias(version);
     if (aliasTarget !== null) {
       violations.push(
-        genaiAliasViolation(
-          workspaceDir,
-          sectionName,
-          name,
-          aliasTarget,
-          version,
-        ),
+        genaiAliasViolation(workspaceDir, sectionName, name, version),
       );
     } else if (name === GENAI_PACKAGE) {
       foundIn.add(sectionName);

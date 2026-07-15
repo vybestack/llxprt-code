@@ -82,6 +82,22 @@ export function isFunctionLikeNode(
   return guards.some((guard) => guard(node));
 }
 
+export function classifyImportExportSyntaxForm(node: ts.Node): string {
+  if (ts.isImportDeclaration(node)) {
+    return node.importClause?.isTypeOnly ? 'import type' : 'import';
+  }
+  if (ts.isExportDeclaration(node)) {
+    const clause = node.exportClause;
+    if (clause === undefined) return 'export * from';
+    return ts.isNamespaceExport(clause)
+      ? 'export * as namespace from'
+      : 'export ... from';
+  }
+  if (ts.isImportEqualsDeclaration(node)) return 'import = require';
+  if (ts.isImportTypeNode(node)) return 'import() type';
+  return 'unknown-import-form';
+}
+
 /**
  * Extract the string literal text from a TS node, or null if it is not a
  * string literal or no-substitution template literal.

@@ -31,6 +31,8 @@ export type ProvenanceKind =
   | 'factory'
   | 'binding'
   | 'namespace'
+  | 'helper'
+  | 'helper-container'
   | 'shadow'
   | 'require-alias';
 
@@ -177,7 +179,12 @@ export function moduleRange(node: ts.Node): {
  * source position by finding the innermost active entry.
  */
 export class ProvenanceResolver {
-  private readonly entries = new Map<string, ScopeEntry[]>();
+  private readonly entries = new Map<string, readonly ScopeEntry[]>();
+  private registrationRevision = 0;
+
+  get revision(): number {
+    return this.registrationRevision;
+  }
 
   /**
    * Register a provenance or shadow entry for `name`.
@@ -192,14 +199,20 @@ export class ProvenanceResolver {
     activeFrom: number,
     activeTo: number,
     declPos: number,
-  ): void {
-    const list = this.entries.get(name);
+  ): boolean {
+    const list = this.entries.get(name) ?? [];
+    const alreadyRegistered = list.some(
+      (entry) =>
+        entry.kind === kind &&
+        entry.activeFrom === activeFrom &&
+        entry.activeTo === activeTo &&
+        entry.declPos === declPos,
+    );
+    if (alreadyRegistered) return false;
     const entry: ScopeEntry = { kind, activeFrom, activeTo, declPos };
-    if (list === undefined) {
-      this.entries.set(name, [entry]);
-    } else {
-      list.push(entry);
-    }
+    this.entries.set(name, [...list, entry]);
+    this.registrationRevision += 1;
+    return true;
   }
 
   /**
@@ -254,6 +267,16 @@ export class ProvenanceResolver {
   /** True if `name` holds a reference to the bare `require` function at `pos`. */
   isRequireAlias(name: string, pos: number): boolean {
     return this.resolve(name, pos) === 'require-alias';
+  }
+
+  /** True if `name` resolves to a createRequire-returning helper at `pos`. */
+  isHelper(name: string, pos: number): boolean {
+    return this.resolve(name, pos) === 'helper';
+  }
+
+  /** True if `name` resolves to an object containing tracked helpers. */
+  isHelperContainer(name: string, pos: number): boolean {
+    return this.resolve(name, pos) === 'helper-container';
   }
 
   /**
@@ -312,7 +335,7 @@ export class GlobalShadowResolver {
    */
   registerShadow(name: string, activeFrom: number, activeTo: number): void {
     if (!CJS_GLOBAL_NAMES.has(name)) return;
-    this.shadows.register(name, 'shadow', activeFrom, activeTo);
+    this.shadows.register(name, 'shadow', activeFrom, activeTo, activeFrom);
   }
 
   /**

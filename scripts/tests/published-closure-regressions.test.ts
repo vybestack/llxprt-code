@@ -306,7 +306,11 @@ describe('Finding5: discoverPackageWorkspaces rejects unsafe symlinks', () => {
       );
       // Create packages/ dir with a symlink to external dir
       mkdirSync(join(repoRoot, 'packages'), { recursive: true });
-      symlinkSync(externalDir, join(repoRoot, 'packages', 'evil'), 'dir');
+      symlinkSync(
+        externalDir,
+        join(repoRoot, 'packages', 'evil'),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
       const dirs = discoverPackageWorkspaces(repoRoot);
       // The symlink pointing outside repo root must NOT be discovered
       expect(dirs).not.toContain('packages/evil');
@@ -328,7 +332,7 @@ describe('Finding5: discoverPackageWorkspaces rejects unsafe symlinks', () => {
       symlinkSync(
         join(repoRoot, 'packages', 'real'),
         join(repoRoot, 'packages', 'linked'),
-        'dir',
+        process.platform === 'win32' ? 'junction' : 'dir',
       );
       const dirs = discoverPackageWorkspaces(repoRoot);
       // The symlink within repo root should be safely discovered

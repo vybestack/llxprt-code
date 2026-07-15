@@ -23,6 +23,8 @@
 
 import ts from 'typescript';
 
+const parseDiagnostics = new WeakMap<ts.SourceFile, readonly ts.Diagnostic[]>();
+
 export {
   scanGenaiImports,
   isGenaiSpecifier,
@@ -46,13 +48,27 @@ export function parseSourceFile(
   sourceText: string,
 ): ts.SourceFile {
   const scriptKind = inferScriptKind(filePath);
-  return ts.createSourceFile(
+  const sourceFile = ts.createSourceFile(
     filePath,
     sourceText,
     ts.ScriptTarget.Latest,
     true,
     scriptKind,
   );
+  const transpilation = ts.transpileModule(sourceText, {
+    compilerOptions: {
+      jsx: ts.JsxEmit.ReactJSX,
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.Latest,
+    },
+    fileName:
+      scriptKind === ts.ScriptKind.TSX || scriptKind === ts.ScriptKind.JSX
+        ? 'diagnostics.tsx'
+        : 'diagnostics.ts',
+    reportDiagnostics: true,
+  });
+  parseDiagnostics.set(sourceFile, transpilation.diagnostics ?? []);
+  return sourceFile;
 }
 
 /**
@@ -68,7 +84,7 @@ export function parseSourceFile(
 export function getParseDiagnostics(
   sourceFile: ts.SourceFile,
 ): readonly ts.Diagnostic[] {
-  return sourceFile.parseDiagnostics;
+  return parseDiagnostics.get(sourceFile) ?? [];
 }
 
 /**

@@ -101,7 +101,7 @@ describe('Finding1: forward hoisted helper fixed point (transitive)', () => {
         "req('@google/genai');\n",
     );
     const violations = scanGenaiImports(sf, 'test.ts');
-    expect(violations).toHaveLength(3);
+    expect(violations).toHaveLength(1);
     expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
   });
 
@@ -116,7 +116,7 @@ describe('Finding1: forward hoisted helper fixed point (transitive)', () => {
         "req('@google/genai');\n",
     );
     const violations = scanGenaiImports(sf, 'test.ts');
-    expect(violations).toHaveLength(4);
+    expect(violations).toHaveLength(1);
     expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
   });
 
@@ -188,15 +188,13 @@ describe('Finding2: module.exports = callExpression() fails closed', () => {
     expect(violations[0].exportForm).toContain('fail-closed');
   });
 
-  it('fails closed for createRequire-style calls without export provenance', () => {
+  it('accepts createRequire-style calls with scope-aware export provenance', () => {
     const sf = parseSourceFile(
       'test.ts',
       "import { createRequire } from 'node:module';\n" +
         "module.exports = createRequire(import.meta.url)('node:fs');\n",
     );
-    const violations = scanGeminiExports(sf, 'test.ts');
-    expect(violations).toHaveLength(1);
-    expect(violations[0].exportForm).toContain('fail-closed');
+    expect(scanGeminiExports(sf, 'test.ts')).toEqual([]);
   });
 });
 
@@ -634,15 +632,13 @@ describe('#3: bare require RHS exemption is correct', () => {
     expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
   });
 
-  it('fails closed for createRequire calls without export provenance', () => {
+  it('does not fail closed for a proven createRequire loader', () => {
     const sf = parseSourceFile(
       'legacy.cjs',
       "const { createRequire } = require('node:module');\n" +
         "module.exports = createRequire(import.meta.url)('@google/genai');\n",
     );
-    const violations = scanGeminiExports(sf, 'legacy.cjs');
-    expect(violations).toHaveLength(1);
-    expect(violations[0].exportForm).toContain('fail-closed');
+    expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
   });
 
   it('fail-closed for module.exports = someUnknownFunc()', () => {

@@ -45,9 +45,10 @@ import {
   literalText,
   elementAccessLiteralText,
   REQUIRE_IDENTIFIER,
+  classifyImportExportSyntaxForm,
+  unwrapTransparentExpressions,
 } from './ast-helpers.ts';
 import { ProvenanceResolver, GlobalShadowResolver } from './provenance.ts';
-import { classifyImportExportSyntaxForm } from './export-detection.ts';
 import type {
   GenaiImportViolation,
   ComputedImportViolation,
@@ -56,6 +57,7 @@ import type {
 import {
   type ImportScanContext,
   isCreateRequireFactoryCallee,
+  isCreateRequireHelperCallee,
   isGlobalRequireRef,
   isModuleRequireRef,
 } from './import-context.ts';
@@ -199,20 +201,20 @@ function isCreateRequireCall(
   ctx: ImportScanContext,
   expr: ts.CallExpression,
 ): boolean {
-  const callee = expr.expression;
+  const callee = unwrapTransparentExpressions(expr.expression);
   if (!ts.isCallExpression(callee)) {
     return false;
   }
-  // Direct factory: createRequire(...)(...)
-  if (isCreateRequireFactoryCallee(ctx, callee.expression)) {
+  if (
+    isCreateRequireFactoryCallee(ctx, callee.expression) ||
+    isCreateRequireHelperCallee(ctx, callee.expression)
+  ) {
     return true;
   }
-  // createRequire.call(ctx, url)(...) / createRequire.apply(ctx, [url])(...)
-  // The inner callee expression is createRequire.call — a member access
-  // (dot or bracket) with name call/apply on a createRequire factory.
+  // For createRequire.call/apply(...)(...), `callee.expression` is the
+  // call/apply member access used by the inner factory invocation.
   if (
     isInvokeMemberAccess(callee.expression) &&
-    INDIRECT_INVOKE_METHODS.has(getMemberAccessName(callee.expression)!) &&
     isCreateRequireFactoryCallee(
       ctx,
       getMemberAccessExpression(callee.expression),
@@ -246,14 +248,7 @@ function isCreateRequireCall(
       return true;
     }
   }
-  // Through a createRequire-returning helper: cr(...)(...)
-  if (
-    ts.isIdentifier(callee.expression) &&
-    ctx.createRequireReturningFunctions.has(callee.expression.text)
-  ) {
-    return true;
-  }
-  return false;
+  return isCreateRequireHelperCallee(ctx, callee.expression);
 }
 
 /**
@@ -293,19 +288,18 @@ function isNodeModuleRequireCallExpression(
 }
 
 /**
- * Check whether an expression is a known binding, require-alias, or
- * createRequire-returning helper at the given position. Used for
- * `.call`/`.apply`/`.bind` invocation chains on bindings.
+ * Check whether an expression is a known loader binding or require alias at
+ * the given position. Used for `.call`/`.apply`/`.bind` invocation chains.
  */
-function isBindingOrHelperIdentifier(
+function isLoaderBindingExpression(
   ctx: ImportScanContext,
   expr: ts.Expression,
-): expr is ts.Identifier {
-  if (!ts.isIdentifier(expr)) return false;
+): boolean {
+  const candidate = unwrapTransparentExpressions(expr);
   return (
-    ctx.resolver.isBinding(expr.text, expr.getStart()) ||
-    ctx.resolver.isRequireAlias(expr.text, expr.getStart()) ||
-    ctx.createRequireReturningFunctions.has(expr.text)
+    ts.isIdentifier(candidate) &&
+    (ctx.resolver.isBinding(candidate.text, candidate.getStart()) ||
+      ctx.resolver.isRequireAlias(candidate.text, candidate.getStart()))
   );
 }
 
@@ -320,32 +314,20 @@ function isBoundCreateRequireCall(
   ctx: ImportScanContext,
   expr: ts.CallExpression,
 ): boolean {
-  const callee = expr.expression;
-  // Direct call through a binding/helper identifier
-  if (ts.isIdentifier(callee)) {
-    return (
-      ctx.resolver.isBinding(callee.text, callee.getStart()) ||
-      ctx.resolver.isRequireAlias(callee.text, callee.getStart()) ||
-      ctx.createRequireReturningFunctions.has(callee.text)
-    );
+  const callee = unwrapTransparentExpressions(expr.expression);
+  if (isLoaderBindingExpression(ctx, callee)) {
+    return true;
   }
-  // binding.call(null, spec) / binding.apply(null, [spec])
-  // binding['call'](null, spec) / binding['apply'](null, [spec])
   if (
     isInvokeMemberAccess(callee) &&
-    INDIRECT_INVOKE_METHODS.has(getMemberAccessName(callee)!) &&
-    isBindingOrHelperIdentifier(ctx, getMemberAccessExpression(callee))
+    isLoaderBindingExpression(ctx, getMemberAccessExpression(callee))
   ) {
     return true;
   }
-  // binding.bind(null)(spec) / binding['bind'](null)(spec)
   if (
     ts.isCallExpression(callee) &&
     isBindMemberAccess(callee.expression) &&
-    isBindingOrHelperIdentifier(
-      ctx,
-      getMemberAccessExpression(callee.expression),
-    )
+    isLoaderBindingExpression(ctx, getMemberAccessExpression(callee.expression))
   ) {
     return true;
   }
@@ -389,6 +371,10 @@ function isImportOrRequireCall(
  * the CallExpression callee check.
  */
 const INDIRECT_INVOKE_METHODS: ReadonlySet<string> = new Set(['call', 'apply']);
+
+function isIndirectInvokeMethod(name: string | undefined): boolean {
+  return name !== undefined && INDIRECT_INVOKE_METHODS.has(name);
+}
 
 /**
  * Check whether a CallExpression uses an indirect require invocation form
@@ -437,7 +423,7 @@ function isIndirectRequireCall(
   // require['call'](...) / require['apply'](...) — bracket access
   if (
     isInvokeMemberAccess(callee) &&
-    INDIRECT_INVOKE_METHODS.has(getMemberAccessName(callee)) &&
+    isIndirectInvokeMethod(getMemberAccessName(callee)) &&
     isGlobalRequireRef(ctx, getMemberAccessExpression(callee))
   ) {
     return true;
@@ -456,7 +442,7 @@ function isIndirectRequireCall(
   // module.require.call(this, ...) / module.require['apply'](null, [...])
   if (
     isInvokeMemberAccess(callee) &&
-    INDIRECT_INVOKE_METHODS.has(getMemberAccessName(callee)) &&
+    isIndirectInvokeMethod(getMemberAccessName(callee)) &&
     isModuleRequireRef(ctx, getMemberAccessExpression(callee))
   ) {
     return true;
@@ -484,7 +470,7 @@ function isInvokeMemberAccess(
   return (
     (ts.isPropertyAccessExpression(node) ||
       ts.isElementAccessExpression(node)) &&
-    INDIRECT_INVOKE_METHODS.has(getMemberAccessName(node))
+    isIndirectInvokeMethod(getMemberAccessName(node))
   );
 }
 
@@ -680,11 +666,10 @@ function findGenaiImportViolation(
  * Collect all @google/genai import violations AND computed-import violations
  * in a single source file. Returns the violations (empty if none).
  */
-export function scanGenaiImports(
+export function createImportScanContext(
   sourceFile: ts.SourceFile,
   relPath: string,
-): Violation[] {
-  const violations: Violation[] = [];
+): ImportScanContext {
   const ctx: ImportScanContext = {
     sourceFile,
     relPath,
@@ -695,14 +680,26 @@ export function scanGenaiImports(
     knownNamespaces: new Set(),
     createRequireReturningFunctions: new Set(),
   };
-
-  // First pass, Phase A: collect ALL module-scoped entries (hoisted imports).
   collectModuleProvenance(ctx, sourceFile);
-
-  // First pass, Phase B: collect ALL block/function-scoped entries.
   collectBlockProvenance(ctx, sourceFile);
+  return ctx;
+}
 
-  // Second pass: detect violations using scope-aware resolution.
+export function isProvenModuleLoaderCall(
+  ctx: ImportScanContext,
+  expr: ts.CallExpression,
+): boolean {
+  return isImportOrRequireCall(ctx, expr);
+}
+
+export function scanGenaiImports(
+  sourceFile: ts.SourceFile,
+  relPath: string,
+): Violation[] {
+  const violations: Violation[] = [];
+  const ctx = createImportScanContext(sourceFile, relPath);
+
+  // Detection pass uses the complete scope-aware provenance graph.
   const visit = (node: ts.Node): void => {
     const violation = findGenaiImportViolation(ctx, node);
     if (violation !== null) violations.push(violation);

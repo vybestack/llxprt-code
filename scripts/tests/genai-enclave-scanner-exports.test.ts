@@ -96,14 +96,20 @@ describe('scanGeminiExports — Object.defineProperty and Object.assign edge cas
     expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
   });
 
-  it('flags Object.assign with no object-literal source (F4 fail-closed)', () => {
+  it('flags Object.assign with a non-literal source (F4 fail-closed)', () => {
     const sf = parseSourceFile(
       'legacy.cjs',
       'Object.assign(exports, someSource);',
     );
-    const violations = scanGeminiExports(sf, 'legacy.cjs');
-    expect(violations).toHaveLength(1);
-    expect(violations[0].exportForm).toContain('fail-closed');
+    expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([
+      {
+        kind: 'gemini-export',
+        file: 'legacy.cjs',
+        line: 1,
+        exportName: 'Object.assign with non-literal source',
+        exportForm: 'computed export mutation (fail-closed)',
+      },
+    ]);
   });
 
   it('detects Gemini names across multiple Object.assign source objects', () => {
@@ -293,26 +299,23 @@ describe('scanGeminiExports — #2352 exact export forms (spread, logical-assign
     expect(violations).toHaveLength(0);
   });
 });
-describe('export-detection — identifier export must both flag identifier and inspect bound object literal (#2)', () => {
-  it('flags both the Gemini-named identifier and its bound object literal Gemini names', () => {
+describe('export-detection — default exports expose only the default name', () => {
+  it('flags a Gemini-named default binding without treating its properties as exports', () => {
     const sf = parseSourceFile(
       'test.ts',
       'const GeminiConfig = { GeminiNested: 1 };\nexport default GeminiConfig;\n',
     );
-    const violations = scanGeminiExports(sf, 'test.ts');
-    expect(violations).toHaveLength(2);
-    expect(violations.some((v) => v.exportName === 'GeminiConfig')).toBe(true);
-    expect(violations.some((v) => v.exportName === 'GeminiNested')).toBe(true);
+    expect(scanGeminiExports(sf, 'test.ts').map((v) => v.exportName)).toEqual([
+      'GeminiConfig',
+    ]);
   });
 
-  it('flags a non-Gemini identifier whose bound object contains a Gemini name', () => {
+  it('does not flag properties of an object exported through a neutral default binding', () => {
     const sf = parseSourceFile(
       'test.ts',
       'const safeName = { GeminiNested: 1 };\nexport default safeName;\n',
     );
-    const violations = scanGeminiExports(sf, 'test.ts');
-    expect(violations).toHaveLength(1);
-    expect(violations[0].exportName).toBe('GeminiNested');
+    expect(scanGeminiExports(sf, 'test.ts')).toEqual([]);
   });
 });
 
@@ -498,53 +501,18 @@ describe('A2/A3: whole-target module.exports logical assignments inspect RHS', (
   });
 });
 
-// ── #2: Transparent expression unwrapping + object initializer inspection ───
+// ── #2: Transparent wrappers preserve ESM default-export semantics ──────────
 
-describe('#2: transparent expression unwrapping in ESM exports', () => {
-  it('detects Gemini names through parenthesized export default', () => {
-    const sf = parseSourceFile(
-      'test.ts',
-      'export default ({ GeminiName: 1 });\n',
-    );
-    const violations = scanGeminiExports(sf, 'test.ts');
-    expect(violations.some((v) => v.exportName === 'GeminiName')).toBe(true);
-  });
-
-  it('detects Gemini names through as-assertion export default', () => {
-    const sf = parseSourceFile(
-      'test.ts',
-      'export default { GeminiName: 1 } as const;\n',
-    );
-    const violations = scanGeminiExports(sf, 'test.ts');
-    expect(violations.some((v) => v.exportName === 'GeminiName')).toBe(true);
-  });
-
-  it('detects Gemini names through satisfies export default', () => {
-    const sf = parseSourceFile(
-      'test.ts',
-      'type T = {};\nexport default { GeminiName: 1 } satisfies T;\n',
-    );
-    const violations = scanGeminiExports(sf, 'test.ts');
-    expect(violations.some((v) => v.exportName === 'GeminiName')).toBe(true);
-  });
-
-  it('detects Gemini names through non-null assertion export default', () => {
-    const sf = parseSourceFile(
-      'test.ts',
-      'const x: { GeminiName: number } | null = { GeminiName: 1 };\n' +
-        'export default x!;\n',
-    );
-    const violations = scanGeminiExports(sf, 'test.ts');
-    expect(violations.some((v) => v.exportName === 'GeminiName')).toBe(true);
-  });
-
-  it('detects nested Gemini through as-assertion in object literal', () => {
-    const sf = parseSourceFile(
-      'test.ts',
-      'export default { nested: { GeminiDeep: 1 } as Record<string, number> };\n',
-    );
-    const violations = scanGeminiExports(sf, 'test.ts');
-    expect(violations.some((v) => v.exportName === 'GeminiDeep')).toBe(true);
+describe('#2: transparent wrappers do not turn default-object properties into named exports', () => {
+  it.each([
+    'export default ({ GeminiName: 1 });\n',
+    'export default { GeminiName: 1 } as const;\n',
+    'type T = {};\nexport default { GeminiName: 1 } satisfies T;\n',
+    'const x: { GeminiName: number } | null = { GeminiName: 1 };\nexport default x!;\n',
+    'export default { nested: { GeminiDeep: 1 } as Record<string, number> };\n',
+  ])('does not flag object properties in %s', (source) => {
+    const sf = parseSourceFile('test.ts', source);
+    expect(scanGeminiExports(sf, 'test.ts')).toEqual([]);
   });
 });
 

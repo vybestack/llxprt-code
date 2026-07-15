@@ -99,7 +99,7 @@ describe('Finding1: bound createRequire call — arrow helper returning createRe
         "req('@google/genai');\n",
     );
     const violations = scanGenaiImports(sf, 'test.ts');
-    expect(violations).toHaveLength(2);
+    expect(violations).toHaveLength(1);
     expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
   });
 
@@ -111,7 +111,7 @@ describe('Finding1: bound createRequire call — arrow helper returning createRe
         "cr(import.meta.url)('@google/genai');\n",
     );
     const violations = scanGenaiImports(sf, 'test.ts');
-    expect(violations).toHaveLength(2);
+    expect(violations).toHaveLength(1);
     expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
   });
 });
@@ -134,7 +134,7 @@ describe('Finding2: no nested-return false positive for createRequire helper', (
     // so req is classified as a bound createRequire. The genai call is
     // detected. This is correct behavior — the scanner follows the chain.
     const violations = scanGenaiImports(sf, 'test.ts');
-    expect(violations).toHaveLength(2);
+    expect(violations).toHaveLength(1);
     expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
   });
 
@@ -258,7 +258,11 @@ describe('Finding4: walkPackages rejects symlink package entries', () => {
     const externalDir = mkdtempSync(join(tmpdir(), 'ext-sym-'));
     try {
       mkdirSync(join(repoRoot, 'packages'), { recursive: true });
-      symlinkSync(externalDir, join(repoRoot, 'packages', 'evil'), 'dir');
+      symlinkSync(
+        externalDir,
+        join(repoRoot, 'packages', 'evil'),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
       const dirs = discoverPackageWorkspaces(repoRoot);
       expect(dirs).not.toContain('packages/evil');
     } finally {
@@ -278,7 +282,7 @@ describe('Finding4: walkPackages rejects symlink package entries', () => {
       symlinkSync(
         join(repoRoot, 'packages', 'real'),
         join(repoRoot, 'packages', 'linked'),
-        'dir',
+        process.platform === 'win32' ? 'junction' : 'dir',
       );
       const dirs = discoverPackageWorkspaces(repoRoot);
       expect(dirs).toContain('packages/linked');

@@ -223,21 +223,41 @@ export function verifyInternalDependencySource(
   };
 }
 
+function discoverScopedWorkspaces(
+  scopeDir: string,
+  scopeName: string,
+  repoRoot: string,
+): string[] {
+  let entries: Array<import('node:fs').Dirent> = [];
+  try {
+    entries = readdirSync(scopeDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => isAcceptableWorkspaceEntry(entry, scopeDir, repoRoot))
+    .map((entry) => `packages/${scopeName}/${entry.name}`);
+}
+
 /**
- * Discover all workspace directories under packages/ (one level deep).
- * This is the raw filesystem list — the root workspaces field is used
- * for shipped-workspace filtering elsewhere.
+ * Discover direct package workspaces and one nested package level below scope
+ * directories such as `packages/@scope/pkg`.
  */
 export function discoverPackageWorkspaces(repoRoot: string): string[] {
   const packagesDir = join(repoRoot, 'packages');
-  if (!existsSync(packagesDir)) {
-    return [];
-  }
+  if (!existsSync(packagesDir)) return [];
   const results: string[] = [];
   const entries = readdirSync(packagesDir, { withFileTypes: true });
   for (const entry of entries) {
     if (isAcceptableWorkspaceEntry(entry, packagesDir, repoRoot)) {
-      results.push(`packages/${entry.name}`);
+      if (!entry.name.startsWith('@')) {
+        results.push(`packages/${entry.name}`);
+      } else {
+        const scopeDir = join(packagesDir, entry.name);
+        results.push(
+          ...discoverScopedWorkspaces(scopeDir, entry.name, repoRoot),
+        );
+      }
     }
   }
   return results;
@@ -618,9 +638,12 @@ export function verifyTransitiveSourceClosure(
     queue.push(packedPath);
   }
 
-  while (queue.length > 0) {
-    const current = queue.shift() as string;
-    if (visited.has(current)) continue;
+  let current = queue.shift();
+  while (current !== undefined) {
+    if (visited.has(current)) {
+      current = queue.shift();
+      continue;
+    }
     visited.add(current);
 
     const absPath = join(repoRoot, current);
@@ -646,6 +669,12 @@ export function verifyTransitiveSourceClosure(
           message: `${current} references '${spec}' which does not exist on disk and is NOT in the published tarball`,
         });
       }
+    } else if (isPacked && !exists) {
+      missing.push({
+        entry: current,
+        missingFile: current,
+        message: `${current} is listed in the published tarball but does not exist on disk`,
+      });
     } else if (!isPacked) {
       missing.push({
         entry: current,
@@ -653,6 +682,7 @@ export function verifyTransitiveSourceClosure(
         message: `${current} is required transitively but is NOT in the published tarball`,
       });
     }
+    current = queue.shift();
   }
 
   return missing;

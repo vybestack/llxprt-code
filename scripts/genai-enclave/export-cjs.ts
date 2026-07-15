@@ -25,8 +25,10 @@ import {
   objectPropertyName,
   inlineSpreadPropertyNames,
   isStaticSpreadSource,
+  unwrapTransparentExpressions,
 } from './ast-helpers.ts';
 import type { GeminiExportViolation } from './violation-types.ts';
+import { isProvenModuleLoaderCall } from './import-detection.ts';
 import {
   type ExportScanContext,
   addExportViolation,
@@ -177,18 +179,19 @@ function checkCommonJSAssignmentRhs(
   rhs: ts.Expression,
   violations: GeminiExportViolation[],
 ): void {
-  if (checkCompositeAssignmentRhs(ctx, node, rhs, violations)) return;
-  if (ts.isObjectLiteralExpression(rhs)) {
-    checkCommonJSObjectLiteral(ctx, rhs, violations);
+  const candidate = unwrapTransparentExpressions(rhs);
+  if (checkCompositeAssignmentRhs(ctx, node, candidate, violations)) return;
+  if (ts.isObjectLiteralExpression(candidate)) {
+    checkCommonJSObjectLiteral(ctx, candidate, violations);
     return;
   }
-  if (ts.isIdentifier(rhs)) {
+  if (ts.isIdentifier(candidate)) {
     // The identifier name is statically resolvable. If it contains "Gemini",
     // flag it as a Gemini export.
-    addCommonJSViolation(ctx, node, rhs.text, violations);
+    addCommonJSViolation(ctx, node, candidate.text, violations);
     // If the identifier resolves to a static object-literal binding, also
     // inspect the object's properties (F2 resolvable spread).
-    const binding = resolveObjectLiteralBinding(ctx, rhs);
+    const binding = resolveObjectLiteralBinding(ctx, candidate);
     if (binding !== undefined) {
       checkCommonJSObjectLiteral(ctx, binding, violations);
       return;
@@ -198,7 +201,10 @@ function checkCommonJSAssignmentRhs(
     // itself does not contain "Gemini" and is not a known-safe global
     // constant (undefined/NaN/Infinity), fail closed to avoid missing a
     // dynamic export surface.
-    if (!containsGemini(rhs.text) && !SAFE_GLOBAL_IDENTIFIERS.has(rhs.text)) {
+    if (
+      !containsGemini(candidate.text) &&
+      !SAFE_GLOBAL_IDENTIFIERS.has(candidate.text)
+    ) {
       addFailClosedViolation(
         ctx,
         node,
@@ -209,17 +215,19 @@ function checkCommonJSAssignmentRhs(
     return;
   }
   if (
-    (ts.isClassExpression(rhs) || ts.isFunctionExpression(rhs)) &&
-    rhs.name !== undefined
+    (ts.isClassExpression(candidate) || ts.isFunctionExpression(candidate)) &&
+    candidate.name !== undefined
   ) {
-    addCommonJSViolation(ctx, node, rhs.name.text, violations);
+    addCommonJSViolation(ctx, node, candidate.name.text, violations);
     return;
   }
   // F2 fail-closed: a CallExpression RHS (e.g. `module.exports = someFunc()`)
-  // cannot be statically inspected. The scanner must flag it.
-  // Only an unshadowed bare `require(...)` is exempt here. Other loader-like
-  // calls fail closed because this export scanner has no import provenance.
-  if (ts.isCallExpression(rhs) && !isRequireCallRhs(ctx, rhs)) {
+  // cannot be statically inspected. Proven module-loader calls are import-side
+  // concerns and are exempt using the same scope-aware provenance model.
+  if (
+    ts.isCallExpression(candidate) &&
+    !isProvenModuleLoaderCall(ctx.importContext, candidate)
+  ) {
     addFailClosedViolation(
       ctx,
       node,
@@ -234,7 +242,7 @@ function checkCommonJSAssignmentRhs(
   // Class/function expressions (named or anonymous) are safe: their names
   // have already been checked above, or they are anonymous (no export name).
   // CallExpressions are handled above (fail-closed or exempted).
-  if (!isSafeStaticExportValue(rhs)) {
+  if (!isSafeStaticExportValue(candidate)) {
     addFailClosedViolation(
       ctx,
       node,
@@ -242,30 +250,6 @@ function checkCommonJSAssignmentRhs(
       violations,
     );
   }
-}
-
-/**
- * Check whether a CallExpression RHS is a createRequire-based require call
- * pattern (`createRequire(...)(...)` or `mod.createRequire(...)(...)`).
- * These are import-side concerns, not export mutations, so the export
- * scanner should not fail-closed on them.
- *
- * Only `createRequire(...)(...)` patterns are exempt. Arbitrary nested
- * call expressions like `makeExports()()` are NOT exempt — they are
- * fail-closed because the scanner cannot statically inspect their result.
- */
-function isRequireCallRhs(
-  ctx: ExportScanContext,
-  expr: ts.CallExpression,
-): boolean {
-  const callee = expr.expression;
-
-  // require(...) — exempt only the unshadowed CommonJS loader.
-  if (ts.isIdentifier(callee) && callee.text === 'require') {
-    return !ctx.globalShadows.isShadowed('require', callee.getStart());
-  }
-
-  return false;
 }
 
 /**
@@ -637,6 +621,7 @@ function checkAssignCall(
 ): void {
   const target = expr.arguments[0];
   if (target === undefined || !isCommonJSExports(ctx, target)) return;
+  if (expr.arguments.length === 1) return;
   let hasLiteralSource = false;
   let hasNonLiteralSource = false;
   for (const arg of expr.arguments) {

@@ -38,6 +38,10 @@ import {
   unwrapTransparentExpressions,
 } from './ast-helpers.ts';
 import { GlobalShadowResolver } from './provenance.ts';
+import {
+  createImportScanContext,
+  type ImportScanContext,
+} from './import-detection.ts';
 import type { GeminiExportViolation } from './violation-types.ts';
 import {
   checkCommonJSExport,
@@ -62,42 +66,11 @@ export interface ExportScanContext {
   readonly sourceFile: ts.SourceFile;
   readonly relPath: string;
   readonly globalShadows: GlobalShadowResolver;
+  readonly importContext: ImportScanContext;
   readonly objectLiteralBindings: ReadonlyMap<
     string,
     readonly ObjectLiteralBindingEntry[]
   >;
-}
-
-/**
- * Classify the import/export syntax form of a TS node for diagnostic output.
- * Handles import declarations, export-from declarations, import-equals, and
- * import-type nodes. Returns 'unknown-import-form' for other node types
- * (named declarations are classified by their callers).
- *
- * Used by both import-detection (for import/export declarations) and
- * export-detection (via import-detection's fallback path).
- */
-export function classifyImportExportSyntaxForm(node: ts.Node): string {
-  if (ts.isImportDeclaration(node)) {
-    return node.importClause?.isTypeOnly ? 'import type' : 'import';
-  }
-  if (ts.isExportDeclaration(node)) {
-    const clause = node.exportClause;
-    if (clause === undefined) {
-      return 'export * from';
-    }
-    if (ts.isNamespaceExport(clause)) {
-      return 'export * as namespace from';
-    }
-    return 'export ... from';
-  }
-  if (ts.isImportEqualsDeclaration(node)) {
-    return 'import = require';
-  }
-  if (ts.isImportTypeNode(node)) {
-    return 'import() type';
-  }
-  return 'unknown-import-form';
 }
 
 /**
@@ -246,17 +219,15 @@ function checkExportAssignment(
     addExportViolation(ctx, node, expr.name.text, exportForm, violations);
     return;
   }
-  // export = { GeminiTs: 1 } — check object-literal property names,
-  // including inline spread sources ({...{GeminiLeak: 1}}).
+  // Only TypeScript `export =` exposes object properties as the module's
+  // named CommonJS surface. An ESM default export exposes only `default`.
   if (ts.isObjectLiteralExpression(expr)) {
-    checkObjectLiteralProperties(ctx, expr, exportForm, violations);
+    if (node.isExportEquals) {
+      checkObjectLiteralProperties(ctx, expr, exportForm, violations);
+    }
     return;
   }
-  // F5: export = someIdentifier where someIdentifier resolves to a static
-  // object-literal binding. The identifier's name itself is checked above;
-  // here we resolve it to its object literal so nested Gemini names are
-  // also detected.
-  if (ts.isIdentifier(expr)) {
+  if (node.isExportEquals && ts.isIdentifier(expr)) {
     const binding = resolveObjectLiteralBinding(ctx, expr);
     if (binding !== undefined) {
       checkObjectLiteralProperties(ctx, binding, exportForm, violations);
@@ -454,6 +425,7 @@ export function scanGeminiExports(
     sourceFile,
     relPath,
     globalShadows: new GlobalShadowResolver(),
+    importContext: createImportScanContext(sourceFile, relPath),
     objectLiteralBindings: collectObjectLiteralBindings(sourceFile),
   };
 

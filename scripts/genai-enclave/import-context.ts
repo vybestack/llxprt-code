@@ -15,7 +15,11 @@
  */
 
 import ts from 'typescript';
-import { elementAccessLiteralText, REQUIRE_IDENTIFIER } from './ast-helpers.ts';
+import {
+  elementAccessLiteralText,
+  REQUIRE_IDENTIFIER,
+  unwrapTransparentExpressions,
+} from './ast-helpers.ts';
 import type { ProvenanceResolver, GlobalShadowResolver } from './provenance.ts';
 
 /**
@@ -30,8 +34,66 @@ export interface ImportScanContext {
   readonly knownFactoryAliases: Set<string>;
   readonly knownBindings: Set<string>;
   readonly knownNamespaces: Set<string>;
-  /** Function names whose body returns a createRequire(...) result. */
   readonly createRequireReturningFunctions: Set<string>;
+}
+
+function helperMemberKey(
+  container: string,
+  member: string,
+  range: { readonly from: number; readonly to: number },
+): string {
+  return `${container}\u0000${member}\u0000${range.from}:${range.to}`;
+}
+
+export function registerCreateRequireMemberHelper(
+  ctx: ImportScanContext,
+  container: string,
+  member: string,
+  range: { readonly from: number; readonly to: number },
+  declPos: number,
+): void {
+  ctx.resolver.register(
+    container,
+    'helper-container',
+    range.from,
+    range.to,
+    declPos,
+  );
+  ctx.resolver.register(
+    helperMemberKey(container, member, range),
+    'helper',
+    range.from,
+    range.to,
+    declPos,
+  );
+}
+
+export function isCreateRequireHelperCallee(
+  ctx: ImportScanContext,
+  expr: ts.Expression,
+): boolean {
+  const candidate = unwrapTransparentExpressions(expr);
+  if (ts.isIdentifier(candidate)) {
+    return ctx.resolver.isHelper(candidate.text, candidate.getStart());
+  }
+  if (
+    !ts.isPropertyAccessExpression(candidate) &&
+    !ts.isElementAccessExpression(candidate)
+  ) {
+    return false;
+  }
+  const member = ts.isPropertyAccessExpression(candidate)
+    ? candidate.name.text
+    : elementAccessLiteralText(candidate.argumentExpression);
+  const base = unwrapTransparentExpressions(candidate.expression);
+  if (member === undefined || !ts.isIdentifier(base)) return false;
+  const pos = base.getStart();
+  if (!ctx.resolver.isHelperContainer(base.text, pos)) return false;
+  const range = ctx.resolver.declarationRangeAt(base.text, pos);
+  return (
+    range !== undefined &&
+    ctx.resolver.isHelper(helperMemberKey(base.text, member, range), pos)
+  );
 }
 
 /**
@@ -44,27 +106,29 @@ export function isCreateRequireFactoryCallee(
   ctx: ImportScanContext,
   expr: ts.Expression,
 ): boolean {
-  if (ts.isIdentifier(expr)) {
-    // A bare `createRequire` identifier is the factory ONLY when the
-    // provenance resolver has a factory-alias entry for it at this position
-    // (e.g. from `import { createRequire } from 'node:module'`). A mere
-    // absence of a shadow is insufficient — the identifier must have
-    // valid resolver provenance as a factory alias.
-    return ctx.resolver.isFactoryAlias(expr.text, expr.getStart());
+  const candidate = unwrapTransparentExpressions(expr);
+  if (ts.isIdentifier(candidate)) {
+    return ctx.resolver.isFactoryAlias(candidate.text, candidate.getStart());
   }
   if (
-    ts.isPropertyAccessExpression(expr) &&
-    expr.name.text === 'createRequire'
+    ts.isPropertyAccessExpression(candidate) &&
+    candidate.name.text === 'createRequire'
   ) {
-    if (!ts.isIdentifier(expr.expression)) return false;
-    return ctx.resolver.isNamespace(expr.expression.text, expr.getStart());
+    const namespace = unwrapTransparentExpressions(candidate.expression);
+    return (
+      ts.isIdentifier(namespace) &&
+      ctx.resolver.isNamespace(namespace.text, namespace.getStart())
+    );
   }
   if (
-    ts.isElementAccessExpression(expr) &&
-    elementAccessLiteralText(expr.argumentExpression) === 'createRequire'
+    ts.isElementAccessExpression(candidate) &&
+    elementAccessLiteralText(candidate.argumentExpression) === 'createRequire'
   ) {
-    if (!ts.isIdentifier(expr.expression)) return false;
-    return ctx.resolver.isNamespace(expr.expression.text, expr.getStart());
+    const namespace = unwrapTransparentExpressions(candidate.expression);
+    return (
+      ts.isIdentifier(namespace) &&
+      ctx.resolver.isNamespace(namespace.text, namespace.getStart())
+    );
   }
   return false;
 }

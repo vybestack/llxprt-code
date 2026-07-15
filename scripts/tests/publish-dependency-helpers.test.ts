@@ -603,6 +603,18 @@ describe('deriveShippedWorkspaceDirs', () => {
     expect(dirs).toEqual(new Set(['packages/cli', 'packages/core']));
   });
 
+  it('extracts scoped workspace dirs and ignores incomplete scopes', () => {
+    const root: RootManifest = {
+      files: [
+        'packages/@scope/pkg/src/',
+        'packages/@scope/pkg/index.ts',
+        'packages/@scope',
+      ],
+    };
+    expect(deriveShippedWorkspaceDirs(root)).toEqual(
+      new Set(['packages/@scope/pkg']),
+    );
+  });
   it('ignores non-packages entries', () => {
     const root: RootManifest = {
       files: ['scripts/preinstall.cjs', 'README.md', 'packages/cli/src/'],

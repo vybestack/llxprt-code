@@ -535,6 +535,14 @@ export function checkWorkspaceDependencies(
   return mismatches;
 }
 
+function shippedWorkspaceDir(entry: string): string | null {
+  const segments = entry.split('/').filter((segment) => segment.length > 0);
+  if (segments[0] !== 'packages' || segments.length < 2) return null;
+  if (!segments[1].startsWith('@')) return `packages/${segments[1]}`;
+  if (segments.length < 3) return null;
+  return `packages/${segments[1]}/${segments[2]}`;
+}
+
 /**
  * Derive the set of shipped workspace directories from the root package.json
  * `files` allowlist. Each entry like `packages/cli/src/` or
@@ -543,13 +551,7 @@ export function checkWorkspaceDependencies(
 export function deriveShippedWorkspaceDirs(root: RootManifest): Set<string> {
   return new Set(
     (root.files ?? [])
-      .map((entry) => {
-        const segments = entry.split('/');
-        if (segments[0] !== 'packages' || segments.length < 2) {
-          return null;
-        }
-        return `${segments[0]}/${segments[1]}`;
-      })
+      .map(shippedWorkspaceDir)
       .filter((dir): dir is string => dir !== null),
   );
 }

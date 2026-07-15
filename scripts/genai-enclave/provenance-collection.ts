@@ -28,13 +28,23 @@ import {
   importedNameOfSpecifier,
   REQUIRE_IDENTIFIER,
   isFunctionLikeNode,
+  objectPropertyName,
+  unwrapTransparentExpressions,
 } from './ast-helpers.ts';
-import { blockScopedRange, hoistedRange, moduleRange } from './provenance.ts';
+import {
+  blockScopedRange,
+  getEnclosingScopeRange,
+  hoistedRange,
+  moduleRange,
+} from './provenance.ts';
+import { functionReturnIsProven } from './helper-return-analysis.ts';
 import {
   type ImportScanContext,
   isCreateRequireFactoryCallee,
+  isCreateRequireHelperCallee,
   isGlobalRequireRef,
   isModuleRequireRef,
+  registerCreateRequireMemberHelper,
 } from './import-context.ts';
 
 /**
@@ -244,11 +254,8 @@ function tryRegisterCallInitializer(
     registerBindings(ctx, declaration, 'binding', range);
     return true;
   }
-  // Call to a function that internally returns createRequire(...) → binding
-  if (
-    ts.isIdentifier(initializer.expression) &&
-    ctx.createRequireReturningFunctions.has(initializer.expression.text)
-  ) {
+  // Call to a scope-resolved helper that returns createRequire(...) → binding
+  if (isCreateRequireHelperCallee(ctx, initializer.expression)) {
     registerBindings(ctx, declaration, 'binding', range);
     return true;
   }
@@ -257,7 +264,7 @@ function tryRegisterCallInitializer(
   //   or `const req = ((url) => createRequire(url))(import.meta.url);`
   //   or `const req = (function(url) { return createRequire(url); })(...);`
   // Parentheses around the function expression must be unwrapped.
-  const iifeCallee = unwrapParentheses(initializer.expression);
+  const iifeCallee = unwrapTransparentExpressions(initializer.expression);
   if (
     isFunctionLikeNode(iifeCallee) &&
     functionReturnsCreateRequire(ctx, iifeCallee)
@@ -327,18 +334,20 @@ function tryRegisterMemberAccessInitializer(
 function isRequireCallFactoryProperty(
   ctx: ImportScanContext,
   initializer: ts.Expression | undefined,
-): initializer is ts.PropertyAccessExpression {
+): boolean {
+  if (initializer === undefined) return false;
+  const candidate = unwrapTransparentExpressions(initializer);
   if (
-    initializer === undefined ||
-    !ts.isPropertyAccessExpression(initializer)
+    !ts.isPropertyAccessExpression(candidate) &&
+    !ts.isElementAccessExpression(candidate)
   ) {
     return false;
   }
-  if (initializer.name.text !== 'createRequire') {
-    return false;
-  }
-  const callExpr = initializer.expression;
-  return isNodeModuleRequireInitializer(ctx, callExpr);
+  const memberName = ts.isPropertyAccessExpression(candidate)
+    ? candidate.name.text
+    : elementAccessLiteralText(candidate.argumentExpression);
+  if (memberName !== 'createRequire') return false;
+  return isNodeModuleRequireInitializer(ctx, candidate.expression);
 }
 
 /**
@@ -487,26 +496,80 @@ function isNamespaceFactoryMember(
   initializer: ts.Expression | undefined,
 ): boolean {
   if (initializer === undefined) return false;
-  let memberName: string | undefined;
-  if (ts.isPropertyAccessExpression(initializer)) {
-    memberName = initializer.name.text;
-  } else if (ts.isElementAccessExpression(initializer)) {
-    memberName = elementAccessLiteralText(initializer.argumentExpression);
+  const candidate = unwrapTransparentExpressions(initializer);
+  if (ts.isPropertyAccessExpression(candidate)) {
+    if (candidate.name.text !== 'createRequire') return false;
+    const namespace = unwrapTransparentExpressions(candidate.expression);
+    return (
+      ts.isIdentifier(namespace) &&
+      ctx.resolver.isNamespace(namespace.text, namespace.getStart())
+    );
   }
-  if (memberName !== 'createRequire') return false;
-  const namespace = initializer.expression;
-  return (
-    ts.isIdentifier(namespace) &&
-    ctx.resolver.isNamespace(namespace.text, initializer.getStart())
-  );
+  if (ts.isElementAccessExpression(candidate)) {
+    if (
+      elementAccessLiteralText(candidate.argumentExpression) !== 'createRequire'
+    ) {
+      return false;
+    }
+    const namespace = unwrapTransparentExpressions(candidate.expression);
+    return (
+      ts.isIdentifier(namespace) &&
+      ctx.resolver.isNamespace(namespace.text, namespace.getStart())
+    );
+  }
+  return false;
+}
+
+function registerObjectMemberHelpers(
+  ctx: ImportScanContext,
+  container: ts.Identifier,
+  literal: ts.ObjectLiteralExpression,
+  range: { readonly from: number; readonly to: number },
+): boolean {
+  let registered = false;
+  for (const property of literal.properties) {
+    const member = objectPropertyName(property);
+    let isHelper = false;
+    if (ts.isMethodDeclaration(property)) {
+      isHelper = functionReturnsCreateRequire(ctx, property);
+    } else if (ts.isPropertyAssignment(property)) {
+      const initializer = unwrapTransparentExpressions(property.initializer);
+      isHelper =
+        isFunctionLikeNode(initializer) &&
+        functionReturnsCreateRequire(ctx, initializer);
+    }
+    if (member !== undefined && isHelper) {
+      registerCreateRequireMemberHelper(
+        ctx,
+        container.text,
+        member,
+        range,
+        container.getStart(),
+      );
+      registered = true;
+    }
+  }
+  return registered;
 }
 
 function collectVariableDeclaration(
   ctx: ImportScanContext,
   declaration: ts.VariableDeclaration,
 ): void {
-  const initializer = declaration.initializer;
+  const initializer =
+    declaration.initializer === undefined
+      ? undefined
+      : unwrapTransparentExpressions(declaration.initializer);
   const range = variableDeclarationRange(declaration);
+
+  if (
+    ts.isIdentifier(declaration.name) &&
+    initializer !== undefined &&
+    ts.isObjectLiteralExpression(initializer) &&
+    registerObjectMemberHelpers(ctx, declaration.name, initializer, range)
+  ) {
+    return;
+  }
 
   // CJS require of node:module → factory aliases or namespace binding
   if (isNodeModuleRequireInitializer(ctx, initializer)) {
@@ -552,22 +615,28 @@ function collectVariableDeclaration(
   }
 }
 
-/**
- * Unwrap nested ParenthesizedExpression nodes to reach the inner expression.
- */
-function unwrapParentheses(node: ts.Expression): ts.Expression {
-  let current: ts.Expression = node;
-  while (ts.isParenthesizedExpression(current)) {
-    current = current.expression;
-  }
-  return current;
+function functionDeclarationRange(node: ts.FunctionDeclaration): {
+  readonly from: number;
+  readonly to: number;
+} {
+  if (ts.isSourceFile(node.parent)) return moduleRange(node);
+  const range = getEnclosingScopeRange(node);
+  return { from: range.start, to: range.end };
 }
 
-/**
- * Register shadow entries for function declaration parameters and the
- * function name itself. Parameters shadow broader provenance within the
- * function body.
- */
+function ownFunctionRange(
+  node:
+    | ts.FunctionDeclaration
+    | ts.FunctionExpression
+    | ts.ArrowFunction
+    | ts.MethodDeclaration
+    | ts.ConstructorDeclaration
+    | ts.GetAccessorDeclaration
+    | ts.SetAccessorDeclaration,
+): { readonly from: number; readonly to: number } {
+  return { from: node.getStart(), to: node.getEnd() };
+}
+
 function collectFunctionShadows(
   ctx: ImportScanContext,
   node:
@@ -579,27 +648,50 @@ function collectFunctionShadows(
     | ts.GetAccessorDeclaration
     | ts.SetAccessorDeclaration,
 ): void {
-  const range = hoistedRange(node);
-  if ('name' in node && node.name !== undefined && ts.isIdentifier(node.name)) {
+  if (ts.isFunctionDeclaration(node) && node.name !== undefined) {
+    const declarationRange = functionDeclarationRange(node);
     ctx.resolver.register(
       node.name.text,
       'shadow',
-      range.from,
-      range.to,
+      declarationRange.from,
+      declarationRange.to,
       node.name.getStart(),
     );
-    ctx.globalShadows.registerShadow(node.name.text, range.from, range.to);
+    ctx.globalShadows.registerShadow(
+      node.name.text,
+      declarationRange.from,
+      declarationRange.to,
+    );
+  } else if (ts.isFunctionExpression(node) && node.name !== undefined) {
+    const expressionRange = ownFunctionRange(node);
+    ctx.resolver.register(
+      node.name.text,
+      'shadow',
+      expressionRange.from,
+      expressionRange.to,
+      node.name.getStart(),
+    );
+    ctx.globalShadows.registerShadow(
+      node.name.text,
+      expressionRange.from,
+      expressionRange.to,
+    );
   }
+  const parameterRange = ownFunctionRange(node);
   for (const param of node.parameters) {
     for (const name of collectBindingNames(param.name)) {
       ctx.resolver.register(
         name,
         'shadow',
-        range.from,
-        range.to,
+        parameterRange.from,
+        parameterRange.to,
         param.name.getStart(),
       );
-      ctx.globalShadows.registerShadow(name, range.from, range.to);
+      ctx.globalShadows.registerShadow(
+        name,
+        parameterRange.from,
+        parameterRange.to,
+      );
     }
   }
 }
@@ -616,15 +708,12 @@ function collectCallAssignment(
     kind = 'binding';
   } else if (isRequireBindCall(ctx, rhs)) {
     kind = 'require-alias';
-  } else if (
-    ts.isIdentifier(rhs.expression) &&
-    ctx.createRequireReturningFunctions.has(rhs.expression.text)
-  ) {
+  } else if (isCreateRequireHelperCallee(ctx, rhs.expression)) {
     kind = 'binding';
   } else {
     // A7: Direct arrow/function IIFE that returns createRequire(...) → binding.
     // Same logic as tryRegisterCallInitializer for variable declarations.
-    const iifeCallee = unwrapParentheses(rhs.expression);
+    const iifeCallee = unwrapTransparentExpressions(rhs.expression);
     if (
       isFunctionLikeNode(iifeCallee) &&
       functionReturnsCreateRequire(ctx, iifeCallee)
@@ -670,7 +759,7 @@ function collectAssignment(
   if (expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken) return;
   const lhs = expr.left;
   if (!ts.isIdentifier(lhs)) return;
-  const rhs = expr.right;
+  const rhs = unwrapTransparentExpressions(expr.right);
   const rhsPos = rhs.getStart();
   const range = assignmentAliasRange(ctx, lhs, node);
 
@@ -743,22 +832,11 @@ export function collectBlockProvenance(
   ctx: ImportScanContext,
   node: ts.Node,
 ): void {
-  // Fixed-point iteration: function declarations are hoisted, but we visit
-  // nodes in source order. A function that calls a createRequire-returning
-  // function declared LATER in source is not recognized on the first pass.
-  // Subsequent passes pick up newly-discovered functions until no new ones
-  // are found (Finding1: forward hoisted helper fixed point).
-  //
-  // Convergence worklist: iterate until no new createRequire-returning
-  // functions are discovered, with a safety bound to prevent pathological
-  // infinite loops on contrived inputs.
-  const MAX_PASSES = 100;
-  for (let pass = 0; pass < MAX_PASSES; pass++) {
-    const beforeSize = ctx.createRequireReturningFunctions.size;
+  let previousRevision: number;
+  do {
+    previousRevision = ctx.resolver.revision;
     collectBlockProvenanceVisit(ctx, node);
-    const afterSize = ctx.createRequireReturningFunctions.size;
-    if (afterSize === beforeSize) break;
-  }
+  } while (ctx.resolver.revision !== previousRevision);
 }
 
 /**
@@ -801,38 +879,66 @@ function collectCreateRequireReturningFunction(
     | ts.GetAccessorDeclaration
     | ts.SetAccessorDeclaration,
 ): void {
-  let name: string | undefined;
-  if ('name' in node && node.name !== undefined && ts.isIdentifier(node.name)) {
-    name = node.name.text;
-  }
-  if (
-    name === undefined &&
-    (ts.isArrowFunction(node) || ts.isFunctionExpression(node))
-  ) {
-    name = getAnonymousFunctionVariableName(node);
-  }
-  if (name === undefined) return;
-  if (functionReturnsCreateRequire(ctx, node)) {
-    ctx.createRequireReturningFunctions.add(name);
-  }
+  const binding = helperBinding(node);
+  if (binding === undefined || !functionReturnsCreateRequire(ctx, node)) return;
+  const key = `${binding.name}:${binding.range.from}:${binding.range.to}`;
+  if (ctx.createRequireReturningFunctions.has(key)) return;
+  ctx.createRequireReturningFunctions.add(key);
+  ctx.resolver.register(
+    binding.name,
+    'helper',
+    binding.range.from,
+    binding.range.to,
+    binding.declPos,
+  );
 }
 
-/**
- * Derive the variable name for an anonymous ArrowFunction or
- * FunctionExpression assigned to a variable declarator
- * (e.g. `const getReq = (url) => createRequire(url)` or
- * `const getReq = function(url) { return createRequire(url); }`).
- */
-function getAnonymousFunctionVariableName(
-  node: ts.ArrowFunction | ts.FunctionExpression,
-): string | undefined {
-  const parent = node.parent;
-  if (
-    parent !== undefined &&
-    ts.isVariableDeclaration(parent) &&
-    ts.isIdentifier(parent.name)
-  ) {
-    return parent.name.text;
+function isTransparentParent(node: ts.Node): boolean {
+  const guards: ReadonlyArray<(candidate: ts.Node) => boolean> = [
+    ts.isParenthesizedExpression,
+    ts.isAsExpression,
+    ts.isTypeAssertionExpression,
+    ts.isSatisfiesExpression,
+    ts.isNonNullExpression,
+  ];
+  return guards.some((guard) => guard(node));
+}
+
+function helperBinding(
+  node:
+    | ts.FunctionDeclaration
+    | ts.FunctionExpression
+    | ts.ArrowFunction
+    | ts.MethodDeclaration
+    | ts.ConstructorDeclaration
+    | ts.GetAccessorDeclaration
+    | ts.SetAccessorDeclaration,
+):
+  | {
+      readonly name: string;
+      readonly range: { readonly from: number; readonly to: number };
+      readonly declPos: number;
+    }
+  | undefined {
+  if (ts.isFunctionDeclaration(node) && node.name !== undefined) {
+    return {
+      name: node.name.text,
+      range: functionDeclarationRange(node),
+      declPos: node.name.getStart(),
+    };
+  }
+  if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
+    let parent = node.parent;
+    while (isTransparentParent(parent)) {
+      parent = parent.parent;
+    }
+    if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+      return {
+        name: parent.name.text,
+        range: variableDeclarationRange(parent),
+        declPos: parent.name.getStart(),
+      };
+    }
   }
   return undefined;
 }
@@ -861,63 +967,25 @@ function functionReturnsCreateRequire(
 ): boolean {
   const body = node.body;
   if (body === undefined) return false;
-  if (ts.isExpression(body)) {
-    // Arrow function with expression body: `() => createRequire(url)`
-    return isCreateRequireReturnExpression(ctx, body);
-  }
-  let found = false;
-  const visit = (n: ts.Node): void => {
-    if (found) return;
-    // Skip nested function-like declarations — their return statements
-    // belong to them, not to the enclosing function.
-    if (n !== body && isFunctionLikeNode(n)) return;
-    if (
-      ts.isReturnStatement(n) &&
-      n.expression !== undefined &&
-      isCreateRequireReturnExpression(ctx, n.expression)
-    ) {
-      found = true;
-      return;
-    }
-    ts.forEachChild(n, visit);
-  };
-  visit(body);
-  return found;
+  return functionReturnIsProven(body, (expression) =>
+    isCreateRequireReturnExpression(ctx, expression),
+  );
 }
 
-/**
- * Check whether an expression is a createRequire factory call result.
- * Also detects calls to other createRequire-returning functions (transitive).
- */
+/** Check whether an expression returns a proven createRequire binding. */
 function isCreateRequireReturnExpression(
   ctx: ImportScanContext,
-  expr: ts.Expression,
+  expression: ts.Expression,
 ): boolean {
-  // createRequire(...)(...) — the returned require function itself
+  const expr = unwrapTransparentExpressions(expression);
   if (
     ts.isCallExpression(expr) &&
-    isCreateRequireFactoryCallee(ctx, expr.expression)
+    (isCreateRequireFactoryCallee(ctx, expr.expression) ||
+      isCreateRequireHelperCallee(ctx, expr.expression))
   ) {
     return true;
   }
-  // createRequire(...) — the factory call (function returns the factory)
-  if (ts.isCallExpression(expr) && isCreateRequireFactoryCallee(ctx, expr)) {
-    return true;
-  }
-  // A binding identifier (returning a previously-computed binding)
-  if (
-    ts.isIdentifier(expr) &&
-    ctx.resolver.isBinding(expr.text, expr.getStart())
-  ) {
-    return true;
-  }
-  // A call to another createRequire-returning function (transitive, Finding1)
-  if (
-    ts.isCallExpression(expr) &&
-    ts.isIdentifier(expr.expression) &&
-    ctx.createRequireReturningFunctions.has(expr.expression.text)
-  ) {
-    return true;
-  }
-  return false;
+  return (
+    ts.isIdentifier(expr) && ctx.resolver.isBinding(expr.text, expr.getStart())
+  );
 }
