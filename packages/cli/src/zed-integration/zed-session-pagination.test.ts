@@ -95,6 +95,16 @@ describe('session lifecycle pagination', () => {
     );
   });
 
+  it('continues pagination with the same cwd filter', () => {
+    const first = paginateSessions(sessions, { cwd: '/a', cursor: null }, 1);
+    const second = paginateSessions(
+      sessions,
+      { cwd: '/a', cursor: first.nextCursor ?? null },
+      1,
+    );
+    expect(second.sessions).toStrictEqual([sessions[1]]);
+  });
+
   it('rejects a cursor created for a different cwd filter', () => {
     const first = paginateSessions(sessions, { cwd: '/a', cursor: null }, 1);
     expect(() =>

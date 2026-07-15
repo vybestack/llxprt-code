@@ -58,8 +58,9 @@ describe('Zed Session.prompt (Agent API) - stream flush ordering', () => {
     const session = createSession(agent, connection);
     createdSessions.push(session);
 
-    await runPrompt(session);
+    const response = await runPrompt(session);
 
+    expect(response.stopReason).toBe('end_turn');
     expect(connection.onlySessionUpdates()).toStrictEqual([
       {
         sessionUpdate: 'agent_message_chunk',

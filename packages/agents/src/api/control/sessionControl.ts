@@ -409,6 +409,7 @@ export class SessionControl implements AgentSessionControl {
             error instanceof Error ? error.message : String(error)
           }`,
       );
+      throw error;
     }
   }
 
