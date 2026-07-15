@@ -147,10 +147,21 @@ function handleSessionStart(
     return undefined;
   }
   const startPayload = payload as unknown as SessionStartPayload;
-  if (!startPayload.sessionId || !startPayload.projectHash) {
+  const requiredStrings = [
+    startPayload.sessionId,
+    startPayload.projectHash,
+    startPayload.provider,
+    startPayload.model,
+    startPayload.startTime,
+  ];
+  if (
+    requiredStrings.some(
+      (value) => typeof value !== 'string' || value.length === 0,
+    )
+  ) {
     return {
       ok: false,
-      error: 'Invalid session_start: missing required fields',
+      error: 'Invalid session_start: missing or malformed required fields',
       warnings: acc.warnings,
     };
   }

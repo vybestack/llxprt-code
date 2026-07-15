@@ -140,9 +140,10 @@ async function deleteResolvedSession(
     await unlink(target.filePath);
     result = { ok: true, deletedSessionId: target.sessionId };
   } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error);
     result = {
       ok: false,
-      error: `Failed to delete session: ${(error as Error).message}`,
+      error: `Failed to delete session: ${detail}`,
     };
   } finally {
     await lock.release().catch(() => undefined);
