@@ -209,6 +209,7 @@ export const ALLOWED_IMPORT_TUPLES: readonly string[] = [
   'core/src/utils/summarizer.ts::../config/models.js::DEFAULT_GEMINI_FLASH_LITE_MODEL::DEFAULT_GEMINI_FLASH_LITE_MODEL',
   'core/test/models/profiles.test.ts::./__fixtures__/mock-data.js::geminiModel::geminiModel',
   'core/test/models/transformer.test.ts::./__fixtures__/mock-data.js::geminiModel::geminiModel',
+  'providers/src/fake/FakeProvider.ts::@vybestack/llxprt-code-core/llm-types/index.js::GeminiContent::GeminiContent',
   'providers/src/composition/aliasProviderFactory.ts::../gemini/GeminiProvider.js::GeminiProvider::GeminiProvider',
   'providers/src/utils/providerRequestConversion.ts::../gemini/GeminiMessageConverter.js::convertHistoryToGeminiFormat::convertHistoryToGeminiFormat',
   'settings/src/profiles/__tests__/canonicalProfileRepair.test.ts::./canonicalProfileRepair.testHelpers.js::corruptCanonicalProfileNonGeminiModel::corruptCanonicalProfileNonGeminiModel',
