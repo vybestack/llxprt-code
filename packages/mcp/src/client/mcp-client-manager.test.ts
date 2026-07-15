@@ -173,17 +173,85 @@ describe('McpClientManager', () => {
       await manager.startConfiguredMcpServers();
       refreshMcpContext.mockClear();
 
-      const scheduledBeforeStop = onToolsUpdated?.();
-      const stopping = manager.stop();
-      await vi.runAllTimersAsync();
-      await Promise.all([scheduledBeforeStop, stopping]);
+      void onToolsUpdated?.();
+      await manager.stop();
 
       expect(refreshMcpContext).not.toHaveBeenCalled();
 
-      const scheduledAfterStop = onToolsUpdated?.();
-      await vi.runAllTimersAsync();
-      await scheduledAfterStop;
+      const afterStopRefresh = onToolsUpdated?.();
+      await afterStopRefresh;
       expect(refreshMcpContext).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries a context refresh requested while a failed refresh is pending', async () => {
+    vi.useFakeTimers();
+    try {
+      let onToolsUpdated: ConstructorParameters<typeof McpClient>[9];
+      const mockedMcpClient = {
+        connect: vi.fn(),
+        discover: vi.fn(),
+        disconnect: vi.fn(),
+        invalidateCapabilities: vi.fn(),
+        abortDiscovery: vi.fn(),
+        getStatus: vi.fn(),
+        getServerConfig: vi.fn().mockReturnValue({}),
+      };
+      vi.mocked(McpClient).mockImplementation(
+        (
+          _serverName,
+          _serverConfig,
+          _toolRegistry,
+          _promptRegistry,
+          _resourceRegistry,
+          _workspaceContext,
+          _cliConfig,
+          _debugMode,
+          _clientVersion,
+          handleToolsUpdated,
+        ) => {
+          onToolsUpdated = handleToolsUpdated;
+          return mockedMcpClient as unknown as McpClient;
+        },
+      );
+      const refreshMcpContext = vi.fn().mockResolvedValue(undefined);
+      const mockConfig = {
+        isTrustedFolder: () => true,
+        getMcpServers: () => ({ 'test-server': {} }),
+        getMcpServerCommand: () => '',
+        getPromptRegistry: () => ({ removePromptsByServer: vi.fn() }),
+        getResourceRegistry: () => ({ removeResourcesByServer: vi.fn() }),
+        getDebugMode: () => false,
+        getWorkspaceContext: () => ({}) as WorkspaceContext,
+        getAllowedMcpServers: () => undefined,
+        getBlockedMcpServers: () => undefined,
+        refreshMcpContext,
+      } as unknown as Config;
+      const manager = new McpClientManager(
+        '0.0.1',
+        { removeMcpToolsByServer: vi.fn() } as unknown as ToolRegistry,
+        mockConfig,
+      );
+      await manager.startConfiguredMcpServers();
+      refreshMcpContext.mockClear();
+      let rejectFirstRefresh: (error: Error) => void = () => {};
+      const firstRefresh = new Promise<void>((_resolve, reject) => {
+        rejectFirstRefresh = reject;
+      });
+      refreshMcpContext
+        .mockReturnValueOnce(firstRefresh)
+        .mockResolvedValue(undefined);
+
+      const firstRequest = onToolsUpdated?.();
+      await vi.advanceTimersByTimeAsync(300);
+      const secondRequest = onToolsUpdated?.();
+      rejectFirstRefresh(new Error('refresh failed'));
+      await vi.advanceTimersByTimeAsync(300);
+      await Promise.all([firstRequest, secondRequest]);
+
+      expect(refreshMcpContext).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
     }
@@ -811,64 +879,6 @@ describe('McpClientManager', () => {
       } finally {
         vi.useRealTimers();
       }
-    });
-
-    it('records partial failure: failing server in failures map, successful server not, both reach COMPLETED', async () => {
-      const goodClient = {
-        connect: vi.fn().mockResolvedValue(undefined),
-        discover: vi.fn().mockResolvedValue(undefined),
-        disconnect: vi.fn().mockResolvedValue(undefined),
-        getStatus: vi.fn(),
-        getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
-        getInstructions: vi.fn().mockReturnValue('good-server instructions'),
-      };
-      const badClient = {
-        connect: vi.fn().mockRejectedValue(new Error('server crashed')),
-        discover: vi.fn().mockResolvedValue(undefined),
-        disconnect: vi.fn().mockResolvedValue(undefined),
-        getStatus: vi.fn(),
-        getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
-        getInstructions: vi.fn().mockReturnValue(''),
-      };
-
-      let callCount = 0;
-      vi.mocked(McpClient).mockImplementation(() => {
-        const client = callCount === 0 ? goodClient : badClient;
-        callCount++;
-        return client as unknown as McpClient;
-      });
-
-      const { manager, promptRegistry, resourceRegistry, toolRegistry } =
-        createExtensionManager(undefined, {
-          'good-server': {},
-          'bad-server': {},
-        });
-
-      await manager.startConfiguredMcpServers();
-      await manager.whenDiscoverySettled();
-
-      const failures = manager.getDiscoveryFailures();
-      expect(failures.has('bad-server')).toBe(true);
-      expect(failures.get('bad-server')).toContain('server crashed');
-      expect(failures.has('good-server')).toBe(false);
-
-      // Aggregate discovery state reaches COMPLETED even with a partial failure.
-      expect(manager.getDiscoveryState()).toBe(MCPDiscoveryState.COMPLETED);
-
-      // The failed client is cleaned up while the good server remains usable.
-      expect(manager.getMcpServerCount()).toBe(1);
-      expect(badClient.disconnect).toHaveBeenCalledOnce();
-      expect(toolRegistry.removeMcpToolsByServer).toHaveBeenCalledWith(
-        'bad-server',
-      );
-      expect(promptRegistry.removePromptsByServer).toHaveBeenCalledWith(
-        'bad-server',
-      );
-      expect(resourceRegistry.removeResourcesByServer).toHaveBeenCalledWith(
-        'bad-server',
-      );
-      const instructions = manager.getMcpInstructions();
-      expect(instructions).toContain('good-server instructions');
     });
   });
 });

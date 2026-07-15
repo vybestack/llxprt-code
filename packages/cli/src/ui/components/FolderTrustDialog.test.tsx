@@ -23,7 +23,6 @@ vi.mock('node:process', async () => {
   return {
     ...actual,
     exit: mockedExit,
-    cwd: mockedCwd,
   };
 });
 

@@ -130,6 +130,20 @@ function flattenErrorDetails(error: unknown): string[] {
   return [error instanceof Error ? error.message : String(error)];
 }
 
+export function combineTrustUpdateFailure(
+  error: unknown,
+  rollbackFailures: readonly unknown[],
+  aggregateMessage: string,
+): { error: unknown; rollbackSucceeded: boolean } {
+  if (rollbackFailures.length === 0) {
+    return { error, rollbackSucceeded: true };
+  }
+  return {
+    error: new AggregateError([error, ...rollbackFailures], aggregateMessage),
+    rollbackSucceeded: false,
+  };
+}
+
 export function getTrustCommitErrorMessage(
   phase: 'persistence' | 'live',
   error: unknown,

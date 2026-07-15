@@ -19,6 +19,7 @@ import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import type { LoadedTrustedFolders } from '../../config/trustedFolders.js';
 import { TrustLevel } from '../../config/trustedFolders.js';
 import * as trustedFolders from '../../config/trustedFolders.js';
+import { createDeferred } from '../../test-utils/async.js';
 
 const mockedCwd = vi.hoisted(() => vi.fn());
 const mockedExit = vi.hoisted(() =>
@@ -366,6 +367,36 @@ describe('useFolderTrust', () => {
       );
     } finally {
       vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not report or exit for a stale selection after unmount', async () => {
+    vi.useFakeTimers();
+    try {
+      isWorkspaceTrustedSpy.mockReturnValue(undefined);
+      const liveUpdate = createDeferred<void>();
+      mockConfig.setTrustedFolderLive
+        .mockReturnValueOnce(liveUpdate.promise)
+        .mockResolvedValueOnce(undefined);
+      const { result, unmount } = renderHook(() =>
+        useFolderTrust(mockSettings, addItem, mockConfig),
+      );
+
+      const selection = result.current.handleFolderTrustSelect(
+        FolderTrustChoice.TRUST_FOLDER,
+      );
+      await vi.waitFor(() =>
+        expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledOnce(),
+      );
+      unmount();
+      liveUpdate.reject(new Error('late live failure'));
+      await selection;
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(addItem).not.toHaveBeenCalled();
+      expect(mockedExit).not.toHaveBeenCalled();
+    } finally {
       vi.useRealTimers();
     }
   });

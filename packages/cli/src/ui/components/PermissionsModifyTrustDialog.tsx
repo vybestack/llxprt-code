@@ -17,7 +17,10 @@ import { isTrustLevel, type TrustLevel } from '../../config/trustedFolders.js';
 import type { HistoryItemWithoutId } from '../types.js';
 import { MessageType } from '../types.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
-import type { PermissionsTrustRuntime } from '../hooks/usePermissionsModifyTrust.js';
+import type {
+  PermissionsTrustRuntime,
+  UsePermissionsModifyTrustReturn,
+} from '../hooks/usePermissionsModifyTrust.js';
 import {
   getLocalTrustLevelDisplay,
   getTrustLevelDisplay,
@@ -178,41 +181,28 @@ function recordTrustSelection(
   return changed;
 }
 
-function useTrustDialogState(
-  onExit: () => void,
-  addItem: UseHistoryManagerReturn['addItem'],
-  config?: PermissionsTrustRuntime,
-) {
-  const {
-    pendingTrustLevel,
-    effectiveLocalTrustLevel,
-    commitTrustLevel,
-    isIdeTrusted,
-    isParentTrusted,
-    committedTrustLevel,
-    effectiveTrust,
-    workingDirectory,
-    parentFolderName,
-  } = usePermissionsModifyTrust(config);
-
-  const [showUpdatedPrompt, setShowUpdatedPrompt] = useState(false);
-  const [isCommitting, setIsCommitting] = useState(false);
-  const committingRef = useRef(false);
-  const getDisplayText = useCallback(
-    (level: TrustLevel | undefined): string =>
-      getTrustLevelDisplay(level, isIdeTrusted, isParentTrusted),
-    [isIdeTrusted, isParentTrusted],
-  );
-  const { options, initialIndex } = useTrustFormOptions(
-    workingDirectory,
-    parentFolderName,
-    pendingTrustLevel ?? effectiveLocalTrustLevel,
-  );
-  const handleSelect = useCallback(
+function useTrustSelectionHandler({
+  addItem,
+  commitTrustLevel,
+  onExit,
+  pendingTrustLevel,
+  setIsCommitting,
+  setShowUpdatedPrompt,
+  committingRef,
+  workingDirectory,
+}: {
+  addItem: UseHistoryManagerReturn['addItem'];
+  commitTrustLevel: UsePermissionsModifyTrustReturn['commitTrustLevel'];
+  onExit: () => void;
+  pendingTrustLevel: TrustLevel | undefined;
+  setIsCommitting: React.Dispatch<React.SetStateAction<boolean>>;
+  setShowUpdatedPrompt: React.Dispatch<React.SetStateAction<boolean>>;
+  committingRef: React.MutableRefObject<boolean>;
+  workingDirectory: string;
+}) {
+  return useCallback(
     async (level: TrustLevel) => {
-      if (committingRef.current) {
-        return;
-      }
+      if (committingRef.current) return;
       committingRef.current = true;
       setIsCommitting(true);
       try {
@@ -238,11 +228,8 @@ function useTrustDialogState(
           pendingTrustLevel,
           getLocalTrustLevelDisplay(level),
         );
-        if (changed) {
-          setShowUpdatedPrompt(true);
-        } else {
-          onExit();
-        }
+        if (changed) setShowUpdatedPrompt(true);
+        else onExit();
       } catch (error) {
         addItem(
           {
@@ -256,8 +243,58 @@ function useTrustDialogState(
         setIsCommitting(false);
       }
     },
-    [commitTrustLevel, pendingTrustLevel, addItem, workingDirectory, onExit],
+    [
+      addItem,
+      commitTrustLevel,
+      committingRef,
+      onExit,
+      pendingTrustLevel,
+      setIsCommitting,
+      setShowUpdatedPrompt,
+      workingDirectory,
+    ],
   );
+}
+
+function useTrustDialogState(
+  onExit: () => void,
+  addItem: UseHistoryManagerReturn['addItem'],
+  config?: PermissionsTrustRuntime,
+) {
+  const trust = usePermissionsModifyTrust(config);
+  const {
+    pendingTrustLevel,
+    effectiveLocalTrustLevel,
+    isIdeTrusted,
+    isParentTrusted,
+    committedTrustLevel,
+    effectiveTrust,
+    workingDirectory,
+    parentFolderName,
+  } = trust;
+  const [showUpdatedPrompt, setShowUpdatedPrompt] = useState(false);
+  const [isCommitting, setIsCommitting] = useState(false);
+  const committingRef = useRef(false);
+  const getDisplayText = useCallback(
+    (level: TrustLevel | undefined): string =>
+      getTrustLevelDisplay(level, isIdeTrusted, isParentTrusted),
+    [isIdeTrusted, isParentTrusted],
+  );
+  const { options, initialIndex } = useTrustFormOptions(
+    workingDirectory,
+    parentFolderName,
+    pendingTrustLevel ?? effectiveLocalTrustLevel,
+  );
+  const handleSelect = useTrustSelectionHandler({
+    addItem,
+    commitTrustLevel: trust.commitTrustLevel,
+    onExit,
+    pendingTrustLevel,
+    setIsCommitting,
+    setShowUpdatedPrompt,
+    committingRef,
+    workingDirectory,
+  });
 
   const warningMessage = getWarningMessage(
     isIdeTrusted,

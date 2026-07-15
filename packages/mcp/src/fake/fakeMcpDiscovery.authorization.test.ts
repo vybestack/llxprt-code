@@ -63,6 +63,32 @@ describe('applyFakeServerDiscovery authorization', () => {
     expect(getMCPServerStatus(name)).toBe(MCPServerStatus.DISCONNECTED);
   });
 
+  it('removes the abort listener after latency completes', async () => {
+    vi.useFakeTimers();
+    const name = 'latency-listener-cleanup';
+    const registry = createToolRegistry();
+    const controller = new AbortController();
+    const removeEventListener = vi.spyOn(
+      controller.signal,
+      'removeEventListener',
+    );
+
+    const discovery = applyFakeServerDiscovery(
+      name,
+      registry,
+      fixtureWithTool(name, 50),
+      () => true,
+      controller.signal,
+    );
+    await vi.advanceTimersByTimeAsync(50);
+    await discovery;
+
+    expect(removeEventListener).toHaveBeenCalledWith(
+      'abort',
+      expect.any(Function),
+    );
+  });
+
   it('treats authorization callback failures as revoked authorization', async () => {
     const name = 'authorization-error';
     const registry = createToolRegistry();

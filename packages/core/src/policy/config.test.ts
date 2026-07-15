@@ -295,6 +295,7 @@ describe('policy config', () => {
       const rule = engineConfig.rules.find(
         (candidate) => candidate.source === 'Settings (Tools Allowed)',
       );
+      expect(rule).toBeDefined();
       expect(rule?.toolName).toBe('user-server__*');
       expect(rule).not.toHaveProperty('toolNamePrefix');
     });

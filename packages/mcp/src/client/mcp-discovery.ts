@@ -364,10 +364,20 @@ function rollbackAndDisconnect(
 function requireAuthorization(
   isAuthorized: (() => boolean) | undefined,
 ): () => boolean {
-  if (isAuthorized === undefined) {
+  if (!isAuthorized) {
     throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
   }
   return isAuthorized;
+}
+
+function readAuthorization(
+  options:
+    | {
+        isAuthorized: () => boolean;
+      }
+    | undefined,
+): (() => boolean) | undefined {
+  return options?.isAuthorized;
 }
 
 /**
@@ -378,15 +388,15 @@ export async function discoverTools(
   mcpServerConfig: MCPServerConfig,
   mcpClient: Client,
   cliConfig: Config,
-  messageBus?: MessageBus,
-  options?: {
+  messageBus: MessageBus | undefined,
+  options: {
     timeout?: number;
     signal?: AbortSignal;
-    isAuthorized?: () => boolean;
+    isAuthorized: () => boolean;
   },
 ): Promise<DiscoveredMCPTool[]> {
   const debug = new DebugLogger('llxprt:mcp:discovery');
-  const isAuthorized = requireAuthorization(options?.isAuthorized);
+  const isAuthorized = requireAuthorization(readAuthorization(options));
 
   try {
     debug.log(`Starting tool discovery for server: ${mcpServerName}`);
@@ -449,7 +459,7 @@ function processToolDefinition(
   mcpClient: Client,
   cliConfig: Config,
   debug: DebugLogger,
-  isAuthorized: () => boolean = () => false,
+  isAuthorized: () => boolean,
 ): DiscoveredMCPTool | undefined {
   try {
     debug.log(`Processing tool: ${toolDef.name}`);

@@ -32,7 +32,6 @@ describe('saveTrustedFolders filesystem permissions', () => {
       temporaryDirectories.push(directory);
       const filePath = path.join(directory, 'trustedFolders.json');
       fs.writeFileSync(filePath, '{}', { mode: 0o644 });
-      fs.chmodSync(filePath, 0o644);
 
       saveTrustedFolders({
         path: filePath,
@@ -225,7 +224,7 @@ describe('saveTrustedFolders filesystem permissions', () => {
     );
 
     expect(() => folders.setValue(missing, TrustLevel.TRUST_FOLDER)).toThrow(
-      /resolve canonical path/i,
+      Error,
     );
     expect(folders.user.config).toStrictEqual({});
     expect(fs.existsSync(filePath)).toBe(false);

@@ -188,22 +188,27 @@ export class LoadedTrustedFolders {
       : this.user.config[canonicalPath];
   }
 
+  private aliasesFor(canonicalPath: string): string[] {
+    return Object.keys(this.user.config).filter(
+      (rulePath) => resolveCanonicalPath(rulePath) === canonicalPath,
+    );
+  }
+
   snapshotValue(location: string): TrustedFolderSnapshot {
     const canonicalPath = requireCanonicalPath(location);
+    const aliases = new Set(this.aliasesFor(canonicalPath));
     return {
       canonicalPath,
-      entries: Object.entries(this.user.config).filter(
-        ([rulePath]) => resolveCanonicalPath(rulePath) === canonicalPath,
+      entries: Object.entries(this.user.config).filter(([rulePath]) =>
+        aliases.has(rulePath),
       ),
     };
   }
 
   restoreSnapshot(snapshot: TrustedFolderSnapshot): void {
     const originalConfig = { ...this.user.config };
-    for (const rulePath of Object.keys(this.user.config)) {
-      if (resolveCanonicalPath(rulePath) === snapshot.canonicalPath) {
-        delete this.user.config[rulePath];
-      }
+    for (const rulePath of this.aliasesFor(snapshot.canonicalPath)) {
+      delete this.user.config[rulePath];
     }
     for (const [rulePath, trustLevel] of snapshot.entries) {
       this.user.config[rulePath] = trustLevel;
@@ -219,9 +224,7 @@ export class LoadedTrustedFolders {
   setValue(location: string, trustLevel: TrustLevel): void {
     const canonicalPath = requireCanonicalPath(location);
     const originalConfig = { ...this.user.config };
-    const aliases = Object.keys(this.user.config).filter(
-      (rulePath) => resolveCanonicalPath(rulePath) === canonicalPath,
-    );
+    const aliases = this.aliasesFor(canonicalPath);
     for (const alias of aliases) {
       delete this.user.config[alias];
     }
@@ -237,9 +240,7 @@ export class LoadedTrustedFolders {
   deleteValue(location: string): void {
     const canonicalPath = requireCanonicalPath(location);
     const originalConfig = { ...this.user.config };
-    const aliases = Object.keys(this.user.config).filter(
-      (rulePath) => resolveCanonicalPath(rulePath) === canonicalPath,
-    );
+    const aliases = this.aliasesFor(canonicalPath);
     if (aliases.length === 0) {
       return;
     }

@@ -12,7 +12,6 @@ import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
 import { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
 import type { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
-
 vi.mock('./mcp-client.js', () => ({
   McpClient: vi.fn(),
   MCPDiscoveryState: {

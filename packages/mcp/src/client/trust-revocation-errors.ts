@@ -4,10 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export function appendFailures(target: unknown[], error: unknown): void {
+export function appendFailures(
+  target: unknown[],
+  error: unknown,
+  visited = new Set<AggregateError>(),
+): void {
   if (error instanceof AggregateError) {
+    if (visited.has(error)) {
+      return;
+    }
+    visited.add(error);
     for (const nestedError of error.errors) {
-      appendFailures(target, nestedError);
+      appendFailures(target, nestedError, visited);
     }
     return;
   }

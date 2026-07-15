@@ -16,6 +16,7 @@ import {
   getTrustCommitErrorMessage,
   shouldDismissTrustDialog,
   buildTrustLevelOptions,
+  combineTrustUpdateFailure,
   findInitialTrustOptionIndex,
 } from './trustDialogHelpers.js';
 
@@ -114,6 +115,35 @@ describe('trustDialogHelpers', () => {
       ).toStrictEqual({
         savedLocalFallback: 'Trusted',
         effectiveNow: 'Not trusted (via IDE)',
+      });
+    });
+    describe('combineTrustUpdateFailure', () => {
+      it('retains the original error when rollback succeeds', () => {
+        const error = new Error('update failed');
+
+        expect(
+          combineTrustUpdateFailure(error, [], 'rollback failed'),
+        ).toStrictEqual({
+          error,
+          rollbackSucceeded: true,
+        });
+      });
+
+      it('aggregates the update and every rollback failure', () => {
+        const error = new Error('update failed');
+        const rollbackFailure = new Error('restore failed');
+
+        const result = combineTrustUpdateFailure(
+          error,
+          [rollbackFailure],
+          'rollback failed',
+        );
+
+        expect(result.rollbackSucceeded).toBe(false);
+        expect(result.error).toMatchObject({
+          message: 'rollback failed',
+          errors: [error, rollbackFailure],
+        });
       });
     });
   });

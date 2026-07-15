@@ -157,15 +157,11 @@ describe('mcp-client', () => {
       );
       await client.connect();
       const discovery = client.discover(createTrustedConfig());
-      try {
-        await vi.waitFor(() => expect(resourceSignal).toBeDefined());
-        await client.disconnect();
+      await vi.waitFor(() => expect(resourceSignal).toBeDefined());
+      await client.disconnect();
 
-        expect(resourceSignal?.aborted).toBe(true);
-        await expect(discovery).rejects.toMatchObject({ name: 'AbortError' });
-      } finally {
-        await client.disconnect();
-      }
+      expect(resourceSignal?.aborted).toBe(true);
+      await expect(discovery).rejects.toMatchObject({ name: 'AbortError' });
     });
 
     it('should not skip tools even if a parameter is missing a type', async () => {

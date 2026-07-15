@@ -41,7 +41,7 @@ describe('Config.setTrustedFolderLive', () => {
   it('updates local trust without running transitions before initialization', () => {
     const config = new Config({ ...baseParams, trustedFolder: false });
 
-    config.setTrustedFolderLive(true);
+    void config.setTrustedFolderLive(true);
 
     expect(config.isTrustedFolder()).toBe(true);
     expect(emitSpy).not.toHaveBeenCalled();
@@ -54,7 +54,7 @@ describe('Config.setTrustedFolderLive', () => {
     });
     expect(config.isTrustedFolder()).toBe(false);
 
-    config.setTrustedFolderLive(true);
+    void config.setTrustedFolderLive(true);
 
     expect(config.isTrustedFolder()).toBe(true);
   });
@@ -66,7 +66,7 @@ describe('Config.setTrustedFolderLive', () => {
     });
     expect(config.isTrustedFolder()).toBe(true);
 
-    config.setTrustedFolderLive(false);
+    void config.setTrustedFolderLive(false);
 
     expect(config.isTrustedFolder()).toBe(false);
   });
@@ -77,7 +77,7 @@ describe('Config.setTrustedFolderLive', () => {
       trustedFolder: false,
     });
 
-    config.setTrustedFolderLive(true);
+    void config.setTrustedFolderLive(true);
 
     expect(emitSpy).toHaveBeenCalledWith(true);
   });
@@ -88,7 +88,7 @@ describe('Config.setTrustedFolderLive', () => {
       trustedFolder: true,
     });
 
-    config.setTrustedFolderLive(false);
+    void config.setTrustedFolderLive(false);
 
     expect(emitSpy).toHaveBeenCalledWith(false);
   });
@@ -99,7 +99,7 @@ describe('Config.setTrustedFolderLive', () => {
       trustedFolder: true,
     });
 
-    config.setTrustedFolderLive(true);
+    void config.setTrustedFolderLive(true);
 
     expect(emitSpy).not.toHaveBeenCalled();
   });
@@ -110,7 +110,7 @@ describe('Config.setTrustedFolderLive', () => {
       trustedFolder: false,
     });
 
-    config.setTrustedFolderLive(false);
+    void config.setTrustedFolderLive(false);
 
     expect(emitSpy).not.toHaveBeenCalled();
   });
@@ -125,7 +125,7 @@ describe('Config.setTrustedFolderLive', () => {
       trustedFolder: false,
     });
 
-    config.setTrustedFolderLive(false);
+    void config.setTrustedFolderLive(false);
 
     expect(config.isTrustedFolder()).toBe(true);
     expect(emitSpy).not.toHaveBeenCalled();
@@ -141,7 +141,7 @@ describe('Config.setTrustedFolderLive', () => {
       trustedFolder: true,
     });
 
-    config.setTrustedFolderLive(true);
+    void config.setTrustedFolderLive(true);
 
     expect(config.isTrustedFolder()).toBe(false);
     expect(emitSpy).not.toHaveBeenCalled();
@@ -156,7 +156,7 @@ describe('Config.setTrustedFolderLive', () => {
       'Cannot enable privileged approval modes in an untrusted folder.',
     );
 
-    config.setTrustedFolderLive(true);
+    void config.setTrustedFolderLive(true);
 
     expect(() => config.setApprovalMode(ApprovalMode.YOLO)).not.toThrow();
   });
@@ -168,7 +168,7 @@ describe('Config.setTrustedFolderLive', () => {
     });
     config.setApprovalMode(ApprovalMode.YOLO);
 
-    config.setTrustedFolderLive(false);
+    void config.setTrustedFolderLive(false);
 
     expect(() => config.setApprovalMode(ApprovalMode.YOLO)).toThrow(
       'Cannot enable privileged approval modes in an untrusted folder.',
@@ -187,7 +187,7 @@ describe('Config.setTrustedFolderLive', () => {
         ...baseParams,
         trustedFolder: false,
       });
-      config.setTrustedFolderLive(true);
+      void config.setTrustedFolderLive(true);
 
       expect(received).toStrictEqual([true]);
     } finally {
@@ -204,7 +204,7 @@ describe('Config.setTrustedFolderLive', () => {
       config.setApprovalMode(ApprovalMode.YOLO);
       expect(config.getApprovalMode()).toBe(ApprovalMode.YOLO);
 
-      config.setTrustedFolderLive(false);
+      void config.setTrustedFolderLive(false);
 
       expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
     });
@@ -217,7 +217,7 @@ describe('Config.setTrustedFolderLive', () => {
       config.setApprovalMode(ApprovalMode.AUTO_EDIT);
       expect(config.getApprovalMode()).toBe(ApprovalMode.AUTO_EDIT);
 
-      config.setTrustedFolderLive(false);
+      void config.setTrustedFolderLive(false);
 
       expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
     });
@@ -229,7 +229,7 @@ describe('Config.setTrustedFolderLive', () => {
       });
       config.setApprovalMode(ApprovalMode.DEFAULT);
 
-      config.setTrustedFolderLive(false);
+      void config.setTrustedFolderLive(false);
 
       expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
     });
@@ -241,7 +241,7 @@ describe('Config.setTrustedFolderLive', () => {
       });
       config.setApprovalMode(ApprovalMode.DEFAULT);
 
-      config.setTrustedFolderLive(true);
+      void config.setTrustedFolderLive(true);
 
       expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
     });
@@ -260,7 +260,7 @@ describe('Config.setTrustedFolderLive', () => {
       configA.setApprovalMode(ApprovalMode.YOLO);
       configB.setApprovalMode(ApprovalMode.YOLO);
 
-      configA.setTrustedFolderLive(false);
+      void configA.setTrustedFolderLive(false);
 
       expect(configA.isTrustedFolder()).toBe(false);
       expect(configA.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
@@ -278,7 +278,7 @@ describe('Config.setTrustedFolderLive', () => {
         trustedFolder: false,
       });
 
-      configA.setTrustedFolderLive(true);
+      void configA.setTrustedFolderLive(true);
 
       expect(configA.isTrustedFolder()).toBe(true);
       expect(configB.isTrustedFolder()).toBe(false);
@@ -304,7 +304,7 @@ describe('Config.setTrustedFolderLive', () => {
         source: 'User Defined',
       });
 
-      config.setTrustedFolderLive(false);
+      void config.setTrustedFolderLive(false);
 
       expect(
         config
@@ -335,7 +335,7 @@ describe('Config.setTrustedFolderLive', () => {
           .evaluate('trusted-server__tool', {}, 'trusted-server'),
       ).toBe(PolicyDecision.ASK_USER);
 
-      config.setTrustedFolderLive(true);
+      void config.setTrustedFolderLive(true);
 
       expect(
         config

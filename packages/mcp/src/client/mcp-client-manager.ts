@@ -40,10 +40,12 @@ import { RetryableClientDisconnections } from './retryable-client-disconnections
 import { collectMcpInstructions } from './mcp-instructions.js';
 import {
   collectMcpServers,
+  consumeMcpContextRefreshes,
   isAllowedMcpServer,
-  isRefreshRequested,
   recordPendingDiscoveryTimeouts,
   removeMcpServerArtifacts,
+  removeMcpServerState,
+  waitForMcpRefreshDebounce,
 } from './mcp-client-manager-helpers.js';
 
 const logger = new DebugLogger('llxprt:mcp-client-manager');
@@ -65,13 +67,9 @@ export const DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS = 10_000;
  */
 export class McpClientManager {
   private clients: Map<string, McpClient> = new Map();
-  private readonly clientVersion: string;
-  private readonly toolRegistry: ToolRegistry;
-  private readonly cliConfig: Config;
   // If we have ongoing MCP client discovery, this completes once that is done.
   private discoveryPromise: Promise<void> | undefined;
   private discoveryState: MCPDiscoveryState = MCPDiscoveryState.NOT_STARTED;
-  private readonly eventEmitter?: EventEmitter;
   private pendingRefreshPromise: Promise<void> | null = null;
   private pendingRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   private pendingRefreshTimerResolve: (() => void) | undefined;
@@ -80,21 +78,7 @@ export class McpClientManager {
     name: string;
     extensionName: string;
   }> = [];
-  /**
-   * Per-server discovery failure messages, keyed by server name. Populated by
-   * the fake discovery seam (and clearable on restart) so callers can detect a
-   * failed discovery without inspecting feedback events.
-   *
-   * @plan:PLAN-20260617-COREAPI.P22
-   * @requirement:REQ-013
-   */
   private readonly discoveryFailures: Map<string, string> = new Map();
-  /**
-   * Monotonically increasing generation counter incremented on every trust
-   * revocation. In-flight discoveries capture the generation before their
-   * first `await` and reject the result if the generation changed, preventing
-   * a client from being registered after trust was revoked.
-   */
   private trustGeneration = 0;
   private readonly discoveringServers = new Map<string, Promise<void>>();
   private readonly queuedDiscoveryConfigs = new Map<string, MCPServerConfig>();
@@ -102,36 +86,18 @@ export class McpClientManager {
   private readonly quarantinedClients = new Map<string, McpClient>();
   private readonly clientDisconnections = new RetryableClientDisconnections();
   private stopped = false;
-  /**
-   * Server names whose discovery is currently in flight. Used by the bounded
-   * {@link whenDiscoverySettled} gate so a never-settling server can be
-   * recorded as a failure once the settle timeout elapses (issue #2516).
-   */
   private readonly pendingDiscoveryServers: Set<string> = new Set();
   private readonly fakeDiscoveryControllers = new Map<
     string,
     AbortController
   >();
-  /**
-   * Per-instance bound for {@link whenDiscoverySettled}. Defaults to
-   * {@link DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS}; overridable for
-   * high-latency environments or tests.
-   */
-  private readonly settleTimeoutMs: number;
-
   constructor(
-    clientVersion: string,
-    toolRegistry: ToolRegistry,
-    cliConfig: Config,
-    eventEmitter?: EventEmitter,
-    settleTimeoutMs: number = DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS,
-  ) {
-    this.clientVersion = clientVersion;
-    this.toolRegistry = toolRegistry;
-    this.cliConfig = cliConfig;
-    this.eventEmitter = eventEmitter;
-    this.settleTimeoutMs = settleTimeoutMs;
-  }
+    private readonly clientVersion: string,
+    private readonly toolRegistry: ToolRegistry,
+    private readonly cliConfig: Config,
+    private readonly eventEmitter?: EventEmitter,
+    private readonly settleTimeoutMs: number = DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS,
+  ) {}
 
   async stopExtension(extension: LlxprtExtension) {
     logger.log(`Unloading extension: ${extension.name}`);
@@ -738,12 +704,12 @@ export class McpClientManager {
     this.clients.clear();
     this.connectingClients.clear();
     for (const name of serverNames) {
-      updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED);
-      try {
-        this.removeServerArtifacts(name);
-      } catch (error) {
-        appendFailures(failures, error);
-      }
+      removeMcpServerState(
+        name,
+        () => updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED),
+        () => this.removeServerArtifacts(name),
+        failures,
+      );
     }
     try {
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
@@ -857,12 +823,12 @@ export class McpClientManager {
     this.connectingClients.clear();
     this.quarantinedClients.clear();
     for (const name of serverNames) {
-      updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED);
-      try {
-        this.removeServerArtifacts(name);
-      } catch (error) {
-        appendFailures(failures, error);
-      }
+      removeMcpServerState(
+        name,
+        () => updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED),
+        () => this.removeServerArtifacts(name),
+        failures,
+      );
     }
     for (const result of await Promise.allSettled([
       ...Array.from(clientsByIdentity.keys(), (client) =>
@@ -941,42 +907,44 @@ export class McpClientManager {
     return this.clients.get(name);
   }
 
-  private async scheduleMcpContextRefresh(): Promise<void> {
-    if (this.stopped) {
-      return Promise.resolve();
+  private async consumeMcpContextRefreshes(): Promise<void> {
+    try {
+      await consumeMcpContextRefreshes({
+        isStopped: () => this.stopped,
+        readRequested: () => this.refreshRequestedWhilePending,
+        clearRequested: () => {
+          this.refreshRequestedWhilePending = false;
+        },
+        waitForDebounce: () =>
+          waitForMcpRefreshDebounce(
+            (timer) => {
+              this.pendingRefreshTimer = timer;
+            },
+            () => {
+              this.pendingRefreshTimer = undefined;
+            },
+            (resolve) => {
+              this.pendingRefreshTimerResolve = resolve;
+            },
+          ),
+        refresh: () => this.cliConfig.refreshMcpContext(),
+        reportError: (error) =>
+          debugLogger.error(
+            `Error refreshing MCP context: ${getErrorMessage(error)}`,
+          ),
+      });
+    } finally {
+      this.pendingRefreshPromise = null;
     }
+  }
+
+  private async scheduleMcpContextRefresh(): Promise<void> {
+    if (this.stopped) return Promise.resolve();
     if (this.pendingRefreshPromise) {
       this.refreshRequestedWhilePending = true;
       return this.pendingRefreshPromise;
     }
-
-    this.pendingRefreshPromise = (async () => {
-      try {
-        this.refreshRequestedWhilePending = false;
-        await new Promise<void>((resolve) => {
-          this.pendingRefreshTimerResolve = resolve;
-          this.pendingRefreshTimer = setTimeout(() => {
-            this.pendingRefreshTimer = undefined;
-            this.pendingRefreshTimerResolve = undefined;
-            resolve();
-          }, 300);
-        });
-        if (!this.stopped) {
-          await this.cliConfig.refreshMcpContext();
-          this.pendingRefreshPromise = null;
-          if (isRefreshRequested(() => this.refreshRequestedWhilePending)) {
-            await this.scheduleMcpContextRefresh();
-          }
-        }
-      } catch (error) {
-        debugLogger.error(
-          `Error refreshing MCP context: ${getErrorMessage(error)}`,
-        );
-      } finally {
-        this.pendingRefreshPromise = null;
-      }
-    })();
-
+    this.pendingRefreshPromise = this.consumeMcpContextRefreshes();
     return this.pendingRefreshPromise;
   }
 

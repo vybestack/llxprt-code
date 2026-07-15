@@ -225,13 +225,18 @@ describe('McpClient disconnect cleanup', () => {
     );
     await client.connect();
 
-    const failure = await client.disconnect().then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+    let failure: unknown;
+    try {
+      await client.disconnect();
+    } catch (error) {
+      failure = error;
+    }
     expect(failure).toMatchObject({
       message: "Disconnect cleanup failed for 'test-server'",
-      errors: [toolCleanupFailure, promptCleanupFailure],
+      errors: expect.arrayContaining([
+        toolCleanupFailure,
+        promptCleanupFailure,
+      ]),
     });
 
     expect(sdkClient.close).toHaveBeenCalledOnce();

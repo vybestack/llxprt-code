@@ -9,6 +9,7 @@ import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-
 import type { McpClient } from './mcp-client.js';
 import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import { appendFailures } from './trust-revocation-errors.js';
 
 export function isAllowedMcpServer(
   name: string,
@@ -54,12 +55,72 @@ export function isRefreshRequested(readRequested: () => boolean): boolean {
   return readRequested();
 }
 
+export async function waitForMcpRefreshDebounce(
+  setTimer: (timer: ReturnType<typeof setTimeout>) => void,
+  clearTimer: () => void,
+  setResolve: (resolve: (() => void) | undefined) => void,
+): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setResolve(resolve);
+    setTimer(
+      setTimeout(() => {
+        clearTimer();
+        setResolve(undefined);
+        resolve();
+      }, 300),
+    );
+  });
+}
+
+export async function consumeMcpContextRefreshes({
+  isStopped,
+  readRequested,
+  clearRequested,
+  waitForDebounce,
+  refresh,
+  reportError,
+}: {
+  isStopped: () => boolean;
+  readRequested: () => boolean;
+  clearRequested: () => void;
+  waitForDebounce: () => Promise<void>;
+  refresh: () => Promise<void>;
+  reportError: (error: unknown) => void;
+}): Promise<void> {
+  do {
+    clearRequested();
+    await waitForDebounce();
+    if (!isStopped()) {
+      try {
+        await refresh();
+      } catch (error) {
+        reportError(error);
+      }
+    }
+  } while (!isStopped() && isRefreshRequested(readRequested));
+}
+
 export function collectMcpServers(
   clients: ReadonlyMap<string, McpClient>,
 ): Record<string, MCPServerConfig> {
   return Object.fromEntries(
     Array.from(clients, ([name, client]) => [name, client.getServerConfig()]),
   );
+}
+
+export function removeMcpServerState(
+  name: string,
+  updateStatus: () => void,
+  removeArtifacts: () => void,
+  failures: unknown[],
+): void {
+  for (const cleanup of [updateStatus, removeArtifacts]) {
+    try {
+      cleanup();
+    } catch (error) {
+      appendFailures(failures, error);
+    }
+  }
 }
 
 export function removeMcpServerArtifacts(
@@ -80,10 +141,7 @@ export function removeMcpServerArtifacts(
       failures.push(error);
     }
   }
-  if (failures.length === 1) {
-    throw failures[0];
-  }
-  if (failures.length > 1) {
+  if (failures.length > 0) {
     throw new AggregateError(
       failures,
       `Failed to remove MCP artifacts for '${name}'`,

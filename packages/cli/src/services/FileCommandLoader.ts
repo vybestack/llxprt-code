@@ -142,9 +142,11 @@ export class FileCommandLoader implements ICommandLoader {
   }
 
   private canUseFileCommands(): boolean {
+    const config = this.config;
     return (
-      this.config?.getFolderTrust() !== true ||
-      this.config.isTrustedFolder() === true
+      config == null ||
+      config.getFolderTrust() !== true ||
+      config.isTrustedFolder() === true
     );
   }
 

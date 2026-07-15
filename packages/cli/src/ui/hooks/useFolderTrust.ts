@@ -19,7 +19,10 @@ import {
 import { type HistoryItemWithoutId, MessageType } from '../types.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import process from 'node:process';
-import { getTrustCommitErrorMessage } from '../trustDialogHelpers.js';
+import {
+  combineTrustUpdateFailure,
+  getTrustCommitErrorMessage,
+} from '../trustDialogHelpers.js';
 
 export type FolderTrustRuntime = Pick<
   CliUiRuntime,
@@ -70,6 +73,7 @@ async function applyFolderTrustChoice(
   config: FolderTrustRuntime | undefined,
   addItem: AddItemFn | undefined,
   setDialogOpen: SetDialogOpenFn,
+  mountedRef: React.MutableRefObject<boolean>,
 ): Promise<void> {
   const trustLevel = getTrustLevelFromChoice(choice);
   if (trustLevel === null) {
@@ -93,7 +97,9 @@ async function applyFolderTrustChoice(
         workingDirectory,
       ) ?? false;
     await config?.setTrustedFolderLive(newIsTrusted);
-    setDialogOpen(false);
+    if (mountedRef.current) {
+      setDialogOpen(false);
+    }
   } catch (error) {
     const rollbackFailures: unknown[] = [];
     if (trustedFolders !== undefined && savedSnapshot !== undefined) {
@@ -110,17 +116,18 @@ async function applyFolderTrustChoice(
         rollbackFailures.push(rollbackError);
       }
     }
-    const reportedError =
-      rollbackFailures.length === 0
-        ? error
-        : new AggregateError(
-            [error, ...rollbackFailures],
-            'Trust update and rollback failed',
-          );
+    if (!mountedRef.current) {
+      return;
+    }
+    const failure = combineTrustUpdateFailure(
+      error,
+      rollbackFailures,
+      'Trust update and rollback failed',
+    );
     const message = `${getTrustCommitErrorMessage(
       failedPhase,
-      reportedError,
-      rollbackFailures.length === 0,
+      failure.error,
+      failure.rollbackSucceeded,
     )} Exiting LLxprt Code.`;
     debug.error(message);
     addItem?.({ type: MessageType.ERROR, text: message }, Date.now());
@@ -143,6 +150,14 @@ export const useFolderTrust = (
   );
   const startupMessageSent = useRef(false);
   const previousFolderTrust = useRef(folderTrust);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const folderTrustChanged = previousFolderTrust.current !== folderTrust;
@@ -165,6 +180,7 @@ export const useFolderTrust = (
         config,
         addItem,
         setIsFolderTrustDialogOpen,
+        mountedRef,
       ),
     [addItem, config, settings],
   );

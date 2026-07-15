@@ -15,6 +15,7 @@ import {
 } from '../../config/trustedFolders.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useIdeTrustListener } from './useIdeTrustListener.js';
+import { combineTrustUpdateFailure } from '../trustDialogHelpers.js';
 import process from 'node:process';
 
 export type PermissionsTrustRuntime = Pick<
@@ -155,18 +156,17 @@ async function commitSavedTrustLevel(
     } catch (rollbackError) {
       rollbackFailures.push(rollbackError);
     }
+    const failure = combineTrustUpdateFailure(
+      error,
+      rollbackFailures,
+      'Live trust update and rollback failed',
+    );
     return {
       result: {
         success: false,
         phase: 'live',
-        error:
-          rollbackFailures.length === 0
-            ? error
-            : new AggregateError(
-                [error, ...rollbackFailures],
-                'Live trust update and rollback failed',
-              ),
-        rollbackSucceeded: rollbackFailures.length === 0,
+        error: failure.error,
+        rollbackSucceeded: failure.rollbackSucceeded,
       },
     };
   }

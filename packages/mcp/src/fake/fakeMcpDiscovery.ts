@@ -201,15 +201,16 @@ async function waitForLatency(
 ): Promise<void> {
   if (latencyMs <= 0) return;
   await new Promise<void>((resolve) => {
-    const timeout = setTimeout(resolve, latencyMs);
-    signal?.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(timeout);
-        resolve();
-      },
-      { once: true },
-    );
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', finish);
+      resolve();
+    };
+    const timeout = setTimeout(finish, latencyMs);
+    signal?.addEventListener('abort', finish, { once: true });
   });
 }
 

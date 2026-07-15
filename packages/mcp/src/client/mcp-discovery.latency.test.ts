@@ -40,8 +40,23 @@ vi.mock('./mcp-status.js', () => ({
   }),
 }));
 
+const REVOKE_BEFORE_PUBLICATION_CHECK = 9;
+const REVOKE_DURING_TOOL_PUBLICATION_CHECK = 12;
+const REVOKE_AFTER_CONNECT_CHECK = 1;
+
+function createRevocableTrustConfig(revokeAfterChecks: number): Config {
+  let trustChecks = 0;
+  return {
+    isTrustedFolder: () => {
+      trustChecks++;
+      return trustChecks <= revokeAfterChecks;
+    },
+  } as Config;
+}
+
 describe('connectAndDiscover revocation-during-latency', () => {
   beforeEach(() => {
+    connection.client = undefined;
     connectToMcpServerMock.mockImplementation(() =>
       Promise.resolve(connection.client),
     );
@@ -87,13 +102,7 @@ describe('connectAndDiscover revocation-during-latency', () => {
     const promptRegistry = new PromptRegistry();
     const registerPromptSpy = vi.spyOn(promptRegistry, 'registerPrompt');
 
-    let trustCalls = 0;
-    const config = {
-      isTrustedFolder: () => {
-        trustCalls++;
-        return trustCalls <= 9;
-      },
-    } as Config;
+    const config = createRevocableTrustConfig(REVOKE_BEFORE_PUBLICATION_CHECK);
 
     await connectAndDiscover(
       '0.0.1',
@@ -155,13 +164,9 @@ describe('connectAndDiscover revocation-during-latency', () => {
     const { registry, registeredTools } = makeToolRegistry();
     const promptRegistry = new PromptRegistry();
 
-    let trustCalls = 0;
-    const config = {
-      isTrustedFolder: () => {
-        trustCalls++;
-        return trustCalls <= 12;
-      },
-    } as Config;
+    const config = createRevocableTrustConfig(
+      REVOKE_DURING_TOOL_PUBLICATION_CHECK,
+    );
 
     await connectAndDiscover(
       '0.0.1',
@@ -188,13 +193,7 @@ describe('connectAndDiscover revocation-during-latency', () => {
     const { registry, registeredTools } = makeToolRegistry();
     const promptRegistry = new PromptRegistry();
 
-    let trustCalls = 0;
-    const config = {
-      isTrustedFolder: () => {
-        trustCalls++;
-        return trustCalls <= 1;
-      },
-    } as Config;
+    const config = createRevocableTrustConfig(REVOKE_AFTER_CONNECT_CHECK);
 
     await connectAndDiscover(
       '0.0.1',

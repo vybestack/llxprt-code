@@ -448,6 +448,26 @@ describe('permissionsCommand', () => {
       expect(setTrustedFolderLive).toHaveBeenCalledWith(true);
     });
 
+    it('returns a user-facing error when trusted-folder loading fails', async () => {
+      vi.mocked(trustedFolders.loadTrustedFolders).mockImplementationOnce(
+        () => {
+          throw new Error('load failed');
+        },
+      );
+      const mockContext = createMockContext();
+
+      const result = await permissionsCommand.action?.(
+        mockContext,
+        `TRUST_FOLDER ${workspacePath}`,
+      );
+
+      expect(result).toMatchObject({
+        messageType: 'error',
+        content: expect.stringContaining('load failed'),
+      });
+      expect(mockSetValue).not.toHaveBeenCalled();
+    });
+
     it('should call setTrustedFolderLive(true) when TRUST_FOLDER covers cwd as a descendant', async () => {
       const setTrustedFolderLive = vi.fn();
       const mockContext = createMockContext({ setTrustedFolderLive });

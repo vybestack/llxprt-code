@@ -67,6 +67,7 @@ vi.mock('./mcp-status.js', () => ({
 
 describe('MCP capability authorization', () => {
   beforeEach(() => {
+    connection.client = undefined;
     connectToMcpServerMock.mockImplementation(() =>
       Promise.resolve(connection.client),
     );
@@ -347,7 +348,12 @@ describe('MCP capability authorization', () => {
     } as unknown as Client;
 
     await expect(
-      discoverTools('server', { command: 'server' }, client, {} as Config),
+      Reflect.apply(discoverTools, undefined, [
+        'server',
+        { command: 'server' },
+        client,
+        {} as Config,
+      ]),
     ).rejects.toThrow(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
     expect(listTools).not.toHaveBeenCalled();
     expect(callTool).not.toHaveBeenCalled();

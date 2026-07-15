@@ -69,7 +69,7 @@ describe('FolderTrustChanged event', () => {
     expect(second).toStrictEqual([false]);
   });
 
-  it('continues notifying trust listeners after one listener throws', () => {
+  it('throws after notifying all trust listeners when one listener fails', () => {
     const received: boolean[] = [];
     events.on(CoreEvent.FolderTrustChanged, () => {
       throw new Error('listener failed');

@@ -17,7 +17,10 @@ import {
   resolveLocalWorkspaceTrust,
   TrustLevel,
 } from '../../config/trustedFolders.js';
-import { getTrustCommitErrorMessage } from '../trustDialogHelpers.js';
+import {
+  combineTrustUpdateFailure,
+  getTrustCommitErrorMessage,
+} from '../trustDialogHelpers.js';
 
 const VALID_TRUST_LEVELS = [
   TrustLevel.TRUST_FOLDER,
@@ -111,12 +114,16 @@ export const permissionsCommand: SlashCommand = {
     const { trustLevel, targetPath } = parsed;
 
     return (async (): Promise<OpenDialogActionReturn | MessageActionReturn> => {
-      const trustedFolders = loadTrustedFolders();
-      const savedSnapshot = trustedFolders.snapshotValue(targetPath);
+      let trustedFolders: ReturnType<typeof loadTrustedFolders> | undefined;
+      let savedSnapshot:
+        | ReturnType<ReturnType<typeof loadTrustedFolders>['snapshotValue']>
+        | undefined;
       const config = context.services.config;
       const previousLiveTrust = config?.isTrustedFolder() ?? false;
       let failedPhase: 'persistence' | 'live' = 'persistence';
       try {
+        trustedFolders = loadTrustedFolders();
+        savedSnapshot = trustedFolders.snapshotValue(targetPath);
         trustedFolders.setValue(targetPath, trustLevel);
         if (config) {
           failedPhase = 'live';
@@ -136,32 +143,32 @@ export const permissionsCommand: SlashCommand = {
         };
       } catch (error) {
         const rollbackFailures: unknown[] = [];
-        try {
-          trustedFolders.restoreSnapshot(savedSnapshot);
-        } catch (rollbackError) {
-          rollbackFailures.push(rollbackError);
+        if (trustedFolders !== undefined && savedSnapshot !== undefined) {
+          try {
+            trustedFolders.restoreSnapshot(savedSnapshot);
+          } catch (rollbackError) {
+            rollbackFailures.push(rollbackError);
+          }
         }
-        if (config) {
+        if (config && failedPhase === 'live') {
           try {
             await config.setTrustedFolderLive(previousLiveTrust);
           } catch (rollbackError) {
             rollbackFailures.push(rollbackError);
           }
         }
-        const reportedError =
-          rollbackFailures.length === 0
-            ? error
-            : new AggregateError(
-                [error, ...rollbackFailures],
-                'Trust update and rollback failed',
-              );
+        const failure = combineTrustUpdateFailure(
+          error,
+          rollbackFailures,
+          'Trust update and rollback failed',
+        );
         return {
           type: 'message',
           messageType: 'error',
           content: getTrustCommitErrorMessage(
             failedPhase,
-            reportedError,
-            rollbackFailures.length === 0,
+            failure.error,
+            failure.rollbackSucceeded,
           ),
         };
       }

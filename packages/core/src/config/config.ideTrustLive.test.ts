@@ -9,9 +9,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const ideClient = vi.hoisted(() => ({
   addTrustChangeListener: vi.fn(),
   removeTrustChangeListener: vi.fn(),
-  getConnectionStatus: vi.fn(),
-  initialize: vi.fn(),
-  shutdown: vi.fn(),
 }));
 const getIdeClient = vi.hoisted(() => vi.fn());
 let trustChangeListener: ((trusted: boolean | undefined) => void) | undefined;
