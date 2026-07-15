@@ -557,7 +557,7 @@
     "js-yaml": "^4.2.0",
     "marked": "^15.0.12",
     "micromatch": "^4.0.8",
-    "mime-types": "^2.1.35",
+    "mime-types": "^3.0.1",
     "mnemonist": "^0.40.3",
     "node-fetch": "^3.3.2",
     "open": "^10.1.2",

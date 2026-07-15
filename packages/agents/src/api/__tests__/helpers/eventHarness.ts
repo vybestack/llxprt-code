@@ -45,19 +45,16 @@ import type {
 } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
-// ─── Adapter driver (variable-specifier dynamic import → natural RED) ───────
-
-const ADAPTER_MODULE = '../../eventAdapter.js';
+// ─── Adapter driver (dynamic import → natural RED) ──────────────────────────
 
 /**
- * Drives mapLoopStream via a variable-specifier dynamic import so TS cannot
- * statically resolve the module. At RED the import rejects (module missing);
- * at GREEN (P14) it resolves and drains to an AgentEvent[].
+ * Drives mapLoopStream via a dynamic import. At RED the import rejects
+ * (module missing); at GREEN (P14) it resolves and drains to an AgentEvent[].
  */
 export async function runAdapter(
   loopEvents: readonly AgenticLoopEvent[],
 ): Promise<AgentEvent[]> {
-  const mod: Record<string, unknown> = await import(ADAPTER_MODULE);
+  const mod: Record<string, unknown> = await import('../../eventAdapter.js');
   const fn = mod['mapLoopStream'];
   if (typeof fn !== 'function') {
     throw new Error('mapLoopStream not available');

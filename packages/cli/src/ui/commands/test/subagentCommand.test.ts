@@ -78,8 +78,8 @@ const loadSubagentCommandModule = async () => {
   // Reset modules to ensure fresh import with mocks
   vi.resetModules();
 
-  // Import module
-  const mod = await import('../subagentCommand.js?t=' + Date.now());
+  // Import module — vi.resetModules() above ensures a fresh evaluation
+  const mod = await import('../subagentCommand.js');
   subagentCommand = mod.subagentCommand;
 };
 
