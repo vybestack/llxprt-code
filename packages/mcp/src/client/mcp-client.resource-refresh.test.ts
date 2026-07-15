@@ -67,11 +67,34 @@ function createMockSdkClient(
         .mockReturnValue({ resources: { listChanged: true } }),
       request,
     },
+
     getResourceListHandler: () => resourceListHandler,
   };
 }
 
 describe('McpClient resource refresh', () => {
+  function createTestMcpClient(
+    config: Config,
+    resourceRegistry = new ResourceRegistry(),
+    toolRegistry: ToolRegistry = {
+      registerTool: vi.fn(),
+      sortTools: vi.fn(),
+      removeMcpToolsByServer: vi.fn(),
+      getMessageBus: vi.fn(),
+    } as unknown as ToolRegistry,
+  ): McpClient {
+    return new McpClient(
+      'test-server',
+      { command: 'test-command' },
+      toolRegistry,
+      { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
+      resourceRegistry,
+      new WorkspaceContext('/workspace'),
+      config,
+      false,
+      '0.0.1',
+    );
+  }
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -87,22 +110,7 @@ describe('McpClient resource refresh', () => {
       close: vi.fn().mockResolvedValue(undefined),
     } as unknown as SdkClientStdioLib.StdioClientTransport);
     const trustedConfig = { isTrustedFolder: () => true } as Config;
-    const client = new McpClient(
-      'test-server',
-      { command: 'test-command' },
-      {
-        registerTool: vi.fn(),
-        sortTools: vi.fn(),
-        removeMcpToolsByServer: vi.fn(),
-        getMessageBus: vi.fn(),
-      } as unknown as ToolRegistry,
-      { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
-      new ResourceRegistry(),
-      new WorkspaceContext('/workspace'),
-      trustedConfig,
-      false,
-      '0.0.1',
-    );
+    const client = createTestMcpClient(trustedConfig);
     await client.connect();
     mockedClient.request.mockImplementation((_request, _schema, options) => {
       refreshSignal = options?.signal;
@@ -154,21 +162,7 @@ describe('McpClient resource refresh', () => {
       },
     );
     const config = { isTrustedFolder: () => trusted } as Config;
-    const client = new McpClient(
-      'test-server',
-      { command: 'test-command' },
-      {
-        registerTool: vi.fn(),
-        sortTools: vi.fn(),
-        getMessageBus: vi.fn(),
-      } as unknown as ToolRegistry,
-      {} as PromptRegistry,
-      resourceRegistry,
-      new WorkspaceContext('/workspace'),
-      config,
-      false,
-      '0.0.1',
-    );
+    const client = createTestMcpClient(config, resourceRegistry);
     await client.connect();
 
     await getResourceListHandler()?.({
@@ -197,21 +191,7 @@ describe('McpClient resource refresh', () => {
     );
     const resourceRegistry = new ResourceRegistry();
     const trustedConfig = { isTrustedFolder: () => true } as Config;
-    const client = new McpClient(
-      'test-server',
-      { command: 'test-command' },
-      {
-        registerTool: vi.fn(),
-        sortTools: vi.fn(),
-        getMessageBus: vi.fn(),
-      } as unknown as ToolRegistry,
-      {} as PromptRegistry,
-      resourceRegistry,
-      new WorkspaceContext('/workspace'),
-      trustedConfig,
-      false,
-      '0.0.1',
-    );
+    const client = createTestMcpClient(trustedConfig, resourceRegistry);
     await client.connect();
     await client.discover(trustedConfig);
     expect(resourceRegistry.getAllResources()).toHaveLength(1);
@@ -243,21 +223,7 @@ describe('McpClient resource refresh', () => {
     );
     const resourceRegistry = new ResourceRegistry();
     const config = { isTrustedFolder: () => false } as Config;
-    const client = new McpClient(
-      'test-server',
-      { command: 'test-command' },
-      {
-        registerTool: vi.fn(),
-        sortTools: vi.fn(),
-        getMessageBus: vi.fn(),
-      } as unknown as ToolRegistry,
-      {} as PromptRegistry,
-      resourceRegistry,
-      new WorkspaceContext('/workspace'),
-      config,
-      false,
-      '0.0.1',
-    );
+    const client = createTestMcpClient(config, resourceRegistry);
     await client.connect();
 
     await getResourceListHandler()?.({

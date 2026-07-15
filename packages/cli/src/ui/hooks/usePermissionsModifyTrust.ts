@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import * as path from 'node:path';
 import {
   loadTrustedFolders,
@@ -206,6 +206,7 @@ export function usePermissionsModifyTrust(
   const [effectiveTrust, setEffectiveTrust] = useState<boolean | undefined>(
     currentEffectiveTrust,
   );
+  const commitQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     setPendingTrustLevel(trustedFolders.getValue(normalizedCwd));
@@ -217,25 +218,33 @@ export function usePermissionsModifyTrust(
   }, [currentEffectiveTrust]);
 
   const commitTrustLevel = useCallback(
-    async (level?: TrustLevel): Promise<TrustCommitResult> => {
+    (level?: TrustLevel): Promise<TrustCommitResult> => {
       const nextLevel = level ?? pendingTrustLevel;
       if (nextLevel === undefined) {
-        return { success: true };
+        return Promise.resolve({ success: true });
       }
 
-      const commit = await commitSavedTrustLevel(
-        config,
-        trustedFolders,
-        normalizedCwd,
-        nextLevel,
+      const runCommit = async (): Promise<TrustCommitResult> => {
+        const commit = await commitSavedTrustLevel(
+          config,
+          trustedFolders,
+          normalizedCwd,
+          nextLevel,
+        );
+        if (!commit.result.success) {
+          return commit.result;
+        }
+        setEffectiveTrust(commit.effectiveTrust);
+        setPendingTrustLevel(nextLevel);
+        setCommittedLevel(nextLevel);
+        return { success: true };
+      };
+      const commit = commitQueueRef.current.then(runCommit, runCommit);
+      commitQueueRef.current = commit.then(
+        () => undefined,
+        () => undefined,
       );
-      if (!commit.result.success) {
-        return commit.result;
-      }
-      setEffectiveTrust(commit.effectiveTrust);
-      setPendingTrustLevel(nextLevel);
-      setCommittedLevel(nextLevel);
-      return { success: true };
+      return commit;
     },
     [pendingTrustLevel, trustedFolders, normalizedCwd, config],
   );

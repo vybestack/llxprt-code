@@ -95,7 +95,7 @@ export function getWarningMessage(
   }
   if (isParentTrusted === true) {
     if (currentTrustLevel === TrustLevel.DO_NOT_TRUST) {
-      return 'This folder is not trusted because a local rule overrides the trusted parent folder.';
+      return 'This folder is not trusted because a parent folder rule denies trust.';
     }
     return 'This folder is trusted via a parent folder setting. You can override it with a more specific rule.';
   }

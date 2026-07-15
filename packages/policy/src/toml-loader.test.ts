@@ -176,6 +176,19 @@ priority = 100
       expect(result.errors).toHaveLength(0);
     });
 
+    it('should preserve a standalone star as an exact tool name', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+toolName = "*"
+decision = "allow"
+priority = 100
+`);
+
+      expect(result.rules).toHaveLength(1);
+      expect(result.rules[0]?.toolName).toBe('*');
+      expect(result.rules[0]).not.toHaveProperty('toolNamePrefix');
+      expect(result.errors).toHaveLength(0);
+    });
     it('should filter rules by mode', async () => {
       const result = await runLoadPoliciesFromToml(`
 [[rule]]

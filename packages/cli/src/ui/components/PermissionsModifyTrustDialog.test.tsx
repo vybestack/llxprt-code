@@ -498,7 +498,7 @@ describe('PermissionsModifyTrustDialog', () => {
 
     expect(lastFrame()).toContain('Current: Not trusted (via parent folder)');
     expect(lastFrame()).toContain(
-      'This folder is not trusted because a local rule overrides the trusted parent folder.',
+      'This folder is not trusted because a parent folder rule denies trust.',
     );
     stdin.write('\r');
     await waitFor(() => {

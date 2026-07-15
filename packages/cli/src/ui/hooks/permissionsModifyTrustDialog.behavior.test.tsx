@@ -7,6 +7,7 @@
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '../../test-utils/render.js';
+import { createDeferred } from '../../test-utils/async.js';
 import {
   TrustLevel,
   type ResolvedTrustRule,
@@ -282,6 +283,51 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     expect(result.current.pendingTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
     expect(result.current.effectiveTrust).toBe(false);
     expect(result.current.committedTrustLevel).toBeUndefined();
+  });
+
+  it('serializes concurrent commits and preserves the final selection', async () => {
+    const firstLiveUpdate = createDeferred<void>();
+    let liveTrust = false;
+    const setTrustedFolderLive = vi
+      .fn<(trusted: boolean) => Promise<void>>()
+      .mockImplementationOnce(async (trusted) => {
+        await firstLiveUpdate.promise;
+        liveTrust = trusted;
+      })
+      .mockImplementation(async (trusted) => {
+        liveTrust = trusted;
+      });
+    const config: PermissionsTrustRuntime = {
+      getWorkingDir: () => '/configured/workspace',
+      getFolderTrust: () => true,
+      getIdeClient: () => undefined,
+      isTrustedFolder: () => liveTrust,
+      setTrustedFolderLive,
+    };
+    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+
+    let firstCommit: ReturnType<typeof result.current.commitTrustLevel>;
+    let secondCommit: ReturnType<typeof result.current.commitTrustLevel>;
+    act(() => {
+      firstCommit = result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
+      secondCommit = result.current.commitTrustLevel(TrustLevel.DO_NOT_TRUST);
+    });
+    await vi.waitFor(() => expect(setTrustedFolderLive).toHaveBeenCalledOnce());
+
+    expect(mockedUserConfig.value['/configured/workspace']).toBe(
+      TrustLevel.TRUST_FOLDER,
+    );
+    firstLiveUpdate.resolve();
+    await act(async () => {
+      await Promise.all([firstCommit, secondCommit]);
+    });
+
+    expect(setTrustedFolderLive).toHaveBeenCalledTimes(2);
+    expect(mockedUserConfig.value['/configured/workspace']).toBe(
+      TrustLevel.DO_NOT_TRUST,
+    );
+    expect(result.current.committedTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
+    expect(result.current.effectiveTrust).toBe(false);
   });
 
   it('restores the exact saved rule when live application throws', async () => {

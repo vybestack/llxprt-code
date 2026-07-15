@@ -227,9 +227,9 @@ describe('MCP capability authorization', () => {
       listPrompts,
     } as unknown as Client;
 
-    await expect(discoverPrompts('server', client)).rejects.toThrow(
-      MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE,
-    );
+    await expect(
+      Reflect.apply(discoverPrompts, undefined, ['server', client]),
+    ).rejects.toThrow(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
     expect(listPrompts).not.toHaveBeenCalled();
   });
 
@@ -475,9 +475,9 @@ describe('MCP capability authorization', () => {
       request,
     } as unknown as Client;
 
-    await expect(discoverResources('server', client)).rejects.toThrow(
-      MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE,
-    );
+    await expect(
+      Reflect.apply(discoverResources, undefined, ['server', client]),
+    ).rejects.toThrow(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
     expect(request).not.toHaveBeenCalled();
   });
 
@@ -498,6 +498,7 @@ describe('MCP capability authorization', () => {
     expect(published).toBe(false);
     expect(registry.getPrompt('prompt')).toBeUndefined();
   });
+
   it('does not connect when folder trust is not authorized', async () => {
     connectToMcpServerMock.mockClear();
 
@@ -647,6 +648,41 @@ describe('MCP capability authorization', () => {
     );
   });
 
+  it('surfaces rollback cleanup failures while attempting every cleanup', async () => {
+    const toolFailure = new Error('tool cleanup failed');
+    const promptFailure = new Error('prompt cleanup failed');
+    const closeFn = vi.fn().mockResolvedValue(undefined);
+    connection.client = {
+      close: closeFn,
+      getServerCapabilities: () => ({ prompts: {} }),
+      listPrompts: vi.fn().mockResolvedValue({ prompts: [] }),
+    } as unknown as Client;
+    const removeTools = vi.fn(() => {
+      throw toolFailure;
+    });
+    const removePrompts = vi.fn(() => {
+      throw promptFailure;
+    });
+
+    await expect(
+      connectAndDiscover(
+        '0.0.1',
+        'server',
+        { command: 'server' },
+        { removeMcpToolsByServer: removeTools } as unknown as ToolRegistry,
+        { removePromptsByServer: removePrompts } as unknown as PromptRegistry,
+        false,
+        {} as WorkspaceContext,
+        { isTrustedFolder: () => true } as Config,
+      ),
+    ).rejects.toMatchObject({
+      errors: expect.arrayContaining([toolFailure, promptFailure]),
+    });
+    expect(removeTools).toHaveBeenCalledWith('server');
+    expect(removePrompts).toHaveBeenCalledWith('server');
+    expect(closeFn).toHaveBeenCalledOnce();
+  });
+
   it('server error handler closes client and disconnects even when registry cleanup throws', async () => {
     const closeFn = vi.fn().mockResolvedValue(undefined);
     const removeTools = vi.fn().mockImplementation(() => {
@@ -672,6 +708,7 @@ describe('MCP capability authorization', () => {
       removeMcpToolsByServer: removeTools,
     } as unknown as ToolRegistry;
     const promptRegistry = {
+      registerPrompt: vi.fn(),
       removePromptsByServer: removePrompts,
     } as unknown as PromptRegistry;
 

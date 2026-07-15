@@ -89,13 +89,13 @@ async function applyFolderTrustChoice(
     savedSnapshot = trustedFolders.snapshotValue(workingDirectory);
     previousLiveTrust = config?.isTrustedFolder() ?? false;
     trustedFolders.setValue(workingDirectory, trustLevel);
-    failedPhase = 'live';
     const newIsTrusted =
       resolveLocalWorkspaceTrust(
         settings.merged,
         trustedFolders,
         workingDirectory,
       ) ?? false;
+    failedPhase = 'live';
     await config?.setTrustedFolderLive(newIsTrusted);
     if (mountedRef.current) {
       setDialogOpen(false);

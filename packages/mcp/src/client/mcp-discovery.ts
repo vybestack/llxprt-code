@@ -183,7 +183,8 @@ function cleanupServerArtifacts(
   mcpServerName: string,
   toolRegistry: ToolRegistry,
   promptRegistry: PromptRegistry,
-): void {
+): unknown[] {
+  const failures: unknown[] = [];
   for (const [label, cleanup] of [
     ['tools', () => toolRegistry.removeMcpToolsByServer(mcpServerName)],
     ['prompts', () => promptRegistry.removePromptsByServer(mcpServerName)],
@@ -191,11 +192,13 @@ function cleanupServerArtifacts(
     try {
       cleanup();
     } catch (cleanupError) {
+      failures.push(cleanupError);
       debugLogger.error(
         `Error cleaning up ${label} for '${mcpServerName}': ${getErrorMessage(cleanupError)}`,
       );
     }
   }
+  return failures;
 }
 
 function rollbackOnError(
@@ -206,11 +209,21 @@ function rollbackOnError(
   error: unknown,
 ): void {
   mcpClient?.close().catch(() => {});
-  cleanupServerArtifacts(mcpServerName, toolRegistry, promptRegistry);
+  const cleanupFailures = cleanupServerArtifacts(
+    mcpServerName,
+    toolRegistry,
+    promptRegistry,
+  );
   debugLogger.error(
     `Error connecting to MCP server '${mcpServerName}': ${getErrorMessage(error)}`,
   );
   updateMCPServerStatus(mcpServerName, MCPServerStatus.DISCONNECTED);
+  if (cleanupFailures.length > 0) {
+    throw new AggregateError(
+      [error, ...cleanupFailures],
+      `Rollback cleanup failed for MCP server '${mcpServerName}'`,
+    );
+  }
 }
 
 function createServerErrorHandler(
@@ -500,18 +513,18 @@ function processToolDefinition(
 interface ResourceDiscoveryOptions {
   timeout?: number;
   signal?: AbortSignal;
-  isAuthorized?: () => boolean;
+  isAuthorized: () => boolean;
 }
 
 export async function discoverResources(
   mcpServerName: string,
   mcpClient: Client,
-  options?: ResourceDiscoveryOptions,
+  options: ResourceDiscoveryOptions,
 ): Promise<Resource[]> {
   if (mcpClient.getServerCapabilities()?.resources == null) {
     return [];
   }
-  const isAuthorized = requireAuthorization(options?.isAuthorized);
+  const isAuthorized = requireAuthorization(readAuthorization(options));
   if (!isAuthorized()) {
     return [];
   }
@@ -561,7 +574,7 @@ async function listResources(
 interface PromptDiscoveryOptions {
   timeout?: number;
   signal?: AbortSignal;
-  isAuthorized?: () => boolean;
+  isAuthorized: () => boolean;
 }
 
 /**
@@ -570,9 +583,9 @@ interface PromptDiscoveryOptions {
 export async function discoverPrompts(
   mcpServerName: string,
   mcpClient: Client,
-  options?: PromptDiscoveryOptions,
+  options: PromptDiscoveryOptions,
 ): Promise<Prompt[]> {
-  const isAuthorized = requireAuthorization(options?.isAuthorized);
+  const isAuthorized = requireAuthorization(readAuthorization(options));
   try {
     if (mcpClient.getServerCapabilities()?.prompts == null) return [];
 

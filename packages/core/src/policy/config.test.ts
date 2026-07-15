@@ -238,7 +238,7 @@ describe('policy config', () => {
 
       expect(
         engineConfig.rules.filter(
-          (rule) => rule.source?.startsWith('Settings (MCP') === true,
+          (rule) => rule.source?.startsWith('Settings (MCP') ?? false,
         ),
       ).toStrictEqual([
         expect.objectContaining({
@@ -279,7 +279,7 @@ describe('policy config', () => {
       ).toBe(false);
       expect(
         engineConfig.rules
-          .filter((rule) => rule.source?.startsWith('Settings (MCP') === true)
+          .filter((rule) => rule.source?.startsWith('Settings (MCP') ?? false)
           .map((rule) => rule.source),
       ).toStrictEqual(['Settings (MCP Excluded)', 'Settings (MCP Allowed)']);
     });

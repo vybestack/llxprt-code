@@ -289,7 +289,7 @@ describe('useFolderTrust', () => {
     expect(result.current.isFolderTrustDialogOpen).toBe(false);
   });
 
-  it('should not call setTrustedFolderLive when no config is provided', async () => {
+  it('persists trust when no live config is provided', async () => {
     isWorkspaceTrustedSpy.mockReturnValue(undefined);
     const { result } = renderHook(() => useFolderTrust(mockSettings, addItem));
 
@@ -299,7 +299,44 @@ describe('useFolderTrust', () => {
       );
     });
 
+    expect(mockTrustedFolders.setValue).toHaveBeenCalledWith(
+      process.cwd(),
+      TrustLevel.TRUST_FOLDER,
+    );
     expect(result.current.isFolderTrustDialogOpen).toBe(false);
+  });
+
+  it('classifies local trust resolution failures as persistence errors', async () => {
+    vi.useFakeTimers();
+    try {
+      isWorkspaceTrustedSpy.mockReturnValue(undefined);
+      const resolutionSpy = vi
+        .spyOn(trustedFolders, 'resolveLocalWorkspaceTrust')
+        .mockImplementationOnce(() => {
+          throw new Error('cannot resolve local trust');
+        });
+      const { result } = renderHook(() =>
+        useFolderTrust(mockSettings, addItem, mockConfig),
+      );
+
+      await act(async () => {
+        await result.current.handleFolderTrustSelect(
+          FolderTrustChoice.TRUST_FOLDER,
+        );
+      });
+
+      expect(mockConfig.setTrustedFolderLive).not.toHaveBeenCalled();
+      expect(addItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: expect.stringContaining('Failed to save trust settings'),
+        }),
+        expect.any(Number),
+      );
+      resolutionSpy.mockRestore();
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
   });
 
   it('reports persistence failures and exits with a fatal config error', async () => {

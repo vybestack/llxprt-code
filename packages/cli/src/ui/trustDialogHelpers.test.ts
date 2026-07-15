@@ -30,6 +30,7 @@ describe('trustDialogHelpers', () => {
       expect(options[1].value).toBe(FolderTrustChoice.TRUST_PARENT);
       expect(options[1].label).toBe('Trust parent folder (workspace)');
       expect(options[2].value).toBe(FolderTrustChoice.DO_NOT_TRUST);
+      expect(options[2].label).toBe("Don't trust");
       const keys = options.map((o) => o.key);
       expect(new Set(keys).size).toBe(keys.length);
     });
@@ -86,6 +87,27 @@ describe('trustDialogHelpers', () => {
         'Trusted (via parent folder)',
       );
     });
+
+    it.each([
+      [TrustLevel.TRUST_PARENT, undefined, false, 'Trust parent'],
+      [
+        TrustLevel.TRUST_PARENT,
+        undefined,
+        true,
+        'Trust parent (via parent folder)',
+      ],
+      [TrustLevel.TRUST_PARENT, true, true, 'Trusted (via IDE)'],
+      [TrustLevel.TRUST_PARENT, false, true, 'Not trusted (via IDE)'],
+      [TrustLevel.DO_NOT_TRUST, true, true, 'Trusted (via IDE)'],
+      [TrustLevel.DO_NOT_TRUST, false, true, 'Not trusted (via IDE)'],
+    ] as const)(
+      'displays %s with IDE trust %s and inherited provenance %s',
+      (level, ideTrust, inheritedTrust, expected) => {
+        expect(getTrustLevelDisplay(level, ideTrust, inheritedTrust)).toBe(
+          expected,
+        );
+      },
+    );
   });
 
   describe('getWarningMessage', () => {
@@ -98,9 +120,9 @@ describe('trustDialogHelpers', () => {
       );
     });
 
-    it('warns about parent folder trust', () => {
+    it('warns about inherited parent distrust', () => {
       const msg = getWarningMessage(undefined, true, TrustLevel.DO_NOT_TRUST);
-      expect(msg).toContain('local rule overrides the trusted parent folder');
+      expect(msg).toContain('a parent folder rule denies trust');
     });
 
     it('returns null when no override applies', () => {
@@ -117,33 +139,34 @@ describe('trustDialogHelpers', () => {
         effectiveNow: 'Not trusted (via IDE)',
       });
     });
-    describe('combineTrustUpdateFailure', () => {
-      it('retains the original error when rollback succeeds', () => {
-        const error = new Error('update failed');
+  });
 
-        expect(
-          combineTrustUpdateFailure(error, [], 'rollback failed'),
-        ).toStrictEqual({
-          error,
-          rollbackSucceeded: true,
-        });
+  describe('combineTrustUpdateFailure', () => {
+    it('retains the original error when rollback succeeds', () => {
+      const error = new Error('update failed');
+
+      expect(
+        combineTrustUpdateFailure(error, [], 'rollback failed'),
+      ).toStrictEqual({
+        error,
+        rollbackSucceeded: true,
       });
+    });
 
-      it('aggregates the update and every rollback failure', () => {
-        const error = new Error('update failed');
-        const rollbackFailure = new Error('restore failed');
+    it('aggregates the update and every rollback failure', () => {
+      const error = new Error('update failed');
+      const rollbackFailure = new Error('restore failed');
 
-        const result = combineTrustUpdateFailure(
-          error,
-          [rollbackFailure],
-          'rollback failed',
-        );
+      const result = combineTrustUpdateFailure(
+        error,
+        [rollbackFailure],
+        'rollback failed',
+      );
 
-        expect(result.rollbackSucceeded).toBe(false);
-        expect(result.error).toMatchObject({
-          message: 'rollback failed',
-          errors: [error, rollbackFailure],
-        });
+      expect(result.rollbackSucceeded).toBe(false);
+      expect(result.error).toMatchObject({
+        message: 'rollback failed',
+        errors: [error, rollbackFailure],
       });
     });
   });
@@ -206,10 +229,23 @@ describe('trustDialogHelpers', () => {
   describe('buildTrustLevelOptions', () => {
     it('builds radio items for the modify-trust dialog', () => {
       const options = buildTrustLevelOptions('project', 'workspace');
-      expect(options).toHaveLength(3);
-      expect(options[0].value).toBe(TrustLevel.TRUST_FOLDER);
-      expect(options[1].value).toBe(TrustLevel.TRUST_PARENT);
-      expect(options[2].value).toBe(TrustLevel.DO_NOT_TRUST);
+      expect(options).toStrictEqual([
+        {
+          key: TrustLevel.TRUST_FOLDER,
+          label: 'Trust folder (project)',
+          value: TrustLevel.TRUST_FOLDER,
+        },
+        {
+          key: TrustLevel.TRUST_PARENT,
+          label: 'Trust parent folder (workspace)',
+          value: TrustLevel.TRUST_PARENT,
+        },
+        {
+          key: TrustLevel.DO_NOT_TRUST,
+          label: "Don't trust",
+          value: TrustLevel.DO_NOT_TRUST,
+        },
+      ]);
     });
   });
 

@@ -46,6 +46,12 @@ const createMockResourceRegistry = (): ResourceRegistry =>
   }) as unknown as ResourceRegistry;
 import type { TransportWithInternals } from './mcpClientTestHelpers.js';
 
+async function expectPending(promise: Promise<unknown>): Promise<void> {
+  expect(await Promise.race([promise, Promise.resolve('pending')])).toBe(
+    'pending',
+  );
+}
+
 describe('connectToMcpServer with OAuth', () => {
   let mockedClient: ClientLib.Client;
   let workspaceContext: WorkspaceContext;
@@ -124,9 +130,7 @@ describe('connectToMcpServer with OAuth', () => {
     );
     await vi.waitFor(() => expect(mockedClient.close).toHaveBeenCalledOnce());
 
-    expect(await Promise.race([outcome, Promise.resolve('pending')])).toBe(
-      'pending',
-    );
+    await expectPending(outcome);
     releaseClientClose?.();
     await expect(outcome).resolves.toMatchObject({ name: 'AbortError' });
     expect(transport.close).toHaveBeenCalledOnce();
@@ -199,9 +203,7 @@ describe('connectToMcpServer with OAuth', () => {
     rejectConnect?.(new Error('connect failed'));
     await vi.waitFor(() => expect(transport.close).toHaveBeenCalledOnce());
 
-    expect(await Promise.race([outcome, Promise.resolve('pending')])).toBe(
-      'pending',
-    );
+    await expectPending(outcome);
     releaseTransportClose?.();
     const failure = await outcome;
     expect(failure).toBeInstanceOf(DOMException);
@@ -254,9 +256,7 @@ describe('connectToMcpServer with OAuth', () => {
     resolveConnect?.();
     await vi.waitFor(() => expect(transport.close).toHaveBeenCalledOnce());
 
-    expect(await Promise.race([outcome, Promise.resolve('pending')])).toBe(
-      'pending',
-    );
+    await expectPending(outcome);
     releaseTransportClose?.();
     const failure = await outcome;
     expect(failure).toBeInstanceOf(DOMException);

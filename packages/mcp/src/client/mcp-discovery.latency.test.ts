@@ -148,6 +148,7 @@ describe('connectAndDiscover revocation-during-latency', () => {
 
     expect(statusUpdates).toContain('server:connected');
     expect(registeredTools).toHaveLength(1);
+    expect(promptRegistry.getPrompt('prompt1')).toBeDefined();
   });
 
   it('stops registering tools mid-loop when trust is revoked between tool registrations', async () => {
@@ -181,6 +182,7 @@ describe('connectAndDiscover revocation-during-latency', () => {
 
     expect(registeredTools).toHaveLength(1);
     expect(registry.removeMcpToolsByServer).toHaveBeenCalledWith('server');
+    expect(client.close).toHaveBeenCalledOnce();
   });
 
   it('does not set CONNECTED when trust is revoked after the connect handshake', async () => {

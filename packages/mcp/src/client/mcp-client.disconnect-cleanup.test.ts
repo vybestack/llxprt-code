@@ -107,9 +107,58 @@ describe('McpClient disconnect cleanup', () => {
     await expect(client.disconnect()).rejects.toThrow('client close failed');
 
     expect(sdkClient.close).toHaveBeenCalledOnce();
+
     expect(client.getStatus()).toBe('disconnected');
   });
 
+  it('times out a hanging SDK client close and keeps it retryable', async () => {
+    vi.useFakeTimers();
+    try {
+      const sdkClient = {
+        connect: vi.fn(),
+        close: vi
+          .fn()
+          .mockImplementationOnce(() => new Promise<void>(() => {}))
+          .mockResolvedValueOnce(undefined),
+        registerCapabilities: vi.fn(),
+        setRequestHandler: vi.fn(),
+        getServerCapabilities: vi.fn().mockReturnValue({}),
+      };
+      vi.mocked(ClientLib.Client).mockReturnValue(
+        sdkClient as unknown as ClientLib.Client,
+      );
+      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+        {} as SdkClientStdioLib.StdioClientTransport,
+      );
+      const client = new McpClient(
+        'test-server',
+        { command: 'test-command' },
+        { removeMcpToolsByServer: vi.fn() } as unknown as ToolRegistry,
+        { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
+        createMockResourceRegistry(),
+        workspaceContext,
+        createTrustedConfig(),
+        false,
+        '0.0.1',
+      );
+      await client.connect();
+
+      const disconnect = client.disconnect().then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      await expect(disconnect).resolves.toMatchObject({
+        message: "Timed out closing MCP client 'test-server' after 10000ms",
+      });
+      await expect(client.disconnect()).resolves.toBeUndefined();
+      expect(sdkClient.close).toHaveBeenCalledTimes(2);
+      expect(client.getStatus()).toBe('disconnected');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it('retains a failed SDK client close so disconnect can retry it', async () => {
     const closeFailure = new Error('client close failed');
     const sdkClient = {

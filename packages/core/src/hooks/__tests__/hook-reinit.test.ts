@@ -291,17 +291,19 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
     await expect(initialization).rejects.toThrow(/disposed/i);
   });
 
-  it('releases queued signals when registry initialization fails', async () => {
+  it('allows initialization to recover after registry initialization fails', async () => {
     const mockConfig = createHookConfig();
     const hookSystem = new HookSystem(mockConfig);
     const failure = new Error('registry initialization failed');
-    vi.spyOn(hookSystem.getRegistry(), 'initialize').mockRejectedValue(failure);
+    const initialize = vi
+      .spyOn(hookSystem.getRegistry(), 'initialize')
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce(undefined);
 
     await expect(hookSystem.initialize()).rejects.toBe(failure);
+    await expect(hookSystem.initialize()).resolves.toBeUndefined();
 
-    const internal = hookSystem as unknown as {
-      initializationSignals: ReadonlyMap<number, AbortSignal | undefined>;
-    };
-    expect(internal.initializationSignals.size).toBe(0);
+    expect(initialize).toHaveBeenCalledTimes(2);
+    expect(hookSystem.isInitialized()).toBe(true);
   });
 });

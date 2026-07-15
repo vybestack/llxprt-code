@@ -175,6 +175,7 @@ describe('McpClientManager', () => {
 
       void onToolsUpdated?.();
       await manager.stop();
+      await vi.runAllTimersAsync();
 
       expect(refreshMcpContext).not.toHaveBeenCalled();
 

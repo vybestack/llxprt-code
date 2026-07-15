@@ -55,6 +55,7 @@ import {
   isEnabled,
   populateMcpServerCommand,
 } from './mcp-discovery-helpers.js';
+import { closeClientWithTimeout } from './close-client-with-timeout.js';
 
 // Re-export public API symbols to preserve external import paths.
 export {
@@ -430,7 +431,7 @@ export class McpClient {
     const client = this.client;
     try {
       if (client) {
-        await client.close();
+        await closeClientWithTimeout(client, this.serverName);
         if (this.client === client) {
           this.client = undefined;
         }

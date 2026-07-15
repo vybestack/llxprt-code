@@ -391,6 +391,21 @@ describe('Trusted Folders Loading', () => {
     );
   });
 
+  it('preserves in-memory state when writing the temporary file fails', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const loadedFolders = loadTrustedFolders();
+    mockFsWriteFileSync.mockImplementationOnce(() => {
+      throw new Error('disk full');
+    });
+
+    expect(() =>
+      loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER),
+    ).toThrow('disk full');
+
+    expect(loadedFolders.user.config['/new/path']).toBeUndefined();
+    expect(mockFsRenameSync).not.toHaveBeenCalled();
+  });
+
   it('removes the temporary file when the atomic rename fails', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
