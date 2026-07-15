@@ -91,6 +91,8 @@ const makeParams = (): UIStateParams => ({
   showErrorDetails: false,
   showToolDescriptions: false,
   isTodoPanelCollapsed: false,
+  isQueuedMessagesPanelCollapsed: false,
+  queuedSubmissions: [],
   isNarrow: false,
   vimModeEnabled: false,
   vimMode: undefined,

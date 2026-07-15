@@ -4,119 +4,82 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { ModelLimitsCatalogSchema } from './model-limits.schema.js';
+import type { ModelLimitsCatalog } from './model-limits.schema.js';
+import catalogData from './model-limits.json' with { type: 'json' };
+
 type Model = string;
 type TokenCount = number;
 
-/**
- * Conservative fallback for unrecognized models.
- *
- * Lowered from 1M to 200K (issue #2270 / #2527): the overwhelmingly common
- * real-world floor is 200K (Claude, many GLM/Gemini variants). Defaulting to
- * 200K instead of 1M makes the unrecognized-model case fail-safe — proactive
- * compression fires conservatively rather than silently overrunning a
- * sub-200K backend.
- */
-export const DEFAULT_TOKEN_LIMIT = 200_000;
+// Catalog corruption is a release/configuration error. Validate eagerly so an
+// invalid package fails deterministically instead of silently using stale limits.
+const CATALOG = ModelLimitsCatalogSchema.parse(catalogData);
 
-const OPENAI_128K_PREFIXES = [
-  'o4-mini',
-  'gpt-4o-mini',
-  'gpt-4o-realtime',
-  'gpt-4o',
-  'gpt-4-turbo',
-];
+export const DEFAULT_TOKEN_LIMIT: TokenCount = CATALOG.defaultLimit;
 
-const OPENAI_200K_PREFIXES = ['o3-pro', 'o3-mini', 'o1-mini', 'o3', 'o1'];
-
-interface PrefixLimit {
-  prefix: string;
-  limit: TokenCount;
-}
-
-const PREFIX_LIMITS: PrefixLimit[] = [
-  { prefix: 'gpt-4.1', limit: 1_000_000 },
-  { prefix: 'gpt-3.5-turbo', limit: 16_385 },
-  // Gemini 2.x variants (experimental, preview, dated snapshots) — all 1M.
-  // Exact entries above take precedence, so the 32K image-generation variant
-  // is unaffected. Prevents the lowered DEFAULT_TOKEN_LIMIT from silently
-  // shrinking recognized Gemini variants (issue #2527).
-  { prefix: 'gemini-2.5-pro', limit: 1_048_576 },
-  { prefix: 'gemini-2.5-flash', limit: 1_048_576 },
-  { prefix: 'gemini-2.0-flash', limit: 1_048_576 },
-  // GLM-5 family — 200K context window (z.ai API docs)
-  { prefix: 'glm-5', limit: 200_000 },
-  // GLM-4 family — 128K context window (z.ai API docs)
-  { prefix: 'glm-4', limit: 128_000 },
-];
-
-const EXACT_LIMITS: Record<string, TokenCount> = {
-  // GLM (z.ai) models — exact entries for commonly used variants.
-  // The GLM-5 family (glm-5, glm-5.1, glm-5.2, …) exposes a 200K context
-  // window; the GLM-4 family (glm-4, glm-4.5, glm-4.6, …) exposes 128K.
-  // Prefix-based fallbacks below cover future/dated variants.
-  'glm-5.2': 200_000,
-  'glm-5.1': 200_000,
-  'glm-5': 200_000,
-  'glm-4.6': 128_000,
-  'glm-4.5': 128_000,
-  'glm-4': 128_000,
-
-  // Gemini models
-  'gemini-1.5-pro': 2_097_152,
-  'gemini-1.5-flash': 1_048_576,
-  'gemini-2.5-pro-preview-05-06': 1_048_576,
-  'gemini-2.5-pro-preview-06-05': 1_048_576,
-  'gemini-2.5-pro': 1_048_576,
-  'gemini-2.5-flash-preview-05-20': 1_048_576,
-  'gemini-2.5-flash': 1_048_576,
-  'gemini-2.5-flash-lite': 1_048_576,
-  'gemini-2.0-flash': 1_048_576,
-  'gemini-2.0-flash-preview-image-generation': 32_000,
-
-  // Claude Opus 4.6/4.7/4.8 default to the Claude Code / subscription 200K
-  // context window. The 1M window is API-only and plan-gated; override via
-  // /set or a profile (context-limit).
-  'claude-opus-4-8': 200_000,
-  'claude-opus-4-7': 200_000,
-  'claude-opus-4-6': 200_000,
-  'claude-opus-4-latest': 200_000,
-  'claude-sonnet-4-6': 200_000,
-  'claude-sonnet-4-latest': 400_000,
-  // Claude Sonnet 5 defaults to the Claude Code / subscription 200K context
-  // window. The advertised 1M window is API-only and plan-gated; override via
-  // /set or a profile (context-limit).
-  'claude-sonnet-5': 200_000,
-  'claude-sonnet-5-latest': 200_000,
-  // Claude Fable 5 defaults to the Claude Code / subscription 200K context
-  // window. The advertised 1M window is API-only and plan-gated; override via
-  // /set or a profile (context-limit). Mirrors getContextWindowForModel.
-  'claude-fable-5': 200_000,
-  'claude-fable-5-latest': 200_000,
-  'claude-3-7-opus-20250115': 300_000,
-  'claude-3-7-sonnet-20250115': 300_000,
-  'claude-3-opus-20240229': 200_000,
-  'claude-3-sonnet-20240229': 200_000,
-  'claude-3-haiku-20240307': 200_000,
-  'claude-3.5-sonnet-20240620': 200_000,
-  'claude-3.5-sonnet-20241022': 200_000,
-  'claude-3.5-haiku-20241022': 200_000,
-  'claude-3-5-sonnet-20241022': 200_000,
-  'claude-3-5-haiku-20241022': 200_000,
-};
-
-function matchesAnyPrefix(model: string, prefixes: string[]): boolean {
+function matchesAnyPrefix(model: string, prefixes: readonly string[]): boolean {
   return prefixes.some((prefix) => model.startsWith(prefix));
 }
 
-function resolvePrefixLimit(
+function assertUnreachableRule(rule: never): never {
+  throw new Error(`Unsupported model-limit rule: ${JSON.stringify(rule)}`);
+}
+
+/**
+ * Resolve a single catalog's ordered rules against a model id + provider
+ * prefix. Exported so that the case-insensitive normalization can be tested
+ * with any catalog (including mixed-case fixtures) without type assertions.
+ */
+export function resolveOrderedRuleFromCatalog(
+  catalog: ModelLimitsCatalog,
   modelWithoutPrefix: string,
+  providerPrefix: string,
 ): TokenCount | undefined {
-  for (const { prefix, limit } of PREFIX_LIMITS) {
-    if (modelWithoutPrefix.startsWith(prefix)) {
-      return limit;
+  for (const rule of catalog.orderedRules) {
+    switch (rule.type) {
+      case 'substring':
+        if (modelWithoutPrefix.includes(rule.substring)) {
+          return rule.limit;
+        }
+        break;
+      case 'substringOrProviderPrefix':
+        if (
+          modelWithoutPrefix.includes(rule.substring) ||
+          providerPrefix === rule.providerPrefix
+        ) {
+          return rule.limit;
+        }
+        break;
+      case 'prefixGroup':
+        if (matchesAnyPrefix(modelWithoutPrefix, rule.prefixes)) {
+          return rule.limit;
+        }
+        break;
+      case 'substringCaseInsensitive':
+        if (
+          modelWithoutPrefix
+            .toLowerCase()
+            .includes(rule.substring.toLowerCase())
+        ) {
+          return rule.limit;
+        }
+        break;
+      default:
+        return assertUnreachableRule(rule);
     }
   }
   return undefined;
+}
+
+function resolveOrderedRule(
+  modelWithoutPrefix: string,
+  providerPrefix: string,
+): TokenCount | undefined {
+  return resolveOrderedRuleFromCatalog(
+    CATALOG,
+    modelWithoutPrefix,
+    providerPrefix,
+  );
 }
 
 export function tokenLimit(
@@ -135,51 +98,22 @@ export function tokenLimit(
     colonIndex !== -1 ? model.slice(colonIndex + 1) : model;
 
   // Check exact model matches first
-  if (modelWithoutPrefix in EXACT_LIMITS) {
-    return EXACT_LIMITS[modelWithoutPrefix];
+  const exactLimit = CATALOG.exactLimits[modelWithoutPrefix];
+  if (typeof exactLimit === 'number') {
+    return exactLimit;
   }
 
   // Check prefix-based limits
-  const prefixLimit = resolvePrefixLimit(modelWithoutPrefix);
-  if (prefixLimit !== undefined) {
-    return prefixLimit;
+  for (const { prefix, limit } of CATALOG.prefixLimits) {
+    if (modelWithoutPrefix.startsWith(prefix)) {
+      return limit;
+    }
   }
 
-  // Codex models default to 256K context (per composition/aliases/codex.config).
-  // variant has a smaller 128K window and must be checked first since its ID
-  // also contains the substring "codex". Non-suffixed codex model IDs
-  // (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1) are only resolvable when the
-  // provider prefix is explicitly "codex" — a bare ID is ambiguous and could
-  // belong to the regular OpenAI provider.
-  if (modelWithoutPrefix.includes('codex-spark')) {
-    return 131_072;
-  }
-  if (modelWithoutPrefix.includes('codex') || providerPrefix === 'codex') {
-    return 262_144;
-  }
-
-  // Check OpenAI 200K models (includes o3, o1 series)
-  if (matchesAnyPrefix(modelWithoutPrefix, OPENAI_200K_PREFIXES)) {
-    return 200_000;
-  }
-
-  // Check OpenAI 128K models
-  if (matchesAnyPrefix(modelWithoutPrefix, OPENAI_128K_PREFIXES)) {
-    return 128_000;
-  }
-
-  // Claude Sonnet 5 dated snapshot variants (e.g. claude-sonnet-5-YYYYMMDD)
-  // are not individually exact-keyed above; resolve them to the same
-  // subscription-safe 200K default as the bare alias and -latest. Mirrors
-  // getContextWindowForModel in the anthropic package.
-  if (modelWithoutPrefix.toLowerCase().includes('claude-sonnet-5')) {
-    return 200_000;
-  }
-
-  // Claude Fable 5 dated snapshot variants (e.g. claude-fable-5-YYYYMMDD)
-  // resolve to the same subscription-safe 200K default.
-  if (modelWithoutPrefix.toLowerCase().includes('claude-fable-5')) {
-    return 200_000;
+  // Check ordered data-driven rules (codex, OpenAI groups, Claude substrings)
+  const orderedLimit = resolveOrderedRule(modelWithoutPrefix, providerPrefix);
+  if (orderedLimit !== undefined) {
+    return orderedLimit;
   }
 
   return DEFAULT_TOKEN_LIMIT;

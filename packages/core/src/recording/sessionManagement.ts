@@ -25,7 +25,12 @@
 
 import { type SessionSummary } from './types.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
-import { SessionLockManager } from './SessionLockManager.js';
+import {
+  SessionLockManager,
+  SessionLockedError,
+  type LockHandle,
+} from './SessionLockManager.js';
+import { RESUME_NO_SESSIONS_FOUND } from './resumeNotFoundMessages.js';
 
 /**
  * Result of listing sessions for a project.
@@ -77,7 +82,7 @@ export async function deleteSession(
   const sessions = await SessionDiscovery.listSessions(chatsDir, projectHash);
 
   if (sessions.length === 0) {
-    return { ok: false, error: 'No sessions found for this project' };
+    return { ok: false, error: RESUME_NO_SESSIONS_FOUND };
   }
 
   const resolved = SessionDiscovery.resolveSessionRef(ref, sessions);
@@ -85,38 +90,63 @@ export async function deleteSession(
     return { ok: false, error: resolved.error };
   }
 
-  const target = resolved.session;
+  return deleteResolvedSession(resolved.session, chatsDir);
+}
 
-  const locked = await SessionLockManager.isLocked(chatsDir, target.sessionId);
-  if (locked) {
-    const stale = await SessionLockManager.isStale(chatsDir, target.sessionId);
-    if (stale) {
-      await SessionLockManager.removeStaleLock(chatsDir, target.sessionId);
-    } else {
+export const SESSION_NOT_FOUND_PREFIX = 'Session not found:';
+
+/** Delete a session only when the supplied identifier is an exact match. */
+export async function deleteSessionById(
+  sessionId: string,
+  chatsDir: string,
+  projectHash: string,
+): Promise<DeleteSessionResult | DeleteSessionError> {
+  const sessions = await SessionDiscovery.listSessions(chatsDir, projectHash);
+  const target = sessions.find((session) => session.sessionId === sessionId);
+  if (target === undefined) {
+    return {
+      ok: false,
+      error: `${SESSION_NOT_FOUND_PREFIX} ${sessionId}`,
+    };
+  }
+
+  return deleteResolvedSession(target, chatsDir);
+}
+
+async function deleteResolvedSession(
+  target: SessionSummary,
+  chatsDir: string,
+): Promise<DeleteSessionResult | DeleteSessionError> {
+  let lock: LockHandle;
+  try {
+    lock = await SessionLockManager.acquire(chatsDir, target.sessionId);
+  } catch (error: unknown) {
+    if (error instanceof SessionLockedError) {
       return {
         ok: false,
         error: 'Cannot delete: session is in use by another process',
       };
     }
-  }
-
-  const { unlink } = await import('node:fs/promises');
-
-  try {
-    await unlink(target.filePath);
-  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error);
     return {
       ok: false,
-      error: `Failed to delete session: ${(error as Error).message}`,
+      error: `Failed to lock session for deletion: ${detail}`,
     };
   }
 
-  const lockPath = SessionLockManager.getLockPath(chatsDir, target.sessionId);
+  const { unlink } = await import('node:fs/promises');
+  let result: DeleteSessionResult | DeleteSessionError;
   try {
-    await unlink(lockPath);
-  } catch {
-    // Lock file may not exist
+    await unlink(target.filePath);
+    result = { ok: true, deletedSessionId: target.sessionId };
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error);
+    result = {
+      ok: false,
+      error: `Failed to delete session: ${detail}`,
+    };
+  } finally {
+    await lock.release().catch(() => undefined);
   }
-
-  return { ok: true, deletedSessionId: target.sessionId };
+  return result;
 }

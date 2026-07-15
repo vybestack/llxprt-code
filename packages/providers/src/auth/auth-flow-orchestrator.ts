@@ -232,6 +232,10 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     bucket: string | undefined,
     provider: OAuthProvider,
   ): Promise<void> {
+    // Inform the provider of the current bucket so it can look up the
+    // correct browser profile association before launching the browser.
+    provider.setAuthContext?.({ bucket });
+
     logger.debug(
       () => `[FLOW] Calling provider.initiateAuth() for ${providerName}...`,
     );

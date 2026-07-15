@@ -28,6 +28,7 @@ export interface UIActions {
 
   // Input actions
   handleUserInputSubmit: (value: string) => void;
+  handleSteer: (text: string) => boolean;
   handleClearScreen: () => void;
 
   // Theme dialog

@@ -616,7 +616,12 @@ describe('oauth_exchange handler', () => {
 
       expect(successes.length).toBe(1);
       expect(failures.length).toBe(1);
-      expect(failures[0].code).toBe('SESSION_ALREADY_USED');
+      // With per-connection dispatch serialization, the second request may
+      // see SESSION_NOT_FOUND (session consumed by the first) or
+      // SESSION_ALREADY_USED (if both started before completion).
+      expect(failures[0].code).toMatch(
+        /^(SESSION_ALREADY_USED|SESSION_NOT_FOUND)$/,
+      );
     });
 
     it('concurrent exchange - no token duplication', async () => {

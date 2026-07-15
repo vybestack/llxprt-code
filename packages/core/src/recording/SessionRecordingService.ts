@@ -35,6 +35,8 @@ import {
   type SessionRecordLine,
 } from './types.js';
 
+export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
+
 /**
  * Core service for recording session events to a JSONL file.
  *
@@ -55,6 +57,7 @@ export class SessionRecordingService {
   private readonly chatsDir: string;
   private preContentBuffer: SessionRecordLine[] = [];
   private chatsDirWatcher: FSWatcher | null = null;
+  private sessionTitle: string | null | undefined;
 
   /**
    * @plan PLAN-20260211-SESSIONRECORDING.P05
@@ -69,6 +72,7 @@ export class SessionRecordingService {
       sessionId: config.sessionId,
       projectHash: config.projectHash,
       workspaceDirs: config.workspaceDirs,
+      ...(config.cwd === undefined ? {} : { cwd: config.cwd }),
       provider: config.provider,
       model: config.model,
       startTime: new Date().toISOString(),
@@ -106,7 +110,10 @@ export class SessionRecordingService {
   enqueue(type: SessionEventType, payload: unknown): void {
     if (!this.active) return;
 
-    if (type === 'content' && !this.materialized) {
+    if (
+      (type === 'content' || type === 'session_metadata') &&
+      !this.materialized
+    ) {
       this.materialize();
       for (const buffered of this.preContentBuffer) {
         this.queue.push(buffered);
@@ -142,7 +149,7 @@ export class SessionRecordingService {
   private materialize(): void {
     const now = new Date();
     const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
-    const prefix = this.sessionId.substring(0, 12);
+    const prefix = this.sessionId.substring(0, SESSION_FILE_ID_PREFIX_LENGTH);
     const fileName = `session-${timestamp}-${prefix}.jsonl`;
     this.filePath = path.join(this.chatsDir, fileName);
     mkdirSync(this.chatsDir, { recursive: true });
@@ -307,11 +314,16 @@ export class SessionRecordingService {
    * @requirement REQ-REC-008
    * @pseudocode session-recording-service.md lines 174-179
    */
-  initializeForResume(filePath: string, lastSeq: number): void {
+  initializeForResume(
+    filePath: string,
+    lastSeq: number,
+    title?: string | null,
+  ): void {
     this.filePath = filePath;
     this.seq = lastSeq;
     this.materialized = true;
     this.preContentBuffer = [];
+    this.sessionTitle = title;
     this.startChatsDirWatcher();
   }
 
@@ -467,5 +479,26 @@ export class SessionRecordingService {
    */
   recordDirectoriesChanged(directories: string[]): void {
     this.enqueue('directories_changed', { directories });
+  }
+
+  /**
+   * Record a session_metadata event — persisted human-readable title.
+   * The title is tri-state: `string` for a concrete title, `null` for explicit
+   * untitled, `undefined` for legacy (field absent). Like `content`, this event
+   * materializes the file so slash/failure sessions persist metadata even
+   * without a content event.
+   *
+   * @requirement REQ-REC-002
+   */
+  recordSessionMetadata(title: string | null): void {
+    if (!this.active) {
+      return;
+    }
+    this.enqueue('session_metadata', { title });
+    this.sessionTitle = title;
+  }
+
+  getSessionMetadataTitle(): string | null | undefined {
+    return this.sessionTitle;
   }
 }

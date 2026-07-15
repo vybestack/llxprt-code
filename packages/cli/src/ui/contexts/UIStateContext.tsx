@@ -25,6 +25,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import type { SlashCommandRuntime } from '../cliUiRuntime.js';
+import type { QueuedSubmission } from '../hooks/agentStream/types.js';
 import type { SlashCommand, CommandContext } from '../commands/types.js';
 
 import type { LoadedSettings } from '../../config/settings.js';
@@ -147,6 +148,8 @@ export interface UIState {
   showErrorDetails: boolean;
   showToolDescriptions: boolean;
   isTodoPanelCollapsed: boolean;
+  isQueuedMessagesPanelCollapsed: boolean;
+  queuedSubmissions: readonly QueuedSubmission[];
   isNarrow: boolean;
   vimModeEnabled: boolean;
   vimMode: string | undefined;

@@ -487,6 +487,13 @@
           "default": false,
           "type": "boolean"
         },
+        "alwaysDisplayFullShellCommand": {
+          "title": "Always Display Full Shell Command",
+          "description": "Display complete shell commands without truncation.",
+          "markdownDescription": "Display complete shell commands without truncation.\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `true`",
+          "default": true,
+          "type": "boolean"
+        },
         "showLineNumbers": {
           "title": "Show Line Numbers",
           "description": "Show line numbers in the chat.",
@@ -1549,8 +1556,8 @@
         },
         "type": {
           "type": "string",
-          "description": "Transport type. Use \"stdio\" for local command, \"sse\" for Server-Sent Events, or \"http\" for Streamable HTTP.",
-          "enum": ["stdio", "sse", "http"]
+          "description": "Transport type. Use \"stdio\" for local command, \"sse\" for Server-Sent Events, \"http\" for Streamable HTTP, or \"streamable-http\" as an alias for \"http\".",
+          "enum": ["stdio", "sse", "http", "streamable-http"]
         },
         "timeout": {
           "type": "number",

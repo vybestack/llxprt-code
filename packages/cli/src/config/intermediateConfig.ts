@@ -30,6 +30,7 @@ export interface IntermediateConfig {
   readonly profileSettingsWithTools: Settings;
   readonly policyEngineConfig: PolicyEngineConfig;
   readonly outputFormat: OutputFormat;
+  readonly quiet: boolean;
   readonly useRipgrepSetting: boolean | undefined;
   readonly mcpEnabled: boolean;
   readonly extensionsEnabled: boolean;
@@ -88,6 +89,7 @@ export async function resolveIntermediateConfig(
   );
 
   const outputFormat = resolveOutputFormat(argv);
+  const quiet = argv.quiet ?? false;
 
   const useRipgrepSetting = await resolveRipgrepSetting(profileMergedSettings);
 
@@ -117,6 +119,7 @@ export async function resolveIntermediateConfig(
     profileSettingsWithTools,
     policyEngineConfig,
     outputFormat,
+    quiet,
     useRipgrepSetting,
     mcpEnabled,
     extensionsEnabled,

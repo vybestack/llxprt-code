@@ -6,6 +6,7 @@
 
 import { z } from 'zod';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { normalizeBaseUrl } from './codexBaseUrl.js';
 
 const logger = new DebugLogger('llxprt:openai:codex:usage');
 
@@ -92,18 +93,6 @@ export type CodexUsageInfo = z.infer<typeof CodexUsageInfoSchema>;
 const DEFAULT_CODEX_USAGE_ENDPOINT = 'https://api.openai.com/api/codex/usage';
 const CHATGPT_BACKEND_USAGE_ENDPOINT =
   'https://chatgpt.com/backend-api/wham/usage';
-
-function normalizeBaseUrl(baseUrl?: string): string {
-  if (typeof baseUrl !== 'string') {
-    return '';
-  }
-
-  let normalized = baseUrl.trim();
-  while (normalized.endsWith('/')) {
-    normalized = normalized.slice(0, -1);
-  }
-  return normalized;
-}
 
 function buildCodexUsageEndpoints(baseUrl?: string): string[] {
   const endpoints: string[] = [];

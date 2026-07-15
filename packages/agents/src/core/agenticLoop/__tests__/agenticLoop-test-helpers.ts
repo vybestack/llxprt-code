@@ -28,7 +28,10 @@ import {
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import {
+  ApprovalMode,
+  DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+} from '@vybestack/llxprt-code-core/config/configTypes.js';
 import {
   AgentEventType,
   DEFAULT_AGENT_ID,
@@ -46,6 +49,7 @@ import type { AgentRequestInput } from '@vybestack/llxprt-code-core/core/clientC
 import type {
   ContentBlock,
   IContent,
+  TextBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
@@ -73,6 +77,18 @@ export function partListUnionToParts(req: AgentRequestInput): ContentBlock[] {
     return req.blocks;
   }
   return [];
+}
+
+/** True when a ContentBlock[] contains at least one tool_response block. */
+export function hasFunctionResponsePart(parts: ContentBlock[]): boolean {
+  return parts.some((p) => p.type === 'tool_response');
+}
+
+/** Extracts the text from every TextBlock in a ContentBlock[]. */
+export function textParts(parts: ContentBlock[]): string[] {
+  return parts
+    .filter((p): p is TextBlock => p.type === 'text')
+    .map((p) => p.text);
 }
 
 /** Shared mutable state for a scripted agent client. */
@@ -258,6 +274,7 @@ export function createTestConfig(options: {
   policyEngine: PolicyEngine;
   interactive: boolean;
   approvalMode?: ApprovalMode;
+  imagePayloadBudgetBytes?: number;
 }): Config {
   const { messageBus, toolRegistry, policyEngine, interactive } = options;
   const approvalMode = options.approvalMode ?? ApprovalMode.YOLO;
@@ -266,6 +283,8 @@ export function createTestConfig(options: {
     getSessionId: () => 'agentic-loop-test-session',
     getUsageStatisticsEnabled: () => false,
     getDebugMode: () => false,
+    getImagePayloadBudgetBytes: () =>
+      options.imagePayloadBudgetBytes ?? DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
     getApprovalMode: () => approvalMode,
     getEphemeralSettings: () => ({}),
     getEphemeralSetting: () => undefined,

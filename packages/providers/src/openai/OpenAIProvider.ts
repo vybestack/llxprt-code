@@ -47,6 +47,7 @@ import { type DumpMode } from '../utils/dumpContext.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
 import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
+import { createBoundedCache } from '../kimi/kimiFileUpload.js';
 import {
   resolveOpenAITransport,
   resolveExplicitTransportModeFromSources,
@@ -630,6 +631,111 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
   }
 
+  /**
+   * Kimi-only media pre-pass. When the resolved provider is a Kimi alias with
+   * `mediaSupport.fileUpload` enabled, uploads PDF media blocks via the Files
+   * API and returns a cloned options object where PDF blocks are replaced with
+   * text references and the file ids are appended to the system instruction.
+   *
+   * For all other providers, or when there are no uploadable PDFs, the original
+   * options object is returned unchanged.
+   */
+  private async maybeProcessKimiMedia(
+    options: NormalizedGenerateChatOptions,
+    client: OpenAI,
+    logger: DebugLogger,
+  ): Promise<NormalizedGenerateChatOptions> {
+    const mediaSupport = this.readMediaSupport();
+    const providerVideoSetting = options.settings.getProviderSettings(
+      this.name,
+    )['kimi.experimental-video'];
+    const globalVideoSetting = options.settings.get('kimi.experimental-video');
+    const allowVideo =
+      mediaSupport?.videoSupport === true &&
+      (providerVideoSetting === true || globalVideoSetting === true);
+    const allowFileUpload = mediaSupport?.fileUpload === true;
+    if (!allowFileUpload && !allowVideo) {
+      return options;
+    }
+
+    try {
+      const { processKimiMedia } = await import(
+        '../kimi/kimiMediaProcessing.js'
+      );
+      const result = await processKimiMedia(
+        client,
+        options.contents,
+        kimiFileUploadCache,
+        { allowFileUpload, allowVideo },
+      );
+
+      if (
+        result.fileReferenceText === '' &&
+        result.contents === options.contents
+      ) {
+        return options;
+      }
+
+      logger.debug(
+        () =>
+          `[OpenAIProvider] Kimi file-upload pre-pass replaced PDF blocks; file reference injected into system instruction`,
+        { fileReferenceText: result.fileReferenceText },
+      );
+
+      if (result.fileReferenceText === '') {
+        return { ...options, contents: result.contents };
+      }
+
+      const existingInstruction = options.systemInstruction ?? '';
+      const combinedInstruction =
+        existingInstruction.trim().length > 0
+          ? `${existingInstruction}\n\n${result.fileReferenceText}`
+          : result.fileReferenceText;
+
+      return {
+        ...options,
+        contents: result.contents,
+        systemInstruction: combinedInstruction,
+      };
+    } catch (mediaError) {
+      logger.warn(
+        () =>
+          `[OpenAIProvider] Kimi media pre-pass failed, falling back to inline behavior: ${
+            mediaError instanceof Error
+              ? mediaError.message
+              : String(mediaError)
+          }`,
+      );
+      return options;
+    }
+  }
+
+  /**
+   * Read the mediaSupport block threaded onto providerConfig.providerSpecific
+   * by the alias factory. Returns undefined for non-Kimi or when not declared.
+   */
+  private readMediaSupport():
+    | { inlineImages?: boolean; fileUpload?: boolean; videoSupport?: boolean }
+    | undefined {
+    const specific = this.providerConfig?.providerSpecific as
+      | { mediaSupport?: unknown }
+      | undefined;
+    const raw = specific?.mediaSupport;
+    if (
+      raw === null ||
+      raw === undefined ||
+      typeof raw !== 'object' ||
+      Array.isArray(raw)
+    ) {
+      return undefined;
+    }
+    return raw as {
+      inlineImages?: boolean;
+      fileUpload?: boolean;
+      videoSupport?: boolean;
+    };
+  }
+
   private async *generateChatCompletionImpl(
     options: NormalizedGenerateChatOptions,
     toolFormatter: ToolFormatter,
@@ -646,10 +752,19 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const { executeApiRequest } = await import('./OpenAIApiExecution.js');
     const { mergeInvocationHeaders } = await import('./OpenAIClientFactory.js');
 
-    const requestContext = await prepareRequest(
+    // Kimi media pre-pass: upload PDFs via the Files API and replace them
+    // with file-id references so large documents stay out of the token budget.
+    // Only activates for Kimi aliases with mediaSupport.fileUpload enabled.
+    const effectiveOptions = await this.maybeProcessKimiMedia(
       options,
+      client,
+      logger,
+    );
+
+    const requestContext = await prepareRequest(
+      effectiveOptions,
       this.getDefaultModel(),
-      options.config,
+      effectiveOptions.config,
       logger,
       this.name,
     );
@@ -847,3 +962,13 @@ function resolveAgentSettings(
 ): Record<string, unknown> {
   return invocationSettings ?? providerConfig?.getEphemeralSettings?.() ?? {};
 }
+
+/**
+ * Process-level cache for Kimi file uploads, keyed by content hash.
+ * Prevents re-uploading the same PDF across turns within a session.
+ * Bounded via the wrapper to avoid unbounded memory growth.
+ */
+const KIMI_FILE_UPLOAD_CACHE_CAPACITY = 100;
+const kimiFileUploadCache = createBoundedCache<string>(
+  KIMI_FILE_UPLOAD_CACHE_CAPACITY,
+);

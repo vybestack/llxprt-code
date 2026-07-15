@@ -9,9 +9,23 @@ import { AuthCommandExecutor } from './authCommand.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { CommandContext } from './types.js';
 
+// Mock browser profile discovery so tests never touch real disk. The source
+// imports discoverBrowserProfiles from the public core barrel
+// (@vybestack/llxprt-code-core), so the mock must target that specifier and
+// preserve all other core exports via importActual.
+vi.mock('@vybestack/llxprt-code-core', async (importActual) => {
+  const actual =
+    await importActual<typeof import('@vybestack/llxprt-code-core')>();
+  return { ...actual, discoverBrowserProfiles: vi.fn() };
+});
+
+import { discoverBrowserProfiles } from '@vybestack/llxprt-code-core';
+
 // Mock OAuth manager and dependencies
 const peekStoredTokenMock = vi.fn();
 const getOAuthTokenMock = vi.fn();
+const setBrowserProfileAssociationMock = vi.fn();
+const clearBrowserProfileAssociationMock = vi.fn();
 const mockOAuthManager = {
   registerProvider: vi.fn(),
   toggleOAuthEnabled: vi.fn(),
@@ -24,6 +38,8 @@ const mockOAuthManager = {
   getSupportedProviders: vi.fn().mockReturnValue(['anthropic', 'codex']),
   getHigherPriorityAuth: vi.fn(),
   logout: vi.fn(),
+  setBrowserProfileAssociation: setBrowserProfileAssociationMock,
+  clearBrowserProfileAssociation: clearBrowserProfileAssociationMock,
 } as unknown as OAuthManager;
 
 describe('AuthCommandExecutor OAuth Support', () => {
@@ -212,7 +228,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         type: 'message',
         messageType: 'error',
         content:
-          'Invalid action: invalid. Use enable, disable, login, logout, status, or switch',
+          'Invalid action: invalid. Use create, disable, enable, login, logout, profile, status, or switch',
       });
     });
   });
@@ -557,6 +573,168 @@ describe('AuthCommandExecutor OAuth Support', () => {
       expect(authCommand.name).toBe('auth');
       expect(authCommand.description).toBe(
         'Manage OAuth authentication for providers',
+      );
+    });
+  });
+
+  describe('Browser profile association (create action)', () => {
+    it('@given Chrome profiles discovered @when create with bucket @then lists numbered profiles', async () => {
+      (
+        discoverBrowserProfiles as unknown as ReturnType<typeof vi.fn>
+      ).mockReturnValue([
+        { directoryName: 'Default', displayName: 'Personal' },
+        { directoryName: 'Profile 1', displayName: 'Work' },
+      ]);
+
+      const result = await executor.execute(
+        mockContext,
+        'anthropic create mybucket',
+      );
+
+      const expectedContent = [
+        'Discovered Chrome profiles for anthropic bucket "mybucket":',
+        '',
+        '  1: Personal (profile: Default)',
+        '  2: Work (profile: Profile 1)',
+        '',
+        'To associate a profile, run:',
+        '  /auth anthropic profile mybucket <number-or-directory>',
+        'Then authenticate with:',
+        '  /auth anthropic login mybucket',
+      ].join('\n');
+
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'info',
+        content: expectedContent,
+      });
+    });
+
+    it('@given no Chrome profiles found @when create action omits the bucket @then falls back to default-bucket guidance', async () => {
+      (
+        discoverBrowserProfiles as unknown as ReturnType<typeof vi.fn>
+      ).mockReturnValue([]);
+
+      const result = await executor.execute(mockContext, 'anthropic create');
+
+      expect(result).toMatchObject({ type: 'message', messageType: 'info' });
+      expect((result as { content: string }).content).toContain(
+        'No Chrome profiles were detected',
+      );
+      expect((result as { content: string }).content).toContain('default');
+    });
+  });
+
+  describe('Browser profile association (profile action)', () => {
+    it('@given numeric selector @when profile set by number @then stores resolved directory and displayName', async () => {
+      (
+        discoverBrowserProfiles as unknown as ReturnType<typeof vi.fn>
+      ).mockReturnValue([
+        { directoryName: 'Default', displayName: 'Personal' },
+        { directoryName: 'Profile 1', displayName: 'Work' },
+      ]);
+
+      const result = await executor.execute(
+        mockContext,
+        'anthropic profile workbucket 2',
+      );
+
+      expect(setBrowserProfileAssociationMock).toHaveBeenCalledWith(
+        'anthropic',
+        'workbucket',
+        {
+          browser: 'chrome',
+          profileDirectory: 'Profile 1',
+          displayName: 'Work',
+        },
+      );
+      expect(result).toMatchObject({ type: 'message', messageType: 'info' });
+      expect((result as { content: string }).content).toContain(
+        'Associated anthropic bucket "workbucket" with Chrome profile: Work (Profile 1)',
+      );
+    });
+
+    it('@given literal directory selector @when profile set by name @then stores directory without displayName', async () => {
+      const result = await executor.execute(
+        mockContext,
+        'anthropic profile mybucket MyCustomDir',
+      );
+
+      expect(setBrowserProfileAssociationMock).toHaveBeenCalledWith(
+        'anthropic',
+        'mybucket',
+        { browser: 'chrome', profileDirectory: 'MyCustomDir' },
+      );
+      expect((result as { content: string }).content).toContain(
+        'Associated anthropic bucket "mybucket" with Chrome profile: MyCustomDir',
+      );
+    });
+
+    it('@given out-of-range number @when profile selector invalid @then returns error', async () => {
+      (
+        discoverBrowserProfiles as unknown as ReturnType<typeof vi.fn>
+      ).mockReturnValue([
+        { directoryName: 'Default', displayName: 'Personal' },
+      ]);
+
+      const result = await executor.execute(
+        mockContext,
+        'anthropic profile mybucket 9',
+      );
+
+      expect(setBrowserProfileAssociationMock).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ type: 'message', messageType: 'error' });
+      expect((result as { content: string }).content).toContain(
+        'Invalid profile selector',
+      );
+    });
+
+    it('@given traversal selector @when profile selector has path separators @then returns error', async () => {
+      const result = await executor.execute(
+        mockContext,
+        'anthropic profile mybucket ../etc',
+      );
+
+      expect(setBrowserProfileAssociationMock).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ type: 'message', messageType: 'error' });
+      expect((result as { content: string }).content).toContain(
+        'Invalid profile selector',
+      );
+    });
+
+    it('@given --clear flag @when profile clear @then clears association', async () => {
+      const result = await executor.execute(
+        mockContext,
+        'anthropic profile mybucket --clear',
+      );
+
+      expect(clearBrowserProfileAssociationMock).toHaveBeenCalledWith(
+        'anthropic',
+        'mybucket',
+      );
+      expect((result as { content: string }).content).toContain(
+        'Cleared browser profile association',
+      );
+    });
+
+    it('@given missing bucket @when profile without bucket @then returns error', async () => {
+      const result = await executor.execute(mockContext, 'anthropic profile');
+
+      expect(result).toMatchObject({ type: 'message', messageType: 'error' });
+      expect((result as { content: string }).content).toContain(
+        'Bucket name required',
+      );
+    });
+
+    it('@given missing selector @when profile without selector @then returns error', async () => {
+      const result = await executor.execute(
+        mockContext,
+        'anthropic profile mybucket',
+      );
+
+      expect(result).toMatchObject({ type: 'message', messageType: 'error' });
+      expect((result as { content: string }).content).toContain(
+        'selector is required',
       );
     });
   });

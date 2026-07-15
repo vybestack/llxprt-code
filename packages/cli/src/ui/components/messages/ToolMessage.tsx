@@ -5,14 +5,14 @@
  */
 
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Box, Text } from 'ink';
 import type { IndividualToolCallDisplay } from '../../types.js';
 import { ToolCallStatus } from '../../types.js';
 import { Colors } from '../../colors.js';
 import { theme } from '../../semantic-colors.js';
 import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../constants.js';
-import { useKeypress } from '../../hooks/useKeypress.js';
+import { useShellCommandDisplay } from '../../contexts/ShellCommandDisplayContext.js';
 import {
   ShellExecutionService,
   splitCommands,
@@ -67,12 +67,14 @@ function extractEchoText(cmd: string): string | null {
  * Compute current subcommand for display when details visible.
  */
 function computeCurrentSubcommand(
-  isDetailsVisible: boolean,
+  showFullShellDescription: boolean,
   status: ToolCallStatus,
   description: string | undefined,
   resultDisplay: string | object | undefined,
 ): string | null {
-  if (!isDetailsVisible || status !== ToolCallStatus.Executing) return null;
+  if (!showFullShellDescription || status !== ToolCallStatus.Executing) {
+    return null;
+  }
   if (!description) return null;
 
   const outputString =
@@ -165,38 +167,10 @@ function computeShellFocusState(
 }
 
 /**
- * Hook to manage details visibility toggle.
- */
-function useDetailsToggle(
-  status: ToolCallStatus,
-  isFocused: boolean,
-): [boolean, React.Dispatch<React.SetStateAction<boolean>>] {
-  const [isDetailsVisible, setIsDetailsVisible] = useState(false);
-
-  useKeypress(
-    (key) => {
-      if (
-        key.ctrl === true &&
-        key.name === 'r' &&
-        status === ToolCallStatus.Executing
-      ) {
-        setIsDetailsVisible((prev) => !prev);
-      }
-    },
-    { isActive: isFocused },
-  );
-
-  return [isDetailsVisible, setIsDetailsVisible];
-}
-
-/**
  * Render the executing status hint.
  */
-function renderExecutingHint(
-  status: ToolCallStatus,
-  isDetailsVisible: boolean,
-): React.ReactNode {
-  if (status !== ToolCallStatus.Executing || isDetailsVisible) {
+function renderExecutingHint(showExecutingHint: boolean): React.ReactNode {
+  if (!showExecutingHint) {
     return null;
   }
   return (
@@ -260,6 +234,7 @@ function renderToolMessageHeader(
   name: string,
   description: string,
   emphasis: TextEmphasis,
+  showFullDescription: boolean,
   isThisShellFocusable: boolean,
   isThisShellFocused: boolean,
 ): React.ReactNode {
@@ -276,6 +251,7 @@ function renderToolMessageHeader(
         status={status}
         description={description}
         emphasis={emphasis}
+        showFullDescription={showFullDescription}
       />
       {isThisShellFocusable && (
         <Box marginLeft={1} flexShrink={0}>
@@ -299,7 +275,7 @@ function renderToolMessageContent(
   borderColor: string,
   borderDimColor: boolean,
   status: ToolCallStatus,
-  isDetailsVisible: boolean,
+  showExecutingHint: boolean,
   currentSubcommand: string | null,
   resultDisplay: string | object | undefined,
   availableTerminalHeight: number | undefined,
@@ -323,7 +299,7 @@ function renderToolMessageContent(
       flexDirection="column"
       overflowX="hidden"
     >
-      {renderExecutingHint(status, isDetailsVisible)}
+      {renderExecutingHint(showExecutingHint)}
       {renderCurrentSubcommand(currentSubcommand)}
       <ToolResultDisplay
         resultDisplay={resultDisplay}
@@ -355,6 +331,7 @@ export interface ToolMessageProps extends IndividualToolCallDisplay {
 }
 
 export const ToolMessage: React.FC<ToolMessageProps> = ({
+  callId,
   name,
   description,
   resultDisplay,
@@ -372,7 +349,13 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   borderColor = Colors.Gray,
   borderDimColor = false,
 }) => {
-  const [isDetailsVisible] = useDetailsToggle(status, isFocused);
+  const isShellTool = name === SHELL_NAME || name === SHELL_COMMAND_NAME;
+  const showFullShellDescription = useShellCommandDisplay(
+    callId,
+    name,
+    status,
+    isFocused,
+  );
 
   const { isThisShellFocused, isThisShellFocusable } = computeShellFocusState(
     name,
@@ -386,12 +369,12 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   const currentSubcommand = useMemo(
     () =>
       computeCurrentSubcommand(
-        isDetailsVisible,
+        showFullShellDescription,
         status,
         description,
         resultDisplay,
       ),
-    [isDetailsVisible, status, description, resultDisplay],
+    [showFullShellDescription, status, description, resultDisplay],
   );
 
   return (
@@ -405,6 +388,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
         name,
         description || '',
         emphasis,
+        showFullShellDescription,
         isThisShellFocusable,
         isThisShellFocused,
       )}
@@ -413,7 +397,9 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
         borderColor,
         borderDimColor,
         status,
-        isDetailsVisible,
+        isShellTool &&
+          status === ToolCallStatus.Executing &&
+          !showFullShellDescription,
         currentSubcommand,
         resultDisplay,
         availableTerminalHeight,

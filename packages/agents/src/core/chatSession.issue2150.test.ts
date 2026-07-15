@@ -23,7 +23,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ChatSession, StreamEventType } from './chatSession.js';
+import { ChatSession } from './chatSession.js';
 import type { StreamEvent } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -164,7 +164,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
     return events;
   }
 
-  it('retries the turn after a connection error thrown past the first chunk and then succeeds', async () => {
+  it('does not retry a connection error after visible content was emitted', async () => {
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
@@ -195,22 +195,76 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-midstream',
     );
 
-    // Collecting events must NOT throw: the loop must recover, not break.
-    const events = await collectEvents(stream);
+    await expect(collectEvents(stream)).rejects.toThrow('Connection error.');
+    expect(attempt).toBe(1);
+    expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
+  });
 
-    // The provider must have been re-invoked for a fresh turn.
-    expect(attempt).toBe(2);
-    expect(generateChatCompletionMock).toHaveBeenCalledTimes(2);
+  it('does not retry a connection error after a tool call was emitted', async () => {
+    let attempt = 0;
+    const generateChatCompletionMock = vi.fn(async function* (
+      _options: GenerateChatOptions,
+    ) {
+      attempt++;
+      yield {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'call-1',
+            name: 'read_file',
+            parameters: { file_path: 'README.md' },
+          },
+        ],
+      };
+      throw createConnectionError();
+    });
+    registerProvider(generateChatCompletionMock);
 
-    // A RETRY event must be surfaced to the consumer on the second attempt.
-    expect(events.some((e) => e.type === StreamEventType.RETRY)).toBe(true);
+    const chat = buildChatSession();
+    const stream = await chat.sendMessageStream(
+      { message: 'trigger a tool call before a connection error' },
+      'prompt-issue-2150-tool-call',
+    );
 
-    // The recovered content must be delivered.
-    const chunkText = events
-      .filter((e) => e.type === StreamEventType.CHUNK)
-      .map((e) => JSON.stringify(e))
-      .join('');
-    expect(chunkText).toContain('recovered response');
+    await expect(collectEvents(stream)).rejects.toThrow('Connection error.');
+    expect(attempt).toBe(1);
+    expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry after hidden thinking metadata was emitted', async () => {
+    let attempt = 0;
+    const generateChatCompletionMock = vi.fn(async function* (
+      _options: GenerateChatOptions,
+    ) {
+      attempt++;
+      yield {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'thinking',
+            thought: '',
+            sourceField: 'thinking',
+            signature: 'state-token',
+            streamId: 'reasoning-1',
+            streamStatus: 'complete',
+            isHidden: true,
+          },
+        ],
+      };
+      throw createConnectionError();
+    });
+    registerProvider(generateChatCompletionMock);
+
+    const chat = buildChatSession();
+    const stream = await chat.sendMessageStream(
+      { message: 'trigger hidden thinking metadata before a connection error' },
+      'prompt-issue-2150-thinking-metadata',
+    );
+
+    await expect(collectEvents(stream)).rejects.toThrow('Connection error.');
+    expect(attempt).toBe(1);
+    expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });
 
   it('does NOT retry a non-transient error thrown mid-stream and stops the loop', async () => {
@@ -297,14 +351,9 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-persistent',
     );
 
-    // The loop must not spin forever: after the bounded retry budget is
-    // exhausted, the final connection error propagates.
     await expect(collectEvents(stream)).rejects.toThrow('Connection error.');
-    // Bounded and deterministic: with INVALID_CONTENT_RETRY_OPTIONS.maxAttempts
-    // === 2, the provider is invoked exactly twice (1 initial + 1 retry) and
-    // the second failure exhausts the budget, propagating the error.
-    expect(attempt).toBe(2);
-    expect(generateChatCompletionMock).toHaveBeenCalledTimes(2);
+    expect(attempt).toBe(1);
+    expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });
 
   it('does NOT retry when the request was aborted via the abort signal (no AbortError name)', async () => {
@@ -383,10 +432,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });
 
-  it('records exactly one user turn and one assistant turn after a mid-stream retry (no duplication)', async () => {
-    // History safety invariant: turn-level retry must not double-record the
-    // user turn, and the discarded 'partial' from the failed attempt must not
-    // appear in history — only the recovered final assistant message.
+  it('does not commit a failed response after visible content was emitted', async () => {
     const history = new HistoryService();
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
@@ -414,31 +460,16 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-history-safety',
     );
 
-    const events = await collectEvents(stream);
-    expect(attempt).toBe(2);
-    expect(events.some((e) => e.type === StreamEventType.RETRY)).toBe(true);
+    await expect(collectEvents(stream)).rejects.toThrow('Connection error.');
+    expect(attempt).toBe(1);
 
-    // Allow any deferred history writes to settle before querying.
     await chat.waitForIdle();
 
-    const all = history.getAll();
-    const human = all.filter((c) => c.speaker === 'human');
-    const ai = all.filter((c) => c.speaker === 'ai');
-
-    // Exactly one user turn (not duplicated by the retry).
-    expect(human).toHaveLength(1);
-    // Exactly one assistant turn: the recovered response, NOT the discarded
-    // 'partial' content from the failed attempt.
-    expect(ai).toHaveLength(1);
-    const aiText = JSON.stringify(ai[0]);
-    expect(aiText).toContain('recovered response');
-    expect(aiText).not.toContain('partial');
+    const ai = history.getAll().filter((content) => content.speaker === 'ai');
+    expect(ai).toHaveLength(0);
   });
 
-  it('retries InvalidStreamError thrown mid-stream and then succeeds (TurnProcessor-level content-retry regression)', async () => {
-    // Pins that extracting the retry decision into shouldRetryStreamAttempt
-    // did not change InvalidStreamError retry behavior. First attempt yields a
-    // chunk then throws InvalidStreamError; second attempt succeeds.
+  it('does not retry InvalidStreamError after a chunk was already emitted', async () => {
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
@@ -468,20 +499,11 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-invalid-stream',
     );
 
-    // Must retry and succeed (no throw).
-    const events = await collectEvents(stream);
-    expect(attempt).toBe(2);
-    expect(events.some((e) => e.type === StreamEventType.RETRY)).toBe(true);
-    const chunkText = events
-      .filter((e) => e.type === StreamEventType.CHUNK)
-      .map((e) => JSON.stringify(e))
-      .join('');
-    expect(chunkText).toContain('recovered response');
+    await expect(collectEvents(stream)).rejects.toThrow(InvalidStreamError);
+    expect(attempt).toBe(1);
   });
 
-  it('retries EmptyStreamError thrown mid-stream and then succeeds (content-retry regression)', async () => {
-    // Analogous to the InvalidStreamError case. EmptyStreamError's constructor
-    // takes only a message, so it is straightforward to construct here.
+  it('does not retry EmptyStreamError after a chunk was already emitted', async () => {
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
@@ -508,14 +530,8 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-empty-stream',
     );
 
-    const events = await collectEvents(stream);
-    expect(attempt).toBe(2);
-    expect(events.some((e) => e.type === StreamEventType.RETRY)).toBe(true);
-    const chunkText = events
-      .filter((e) => e.type === StreamEventType.CHUNK)
-      .map((e) => JSON.stringify(e))
-      .join('');
-    expect(chunkText).toContain('recovered response');
+    await expect(collectEvents(stream)).rejects.toThrow(EmptyStreamError);
+    expect(attempt).toBe(1);
   });
 
   it('shares one transport budget across agent empty-stream retries', async () => {

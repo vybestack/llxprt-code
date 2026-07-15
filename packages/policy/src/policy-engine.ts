@@ -4,11 +4,18 @@ import {
   type PolicyRule,
 } from './types.js';
 import { stableStringify } from './stable-stringify.js';
+import { isDestructiveCommand } from './destructive-commands.js';
 import {
   SHELL_TOOL_NAMES,
   splitCommands,
   hasRedirection,
 } from './utils/shell-utils.js';
+
+/** Reads the `command` property from args as a string, or undefined if absent/non-string. */
+function readStringCommand(args: Record<string, unknown>): string | undefined {
+  const c = args['command'];
+  return typeof c === 'string' ? c : undefined;
+}
 
 /**
  * PolicyEngine evaluates tool execution requests against configured rules.
@@ -49,6 +56,16 @@ export class PolicyEngine {
       }
     }
 
+    // Hard-deny backstop: built-in destructive-command disabled-list. This is
+    // a non-bypassable guard that fires before rule matching so it beats the
+    // YOLO wildcard (priority 1.999) and any allowlist rule.
+    if (SHELL_TOOL_NAMES.includes(toolName)) {
+      const command = readStringCommand(args);
+      if (command !== undefined && isDestructiveCommand(command)) {
+        return PolicyDecision.DENY;
+      }
+    }
+
     // Find the highest priority matching rule
     const matchingRule = this.findMatchingRule(toolName, args);
 
@@ -78,8 +95,8 @@ export class PolicyEngine {
       SHELL_TOOL_NAMES.includes(toolName) &&
       decision === PolicyDecision.ALLOW
     ) {
-      const command = (args as { command?: string }).command;
-      if (command) {
+      const command = readStringCommand(args);
+      if (command !== undefined) {
         const shellResult = this.evaluateShellCommand(
           toolName,
           args,
@@ -215,8 +232,8 @@ export class PolicyEngine {
     serverName: string | undefined,
     currentResult: PolicyDecision,
   ): PolicyDecision {
-    const command = (args as { command?: string }).command;
-    if (!command) {
+    const command = readStringCommand(args);
+    if (command === undefined) {
       return currentResult;
     }
 

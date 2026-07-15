@@ -34,9 +34,10 @@ import type { IdeContextTracker } from './IdeContextTracker.js';
 import type { AgentHookManager } from './AgentHookManager.js';
 import type { AfterAgentHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import {
-  estimateRequestTokensStructured,
   extractPromptText,
+  estimateRequestTokensStructured,
 } from './clientHelpers.js';
+import { recordTokenEstimate } from './tokenUsageEstimateLogger.js';
 import { getTokenLimitForConfiguredContext } from './contextLimitResolver.js';
 import { resolvePreflightOverflow } from './preflightRecovery.js';
 import type { Todo } from '@vybestack/llxprt-code-tools';
@@ -110,6 +111,10 @@ function normalizeTodoSnapshotEntry(todo: Todo): Todo {
   } as Todo;
 }
 
+function estimateStructuredTokens(request: AgentMessageInput): number {
+  return Math.max(1, estimateRequestTokensStructured(request));
+}
+
 export const MAX_TURNS = 100;
 const MAX_RETRIES = 3;
 
@@ -155,7 +160,8 @@ export class MessageStreamOrchestrator {
     const request = yield* this._preflight(narrowedRequest, ctx);
     if (request instanceof Turn) return request;
 
-    const earlyTurn = yield* this._checkSessionLimits(narrowedRequest, ctx);
+    // Include BeforeAgent hook context because it is part of the provider payload.
+    const earlyTurn = yield* this._checkSessionLimits(request, ctx);
     if (earlyTurn) return earlyTurn;
 
     await this._injectIdeContext();
@@ -250,9 +256,6 @@ export class MessageStreamOrchestrator {
         request = [...blocks, additionalBlock] as AgentMessageInput;
       }
     } else {
-      // Continuation / retry of the same prompt — emit ModelInfo only when
-      // the composite provider/profile/model identity has changed since the
-      // last emission. Duplicates for the same identity are suppressed.
       yield* this._emitModelInfoIfChanged();
     }
 
@@ -301,39 +304,35 @@ export class MessageStreamOrchestrator {
       getTokenLimitForConfiguredContext(effectiveIdentity.model, config) -
       chat.getLastPromptTokenCount();
 
-    // When history already exceeds the current model's limit (e.g. after a
-    // provider/profile switch to a smaller context window), remaining capacity
-    // is zero or negative. The preflight guard must NOT short-circuit: even a
-    // 0-token tool-response continuation would otherwise trip it
-    // (0 > negative * 0.95), emitting a bogus ContextWindowWillOverflow before
-    // the downstream compression path can resolve the overflow with the
-    // switched model's tokenizer. Defer to the normal send path.
+    const fallback = estimateStructuredTokens(initialRequest);
+    const recordEstimate = (estimatedTokens: number): void => {
+      recordTokenEstimate(
+        chat,
+        ctx.prompt_id,
+        initialRequest,
+        estimatedTokens,
+        effectiveIdentity.providerName,
+        effectiveIdentity.model,
+      );
+    };
+
     if (remainingTokenCount <= 0) {
+      recordEstimate(fallback);
       return undefined;
     }
 
-    // Use the model-aware tokenizer for request sizing rather than a naive
-    // text-only estimate, which under-counts functionResponse-only
-    // continuations as 0 tokens. When the chat session does not expose the
-    // tokenizer-backed methods (e.g. a minimal test double), or the tokenizer
-    // throws (e.g. uninitialized internals during early preflight), fall back
-    // to the structured payload-aware estimate so the guard still functions
-    // while counting tool-response/tool-call JSON payloads.
-    const { estimatePendingTokens: est } = chat;
-    const fallback = estimateRequestTokensStructured(initialRequest);
-    const estimatedRequestTokenCount =
-      typeof est === 'function'
-        ? await Promise.resolve()
-            .then(() => {
-              const contents = iContentFromAgentMessageInput(initialRequest);
-              return est.call(chat, contents);
-            })
-            .catch(() => fallback)
-        : fallback;
+    let estimatedRequestTokenCount = fallback;
+    if (typeof chat.estimatePendingTokens === 'function') {
+      try {
+        const contents = iContentFromAgentMessageInput(initialRequest);
+        estimatedRequestTokenCount = await chat.estimatePendingTokens(contents);
+      } catch {
+        estimatedRequestTokenCount = fallback;
+      }
+    }
 
-    // Overflow guard: attempt automatic compression before bailing (issue
-    // #2402), matching manual /compress, the load-balancer guard (#2207),
-    // and the provider content enforcer (#2299).
+    recordEstimate(estimatedRequestTokenCount);
+
     const proceed = await resolvePreflightOverflow(this.deps, {
       promptId: ctx.prompt_id,
       estimatedRequestTokenCount,
@@ -580,7 +579,6 @@ export class MessageStreamOrchestrator {
       return yield* this._finishWithToolCalls(iter.deferredEvents, ctx);
     }
 
-    // Prefer authoritative Finished outcome when available, fallback to event-inferred flags
     const hadVisible = iter.outcome?.hadVisibleOutput ?? iter.hadContent;
     const hadThinking = iter.outcome?.hadThinking ?? iter.hadThinking;
 

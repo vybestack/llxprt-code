@@ -61,6 +61,9 @@ export interface GeminiPartExtension {
    * May also contain arbitrary user-configured field names (issue #2488).
    */
   llxprtSourceField?: string;
+  llxprtThoughtBlockId?: string;
+  llxprtThoughtBlockStatus?: 'delta' | 'complete';
+  llxprtThoughtIsHidden?: boolean;
 }
 
 /**

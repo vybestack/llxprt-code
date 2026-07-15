@@ -171,13 +171,13 @@ describe('TodoContinuationService', () => {
   });
 
   describe('shouldDeferStreamEvent', () => {
-    it('returns true for Content events', () => {
+    it('returns false for Content events so assistant text streams immediately', () => {
       expect(
         service.shouldDeferStreamEvent({
           type: AgentEventType.Content,
           value: 'text',
         }),
-      ).toBe(true);
+      ).toBe(false);
     });
 
     it('returns true for Finished events', () => {

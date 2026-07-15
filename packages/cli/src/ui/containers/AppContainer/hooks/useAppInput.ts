@@ -28,6 +28,7 @@ import { useSlashCommandActions } from './useSlashCommandActions.js';
 import { useExitHandling } from './useExitHandling.js';
 import { useInputHandling } from './useInputHandling.js';
 import { useShellFocusAutoReset } from './useShellFocusAutoReset.js';
+import { useSteer } from './useSteer.js';
 import * as fs from 'fs';
 import type { AppBootstrapResult } from './useAppBootstrap.js';
 import type { AppDialogsResult } from './useAppDialogs.js';
@@ -373,6 +374,7 @@ function useInputStreamWiring(
     lastSubmittedPromptRef,
     agentStreamResult,
   } = setup;
+  const { submitQuery } = agentStreamResult;
   const pendingHistoryItems = useMemo(
     () => [
       ...(core.pendingHistoryItems as HistoryItem[]),
@@ -390,7 +392,7 @@ function useInputStreamWiring(
   const { handleFinalSubmit } = useInputHandling({
     buffer,
     inputHistoryStore,
-    submitQuery: agentStreamResult.submitQuery,
+    submitQuery,
     pendingHistoryItems,
     lastSubmittedPromptRef,
     hadToolCallsRef,
@@ -404,16 +406,32 @@ function useInputStreamWiring(
     handleFinalSubmit,
     todos,
   });
+  const enqueueSteer = useCallback(
+    (message: string) => {
+      void submitQuery(message);
+    },
+    [submitQuery],
+  );
+  const handleSteer = useSteer(
+    p.agent,
+    agentStreamResult.streamingState,
+    agentStreamResult.sanitizeContent,
+    pendingHistoryItems,
+    enqueueSteer,
+  );
   const {
     activeShellPtyId: _ptyIdFromStream,
     pendingHistoryItems: _pendingFromStream,
+    queuedSubmissions,
     ...streamRest
   } = agentStreamResult;
   return {
     handleFinalSubmit,
     handleUserInputSubmit,
+    handleSteer,
     pendingHistoryItems,
     activeShellPtyId,
+    queuedSubmissions,
     ...streamRest,
   };
 }

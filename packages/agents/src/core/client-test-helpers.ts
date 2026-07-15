@@ -21,6 +21,7 @@ import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config
 import type { ChatSession } from './chatSession.js';
 import { AgentClient } from './client.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { FileDiscoveryService } from '@vybestack/llxprt-code-core/services/fileDiscoveryService.js';
 import { setSimulate429 } from '@vybestack/llxprt-code-core/utils/testUtils.js';
@@ -163,6 +164,9 @@ function setupConfigMock(): ContentGeneratorConfig {
       suggestionCooldownMs: 300000,
     }),
     getContinueOnFailedApiCall: vi.fn().mockReturnValue(true),
+    getImagePayloadBudgetBytes: vi
+      .fn()
+      .mockReturnValue(DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES),
     getChatCompression: vi.fn().mockReturnValue(undefined),
     getEphemeralSettings: vi.fn().mockReturnValue({}),
     getEphemeralSetting: vi.fn().mockReturnValue(undefined),
@@ -204,6 +208,9 @@ async function createAndInitClient(
     clearHistory: vi.fn(),
     sendMessageStream: vi.fn(),
     getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+    getTokenUsageLogger: vi.fn().mockReturnValue({
+      isEnabled: () => false,
+    }),
   };
   client['chat'] = mockChat as unknown as ChatSession;
 
