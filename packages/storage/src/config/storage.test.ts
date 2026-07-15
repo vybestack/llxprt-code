@@ -391,6 +391,12 @@ describe('Storage – instance (workspace-local) helpers', () => {
     );
   });
 
+  it('getProjectChatsDir is the chats folder directly under the project temp dir (shared writer/prober contract)', () => {
+    expect(storage.getProjectChatsDir()).toBe(
+      path.join(storage.getProjectTempDir(), 'chats'),
+    );
+  });
+
   it('getProjectTempDir is deterministic for a given project root', () => {
     const a = new Storage(projectRoot).getProjectTempDir();
     const b = new Storage(projectRoot).getProjectTempDir();

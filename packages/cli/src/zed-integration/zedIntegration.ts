@@ -3,271 +3,421 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
 import {
   type Config,
-  getErrorStatus,
   todoEvents,
   DEFAULT_AGENT_ID,
-  isWithinRoot,
-  createInkStdio,
-  type ContentBlock,
-  EmojiFilter,
   type FilterConfiguration,
+  type IContent,
   type TodoUpdateEvent,
-  type Todo,
   type ApprovalMode,
-  type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import { debugLogger, DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import * as acp from '@agentclientprotocol/sdk';
+import type * as acp from '@agentclientprotocol/sdk';
 import {
   fromConfig,
+  getTokenLimitForConfiguredContext,
   type Agent,
   type AgentEvent,
-  type DoneReason,
-  type ThoughtSummary,
-  type AgentInput,
 } from '@vybestack/llxprt-code-agents';
-import { Readable, Writable } from 'node:stream';
-import * as path from 'node:path';
 import { type LoadedSettings } from '../config/settings.js';
 import { randomUUID } from 'crypto';
-import {
-  loadProfileByName,
-  setCliRuntimeContext,
-} from '@vybestack/llxprt-code-providers/runtime.js';
-import { runExitCleanup } from '../utils/cleanup.js';
 import { AcpFileSystemService } from './fileSystemService.js';
-import { parseZedAuthMethodId, buildAvailableModes } from './zed-helpers.js';
+import {
+  buildAvailableModes,
+  buildSessionModes,
+  buildUsageUpdate,
+  describeSessionUpdateForLog,
+} from './zed-helpers.js';
 import { ZedPathResolver } from './zed-path-resolver.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import { StreamBatcher } from './streamBatcher.js';
 import {
-  emitToolCallStart,
-  emitToolStatus,
-  emitToolResult,
   requestToolConfirmation,
   type PermissionRoundTripResult,
 } from './zed-tool-handler.js';
-
+import type { TerminalManager } from './zed-terminal-manager.js';
+import { buildZedTerminalSetup } from './zed-terminal-setup.js';
+import { mapHistoryToSessionUpdates } from './zed-session-replay.js';
+import { wrapReplayFailure } from './zed-session-errors.js';
+import {
+  resumeAgentHistory,
+  toLoadRequestError,
+  hasRecordedSessionFile,
+  readAgentHistoryForReplay,
+  nodeChatSessionFileLister,
+  type ChatSessionFileLister,
+} from './zed-session-loader.js';
+import { SessionLifecycle } from './zed-session-lifecycle.js';
+import type { LifecycleSession } from './zed-session-pagination.js';
+import { authenticateZedAgent, initializeZedAgent } from './zed-initialize.js';
+import {
+  createSessionScopedConfig,
+  resolveSessionTargetDir,
+} from './zed-session-config.js';
+import { buildAvailableCommandsUpdate } from './zed-command-registry.js';
+import { tryHandleZedCommand } from './zed-prompt-command.js';
+import {
+  buildZedConfigOptions,
+  dispatchZedConfigOption,
+  observeZedConfigOptions,
+  setZedConfigOption,
+  zedConfigOptionsForClient,
+  zedSessionConfigOptions,
+} from './zed-config-options.js';
+import {
+  buildZedSession,
+  enableZedSessionRecording,
+} from './zed-agent-setup.js';
+import {
+  runPromptTurn as executePromptTurn,
+  type SessionStreamDeps,
+} from './zed-session-events.js';
+import { buildZedPlanUpdate } from './zed-plan-update.js';
+import {
+  SessionTitleTracker,
+  buildSessionInfoUpdate,
+} from './zed-session-info.js';
+import type {
+  CloseSessionRequest,
+  CloseSessionResponse,
+  DeleteSessionRequest,
+  DeleteSessionResponse,
+  ClientCapabilitiesWithSession,
+} from './acp-types.js';
 export { parseZedAuthMethodId } from './zed-helpers.js';
-
-export async function runZedIntegration(
-  config: Config,
-  settings: LoadedSettings,
-): Promise<void> {
-  const logger = new DebugLogger('llxprt:zed-integration');
-  logger.debug(() => 'Starting Zed integration');
-
-  const { stdout: workingStdout } = createInkStdio();
-  const stdout = Writable.toWeb(workingStdout) as WritableStream;
-  const stdin = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
-
-  logger.debug(() => 'Streams created');
-
-  // Deliberate foreground hand-off: the Zed integration replaces the CLI
-  // bootstrap runtime as the process default. allowDefaultHandoff opts past the
-  // write-once guard for this one intentional transition (issue #2300).
-  setCliRuntimeContext(config.getSettingsService(), config, {
-    runtimeId: 'cli.runtime.zed',
-    metadata: { source: 'zed-integration', stage: 'bootstrap' },
-    allowDefaultHandoff: true,
-  });
-
-  let zedAgent: ZedAgent | undefined;
-
-  try {
-    const stream = acp.ndJsonStream(stdout, stdin);
-    const connection = new acp.AgentSideConnection((conn) => {
-      logger.debug(() => 'Creating ZedAgent');
-      zedAgent = new ZedAgent(config, settings, conn);
-      return zedAgent;
-    }, stream);
-    logger.debug(() => 'AgentSideConnection created successfully');
-
-    try {
-      await connection.closed;
-    } finally {
-      await zedAgent?.disposeAll();
-      await runExitCleanup();
-    }
-  } catch (e) {
-    logger.debug(() => `ERROR: Failed to create AgentSideConnection: ${e}`);
-    throw e;
-  }
-}
-
-function resolveSessionTargetDir(
-  config: Config,
-  cwd: string | undefined,
-): string {
-  if (cwd === undefined || cwd.trim().length === 0) {
-    return config.getTargetDir();
-  }
-  const candidate = path.isAbsolute(cwd)
-    ? cwd
-    : path.resolve(config.getTargetDir(), cwd);
-  return isWithinRoot(candidate, config.getTargetDir())
-    ? candidate
-    : config.getTargetDir();
-}
-
-export function createSessionScopedConfig(
-  config: Config,
-  initialFileSystemService: ReturnType<Config['getFileSystemService']>,
-  targetDir: string = config.getTargetDir(),
-): Config {
-  let fileSystemService = initialFileSystemService;
-  let providerManager: RuntimeProviderManager | undefined =
-    config.getProviderManager();
-  return new Proxy(config, {
-    get(target, property, receiver) {
-      if (property === 'getFileSystemService') {
-        return () => fileSystemService;
-      }
-      if (property === 'setFileSystemService') {
-        return (nextFileSystemService: typeof fileSystemService) => {
-          fileSystemService = nextFileSystemService;
-        };
-      }
-      if (property === 'getProviderManager') {
-        return () => providerManager;
-      }
-      if (property === 'setProviderManager') {
-        return (nextProviderManager: RuntimeProviderManager) => {
-          providerManager = nextProviderManager;
-        };
-      }
-      if (property === 'getProjectRoot') {
-        return () => targetDir;
-      }
-      if (property === 'getTargetDir') {
-        return () => targetDir;
-      }
-      return Reflect.get(target, property, receiver);
-    },
-  });
-}
-
+export { createSessionScopedConfig } from './zed-session-config.js';
+export { runZedIntegration } from './runZedIntegration.js';
 export class ZedAgent {
   private sessions: Map<string, Session> = new Map();
-  private clientCapabilities: acp.ClientCapabilities | undefined;
-  private logger: DebugLogger;
-
+  private clientCapabilities: ClientCapabilitiesWithSession | undefined;
+  private readonly logger = new DebugLogger('llxprt:zed-integration');
+  private readonly lifecycle: SessionLifecycle;
   constructor(
     private config: Config,
     _settings: LoadedSettings,
     private connection: acp.AgentSideConnection,
+    private readonly sessionFileLister: ChatSessionFileLister = nodeChatSessionFileLister,
   ) {
-    this.logger = new DebugLogger('llxprt:zed-integration');
+    this.lifecycle = new SessionLifecycle(
+      config,
+      this.sessions,
+      (sessionId, cwd) => this.buildAndResumeSession(sessionId, cwd),
+      (session) => zedSessionConfigOptions(this.clientCapabilities, session),
+    );
   }
-
   async initialize(
     args: acp.InitializeRequest,
   ): Promise<acp.InitializeResponse> {
-    this.clientCapabilities = args.clientCapabilities;
-    const profileManager = this.config.getProfileManager();
-    const profileNames = profileManager
-      ? await profileManager.listProfiles()
-      : [];
-    const authMethods = profileNames.map((name) => ({
-      id: name,
-      name,
-      description: null,
-    }));
-
-    return {
-      protocolVersion: acp.PROTOCOL_VERSION,
-      authMethods,
-      agentCapabilities: {
-        loadSession: false,
-        promptCapabilities: {
-          image: true,
-          audio: true,
-          embeddedContext: true,
-        },
-      },
-    };
+    this.clientCapabilities = args.clientCapabilities as
+      | ClientCapabilitiesWithSession
+      | undefined;
+    return initializeZedAgent(this.config);
   }
-
-  async authenticate({ methodId }: acp.AuthenticateRequest): Promise<void> {
-    const profileManager = this.config.getProfileManager();
-    const availableProfiles = profileManager
-      ? await profileManager.listProfiles()
-      : [];
-    const profileName = parseZedAuthMethodId(methodId, availableProfiles);
-
-    await loadProfileByName(profileName);
+  listSessions(
+    params: acp.ListSessionsRequest,
+  ): Promise<acp.ListSessionsResponse> {
+    return this.lifecycle.list(params);
   }
-
+  authenticate({ methodId }: acp.AuthenticateRequest): Promise<void> {
+    return authenticateZedAgent(this.config, methodId);
+  }
   async newSession({
     cwd,
     mcpServers: _mcpServers,
   }: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
     try {
       const sessionId = randomUUID();
-      const baseFileSystemService = this.config.getFileSystemService();
-      const sessionFileSystemService = this.clientCapabilities?.fs
-        ? new AcpFileSystemService(
-            this.connection,
-            sessionId,
-            this.clientCapabilities.fs,
-            baseFileSystemService,
-          )
-        : baseFileSystemService;
-      const sessionConfig = createSessionScopedConfig(
-        this.config,
-        sessionFileSystemService,
-        resolveSessionTargetDir(this.config, cwd),
-      );
-
-      this.logger.debug(() => `newSession - creating session ${sessionId}`);
-
-      const agent = await fromConfig({
-        config: sessionConfig,
-        sessionId,
-      });
-
-      const session = new Session(
-        sessionId,
+      const {
         agent,
-        sessionConfig,
-        this.connection,
-      );
+        config: sessionConfig,
+        terminals,
+      } = await this.buildSessionAgent(sessionId, cwd);
+      let session: Session;
+      try {
+        await enableZedSessionRecording(agent, (error) =>
+          this.logger.debug(
+            () => `Recording failed for ${sessionId}: ${error}`,
+          ),
+        );
+        session = await this.createSession(
+          sessionId,
+          agent,
+          sessionConfig,
+          terminals,
+        );
+      } catch (error) {
+        await agent.dispose().catch(() => undefined);
+        await terminals?.settleAll().catch(() => undefined);
+        throw error;
+      }
+      try {
+        await session.sendAvailableCommands();
+      } catch (error) {
+        await session.dispose();
+        throw error;
+      }
+      let configOptions: acp.NewSessionResponse['configOptions'];
+      try {
+        ({ configOptions } = await zedConfigOptionsForClient(
+          this.clientCapabilities,
+          agent,
+          sessionConfig,
+        ));
+      } catch (error) {
+        await session.dispose();
+        throw error;
+      }
       this.sessions.set(sessionId, session);
-
       return {
         sessionId,
-        modes: {
-          availableModes: buildAvailableModes(),
-          currentModeId: agent.getApprovalMode(),
-        },
+        modes: buildSessionModes(agent.getApprovalMode()),
+        ...(configOptions === undefined ? {} : { configOptions }),
       };
     } catch (error) {
       this.logger.debug(() => `ERROR in newSession: ${error}`);
       throw error;
     }
   }
-
-  async setSessionMode(
+  resumeSession(
+    params: acp.ResumeSessionRequest,
+  ): Promise<acp.ResumeSessionResponse> {
+    return this.lifecycle.resume(params);
+  }
+  private supportsConfigOptions(): boolean {
+    return this.clientCapabilities?.session?.configOptions === true;
+  }
+  private supportsTerminal(): boolean {
+    return this.clientCapabilities?.terminal === true;
+  }
+  private createSession(
+    id: string,
+    agent: Agent,
+    config: Config,
+    terminals: TerminalManager | null,
+  ) {
+    return buildZedSession(
+      agent,
+      () =>
+        new Session(
+          id,
+          agent,
+          config,
+          this.connection,
+          this.supportsConfigOptions(),
+          terminals,
+        ),
+      (error) => this.logger.debug(() => `Session cleanup failed: ${error}`),
+    );
+  }
+  async loadSession(
+    params: acp.LoadSessionRequest,
+  ): Promise<acp.LoadSessionResponse> {
+    return this.lifecycle.runSerialized(params.sessionId, () =>
+      this.performLoadSession(params),
+    );
+  }
+  private async performLoadSession(
+    params: acp.LoadSessionRequest,
+  ): Promise<acp.LoadSessionResponse> {
+    const { sessionId } = params;
+    const reattached = await this.tryReattachLiveSession(sessionId);
+    if (reattached !== null) {
+      try {
+        await reattached.sendAvailableCommands();
+      } catch (error) {
+        await this.rollbackSession(sessionId, reattached);
+        throw error;
+      }
+      try {
+        return {
+          modes: buildSessionModes(reattached.getApprovalMode()),
+          ...(await zedSessionConfigOptions(
+            this.clientCapabilities,
+            reattached,
+          )),
+        };
+      } catch (error) {
+        await this.rollbackSession(sessionId, reattached);
+        throw error;
+      }
+    }
+    await this.disposePriorSession(sessionId);
+    const session = await this.installResumedSession(sessionId, params.cwd);
+    try {
+      await session.sendAvailableCommands();
+    } catch (error) {
+      await this.rollbackSession(sessionId, session);
+      throw error;
+    }
+    return {
+      modes: buildSessionModes(session.getApprovalMode()),
+      ...(await zedSessionConfigOptions(this.clientCapabilities, session)),
+    };
+  }
+  private async tryReattachLiveSession(
+    sessionId: string,
+  ): Promise<Session | null> {
+    const existing = this.sessions.get(sessionId);
+    if (existing === undefined) {
+      return null;
+    }
+    const recordingExists = await hasRecordedSessionFile(
+      this.config,
+      sessionId,
+      this.sessionFileLister,
+    );
+    if (recordingExists) {
+      return null;
+    }
+    this.logger.debug(
+      () => `loadSession - re-attaching live session ${sessionId}`,
+    );
+    try {
+      await existing.replayLiveHistory();
+      return existing;
+    } catch (error) {
+      await this.rollbackSession(sessionId, existing);
+      throw error;
+    }
+  }
+  private async rollbackSession(
+    sessionId: string,
+    session: Session,
+  ): Promise<void> {
+    this.sessions.delete(sessionId);
+    await session.dispose().catch(() => undefined);
+  }
+  private async disposePriorSession(sessionId: string): Promise<void> {
+    const existing = this.sessions.get(sessionId);
+    if (existing !== undefined) await this.rollbackSession(sessionId, existing);
+  }
+  private async installResumedSession(
+    sessionId: string,
+    cwd: string | undefined,
+  ): Promise<Session> {
+    const { session, history } = await this.buildAndResumeSession(
+      sessionId,
+      cwd,
+    );
+    this.sessions.set(sessionId, session);
+    try {
+      await session.streamHistory(history);
+    } catch (error) {
+      await this.rollbackSession(sessionId, session);
+      this.logger.debug(() => `loadSession - replay failed: ${error}`);
+      throw error;
+    }
+    return session;
+  }
+  private async buildAndResumeSession(
+    sessionId: string,
+    cwd: string | undefined,
+  ): Promise<{ session: Session; history: readonly IContent[] }> {
+    const {
+      agent,
+      config: sessionConfig,
+      terminals,
+    } = await this.buildSessionAgent(sessionId, cwd);
+    try {
+      const history = await resumeAgentHistory(
+        agent,
+        sessionId,
+        sessionConfig,
+        this.sessionFileLister,
+      );
+      const session = new Session(
+        sessionId,
+        agent,
+        sessionConfig,
+        this.connection,
+        this.supportsConfigOptions(),
+        terminals,
+      );
+      return { session, history };
+    } catch (error) {
+      await agent.dispose().catch(() => undefined);
+      await terminals?.settleAll().catch(() => undefined);
+      this.logger.debug(() => `loadSession - build/resume failed: ${error}`);
+      throw toLoadRequestError(sessionId, error);
+    }
+  }
+  private async buildSessionAgent(
+    sessionId: string,
+    cwd: string | undefined,
+  ): Promise<{
+    agent: Agent;
+    config: Config;
+    terminals: TerminalManager | null;
+  }> {
+    const baseFileSystemService = this.config.getFileSystemService();
+    const sessionFileSystemService = this.clientCapabilities?.fs
+      ? new AcpFileSystemService(
+          this.connection,
+          sessionId,
+          this.clientCapabilities.fs,
+          baseFileSystemService,
+        )
+      : baseFileSystemService;
+    let terminalSetup: ReturnType<typeof buildZedTerminalSetup> | undefined;
+    const sessionConfig = createSessionScopedConfig(
+      this.config,
+      sessionFileSystemService,
+      resolveSessionTargetDir(this.config, cwd),
+      () => terminalSetup?.registry,
+    );
+    if (this.supportsTerminal()) {
+      terminalSetup = buildZedTerminalSetup(
+        sessionId,
+        sessionConfig,
+        this.config.getToolRegistry(),
+        this.connection,
+        this.logger,
+      );
+    }
+    let agent: Agent;
+    try {
+      agent = await fromConfig({
+        config: sessionConfig,
+        sessionId,
+        ...(terminalSetup === undefined
+          ? {}
+          : { messageBus: terminalSetup.messageBus }),
+      });
+    } catch (error) {
+      await terminalSetup?.terminals.settleAll().catch(() => undefined);
+      throw error;
+    }
+    return {
+      agent,
+      config: sessionConfig,
+      terminals: terminalSetup?.terminals ?? null,
+    };
+  }
+  deleteSession(params: DeleteSessionRequest): Promise<DeleteSessionResponse> {
+    return this.lifecycle.delete(params);
+  }
+  closeSession(params: CloseSessionRequest): Promise<CloseSessionResponse> {
+    return this.lifecycle.close(params);
+  }
+  setSessionMode(
     params: acp.SetSessionModeRequest,
   ): Promise<acp.SetSessionModeResponse> {
     const session = this.sessions.get(params.sessionId);
     if (!session) {
       throw new Error(`Session not found: ${params.sessionId}`);
     }
-    return session.setMode(params.modeId);
+    return Promise.resolve(session.setMode(params.modeId));
   }
-
-  async cancel(params: acp.CancelNotification): Promise<void> {
-    const session = this.sessions.get(params.sessionId);
-    if (!session) {
-      throw new Error(`Session not found: ${params.sessionId}`);
-    }
+  setSessionConfigOption(params: acp.SetSessionConfigOptionRequest) {
+    return this.lifecycle.runSerialized(params.sessionId, () =>
+      dispatchZedConfigOption(this.clientCapabilities, this.sessions, params),
+    );
+  }
+  async cancel({ sessionId }: acp.CancelNotification): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new Error(`Session not found: ${sessionId}`);
     await session.cancelPendingPrompt();
   }
-
   async prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {
     const session = this.sessions.get(params.sessionId);
     if (!session) {
@@ -275,62 +425,15 @@ export class ZedAgent {
     }
     return session.prompt(params);
   }
-
   async disposeAll(): Promise<void> {
     const sessions = [...this.sessions.values()];
     this.sessions.clear();
     await Promise.allSettled(sessions.map((session) => session.dispose()));
   }
 }
-
-function mapDoneReasonToStopReason(reason: DoneReason): acp.StopReason {
-  switch (reason) {
-    case 'stop':
-    case 'loop-detected':
-      return 'end_turn';
-    case 'aborted':
-      return 'cancelled';
-    case 'max-turns':
-      return 'max_turn_requests';
-    case 'context-overflow':
-      return 'max_tokens';
-    case 'refusal':
-      return 'refusal';
-    case 'error':
-    case 'hook-stopped':
-      throw new Error(`Agent stopped with terminal reason: ${reason}`);
-    default: {
-      const exhaustive: never = reason;
-      return exhaustive;
-    }
-  }
-}
-const NOOP_METADATA_EVENT_TYPES = new Set<AgentEvent['type']>([
-  'context-warning',
-  'compression',
-  'model-info',
-  'retry',
-  'citation',
-]);
-
-function isNoopMetadataEvent(event: AgentEvent): event is Extract<
-  AgentEvent,
-  {
-    type:
-      | 'context-warning'
-      | 'compression'
-      | 'model-info'
-      | 'retry'
-      | 'citation';
-  }
-> {
-  return NOOP_METADATA_EVENT_TYPES.has(event.type);
-}
-
 export class Session {
   private pendingPrompt: AbortController | null = null;
-  private emojiFilter: EmojiFilter;
-  private logger: DebugLogger;
+  private readonly logger = new DebugLogger('llxprt:zed-integration');
   private pathResolver: ZedPathResolver;
   private activeConfirmations = new Map<
     string,
@@ -342,25 +445,29 @@ export class Session {
   >();
   private promptGeneration = 0;
   private readonly todoListener: (event: TodoUpdateEvent) => void;
+  private readonly stopConfigUpdates: () => void;
+  private readonly sessionInfo = new SessionTitleTracker();
+  private readonly createdAt = new Date().toISOString();
+  private readonly terminals: TerminalManager | null;
 
   constructor(
     private readonly id: string,
     private readonly agent: Agent,
     private readonly config: Config,
     private readonly connection: acp.AgentSideConnection,
+    configOptionsEnabled = false,
+    terminals: TerminalManager | null = null,
   ) {
-    this.logger = new DebugLogger('llxprt:zed-integration');
-    const configuredEmojiFilterMode = this.config.getEphemeralSetting(
-      'emojifilter',
-    ) as 'allowed' | 'auto' | 'warn' | 'error' | undefined;
-    const emojiFilterMode = configuredEmojiFilterMode ?? 'auto';
-    const filterConfig: FilterConfiguration = { mode: emojiFilterMode };
-    this.emojiFilter = new EmojiFilter(filterConfig);
-
+    this.terminals = terminals;
     this.pathResolver = new ZedPathResolver(this.config, (msg) =>
       this.debug(msg),
     );
-
+    const recordedTitle = config
+      .getSessionRecordingService()
+      ?.getSessionMetadataTitle();
+    if (recordedTitle !== undefined) {
+      this.sessionInfo.hydrateFromMetadata(recordedTitle);
+    }
     this.todoListener = (event: TodoUpdateEvent) => {
       const eventAgentId = event.agentId ?? DEFAULT_AGENT_ID;
       if (event.sessionId === this.id && eventAgentId === DEFAULT_AGENT_ID) {
@@ -370,8 +477,15 @@ export class Session {
       }
     };
     todoEvents.onTodoUpdated(this.todoListener);
+    this.stopConfigUpdates = configOptionsEnabled
+      ? observeZedConfigOptions(
+          this.agent,
+          this.config,
+          (update) => this.sendUpdateStrict(update),
+          (error) => this.logger.debug(() => `Config update failed: ${error}`),
+        )
+      : () => undefined;
   }
-
   setMode(modeId: acp.SessionModeId): acp.SetSessionModeResponse {
     const availableModes = buildAvailableModes();
     const mode = availableModes.find((m) => m.id === modeId);
@@ -381,46 +495,43 @@ export class Session {
     this.agent.setApprovalMode(mode.id as ApprovalMode);
     return {};
   }
-
+  getApprovalMode(): ApprovalMode {
+    return this.agent.getApprovalMode();
+  }
+  setConfigOption(configId: string, value: string) {
+    return setZedConfigOption(this.agent, this.config, configId, value);
+  }
+  getConfigOptions = () => buildZedConfigOptions(this.agent, this.config);
+  getLifecycleInfo(): LifecycleSession {
+    const title = this.sessionInfo.getTitle();
+    return {
+      sessionId: this.id,
+      cwd: this.config.getProjectRoot(),
+      updatedAt: this.sessionInfo.getUpdatedAt() ?? this.createdAt,
+      createdAt: this.createdAt,
+      ...(title === undefined ? {} : { title }),
+    };
+  }
   async cancelPendingPrompt(): Promise<void> {
     this.settleActiveConfirmation();
-    if (!this.pendingPrompt) {
-      return;
-    }
-    this.pendingPrompt.abort();
+    this.pendingPrompt?.abort();
     this.pendingPrompt = null;
+    await this.terminals
+      ?.settleAll()
+      .catch((e: unknown) =>
+        this.logger.debug(() => `Terminal settleAll failed: ${e}`),
+      );
   }
-
   private settleActiveConfirmation(): void {
-    const confirmations = [...this.activeConfirmations.entries()];
-    this.activeConfirmations.clear();
-    for (const [confirmationId, state] of confirmations) {
-      if (state.settled) {
-        continue;
-      }
-      state.settled = true;
-      try {
-        this.agent.tools.respondToConfirmation(
-          confirmationId,
-          ToolConfirmationOutcome.Cancel,
-        );
-      } catch (error) {
-        debugLogger.error('Failed to cancel active tool confirmation:', error);
-      } finally {
-        state.cancelWaiter();
-      }
+    for (const confirmationId of [...this.activeConfirmations.keys()]) {
+      this.settleConfirmation(confirmationId);
     }
   }
-
   private settleConfirmation(confirmationId: string): void {
     const state = this.activeConfirmations.get(confirmationId);
-    if (state === undefined) {
-      return;
-    }
+    if (state === undefined) return;
     this.activeConfirmations.delete(confirmationId);
-    if (state.settled) {
-      return;
-    }
+    if (state.settled) return;
     state.settled = true;
     try {
       this.agent.tools.respondToConfirmation(
@@ -433,231 +544,141 @@ export class Session {
       state.cancelWaiter();
     }
   }
-
   async prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {
     await this.cancelPendingPrompt();
-    const pendingSend = new AbortController();
-    this.pendingPrompt = pendingSend;
-    this.promptGeneration += 1;
-    const promptGeneration = this.promptGeneration;
-
-    const promptId = Math.random().toString(16).slice(2);
-
+    const eligibility = this.sessionInfo.consumeTitleEligibility(params.prompt);
     try {
-      let parts: ContentBlock[];
-      try {
-        parts = await this.pathResolver.resolvePrompt(
-          params.prompt,
-          pendingSend.signal,
-        );
-      } catch (error) {
-        if (
-          pendingSend.signal.aborted ||
-          (error instanceof Error && error.name === 'AbortError')
-        ) {
-          return { stopReason: 'cancelled' };
-        }
-        throw error;
-      }
-
-      const batcher = new StreamBatcher(this.emojiFilter, (u) =>
-        this.sendUpdate(u),
+      this.recordMetadataTitle(eligibility.title);
+    } catch (error) {
+      this.logger.debug(() => `Session metadata recording failed: ${error}`);
+    }
+    try {
+      const commandResult = await tryHandleZedCommand(
+        params.prompt,
+        this.agent,
+        (update) => this.sendUpdateStrict(update),
       );
-      let terminalStopReason: acp.StopReason | null = null;
-
+      if (commandResult !== null) {
+        return commandResult.response;
+      }
+      const pendingSend = new AbortController();
+      this.pendingPrompt = pendingSend;
+      this.promptGeneration += 1;
+      const promptGeneration = this.promptGeneration;
+      const promptId = randomUUID();
       try {
-        terminalStopReason = await this.consumeAgentStream(
-          parts,
+        return await this.runPromptTurn(
+          params,
           pendingSend,
           promptId,
           promptGeneration,
-          batcher,
         );
-      } catch (error) {
-        if (getErrorStatus(error) === 429) {
-          throw new acp.RequestError(
-            429,
-            'Rate limit exceeded. Try again later.',
-          );
-        }
-        if (
-          pendingSend.signal.aborted ||
-          (error instanceof Error && error.name === 'AbortError')
-        ) {
-          return { stopReason: 'cancelled' };
-        }
-        throw error;
       } finally {
-        try {
-          await batcher.flush();
-        } catch (flushError) {
-          debugLogger.error(
-            'Failed to flush stream updates to Zed:',
-            flushError,
-          );
+        if (this.pendingPrompt === pendingSend) {
+          this.pendingPrompt = null;
         }
       }
-
-      if (pendingSend.signal.aborted && terminalStopReason !== 'cancelled') {
-        return { stopReason: 'cancelled' };
-      }
-
-      if (terminalStopReason !== null) {
-        return { stopReason: terminalStopReason };
-      }
-
-      return { stopReason: 'end_turn' };
     } finally {
-      if (this.pendingPrompt === pendingSend) {
-        this.pendingPrompt = null;
+      try {
+        await this.emitTurnMetadata(eligibility);
+      } catch (error) {
+        this.logger.debug(() => `emitTurnMetadata ERROR: ${String(error)}`);
       }
     }
   }
 
-  private async consumeAgentStream(
-    parts: ContentBlock[],
+  private async runPromptTurn(
+    params: acp.PromptRequest,
     pendingSend: AbortController,
     promptId: string,
     promptGeneration: number,
-    batcher: StreamBatcher,
-  ): Promise<acp.StopReason | null> {
-    const eventStream = this.agent.stream(parts as AgentInput, {
-      signal: pendingSend.signal,
+  ): Promise<acp.PromptResponse> {
+    return executePromptTurn(
+      {
+        pathResolver: this.pathResolver,
+        emojiFilterMode: (this.config.getEphemeralSetting('emojifilter') ??
+          'auto') as FilterConfiguration['mode'],
+        streamDeps: this.buildStreamDeps(promptGeneration, pendingSend),
+      },
+      params,
+      pendingSend,
       promptId,
-      maxTurns: this.config.getMaxSessionTurns(),
-    });
-    let terminalStopReason: acp.StopReason | null = null;
-    for await (const event of eventStream) {
-      if (this.isPromptStale(promptGeneration, pendingSend)) {
-        if (event.type === 'done') {
-          return 'cancelled';
-        }
-        continue;
-      }
-      const stopReason = await this.handleAgentEvent(
-        event,
-        batcher,
-        promptGeneration,
-        pendingSend,
-      );
-      if (stopReason !== null) {
-        terminalStopReason = stopReason;
-      }
-    }
-    return terminalStopReason;
+      promptGeneration,
+    );
   }
 
-  private async handleFlushedAgentEvent(
-    event: Exclude<
-      AgentEvent,
-      Extract<AgentEvent, { type: 'text' | 'thinking' | 'done' }>
-    >,
-    batcher: StreamBatcher,
+  private buildStreamDeps(
     promptGeneration: number,
     pendingSend: AbortController,
-  ): Promise<acp.StopReason | null> {
-    if (isNoopMetadataEvent(event)) {
-      return null;
-    }
-    switch (event.type) {
-      case 'tool-call':
-        await batcher.flush();
-        await emitToolCallStart(event.call, (u) => this.sendUpdate(u));
-        return null;
-      case 'tool-status':
-        await batcher.flush();
-        await emitToolStatus(event.update, (u) => this.sendUpdate(u));
-        return null;
-      case 'tool-result':
-        await batcher.flush();
-        await emitToolResult(event.result, (u) => this.sendUpdate(u));
-        return null;
-      case 'tool-confirmation':
-        await batcher.flush();
-        await this.handleToolConfirmation(event, promptGeneration, pendingSend);
-        return null;
-      case 'error':
-        await batcher.flush();
-        throw this.translateErrorEvent(event);
-      case 'idle-timeout':
-        await batcher.flush();
-        throw this.translateIdleTimeout(event);
-      case 'invalid-stream':
-        await batcher.flush();
-        throw new Error(
-          'Agent produced an invalid stream that could not be recovered.',
-        );
-      case 'hook-blocked':
-        await batcher.flush();
-        throw new Error(
-          event.info.systemMessage ?? 'Agent stopped by a hook blocker.',
-        );
-      case 'loop-detected':
-        await batcher.flush();
-        return 'end_turn';
-      case 'notice':
-        await batcher.flush();
-        await this.sendUpdate({
-          sessionUpdate: 'agent_message_chunk',
-          content: { type: 'text', text: event.message },
-        });
-        return null;
-      case 'usage':
-        await batcher.flush();
-        await this.sendUsageUpdate(event.usage);
-        return null;
-      default: {
-        const exhaustive: never = event;
-        throw new Error(`Unhandled agent event: ${String(exhaustive)}`);
-      }
-    }
-  }
-
-  private async handleAgentEvent(
-    event: AgentEvent,
-    batcher: StreamBatcher,
-    promptGeneration: number,
-    pendingSend: AbortController,
-  ): Promise<acp.StopReason | null> {
-    switch (event.type) {
-      case 'text':
-        batcher.append(event.text, false);
-        return null;
-      case 'thinking': {
-        const thoughtText = this.extractThoughtText(event.thought);
-        if (thoughtText.length > 0) {
-          batcher.appendThought(thoughtText, event.thought.streamId);
-        }
-        return null;
-      }
-      case 'done':
-        await batcher.flush();
-        return mapDoneReasonToStopReason(event.reason);
-      default:
-        return this.handleFlushedAgentEvent(
-          event,
-          batcher,
+  ): SessionStreamDeps {
+    return {
+      agent: this.agent,
+      terminals: this.terminals,
+      sendUpdate: (update) => this.sendUpdate(update),
+      sendUsage: (usage) => this.sendUsageUpdate(usage),
+      handleConfirmation: (confirmation) =>
+        this.handleToolConfirmation(
+          confirmation,
           promptGeneration,
           pendingSend,
-        );
+        ),
+      isPromptStale: (gen, send) => this.isPromptStale(gen, send),
+      maxTurns: this.config.getMaxSessionTurns(),
+      logger: this.logger,
+    };
+  }
+
+  private async emitTurnMetadata(eligibility: {
+    readonly wonTitle: boolean;
+    readonly title: string | undefined;
+  }): Promise<void> {
+    const { updates } = this.sessionInfo.recordTurn(new Date().toISOString());
+    const updatedAt = updates[0]?.updatedAt ?? undefined;
+    if (eligibility.wonTitle && eligibility.title !== undefined) {
+      await this.sendTitleUpdate(
+        buildSessionInfoUpdate({ title: eligibility.title, updatedAt }),
+        eligibility.title,
+      );
+      return;
+    }
+    for (const update of updates) {
+      if (typeof update.title === 'string') {
+        await this.sendTitleUpdate(update, update.title);
+      } else {
+        await this.sendUpdate(update);
+      }
     }
   }
 
+  private async sendTitleUpdate(
+    update: acp.SessionInfoUpdate & { sessionUpdate: 'session_info_update' },
+    title: string,
+  ): Promise<void> {
+    try {
+      await this.sendUpdateStrict(update);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.debug(
+        () => `sendTitleUpdate ERROR (will retry next turn): ${msg}`,
+      );
+      this.sessionInfo.markPendingTitle(title);
+    }
+  }
+
+  private recordMetadataTitle(title: string | undefined): void {
+    const recording = this.config.getSessionRecordingService();
+    if (recording?.isActive() === true)
+      recording.recordSessionMetadata(title ?? null);
+  }
   private async sendUsageUpdate(
     usage: Extract<AgentEvent, { type: 'usage' }>['usage'],
   ): Promise<void> {
-    const outputTokens = usage.candidatesTokenCount ?? 0;
-    const size = usage.totalTokenCount ?? outputTokens;
-    if (size === 0 && outputTokens === 0) {
-      return;
-    }
-    await this.sendUpdate({
-      sessionUpdate: 'usage_update',
-      used: size,
-      size,
-    });
+    const update = buildUsageUpdate(
+      usage,
+      getTokenLimitForConfiguredContext(this.config.getModel(), this.config),
+    );
+    if (update !== null) await this.sendUpdate(update);
   }
-
   private isPromptStale(
     promptGeneration: number,
     pendingSend: AbortController,
@@ -668,7 +689,6 @@ export class Session {
       pendingSend.signal.aborted
     );
   }
-
   private async handleToolConfirmation(
     event: Extract<AgentEvent, { type: 'tool-confirmation' }>,
     promptGeneration: number,
@@ -682,12 +702,10 @@ export class Session {
         settled: false,
       });
     });
-
     if (this.isPromptStale(promptGeneration, pendingSend)) {
       this.settleConfirmation(confirmationId);
       return;
     }
-
     let result: PermissionRoundTripResult | null;
     try {
       result = await Promise.race([
@@ -697,6 +715,7 @@ export class Session {
           event.confirmation.name,
           event.confirmation.details,
           this.connection,
+          this.agent.tools.get(event.confirmation.name)?.kind,
         ),
         cancelled,
       ] as const);
@@ -704,7 +723,6 @@ export class Session {
       this.settleConfirmation(confirmationId);
       throw error;
     }
-
     const state = this.activeConfirmations.get(confirmationId);
     if (
       result === null ||
@@ -714,7 +732,6 @@ export class Session {
     ) {
       return;
     }
-
     state.settled = true;
     this.activeConfirmations.delete(confirmationId);
     try {
@@ -731,43 +748,16 @@ export class Session {
       );
     }
   }
-
-  private extractThoughtText(thought: ThoughtSummary): string {
-    const parts = [thought.subject, thought.description].filter(
-      (v) => v.length > 0,
-    );
-    return parts.join(parts.length > 1 ? ' ' : '');
+  private async sendUpdateStrict(update: acp.SessionUpdate): Promise<void> {
+    this.logger.debug(() => describeSessionUpdateForLog(update));
+    await this.connection.sessionUpdate({ sessionId: this.id, update });
   }
-
-  private translateErrorEvent(
-    event: Extract<AgentEvent, { type: 'error' }>,
-  ): Error {
-    const error = new Error(event.error.message);
-    if (event.error.status !== undefined) {
-      Object.assign(error, { status: event.error.status });
-    }
-    return error;
+  sendAvailableCommands(): Promise<void> {
+    return this.sendUpdateStrict(buildAvailableCommandsUpdate());
   }
-
-  private translateIdleTimeout(
-    event: Extract<AgentEvent, { type: 'idle-timeout' }>,
-  ): Error {
-    return new Error(event.error.message);
-  }
-
   private async sendUpdate(update: acp.SessionUpdate): Promise<void> {
-    const params: acp.SessionNotification = { sessionId: this.id, update };
-    this.logger.debug(
-      () =>
-        `sendUpdate: ${update.sessionUpdate} ${
-          'content' in update && update.content && 'text' in update.content
-            ? `(${(update.content as { text: string }).text.length} chars)`
-            : ''
-        }`,
-    );
     try {
-      await this.connection.sessionUpdate(params);
-      this.logger.debug(() => 'sendUpdate: delivered');
+      await this.sendUpdateStrict(update);
     } catch (error) {
       this.logger.debug(
         () =>
@@ -775,34 +765,46 @@ export class Session {
       );
     }
   }
-
   debug(msg: string) {
-    if (this.config.getDebugMode()) {
-      debugLogger.warn(msg);
+    if (this.config.getDebugMode()) debugLogger.warn(msg);
+  }
+  private sendPlanUpdate(todos: TodoUpdateEvent['todos']): Promise<void> {
+    return this.sendUpdate(buildZedPlanUpdate(todos));
+  }
+  async streamHistory(items: readonly IContent[]): Promise<void> {
+    const updates = mapHistoryToSessionUpdates(items);
+    for (const update of updates) {
+      try {
+        await this.sendUpdateStrict(update);
+      } catch (error) {
+        throw wrapReplayFailure(this.id, error);
+      }
     }
+    this.sessionInfo.hydrateFromHistory(items);
   }
-
-  private async sendPlanUpdate(todos: Todo[]): Promise<void> {
-    const entries: acp.PlanEntry[] = todos.map((todo) => ({
-      content: todo.content,
-      status: todo.status,
-      priority: 'medium' as const,
-    }));
-    await this.sendUpdate({ sessionUpdate: 'plan', entries });
+  async replayLiveHistory(): Promise<void> {
+    await this.streamHistory(
+      await readAgentHistoryForReplay(this.agent, this.id),
+    );
   }
-
   async dispose(): Promise<void> {
     try {
       todoEvents.offTodoUpdated(this.todoListener);
+      this.stopConfigUpdates();
       this.settleActiveConfirmation();
+      await this.terminals
+        ?.settleAll()
+        .catch((error) =>
+          this.logger.debug(() => `Terminal cleanup failed: ${error}`),
+        );
       this.pendingPrompt?.abort();
       this.pendingPrompt = null;
     } finally {
-      try {
-        await this.agent.dispose();
-      } catch (error) {
-        debugLogger.error('Failed to dispose Zed session agent:', error);
-      }
+      await this.agent
+        .dispose()
+        .catch((e: unknown) =>
+          this.logger.debug(() => `Failed to dispose Zed session agent: ${e}`),
+        );
     }
   }
 }

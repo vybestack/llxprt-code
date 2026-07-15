@@ -22,7 +22,10 @@ export type ConfirmationCapture = {
   requiresUserConfirmation?: boolean;
 };
 
-export function buildScriptedAgent(nextEvents: () => readonly AgentEvent[]): {
+export function buildScriptedAgent(
+  nextEvents: () => readonly AgentEvent[],
+  toolKinds: Readonly<Record<string, string>> = {},
+): {
   agent: Agent;
   confirmations: ConfirmationCapture[];
 } {
@@ -37,6 +40,8 @@ export function buildScriptedAgent(nextEvents: () => readonly AgentEvent[]): {
     setApprovalMode: vi.fn(),
     dispose: vi.fn().mockResolvedValue(undefined),
     tools: {
+      get: (name: string) =>
+        Object.hasOwn(toolKinds, name) ? { kind: toolKinds[name] } : undefined,
       respondToConfirmation: (
         confirmationId: string,
         decision: ToolConfirmationOutcome,
@@ -63,12 +68,92 @@ export function buildScriptedAgent(nextEvents: () => readonly AgentEvent[]): {
   return { agent, confirmations };
 }
 
-export function buildFakeAgent(events: readonly AgentEvent[]): {
+/**
+ * Like {@link buildScriptedAgent} but the stream blocks after yielding all
+ * events until the abort signal fires.  Used to test cancel/dispose while a
+ * prompt turn is still in-flight.
+ */
+export function buildBlockingScriptedAgent(
+  nextEvents: () => readonly AgentEvent[],
+  toolKinds: Readonly<Record<string, string>> = {},
+): {
   agent: Agent;
   confirmations: ConfirmationCapture[];
 } {
-  return buildScriptedAgent(() => events);
+  const confirmations: ConfirmationCapture[] = [];
+  const agent = {
+    async *stream(_input: unknown, opts?: unknown): AsyncIterable<AgentEvent> {
+      for (const e of nextEvents()) {
+        yield e;
+      }
+      const signal = (opts as { signal?: AbortSignal } | undefined)?.signal;
+      if (signal === undefined) {
+        throw new Error(
+          'buildBlockingScriptedAgent requires an AbortSignal in stream opts',
+        );
+      }
+      if (!signal.aborted) {
+        await new Promise<void>((resolve) => {
+          signal.addEventListener('abort', () => resolve(), { once: true });
+        });
+      }
+    },
+    getApprovalMode: (): ApprovalMode => 'default' as ApprovalMode,
+    setApprovalMode: vi.fn(),
+    dispose: vi.fn().mockResolvedValue(undefined),
+    tools: {
+      get: (name: string) =>
+        Object.hasOwn(toolKinds, name) ? { kind: toolKinds[name] } : undefined,
+      respondToConfirmation: (
+        confirmationId: string,
+        decision: ToolConfirmationOutcome,
+        payload?: ToolConfirmationPayload,
+        requiresUserConfirmation?: boolean,
+      ) => {
+        confirmations.push({
+          confirmationId,
+          decision,
+          ...(payload === undefined ? {} : { payload }),
+          ...(requiresUserConfirmation === undefined
+            ? {}
+            : { requiresUserConfirmation }),
+        });
+      },
+      onConfirmationRequest: () => () => {},
+      onToolUpdate: () => () => {},
+      setEditorCallbacks: () => {},
+      setEnabled: vi.fn().mockResolvedValue(undefined),
+      list: () => [],
+      keys: {},
+    },
+  } as unknown as Agent;
+  return { agent, confirmations };
 }
+
+export function buildFakeAgent(
+  events: readonly AgentEvent[],
+  toolKinds: Readonly<Record<string, string>> = {},
+): {
+  agent: Agent;
+  confirmations: ConfirmationCapture[];
+} {
+  return buildScriptedAgent(() => events, toolKinds);
+}
+
+export function buildBlockingFakeAgent(
+  events: readonly AgentEvent[],
+  toolKinds: Readonly<Record<string, string>> = {},
+): {
+  agent: Agent;
+  confirmations: ConfirmationCapture[];
+} {
+  return buildBlockingScriptedAgent(() => events, toolKinds);
+}
+
+export type FakeTerminalHandle = Pick<
+  acp.TerminalHandle,
+  'id' | 'currentOutput' | 'waitForExit' | 'kill' | 'release'
+>;
 
 export class RecordingConnection {
   readonly messages: Array<
@@ -84,6 +169,142 @@ export class RecordingConnection {
     optionId: ToolConfirmationOutcome.ProceedOnce,
   };
   private permissionRejection: Error | null = null;
+  private sessionUpdateFailAfter: number | null = null;
+  private sessionUpdateError: Error | null = null;
+  private sessionUpdateCalls = 0;
+
+  // --- Terminal test-double state ---
+
+  readonly createTerminalCalls: Array<{
+    command: string;
+    cwd?: string | null;
+    sessionId: string;
+    args?: string[];
+    env?: Array<{ name: string; value: string }>;
+    outputByteLimit?: number | null;
+  }> = [];
+
+  killCalls = 0;
+  releaseCalls = 0;
+
+  private terminalOutput = '';
+  private terminalExitDelayed = false;
+  private terminalExitResolvers = new Map<string, Array<() => void>>();
+  private terminalCreationWaiters = new Set<() => void>();
+  private terminalContentWaiters = new Set<() => void>();
+
+  setTerminalOutput(output: string): void {
+    this.terminalOutput = output;
+  }
+
+  delayTerminalExit(): void {
+    this.terminalExitDelayed = true;
+  }
+
+  resolveDelayedTerminalExit(terminalId?: string): void {
+    if (terminalId !== undefined) {
+      const resolvers = this.terminalExitResolvers.get(terminalId);
+      if (resolvers !== undefined) {
+        this.terminalExitResolvers.delete(terminalId);
+        for (const fn of resolvers) {
+          fn();
+        }
+      }
+      if (this.terminalExitResolvers.size === 0) {
+        this.terminalExitDelayed = false;
+      }
+      return;
+    }
+    for (const resolvers of this.terminalExitResolvers.values()) {
+      for (const fn of resolvers) {
+        fn();
+      }
+    }
+    this.terminalExitResolvers.clear();
+    this.terminalExitDelayed = false;
+  }
+
+  waitForTerminalProcessCreated(): Promise<void> {
+    if (this.createTerminalCalls.length > 0) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const waiter = (): void => {
+        this.terminalCreationWaiters.delete(waiter);
+        resolve();
+      };
+      this.terminalCreationWaiters.add(waiter);
+    });
+  }
+
+  /**
+   * Resolves once at least one terminal content update (tool_call_update with
+   * a `terminal` content block) has been recorded — i.e., the Session has
+   * created and registered a terminal.
+   */
+  waitForTerminalCreated(timeoutMs = 5000): Promise<void> {
+    if (this.hasTerminalContentUpdate()) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      const waiter = (): void => {
+        cleanup();
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error('waitForTerminalCreated timed out'));
+      }, timeoutMs);
+      const cleanup = (): void => {
+        clearTimeout(timer);
+        this.terminalContentWaiters.delete(waiter);
+      };
+      this.terminalContentWaiters.add(waiter);
+      if (this.hasTerminalContentUpdate()) {
+        waiter();
+      }
+    });
+  }
+
+  private hasTerminalContentUpdate(): boolean {
+    return this.messages.some(
+      (m) =>
+        m.kind === 'sessionUpdate' &&
+        m.update.sessionUpdate === 'tool_call_update' &&
+        (m.update.content ?? []).some((c) => c.type === 'terminal'),
+    );
+  }
+
+  /**
+   * Arms sessionUpdate to REJECT starting with the (0-based) `afterCount`-th
+   * call: the first `afterCount` notifications are still recorded/delivered
+   * normally, then every subsequent call throws `error`. Used to simulate a
+   * dead/failing transport mid history-replay (issue #1604 FINDING A) so strict
+   * streamHistory delivery and loadSession cleanup can be asserted. `afterCount:
+   * 0` fails the very first update.
+   */
+  failSessionUpdateAfter(afterCount: number, error: Error): void {
+    this.sessionUpdateFailAfter = afterCount;
+    this.sessionUpdateError = error;
+  }
+
+  /**
+   * Disarms {@link failSessionUpdateAfter} and resets the call counter so a
+   * SUBSEQUENT operation on the same connection delivers normally — used to
+   * simulate a transport that has recovered before a retry load (issue #1604
+   * FINDING A partial-failure test).
+   */
+  clearSessionUpdateFailure(): void {
+    this.sessionUpdateFailAfter = null;
+    this.sessionUpdateError = null;
+    this.sessionUpdateCalls = 0;
+  }
+
+  clearSessionInfoUpdates(): void {
+    const retained = this.messages.filter(
+      (message) =>
+        message.kind !== 'sessionUpdate' ||
+        message.update.sessionUpdate !== 'session_info_update',
+    );
+    this.messages.splice(0, this.messages.length, ...retained);
+  }
+
   private gatedDeferred: {
     resolve: (o: acp.RequestPermissionOutcome) => void;
     promise: Promise<acp.RequestPermissionOutcome>;
@@ -125,7 +346,24 @@ export class RecordingConnection {
 
   sessionUpdate: Mock = vi.fn(
     async (params: acp.SessionNotification): Promise<void> => {
+      const shouldFail =
+        this.sessionUpdateFailAfter !== null &&
+        this.sessionUpdateCalls >= this.sessionUpdateFailAfter;
+      this.sessionUpdateCalls++;
+      if (shouldFail) {
+        throw (
+          this.sessionUpdateError ??
+          new Error('sessionUpdate transport failure')
+        );
+      }
       this.messages.push({ kind: 'sessionUpdate', update: params.update });
+      if (this.hasTerminalContentUpdate()) {
+        const waiters = [...this.terminalContentWaiters];
+        this.terminalContentWaiters.clear();
+        for (const resolve of waiters) {
+          resolve();
+        }
+      }
     },
   );
 
@@ -161,10 +399,111 @@ export class RecordingConnection {
     },
   );
 
+  createTerminal: Mock = vi.fn(
+    async (params: acp.CreateTerminalRequest): Promise<FakeTerminalHandle> => {
+      const call = {
+        command: params.command,
+        cwd: params.cwd,
+        sessionId: params.sessionId,
+        ...(params.args !== undefined ? { args: params.args } : {}),
+        ...(params.env !== undefined ? { env: params.env } : {}),
+        ...(params.outputByteLimit !== undefined
+          ? { outputByteLimit: params.outputByteLimit }
+          : {}),
+      };
+      this.createTerminalCalls.push(call);
+      const waiters = [...this.terminalCreationWaiters];
+      this.terminalCreationWaiters.clear();
+      for (const resolve of waiters) {
+        resolve();
+      }
+      const terminalId = `terminal-${this.createTerminalCalls.length}`;
+      return this.buildFakeTerminalHandle(terminalId);
+    },
+  );
+
+  private buildFakeTerminalHandle(terminalId: string): FakeTerminalHandle {
+    const handle = {
+      id: terminalId,
+      currentOutput: vi.fn(async () => ({
+        output: this.terminalOutput,
+        exitStatus: null,
+        truncated: false,
+      })),
+      waitForExit: vi.fn(async () => {
+        if (this.terminalExitDelayed) {
+          await new Promise<void>((resolve) => {
+            const existing = this.terminalExitResolvers.get(terminalId);
+            if (existing !== undefined) {
+              existing.push(resolve);
+            } else {
+              this.terminalExitResolvers.set(terminalId, [resolve]);
+            }
+          });
+        }
+        return { exitCode: 0, signal: null };
+      }),
+      kill: vi.fn(async () => {
+        this.killCalls += 1;
+        this.resolveDelayedTerminalExit(terminalId);
+        return {};
+      }),
+      release: vi.fn(async () => {
+        this.releaseCalls += 1;
+        this.resolveDelayedTerminalExit(terminalId);
+        return {};
+      }),
+    };
+    return handle;
+  }
+
+  /**
+   * Returns content-focused session updates, excluding infrastructure
+   * notifications (`available_commands_update` and `session_info_update`).
+   * Use {@link sessionInfoUpdates} for title/updatedAt assertions and
+   * {@link availableCommandUpdates} for command-registry assertions.
+   */
   onlySessionUpdates(): acp.SessionUpdate[] {
     return this.messages
       .filter((m) => m.kind === 'sessionUpdate')
-      .map((m) => (m as { update: acp.SessionUpdate }).update);
+      .map((m) => (m as { update: acp.SessionUpdate }).update)
+      .filter(
+        (update) =>
+          update.sessionUpdate !== 'available_commands_update' &&
+          update.sessionUpdate !== 'session_info_update',
+      );
+  }
+
+  sessionInfoUpdates(): Array<
+    Extract<acp.SessionUpdate, { sessionUpdate: 'session_info_update' }>
+  > {
+    return this.messages
+      .filter((m) => m.kind === 'sessionUpdate')
+      .map((m) => (m as { update: acp.SessionUpdate }).update)
+      .filter(
+        (
+          update,
+        ): update is Extract<
+          acp.SessionUpdate,
+          { sessionUpdate: 'session_info_update' }
+        > => update.sessionUpdate === 'session_info_update',
+      );
+  }
+
+  availableCommandUpdates(): Array<
+    Extract<acp.SessionUpdate, { sessionUpdate: 'available_commands_update' }>
+  > {
+    return this.messages
+      .filter((m) => m.kind === 'sessionUpdate')
+      .map((m) => (m as { update: acp.SessionUpdate }).update)
+      .filter(
+        (
+          update,
+        ): update is Extract<
+          acp.SessionUpdate,
+          { sessionUpdate: 'available_commands_update' }
+        > => update.sessionUpdate === 'available_commands_update',
+      );
   }
 
   sessionUpdateKinds(): string[] {
@@ -179,6 +518,7 @@ export function buildMinimalConfig(): Config {
     getApprovalMode: () => 'default' as ApprovalMode,
     setApprovalMode: () => {},
     getTargetDir: () => '/project',
+    getProjectRoot: () => '/project',
     getFileService: () => ({ shouldIgnoreFile: () => false }),
     getFileFilteringOptions: () => ({
       respectGitIgnore: true,
@@ -187,6 +527,11 @@ export function buildMinimalConfig(): Config {
     getEnableRecursiveFileSearch: () => false,
     getFileSystemService: () => ({ readTextFile: async () => '' }),
     getMaxSessionTurns: () => 50,
+    // usage_update path (issue #1607): sendUsageUpdate resolves the context
+    // window via getTokenLimitForConfiguredContext(model, config).
+    getModel: () => 'test-model',
+    getContentGeneratorConfig: () => undefined,
+    getSessionRecordingService: () => undefined,
   } as unknown as Config;
 }
 

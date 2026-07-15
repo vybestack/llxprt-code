@@ -234,7 +234,7 @@
     "vitest": "^3.2.6"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "^0.14.1",
+    "@agentclientprotocol/sdk": "^1.2.1",
     "@ai-sdk/openai": "^2.0.74",
     "@ai-sdk/provider-utils": "^2.0.6",
     "@anthropic-ai/sdk": "^0.55.1",

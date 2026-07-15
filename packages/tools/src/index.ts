@@ -287,6 +287,7 @@ export {
   OUTPUT_UPDATE_INTERVAL_MS,
   type ShellToolParams,
 } from './tools/shell.js';
+export { buildCommandToExecute } from './tools/shell-helpers.js';
 export {
   DISCOVERED_TOOL_PREFIX,
   ToolRegistry,
