@@ -8,24 +8,29 @@
 
 import { ExitCodes } from '@vybestack/llxprt-code-core';
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 
 const mockedExit = vi.hoisted(() => vi.fn());
 const mockedCwd = vi.hoisted(() => vi.fn());
+const KITTY_ESCAPE_SEQUENCE = '\u001b[27u';
 
 function createDeferred(): {
   readonly promise: Promise<void>;
   readonly resolve: () => void;
+  readonly reject: (error: Error) => void;
 } {
   let resolvePromise: (() => void) | undefined;
-  const promise = new Promise<void>((resolve) => {
+  let rejectPromise: ((error: Error) => void) | undefined;
+  const promise = new Promise<void>((resolve, reject) => {
     resolvePromise = resolve;
+    rejectPromise = reject;
   });
   return {
     promise,
     resolve: () => resolvePromise?.(),
+    reject: (error) => rejectPromise?.(error),
   };
 }
 
@@ -84,7 +89,7 @@ describe('FolderTrustDialog', () => {
     );
 
     act(() => {
-      stdin.write('\u001b[27u'); // Press kitty escape key
+      stdin.write(KITTY_ESCAPE_SEQUENCE); // Press kitty escape key
     });
 
     await waitFor(() => {
@@ -111,7 +116,7 @@ describe('FolderTrustDialog', () => {
     act(() => {
       stdin.write('\r');
       stdin.write('\r');
-      stdin.write('\u001b[27u');
+      stdin.write(KITTY_ESCAPE_SEQUENCE);
     });
 
     await waitFor(() => expect(onSelect).toHaveBeenCalledOnce());
@@ -120,9 +125,59 @@ describe('FolderTrustDialog', () => {
     await selection.promise;
 
     act(() => {
-      stdin.write('\u001b[27u');
+      stdin.write(KITTY_ESCAPE_SEQUENCE);
     });
     await waitFor(() => expect(mockedExit).toHaveBeenCalledOnce());
+  });
+
+  it('allows another selection after StrictMode replays the mount effect', async () => {
+    const selection = createDeferred();
+    const onSelect = vi
+      .fn()
+      .mockReturnValueOnce(selection.promise)
+      .mockResolvedValue(undefined);
+    const { stdin } = renderWithProviders(
+      <StrictMode>
+        <FolderTrustDialog
+          workingDirectory="/home/user/project"
+          onSelect={onSelect}
+        />
+      </StrictMode>,
+    );
+
+    act(() => {
+      stdin.write('\r');
+    });
+    await waitFor(() => expect(onSelect).toHaveBeenCalledOnce());
+
+    selection.resolve();
+    await act(async () => selection.promise);
+    act(() => {
+      stdin.write('\r');
+    });
+
+    await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(2));
+  });
+
+  it('shows an actionable error when applying the selection fails', async () => {
+    const selection = createDeferred();
+    const { lastFrame, stdin } = renderWithProviders(
+      <FolderTrustDialog
+        workingDirectory="/home/user/project"
+        onSelect={() => selection.promise}
+      />,
+    );
+
+    act(() => {
+      stdin.write('\r');
+    });
+    selection.reject(new Error('disk full'));
+
+    await waitFor(() => {
+      expect(lastFrame()).toContain(
+        'Failed to apply folder trust selection: disk full',
+      );
+    });
   });
 
   describe('parentFolder display', () => {

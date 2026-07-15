@@ -109,6 +109,7 @@ describe('connectAndDiscover revocation-during-latency', () => {
     expect(statusUpdates).not.toContain('server:connected');
     expect(registeredTools).toHaveLength(0);
     expect(registerPromptSpy).not.toHaveBeenCalled();
+    expect(client.close).toHaveBeenCalledOnce();
   });
 
   it('sets CONNECTED and registers tools when trust holds throughout', async () => {

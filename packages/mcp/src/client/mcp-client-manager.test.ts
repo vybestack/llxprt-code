@@ -135,8 +135,23 @@ describe('McpClientManager', () => {
         getStatus: vi.fn(),
         getServerConfig: vi.fn().mockReturnValue({}),
       };
-      vi.mocked(McpClient).mockReturnValue(
-        mockedMcpClient as unknown as McpClient,
+      let onToolsUpdated: ConstructorParameters<typeof McpClient>[9];
+      vi.mocked(McpClient).mockImplementation(
+        (
+          _serverName,
+          _serverConfig,
+          _toolRegistry,
+          _promptRegistry,
+          _resourceRegistry,
+          _workspaceContext,
+          _cliConfig,
+          _debugMode,
+          _clientVersion,
+          handleToolsUpdated,
+        ) => {
+          onToolsUpdated = handleToolsUpdated;
+          return mockedMcpClient as unknown as McpClient;
+        },
       );
       const refreshMcpContext = vi.fn();
       const mockConfig = {
@@ -157,17 +172,16 @@ describe('McpClientManager', () => {
       const manager = new McpClientManager('0.0.1', toolRegistry, mockConfig);
       await manager.startConfiguredMcpServers();
       refreshMcpContext.mockClear();
-      const onToolsUpdated = vi.mocked(McpClient).mock.calls[0][9];
 
       const scheduledBeforeStop = onToolsUpdated?.();
       const stopping = manager.stop();
-      await vi.advanceTimersByTimeAsync(300);
+      await vi.runAllTimersAsync();
       await Promise.all([scheduledBeforeStop, stopping]);
 
       expect(refreshMcpContext).not.toHaveBeenCalled();
 
       const scheduledAfterStop = onToolsUpdated?.();
-      await vi.advanceTimersByTimeAsync(300);
+      await vi.runAllTimersAsync();
       await scheduledAfterStop;
       expect(refreshMcpContext).not.toHaveBeenCalled();
     } finally {

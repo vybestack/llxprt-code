@@ -43,12 +43,6 @@ vi.mock('../../config/trustedFolders.js', async () => {
         mockRules.find((rule) => rule.path === location)?.trustLevel,
       snapshotValue: mockSnapshotValue,
       restoreSnapshot: mockRestoreSnapshot,
-      deleteValue: (location: string) => {
-        const index = mockRules.findIndex((rule) => rule.path === location);
-        if (index >= 0) {
-          mockRules.splice(index, 1);
-        }
-      },
       user: { path: '/mock/path', config: {} },
       errors: [],
       isPathTrusted: mockIsPathTrusted,

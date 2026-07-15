@@ -45,6 +45,8 @@ function createErrorWithCode(message: string, code: string): Error {
   return Object.assign(new Error(message), { code });
 }
 
+const TRUSTED_FOLDERS_FILE_MODE = 0o600;
+
 vi.mock('fs', async (importOriginal) => {
   const actualFs = await importOriginal<typeof fs>();
   return {
@@ -84,7 +86,9 @@ describe('Trusted Folders Loading', () => {
     mockFsStatSync = vi.mocked(fs.statSync);
     mockFsRenameSync = vi.mocked(fs.renameSync);
     mockFsUnlinkSync = vi.mocked(fs.unlinkSync);
-    mockFsStatSync.mockReturnValue({ mode: 0o600 } as fs.Stats);
+    mockFsStatSync.mockReturnValue({
+      mode: TRUSTED_FOLDERS_FILE_MODE,
+    } as fs.Stats);
     vi.mocked(osActual.homedir).mockReturnValue('/mock/home/user');
     (mockStripJsonComments as unknown as Mock).mockImplementation(
       (jsonString: string) => jsonString,
@@ -265,10 +269,13 @@ describe('Trusted Folders Loading', () => {
     expect(mockFsWriteFileSync).toHaveBeenCalledWith(
       expect.stringContaining('.trustedFolders.json.'),
       JSON.stringify({ '/new/path': TrustLevel.TRUST_FOLDER }, null, 2),
-      { encoding: 'utf-8', mode: 0o600, flag: 'wx' },
+      { encoding: 'utf-8', mode: TRUSTED_FOLDERS_FILE_MODE, flag: 'wx' },
     );
     const temporaryPath = vi.mocked(fs.writeFileSync).mock.calls[0][0];
-    expect(mockFsChmodSync).toHaveBeenCalledWith(temporaryPath, 0o600);
+    expect(mockFsChmodSync).toHaveBeenCalledWith(
+      temporaryPath,
+      TRUSTED_FOLDERS_FILE_MODE,
+    );
     expect(mockFsStatSync).toHaveBeenCalledWith(temporaryPath);
     expect(mockFsRenameSync).toHaveBeenCalledWith(
       temporaryPath,
@@ -299,7 +306,7 @@ describe('Trusted Folders Loading', () => {
     expect(mockFsWriteFileSync).toHaveBeenCalledWith(
       expect.stringContaining('.trustedFolders.json.'),
       JSON.stringify({}, null, 2),
-      { encoding: 'utf-8', mode: 0o600, flag: 'wx' },
+      { encoding: 'utf-8', mode: TRUSTED_FOLDERS_FILE_MODE, flag: 'wx' },
     );
     expect(mockFsRenameSync).toHaveBeenCalledOnce();
   });

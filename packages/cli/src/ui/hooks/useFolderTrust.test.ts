@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { type FolderTrustRuntime, useFolderTrust } from './useFolderTrust.js';
+import { ExitCodes } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import type { LoadedTrustedFolders } from '../../config/trustedFolders.js';
@@ -20,6 +21,7 @@ import { TrustLevel } from '../../config/trustedFolders.js';
 import * as trustedFolders from '../../config/trustedFolders.js';
 
 const mockedCwd = vi.hoisted(() => vi.fn());
+const mockedExit = vi.hoisted(() => vi.fn());
 const temporaryDirectories: string[] = [];
 
 vi.mock('node:process', async () => {
@@ -28,6 +30,7 @@ vi.mock('node:process', async () => {
   return {
     ...actual,
     cwd: mockedCwd,
+    exit: mockedExit,
     platform: 'linux',
   };
 });
@@ -62,12 +65,19 @@ describe('useFolderTrust', () => {
     vi.spyOn(mockTrustedFolders, 'snapshotValue').mockImplementation(
       (folderPath) => ({
         canonicalPath: folderPath,
-        entries: Object.entries(mockTrustedFolders.user.config),
+        entries: Object.entries(mockTrustedFolders.user.config).filter(
+          ([entryPath]) => entryPath === folderPath,
+        ),
       }),
     );
     vi.spyOn(mockTrustedFolders, 'restoreSnapshot').mockImplementation(
       (snapshot) => {
-        mockTrustedFolders.user.config = Object.fromEntries(snapshot.entries);
+        mockTrustedFolders.user.config = Object.fromEntries([
+          ...Object.entries(mockTrustedFolders.user.config).filter(
+            ([entryPath]) => entryPath !== snapshot.canonicalPath,
+          ),
+          ...snapshot.entries,
+        ]);
       },
     );
     vi.spyOn(mockTrustedFolders, 'isPathTrusted').mockImplementation(
@@ -264,6 +274,93 @@ describe('useFolderTrust', () => {
     });
 
     expect(result.current.isFolderTrustDialogOpen).toBe(false);
+  });
+
+  it('reports persistence failures and exits with a fatal config error', async () => {
+    vi.useFakeTimers();
+    try {
+      isWorkspaceTrustedSpy.mockReturnValue(undefined);
+      loadTrustedFoldersSpy.mockImplementationOnce(() => {
+        throw new Error('cannot read trusted folders');
+      });
+      const { result } = renderHook(() =>
+        useFolderTrust(mockSettings, addItem, mockConfig),
+      );
+
+      await act(async () => {
+        await result.current.handleFolderTrustSelect(
+          FolderTrustChoice.TRUST_FOLDER,
+        );
+      });
+
+      expect(addItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          text: expect.stringContaining('cannot read trusted folders'),
+        }),
+        expect.any(Number),
+      );
+      expect(mockedExit).not.toHaveBeenCalled();
+      await expect(vi.advanceTimersByTimeAsync(100)).rejects.toThrow(
+        `process.exit unexpectedly called with "${ExitCodes.FATAL_CONFIG_ERROR}"`,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('restores persisted and live trust after live application fails', async () => {
+    isWorkspaceTrustedSpy.mockReturnValue(undefined);
+    mockTrustedFolders.user.config['/test/path'] = TrustLevel.DO_NOT_TRUST;
+    mockConfig.setTrustedFolderLive
+      .mockRejectedValueOnce(new Error('live update failed'))
+      .mockResolvedValueOnce(undefined);
+    const { result } = renderHook(() =>
+      useFolderTrust(mockSettings, addItem, mockConfig),
+    );
+
+    await act(async () => {
+      await result.current.handleFolderTrustSelect(
+        FolderTrustChoice.TRUST_FOLDER,
+      );
+    });
+
+    expect(mockTrustedFolders.user.config).toStrictEqual({
+      '/test/path': TrustLevel.DO_NOT_TRUST,
+    });
+    expect(mockConfig.setTrustedFolderLive).toHaveBeenNthCalledWith(1, true);
+    expect(mockConfig.setTrustedFolderLive).toHaveBeenNthCalledWith(2, false);
+    expect(addItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        text: expect.stringContaining('live update failed'),
+      }),
+      expect.any(Number),
+    );
+  });
+
+  it('reports incomplete rollback when restoring live trust also fails', async () => {
+    isWorkspaceTrustedSpy.mockReturnValue(undefined);
+    mockConfig.setTrustedFolderLive
+      .mockRejectedValueOnce(new Error('live update failed'))
+      .mockRejectedValueOnce(new Error('live rollback failed'));
+    const { result } = renderHook(() =>
+      useFolderTrust(mockSettings, addItem, mockConfig),
+    );
+
+    await act(async () => {
+      await result.current.handleFolderTrustSelect(
+        FolderTrustChoice.TRUST_FOLDER,
+      );
+    });
+
+    expect(addItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        text: expect.stringContaining('rollback was incomplete'),
+      }),
+      expect.any(Number),
+    );
   });
 
   it.skipIf(process.platform === 'win32')(

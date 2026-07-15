@@ -62,22 +62,27 @@ const ExitMessage: React.FC<ExitMessageProps> = ({ exiting }) => {
   );
 };
 
+function useMountedRef(): React.MutableRefObject<boolean> {
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  return mountedRef;
+}
+
 export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
   workingDirectory,
   onSelect,
 }) => {
   const [exiting, setExiting] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const committingRef = useRef(false);
   const exitingRef = useRef(false);
-  const mountedRef = useRef(true);
-
-  useEffect(
-    () => () => {
-      mountedRef.current = false;
-    },
-    [],
-  );
+  const mountedRef = useMountedRef();
 
   useKeypress(
     (key) => {
@@ -102,9 +107,17 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
       }
       committingRef.current = true;
       setIsCommitting(true);
+      setErrorMessage(null);
       void Promise.resolve(onSelect(choice))
-        .catch((error) => {
+        .catch((error: unknown) => {
           debug.error('Folder trust selection failed', error);
+          if (mountedRef.current) {
+            const detail =
+              error instanceof Error ? error.message : String(error);
+            setErrorMessage(
+              `Failed to apply folder trust selection: ${detail}`,
+            );
+          }
         })
         .finally(() => {
           committingRef.current = false;
@@ -113,7 +126,7 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
           }
         });
     },
-    [onSelect],
+    [mountedRef, onSelect],
   );
 
   const currentFolder = path.basename(workingDirectory);
@@ -137,6 +150,7 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
           onSelect={handleSelect}
           isFocused={!isCommitting}
         />
+        {errorMessage && <Text color={theme.status.error}>{errorMessage}</Text>}
       </Box>
       <ExitMessage exiting={exiting} />
     </Box>

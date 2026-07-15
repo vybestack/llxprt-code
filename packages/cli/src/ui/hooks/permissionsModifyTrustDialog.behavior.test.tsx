@@ -73,11 +73,21 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     );
     mockedSnapshotValue.mockImplementation((folderPath: string) => ({
       canonicalPath: folderPath,
-      entries: Object.entries(mockedUserConfig.value),
+      entries: Object.entries(mockedUserConfig.value).filter(
+        ([entryPath]) => entryPath === folderPath,
+      ),
     }));
     mockedRestoreSnapshot.mockImplementation(
-      (snapshot: { entries: ReadonlyArray<readonly [string, TrustLevel]> }) => {
-        mockedUserConfig.value = Object.fromEntries(snapshot.entries);
+      (snapshot: {
+        canonicalPath: string;
+        entries: ReadonlyArray<readonly [string, TrustLevel]>;
+      }) => {
+        mockedUserConfig.value = Object.fromEntries([
+          ...Object.entries(mockedUserConfig.value).filter(
+            ([entryPath]) => entryPath !== snapshot.canonicalPath,
+          ),
+          ...snapshot.entries,
+        ]);
       },
     );
     mockedResolvePathTrust.mockReset();
@@ -160,6 +170,28 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     expect(setTrustedFolderLive).toHaveBeenCalledTimes(3);
     expect(result.current.committedTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
     expect(result.current.effectiveTrust).toBe(false);
+  });
+
+  it('preserves unrelated rule changes while rolling back a live failure', async () => {
+    const config: PermissionsTrustRuntime = {
+      getWorkingDir: () => '/configured/workspace',
+      getFolderTrust: () => true,
+      getIdeClient: () => undefined,
+      isTrustedFolder: () => false,
+      setTrustedFolderLive: vi.fn().mockImplementation(() => {
+        mockedUserConfig.value['/unrelated'] = TrustLevel.TRUST_PARENT;
+        throw new Error('live update failed');
+      }),
+    };
+    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+
+    await act(async () => {
+      await result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
+    });
+
+    expect(mockedUserConfig.value).toStrictEqual({
+      '/unrelated': TrustLevel.TRUST_PARENT,
+    });
   });
 
   it('preserves the pending selection when persistence fails', async () => {

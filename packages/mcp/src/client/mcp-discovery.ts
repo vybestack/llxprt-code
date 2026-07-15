@@ -179,14 +179,11 @@ export async function connectAndDiscover(
   }
 }
 
-function rollbackOnError(
+function cleanupServerArtifacts(
   mcpServerName: string,
-  mcpClient: Client | undefined,
   toolRegistry: ToolRegistry,
   promptRegistry: PromptRegistry,
-  error: unknown,
 ): void {
-  mcpClient?.close().catch(() => {});
   for (const [label, cleanup] of [
     ['tools', () => toolRegistry.removeMcpToolsByServer(mcpServerName)],
     ['prompts', () => promptRegistry.removePromptsByServer(mcpServerName)],
@@ -199,6 +196,17 @@ function rollbackOnError(
       );
     }
   }
+}
+
+function rollbackOnError(
+  mcpServerName: string,
+  mcpClient: Client | undefined,
+  toolRegistry: ToolRegistry,
+  promptRegistry: PromptRegistry,
+  error: unknown,
+): void {
+  mcpClient?.close().catch(() => {});
+  cleanupServerArtifacts(mcpServerName, toolRegistry, promptRegistry);
   debugLogger.error(
     `Error connecting to MCP server '${mcpServerName}': ${getErrorMessage(error)}`,
   );
@@ -214,18 +222,7 @@ function createServerErrorHandler(
 ): (error: Error) => void {
   return (error) => {
     debugLogger.error(`MCP ERROR (${mcpServerName}):`, error.toString());
-    for (const [label, cleanup] of [
-      ['tools', () => toolRegistry.removeMcpToolsByServer(mcpServerName)],
-      ['prompts', () => promptRegistry.removePromptsByServer(mcpServerName)],
-    ] as const) {
-      try {
-        cleanup();
-      } catch (cleanupError) {
-        debugLogger.error(
-          `Error cleaning up ${label} for '${mcpServerName}': ${getErrorMessage(cleanupError)}`,
-        );
-      }
-    }
+    cleanupServerArtifacts(mcpServerName, toolRegistry, promptRegistry);
     updateMCPServerStatus(mcpServerName, MCPServerStatus.DISCONNECTED);
     client.close().catch(() => {});
     onClientCleared();
@@ -359,20 +356,7 @@ function rollbackAndDisconnect(
   promptRegistry: PromptRegistry,
   client: Client,
 ): void {
-  try {
-    toolRegistry.removeMcpToolsByServer(mcpServerName);
-  } catch (cleanupError) {
-    debugLogger.error(
-      `Error cleaning up tools for '${mcpServerName}': ${getErrorMessage(cleanupError)}`,
-    );
-  }
-  try {
-    promptRegistry.removePromptsByServer(mcpServerName);
-  } catch (cleanupError) {
-    debugLogger.error(
-      `Error cleaning up prompts for '${mcpServerName}': ${getErrorMessage(cleanupError)}`,
-    );
-  }
+  cleanupServerArtifacts(mcpServerName, toolRegistry, promptRegistry);
   client.close().catch(() => {});
   updateMCPServerStatus(mcpServerName, MCPServerStatus.DISCONNECTED);
 }

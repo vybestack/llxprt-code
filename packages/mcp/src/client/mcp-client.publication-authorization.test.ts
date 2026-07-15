@@ -62,7 +62,7 @@ function createHarness(options: {
       inputSchema: { type: 'object' };
     }>;
   }>;
-  listResources?: () => Promise<{
+  requestResources?: () => Promise<{
     resources: Array<{ uri: string }>;
   }>;
   afterPromptRegistered?: () => void;
@@ -85,7 +85,7 @@ function createHarness(options: {
       options.listPrompts ?? vi.fn().mockResolvedValue({ prompts: [] }),
     listTools: options.listTools ?? vi.fn().mockResolvedValue({ tools: [] }),
     request:
-      options.listResources ?? vi.fn().mockResolvedValue({ resources: [] }),
+      options.requestResources ?? vi.fn().mockResolvedValue({ resources: [] }),
   } as unknown as Client;
   vi.mocked(ClientLib.Client).mockReturnValue(sdkClient);
   vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue(
@@ -213,7 +213,7 @@ describe('McpClient capability publication', () => {
         toolRpcStarted.resolve(undefined);
         return toolResponse.promise;
       },
-      listResources: async () => {
+      requestResources: async () => {
         resourceRpcStarted = true;
         return { resources: [] };
       },
@@ -308,7 +308,7 @@ describe('McpClient capability publication', () => {
       listTools: async () => ({
         tools: [{ name: 'tool', inputSchema: { type: 'object' } }],
       }),
-      listResources: async () => ({
+      requestResources: async () => ({
         resources: [{ uri: 'file:///resource' }],
       }),
     });

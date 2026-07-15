@@ -129,16 +129,4 @@ describe('McpClient discover rollback independence', () => {
       expect(harness.removeTools).toHaveBeenCalledWith('test-server');
     },
   );
-
-  it('cleans all three registries when the first cleanup throws', async () => {
-    const harness = await createRollbackHarness('prompts');
-
-    await harness.client.discover(harness.config, harness.mayPublish);
-
-    expect(harness.setResourcesForServer).toHaveBeenCalledOnce();
-    expect(harness.mayPublish()).toBe(false);
-    expect(harness.removePrompts).toHaveBeenCalledWith('test-server');
-    expect(harness.removeResources).toHaveBeenCalledWith('test-server');
-    expect(harness.removeTools).toHaveBeenCalledWith('test-server');
-  });
 });

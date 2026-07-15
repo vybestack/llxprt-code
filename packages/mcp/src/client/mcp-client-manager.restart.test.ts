@@ -65,23 +65,30 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
       refreshMcpContext: vi.fn(),
     }) as unknown as Config;
 
+  type MockMcpClient = {
+    connect: ReturnType<typeof vi.fn>;
+    discover: ReturnType<typeof vi.fn>;
+    disconnect: ReturnType<typeof vi.fn>;
+    getStatus: ReturnType<typeof vi.fn>;
+    getServerConfig: ReturnType<typeof vi.fn>;
+    getInstructions: ReturnType<typeof vi.fn>;
+  };
+
+  const createMockMcpClient = (
+    overrides: Partial<MockMcpClient> = {},
+  ): MockMcpClient => ({
+    connect: vi.fn().mockResolvedValue(undefined),
+    discover: vi.fn().mockResolvedValue(undefined),
+    disconnect: vi.fn().mockResolvedValue(undefined),
+    getStatus: vi.fn().mockReturnValue('connected'),
+    getServerConfig: vi.fn().mockReturnValue({}),
+    getInstructions: vi.fn().mockReturnValue(''),
+    ...overrides,
+  });
+
   it('restartServer does not leave a stale dead client when existing.disconnect throws (reconnects with a fresh client)', async () => {
-    const goodClient = {
-      connect: vi.fn().mockResolvedValue(undefined),
-      discover: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      getStatus: vi.fn().mockReturnValue('connected'),
-      getServerConfig: vi.fn().mockReturnValue({}),
-      getInstructions: vi.fn().mockReturnValue(''),
-    };
-    const freshClient = {
-      connect: vi.fn().mockResolvedValue(undefined),
-      discover: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      getStatus: vi.fn().mockReturnValue('connected'),
-      getServerConfig: vi.fn().mockReturnValue({}),
-      getInstructions: vi.fn().mockReturnValue(''),
-    };
+    const goodClient = createMockMcpClient();
+    const freshClient = createMockMcpClient();
 
     let callCount = 0;
     vi.mocked(McpClient).mockImplementation(() => {
@@ -135,22 +142,11 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
   });
 
   it('restartServer records a discovery failure when reconnect itself fails after a throwing disconnect', async () => {
-    const goodClient = {
-      connect: vi.fn().mockResolvedValue(undefined),
-      discover: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      getStatus: vi.fn().mockReturnValue('connected'),
-      getServerConfig: vi.fn().mockReturnValue({}),
-      getInstructions: vi.fn().mockReturnValue(''),
-    };
-    const freshClient = {
+    const goodClient = createMockMcpClient();
+    const freshClient = createMockMcpClient({
       connect: vi.fn().mockRejectedValue(new Error('reconnect refused')),
-      discover: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn().mockReturnValue('disconnected'),
-      getServerConfig: vi.fn().mockReturnValue({}),
-      getInstructions: vi.fn().mockReturnValue(''),
-    };
+    });
 
     let callCount = 0;
     vi.mocked(McpClient).mockImplementation(() => {
@@ -187,38 +183,10 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
   });
 
   it('restart (all servers) does not leave a stale dead client when existing.disconnect throws', async () => {
-    const serverAClient = {
-      connect: vi.fn().mockResolvedValue(undefined),
-      discover: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      getStatus: vi.fn().mockReturnValue('connected'),
-      getServerConfig: vi.fn().mockReturnValue({}),
-      getInstructions: vi.fn().mockReturnValue(''),
-    };
-    const serverBClient = {
-      connect: vi.fn().mockResolvedValue(undefined),
-      discover: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      getStatus: vi.fn().mockReturnValue('connected'),
-      getServerConfig: vi.fn().mockReturnValue({}),
-      getInstructions: vi.fn().mockReturnValue(''),
-    };
-    const freshA = {
-      connect: vi.fn().mockResolvedValue(undefined),
-      discover: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      getStatus: vi.fn().mockReturnValue('connected'),
-      getServerConfig: vi.fn().mockReturnValue({}),
-      getInstructions: vi.fn().mockReturnValue(''),
-    };
-    const freshB = {
-      connect: vi.fn().mockResolvedValue(undefined),
-      discover: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      getStatus: vi.fn().mockReturnValue('connected'),
-      getServerConfig: vi.fn().mockReturnValue({}),
-      getInstructions: vi.fn().mockReturnValue(''),
-    };
+    const serverAClient = createMockMcpClient();
+    const serverBClient = createMockMcpClient();
+    const freshA = createMockMcpClient();
+    const freshB = createMockMcpClient();
 
     let callCount = 0;
     vi.mocked(McpClient).mockImplementation(() => {
@@ -257,24 +225,13 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
   });
 
   it('restartServer reports a discovery failure when connectAndDiscover throws an unexpected error (not masked)', async () => {
-    const goodClient = {
-      connect: vi.fn().mockResolvedValue(undefined),
-      discover: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      getStatus: vi.fn().mockReturnValue('connected'),
-      getServerConfig: vi.fn().mockReturnValue({}),
-      getInstructions: vi.fn().mockReturnValue(''),
-    };
-    const freshClient = {
+    const goodClient = createMockMcpClient();
+    const freshClient = createMockMcpClient({
       connect: vi
         .fn()
         .mockRejectedValue(new Error('unexpected connect failure')),
-      discover: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn().mockReturnValue('disconnected'),
-      getServerConfig: vi.fn().mockReturnValue({}),
-      getInstructions: vi.fn().mockReturnValue(''),
-    };
+    });
 
     let callCount = 0;
     vi.mocked(McpClient).mockImplementation(() => {
@@ -312,22 +269,8 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
   });
 
   it('startConfiguredMcpServers then restartServer preserves the connected state when disconnect succeeds', async () => {
-    const initialClient = {
-      connect: vi.fn().mockResolvedValue(undefined),
-      discover: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      getStatus: vi.fn().mockReturnValue('connected'),
-      getServerConfig: vi.fn().mockReturnValue({}),
-      getInstructions: vi.fn().mockReturnValue(''),
-    };
-    const freshClient = {
-      connect: vi.fn().mockResolvedValue(undefined),
-      discover: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      getStatus: vi.fn().mockReturnValue('connected'),
-      getServerConfig: vi.fn().mockReturnValue({}),
-      getInstructions: vi.fn().mockReturnValue(''),
-    };
+    const initialClient = createMockMcpClient();
+    const freshClient = createMockMcpClient();
 
     let callCount = 0;
     vi.mocked(McpClient).mockImplementation(() => {
@@ -360,22 +303,8 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
   });
 
   it('restartServer emits McpClientUpdate consistently during restart (old removed, new registered)', async () => {
-    const initialClient = {
-      connect: vi.fn().mockResolvedValue(undefined),
-      discover: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      getStatus: vi.fn().mockReturnValue('connected'),
-      getServerConfig: vi.fn().mockReturnValue({}),
-      getInstructions: vi.fn().mockReturnValue(''),
-    };
-    const freshClient = {
-      connect: vi.fn().mockResolvedValue(undefined),
-      discover: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      getStatus: vi.fn().mockReturnValue('connected'),
-      getServerConfig: vi.fn().mockReturnValue({}),
-      getInstructions: vi.fn().mockReturnValue(''),
-    };
+    const initialClient = createMockMcpClient();
+    const freshClient = createMockMcpClient();
 
     let callCount = 0;
     vi.mocked(McpClient).mockImplementation(() => {
