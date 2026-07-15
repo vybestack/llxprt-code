@@ -113,7 +113,7 @@ function getDeclarationWhitelistName(
 }
 
 /**
- * Converts a ToolMetadata object into a ToolDeclaration for the Gemini API.
+ * Converts a ToolMetadata object into a ToolDeclaration for the agent API.
  */
 export function convertMetadataToFunctionDeclaration(
   fallbackName: string,
@@ -864,7 +864,7 @@ function instantiateChat(
   } catch (error) {
     void reportError(
       error,
-      'Error initializing Gemini chat session.',
+      'Error initializing agent chat session.',
       startHistory,
       'startChat',
     );

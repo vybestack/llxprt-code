@@ -127,18 +127,23 @@ export function createAnthropicApiCall(
   client: Anthropic,
   requestBody: Record<string, unknown>,
   customHeaders: Record<string, string>,
+  signal?: AbortSignal,
 ): () => Promise<{
   data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
   response: Response | undefined;
 }> {
   const params = asMessageCreateParams(requestBody);
   return async () => {
-    const apiCall = () =>
-      Object.keys(customHeaders).length > 0
-        ? client.messages.create(params, { headers: customHeaders })
+    const requestOptions = {
+      ...(Object.keys(customHeaders).length > 0
+        ? { headers: customHeaders }
+        : {}),
+      ...(signal !== undefined ? { signal } : {}),
+    };
+    const promise =
+      Object.keys(requestOptions).length > 0
+        ? client.messages.create(params, requestOptions)
         : client.messages.create(params);
-
-    const promise = apiCall();
     // The promise has a withResponse() method we can call
     if (typeof promise === 'object' && 'withResponse' in promise) {
       return (

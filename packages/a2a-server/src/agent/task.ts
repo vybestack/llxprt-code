@@ -536,9 +536,8 @@ export class Task {
       // would otherwise see only the (possibly empty) answer text with no
       // indication that a refusal occurred. Surface an explicit notice to the
       // client using the same text-content path as ordinary Content events.
-      // Type narrowing is supplied by InformationalGeminiStreamEvent (which
-      // includes the Finished variant with its value.stopReason field), so no
-      // assertion is required.
+      // Type narrowing is supplied by the Finished event variant (which
+      // includes its value.stopReason field), so no assertion is required.
       if (
         event.type === AgentEventType.Finished &&
         event.value.stopReason === 'refusal'

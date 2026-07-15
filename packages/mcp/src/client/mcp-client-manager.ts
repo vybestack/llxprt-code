@@ -15,6 +15,7 @@ import {
   MCPDiscoveryState,
   populateMcpServerCommand,
 } from './mcp-client.js';
+import { MCPServerStatus, updateMCPServerStatus } from './mcp-status.js';
 import {
   applyFakeServerDiscovery,
   isFakeMcpDiscoveryActive,
@@ -31,6 +32,21 @@ import {
 } from '@vybestack/llxprt-code-core/utils/events.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+import {
+  appendFailures,
+  throwTrustRevocationFailures,
+} from './trust-revocation-errors.js';
+import { RetryableClientDisconnections } from './retryable-client-disconnections.js';
+import { collectMcpInstructions } from './mcp-instructions.js';
+import {
+  collectMcpServers,
+  consumeMcpContextRefreshes,
+  isAllowedMcpServer,
+  recordPendingDiscoveryTimeouts,
+  removeMcpServerArtifacts,
+  removeMcpServerState,
+  waitForMcpRefreshDebounce,
+} from './mcp-client-manager-helpers.js';
 
 const logger = new DebugLogger('llxprt:mcp-client-manager');
 
@@ -51,65 +67,38 @@ export const DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS = 10_000;
  */
 export class McpClientManager {
   private clients: Map<string, McpClient> = new Map();
-  private readonly clientVersion: string;
-  private readonly toolRegistry: ToolRegistry;
-  private readonly cliConfig: Config;
   // If we have ongoing MCP client discovery, this completes once that is done.
   private discoveryPromise: Promise<void> | undefined;
   private discoveryState: MCPDiscoveryState = MCPDiscoveryState.NOT_STARTED;
-  private readonly eventEmitter?: EventEmitter;
   private pendingRefreshPromise: Promise<void> | null = null;
+  private pendingRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+  private pendingRefreshTimerResolve: (() => void) | undefined;
   private refreshRequestedWhilePending = false;
   private readonly blockedMcpServers: Array<{
     name: string;
     extensionName: string;
   }> = [];
-  /**
-   * Per-server discovery failure messages, keyed by server name. Populated by
-   * the fake discovery seam (and clearable on restart) so callers can detect a
-   * failed discovery without inspecting feedback events.
-   *
-   * @plan:PLAN-20260617-COREAPI.P22
-   * @requirement:REQ-013
-   */
   private readonly discoveryFailures: Map<string, string> = new Map();
-  /**
-   * Server names whose discovery is currently in flight. Used by the bounded
-   * {@link whenDiscoverySettled} gate so a never-settling server can be
-   * recorded as a failure once the settle timeout elapses (issue #2516).
-   */
+  private trustGeneration = 0;
+  private readonly discoveringServers = new Map<string, Promise<void>>();
+  private readonly queuedDiscoveryConfigs = new Map<string, MCPServerConfig>();
+  private readonly connectingClients = new Map<string, McpClient>();
+  private readonly quarantinedClients = new Map<string, McpClient>();
+  private readonly clientDisconnections = new RetryableClientDisconnections();
+  private stopped = false;
   private readonly pendingDiscoveryServers: Set<string> = new Set();
-  /**
-   * Per-instance bound for {@link whenDiscoverySettled}. Defaults to
-   * {@link DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS}; overridable for
-   * high-latency environments or tests.
-   */
-  private readonly settleTimeoutMs: number;
-
+  private readonly fakeDiscoveryControllers = new Map<
+    string,
+    AbortController
+  >();
   constructor(
-    clientVersion: string,
-    toolRegistry: ToolRegistry,
-    cliConfig: Config,
-    eventEmitter?: EventEmitter,
-    settleTimeoutMs: number = DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS,
-  ) {
-    this.clientVersion = clientVersion;
-    this.toolRegistry = toolRegistry;
-    this.cliConfig = cliConfig;
-    this.eventEmitter = eventEmitter;
-    this.settleTimeoutMs = settleTimeoutMs;
-  }
+    private readonly clientVersion: string,
+    private readonly toolRegistry: ToolRegistry,
+    private readonly cliConfig: Config,
+    private readonly eventEmitter?: EventEmitter,
+    private readonly settleTimeoutMs: number = DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS,
+  ) {}
 
-  getBlockedMcpServers() {
-    return this.blockedMcpServers;
-  }
-
-  /**
-   * For all the MCP servers associated with this extension:
-   *
-   *    - Disconnects all MCP clients from their servers.
-   *    - Updates the Gemini chat configuration to load the new tools.
-   */
   async stopExtension(extension: LlxprtExtension) {
     logger.log(`Unloading extension: ${extension.name}`);
     await Promise.all(
@@ -120,12 +109,6 @@ export class McpClientManager {
     await this.cliConfig.refreshMcpContext();
   }
 
-  /**
-   * For all the MCP servers associated with this extension:
-   *
-   *    - Connects MCP clients to each server and discovers their tools.
-   *    - Updates the Gemini chat configuration to load the new tools.
-   */
   async startExtension(extension: LlxprtExtension) {
     logger.log(`Loading extension: ${extension.name}`);
     // Issue #2325: Fire MCP discovery without blocking — discovery completes
@@ -143,26 +126,6 @@ export class McpClientManager {
     // emits McpClientUpdate + calls scheduleMcpContextRefresh once each server
     // connects, so the context converges as servers come online.
     await this.cliConfig.refreshMcpContext();
-  }
-
-  private isAllowedMcpServer(name: string) {
-    const allowedNames = this.cliConfig.getAllowedMcpServers();
-    if (
-      allowedNames &&
-      allowedNames.length > 0 &&
-      allowedNames.indexOf(name) === -1
-    ) {
-      return false;
-    }
-    const blockedServers = this.cliConfig.getBlockedMcpServers();
-    if (
-      blockedServers &&
-      blockedServers.length > 0 &&
-      blockedServers.some((s) => s.name === name)
-    ) {
-      return false;
-    }
-    return true;
   }
 
   private async disconnectClient(name: string, skipRefresh = false) {
@@ -192,7 +155,13 @@ export class McpClientManager {
     name: string,
     config: MCPServerConfig,
   ): Promise<void> | void {
-    if (!this.isAllowedMcpServer(name)) {
+    if (
+      !isAllowedMcpServer(
+        name,
+        this.cliConfig.getAllowedMcpServers(),
+        this.cliConfig.getBlockedMcpServers(),
+      )
+    ) {
       if (!this.blockedMcpServers.find((s) => s.name === name)) {
         this.blockedMcpServers.push({
           name,
@@ -201,11 +170,28 @@ export class McpClientManager {
       }
       return;
     }
-    if (!this.cliConfig.isTrustedFolder()) {
+    if (!this.cliConfig.isTrustedFolder() || this.stopped) {
       return;
     }
     if (config.extension && !config.extension.isActive) {
       return;
+    }
+    if (
+      config.extension &&
+      Object.prototype.hasOwnProperty.call(
+        this.cliConfig.getMcpServers() ?? {},
+        name,
+      )
+    ) {
+      logger.warn(
+        `Skipping MCP config for server with name "${name}" from extension "${config.extension.name}" because configured server names are reserved.`,
+      );
+      return;
+    }
+    const pendingDiscovery = this.discoveringServers.get(name);
+    if (pendingDiscovery) {
+      this.queuedDiscoveryConfigs.set(name, config);
+      return pendingDiscovery;
     }
     const existing = this.clients.get(name);
     if (existing && existing.getServerConfig().extension !== config.extension) {
@@ -218,13 +204,33 @@ export class McpClientManager {
       return;
     }
 
-    const currentDiscoveryPromise = this.buildDiscoveryPromise(
+    const currentDiscoveryPromise: Promise<void> = this.buildDiscoveryPromise(
       name,
       config,
       existing,
-    );
+    ).then(() => this.finishDiscovery(name, currentDiscoveryPromise));
+    this.discoveringServers.set(name, currentDiscoveryPromise);
     this.enqueueDiscovery(currentDiscoveryPromise);
     return currentDiscoveryPromise;
+  }
+
+  private async finishDiscovery(
+    name: string,
+    completedDiscovery: Promise<void>,
+  ): Promise<void> {
+    if (this.discoveringServers.get(name) !== completedDiscovery) {
+      return;
+    }
+    this.discoveringServers.delete(name);
+    const queuedConfig = this.queuedDiscoveryConfigs.get(name);
+    this.queuedDiscoveryConfigs.delete(name);
+    if (
+      queuedConfig !== undefined &&
+      this.cliConfig.isTrustedFolder() &&
+      !this.stopped
+    ) {
+      await this.maybeDiscoverMcpServer(name, queuedConfig);
+    }
   }
 
   private buildDiscoveryPromise(
@@ -232,17 +238,103 @@ export class McpClientManager {
     config: MCPServerConfig,
     existing: McpClient | undefined,
   ): Promise<void> {
-    return new Promise<void>((resolve, _reject) => {
+    return new Promise<void>((resolve) => {
       void (async () => {
         this.pendingDiscoveryServers.add(name);
         try {
           await this.connectAndDiscover(name, config, existing);
-        } finally {
+        } catch (error) {
           this.pendingDiscoveryServers.delete(name);
+          if (!isAuthenticationError(error)) {
+            this.discoveryFailures.set(name, getErrorMessage(error));
+            coreEvents.emitFeedback(
+              'error',
+              `Error during discovery for server '${name}': ${getErrorMessage(
+                error,
+              )}`,
+              error,
+            );
+          }
           resolve();
+          return;
         }
+        this.pendingDiscoveryServers.delete(name);
+        resolve();
       })();
     });
+  }
+
+  private removeServerArtifacts(name: string): void {
+    removeMcpServerArtifacts(
+      name,
+      this.toolRegistry,
+      this.cliConfig.getPromptRegistry(),
+      this.cliConfig.getResourceRegistry(),
+    );
+  }
+
+  private createClient(name: string, config: MCPServerConfig): McpClient {
+    const client = new McpClient(
+      name,
+      config,
+      this.toolRegistry,
+      this.cliConfig.getPromptRegistry(),
+      this.cliConfig.getResourceRegistry(),
+      this.cliConfig.getWorkspaceContext(),
+      this.cliConfig,
+      this.cliConfig.getDebugMode(),
+      this.clientVersion,
+      async () => {
+        debugLogger.log('Tools changed, updating agent context...');
+        await this.scheduleMcpContextRefresh();
+      },
+    );
+    this.clientDisconnections.activate(client);
+    return client;
+  }
+
+  private isDiscoveryInvalid(generation: number): boolean {
+    return (
+      !this.cliConfig.isTrustedFolder() ||
+      this.trustGeneration !== generation ||
+      this.stopped
+    );
+  }
+
+  private disconnectMcpClient(client: McpClient): Promise<void> {
+    return this.clientDisconnections.disconnect(client);
+  }
+
+  private async removeAndDisconnectClient(
+    name: string,
+    client: McpClient,
+  ): Promise<void> {
+    if (this.clients.get(name) === client) {
+      this.clients.delete(name);
+      try {
+        this.removeServerArtifacts(name);
+      } catch (error) {
+        logger.warn(
+          `Error removing artifacts for MCP client '${name}': ${getErrorMessage(error)}`,
+        );
+      }
+      try {
+        this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+          clients: new Map(this.clients),
+        });
+      } catch (error) {
+        logger.warn(
+          `Error emitting cleanup for MCP client '${name}': ${getErrorMessage(error)}`,
+        );
+      }
+    }
+    try {
+      await this.disconnectMcpClient(client);
+    } catch (error) {
+      logger.warn(
+        `Error cleaning up failed MCP client '${name}': ${getErrorMessage(error)}`,
+      );
+    }
   }
 
   private async connectAndDiscover(
@@ -255,41 +347,70 @@ export class McpClientManager {
       return;
     }
 
+    const generationBeforeConnect = this.trustGeneration;
+
     if (existing) {
-      await existing.disconnect();
+      await this.removeAndDisconnectClient(name, existing);
     }
 
-    const client =
-      existing ??
-      new McpClient(
-        name,
-        config,
-        this.toolRegistry,
-        this.cliConfig.getPromptRegistry(),
-        this.cliConfig.getResourceRegistry(),
-        this.cliConfig.getWorkspaceContext(),
-        this.cliConfig,
-        this.cliConfig.getDebugMode(),
-        this.clientVersion,
-        async () => {
-          debugLogger.log('Tools changed, updating Gemini context...');
-          await this.scheduleMcpContextRefresh();
-        },
-      );
-    if (!existing) {
+    if (this.isDiscoveryInvalid(generationBeforeConnect)) {
+      return;
+    }
+
+    const client = this.createClient(name, config);
+    this.connectingClients.set(name, client);
+    try {
+      await client.connect();
+      this.connectingClients.delete(name);
+
+      // Re-check trust after connect — trust may have been revoked during
+      // the (potentially slow) connect handshake. If so, disconnect and
+      // do NOT register the client.
+      if (this.isDiscoveryInvalid(generationBeforeConnect)) {
+        await this.removeAndDisconnectClient(name, client);
+        return;
+      }
+
       this.clients.set(name, client);
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
         clients: new Map(this.clients),
       });
-    }
-    try {
-      await client.connect();
-      await client.discover(this.cliConfig);
+      await client.discover(
+        this.cliConfig,
+        () => !this.isDiscoveryInvalid(generationBeforeConnect),
+      );
+
+      // Re-check trust after discover — trust may have been revoked during
+      // the (potentially slow) discovery handshake. If so, remove the
+      // client and disconnect it.
+      if (this.isDiscoveryInvalid(generationBeforeConnect)) {
+        await this.removeAndDisconnectClient(name, client);
+        return;
+      }
+
       this.discoveryFailures.delete(name);
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
         clients: new Map(this.clients),
       });
     } catch (error) {
+      this.connectingClients.delete(name);
+      if (this.clients.get(name) === client) {
+        this.clients.delete(name);
+      }
+      try {
+        this.removeServerArtifacts(name);
+      } catch (cleanupError) {
+        logger.warn(
+          `Error removing artifacts for failed MCP client '${name}': ${getErrorMessage(cleanupError)}`,
+        );
+      }
+      try {
+        await this.disconnectMcpClient(client);
+      } catch (cleanupError) {
+        logger.warn(
+          `Error cleaning up failed MCP client '${name}': ${getErrorMessage(cleanupError)}`,
+        );
+      }
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
         clients: new Map(this.clients),
       });
@@ -330,44 +451,77 @@ export class McpClientManager {
     config: MCPServerConfig,
     existing: McpClient | undefined,
   ): Promise<void> {
-    const client =
-      existing ??
-      new McpClient(
-        name,
-        config,
-        this.toolRegistry,
-        this.cliConfig.getPromptRegistry(),
-        this.cliConfig.getResourceRegistry(),
-        this.cliConfig.getWorkspaceContext(),
-        this.cliConfig,
-        this.cliConfig.getDebugMode(),
-        this.clientVersion,
-        async () => {
-          await this.scheduleMcpContextRefresh();
-        },
-      );
-    if (!existing) {
-      this.clients.set(name, client);
+    const generationBeforeConnect = this.trustGeneration;
+    const isAuthorized = (): boolean =>
+      !this.isDiscoveryInvalid(generationBeforeConnect);
+
+    if (existing) {
+      await this.removeAndDisconnectClient(name, existing);
+    }
+    if (!isAuthorized()) {
+      return;
+    }
+
+    const fixture = loadFakeMcpFixture();
+    if (fixture === undefined || !isAuthorized()) {
+      return;
+    }
+
+    const client = this.createClient(name, config);
+    const discoveryController = new AbortController();
+    this.fakeDiscoveryControllers.set(name, discoveryController);
+    this.clients.set(name, client);
+    try {
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
         clients: new Map(this.clients),
       });
+      if (!isAuthorized()) {
+        await this.removeAndDisconnectClient(name, client);
+        return;
+      }
+
+      this.discoveryFailures.delete(name);
+      const outcome = await applyFakeServerDiscovery(
+        name,
+        this.toolRegistry,
+        fixture,
+        isAuthorized,
+        discoveryController.signal,
+      );
+      if (!isAuthorized()) {
+        await this.removeAndDisconnectClient(name, client);
+        return;
+      }
+      if (
+        outcome.status !== MCPServerStatus.CONNECTED ||
+        outcome.failure !== undefined
+      ) {
+        if (outcome.failure !== undefined) {
+          this.discoveryFailures.set(name, outcome.failure);
+        }
+        await this.removeAndDisconnectClient(name, client);
+        return;
+      }
+
+      client.markConnectedForFakeDiscovery();
+      this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+        clients: new Map(this.clients),
+      });
+      if (!isAuthorized()) {
+        await this.removeAndDisconnectClient(name, client);
+      }
+    } catch (error) {
+      try {
+        updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED);
+      } finally {
+        await this.removeAndDisconnectClient(name, client);
+      }
+      throw error;
+    } finally {
+      if (this.fakeDiscoveryControllers.get(name) === discoveryController) {
+        this.fakeDiscoveryControllers.delete(name);
+      }
     }
-    this.discoveryFailures.delete(name);
-    const fixture = loadFakeMcpFixture();
-    if (fixture === undefined) {
-      return;
-    }
-    const outcome = await applyFakeServerDiscovery(
-      name,
-      this.toolRegistry,
-      fixture,
-    );
-    if (outcome.failure !== undefined) {
-      this.discoveryFailures.set(name, outcome.failure);
-    }
-    this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-      clients: new Map(this.clients),
-    });
   }
 
   /**
@@ -405,7 +559,7 @@ export class McpClientManager {
 
   /**
    * Initiates the tool discovery process for all configured MCP servers (via
-   * gemini settings or command line arguments).
+   * settings or command line arguments).
    *
    * It connects to each server, discovers its available tools, and registers
    * them with the `ToolRegistry`.
@@ -446,6 +600,163 @@ export class McpClientManager {
   }
 
   /**
+   * Called when folder trust transitions to trusted during the active
+   * session. Discovers all configured MCP servers that were previously
+   * suppressed because the folder was untrusted.
+   */
+  async onFolderTrustGained(): Promise<void> {
+    if (this.stopped) {
+      return;
+    }
+    const servers = populateMcpServerCommand(
+      this.cliConfig.getMcpServers() ?? {},
+      this.cliConfig.getMcpServerCommand(),
+    );
+    const discoverPromises: Array<Promise<void>> = [];
+    for (const [name, config] of Object.entries(servers)) {
+      discoverPromises.push(
+        (async () => {
+          try {
+            await this.maybeDiscoverMcpServer(name, config);
+          } catch (error) {
+            logger.warn(
+              `Error discovering server '${name}' on trust gain: ${getErrorMessage(error)}`,
+            );
+          }
+        })(),
+      );
+    }
+
+    await Promise.all(discoverPromises);
+    discoverPromises.length = 0;
+
+    // Configured servers have precedence. Extension servers retry only after
+    // configured discovery has either succeeded or released its reservation.
+    for (const extension of this.cliConfig.getExtensions()) {
+      if (!extension.isActive) {
+        continue;
+      }
+      for (const [name, config] of Object.entries(extension.mcpServers ?? {})) {
+        discoverPromises.push(
+          (async () => {
+            try {
+              await this.maybeDiscoverMcpServer(name, {
+                ...config,
+                extension,
+              });
+            } catch (error) {
+              logger.warn(
+                `Error discovering extension server '${name}' on trust gain: ${getErrorMessage(error)}`,
+              );
+            }
+          })(),
+        );
+      }
+    }
+
+    if (discoverPromises.length === 0) {
+      this.discoveryState = MCPDiscoveryState.COMPLETED;
+      this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+        clients: new Map(this.clients),
+      });
+      await this.cliConfig.refreshMcpContext();
+      return;
+    }
+
+    await Promise.all(discoverPromises);
+    await this.cliConfig.refreshMcpContext();
+  }
+
+  /**
+   * Called when folder trust transitions to untrusted during the active
+   * session. Securely disconnects all running MCP servers and removes their
+   * tools from the registry so no untrusted MCP server remains reachable.
+   */
+  quarantineForTrustRevocation(): void {
+    this.trustGeneration++;
+    for (const controller of this.fakeDiscoveryControllers.values()) {
+      controller.abort();
+    }
+    const failures: unknown[] = [];
+    const serverNames = new Set([
+      ...this.clients.keys(),
+      ...this.discoveringServers.keys(),
+      ...this.connectingClients.keys(),
+    ]);
+    const clientsToQuarantine = new Map([
+      ...this.clients.entries(),
+      ...this.connectingClients.entries(),
+    ]);
+    for (const [name, client] of clientsToQuarantine) {
+      try {
+        client.invalidateCapabilities();
+      } catch (error) {
+        appendFailures(failures, error);
+      }
+      try {
+        client.abortDiscovery();
+      } catch (error) {
+        appendFailures(failures, error);
+      }
+      this.clientDisconnections.retire(client);
+      this.quarantinedClients.set(name, client);
+    }
+    this.clients.clear();
+    this.connectingClients.clear();
+    for (const name of serverNames) {
+      removeMcpServerState(
+        name,
+        () => updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED),
+        () => this.removeServerArtifacts(name),
+        failures,
+      );
+    }
+    try {
+      this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+        clients: new Map(this.clients),
+      });
+    } catch (error) {
+      appendFailures(failures, error);
+    }
+    throwTrustRevocationFailures(
+      failures,
+      'MCP trust revocation quarantine failed',
+    );
+  }
+
+  async onFolderTrustRevoked(): Promise<void> {
+    const failures: unknown[] = [];
+    try {
+      this.quarantineForTrustRevocation();
+    } catch (error) {
+      appendFailures(failures, error);
+    }
+    const entries = new Map(this.quarantinedClients);
+    this.quarantinedClients.clear();
+    await Promise.all(
+      Array.from(entries).map(async ([name, client]) => {
+        try {
+          await this.disconnectMcpClient(client);
+        } catch (error) {
+          appendFailures(failures, error);
+          debugLogger.error(
+            `Error disconnecting client '${name}' on trust revocation: ${getErrorMessage(error)}`,
+          );
+        }
+      }),
+    );
+    try {
+      await this.cliConfig.refreshMcpContext();
+    } catch (error) {
+      appendFailures(failures, error);
+      debugLogger.error(
+        `Error refreshing MCP context on trust revocation: ${getErrorMessage(error)}`,
+      );
+    }
+    throwTrustRevocationFailures(failures, 'MCP trust revocation failed');
+  }
+
+  /**
    * Restarts all active MCP Clients.
    */
   async restart(): Promise<void> {
@@ -480,20 +791,59 @@ export class McpClientManager {
    * This is the cleanup method to be called on application exit.
    */
   async stop(): Promise<void> {
-    const disconnectionPromises = Array.from(this.clients.entries()).map(
-      async ([name, client]) => {
-        try {
-          await client.disconnect();
-        } catch (error) {
-          debugLogger.error(
-            `Error stopping client '${name}': ${getErrorMessage(error)}`,
-          );
-        }
-      },
-    );
-
-    await Promise.all(disconnectionPromises);
+    this.stopped = true;
+    this.trustGeneration++;
+    this.refreshRequestedWhilePending = false;
+    if (this.pendingRefreshTimer !== undefined) {
+      clearTimeout(this.pendingRefreshTimer);
+      this.pendingRefreshTimer = undefined;
+      this.pendingRefreshTimerResolve?.();
+      this.pendingRefreshTimerResolve = undefined;
+    }
+    const pendingRefresh = this.pendingRefreshPromise;
+    for (const controller of this.fakeDiscoveryControllers.values()) {
+      controller.abort();
+    }
+    const failures: unknown[] = [];
+    const serverNames = new Set(this.discoveringServers.keys());
+    const clientsByIdentity = new Map<McpClient, string>();
+    for (const client of this.clientDisconnections.getFailed()) {
+      clientsByIdentity.set(client, 'retired');
+    }
+    for (const [name, client] of [
+      ...this.clients.entries(),
+      ...this.connectingClients.entries(),
+      ...this.quarantinedClients.entries(),
+    ]) {
+      serverNames.add(name);
+      clientsByIdentity.set(client, clientsByIdentity.get(client) ?? name);
+      this.clientDisconnections.retire(client);
+    }
     this.clients.clear();
+    this.connectingClients.clear();
+    this.quarantinedClients.clear();
+    for (const name of serverNames) {
+      removeMcpServerState(
+        name,
+        () => updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED),
+        () => this.removeServerArtifacts(name),
+        failures,
+      );
+    }
+    for (const result of await Promise.allSettled([
+      ...Array.from(clientsByIdentity.keys(), (client) =>
+        this.disconnectMcpClient(client),
+      ),
+      this.whenDiscoverySettled(),
+      pendingRefresh ?? Promise.resolve(),
+    ])) {
+      if (result.status === 'rejected') {
+        appendFailures(failures, result.reason);
+      }
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'MCP client manager stop failed');
+    }
   }
 
   getDiscoveryState(): MCPDiscoveryState {
@@ -523,7 +873,15 @@ export class McpClientManager {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<void>((resolve) => {
       timer = setTimeout(() => {
-        this.recordPendingDiscoveryTimeouts();
+        recordPendingDiscoveryTimeouts(
+          this.pendingDiscoveryServers,
+          this.discoveryFailures,
+          this.settleTimeoutMs,
+          () =>
+            this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+              clients: new Map(this.clients),
+            }),
+        );
         resolve();
       }, settleTimeout);
     });
@@ -541,76 +899,53 @@ export class McpClientManager {
     }
   }
 
-  /**
-   * Records every server still pending discovery as a failure so the gate and
-   * `/mcp list` surface a per-server warning instead of waiting indefinitely.
-   */
-  private recordPendingDiscoveryTimeouts(): void {
-    if (this.pendingDiscoveryServers.size === 0) {
-      return;
-    }
-    for (const name of this.pendingDiscoveryServers) {
-      if (!this.discoveryFailures.has(name)) {
-        this.discoveryFailures.set(
-          name,
-          `Timed out after ${this.settleTimeoutMs}ms waiting for discovery to settle.`,
-        );
-      }
-    }
-    this.pendingDiscoveryServers.clear();
-    this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-      clients: new Map(this.clients),
-    });
-  }
-
-  /**
-   * All of the MCP server configurations currently loaded.
-   */
   getMcpServers(): Record<string, MCPServerConfig> {
-    const mcpServers: Record<string, MCPServerConfig> = {};
-    for (const [name, client] of this.clients.entries()) {
-      mcpServers[name] = client.getServerConfig();
-    }
-    return mcpServers;
+    return collectMcpServers(this.clients);
   }
 
-  /**
-   * Aggregates instructions from all connected MCP servers.
-   * Instructions are formatted with server name headers for attribution.
-   * Returns empty string if no servers have instructions.
-   */
   getClient(name: string): McpClient | undefined {
     return this.clients.get(name);
   }
 
+  private async consumeMcpContextRefreshes(): Promise<void> {
+    try {
+      await consumeMcpContextRefreshes({
+        isStopped: () => this.stopped,
+        readRequested: () => this.refreshRequestedWhilePending,
+        clearRequested: () => {
+          this.refreshRequestedWhilePending = false;
+        },
+        waitForDebounce: () =>
+          waitForMcpRefreshDebounce(
+            (timer) => {
+              this.pendingRefreshTimer = timer;
+            },
+            () => {
+              this.pendingRefreshTimer = undefined;
+            },
+            (resolve) => {
+              this.pendingRefreshTimerResolve = resolve;
+            },
+          ),
+        refresh: () => this.cliConfig.refreshMcpContext(),
+        reportError: (error) =>
+          debugLogger.error(
+            `Error refreshing MCP context: ${getErrorMessage(error)}`,
+          ),
+      });
+    } finally {
+      this.pendingRefreshPromise = null;
+    }
+  }
+
   private async scheduleMcpContextRefresh(): Promise<void> {
+    if (this.stopped) return Promise.resolve();
     if (this.pendingRefreshPromise) {
       this.refreshRequestedWhilePending = true;
       return this.pendingRefreshPromise;
     }
-
-    this.pendingRefreshPromise = (async () => {
-      try {
-        do {
-          this.refreshRequestedWhilePending = false;
-          // Debounce to coalesce multiple rapid updates
-          await new Promise((resolve) => setTimeout(resolve, 300));
-          await this.cliConfig.refreshMcpContext();
-        } while (this.isRefreshRequestedWhilePending());
-      } catch (error) {
-        debugLogger.error(
-          `Error refreshing MCP context: ${getErrorMessage(error)}`,
-        );
-      } finally {
-        this.pendingRefreshPromise = null;
-      }
-    })();
-
+    this.pendingRefreshPromise = this.consumeMcpContextRefreshes();
     return this.pendingRefreshPromise;
-  }
-
-  private isRefreshRequestedWhilePending(): boolean {
-    return this.refreshRequestedWhilePending;
   }
 
   getMcpServerCount(): number {
@@ -618,15 +953,6 @@ export class McpClientManager {
   }
 
   getMcpInstructions(): string {
-    const instructions: string[] = [];
-    for (const [name, client] of this.clients) {
-      const clientInstructions = client.getInstructions();
-      if (clientInstructions) {
-        instructions.push(
-          `The following are instructions provided by the tool server '${name}':\n---[start of server instructions]---\n${clientInstructions}\n---[end of server instructions]---`,
-        );
-      }
-    }
-    return instructions.join('\n\n');
+    return collectMcpInstructions(this.clients);
   }
 }

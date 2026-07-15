@@ -5,13 +5,24 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { ServerAgentStreamEvent } from './turn.js';
+import type { ServerAgentStreamEvent, StructuredError } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
 import { DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import type {
+  GenerateChatOptions,
+  IProvider,
+} from '@vybestack/llxprt-code-providers';
+import {
+  LoadBalancingProvider,
+  ProviderManager,
+} from '@vybestack/llxprt-code-providers';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -245,6 +256,280 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     expect(events.some((e) => e.type === AgentEventType.Error)).toBe(false);
   });
 
+  it('prefers a provider 429 observed during retry over a racing first-response timeout', async () => {
+    const { turn } = buildTurn(20);
+    const rateLimitError: StructuredError = {
+      message: 'Rate limited by provider',
+      status: 429,
+      category: 'rate_limit',
+    };
+    mockSendMessageStream.mockImplementation(
+      (params: {
+        config: {
+          onProviderError: (error: StructuredError) => void;
+        };
+      }) =>
+        Promise.resolve({
+          [Symbol.asyncIterator]: () => ({
+            next: () => {
+              queueMicrotask(() =>
+                params.config.onProviderError(rateLimitError),
+              );
+              return new Promise<IteratorResult<never>>(() => {});
+            },
+          }),
+        }),
+    );
+
+    const events: ServerAgentStreamEvent[] = [];
+    const runPromise = (async () => {
+      for await (const event of turn.run(
+        [{ text: 'Hi' }],
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+    })();
+
+    await vi.advanceTimersByTimeAsync(25);
+    await vi.runAllTimersAsync();
+    await runPromise;
+
+    expect(events).toContainEqual({
+      type: AgentEventType.Error,
+      value: { error: rateLimitError },
+    });
+    expect(
+      events.some((event) => event.type === AgentEventType.StreamIdleTimeout),
+    ).toBe(false);
+  });
+  it('keeps observed provider failures scoped to one run', async () => {
+    const { turn } = buildTurn(20);
+    const rateLimitError: StructuredError = {
+      message: 'First request was rate limited',
+      status: 429,
+      category: 'rate_limit',
+    };
+    mockSendMessageStream
+      .mockImplementationOnce(
+        (params: {
+          config: {
+            onProviderError: (error: StructuredError) => void;
+          };
+        }) => {
+          params.config.onProviderError(rateLimitError);
+          return Promise.resolve(createStreamWithStalledFirstNext());
+        },
+      )
+      .mockResolvedValueOnce(createStreamWithStalledFirstNext());
+
+    const firstEvents: ServerAgentStreamEvent[] = [];
+    const firstRun = (async () => {
+      for await (const event of turn.run(
+        [{ text: 'first' }],
+        new AbortController().signal,
+      )) {
+        firstEvents.push(event);
+      }
+    })();
+    await vi.advanceTimersByTimeAsync(25);
+    await vi.runAllTimersAsync();
+    await firstRun;
+
+    const secondEvents: ServerAgentStreamEvent[] = [];
+    const secondRun = (async () => {
+      for await (const event of turn.run(
+        [{ text: 'second' }],
+        new AbortController().signal,
+      )) {
+        secondEvents.push(event);
+      }
+    })();
+    await vi.advanceTimersByTimeAsync(25);
+    await vi.runAllTimersAsync();
+    await secondRun;
+
+    expect({ firstEvents, secondEvents }).toStrictEqual({
+      firstEvents: [
+        {
+          type: AgentEventType.Error,
+          value: { error: rateLimitError },
+        },
+      ],
+      secondEvents: [
+        {
+          type: AgentEventType.StreamIdleTimeout,
+          value: {
+            error: {
+              message:
+                'Stream idle timeout: no response received within the allowed time.',
+              status: undefined,
+            },
+          },
+        },
+      ],
+    });
+  });
+
+  it('retains an LB-observed 429 when the failover backend stalls until Turn timeout', async () => {
+    const { turn } = buildTurn(20);
+    const settings = new SettingsService();
+    const providerConfig = createRuntimeConfigStub(settings);
+    const providerManager = new ProviderManager({
+      settingsService: settings,
+      config: providerConfig,
+    });
+    providerManager.getProviderByName = (name: string) =>
+      name === 'delegate' ? delegate : undefined;
+    let transports = 0;
+    let secondTransportStarted!: () => void;
+    const secondTransport = new Promise<void>((resolve) => {
+      secondTransportStarted = resolve;
+    });
+    const delegate: IProvider = {
+      name: 'delegate',
+      async *generateChatCompletion(
+        options: GenerateChatOptions,
+      ): AsyncGenerator<IContent> {
+        transports++;
+        if (transports === 1) {
+          const error = new Error('provider rate limit') as Error & {
+            status: number;
+          };
+          error.status = 429;
+          throw error;
+        }
+        secondTransportStarted();
+        const signal = options.metadata?.abortSignal;
+        if (!(signal instanceof AbortSignal)) throw new Error('missing signal');
+        await new Promise<void>((_resolve, reject) => {
+          signal.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        });
+        yield* [];
+      },
+      getModels: async () => [],
+      getDefaultModel: () => 'model',
+      getServerTools: () => [],
+      invokeServerTool: async () => undefined,
+    };
+    providerManager.registerProvider(delegate);
+    const lb = new LoadBalancingProvider(
+      {
+        profileName: 'turn-timeout-lb',
+        strategy: 'failover',
+        subProfiles: [
+          { name: 'first', providerName: 'delegate', modelId: 'model' },
+          { name: 'second', providerName: 'delegate', modelId: 'model' },
+        ],
+        lbProfileEphemeralSettings: { timeout_ms: 0 },
+      },
+      providerManager,
+    );
+    mockSendMessageStream.mockImplementation(
+      async (params: {
+        config: {
+          abortSignal: AbortSignal;
+          onProviderError: (error: StructuredError) => void;
+        };
+      }) => {
+        const source = lb.generateChatCompletion({
+          contents: [],
+          onProviderError: params.config.onProviderError,
+          metadata: { abortSignal: params.config.abortSignal },
+        });
+        return (async function* () {
+          for await (const _chunk of source) {
+            yield {
+              type: StreamEventType.CHUNK,
+              value: mockChunk({ text: 'unexpected' }),
+            };
+          }
+        })();
+      },
+    );
+
+    const events: ServerAgentStreamEvent[] = [];
+    const runPromise = (async () => {
+      for await (const event of turn.run(
+        [{ text: 'Hi' }],
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+    })();
+    await vi.advanceTimersByTimeAsync(0);
+    await secondTransport;
+    await vi.advanceTimersByTimeAsync(25);
+    await vi.runAllTimersAsync();
+    await runPromise;
+
+    expect(transports).toBe(2);
+    expect(events).toContainEqual({
+      type: AgentEventType.Error,
+      value: {
+        error: expect.objectContaining({
+          status: 429,
+          category: 'rate_limit',
+        }),
+      },
+    });
+  });
+
+  it('reports a genuine idle timeout after content instead of a stale observed 429', async () => {
+    const { turn } = buildTurn(100, 20);
+    const rateLimitError: StructuredError = {
+      message: 'Transient provider rate limit',
+      status: 429,
+      category: 'rate_limit',
+    };
+    mockSendMessageStream.mockImplementation(
+      (params: {
+        config: { onProviderError: (error: StructuredError) => void };
+      }) => {
+        params.config.onProviderError(rateLimitError);
+        return Promise.resolve(
+          (async function* () {
+            yield {
+              type: StreamEventType.CHUNK,
+              value: mockChunk({ text: 'progress' }),
+            };
+            await new Promise<void>(() => {});
+          })(),
+        );
+      },
+    );
+
+    const events: ServerAgentStreamEvent[] = [];
+    const runPromise = (async () => {
+      for await (const event of turn.run(
+        [{ text: 'Hi' }],
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+    })();
+
+    await vi.advanceTimersByTimeAsync(25);
+    await vi.runAllTimersAsync();
+    await runPromise;
+
+    expect(events.some((event) => event.type === AgentEventType.Content)).toBe(
+      true,
+    );
+    expect(events.at(-1)?.type).toBe(AgentEventType.StreamIdleTimeout);
+    expect(
+      events.some(
+        (event) =>
+          event.type === AgentEventType.Error &&
+          event.value.error.status === 429,
+      ),
+    ).toBe(false);
+  });
+
   it('resource cleanup: when the timeout wins but the first .next() resolves LATE, the acquired iterator is closed (no provider connection leak)', async () => {
     // Race edge case: timeoutController.abort() is asynchronous, so the
     // in-flight first .next() can still resolve successfully a moment AFTER the
@@ -321,20 +606,63 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     expect(cleanup.returnCalled).toBe(true);
   });
 
+  it('invokes iterator return promptly when first next never settles', async () => {
+    const { turn } = buildTurn(20);
+    let returnCalls = 0;
+    const iterator: AsyncIterator<{
+      type: StreamEventType;
+      value: ModelStreamChunk;
+    }> = {
+      next: () => new Promise(() => {}),
+      async return() {
+        returnCalls++;
+        return { done: true, value: undefined };
+      },
+    };
+    mockSendMessageStream.mockResolvedValue({
+      [Symbol.asyncIterator]: () => iterator,
+    });
+
+    const events: ServerAgentStreamEvent[] = [];
+    const runPromise = (async () => {
+      for await (const event of turn.run(
+        [{ text: 'Hi' }],
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+    })();
+
+    await vi.advanceTimersByTimeAsync(25);
+    await vi.runAllTimersAsync();
+    await runPromise;
+
+    expect(returnCalls).toBe(1);
+    expect(events.at(-1)?.type).toBe(AgentEventType.StreamIdleTimeout);
+  });
+
   it('resource cleanup (disabled path): when first-response is DISABLED (0) and the first .next() throws, the acquired iterator is closed (no leak)', async () => {
     const { turn } = buildTurn(0);
 
     let returnCalled = false;
+    const firstNextFailure = Object.assign(new Error('first next failed'), {
+      status: 502,
+      category: 'server_error',
+    });
+    const cleanupFailure = Object.assign(new Error('cleanup failed'), {
+      status: 504,
+      category: 'network',
+    });
     const throwingIterator: AsyncIterator<{
       type: StreamEventType;
       value: ModelStreamChunk;
     }> = {
       async next(): Promise<never> {
-        throw new Error('first next failed');
+        throw firstNextFailure;
       },
       async return() {
         returnCalled = true;
-        return { done: true, value: undefined };
+        throw cleanupFailure;
       },
     };
     mockSendMessageStream.mockResolvedValue({
@@ -350,9 +678,24 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     }
 
     // The failing iterator MUST have been closed to release the provider
-    // connection, and the error surfaces terminally (not a timeout).
+    // connection, and the provider error surfaces instead of the cleanup error.
     expect(returnCalled).toBe(true);
-    expect(events.some((e) => e.type === AgentEventType.Error)).toBe(true);
+    expect(events).toContainEqual({
+      type: AgentEventType.Error,
+      value: {
+        error: expect.objectContaining({
+          status: 502,
+          category: 'server_error',
+        }),
+      },
+    });
+    expect(
+      events.some(
+        (event) =>
+          event.type === AgentEventType.Error &&
+          event.value.error.status === 504,
+      ),
+    ).toBe(false);
   });
 
   it('control: first-response DISABLED (0) with a normal fast stream → events flow, no timeout', async () => {

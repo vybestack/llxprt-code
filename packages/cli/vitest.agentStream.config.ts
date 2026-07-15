@@ -4,13 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import baseConfig from './vitest.config.js';
+import { defineConfig, mergeConfig } from 'vitest/config';
+import baseConfig from './vitest.config.ts';
 
-export default {
-  ...baseConfig,
-  test: {
-    ...baseConfig.test,
-    include: ['src/agentStream.test.tsx'],
-    exclude: ['**/node_modules/**', '**/dist/**'],
-  },
-};
+export default defineConfig(
+  mergeConfig(
+    baseConfig,
+    defineConfig({
+      test: {
+        include: ['src/agentStream.test.tsx'],
+        exclude: ['**/node_modules/**', '**/dist/**'],
+      },
+    }),
+  ),
+);

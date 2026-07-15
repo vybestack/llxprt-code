@@ -17,7 +17,7 @@ import { type z } from 'zod';
  *
  * Structurally compatible with the Google `FunctionCall` shape so that the
  * agent executor can interoperate with the (not-yet-migrated) runtime layer
- * without importing the Gemini SDK.
+ * without importing a provider SDK.
  */
 export type FunctionCall = {
   id?: string;

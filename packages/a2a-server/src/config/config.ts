@@ -96,7 +96,7 @@ function createBaseConfigParameters(
         settings.fileFiltering?.enableRecursiveFileSearch,
     },
     ideMode: false,
-    folderTrust: settings.folderTrust === true,
+    folderTrust: settings.folderTrust,
     interactive: true,
     extensions,
     // @plan PLAN-20260610-ISSUE1592.P01
@@ -113,8 +113,7 @@ function createBaseConfigParameters(
 }
 
 function getApprovalMode(): ApprovalMode {
-  return process.env['LLXPRT_YOLO_MODE'] === 'true' ||
-    process.env['GEMINI_YOLO_MODE'] === 'true'
+  return process.env['LLXPRT_YOLO_MODE'] === 'true'
     ? ApprovalMode.YOLO
     : ApprovalMode.DEFAULT;
 }

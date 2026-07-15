@@ -21,6 +21,7 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import type { StructuredError } from '@vybestack/llxprt-code-core/core/turn.js';
 import type {
   ProviderTelemetryContext,
   ResolvedAuthToken,
@@ -52,6 +53,7 @@ export interface GenerateChatOptions {
   config?: Config;
   runtime?: ProviderRuntimeContext;
   invocation?: RuntimeInvocationContext;
+  onProviderError?: (error: StructuredError) => void;
   metadata?: Record<string, unknown>;
   resolved?: {
     model?: string;
@@ -81,6 +83,7 @@ export interface GenerateChatOptions {
 export interface IProvider {
   name: string;
   isDefault?: boolean;
+  transportAttemptOwnership?: 'provider';
   getModels(): Promise<IModel[]>;
   /**
    * @plan PLAN-20250218-STATELESSPROVIDER.P04

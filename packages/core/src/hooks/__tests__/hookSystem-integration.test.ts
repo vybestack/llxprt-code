@@ -102,7 +102,7 @@ vi.mock('fs', () => ({
 
 function makeConfig(hooksOverride?: Record<string, unknown>): Config {
   return {
-    storage: { getGeminiDir: vi.fn().mockReturnValue('/project/.gemini') },
+    storage: { getLlxprtDir: vi.fn().mockReturnValue('/project/.llxprt') },
     getExtensions: vi.fn().mockReturnValue([]),
     getHooks: vi.fn().mockReturnValue(hooksOverride ?? {}),
     getDisabledHooks: vi.fn().mockReturnValue([]),

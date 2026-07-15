@@ -28,6 +28,7 @@ type ParsedStreamEvent = {
   status?: string;
   severity?: string;
   message?: string;
+  category?: string;
   error?: { type?: string; message?: string };
 };
 
@@ -492,6 +493,50 @@ describe('processAgentStream', () => {
     ).rejects.toThrow('API connection failed');
   });
 
+  it('preserves a quota category in stream-json and the thrown error', async () => {
+    const streamFormatter = new StreamJsonFormatter();
+    const events: AgentEvent[] = [
+      {
+        type: 'error',
+        error: {
+          message: 'Rate limit retries exhausted after 2 attempts',
+          status: 429,
+          category: 'rate_limit',
+        },
+      },
+    ];
+
+    let thrownError: unknown;
+    try {
+      await processAgentStream(
+        streamFromEvents(events),
+        createContext({ streamFormatter }),
+        Date.now(),
+        () => uiTelemetryService.getMetrics(),
+      );
+    } catch (error) {
+      thrownError = error;
+    }
+
+    expect({
+      thrownError,
+      emittedEvents: parseJsonStdoutEvents(processStdoutSpy.mock.calls),
+    }).toMatchObject({
+      thrownError: {
+        message: 'Rate limit retries exhausted after 2 attempts',
+        status: 429,
+        category: 'rate_limit',
+      },
+      emittedEvents: [
+        {
+          type: JsonStreamEventType.ERROR,
+          severity: 'error',
+          category: 'rate_limit',
+        },
+      ],
+    });
+  });
+
   it('emits a flat JSON object with session_id, response, and stats on completion', async () => {
     const metrics = uiTelemetryService.getMetrics();
     const events: AgentEvent[] = [
@@ -761,7 +806,10 @@ describe('processAgentStream', () => {
     const events: AgentEvent[] = [
       {
         type: 'idle-timeout',
-        error: { message: 'no response received within the allowed time.' },
+        error: {
+          message:
+            'Stream idle timeout: no response received within the allowed time.',
+        },
       },
     ];
 
@@ -772,13 +820,17 @@ describe('processAgentStream', () => {
         Date.now(),
         () => uiTelemetryService.getMetrics(),
       ),
-    ).rejects.toThrow('no response received within the allowed time.');
+    ).rejects.toThrow(
+      'Stream idle timeout: no response received within the allowed time.',
+    );
 
     const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
     const streamError = jsonEvents.find(
       (event) => event.type === JsonStreamEventType.ERROR,
     );
-    expect(streamError?.message).toContain('Stream idle timeout');
+    expect(streamError?.message).toBe(
+      'Stream idle timeout: no response received within the allowed time.',
+    );
   });
 
   it('preserves the tool errorType in the stream-json TOOL_RESULT record', async () => {

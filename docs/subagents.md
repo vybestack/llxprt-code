@@ -365,6 +365,17 @@ Subagents operate within the same tool access policies as your main session:
 - Monitor subagent activity through session logs
 - Consider using profiles with lower-capability models for routine tasks to limit potential impact
 
+### Subagent Turn Limits
+
+Subagents enforce a turn cap via the `max_turns` parameter on the `task` tool or the `maxTurnsPerPrompt` profile ephemeral. Precedence (highest wins):
+
+1. **Explicit task `max_turns`** — passed directly to the `task` tool call.
+2. **Selected subagent profile `maxTurnsPerPrompt`** — the profile the subagent binds to.
+3. **Current foreground `maxTurnsPerPrompt`** — read dynamically at launch time from the parent session.
+4. **Fallback of 1000 turns** — a subagent-specific safety net when none of the above are configured.
+
+A value of `-1` at the task, profile, or foreground layer means **unlimited** (no turn cap). An explicitly stored `-1` foreground value is inherited as unlimited. However, the orchestrator only inherits a **currently materialized valid value** — it does not directly inherit the foreground loop-detection registry's treatment of absent as `-1`. The foreground loop-detection layer independently treats an absent `maxTurnsPerPrompt` as `-1` (unlimited), but the orchestrator does not see that: it reads the foreground config's materialized value and accepts `-1` or a finite positive number. When the foreground value is absent, `NaN`, `Infinity`, a non-number, or zero, the orchestrator rejects it and falls through to the **1000-turn fallback**. The 1000-turn fallback is a fixed constant and does not interpret `-1`.
+
 ## Related commands
 
 - `/profile list` to see available profiles.

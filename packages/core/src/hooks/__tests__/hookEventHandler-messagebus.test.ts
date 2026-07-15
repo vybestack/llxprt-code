@@ -108,7 +108,7 @@ class FakeMessageBus {
 
 function makeConfig(): Config {
   return {
-    storage: { getGeminiDir: vi.fn().mockReturnValue('/project/.gemini') },
+    storage: { getLlxprtDir: vi.fn().mockReturnValue('/project/.llxprt') },
     getExtensions: vi.fn().mockReturnValue([]),
     getHooks: vi.fn().mockReturnValue({}),
     getSessionId: vi.fn().mockReturnValue('test-session-id'),

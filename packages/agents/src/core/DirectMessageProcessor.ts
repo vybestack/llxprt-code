@@ -66,6 +66,7 @@ import {
   beforeModelBlockingToModelOutput,
 } from './hookWireAdapter.js';
 import { canonicalizeToolName } from './toolGovernance.js';
+import { isTerminalRetryError } from './turnAbortHelpers.js';
 
 /**
  * Reads the next chunk from the stream iterator, applying idle-timeout
@@ -258,20 +259,29 @@ export class DirectMessageProcessor {
     params: SendMessageParams,
     userIContents: IContent[],
   ): Promise<ModelOutput> {
+    const requestParams: SendMessageParams = {
+      ...params,
+      config: {
+        ...params.config,
+        providerRequestContext: params.config?.providerRequestContext ?? {},
+      },
+    };
     return retryWithBackoff(
       async () =>
-        this._executeDirectProviderCall(provider, params, userIContents),
+        this._executeDirectProviderCall(provider, requestParams, userIContents),
       {
         shouldRetryOnError: (error: unknown) => {
+          if (isTerminalRetryError(error)) return false;
           if (isProviderApiError(error)) {
             const status = error.status ?? 0;
-            if (status === 400) return false;
-            if (isSchemaDepthError(error.message)) return false;
-            if (status === 429) return true;
-            if (status >= 500 && status < 600) return true;
+            if (status === 400 || isSchemaDepthError(error.message)) {
+              return false;
+            }
+            return status === 429 || (status >= 500 && status < 600);
           }
           return false;
         },
+        signal: params.config?.abortSignal,
       },
     );
   }
@@ -417,6 +427,7 @@ export class DirectMessageProcessor {
       effectiveToolsFromConfig,
       runtimeContext,
       timeoutSignal,
+      params.config?.providerRequestContext,
     );
     const { lastResponse, aggregatedText } = await this._consumeStreamResponse(
       streamResponse,
@@ -461,6 +472,7 @@ export class DirectMessageProcessor {
     effectiveToolsFromConfig: ToolGroupArray | undefined,
     runtimeContext: ProviderRuntimeContext,
     timeoutSignal: AbortSignal,
+    requestContext: Record<string, unknown> | undefined,
   ): AsyncIterable<IContent> {
     this.logger.debug(
       () =>
@@ -493,7 +505,10 @@ export class DirectMessageProcessor {
       } as unknown as GenerateChatOptions['invocation'],
       settings:
         runtimeContext.settingsService as GenerateChatOptions['settings'],
-      metadata: runtimeContext.metadata,
+      metadata: {
+        ...runtimeContext.metadata,
+        _retryRequestContext: requestContext,
+      },
       userMemory: resolveUserMemory(runtimeContext.config),
       systemInstruction: extractSystemInstructionText(
         this.generationConfig.systemInstruction,

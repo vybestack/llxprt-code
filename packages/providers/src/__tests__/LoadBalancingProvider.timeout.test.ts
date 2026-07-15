@@ -18,6 +18,8 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { IProvider } from '../IProvider.js';
+import { LoadBalancerFailoverError } from '../errors.js';
 
 describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
   let settingsService: SettingsService;
@@ -141,8 +143,12 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       providerManager.registerProvider(mockProvider2);
 
       const chunks: IContent[] = [];
+      const observedErrors: unknown[] = [];
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
+        onProviderError: (error) => observedErrors.push(error),
       });
 
       for await (const chunk of gen) {
@@ -151,6 +157,12 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
 
       // Should have failed over to backend2 after timeout
       expect(chunks).toHaveLength(1);
+      expect(observedErrors).toStrictEqual([
+        {
+          message: 'Request timeout after 100ms',
+          category: 'network',
+        },
+      ]);
       const text = chunks[0].parts?.[0];
       expect(
         text != null && typeof text === 'object' && 'text' in text
@@ -361,6 +373,193 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       // Verify the request was made and failover occurred
       expect(stats.totalRequests).toBe(1);
     });
+  });
+
+  it('aborts a stalled first chunk without attempting another backend', async () => {
+    vi.useRealTimers();
+    const controller = new AbortController();
+    let calls = 0;
+    const observedErrors: unknown[] = [];
+    const stalledProvider: IProvider = {
+      name: 'test-provider-1',
+      async *generateChatCompletion(options): AsyncGenerator<IContent> {
+        calls++;
+        const signal = options.invocation?.signal;
+        await new Promise<void>((resolve, reject) => {
+          const onAbort = () => reject(new Error('provider observed abort'));
+          signal?.addEventListener('abort', onAbort, { once: true });
+          if (signal?.aborted === true) onAbort();
+        });
+        yield { speaker: 'ai', blocks: [] };
+      },
+      getModels: async () => [],
+      getDefaultModel: () => 'test-model',
+      getServerTools: () => [],
+      invokeServerTool: async () => null,
+    };
+    providerManager.registerProvider(stalledProvider);
+    const lb = new LoadBalancingProvider(
+      {
+        ...config,
+        lbProfileEphemeralSettings: { timeout_ms: 60_000 },
+      },
+      providerManager,
+    );
+    const promise = (async () => {
+      const chunks: IContent[] = [];
+      for await (const chunk of lb.generateChatCompletion({
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
+        metadata: { abortSignal: controller.signal },
+        onProviderError: (error) => observedErrors.push(error),
+      })) {
+        chunks.push(chunk);
+      }
+      return chunks;
+    })();
+
+    await vi.waitFor(() => expect(calls).toBe(1), { timeout: 1_000 });
+    controller.abort();
+
+    await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+    expect(calls).toBe(1);
+    expect(observedErrors).toStrictEqual([]);
+  });
+  it('releases abort listeners and timeout timers after a successful first chunk', async () => {
+    const parent = new AbortController();
+    const add = vi.spyOn(parent.signal, 'addEventListener');
+    const remove = vi.spyOn(parent.signal, 'removeEventListener');
+    const lb = new LoadBalancingProvider(
+      {
+        ...config,
+        subProfiles,
+        lbProfileEphemeralSettings: { timeout_ms: 60_000 },
+      },
+      providerManager,
+    );
+    providerManager.registerProvider({
+      name: 'test-provider-1',
+      async *generateChatCompletion(): AsyncGenerator<IContent> {
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+      },
+      getModels: async () => [],
+      getDefaultModel: () => 'test-model',
+      getServerTools: () => [],
+      invokeServerTool: async () => null,
+    });
+
+    const chunks: IContent[] = [];
+    for await (const chunk of lb.generateChatCompletion({
+      contents: [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+      ],
+      metadata: { abortSignal: parent.signal },
+    })) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks).toHaveLength(1);
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(remove.mock.calls[0][1]).toBe(add.mock.calls[0][1]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('disposes the linked controller when delegate construction throws synchronously', async () => {
+    const parent = new AbortController();
+    const add = vi.spyOn(parent.signal, 'addEventListener');
+    const remove = vi.spyOn(parent.signal, 'removeEventListener');
+    const throwingProvider: IProvider = {
+      name: 'test-provider-1',
+      generateChatCompletion() {
+        throw new Error('synchronous construction failure');
+      },
+      getModels: async () => [],
+      getDefaultModel: () => 'test-model',
+      getServerTools: () => [],
+      invokeServerTool: async () => null,
+    };
+    providerManager.registerProvider(throwingProvider);
+    const lb = new LoadBalancingProvider(
+      {
+        ...config,
+        subProfiles,
+        lbProfileEphemeralSettings: { failover_retry_count: 1 },
+      },
+      providerManager,
+    );
+
+    await expect(async () => {
+      for await (const _chunk of lb.generateChatCompletion({
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
+        metadata: { abortSignal: parent.signal },
+      })) {
+        // consume
+      }
+    }).rejects.toThrow('synchronous construction failure');
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(remove.mock.calls[0][1]).toBe(add.mock.calls[0][1]);
+  });
+
+  it('preserves transport failures when linked listener removal throws', async () => {
+    const parent = new AbortController();
+    const cleanupError = new Error('listener removal failed');
+    vi.spyOn(parent.signal, 'removeEventListener').mockImplementation(() => {
+      throw cleanupError;
+    });
+    const primaryError = new Error('primary transport failed');
+    const secondaryError = new Error('secondary transport failed');
+    const failures = [primaryError, secondaryError];
+    let calls = 0;
+    const noContent: IContent[] = [];
+    const throwingProvider: IProvider = {
+      name: 'test-provider-1',
+      async *generateChatCompletion(): AsyncGenerator<IContent> {
+        const failure = calls === 0 ? primaryError : secondaryError;
+        calls++;
+        yield* noContent;
+        throw failure;
+      },
+      getModels: async () => [],
+      getDefaultModel: () => 'test-model',
+      getServerTools: () => [],
+      invokeServerTool: async () => null,
+    };
+    providerManager.registerProvider(throwingProvider);
+    providerManager.registerProvider({
+      ...throwingProvider,
+      name: 'test-provider-2',
+    });
+    const lb = new LoadBalancingProvider(
+      {
+        ...config,
+        subProfiles,
+        lbProfileEphemeralSettings: { failover_retry_count: 1 },
+      },
+      providerManager,
+    );
+
+    let thrown: unknown;
+    try {
+      for await (const _chunk of lb.generateChatCompletion({
+        contents: [],
+        metadata: { abortSignal: parent.signal },
+      })) {
+        await Promise.resolve();
+      }
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(LoadBalancerFailoverError);
+    const loadBalancerFailure =
+      thrown instanceof LoadBalancerFailoverError ? thrown : undefined;
+    expect(
+      loadBalancerFailure?.failures.map((failure) => failure.error),
+    ).toStrictEqual(failures);
   });
 
   describe('No timeout after first chunk', () => {

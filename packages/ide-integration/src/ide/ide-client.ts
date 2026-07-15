@@ -84,7 +84,9 @@ export class IdeClient {
   private authToken: string | undefined;
   private diffResponses = new Map<string, (result: DiffUpdateResult) => void>();
   private statusListeners = new Set<(state: IDEConnectionState) => void>();
-  private trustChangeListeners = new Set<(isTrusted: boolean) => void>();
+  private trustChangeListeners = new Set<
+    (isTrusted: boolean | undefined) => void
+  >();
 
   private constructor() {}
 
@@ -114,11 +116,17 @@ export class IdeClient {
     this.statusListeners.delete(listener);
   }
 
-  addTrustChangeListener(listener: (isTrusted: boolean) => void) {
+  /**
+   * Subscribes to effective IDE workspace trust. `undefined` means the IDE trust
+   * state is unavailable or unknown, including after disconnection.
+   */
+  addTrustChangeListener(listener: (isTrusted: boolean | undefined) => void) {
     this.trustChangeListeners.add(listener);
   }
 
-  removeTrustChangeListener(listener: (isTrusted: boolean) => void) {
+  removeTrustChangeListener(
+    listener: (isTrusted: boolean | undefined) => void,
+  ) {
     this.trustChangeListeners.delete(listener);
   }
 
@@ -324,6 +332,11 @@ export class IdeClient {
 
     if (status === IDEConnectionStatus.Disconnected) {
       ideContext.clearIdeContext();
+      if (!isAlreadyDisconnected) {
+        for (const listener of this.trustChangeListeners) {
+          listener(undefined);
+        }
+      }
     }
   }
 
@@ -467,27 +480,20 @@ export class IdeClient {
       (notification) => {
         ideContext.setIdeContext(notification.params);
         const isTrusted = notification.params.workspaceState?.isTrusted;
-        if (isTrusted !== undefined) {
-          for (const listener of this.trustChangeListeners) {
-            listener(isTrusted);
-          }
+        for (const listener of this.trustChangeListeners) {
+          listener(isTrusted);
         }
       },
     );
-    this.client.onerror = (_error) => {
+    const handleDisconnect = (): void => {
       this.setState(
         IDEConnectionStatus.Disconnected,
         `IDE connection error. The connection was lost unexpectedly. Please try reconnecting by running /ide enable`,
         true,
       );
     };
-    this.client.onclose = () => {
-      this.setState(
-        IDEConnectionStatus.Disconnected,
-        `IDE connection error. The connection was lost unexpectedly. Please try reconnecting by running /ide enable`,
-        true,
-      );
-    };
+    this.client.onerror = handleDisconnect;
+    this.client.onclose = handleDisconnect;
     this.client.setNotificationHandler(
       IdeDiffAcceptedNotificationSchema,
       (notification) => {

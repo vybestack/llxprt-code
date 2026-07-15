@@ -129,6 +129,32 @@ describe('RetryOrchestrator onAuthError handler', () => {
     );
   });
 
+  it('does not refresh authentication when the only transport attempt is exhausted', async () => {
+    const authError = createAuthError(401, 'authentication failed');
+    const handleAuthError = vi.fn().mockResolvedValue(undefined);
+    const provider = createTestProvider({ responses: [{ error: authError }] });
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 1,
+      initialDelayMs: 1,
+    });
+
+    await expect(
+      consumeStream(
+        orchestrator.generateChatCompletion({
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+          runtime: {
+            config: {
+              getOnAuthErrorHandler: () => ({ handleAuthError }),
+            },
+          } as GenerateChatOptions['runtime'],
+        }),
+      ),
+    ).rejects.toMatchObject({ isRetryable: false });
+    expect(handleAuthError).not.toHaveBeenCalled();
+  });
+
   /**
    * @fix issue1861
    * Test that RetryOrchestrator calls onAuthError handler on 403 error before retry
@@ -291,6 +317,61 @@ describe('RetryOrchestrator onAuthError handler', () => {
     expect(result).toHaveLength(1);
   });
 
+  it('aborts a never-resolving auth refresh without another transport', async () => {
+    const controller = new AbortController();
+    let transports = 0;
+    let refreshStarted!: () => void;
+    let refreshSettled!: () => void;
+    const started = new Promise<void>((resolve) => {
+      refreshStarted = resolve;
+    });
+    const settled = new Promise<void>((resolve) => {
+      refreshSettled = resolve;
+    });
+    const provider = createTestProvider({
+      responses: [{ error: createAuthError(401, 'unauthorized') }, 'success'],
+    });
+    const originalGenerate = provider.generateChatCompletion.bind(provider);
+    provider.generateChatCompletion = ((options: GenerateChatOptions) => {
+      transports++;
+      return originalGenerate(options);
+    }) as IProvider['generateChatCompletion'];
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 2,
+      initialDelayMs: 0,
+    });
+    const config = {
+      getOnAuthErrorHandler: () => ({
+        handleAuthError: async ({ signal }) => {
+          refreshStarted();
+          await new Promise<void>((_resolve, reject) => {
+            const onAbort = () => {
+              refreshSettled();
+              reject(new DOMException('Aborted', 'AbortError'));
+            };
+            signal?.addEventListener('abort', onAbort, { once: true });
+            if (signal?.aborted === true) onAbort();
+          });
+        },
+      }),
+    } as GenerateChatOptions['config'];
+    const consumption = consumeStream(
+      orchestrator.generateChatCompletion({
+        contents: [],
+        config,
+        invocation: {
+          signal: controller.signal,
+        } as GenerateChatOptions['invocation'],
+      }),
+    );
+
+    await started;
+    controller.abort();
+
+    await expect(consumption).rejects.toMatchObject({ name: 'AbortError' });
+    await settled;
+    expect(transports).toBe(1);
+  });
   /**
    * @fix issue1861
    * Test that onAuthError handler is called on consecutive auth errors before failover

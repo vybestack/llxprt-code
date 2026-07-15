@@ -25,6 +25,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/config.js';
+import { generateMcpToolName } from '@vybestack/llxprt-code-mcp';
 
 // Clear the shipped fake-MCP seam env var after every test so the fixture path
 // never leaks into a sibling spec sharing the same worker process. The seam is
@@ -178,7 +179,7 @@ class FakeMcpRegistryImpl implements FakeMcpRegistry {
     for (const server of this.servers.values()) {
       for (const t of server.snapshotTools()) {
         out.push({
-          name: t.name,
+          name: generateMcpToolName(server.name, t.name),
           description: t.description,
           source: 'mcp',
           server: server.name,

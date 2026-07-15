@@ -92,6 +92,8 @@
     "lint:runner": "bun scripts/run-lint.ts --max-warnings 0",
     "lint:eslint-guard": "bun scripts/check-eslint-guard.ts",
     "lint:cli-boundary": "bun scripts/check-cli-import-boundary.ts",
+    "lint:genai-enclave": "bun scripts/check-genai-enclave.ts",
+    "lint:genai-inventory": "bun scripts/genai-import-inventory.ts --check",
     "lint:agents-api-surface": "node scripts/check-agents-api-surface.mjs",
     "lint:all": "./scripts/lint-all.sh",
     "format": "prettier --experimental-cli --write . --ignore-path .gitignore --ignore-path .prettierignore",
@@ -353,6 +355,7 @@
     "@lydell/node-pty-linux-x64": "1.1.0",
     "@lydell/node-pty-win32-arm64": "1.1.0",
     "@lydell/node-pty-win32-x64": "1.1.0",
+    "@napi-rs/keyring": "^1.3.0",
     "@x70102/ink": "^6.4.0-hotfix-flicker-scroll-merge",
     "node-pty": "^1.0.0"
   },

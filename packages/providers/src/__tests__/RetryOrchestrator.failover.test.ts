@@ -17,6 +17,7 @@ function createTestProvider(config: {
   name?: string;
   responses?: Array<'success' | 'error' | { error: Error }>;
   streamChunks?: IContent[][];
+  onCall?: () => void;
 }): IProvider {
   let callCount = 0;
 
@@ -28,6 +29,7 @@ function createTestProvider(config: {
   return {
     name: config.name ?? 'test-provider',
     async *generateChatCompletion(_options: GenerateChatOptions) {
+      config.onCall?.();
       const responseIndex = Math.min(
         callCount,
         (config.responses?.length ?? 1) - 1,

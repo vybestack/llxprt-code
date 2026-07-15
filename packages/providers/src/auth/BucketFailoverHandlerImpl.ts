@@ -22,6 +22,7 @@ import type {
 } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { BucketFailureReason } from '@vybestack/llxprt-code-core/runtime/contracts/index.js';
 import type { BucketFailoverOAuthManagerLike } from './types.js';
+import { raceWithAbort } from '../utils/abortSignal.js';
 
 const logger = new DebugLogger('llxprt:bucket:failover:handler');
 
@@ -36,6 +37,10 @@ type TriggerClassificationResult = {
   reason: BucketFailureReason;
   completed: boolean;
 };
+
+function isAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
+}
 
 /**
  * CLI implementation of BucketFailoverHandler
@@ -146,10 +151,20 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
    * Pass 3: Attempt foreground reauth for expired/missing tokens
    */
   async tryFailover(context?: FailoverContext): Promise<boolean> {
+    const signal = context?.signal;
+    if (isAborted(signal)) {
+      return raceWithAbort(Promise.resolve(false), signal);
+    }
+    return raceWithAbort(this.tryFailoverInternal(context), signal);
+  }
+
+  private async tryFailoverInternal(
+    context?: FailoverContext,
+  ): Promise<boolean> {
     this.lastFailoverReasons = {};
     const authRetryTimeoutMs =
       context?.authRetryTimeoutMs ?? this.configuredAuthRetryTimeoutMs;
-    this.syncCursorFromSession();
+    this.syncCursorFromSession(context?.signal);
 
     const currentBucket = this.getCurrentBucket();
     if (!currentBucket) {
@@ -161,10 +176,15 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       currentBucket,
       context,
     );
+    const signal = context?.signal;
+    if (isAborted(signal)) return false;
     if (classification.completed) return true;
     this.recordTriggeringBucket(currentBucket, classification.reason);
 
-    if (await this.tryPassTwoFailover(currentBucket)) return true;
+    if (await this.tryPassTwoFailover(currentBucket, signal)) {
+      return true;
+    }
+    if (isAborted(signal)) return false;
 
     const candidateBucket = this.findPassThreeCandidate(currentBucket);
     if (candidateBucket !== undefined) {
@@ -172,6 +192,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
         currentBucket,
         candidateBucket,
         authRetryTimeoutMs,
+        signal,
       );
     }
 
@@ -179,14 +200,14 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     return false;
   }
 
-  private syncCursorFromSession(): void {
+  private syncCursorFromSession(signal: AbortSignal | undefined): void {
     const sessionBucket = this.oauthManager.getSessionBucket(
       this.provider,
       this.metadata,
     );
     if (sessionBucket) {
       const idx = this.buckets.indexOf(sessionBucket);
-      if (idx >= 0) {
+      if (idx >= 0 && !isAborted(signal)) {
         this.currentBucketIndex = idx;
       }
     }
@@ -293,9 +314,14 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
    * @pseudocode failover-handler.md lines 60-121
    */
 
-  private async tryPassTwoFailover(currentBucket: string): Promise<boolean> {
+  private async tryPassTwoFailover(
+    currentBucket: string,
+    signal: AbortSignal | undefined,
+  ): Promise<boolean> {
     for (const bucket of this.buckets) {
-      if (await this.tryPassTwoBucket(bucket, currentBucket)) return true;
+      if (isAborted(signal)) return false;
+      if (await this.tryPassTwoBucket(bucket, currentBucket, signal))
+        return true;
     }
     return false;
   }
@@ -303,25 +329,29 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   private async tryPassTwoBucket(
     bucket: string,
     currentBucket: string,
+    signal: AbortSignal | undefined,
   ): Promise<boolean> {
     if (this.triedBucketsThisSession.has(bucket)) {
       this.lastFailoverReasons[bucket] ??= 'skipped';
       return false;
     }
 
-    const storedToken = await this.readPassTwoToken(bucket);
-    if (storedToken === null) return false;
+    const storedToken = await this.readPassTwoToken(bucket, signal);
+    if (isAborted(signal) || storedToken === null) return false;
 
     const nowSec = Math.floor(Date.now() / 1000);
     if (storedToken.expiry - nowSec <= 0) {
-      return this.tryRefreshCandidate(bucket, currentBucket, nowSec);
+      return this.tryRefreshCandidate(bucket, currentBucket, nowSec, signal);
     }
-    return this.tryValidCandidate(bucket, currentBucket);
+    return this.tryValidCandidate(bucket, currentBucket, signal);
   }
 
-  private async readPassTwoToken(bucket: string): Promise<OAuthToken | null> {
+  private async readPassTwoToken(
+    bucket: string,
+    signal: AbortSignal | undefined,
+  ): Promise<OAuthToken | null> {
     const storedToken = await this.readStoredToken(bucket);
-    if (storedToken === null) {
+    if (storedToken === null && !isAborted(signal)) {
       this.lastFailoverReasons[bucket] = 'no-token';
     }
     return storedToken;
@@ -331,14 +361,18 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     bucket: string,
     currentBucket: string,
     nowSec: number,
+    signal: AbortSignal | undefined,
   ): Promise<boolean> {
     try {
       const refreshedToken = await this.oauthManager.getOAuthToken(
         this.provider,
         bucket,
       );
-      if (refreshedToken && refreshedToken.expiry > nowSec) {
-        this.switchToBucket(bucket, 'pass-2 refresh');
+      if (
+        refreshedToken &&
+        refreshedToken.expiry > nowSec &&
+        this.switchToBucket(bucket, 'pass-2 refresh', signal)
+      ) {
         logger.warn(
           () =>
             `Bucket failover: switched to ${bucket} after refresh from ${currentBucket}`,
@@ -348,6 +382,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     } catch (refreshError) {
       logger.debug(`Refresh failed for ${bucket}:`, refreshError);
     }
+    if (isAborted(signal)) return false;
     this.lastFailoverReasons[bucket] = 'expired-refresh-failed';
     return false;
   }
@@ -355,29 +390,39 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   private async tryValidCandidate(
     bucket: string,
     currentBucket: string,
+    signal: AbortSignal | undefined,
   ): Promise<boolean> {
     let token: OAuthToken | null = null;
     try {
       token = await this.oauthManager.getOAuthToken(this.provider, bucket);
     } catch (error) {
       logger.warn(`Failed to get token for ${this.provider}/${bucket}:`, error);
-      this.lastFailoverReasons[bucket] = 'no-token';
+      if (!isAborted(signal)) {
+        this.lastFailoverReasons[bucket] = 'no-token';
+      }
       return false;
     }
 
     if (token === null) {
-      this.lastFailoverReasons[bucket] = 'no-token';
+      if (!isAborted(signal)) {
+        this.lastFailoverReasons[bucket] = 'no-token';
+      }
       return false;
     }
 
-    this.switchToBucket(bucket, 'pass-2 switch');
+    if (!this.switchToBucket(bucket, 'pass-2 switch', signal)) return false;
     logger.warn(
       () => `Bucket failover: switched from ${currentBucket} to ${bucket}`,
     );
     return true;
   }
 
-  private switchToBucket(bucket: string, stage: BucketSwitchStage): void {
+  private switchToBucket(
+    bucket: string,
+    stage: BucketSwitchStage,
+    signal: AbortSignal | undefined,
+  ): boolean {
+    if (isAborted(signal)) return false;
     const bucketIndex = this.buckets.indexOf(bucket);
     if (bucketIndex >= 0) {
       this.currentBucketIndex = bucketIndex;
@@ -388,6 +433,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     } catch (setError) {
       logger.warn(`Failed to set session bucket during ${stage}: ${setError}`);
     }
+    return true;
   }
 
   private findPassThreeCandidate(currentBucket: string): string | undefined {
@@ -414,6 +460,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     currentBucket: string,
     candidateBucket: string,
     authRetryTimeoutMs: number,
+    signal: AbortSignal | undefined,
   ): Promise<boolean> {
     const existingForegroundReauth =
       this.foregroundReauthInFlightByBucket.get(candidateBucket);
@@ -423,6 +470,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       authRetryTimeoutMs,
       currentBucket,
       candidateBucket,
+      signal,
     );
     this.foregroundReauthInFlightByBucket.set(candidateBucket, pass3Promise);
     try {
@@ -446,13 +494,21 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     authRetryTimeoutMs: number,
     currentBucket: string,
     candidateBucket: string,
+    signal: AbortSignal | undefined,
   ): Promise<boolean> {
     await this.waitForEagerAuth(
       candidateBucket,
       'Foreground reauth waiting for in-flight eager auth',
       'In-flight eager auth failed before pass-3 reauth',
     );
-    if (await this.tryPassThreeTokenRecheck(currentBucket, candidateBucket)) {
+    if (isAborted(signal)) return false;
+    if (
+      await this.tryPassThreeTokenRecheck(
+        currentBucket,
+        candidateBucket,
+        signal,
+      )
+    ) {
       return true;
     }
 
@@ -461,8 +517,13 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       'Foreground reauth detected late in-flight eager auth',
       'Late in-flight eager auth failed before pass-3 reauth',
     );
+    if (isAborted(signal)) return false;
     if (
-      await this.tryFinalPassThreeTokenRecheck(currentBucket, candidateBucket)
+      await this.tryFinalPassThreeTokenRecheck(
+        currentBucket,
+        candidateBucket,
+        signal,
+      )
     ) {
       return true;
     }
@@ -471,6 +532,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       authRetryTimeoutMs,
       currentBucket,
       candidateBucket,
+      signal,
     );
   }
 
@@ -495,6 +557,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   private async tryPassThreeTokenRecheck(
     currentBucket: string,
     candidateBucket: string,
+    signal: AbortSignal | undefined,
   ): Promise<boolean> {
     return this.tryTokenRecheckSwitch(
       currentBucket,
@@ -502,12 +565,14 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       'pass-3 token re-check switch',
       `Token re-check failed before pass-3 reauth for ${candidateBucket}:`,
       `Bucket failover: switched from ${currentBucket} to ${candidateBucket} after token became available`,
+      signal,
     );
   }
 
   private async tryFinalPassThreeTokenRecheck(
     currentBucket: string,
     candidateBucket: string,
+    signal: AbortSignal | undefined,
   ): Promise<boolean> {
     return this.tryTokenRecheckSwitch(
       currentBucket,
@@ -515,6 +580,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       'final pass-3 token re-check switch',
       `Final token re-check failed before pass-3 reauth for ${candidateBucket}:`,
       `Bucket failover: switched from ${currentBucket} to ${candidateBucket} after final token re-check`,
+      signal,
     );
   }
 
@@ -524,6 +590,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     stage: BucketSwitchStage,
     failureMessage: string,
     successMessage: string,
+    signal: AbortSignal | undefined,
   ): Promise<boolean> {
     let token: OAuthToken | null = null;
     try {
@@ -536,7 +603,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     }
     if (token === null) return false;
 
-    this.switchToBucket(candidateBucket, stage);
+    if (!this.switchToBucket(candidateBucket, stage, signal)) return false;
     logger.warn(() => successMessage);
     return true;
   }
@@ -545,6 +612,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     authRetryTimeoutMs: number,
     currentBucket: string,
     candidateBucket: string,
+    signal: AbortSignal | undefined,
   ): Promise<boolean> {
     try {
       logger.debug(
@@ -554,6 +622,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
         candidateBucket,
         authRetryTimeoutMs,
       );
+      if (isAborted(signal)) return false;
       if (authResult === 'timeout') {
         logger.debug(
           `Foreground reauth timed out after ${authRetryTimeoutMs}ms for bucket: ${candidateBucket}`,
@@ -567,12 +636,15 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
         this.provider,
         candidateBucket,
       );
+      if (isAborted(signal)) return false;
       if (token === null) {
         this.recordReauthFailure(candidateBucket);
         return false;
       }
 
-      this.switchToBucket(candidateBucket, 'pass-3 reauth');
+      if (!this.switchToBucket(candidateBucket, 'pass-3 reauth', signal)) {
+        return false;
+      }
       logger.warn(
         () =>
           `Bucket failover: switched from ${currentBucket} to ${candidateBucket} after reauth`,
@@ -598,8 +670,10 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
         `Foreground reauth failed for bucket ${candidateBucket}:`,
         reauthError,
       );
-      this.lastFailoverReasons[candidateBucket] = 'reauth-failed';
-      this.triedBucketsThisSession.add(candidateBucket);
+      if (!isAborted(signal)) {
+        this.lastFailoverReasons[candidateBucket] = 'reauth-failed';
+        this.triedBucketsThisSession.add(candidateBucket);
+      }
       return false;
     }
   }

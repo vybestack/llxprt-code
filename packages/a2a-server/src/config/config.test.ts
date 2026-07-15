@@ -62,6 +62,69 @@ describe('loadConfig auth fallback', () => {
   });
 });
 
+describe('getApprovalMode LLXPRT_YOLO_MODE', () => {
+  const ORIGINAL_ENV = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    vi.restoreAllMocks();
+  });
+
+  it('enables YOLO mode when LLXPRT_YOLO_MODE is "true"', async () => {
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
+    vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
+
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.USE_CCPA;
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+    delete process.env.GOOGLE_CLOUD_LOCATION;
+    delete process.env.GOOGLE_API_KEY;
+    process.env.LLXPRT_YOLO_MODE = 'true';
+    delete process.env.GEMINI_YOLO_MODE;
+
+    const config = await loadConfig({} as never, [], 'test-task-id');
+    expect(config.getApprovalMode()).toBe('yolo');
+  });
+
+  it('uses DEFAULT mode when LLXPRT_YOLO_MODE is not set', async () => {
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
+    vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
+
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.USE_CCPA;
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+    delete process.env.GOOGLE_CLOUD_LOCATION;
+    delete process.env.GOOGLE_API_KEY;
+    delete process.env.LLXPRT_YOLO_MODE;
+    delete process.env.GEMINI_YOLO_MODE;
+
+    const config = await loadConfig({} as never, [], 'test-task-id');
+    expect(config.getApprovalMode()).toBe('default');
+  });
+
+  it('does not enable YOLO mode via GEMINI_YOLO_MODE fallback', async () => {
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
+    vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
+
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.USE_CCPA;
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+    delete process.env.GOOGLE_CLOUD_LOCATION;
+    delete process.env.GOOGLE_API_KEY;
+    delete process.env.LLXPRT_YOLO_MODE;
+    process.env.GEMINI_YOLO_MODE = 'true';
+
+    const config = await loadConfig({} as never, [], 'test-task-id');
+    expect(config.getApprovalMode()).toBe('default');
+  });
+});
+
 describe('loadConfig interactive mode', () => {
   afterEach(() => {
     vi.restoreAllMocks();

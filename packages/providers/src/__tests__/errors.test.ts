@@ -96,7 +96,7 @@ describe('AllBucketsExhaustedError @plan:PLAN-20260223-ISSUE1598.P07', () => {
     expect(error.message).toContain('bucket-beta');
     expect(error.message).toContain('bucket-gamma');
     expect(error.message).toMatch(
-      /All buckets exhausted for provider 'google': bucket-alpha, bucket-beta, bucket-gamma/,
+      /All buckets exhausted for provider 'google' after 3 attempts \(buckets: bucket-alpha, bucket-beta, bucket-gamma\)/,
     );
   });
 

@@ -24,7 +24,7 @@ import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import {
   fromAsync,
-  setupGeminiClient,
+  setupAgentClient,
   type MockResponseShape,
 } from './client-test-helpers.js';
 
@@ -173,9 +173,21 @@ vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
     },
   };
 });
-vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
-  tokenLimit: vi.fn(),
-}));
+vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
+  const tokenLimit = vi.fn();
+  return {
+    tokenLimit,
+    resolveEffectiveContextLimit: vi.fn(
+      (model: string, userCtx?: number, provCtx?: number) => {
+        const ok = (v: unknown): v is number =>
+          typeof v === 'number' && Number.isFinite(v) && v > 0;
+        if (ok(userCtx)) return userCtx;
+        if (ok(provCtx)) return provCtx;
+        return tokenLimit(model);
+      },
+    ),
+  };
+});
 vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
     setLastPromptTokenCount: vi.fn(),
@@ -226,11 +238,11 @@ function findHumanTextBlock(
     .find((block) => block.text.includes(needle));
 }
 
-describe('Gemini Client (client.ts)', () => {
+describe('Agent Client (client.ts)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
-    const ctx = await setupGeminiClient({
+    const ctx = await setupAgentClient({
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,

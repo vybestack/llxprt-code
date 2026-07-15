@@ -84,7 +84,6 @@ const makeParams = (): UIStateParams => ({
   ctrlCPressedOnce: false,
   ctrlDPressedOnce: false,
   showEscapePrompt: false,
-  showIdeRestartPrompt: false,
   quittingMessages: null,
 
   // Display options
@@ -145,7 +144,6 @@ const makeParams = (): UIStateParams => ({
   currentIDE: undefined,
 
   // Trust
-  isRestarting: false,
   isTrustedFolder: false,
 
   // Welcome onboarding

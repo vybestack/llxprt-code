@@ -50,7 +50,7 @@ export type SchedulerConfig = Config & {
 };
 
 /**
- * Extracts the optional trace id from a server gemini stream event.
+ * Extracts the optional trace id from a server agent stream event.
  */
 export function getEventTraceId(
   event: ServerAgentStreamEvent,

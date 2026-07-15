@@ -60,11 +60,9 @@ async function loadToolsForDialog(
 
   const disabledTools = getDisabledToolsFromConfig(config);
   const allTools = [...agent.tools.list()];
-  const geminiTools = allTools.filter(
-    (tool: ToolInfo) => tool.source !== 'mcp',
-  );
+  const agentTools = allTools.filter((tool: ToolInfo) => tool.source !== 'mcp');
 
-  return filterToolsByAction(geminiTools, disabledTools, action);
+  return filterToolsByAction(agentTools, disabledTools, action);
 }
 
 function handleEmptyToolsList(

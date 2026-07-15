@@ -10,8 +10,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import semver from 'semver';
 import { getErrorMessage } from '../../utils/errors.js';
-import { loadExtensionConfig, validateName } from '../../config/extension.js';
+import {
+  loadExtensionConfig,
+  validateName,
+  EXTENSIONS_CONFIG_FILENAME,
+  EXTENSIONS_CONFIG_FILENAME_FALLBACK,
+} from '../../config/extension.js';
 import { exitCli } from '../utils.js';
+import { resolveSecureContextPath } from '../../config/extensions/extensionLoader.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:extensions:validate');
 
@@ -29,6 +35,18 @@ export async function handleValidate(args: ValidateArgs) {
   }
 }
 
+/**
+ * Determines which manifest file was selected by the precedence rule
+ * (llxprt-extension.json first, then gemini-extension.json). Returns the
+ * filename for use in diagnostics so error messages name the correct manifest.
+ */
+function resolveSelectedManifestName(extensionDir: string): string {
+  if (fs.existsSync(path.join(extensionDir, EXTENSIONS_CONFIG_FILENAME))) {
+    return EXTENSIONS_CONFIG_FILENAME;
+  }
+  return EXTENSIONS_CONFIG_FILENAME_FALLBACK;
+}
+
 async function validateExtension(args: ValidateArgs) {
   const workspaceDir = process.cwd();
   const absoluteInputPath = path.resolve(args.path);
@@ -42,13 +60,15 @@ async function validateExtension(args: ValidateArgs) {
     await exitCli(1);
   }
 
+  const selectedManifestName = resolveSelectedManifestName(absoluteInputPath);
+
   const extensionConfig = await loadExtensionConfig({
     extensionDir: absoluteInputPath,
     workspaceDir,
   });
   if (!extensionConfig) {
     throw new Error(
-      `Invalid extension at ${absoluteInputPath}. Please make sure it has a valid llxprt-extension.json or gemini-extension.json file.`,
+      `Invalid extension at ${absoluteInputPath}. Please make sure it has a valid ${EXTENSIONS_CONFIG_FILENAME} or ${EXTENSIONS_CONFIG_FILENAME_FALLBACK} file.`,
     );
   }
 
@@ -62,17 +82,20 @@ async function validateExtension(args: ValidateArgs) {
 
     const missingContextFiles: string[] = [];
     for (const contextFilePath of contextFileNames) {
-      const contextFileAbsolutePath = path.resolve(
-        absoluteInputPath,
+      const contextFileAbsolutePath = resolveSecureContextPath(
         contextFilePath,
+        absoluteInputPath,
       );
-      if (!fs.existsSync(contextFileAbsolutePath)) {
+      if (
+        contextFileAbsolutePath === null ||
+        !fs.existsSync(contextFileAbsolutePath)
+      ) {
         missingContextFiles.push(contextFilePath);
       }
     }
     if (missingContextFiles.length > 0) {
       errors.push(
-        `The following context files referenced in gemini-extension.json are missing: ${missingContextFiles}`,
+        `The following context files referenced in ${selectedManifestName} are missing: ${missingContextFiles}`,
       );
     }
   }

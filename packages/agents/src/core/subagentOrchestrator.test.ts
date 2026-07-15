@@ -9,14 +9,15 @@ import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagen
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { SubAgentScope } from './subagent.js';
-import { type SubAgentScope as SubAgentScopeInstance } from './subagent.js';
 import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { SubagentOrchestrator } from './subagentOrchestrator.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   makeForegroundConfig,
   createRuntimeBundle,
+  createOrchestratorForTurns,
+  createScopeFactory,
+  extractRunConfig,
 } from './__tests__/subagentOrchestrator-test-helpers.js';
 
 const baseProfile: Profile = {
@@ -37,18 +38,36 @@ const defaultRunConfig: RunConfig = {
 
 const foregroundConfig = makeForegroundConfig();
 
-const createScopeFactory = () => {
-  const fakeScope = {
-    runtimeContext: {
-      state: { runtimeId: 'runtime#1' },
-      history: { clear: vi.fn() },
-    },
-    getAgentId: () => 'agent-helper-123',
-  } as unknown as SubAgentScopeInstance;
+/**
+ * Creates a foreground {@link Config} whose `getEphemeralSetting` returns the
+ * given value for `maxTurnsPerPrompt` and `undefined` for all other keys.
+ * When `value` is `undefined` the accessor is still present but returns
+ * `undefined` (missing value) — distinct from omitting the accessor entirely.
+ */
+function makeConfigWithMaxTurns(value: unknown): Config {
+  return {
+    ...foregroundConfig,
+    getEphemeralSetting: (key: string) =>
+      key === 'maxTurnsPerPrompt' ? value : undefined,
+  } as unknown as Config;
+}
 
-  const factory = vi.fn<typeof SubAgentScope.create>(async () => fakeScope);
-  return { factory, fakeScope };
-};
+/**
+ * Shared assertion: launches through a real orchestrator built by
+ * {@link createOrchestratorForTurns}, then asserts the materialized
+ * `runConfig.max_turns` equals the expected value. Every case exercises the
+ * real orchestrator scope, so `runConfig.max_turns` is the actual value the
+ * subagent receives (not a mock artifact).
+ */
+async function launchAndExtract(
+  orchestrator: SubagentOrchestrator,
+  factory: ReturnType<typeof createScopeFactory>['factory'],
+  subagentName: string,
+): Promise<RunConfig> {
+  await orchestrator.launch({ name: subagentName });
+  return extractRunConfig(factory);
+}
+
 const messageBusSubagentConfig: SubagentConfig = {
   name: 'messagebus-helper',
   profile: 'default-profile',
@@ -285,42 +304,18 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     expect(runConfigArg.max_turns).toBeUndefined();
   });
 
-  it('defaults max_turns to 200 when neither profile nor request specify limits', async () => {
-    const subagentConfig: SubagentConfig = {
-      name: 'default-helper',
-      profile: 'default-profile',
-      systemPrompt: 'Assist without additional limits.',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
-    const subagentManager = {
-      loadSubagent,
-    } as unknown as SubagentManager;
-
-    const loadProfile = vi.fn().mockResolvedValue(baseProfile);
-    const profileManager = {
-      loadProfile,
-    } as unknown as ProfileManager;
-
-    const { factory } = createScopeFactory();
-    const runtimeBundle = createRuntimeBundle('default-runtime');
-    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-
-    const orchestrator = new SubagentOrchestrator({
-      subagentManager,
-      profileManager,
-      foregroundConfig,
-      scopeFactory: factory,
-      runtimeLoader,
+  it('defaults max_turns to 1000 when neither profile nor request specify limits', async () => {
+    const { orchestrator, factory } = createOrchestratorForTurns({
+      subagentName: 'default-helper',
+      profile: baseProfile,
     });
-
-    await orchestrator.launch({ name: subagentConfig.name });
-
-    const [, , , , runConfigArg] = factory.mock.calls[0];
+    const runConfigArg = await launchAndExtract(
+      orchestrator,
+      factory,
+      'default-helper',
+    );
     expect(runConfigArg.max_time_minutes).toBe(Number.POSITIVE_INFINITY);
-    expect(runConfigArg.max_turns).toBe(200);
+    expect(runConfigArg.max_turns).toBe(1000);
   });
 
   it('defaults max_turns to the foreground config current maxTurnsPerPrompt when neither profile nor request specify limits', async () => {
@@ -423,43 +418,6 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     const [, , , , secondRunConfig] = factory.mock.calls[1];
     expect(secondRunConfig.max_turns).toBe(250);
-  });
-
-  it('falls back to 200 when foreground config has no current maxTurnsPerPrompt', async () => {
-    const subagentConfig: SubagentConfig = {
-      name: 'no-parent-helper',
-      profile: 'default-profile',
-      systemPrompt: 'Assist.',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
-    const subagentManager = {
-      loadSubagent,
-    } as unknown as SubagentManager;
-
-    const loadProfile = vi.fn().mockResolvedValue(baseProfile);
-    const profileManager = {
-      loadProfile,
-    } as unknown as ProfileManager;
-
-    const { factory } = createScopeFactory();
-    const runtimeBundle = createRuntimeBundle('no-parent-turns');
-    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-
-    const orchestrator = new SubagentOrchestrator({
-      subagentManager,
-      profileManager,
-      foregroundConfig,
-      scopeFactory: factory,
-      runtimeLoader,
-    });
-
-    await orchestrator.launch({ name: subagentConfig.name });
-
-    const [, , , , runConfigArg] = factory.mock.calls[0];
-    expect(runConfigArg.max_turns).toBe(200);
   });
 
   it('respects explicit request max_turns over foreground config maxTurnsPerPrompt', async () => {
@@ -614,51 +572,87 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     expect(runConfigArg.max_turns).toBeUndefined();
   });
 
-  it('falls back to 200 when foreground config maxTurnsPerPrompt is zero', async () => {
-    const subagentConfig: SubagentConfig = {
-      name: 'zero-parent-helper',
-      profile: 'default-profile',
-      systemPrompt: 'Assist.',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+  it.each([
+    {
+      caseName: 'the accessor returns no value',
+      subagentName: 'missing-parent-value-helper',
+      foregroundConfig: makeConfigWithMaxTurns(undefined),
+    },
+    {
+      caseName: 'the foreground value is zero',
+      subagentName: 'zero-parent-helper',
+      foregroundConfig: makeConfigWithMaxTurns(0),
+    },
+    {
+      caseName: 'the foreground value is NaN',
+      subagentName: 'nan-parent-helper',
+      foregroundConfig: makeConfigWithMaxTurns(Number.NaN),
+    },
+    {
+      caseName: 'the foreground value is infinite',
+      subagentName: 'infinity-parent-helper',
+      foregroundConfig: makeConfigWithMaxTurns(Number.POSITIVE_INFINITY),
+    },
+    {
+      caseName: 'the foreground value is not a number',
+      subagentName: 'string-parent-helper',
+      foregroundConfig: makeConfigWithMaxTurns('not-a-number'),
+    },
+    {
+      caseName: 'the foreground accessor is unavailable',
+      subagentName: 'no-parent-accessor-helper',
+      foregroundConfig,
+    },
+  ])(
+    'falls back to 1000 when $caseName',
+    async ({ subagentName, foregroundConfig }) => {
+      const { orchestrator, factory } = createOrchestratorForTurns({
+        subagentName,
+        profile: baseProfile,
+        foregroundConfig,
+      });
+
+      const runConfigArg = await launchAndExtract(
+        orchestrator,
+        factory,
+        subagentName,
+      );
+
+      expect(runConfigArg.max_turns).toBe(1000);
+    },
+  );
+
+  it('keeps explicit task max_turns -1 unlimited even when profile and foreground both cap', async () => {
+    const profileWithCap: Profile = {
+      ...baseProfile,
+      ephemeralSettings: {
+        ...baseProfile.ephemeralSettings,
+        maxTurnsPerPrompt: 300,
+      },
     };
 
-    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
-    const subagentManager = {
-      loadSubagent,
-    } as unknown as SubagentManager;
-
-    const loadProfile = vi.fn().mockResolvedValue(baseProfile);
-    const profileManager = {
-      loadProfile,
-    } as unknown as ProfileManager;
-
-    const configWithZeroParentTurns = {
+    const configWithForegroundCap = {
       ...foregroundConfig,
-      getEphemeralSetting: (key: string) => {
-        if (key === 'maxTurnsPerPrompt') {
-          return 0;
-        }
-        return undefined;
-      },
+      getEphemeralSetting: (key: string) =>
+        key === 'maxTurnsPerPrompt' ? 75 : undefined,
     } as unknown as Config;
 
-    const { factory } = createScopeFactory();
-    const runtimeBundle = createRuntimeBundle('zero-parent-turns');
-    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-
-    const orchestrator = new SubagentOrchestrator({
-      subagentManager,
-      profileManager,
-      foregroundConfig: configWithZeroParentTurns,
-      scopeFactory: factory,
-      runtimeLoader,
+    const { orchestrator, factory } = createOrchestratorForTurns({
+      subagentName: 'task-unlimited-helper',
+      profileName: 'capped-profile',
+      profile: profileWithCap,
+      foregroundConfig: configWithForegroundCap,
     });
 
-    await orchestrator.launch({ name: subagentConfig.name });
+    await orchestrator.launch({
+      name: 'task-unlimited-helper',
+      runConfig: { max_turns: -1 },
+    });
 
-    const [, , , , runConfigArg] = factory.mock.calls[0];
-    expect(runConfigArg.max_turns).toBe(200);
+    const runConfigArg = extractRunConfig(factory);
+    // -1 means unlimited: max_turns is omitted entirely so neither the
+    // 300-turn profile cap nor the 75-turn foreground cap is applied.
+    expect(runConfigArg.max_turns).toBeUndefined();
   });
 
   it('honors an already-aborted signal before beginning launch work', async () => {

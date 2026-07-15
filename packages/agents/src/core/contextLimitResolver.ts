@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
+import { resolveEffectiveContextLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 
 export interface ContextLimitConfig {
   getEphemeralSetting(key: string): unknown;
@@ -58,14 +58,17 @@ function getProviderContextLimit(
  * 1. explicit live user `context-limit` override,
  * 2. the active provider's getContextLimit() (e.g. load-balancer pool min),
  * 3. the model-name lookup via tokenLimit(model).
+ *
+ * Delegates to the shared `resolveEffectiveContextLimit` in core so the
+ * precedence lives in exactly one place (issues #2270 / #2527 DRY).
  */
 export function getTokenLimitForConfiguredContext(
   model: string,
   config: ContextLimitConfig,
 ): number {
-  const contextLimit =
-    getConfiguredContextLimit(config) ?? getProviderContextLimit(config);
-  return contextLimit === undefined
-    ? tokenLimit(model)
-    : tokenLimit(model, contextLimit);
+  return resolveEffectiveContextLimit(
+    model,
+    getConfiguredContextLimit(config),
+    getProviderContextLimit(config),
+  );
 }

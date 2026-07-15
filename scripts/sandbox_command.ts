@@ -60,9 +60,9 @@ function loadEnvFileWhenSandboxConfigured(envPath: string): boolean {
 }
 
 function tryLoadEnvInDir(currentDir: string): boolean {
-  const geminiEnv = join(currentDir, '.llxprt', '.env');
+  const llxprtEnv = join(currentDir, '.llxprt', '.env');
   const regularEnv = join(currentDir, '.env');
-  if (existsSync(geminiEnv) && loadEnvFileWhenSandboxConfigured(geminiEnv)) {
+  if (existsSync(llxprtEnv) && loadEnvFileWhenSandboxConfigured(llxprtEnv)) {
     return true;
   }
   if (existsSync(regularEnv)) {

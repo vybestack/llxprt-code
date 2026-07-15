@@ -81,7 +81,7 @@ describe('loadIgnoreRules', () => {
     const ignore = loadIgnoreRules({
       projectRoot: tmpDir,
       useGitignore: true,
-      useGeminiignore: false,
+      useExtensionIgnore: false,
       ignoreDirs: [],
     });
     const fileFilter = ignore.getFileFilter();
@@ -96,7 +96,7 @@ describe('loadIgnoreRules', () => {
     const ignore = loadIgnoreRules({
       projectRoot: tmpDir,
       useGitignore: false,
-      useGeminiignore: true,
+      useExtensionIgnore: true,
       ignoreDirs: [],
     });
     const fileFilter = ignore.getFileFilter();
@@ -111,7 +111,7 @@ describe('loadIgnoreRules', () => {
     const ignore = loadIgnoreRules({
       projectRoot: tmpDir,
       useGitignore: false,
-      useGeminiignore: true,
+      useExtensionIgnore: true,
       ignoreDirs: [],
     });
     const fileFilter = ignore.getFileFilter();
@@ -127,7 +127,7 @@ describe('loadIgnoreRules', () => {
     const ignore = loadIgnoreRules({
       projectRoot: tmpDir,
       useGitignore: true,
-      useGeminiignore: true,
+      useExtensionIgnore: true,
       ignoreDirs: [],
     });
     const fileFilter = ignore.getFileFilter();
@@ -141,7 +141,7 @@ describe('loadIgnoreRules', () => {
     const ignore = loadIgnoreRules({
       projectRoot: tmpDir,
       useGitignore: false,
-      useGeminiignore: false,
+      useExtensionIgnore: false,
       ignoreDirs: ['logs/'],
     });
     const dirFilter = ignore.getDirectoryFilter();
@@ -154,7 +154,7 @@ describe('loadIgnoreRules', () => {
     const ignore = loadIgnoreRules({
       projectRoot: tmpDir,
       useGitignore: true,
-      useGeminiignore: true,
+      useExtensionIgnore: true,
       ignoreDirs: [],
     });
     const fileFilter = ignore.getFileFilter();
@@ -166,7 +166,7 @@ describe('loadIgnoreRules', () => {
     const ignore = loadIgnoreRules({
       projectRoot: tmpDir,
       useGitignore: false,
-      useGeminiignore: false,
+      useExtensionIgnore: false,
       ignoreDirs: [],
     });
     const dirFilter = ignore.getDirectoryFilter();
@@ -178,7 +178,7 @@ describe('loadIgnoreRules', () => {
     const ignore = loadIgnoreRules({
       projectRoot: tmpDir,
       useGitignore: false,
-      useGeminiignore: false,
+      useExtensionIgnore: false,
       ignoreDirs: [],
       ignorePatterns: ['*.o', '*.so', '*.dll', '*.exe', '*.pyc'],
     });
@@ -196,7 +196,7 @@ describe('loadIgnoreRules', () => {
     const ignore = loadIgnoreRules({
       projectRoot: tmpDir,
       useGitignore: false,
-      useGeminiignore: false,
+      useExtensionIgnore: false,
       ignoreDirs: [],
       ignorePatterns: ['*.dSYM/'],
     });
@@ -212,7 +212,7 @@ describe('loadIgnoreRules', () => {
     const ignore = loadIgnoreRules({
       projectRoot: tmpDir,
       useGitignore: true,
-      useGeminiignore: false,
+      useExtensionIgnore: false,
       ignoreDirs: ['build/'],
       ignorePatterns: ['*.o', '*.class'],
     });
@@ -233,7 +233,7 @@ describe('loadIgnoreRules', () => {
     const ignore = loadIgnoreRules({
       projectRoot: tmpDir,
       useGitignore: true,
-      useGeminiignore: false,
+      useExtensionIgnore: false,
       ignoreDirs: [],
       ignorePatterns: ['*.o'],
     });
@@ -247,7 +247,7 @@ describe('loadIgnoreRules', () => {
     const ignore = loadIgnoreRules({
       projectRoot: tmpDir,
       useGitignore: false,
-      useGeminiignore: false,
+      useExtensionIgnore: false,
       ignoreDirs: ['target/', 'cmake-build-*/', '*.egg-info/'],
       ignorePatterns: [],
     });

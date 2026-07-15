@@ -62,7 +62,7 @@ export interface OpenAIResponsesTool {
 /**
  * Input format from Gemini-style tool declarations
  */
-interface GeminiToolDeclaration {
+interface ToolDeclaration {
   name: string;
   description?: string;
   parametersJsonSchema?: unknown;
@@ -250,17 +250,17 @@ function toNumber(value: unknown): number | undefined {
  * Convert an array of Gemini-style tool declarations to OpenAI Responses format
  */
 export function convertToolsToOpenAIResponses(
-  geminiTools?: Array<{
-    functionDeclarations?: GeminiToolDeclaration[];
+  toolDeclarations?: Array<{
+    functionDeclarations?: ToolDeclaration[];
   }>,
 ): OpenAIResponsesTool[] | undefined {
-  if (!geminiTools || geminiTools.length === 0) {
+  if (!toolDeclarations || toolDeclarations.length === 0) {
     return undefined;
   }
 
   const responsesTools: OpenAIResponsesTool[] = [];
 
-  for (const toolGroup of geminiTools) {
+  for (const toolGroup of toolDeclarations) {
     if (!toolGroup.functionDeclarations) {
       continue;
     }

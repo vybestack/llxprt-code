@@ -37,6 +37,7 @@ function getTierBand(priority: number): string {
 interface PolicyRuleDisplay {
   priority?: number;
   toolName?: string;
+  toolNamePrefix?: string;
   decision: PolicyDecision;
   argsPatternSource?: string;
   source?: string;
@@ -45,6 +46,7 @@ interface PolicyRuleDisplay {
 interface PolicyRuleBase {
   priority?: number;
   toolName?: string;
+  toolNamePrefix?: string;
   decision: PolicyDecision;
   source?: string;
 }
@@ -56,6 +58,7 @@ function toPolicyRuleDisplay<T extends PolicyRuleBase>(
   return {
     priority: rule.priority,
     toolName: rule.toolName,
+    toolNamePrefix: rule.toolNamePrefix,
     decision: rule.decision,
     argsPatternSource: extractPattern(rule),
     source: rule.source,
@@ -107,7 +110,9 @@ function formatPolicyOutput(
     lines.push(`${tier}:`);
 
     for (const rule of tierRules) {
-      const toolName = rule.toolName ?? '*';
+      const toolName =
+        rule.toolName ??
+        (rule.toolNamePrefix !== undefined ? `${rule.toolNamePrefix}*` : '*');
       const decision = formatDecision(rule.decision);
       const priority = rule.priority ?? 0;
       const argsPattern = rule.argsPatternSource

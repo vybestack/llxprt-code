@@ -150,7 +150,7 @@ export interface SessionIdentity {
   getProjectRoot(): string;
   getWorkingDir(): string;
   getProjectTempDir(): string;
-  getGeminiDir(): string;
+  getLlxprtDir(): string;
 }
 
 /**
@@ -414,6 +414,7 @@ export interface AppStateRuntime {
   getDebugMode(): boolean;
   isRestrictiveSandbox(): boolean;
   isTrustedFolder(): boolean;
+  setTrustedFolderLive(trusted: boolean): Promise<void>;
   getFolderTrust(): boolean;
   getQuestion(): string | undefined;
   getConversationLogPath(): string;
@@ -507,7 +508,7 @@ function buildSessionRuntime(source: StreamRuntimeBareSource): SessionIdentity {
     getProjectRoot: () => source.getProjectRoot(),
     getWorkingDir: () => source.getWorkingDir(),
     getProjectTempDir: () => source.getProjectTempDir(),
-    getGeminiDir: () => source.getGeminiDir(),
+    getLlxprtDir: () => source.getLlxprtDir(),
   };
 }
 
@@ -738,6 +739,7 @@ export function buildUiRuntimeFromSource(
       getDebugMode: () => source.getDebugMode(),
       isRestrictiveSandbox: () => source.isRestrictiveSandbox(),
       isTrustedFolder: () => source.isTrustedFolder(),
+      setTrustedFolderLive: (trusted) => source.setTrustedFolderLive(trusted),
       getFolderTrust: () => source.getFolderTrust(),
       getQuestion: () => source.getQuestion(),
       getConversationLogPath: () => source.getConversationLogPath(),

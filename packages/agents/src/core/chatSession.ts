@@ -14,6 +14,7 @@ import type {
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ToolGroupArray } from './streamRequestHelpers.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { StructuredError } from '@vybestack/llxprt-code-core/core/turn.js';
 
 /**
  * Neutral generation config carried by ChatSession. Extends the neutral
@@ -25,6 +26,8 @@ import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/
  */
 export interface ChatSessionConfig extends ModelGenerationSettings {
   abortSignal?: AbortSignal;
+  onProviderError?: (error: StructuredError) => void;
+  providerRequestContext?: Record<string, unknown>;
   tools?: ToolGroupArray;
   toolConfig?: unknown;
 }

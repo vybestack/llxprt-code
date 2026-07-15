@@ -88,10 +88,10 @@ export function classifyCompletedTools(tools: CompletedToolCall[]): {
  * model to re-read them individually.
  */
 export function buildToolResponses(
-  geminiTools: CompletedToolCall[],
+  completedTools: CompletedToolCall[],
   budgetBytes: number = DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
 ): ContentBlock[] {
-  const blocks = geminiTools.flatMap((toolCall) =>
+  const blocks = completedTools.flatMap((toolCall) =>
     toolCall.response.responseParts.filter(
       (block) => block.type !== 'tool_call',
     ),

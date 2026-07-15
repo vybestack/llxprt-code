@@ -118,3 +118,38 @@ export function tokenLimit(
 
   return DEFAULT_TOKEN_LIMIT;
 }
+
+/**
+ * Returns true when *value* is a positive, finite number suitable as a
+ * context-window override.
+ */
+function isPositiveFiniteLimit(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+/**
+ * Single source of truth for the three-tier context-window precedence
+ * (issues #2270 / #2527 DRY consolidation):
+ *
+ * 1. explicit user `context-limit` override (from /set, profile, or settings),
+ * 2. the active provider's reported context limit (e.g. a load-balancer pool's
+ *    min-across-sub-profiles limit),
+ * 3. the model-name lookup via `tokenLimit(model)`.
+ *
+ * Both `ephemerals.contextLimit()` (core runtime) and
+ * `getTokenLimitForConfiguredContext()` (agents layer) delegate to this
+ * function so the precedence lives in exactly one place.
+ */
+export function resolveEffectiveContextLimit(
+  model: string,
+  userContextLimit?: number,
+  providerContextLimit?: number,
+): number {
+  if (isPositiveFiniteLimit(userContextLimit)) {
+    return userContextLimit;
+  }
+  if (isPositiveFiniteLimit(providerContextLimit)) {
+    return providerContextLimit;
+  }
+  return tokenLimit(model);
+}

@@ -85,6 +85,7 @@ export async function resolveIntermediateConfig(
   const policyEngineConfig = await createPolicyEngineConfig(
     profileSettingsWithTools,
     approvalMode,
+    context.trustedFolder,
   );
 
   const outputFormat = resolveOutputFormat(argv);

@@ -82,9 +82,30 @@ export type ServerContextWindowWillOverflowEvent = {
   };
 };
 
+export const STRUCTURED_ERROR_CATEGORIES = [
+  'rate_limit',
+  'quota',
+  'authentication',
+  'server_error',
+  'network',
+  'client_error',
+] as const;
+
+export type StructuredErrorCategory =
+  (typeof STRUCTURED_ERROR_CATEGORIES)[number];
+
+export const STRUCTURED_ERROR_REASONS = [
+  'retries_exhausted',
+  'all_buckets_exhausted',
+] as const;
+
+export type StructuredErrorReason = (typeof STRUCTURED_ERROR_REASONS)[number];
+
 export interface StructuredError {
   message: string;
   status?: number;
+  category?: StructuredErrorCategory;
+  reason?: StructuredErrorReason;
 }
 
 export interface AgentErrorEventValue {

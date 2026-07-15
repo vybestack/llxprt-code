@@ -141,7 +141,6 @@ export interface UIState {
   ctrlCPressedOnce: boolean;
   ctrlDPressedOnce: boolean;
   showEscapePrompt: boolean;
-  showIdeRestartPrompt: boolean;
   quittingMessages: HistoryItem[] | null;
 
   // Display options
@@ -203,7 +202,6 @@ export interface UIState {
   currentIDE: IdeInfo | undefined;
 
   // Trust
-  isRestarting: boolean;
   isTrustedFolder: boolean;
 
   // Welcome onboarding

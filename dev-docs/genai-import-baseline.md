@@ -9,7 +9,7 @@ Every tracked TypeScript file under `packages/**` that imports `@google/genai`, 
 **Per-owner breakdown:**
 
 - `enclave`: 27
-- `#2349`: 1
+- `#2351`: 1
 
 | File                                                                      | Owner   |
 | ------------------------------------------------------------------------- | ------- |
@@ -20,7 +20,7 @@ Every tracked TypeScript file under `packages/**` that imports `@google/genai`, 
 | `packages/core/src/code_assist/googleGenAIWrapper.test.ts`                | enclave |
 | `packages/core/src/code_assist/googleGenAIWrapper.ts`                     | enclave |
 | `packages/core/src/code_assist/server.ts`                                 | enclave |
-| `packages/providers/src/fake/FakeProvider.ts`                             | #2349   |
+| `packages/mcp/src/client/mcp-client.resource-refresh.test.ts`             | #2351   |
 | `packages/providers/src/gemini/GeminiMessageConverter.ts`                 | enclave |
 | `packages/providers/src/gemini/GeminiProvider.auth.test.ts`               | enclave |
 | `packages/providers/src/gemini/GeminiProvider.mediaBlock.test.ts`         | enclave |

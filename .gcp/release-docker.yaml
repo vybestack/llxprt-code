@@ -1,3 +1,10 @@
+# The builder image URI below is an immutable external contract: it references
+# a Google Cloud Artifact Registry repository (gemini-code-dev/gemini-code-containers)
+# that already exists and is the only location where the builder image is
+# published. Changing the URI would break the CI pipeline because no other
+# registry path serves this image. The name is retained from the upstream
+# project and cannot be migrated without creating a parallel registry and
+# republishing the builder image there — out of scope for this issue.
 steps:
   # Step 1: Install root dependencies (includes workspaces)
   - name: 'us-west1-docker.pkg.dev/gemini-code-dev/gemini-code-containers/gemini-code-builder'

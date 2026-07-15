@@ -10,6 +10,7 @@ import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IModel } from '../IModel.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
 /**
  * Test helper: Creates a fake provider that behaves according to provided scenarios
@@ -18,6 +19,7 @@ function createTestProvider(config: {
   name?: string;
   responses?: Array<'success' | 'error' | { error: Error }>;
   streamChunks?: IContent[][];
+  onTransportCall?: (options: GenerateChatOptions) => void;
 }): IProvider {
   let callCount = 0;
 
@@ -28,7 +30,8 @@ function createTestProvider(config: {
 
   return {
     name: config.name ?? 'test-provider',
-    async *generateChatCompletion(_options: GenerateChatOptions) {
+    async *generateChatCompletion(options: GenerateChatOptions) {
+      config.onTransportCall?.(options);
       const responseIndex = Math.min(
         callCount,
         (config.responses?.length ?? 1) - 1,
@@ -193,18 +196,61 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 10, // Fast for testing
       });
 
+      const observedErrors: Array<{
+        message: string;
+        status?: number;
+        category?: string;
+      }> = [];
       const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
+        onProviderError: (error) => observedErrors.push(error),
       };
 
       const result = await consumeStream(
         orchestrator.generateChatCompletion(options),
       );
 
-      expect(result).toHaveLength(1);
-      expect(result[0].blocks[0]).toMatchObject({
-        type: 'text',
-        text: 'test response',
+      expect({ result, observedErrors }).toMatchObject({
+        result: [
+          {
+            blocks: [{ type: 'text', text: 'test response' }],
+          },
+        ],
+        observedErrors: [
+          {
+            message: 'Rate limit exceeded',
+            status: 429,
+            category: 'rate_limit',
+          },
+        ],
+      });
+    });
+
+    it('surfaces an immediate 429 as a classified retries-exhausted error', async () => {
+      const provider = createTestProvider({
+        responses: [{ error: createRateLimitError() }],
+      });
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 1,
+        initialDelayMs: 1,
+      });
+
+      const result = consumeStream(
+        orchestrator.generateChatCompletion({
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+        }),
+      );
+
+      await expect(result).rejects.toMatchObject({
+        category: 'rate_limit',
+        status: 429,
+        message: expect.stringMatching(
+          /retries exhausted.*Rate limit exceeded/i,
+        ),
       });
     });
 
@@ -298,7 +344,7 @@ describe('RetryOrchestrator', () => {
       });
     });
 
-    it('should respect maxAttempts configuration', async () => {
+    it('preserves the final 429 classification when retries are exhausted', async () => {
       const rateLimitError = createRateLimitError();
       const provider = createTestProvider({
         responses: [
@@ -319,7 +365,95 @@ describe('RetryOrchestrator', () => {
 
       await expect(
         consumeStream(orchestrator.generateChatCompletion(options)),
-      ).rejects.toThrow('Rate limit exceeded');
+      ).rejects.toMatchObject({
+        category: 'rate_limit',
+        status: 429,
+        message: expect.stringMatching(
+          /retries exhausted.*Rate limit exceeded/i,
+        ),
+      });
+    });
+
+    it('uses invocation ephemerals as the single transport retry budget', async () => {
+      let transportCalls = 0;
+      const provider = createTestProvider({
+        responses: [{ error: createRateLimitError() }],
+        onTransportCall: () => {
+          transportCalls++;
+        },
+      });
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 6,
+        initialDelayMs: 1000,
+      });
+      const options = createProviderCallOptions({
+        providerName: provider.name,
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
+        ephemerals: { retries: 2, retrywait: 1 },
+      });
+
+      await expect(
+        consumeStream(orchestrator.generateChatCompletion(options)),
+      ).rejects.toMatchObject({
+        status: 429,
+        category: 'rate_limit',
+        reason: 'retries_exhausted',
+        isRetryable: false,
+      });
+      expect(transportCalls).toBe(2);
+    });
+
+    it('continues retries when the provider-error observer throws', async () => {
+      const provider = createTestProvider({
+        responses: [{ error: createRateLimitError() }, 'success'],
+      });
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 2,
+        initialDelayMs: 1,
+      });
+
+      const result = await consumeStream(
+        orchestrator.generateChatCompletion({
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+          onProviderError: () => {
+            throw new Error('observer failed');
+          },
+        }),
+      );
+
+      expect(result).toHaveLength(1);
+    });
+
+    it('does not issue a later transport request when metadata aborts before retry transport', async () => {
+      const controller = new AbortController();
+      let transportCalls = 0;
+      const provider = createTestProvider({
+        responses: [{ error: createRateLimitError() }, 'success'],
+        onTransportCall: () => {
+          transportCalls++;
+          controller.abort();
+        },
+      });
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 3,
+        initialDelayMs: 25,
+      });
+
+      await expect(
+        consumeStream(
+          orchestrator.generateChatCompletion({
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+            ],
+            metadata: { abortSignal: controller.signal },
+          }),
+        ),
+      ).rejects.toThrow(/abort/i);
+      expect(transportCalls).toBe(1);
     });
 
     it('should apply exponential backoff with jitter', async () => {
@@ -782,7 +916,7 @@ describe('RetryOrchestrator', () => {
           await delay(50);
 
           if (options.invocation?.signal?.aborted === true) {
-            throw new Error('Aborted');
+            throw new DOMException('Aborted', 'AbortError');
           }
 
           yield {
@@ -823,12 +957,45 @@ describe('RetryOrchestrator', () => {
       // Abort after a short delay
       setTimeout(() => abortController.abort(), 25);
 
-      await expect(streamPromise).rejects.toThrow(/abort/i);
+      await expect(streamPromise).rejects.toMatchObject({
+        name: 'AbortError',
+      });
 
       // Provider should have been called and received the signal
       expect(providerCalls).toBeGreaterThan(0);
       expect(providerReceivedOptions?.invocation?.signal).toBeDefined();
       expect(providerReceivedOptions?.invocation?.signal?.aborted).toBe(true);
     });
+  });
+
+  it('bounds a provider named load-balancer without relying on its name', async () => {
+    let calls = 0;
+    const provider = createTestProvider({
+      name: 'load-balancer',
+      responses: [
+        { error: createServerError(503) },
+        { error: createServerError(503) },
+        { error: createServerError(503) },
+        { error: createBadRequestError() },
+      ],
+      onTransportCall: () => {
+        calls++;
+      },
+    });
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 3,
+      initialDelayMs: 0,
+    });
+
+    await expect(
+      consumeStream(
+        orchestrator.generateChatCompletion({
+          contents: [],
+        }),
+      ),
+    ).rejects.toMatchObject({
+      name: 'RetriesExhaustedError',
+    });
+    expect(calls).toBe(3);
   });
 });

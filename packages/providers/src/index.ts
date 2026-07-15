@@ -56,6 +56,10 @@ export {
   type TokenAccountingDiagnostics,
   type ResolvedSubProfile,
 } from './LoadBalancingProvider.js';
+export {
+  RetryOrchestrator,
+  type RetryOrchestratorConfig,
+} from './RetryOrchestrator.js';
 
 // --- Content generation ---
 export { ProviderContentGenerator } from './ProviderContentGenerator.js';

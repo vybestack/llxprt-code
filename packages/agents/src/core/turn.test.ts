@@ -83,7 +83,10 @@ describe('Turn', () => {
       expect(mockSendMessageStream).toHaveBeenCalledWith(
         {
           message: reqParts,
-          config: { abortSignal: expect.any(AbortSignal) },
+          config: {
+            abortSignal: expect.any(AbortSignal),
+            onProviderError: expect.any(Function),
+          },
         },
         'prompt-id-1',
       );
@@ -259,7 +262,7 @@ describe('Turn', () => {
       const errorEvent = events[0] as ServerErrorEvent;
       expect(errorEvent.type).toBe(AgentEventType.Error);
       expect(errorEvent.value).toStrictEqual({
-        error: { message: 'API Error', status: undefined },
+        error: { message: 'API Error' },
       });
       expect(turn.getDebugResponses().length).toBe(0);
       expect(reportError).toHaveBeenCalledWith(

@@ -14,6 +14,14 @@ import {
   getErrorStatus,
   isRetryableError,
 } from '@vybestack/llxprt-code-core/utils/retry.js';
+import type { StructuredErrorCategory } from '@vybestack/llxprt-code-core/core/turn.js';
+import {
+  classifyProviderError,
+  formatPublicProviderMessage,
+  getEffectiveProviderStatus,
+  getSafeProviderMessage,
+  summarizeProviderLabels,
+} from './providerErrorObservation.js';
 
 /**
  * Error thrown when authentication is required but not available
@@ -185,41 +193,67 @@ export class ProviderRuntimeScopeError extends Error {
  * Error thrown when all backends in a load balancer failover policy have failed
  * @plan PLAN-20251212issue488
  */
+export type BucketFailoverPolicy = 'eligible' | 'ineligible';
+
+export interface BucketFailoverPolicyError {
+  readonly bucketFailoverPolicy: BucketFailoverPolicy;
+}
+
+export function permitsBucketFailover(error: unknown): boolean {
+  return !(
+    typeof error === 'object' &&
+    error !== null &&
+    'bucketFailoverPolicy' in error &&
+    error.bucketFailoverPolicy === 'ineligible'
+  );
+}
+
 export class LoadBalancerFailoverError extends Error {
   readonly profileName: string;
   readonly failures: ReadonlyArray<{
     readonly profile: string;
     readonly error: Error;
   }>;
-  /**
-   * Whether the aggregate failure is retryable by the upstream backoff layer.
-   * True only when EVERY recorded failure is transient/retryable (429, 5xx,
-   * network-transient, or overload). Mixed or client-error failures → false.
-   * (issue #2450)
-   *
-   * Note: the aggregate deliberately does NOT expose an HTTP `status`. An
-   * aggregate-of-failures is not itself an HTTP 429 response, and exposing a
-   * status would cause `retryWithBackoff` to mis-route the aggregate into the
-   * bucket-failover / `onPersistent429` path (which either throws it fatally
-   * before this marker is consulted, or binds its retry count to bucket
-   * state). Recovery is driven SOLELY by this `isRetryable` marker via normal
-   * bounded retry.
-   */
   readonly isRetryable: boolean;
+  readonly bucketFailoverPolicy = 'ineligible' as const;
+  readonly status?: number;
+  readonly category?: StructuredErrorCategory;
+  readonly reason = 'retries_exhausted' as const;
 
   constructor(
     profileName: string,
     failures: Array<{ profile: string; error: Error }>,
   ) {
-    const profileNames = failures.map((f) => f.profile).join(', ') || 'none';
-    const errorSummary = summarizeFailures(failures);
+    const categories = failures.map(({ error }) =>
+      classifyProviderError(error, getErrorStatus(error)),
+    );
+    const statuses = failures.map(({ error }, index) =>
+      getEffectiveProviderStatus(
+        error,
+        getErrorStatus(error),
+        categories[index],
+      ),
+    );
+    const category = getHomogeneousValue(categories);
+    const status = getHomogeneousValue(statuses);
+    const safeProfileName = summarizeProviderLabels([profileName]);
+    const safeFailureProfiles = summarizeProviderLabels(
+      failures.map(({ profile }) => profile),
+    );
+    const failureSummary = summarizeFailures(failures);
     super(
-      `Load balancer "${profileName}" failover exhausted: ${errorSummary} (tried: ${profileNames})`,
+      formatPublicProviderMessage(
+        `Load balancer "${safeProfileName}" failover exhausted after ${failures.length} backend failures (tried: ${safeFailureProfiles})`,
+        failureSummary,
+      ),
+      { cause: failures[failures.length - 1]?.error },
     );
     this.name = 'LoadBalancerFailoverError';
     this.profileName = profileName;
     this.failures = failures;
     this.isRetryable = computeAggregateRetryable(failures);
+    this.status = status;
+    this.category = category;
   }
 }
 
@@ -258,30 +292,37 @@ function computeAggregateRetryable(
   return failures.every((f) => isTransientBackendFailure(f.error));
 }
 
+function getHomogeneousValue<T>(
+  values: ReadonlyArray<T | undefined>,
+): T | undefined {
+  const first = values[0];
+  if (first === undefined || !values.every((value) => value === first)) {
+    return undefined;
+  }
+  return first;
+}
+
 /**
  * Build a human-readable summary of per-backend failures. For a single failure
  * the underlying message is used; for multiple failures each backend name,
  * message, and HTTP status (when available) are included so callers can diagnose
  * auth, rate-limit, and server issues without inspecting structured fields.
  */
+const MAX_DISPLAYED_FAILURES = 3;
+
 function summarizeFailures(
   failures: Array<{ profile: string; error: Error }>,
 ): string {
-  if (failures.length === 0) {
-    return 'no backend attempts were recorded';
-  }
-
-  if (failures.length === 1) {
-    return failures[0].error.message;
-  }
-
-  return failures
-    .map((failure) => {
-      const status = getErrorStatus(failure.error);
+  if (failures.length === 0) return 'no backend attempts were recorded';
+  const displayed = failures
+    .slice(0, MAX_DISPLAYED_FAILURES)
+    .map(({ profile, error }) => {
+      const status = getErrorStatus(error);
       const statusSuffix = status !== undefined ? ` (status: ${status})` : '';
-      return `${failure.profile}: ${failure.error.message}${statusSuffix}`;
-    })
-    .join('; ');
+      return `${summarizeProviderLabels([profile])}: ${getSafeProviderMessage(error)}${statusSuffix}`;
+    });
+  const omitted = failures.length - displayed.length;
+  return `${displayed.join('; ')}${omitted > 0 ? `; +${omitted} more` : ''}`;
 }
 
 /**
@@ -291,13 +332,7 @@ function summarizeFailures(
  * Base class for all provider errors with consistent retry/failover behavior
  */
 export abstract class ProviderError extends Error {
-  abstract readonly category:
-    | 'rate_limit'
-    | 'quota'
-    | 'authentication'
-    | 'server_error'
-    | 'network'
-    | 'client_error';
+  abstract readonly category: StructuredErrorCategory;
   abstract readonly isRetryable: boolean;
   abstract readonly shouldFailover: boolean;
   readonly status?: number;
@@ -323,6 +358,35 @@ export class RateLimitError extends ProviderError {
   readonly category = 'rate_limit' as const;
   readonly isRetryable = true;
   readonly shouldFailover = true;
+}
+
+export class StreamCleanupTimeoutError extends ProviderError {
+  readonly category = 'server_error' as const;
+  readonly isRetryable = false;
+  readonly shouldFailover = false;
+  readonly failures: readonly Error[];
+
+  constructor(cause: Error) {
+    super('Provider stream did not stop after cancellation', { cause });
+    this.failures = [cause];
+  }
+}
+
+export class RetriesExhaustedError extends ProviderError {
+  readonly isRetryable = false;
+  readonly shouldFailover = false;
+  readonly bucketFailoverPolicy = 'ineligible' as const;
+  readonly reason = 'retries_exhausted' as const;
+  readonly failures: readonly Error[];
+
+  constructor(
+    message: string,
+    readonly category: StructuredErrorCategory,
+    options: { status?: number; cause: Error },
+  ) {
+    super(message, options);
+    this.failures = [options.cause];
+  }
 }
 
 /**
@@ -416,6 +480,10 @@ export class AllBucketsExhaustedError extends Error {
   readonly lastError: Error;
   readonly bucketFailureReasons: Record<string, BucketFailureReason>;
   readonly status?: number;
+  readonly category: StructuredErrorCategory;
+  readonly reason = 'all_buckets_exhausted' as const;
+  readonly isRetryable = false;
+  readonly failures: readonly Error[];
 
   constructor(
     providerName: string,
@@ -449,16 +517,25 @@ export class AllBucketsExhaustedError extends Error {
       : '';
 
     super(
-      `All buckets exhausted for provider '${providerName}': ${attemptedBuckets.join(', ')}` +
-        (bucketDetails ? `\n${bucketDetails}` : '') +
-        `\nLast error: ${cleanedLastErrorMsg}` +
-        reauthenticateSuffix,
+      formatPublicProviderMessage(
+        `All buckets exhausted for provider '${summarizeProviderLabels([providerName])}' after ${attemptedBuckets.length} attempts (buckets: ${summarizeProviderLabels(attemptedBuckets)})`,
+        `${bucketDetails} Last error: ${cleanedLastErrorMsg}${reauthenticateSuffix}`,
+      ),
+      { cause: lastError },
     );
     this.name = 'AllBucketsExhaustedError';
     this.attemptedBuckets = [...attemptedBuckets];
     this.lastError = lastError;
     this.bucketFailureReasons = storedReasons;
-    this.status = (lastError as { status?: number }).status;
+    const rawStatus = getErrorStatus(lastError);
+    this.category =
+      classifyProviderError(lastError, rawStatus) ?? 'client_error';
+    this.status = getEffectiveProviderStatus(
+      lastError,
+      rawStatus,
+      this.category,
+    );
+    this.failures = [lastError];
   }
 
   /**
@@ -467,17 +544,6 @@ export class AllBucketsExhaustedError extends Error {
    *      → 'Rate limited'
    */
   private static extractHumanReadableMessage(raw: string): string {
-    const jsonStart = raw.indexOf('{');
-    if (jsonStart === -1) return raw;
-    try {
-      const parsed = JSON.parse(raw.substring(jsonStart)) as {
-        error?: { message?: string; type?: string };
-        type?: string;
-      };
-      if (parsed.error?.message) return parsed.error.message;
-    } catch {
-      // Not valid JSON — use as-is
-    }
-    return raw;
+    return getSafeProviderMessage(raw);
   }
 }

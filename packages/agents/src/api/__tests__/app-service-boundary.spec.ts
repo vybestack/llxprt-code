@@ -90,8 +90,10 @@ describe('Runtime-vs-app-service boundary (T23/T24) @plan:PLAN-20260617-COREAPI.
 
   it('durable app-service subpaths are importable with their named export (T23) @plan:PLAN-20260617-COREAPI.P09 @requirement:REQ-021', async () => {
     expect(SUBPATH_ENTRIES.length).toBeGreaterThan(0);
+    const mod: Record<string, unknown> = await import(
+      '@vybestack/llxprt-code-agents/app-service.js'
+    );
     for (const entry of SUBPATH_ENTRIES) {
-      const mod: Record<string, unknown> = await import(entry.target);
       const exported = mod[entry.exportName ?? ''];
       expect(typeof exported).toBe('function');
     }

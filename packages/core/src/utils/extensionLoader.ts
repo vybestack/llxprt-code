@@ -74,7 +74,7 @@ export abstract class ExtensionLoader {
     });
     try {
       await this.config.getMcpClientManager()!.startExtension(extension);
-      await this.maybeRefreshGeminiTools(extension);
+      await this.maybeRefreshAgentTools(extension);
       // Register extension subagents
       if (
         Array.isArray(extension.subagents) &&
@@ -122,10 +122,10 @@ export abstract class ExtensionLoader {
   }
 
   /**
-   * Refreshes the gemini tools list if it is initialized and the extension has
+   * Refreshes the agent tools list if it is initialized and the extension has
    * any excludeTools settings.
    */
-  private async maybeRefreshGeminiTools(
+  private async maybeRefreshAgentTools(
     extension: LlxprtExtension,
   ): Promise<void> {
     if (extension.excludeTools && extension.excludeTools.length > 0) {
@@ -177,7 +177,7 @@ export abstract class ExtensionLoader {
 
     try {
       await this.config.getMcpClientManager()!.stopExtension(extension);
-      await this.maybeRefreshGeminiTools(extension);
+      await this.maybeRefreshAgentTools(extension);
       // Remove extension subagents
       const subagentMgr = this.config.getSubagentManager();
       if (subagentMgr) {

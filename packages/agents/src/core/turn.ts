@@ -38,6 +38,7 @@ import {
   StreamEventType,
   type StreamEvent,
 } from './chatSession.js';
+import { closeIteratorBounded } from './iteratorCleanup.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { getCodeAssistServer } from '@vybestack/llxprt-code-core/code_assist/codeAssist.js';
 import { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
@@ -62,7 +63,7 @@ import {
 } from '@vybestack/llxprt-code-core/core/turn.js';
 
 /**
- * Transitional turn-request type — avoids importing the Gemini SDK PartListUnion.
+ * Transitional turn-request type — avoids importing a provider SDK PartListUnion.
  * Accepts strings and arrays of part-shaped objects that the chatSession's
  * normalizeToolInteractionInput can handle. Narrows to AgentMessageInput at P21.
  *
@@ -466,6 +467,7 @@ export class Turn {
     signal: AbortSignal,
     effectiveTimeoutMs: number,
     idleFlag: { timedOut: boolean },
+    onStreamProgress: () => void,
     firstResult?: IteratorResult<StreamEvent>,
   ): AsyncGenerator<ServerAgentStreamEvent> {
     let cumulativeOutcome = this.createEmptyResponseOutcome();
@@ -516,6 +518,7 @@ export class Turn {
         return;
       }
       if (dispatch.action === 'process' && dispatch.chunk != null) {
+        onStreamProgress();
         cumulativeOutcome = this.mergeResponseOutcome(
           cumulativeOutcome,
           dispatch.chunk,
@@ -598,8 +601,42 @@ export class Turn {
     if (typeof error !== 'object' || error === null || !('status' in error)) {
       return undefined;
     }
-    const status = (error as { status: unknown }).status;
-    return typeof status === 'number' ? status : undefined;
+    return typeof error.status === 'number' ? error.status : undefined;
+  }
+
+  private extractErrorCategory(
+    error: unknown,
+  ): StructuredError['category'] | undefined {
+    if (typeof error !== 'object' || error === null || !('category' in error)) {
+      return undefined;
+    }
+    const category = error.category;
+    switch (category) {
+      case 'rate_limit':
+      case 'quota':
+      case 'authentication':
+      case 'server_error':
+      case 'network':
+      case 'client_error':
+        return category;
+      default:
+        return undefined;
+    }
+  }
+
+  private extractErrorReason(
+    error: unknown,
+  ): StructuredError['reason'] | undefined {
+    if (typeof error !== 'object' || error === null || !('reason' in error)) {
+      return undefined;
+    }
+    switch (error.reason) {
+      case 'retries_exhausted':
+      case 'all_buckets_exhausted':
+        return error.reason;
+      default:
+        return undefined;
+    }
   }
 
   private async *handleRunError(
@@ -607,9 +644,18 @@ export class Turn {
     req: TurnRequest,
     signal: AbortSignal,
     idleFlag: { timedOut: boolean },
+    observedProviderError: StructuredError | undefined,
   ): AsyncGenerator<ServerAgentStreamEvent> {
     if (signal.aborted) {
       yield { type: AgentEventType.UserCancelled };
+      return;
+    }
+
+    if (idleFlag.timedOut && observedProviderError !== undefined) {
+      yield {
+        type: AgentEventType.Error,
+        value: { error: observedProviderError },
+      };
       return;
     }
 
@@ -644,9 +690,13 @@ export class Turn {
       'Turn.run-sendMessageStream',
     );
     const status = this.extractErrorStatus(error);
+    const category = this.extractErrorCategory(error);
+    const reason = this.extractErrorReason(error);
     const structuredError: StructuredError = {
       message: getErrorMessage(error),
-      status,
+      ...(status !== undefined ? { status } : {}),
+      ...(category !== undefined ? { category } : {}),
+      ...(reason !== undefined ? { reason } : {}),
     };
     yield { type: AgentEventType.Error, value: { error: structuredError } };
   }
@@ -657,6 +707,10 @@ export class Turn {
     signal: AbortSignal,
   ): AsyncGenerator<ServerAgentStreamEvent> {
     const idleFlag: { timedOut: boolean } = { timedOut: false };
+    let observedProviderError: StructuredError | undefined;
+    const onProviderError = (error: StructuredError): void => {
+      observedProviderError = error;
+    };
     this.logger.debug('Turn.run called', {
       req: safeJsonStringify(req, 2),
       typeofReq: typeof req,
@@ -695,6 +749,7 @@ export class Turn {
           timeoutController,
           firstResponseTimeoutMs,
           idleFlag,
+          onProviderError,
         );
         streamIterator = iterator;
 
@@ -704,15 +759,24 @@ export class Turn {
           signal,
           effectiveTimeoutMs,
           idleFlag,
+          () => {
+            observedProviderError = undefined;
+          },
           firstResult,
         );
       } finally {
-        streamIterator?.return?.().catch(() => {});
         timeoutController.abort();
+        await closeIteratorBounded(streamIterator, timeoutSignal);
         signal.removeEventListener('abort', onParentAbort);
       }
     } catch (e) {
-      yield* this.handleRunError(e, req, signal, idleFlag);
+      yield* this.handleRunError(
+        e,
+        req,
+        signal,
+        idleFlag,
+        observedProviderError,
+      );
     }
   }
 
@@ -736,6 +800,7 @@ export class Turn {
     timeoutController: AbortController,
     firstResponseTimeoutMs: number,
     idleFlag: { timedOut: boolean },
+    onProviderError: (error: StructuredError) => void,
   ): Promise<{
     iterator: AsyncIterator<StreamEvent>;
     firstResult: IteratorResult<StreamEvent>;
@@ -745,6 +810,7 @@ export class Turn {
       const iterator = await this.openResponseStreamIterator(
         req,
         timeoutSignal,
+        onProviderError,
       );
       try {
         const firstResult = await iterator.next();
@@ -753,7 +819,7 @@ export class Turn {
         // On a first-next failure the iterator has not yet been handed to
         // run() (streamIterator is still unassigned there), so close it here to
         // avoid leaking the provider connection before rethrowing.
-        await iterator.return?.().catch(() => {});
+        await closeIteratorBounded(iterator, timeoutSignal);
         throw error;
       }
     }
@@ -791,6 +857,7 @@ export class Turn {
       const iterator = await this.openResponseStreamIterator(
         req,
         timeoutSignal,
+        onProviderError,
       );
       acquiredIterator = iterator;
       const firstResult = await iterator.next();
@@ -817,13 +884,14 @@ export class Turn {
       // resolves LATE (first event arrived just after the abort) or REJECTS (the
       // aborted provider throws), and swallow the rejection to avoid an
       // unhandled rejection under strict Node modes.
+      await closeIteratorBounded(acquiredIterator, timeoutSignal);
       firstEventPromise
-        .then((late) => {
-          late.iterator.return?.().catch(() => {});
+        .then(async (late) => {
+          if (late.iterator !== acquiredIterator) {
+            await closeIteratorBounded(late.iterator, timeoutSignal);
+          }
         })
-        .catch(() => {
-          acquiredIterator?.return?.().catch(() => {});
-        });
+        .catch(() => undefined);
       throw error;
     } finally {
       firstResponseTimer.abort();
@@ -838,6 +906,7 @@ export class Turn {
   private async openResponseStreamIterator(
     req: TurnRequest,
     timeoutSignal: AbortSignal,
+    onProviderError: (error: StructuredError) => void,
   ): Promise<AsyncIterator<StreamEvent>> {
     // Bridge: chatSession.sendMessageStream still expects Google-shaped
     // SendMessageParameters (until P21). The value is structurally compatible;
@@ -849,6 +918,7 @@ export class Turn {
         >[0]['message'],
         config: {
           abortSignal: timeoutSignal,
+          onProviderError,
         },
       },
       this.prompt_id,
