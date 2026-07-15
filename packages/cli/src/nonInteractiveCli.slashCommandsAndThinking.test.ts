@@ -37,6 +37,10 @@ const agentState = vi.hoisted(() => ({
   events: [] as AgentEvent[],
 }));
 
+// Activation params (_profileModelParams, _cliModelParams, _bootstrapArgs) have
+// no public setter API on Config — production code reads/writes them via the
+// same underscore-prefixed casts. This local non-readonly intersection mirrors
+// those casts so the test can stage activation state.
 type ConfigWithActivationParams = Config & {
   _profileModelParams?: Record<string, unknown>;
   _cliModelParams?: Record<string, unknown>;

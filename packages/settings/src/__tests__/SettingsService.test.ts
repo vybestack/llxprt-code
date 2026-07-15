@@ -441,3 +441,159 @@ describe('SettingsService — provider trust boundary', () => {
     expect(exported.providers).not.toHaveProperty('openai');
   });
 });
+
+describe('SettingsService — diagnostics redacts sensitive auth-key (Issue #2472)', () => {
+  function setupServiceWithSecret(): SettingsService {
+    const svc = new SettingsService();
+    svc.set('auth-key', 'sk-real-secret-value');
+    svc.setProviderSetting('openai', 'auth-key', 'sk-provider-secret');
+    svc.set('providers.openai.model', 'gpt-4');
+    svc.set('temperature', 0.7);
+    svc.set('base-url', 'https://api.example.com');
+    return svc;
+  }
+
+  it('redacts auth-key in ephemeralSettings', async () => {
+    const diag = await setupServiceWithSecret().getDiagnosticsData();
+    expect(diag.ephemeralSettings['auth-key']).toBe('[REDACTED]');
+  });
+
+  it('redacts auth-key in providerSettings', async () => {
+    const diag = await setupServiceWithSecret().getDiagnosticsData();
+    expect(diag.providerSettings['auth-key']).toBe('[REDACTED]');
+  });
+
+  it('redacts auth-key in modelParams', async () => {
+    const diag = await setupServiceWithSecret().getDiagnosticsData();
+    expect(diag.modelParams['auth-key']).toBe('[REDACTED]');
+  });
+
+  it('redacts auth-key inside allSettings.providers', async () => {
+    const diag = await setupServiceWithSecret().getDiagnosticsData();
+    expect(diag.allSettings.providers['openai']['auth-key']).toBe('[REDACTED]');
+  });
+
+  it('preserves non-sensitive values in diagnostics', async () => {
+    const diag = await setupServiceWithSecret().getDiagnosticsData();
+    expect(diag).toMatchObject({
+      model: 'gpt-4',
+      ephemeralSettings: {
+        temperature: 0.7,
+        'base-url': 'https://api.example.com',
+      },
+      providerSettings: { model: 'gpt-4' },
+    });
+  });
+
+  it('does not leak raw secrets in serialized diagnostics JSON', async () => {
+    const serialized = JSON.stringify(
+      await setupServiceWithSecret().getDiagnosticsData(),
+    );
+    expect(
+      ['sk-real-secret-value', 'sk-provider-secret'].every(
+        (secret) => !serialized.includes(secret),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('SettingsService — exportForProfile preserves auth-key (Issue #2472)', () => {
+  it('does not redact auth-key in exported provider settings', async () => {
+    const svc = new SettingsService();
+    svc.setProviderSetting('openai', 'auth-key', 'sk-persist-me');
+    svc.setProviderSetting('openai', 'model', 'gpt-4');
+
+    const exported = await svc.exportForProfile();
+
+    expect(exported.providers['openai']).toMatchObject({
+      'auth-key': 'sk-persist-me',
+      model: 'gpt-4',
+    });
+  });
+});
+
+describe('SettingsService — change event redacts sensitive values (Issue #2472)', () => {
+  it('redacts oldValue and newValue for auth-key in change events', () => {
+    const svc = new SettingsService();
+    svc.set('auth-key', 'sk-original');
+    let evt: { key: string; oldValue: unknown; newValue: unknown } | undefined;
+    svc.on('change', (e) => {
+      evt = e;
+    });
+    svc.set('auth-key', 'sk-rotated');
+
+    expect(evt?.key).toBe('auth-key');
+    expect(evt?.oldValue).toBe('[REDACTED]');
+    expect(evt?.newValue).toBe('[REDACTED]');
+  });
+
+  it('redacts oldValue and newValue for apiKey alias in change events', () => {
+    const svc = new SettingsService();
+    svc.set('apiKey', 'sk-original');
+    let evt: { key: string; oldValue: unknown; newValue: unknown } | undefined;
+    svc.on('change', (e) => {
+      evt = e;
+    });
+    svc.set('apiKey', 'sk-rotated');
+
+    expect(evt?.key).toBe('apiKey');
+    expect(evt?.oldValue).toBe('[REDACTED]');
+    expect(evt?.newValue).toBe('[REDACTED]');
+  });
+
+  it('preserves non-sensitive newValue in change events', () => {
+    const svc = new SettingsService();
+    let evt: { key: string; oldValue: unknown; newValue: unknown } | undefined;
+    svc.on('change', (e) => {
+      evt = e;
+    });
+    svc.set('temperature', 0.9);
+
+    expect(evt?.key).toBe('temperature');
+    expect(evt?.newValue).toBe(0.9);
+  });
+
+  it('redacts oldValue and newValue for auth-key in provider-change events', () => {
+    const svc = new SettingsService();
+    svc.setProviderSetting('openai', 'auth-key', 'sk-original');
+    let evt:
+      | { provider: string; key: string; oldValue: unknown; newValue: unknown }
+      | undefined;
+    svc.on('provider-change', (e) => {
+      evt = e;
+    });
+    svc.setProviderSetting('openai', 'auth-key', 'sk-rotated');
+
+    expect(evt?.provider).toBe('openai');
+    expect(evt?.key).toBe('auth-key');
+    expect(evt?.oldValue).toBe('[REDACTED]');
+    expect(evt?.newValue).toBe('[REDACTED]');
+  });
+
+  it('preserves provider and key metadata in provider-change events for sensitive keys', () => {
+    const svc = new SettingsService();
+    svc.setProviderSetting('anthropic', 'apiKey', 'sk-original');
+    let evt:
+      | { provider: string; key: string; oldValue: unknown; newValue: unknown }
+      | undefined;
+    svc.on('provider-change', (e) => {
+      evt = e;
+    });
+    svc.setProviderSetting('anthropic', 'apiKey', 'sk-rotated');
+
+    expect(evt?.provider).toBe('anthropic');
+    expect(evt?.key).toBe('apiKey');
+  });
+
+  it('preserves non-sensitive newValue in provider-change events', () => {
+    const svc = new SettingsService();
+    let evt: { key: string; newValue: unknown } | undefined;
+    svc.on('provider-change', (e) => {
+      evt = e;
+    });
+    svc.setProviderSetting('openai', 'model', 'gpt-4');
+
+    expect(evt?.key).toBe('model');
+    expect(evt?.newValue).toBe('gpt-4');
+  });
+});

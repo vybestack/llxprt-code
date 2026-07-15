@@ -14,6 +14,7 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     description: 'Provider API authentication key',
     type: 'string',
     persistToProfile: true,
+    sensitive: true,
   },
   {
     key: 'auth-keyfile',

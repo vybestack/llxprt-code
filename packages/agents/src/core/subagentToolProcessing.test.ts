@@ -268,7 +268,7 @@ describe('subagentToolProcessing', () => {
       expect(output.final_message.trim().toLowerCase()).not.toBe('none');
     });
 
-    it('should preserve literal "None" as a meaningful goal answer without emitted vars', () => {
+    it('should preserve literal "None" as a meaningful goal answer without emitted vars (Issue #2410)', () => {
       const output: OutputObject = {
         emitted_vars: {},
         terminate_reason: SubagentTerminateMode.GOAL,

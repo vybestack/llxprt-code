@@ -382,8 +382,7 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
 
       expect(content).toContain('auth-key:');
       expect(content).not.toContain('sk-abcdefghijklmnop');
-      // Should show first 4 + masked middle + last 4
-      expect(content).toContain('sk-a***********mnop');
+      expect(content).toContain('[REDACTED]');
     });
 
     it('does not mask auth-keyfile value (just a file path)', async () => {

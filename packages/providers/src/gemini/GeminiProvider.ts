@@ -331,9 +331,7 @@ export class GeminiProvider extends BaseProvider {
   private hasCompleteVertexProjectConfig(
     vertexConfig: VertexAIAuthConfig,
   ): boolean {
-    return (
-      vertexConfig.project !== undefined && vertexConfig.location !== undefined
-    );
+    return Boolean(vertexConfig.project) && Boolean(vertexConfig.location);
   }
 
   private buildVertexAIOptions(

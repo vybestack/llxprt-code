@@ -32,6 +32,8 @@ export interface SettingSpec {
   default?: unknown;
   persistToProfile: boolean;
   completionOptions?: ReadonlyArray<{ value: string; description?: string }>;
+  /** When true, the value is secret and must be masked in diagnostics. */
+  sensitive?: boolean;
 }
 
 export interface SeparatedSettings {

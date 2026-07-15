@@ -122,6 +122,7 @@ export class StreamProcessor {
     private readonly flushAuthScope: typeof flushRuntimeAuthScope = flushRuntimeAuthScope,
   ) {}
 
+  /** Tracks tool responses already recorded during eager client streaming. */
   markToolResponsesRecorded(callIds: readonly string[]): void {
     for (const callId of callIds) {
       if (typeof callId === 'string' && callId.length > 0) {

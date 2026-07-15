@@ -198,8 +198,8 @@ function tryLoadApiKeyFromKeyfile(
   expandedKeyfile: string,
   service: SettingsService,
 ): void {
+  const resolvedPath = path.resolve(expandedKeyfile);
   try {
-    const resolvedPath = path.resolve(expandedKeyfile);
     // This stays synchronous because subagent settings population runs inside a
     // synchronous runtime-initialization path; main provider activation uses the
     // same warning/fallback keyfile semantics before this isolated settings copy
@@ -210,12 +210,12 @@ function tryLoadApiKeyFromKeyfile(
       service.set(`providers.${provider}.auth-key`, content);
     } else {
       debugLogger.warn(
-        `SubagentOrchestrator: auth key file '${expandedKeyfile}' is empty`,
+        `SubagentOrchestrator: auth key file '${resolvedPath}' is empty`,
       );
     }
   } catch (error) {
     debugLogger.warn(
-      `SubagentOrchestrator: unable to read auth key file '${expandedKeyfile}': ${
+      `SubagentOrchestrator: unable to read auth key file '${resolvedPath}': ${
         error instanceof Error ? error.message : String(error)
       }`,
     );
@@ -351,8 +351,9 @@ function populateGeneralEphemerals(
 ): void {
   const ephemerals = profile.ephemeralSettings as
     | Record<string, unknown>
+    | null
     | undefined;
-  if (ephemerals === undefined) {
+  if (ephemerals === null || ephemerals === undefined) {
     return;
   }
   for (const [key, value] of Object.entries(ephemerals)) {

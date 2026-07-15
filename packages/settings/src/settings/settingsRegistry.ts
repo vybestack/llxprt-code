@@ -524,6 +524,34 @@ export function getProtectedSettingKeys(): string[] {
   return keys;
 }
 
+const SENSITIVE_SETTING_KEYS: ReadonlySet<string> = new Set(
+  SETTINGS_REGISTRY.filter((s) => s.sensitive === true).flatMap((s) => [
+    s.key,
+    ...(s.aliases ?? []),
+  ]),
+);
+
+export const REDACTED_VALUE = '[REDACTED]';
+
+export function isSensitiveSettingKey(key: string): boolean {
+  if (SENSITIVE_SETTING_KEYS.has(key)) {
+    return true;
+  }
+  const lastDot = key.lastIndexOf('.');
+  return lastDot >= 0 && SENSITIVE_SETTING_KEYS.has(key.slice(lastDot + 1));
+}
+
+/** Returns a shallow copy with sensitive top-level setting values redacted. */
+export function redactSensitiveValues(
+  record: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    result[key] = isSensitiveSettingKey(key) ? REDACTED_VALUE : value;
+  }
+  return result;
+}
+
 export function getProviderConfigKeys(): string[] {
   return collectProviderConfigKeys();
 }

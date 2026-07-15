@@ -18,7 +18,10 @@ import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import path from 'node:path';
 import process from 'node:process';
-import { Storage } from '@vybestack/llxprt-code-settings';
+import {
+  Storage,
+  redactSensitiveValues,
+} from '@vybestack/llxprt-code-settings';
 import type {
   ExtendedLoadBalancerStats,
   TokenAccountingDiagnostics,
@@ -127,17 +130,6 @@ function isSessionTokenUsage(
   return tokenFields.every(
     (field) =>
       typeof candidate[field] === 'number' && Number.isFinite(candidate[field]),
-  );
-}
-
-function maskSensitive(value: string): string {
-  if (value.length < 8) {
-    return '*'.repeat(value.length);
-  }
-  return (
-    value.substring(0, 4) +
-    '*'.repeat(value.length - 8) +
-    value.substring(value.length - 4)
   );
 }
 
@@ -302,31 +294,26 @@ function appendEphemeralSettings(
   ephemeralSettings: Record<string, unknown>,
   logger: DebugLogger,
 ): void {
+  const redactedSettings = redactSensitiveValues(ephemeralSettings);
   diagnostics.push('\n## Ephemeral Settings');
   logger.debug(
     () =>
-      `[diagnostics] ephemeral settings ${JSON.stringify(ephemeralSettings)}`,
+      `[diagnostics] ephemeral settings ${JSON.stringify(redactedSettings)}`,
   );
-  if (Object.keys(ephemeralSettings).length === 0) {
+  if (Object.keys(redactedSettings).length === 0) {
     diagnostics.push('- No ephemeral settings configured');
     return;
   }
 
-  const sensitiveKeys = new Set(['auth-key', 'apiKey', 'api-key']);
-
-  const formatSettingValue = (key: string, value: unknown): string => {
-    if (typeof value === 'string' && sensitiveKeys.has(key)) {
-      return maskSensitive(value);
-    }
-    return typeof value === 'object' ? JSON.stringify(value) : String(value);
-  };
+  const formatSettingValue = (value: unknown): string =>
+    typeof value === 'object' ? JSON.stringify(value) : String(value);
 
   const authSettings: Array<[string, unknown]> = [];
   const toolSettings: Array<[string, unknown]> = [];
   const compressionSettings: Array<[string, unknown]> = [];
   const otherSettings: Array<[string, unknown]> = [];
 
-  for (const [key, value] of Object.entries(ephemeralSettings)) {
+  for (const [key, value] of Object.entries(redactedSettings)) {
     if (value === undefined || value === null) {
       continue;
     }
@@ -345,7 +332,7 @@ function appendEphemeralSettings(
   if (authSettings.length > 0) {
     diagnostics.push('- Authentication:');
     for (const [key, value] of authSettings) {
-      diagnostics.push(`  - ${key}: ${formatSettingValue(key, value)}`);
+      diagnostics.push(`  - ${key}: ${formatSettingValue(value)}`);
     }
   }
 
@@ -366,7 +353,7 @@ function appendEphemeralSettings(
   if (otherSettings.length > 0) {
     diagnostics.push('- Other Settings:');
     for (const [key, value] of otherSettings) {
-      diagnostics.push(`  - ${key}: ${formatSettingValue(key, value)}`);
+      diagnostics.push(`  - ${key}: ${formatSettingValue(value)}`);
     }
   }
 }

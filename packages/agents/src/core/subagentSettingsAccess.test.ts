@@ -7,7 +7,12 @@
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { expandTilde } from './subagentSettingsAccess.js';
+import {
+  expandTilde,
+  getNumberSetting,
+  getStringSetting,
+  getStringArraySetting,
+} from './subagentSettingsAccess.js';
 
 describe('subagentSettingsAccess expandTilde', () => {
   it('expands leading tilde followed by a Windows separator', () => {
@@ -41,5 +46,33 @@ describe('subagentSettingsAccess expandTilde', () => {
 
   it('returns an empty string unchanged', () => {
     expect(expandTilde('')).toBe('');
+  });
+});
+
+describe('getSetting helpers with undefined settings (Issue #2472)', () => {
+  it('getNumberSetting returns undefined', () => {
+    expect(getNumberSetting(undefined, ['temperature'])).toBeUndefined();
+  });
+
+  it('getStringSetting returns undefined', () => {
+    expect(getStringSetting(undefined, ['auth-key'])).toBeUndefined();
+  });
+
+  it('getStringArraySetting returns undefined', () => {
+    expect(getStringArraySetting(undefined, ['tools.allowed'])).toBeUndefined();
+  });
+});
+
+describe('getSetting helpers with null settings (Issue #2472)', () => {
+  it('getNumberSetting returns undefined for null', () => {
+    expect(getNumberSetting(null, ['temperature'])).toBeUndefined();
+  });
+
+  it('getStringSetting returns undefined for null', () => {
+    expect(getStringSetting(null, ['auth-key'])).toBeUndefined();
+  });
+
+  it('getStringArraySetting returns undefined for null', () => {
+    expect(getStringArraySetting(null, ['tools.allowed'])).toBeUndefined();
   });
 });

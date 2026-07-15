@@ -506,6 +506,15 @@ export function stripEmptyTextBlocks(
         content: getEmptyMessagePlaceholder(message.role),
       };
     }
+    // An empty content array is invalid for strict endpoints; replace it
+    // with the role placeholder before the equality short-circuit below.
+    if (message.content.length === 0) {
+      strippedCount += 1;
+      return {
+        ...message,
+        content: getEmptyMessagePlaceholder(message.role),
+      };
+    }
     const filtered = message.content.filter((block: AnthropicMessageBlock) => {
       if (block.type === 'text') {
         return block.text.trim() !== '';

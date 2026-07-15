@@ -15,6 +15,15 @@ import {
   type TrustedProviderRecord,
   type TrustedProvidersMap,
 } from './validation.js';
+import {
+  redactSensitiveValues,
+  isSensitiveSettingKey,
+  REDACTED_VALUE,
+} from './settingsRegistry.js';
+
+function redactEventValue(key: string, value: unknown): unknown {
+  return isSensitiveSettingKey(key) ? REDACTED_VALUE : value;
+}
 
 interface EphemeralSettings {
   providers: TrustedProvidersMap;
@@ -43,6 +52,23 @@ type SettingsEventListener =
   | ((event: ProviderSettingsChangeEvent) => void)
   | (() => void)
   | ((...args: unknown[]) => void);
+
+/**
+ * Snapshot returned by {@link SettingsService.getDiagnosticsData}.
+ * Sensitive setting values (e.g. `auth-key`) are replaced with
+ * `[REDACTED]`; all other values are preserved verbatim.
+ */
+export interface DiagnosticsData {
+  provider: string;
+  model: string;
+  profile: string | null;
+  providerSettings: Record<string, unknown>;
+  ephemeralSettings: Record<string, unknown>;
+  modelParams: Record<string, unknown>;
+  allSettings: {
+    providers: Record<string, Record<string, unknown>>;
+  };
+}
 
 function copyStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map((name) => String(name)) : [];
@@ -80,8 +106,8 @@ export class SettingsService extends EventEmitter {
 
     this.eventEmitter.emit('change', {
       key,
-      oldValue,
-      newValue: value,
+      oldValue: redactEventValue(key, oldValue),
+      newValue: redactEventValue(key, value),
     });
   }
 
@@ -103,8 +129,8 @@ export class SettingsService extends EventEmitter {
     this.eventEmitter.emit('provider-change', {
       provider,
       key,
-      oldValue,
-      newValue: value,
+      oldValue: redactEventValue(key, oldValue),
+      newValue: redactEventValue(key, value),
     });
   }
 
@@ -411,7 +437,7 @@ export class SettingsService extends EventEmitter {
     return typeof value === 'string' ? value : null;
   }
 
-  getDiagnosticsData(): Promise<Record<string, unknown>> {
+  getDiagnosticsData(): Promise<DiagnosticsData> {
     const globalActiveProvider = this.settings.global.activeProvider;
     const fallbackActiveProvider =
       typeof this.settings.activeProvider === 'string' &&
@@ -433,15 +459,24 @@ export class SettingsService extends EventEmitter {
       }
     }
 
+    const redactedProviders: Record<string, Record<string, unknown>> = {};
+    for (const [provider, settings] of Object.entries(
+      this.settings.providers,
+    )) {
+      if (settings !== undefined) {
+        redactedProviders[provider] = redactSensitiveValues(settings);
+      }
+    }
+
     return Promise.resolve({
       provider: activeProvider,
       model,
       profile: this.getCurrentProfileName(),
-      providerSettings,
-      ephemeralSettings: this.settings.global,
-      modelParams,
+      providerSettings: redactSensitiveValues(providerSettings),
+      ephemeralSettings: redactSensitiveValues(this.settings.global),
+      modelParams: redactSensitiveValues(modelParams),
       allSettings: {
-        providers: this.settings.providers,
+        providers: redactedProviders,
       },
     });
   }

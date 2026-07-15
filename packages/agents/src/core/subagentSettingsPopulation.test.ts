@@ -160,6 +160,67 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
     }
   });
 
+  it('logs the resolved path (not the raw relative path) when keyfile is missing', () => {
+    const service = createRuntimeSettingsService();
+    const warn = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'subagent-keyfile-'));
+    const missingKeyfile = path.join(tempDir, 'nonexistent-key.txt');
+    const relativeKeyfile = path.relative(process.cwd(), missingKeyfile);
+    const profile = createProfile({ 'auth-keyfile': relativeKeyfile });
+
+    try {
+      populatePreActivationSettings(
+        service,
+        profile,
+        'relative-missing-keyfile-profile',
+      );
+      populatePostActivationSettings(
+        service,
+        profile,
+        'relative-missing-keyfile-profile',
+        new Set(),
+      );
+
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        expect.stringContaining(missingKeyfile),
+      );
+    } finally {
+      warn.mockRestore();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('logs the resolved path when keyfile exists but is empty', () => {
+    const warn = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'subagent-keyfile-'));
+
+    try {
+      const emptyKeyfile = path.join(tempDir, 'empty-key.txt');
+      fs.writeFileSync(emptyKeyfile, '', 'utf8');
+      const relativeKeyfile = path.relative(process.cwd(), emptyKeyfile);
+      const profile = createProfile({ 'auth-keyfile': relativeKeyfile });
+      const service = createRuntimeSettingsService();
+      populatePreActivationSettings(
+        service,
+        profile,
+        'relative-empty-keyfile-profile',
+      );
+      populatePostActivationSettings(
+        service,
+        profile,
+        'relative-empty-keyfile-profile',
+        new Set(),
+      );
+
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        expect.stringContaining(emptyKeyfile),
+      );
+    } finally {
+      warn.mockRestore();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('populates auth-key-name in both generic and provider-scoped settings', () => {
     const service = createRuntimeSettingsService();
     const profile = createProfile({ 'auth-key-name': 'MY_API_KEY' });

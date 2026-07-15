@@ -7,10 +7,13 @@
 import { expandTildePath } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 
-type EphemeralSettings = Profile['ephemeralSettings'];
+type EphemeralSettings = Profile['ephemeralSettings'] | null | undefined;
 
 /** Reads a raw ephemeral setting value by key. */
 function getSetting(settings: EphemeralSettings, key: string): unknown {
+  if (settings === null || settings === undefined) {
+    return undefined;
+  }
   const values = settings as unknown as Record<string, unknown>;
   return values[key];
 }

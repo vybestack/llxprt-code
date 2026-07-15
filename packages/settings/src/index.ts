@@ -25,6 +25,9 @@ export {
   getDirectSettingSpecs,
   getInternalSettingKeys,
   isInternalSettingKey,
+  redactSensitiveValues,
+  isSensitiveSettingKey,
+  REDACTED_VALUE,
   SETTINGS_REGISTRY,
 } from './settings/settingsRegistry.js';
 export type {

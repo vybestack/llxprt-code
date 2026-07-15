@@ -12,7 +12,6 @@ const googleGenAIConstructor = vi.hoisted(() => vi.fn());
 
 vi.mock('@google/genai', () => ({
   GoogleGenAI: googleGenAIConstructor,
-  Type: { OBJECT: 'object' },
 }));
 
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -24,11 +23,8 @@ vi.mock('@vybestack/llxprt-code-core/code_assist/codeAssist.js', () => ({
 }));
 
 const mockSettingsService = vi.hoisted(() => ({
-  set: vi.fn(),
   get: vi.fn(),
   getProviderSettings: vi.fn().mockReturnValue({}),
-  updateSettings: vi.fn(),
-  getAllGlobalSettings: vi.fn().mockReturnValue({}),
 }));
 
 type GeminiProviderInternals = {
@@ -80,7 +76,6 @@ describe('GeminiProvider Authentication', () => {
     vi.clearAllMocks();
     mockSettingsService.get.mockReset();
     mockSettingsService.getProviderSettings.mockReturnValue({});
-    mockSettingsService.getAllGlobalSettings.mockReturnValue({});
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
     delete process.env.GOOGLE_API_KEY;
@@ -325,5 +320,28 @@ describe('GeminiProvider Authentication', () => {
       settingsService: mockSettingsService,
       includeOAuth: false,
     });
+  });
+
+  it('rejects whitespace-only Vertex AI project settings', async () => {
+    mockVertexAISettings('   ', 'europe-west4');
+    const provider = createProviderWithRuntimeSettings();
+
+    await expect(
+      createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
+    ).rejects.toThrow(
+      'Vertex AI mode is active but project/location are not configured',
+    );
+  });
+
+  it('rejects whitespace-only Vertex AI location from the environment', async () => {
+    process.env.GOOGLE_CLOUD_PROJECT = 'env-project';
+    process.env.GOOGLE_CLOUD_LOCATION = '   ';
+    const provider = createProviderWithRuntimeSettings();
+
+    await expect(
+      createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
+    ).rejects.toThrow(
+      'Vertex AI mode is active but project/location are not configured',
+    );
   });
 });
