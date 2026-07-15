@@ -499,12 +499,12 @@ describe('Settings Remediation Integration', () => {
       const diagnostics = await settingsService.getDiagnosticsData();
 
       expect(diagnostics.provider).toBe('openai');
-      expect(diagnostics.providerSettings['auth-key']).toBe('test-key');
+      expect(diagnostics.providerSettings['auth-key']).toBe('[REDACTED]');
       expect(diagnostics.providerSettings.model).toBe('gpt-4');
       expect(diagnostics.ephemeralSettings.model).toBe('test-model');
       expect(diagnostics.ephemeralSettings.temperature).toBe(0.8);
       expect(diagnostics.allSettings.providers.openai['auth-key']).toBe(
-        'test-key',
+        '[REDACTED]',
       );
     });
   });
