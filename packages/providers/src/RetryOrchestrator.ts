@@ -358,9 +358,14 @@ export class RetryOrchestrator implements IProvider {
       if (action.type === 'throw') throw action.error;
     }
 
+    const finalError =
+      lastError ?? new Error('Shared transport attempt budget exhausted');
+    const { category, status } = classifyRetryError(finalError);
     throw createRetriesExhaustedError(
-      lastError ?? new Error('Shared transport attempt budget exhausted'),
+      finalError,
       budget.used,
+      category,
+      status,
     );
   }
 
