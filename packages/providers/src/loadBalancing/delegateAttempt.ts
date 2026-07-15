@@ -23,13 +23,41 @@ export function requireTransportAttempt(options: GenerateChatOptions): void {
   }
 }
 
-export function createDelegateAttempt(options: GenerateChatOptions): {
+export interface DelegateAttempt {
   readonly linked: LinkedAbortController;
   readonly options: GenerateChatOptions;
-} {
+}
+
+export function createDelegateAttempt(
+  options: GenerateChatOptions,
+): DelegateAttempt {
   const linked = createLinkedAbortController(getRequestSignal(options));
   return {
     linked,
     options: withRequestSignal(options, linked.controller.signal),
   };
+}
+
+export async function* cleanupDelegateAttempt<T>(
+  attempt: DelegateAttempt,
+  stream: AsyncIterable<T>,
+): AsyncGenerator<T> {
+  let requestFailed = false;
+  let requestFailure: unknown;
+  let cleanupFailure: unknown;
+  try {
+    yield* stream;
+  } catch (error) {
+    requestFailed = true;
+    requestFailure = error;
+  } finally {
+    attempt.linked.controller.abort();
+    try {
+      attempt.linked.dispose();
+    } catch (error) {
+      cleanupFailure = error;
+    }
+  }
+  if (requestFailed) throw requestFailure;
+  if (cleanupFailure !== undefined) throw cleanupFailure;
 }

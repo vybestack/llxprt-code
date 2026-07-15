@@ -107,10 +107,8 @@ describe('Anthropic stream retry ownership', () => {
         metadata: { abortSignal: controller.signal },
       }),
     );
-    await vi.waitFor(() => expect(vi.getTimerCount()).toBeGreaterThan(0), {
-      interval: 1,
-      timeout: 20,
-    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
     controller.abort();
 
     await expect(result).rejects.toMatchObject({ name: 'AbortError' });

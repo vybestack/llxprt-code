@@ -298,12 +298,32 @@ describe('request-scoped retry infrastructure', () => {
     const error = new Error('delegate failure');
 
     expect(claimProviderErrorObservation(options, error)).toBe(true);
-    expect(
-      claimProviderErrorObservation(
-        attachProviderErrorObservationContext(options),
-        error,
-      ),
-    ).toBe(false);
+    const attached = attachProviderErrorObservationContext(options);
+    expect(claimProviderErrorObservation(attached.options, error)).toBe(false);
+    attached.release();
+  });
+
+  it('starts fresh observation deduplication after a request lifecycle ends', () => {
+    const options: GenerateChatOptions = {
+      contents: [],
+      onProviderError: () => undefined,
+    };
+    const error = new Error('delegate failure');
+    const firstRequest = attachProviderErrorObservationContext(options);
+
+    expect(claimProviderErrorObservation(firstRequest.options, error)).toBe(
+      true,
+    );
+    expect(claimProviderErrorObservation(firstRequest.options, error)).toBe(
+      false,
+    );
+    firstRequest.release();
+
+    const secondRequest = attachProviderErrorObservationContext(options);
+    expect(claimProviderErrorObservation(secondRequest.options, error)).toBe(
+      true,
+    );
+    secondRequest.release();
   });
 
   it('bounds detached primitive error deduplication', () => {
@@ -340,6 +360,21 @@ describe('request-scoped retry infrastructure', () => {
     parent.abort(new Error('parent stopped'));
 
     expect(linked.controller.signal.aborted).toBe(false);
+  });
+
+  it('does not repeat linked cleanup after listener removal throws', () => {
+    const parent = new AbortController();
+    const cleanupError = new Error('listener removal failed');
+    const remove = vi
+      .spyOn(parent.signal, 'removeEventListener')
+      .mockImplementation(() => {
+        throw cleanupError;
+      });
+    const linked = createLinkedAbortController(parent.signal);
+
+    expect(() => linked.dispose()).toThrow(cleanupError);
+    expect(() => linked.dispose()).not.toThrow();
+    expect(remove).toHaveBeenCalledTimes(1);
   });
 
   it('converts request cancellation to AbortError while retaining the provider failure', () => {

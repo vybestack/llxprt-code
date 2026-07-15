@@ -19,6 +19,7 @@ import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IProvider } from '../IProvider.js';
+import { LoadBalancerFailoverError } from '../errors.js';
 
 describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
   let settingsService: SettingsService;
@@ -502,6 +503,63 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
     expect(add).toHaveBeenCalledTimes(1);
     expect(remove).toHaveBeenCalledTimes(1);
     expect(remove.mock.calls[0][1]).toBe(add.mock.calls[0][1]);
+  });
+
+  it('preserves transport failures when linked listener removal throws', async () => {
+    const parent = new AbortController();
+    const cleanupError = new Error('listener removal failed');
+    vi.spyOn(parent.signal, 'removeEventListener').mockImplementation(() => {
+      throw cleanupError;
+    });
+    const primaryError = new Error('primary transport failed');
+    const secondaryError = new Error('secondary transport failed');
+    const failures = [primaryError, secondaryError];
+    let calls = 0;
+    const noContent: IContent[] = [];
+    const throwingProvider: IProvider = {
+      name: 'test-provider-1',
+      async *generateChatCompletion(): AsyncGenerator<IContent> {
+        const failure = calls === 0 ? primaryError : secondaryError;
+        calls++;
+        yield* noContent;
+        throw failure;
+      },
+      getModels: async () => [],
+      getDefaultModel: () => 'test-model',
+      getServerTools: () => [],
+      invokeServerTool: async () => null,
+    };
+    providerManager.registerProvider(throwingProvider);
+    providerManager.registerProvider({
+      ...throwingProvider,
+      name: 'test-provider-2',
+    });
+    const lb = new LoadBalancingProvider(
+      {
+        ...config,
+        subProfiles,
+        lbProfileEphemeralSettings: { failover_retry_count: 1 },
+      },
+      providerManager,
+    );
+
+    let thrown: unknown;
+    try {
+      for await (const _chunk of lb.generateChatCompletion({
+        contents: [],
+        metadata: { abortSignal: parent.signal },
+      })) {
+        await Promise.resolve();
+      }
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(LoadBalancerFailoverError);
+    const loadBalancerFailure =
+      thrown instanceof LoadBalancerFailoverError ? thrown : undefined;
+    expect(
+      loadBalancerFailure?.failures.map((failure) => failure.error),
+    ).toStrictEqual(failures);
   });
 
   describe('No timeout after first chunk', () => {

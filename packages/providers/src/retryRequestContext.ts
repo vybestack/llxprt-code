@@ -58,13 +58,16 @@ export function resolveRetryRequestContext(
     defaults.maxAttempts,
   );
   const budgetContext = attachTransportAttemptBudget(options, maxAttempts);
-  const requestOptions = attachProviderErrorObservationContext(
+  const observationContext = attachProviderErrorObservationContext(
     budgetContext.options,
   );
   return {
-    options: requestOptions,
+    options: observationContext.options,
     budget: budgetContext.budget,
-    releaseBudget: budgetContext.release,
+    releaseBudget: () => {
+      observationContext.release();
+      budgetContext.release();
+    },
     maxAttempts,
     initialDelayMs: nonNegativeFiniteNumber(
       ephemerals?.[RETRY_EPHEMERAL_KEYS.initialDelayMs],

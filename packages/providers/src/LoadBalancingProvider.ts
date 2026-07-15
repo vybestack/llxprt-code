@@ -16,8 +16,11 @@ import { coreEvents } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { getErrorStatus } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
-import { LoadBalancerFailoverError, permitsBucketFailover } from './errors.js';
-import { markProviderErrorObservationHandled } from './providerErrorObservation.js';
+import { LoadBalancerFailoverError } from './errors.js';
+import {
+  markProviderErrorObservationHandled,
+  withProviderErrorObservationContext,
+} from './providerErrorObservation.js';
 import { CircuitBreakerManager } from './loadBalancing/circuitBreakerManager.js';
 import { TPMTracker } from './loadBalancing/tpmTracker.js';
 import { BackendMetricsCollector } from './loadBalancing/backendMetrics.js';
@@ -25,6 +28,7 @@ import {
   extractFailoverSettings as extractFailoverSettingsFromEphemeral,
   shouldFailover as shouldFailoverOnError,
   isImmediateFailoverError as isImmediateFailover,
+  permitsLoadBalancerFailover,
 } from './loadBalancing/failoverSettings.js';
 import {
   wrapWithTimeout,
@@ -39,6 +43,7 @@ import {
 } from './loadBalancing/requestAbort.js';
 import { hasTransportAttemptRemaining } from './transportAttemptBudget.js';
 import {
+  cleanupDelegateAttempt,
   createDelegateAttempt,
   requireTransportAttempt,
 } from './loadBalancing/delegateAttempt.js';
@@ -684,6 +689,14 @@ export class LoadBalancingProvider implements IProvider {
   private async *executeWithFailover(
     options: GenerateChatOptions,
   ): AsyncGenerator<IContent> {
+    yield* withProviderErrorObservationContext(options, (observedOptions) =>
+      this.executeObservedFailover(observedOptions),
+    );
+  }
+
+  private async *executeObservedFailover(
+    options: GenerateChatOptions,
+  ): AsyncGenerator<IContent> {
     const { owner: requestOwner, startIndex } = this.failoverState.claim();
     const settings = this.extractFailoverSettings();
     const errors: Array<{ profile: string; error: Error }> = [];
@@ -882,28 +895,23 @@ export class LoadBalancingProvider implements IProvider {
 
     const attempt = createDelegateAttempt(resolvedOptions);
     const chunks: IContent[] = [];
-    try {
-      const rawIterator = delegateProvider.generateChatCompletion(
-        attempt.options,
-      );
-      const iterator = wrapWithTimeout(
-        rawIterator,
-        settings.timeoutMs,
-        subProfile.name,
-        this.logger,
-        {
-          signal: attempt.linked.controller.signal,
-          cancel: () => attempt.linked.controller.abort(),
-        },
-      );
-      for await (const chunk of iterator) {
-        chunksYielded.value = true;
-        chunks.push(chunk);
-        yield chunk;
-      }
-    } finally {
-      attempt.linked.controller.abort();
-      attempt.linked.dispose();
+    const rawIterator = delegateProvider.generateChatCompletion(
+      attempt.options,
+    );
+    const iterator = wrapWithTimeout(
+      rawIterator,
+      settings.timeoutMs,
+      subProfile.name,
+      this.logger,
+      {
+        signal: attempt.linked.controller.signal,
+        cancel: () => attempt.linked.controller.abort(),
+      },
+    );
+    for await (const chunk of cleanupDelegateAttempt(attempt, iterator)) {
+      chunksYielded.value = true;
+      chunks.push(chunk);
+      yield chunk;
     }
 
     const tokensUsed = BackendMetricsCollector.extractTokenCount(chunks);
@@ -933,21 +941,17 @@ export class LoadBalancingProvider implements IProvider {
     requestOwner: symbol,
     transportAttemptRemaining: boolean,
   ): 'immediate-throw' | 'break' | 'retry' {
-    if (!permitsBucketFailover(error)) return 'immediate-throw';
+    if (chunksYielded) {
+      this.logger.debug(
+        () =>
+          `[LB:failover] ${subProfile.name} failed after yielding chunks, aborting stream`,
+      );
+      this.recordRequestFailure(subProfile.name, startTime, error as Error);
+      this.circuitBreaker.recordBackendFailure(subProfile.name, error as Error);
+      return 'immediate-throw';
+    }
+    if (!permitsLoadBalancerFailover(error)) return 'immediate-throw';
     if (this.isImmediateFailoverError(error)) {
-      if (chunksYielded) {
-        this.logger.debug(
-          () =>
-            `[LB:failover] ${subProfile.name} returned immediate failover error after yielding chunks, aborting stream`,
-        );
-        this.recordRequestFailure(subProfile.name, startTime, error as Error);
-        this.circuitBreaker.recordBackendFailure(
-          subProfile.name,
-          error as Error,
-        );
-        return 'immediate-throw';
-      }
-
       this.logger.debug(
         () =>
           `[LB:failover] ${subProfile.name} returned immediate failover error (${getErrorStatus(error)}), skipping retries`,
