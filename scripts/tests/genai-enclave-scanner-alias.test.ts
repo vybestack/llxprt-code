@@ -54,9 +54,8 @@ describe('scanGenaiImports — F2: require alias tracking', () => {
         "req('@google/genai');\n",
     );
     const violations = scanGenaiImports(sf, 'test.ts');
-    // Two violations: the computed createRequire return and the genai call.
-    expect(violations).toHaveLength(2);
-    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].kind).toBe('genai-import');
   });
 });
 

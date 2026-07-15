@@ -145,12 +145,16 @@ describe('scanGeminiExports — CommonJS direct-assignment export forms', () => 
     ).toContain('geminiFn');
   });
 
-  it('does NOT flag module.exports = <nonGeminiIdentifier>', () => {
+  it('fails closed for module.exports = <unresolved nonGeminiIdentifier>', () => {
     const sf = parseSourceFile(
       'legacy.cjs',
       'class Normal {}\nmodule.exports = Normal;',
     );
-    expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].exportForm).toBe(
+      'computed export mutation (fail-closed)',
+    );
   });
 
   it('does NOT flag module.exports = anonymous class/function', () => {

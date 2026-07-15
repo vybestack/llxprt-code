@@ -674,18 +674,16 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('fail-closed');
       });
 
-      it('FAILS export default with non-literal spread even without "Gemini"', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('allows export default with a non-literal spread and no Gemini name', () => {
+        const { code } = withFixture(({ root, write }) => {
           writeRequiredManifests(write);
           write(
             'packages/cli/src/spread-default.ts',
             'const base = { foo: 1 };\nexport default { ...base };\n',
           );
-          return runScript(root, 1);
+          return runScript(root);
         });
-        expect(code).toBe(1);
-        expect(stdout).toContain('spread-default.ts');
-        expect(stdout).toContain('fail-closed');
+        expect(code).toBe(0);
       });
 
       it('FAILS Object.defineProperty with computed key even without "Gemini"', () => {

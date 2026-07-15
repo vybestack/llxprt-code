@@ -233,54 +233,14 @@ export const GEMINI_NAME_EXPLICIT_ALLOWLIST: readonly GeminiNameAllowlistEntry[]
     },
     {
       path: 'packages/core/src/config/config.ts',
-      name: 'GeminiCLIExtension',
-      justification:
-        'Deprecated public legacy alias for config type. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/config/config.ts',
       name: 'DEFAULT_GEMINI_FLASH_MODEL',
       justification: 'Default Gemini Flash model ID re-exported from config.',
-    },
-    {
-      path: 'packages/core/src/config/configTypes.ts',
-      name: 'GeminiCLIExtension',
-      justification:
-        'Deprecated public legacy alias for config type. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/config/index.ts',
-      name: 'GeminiCLIExtension',
-      justification:
-        'Deprecated public legacy alias re-exported from config index.',
     },
     {
       path: 'packages/core/src/config/index.ts',
       name: 'DEFAULT_GEMINI_FLASH_MODEL',
       justification:
         'Default Gemini Flash model ID re-exported from config index.',
-    },
-    // ── Env-var / directory constants ─────────────────────────────────
-    {
-      path: 'packages/core/src/index.ts',
-      name: 'GEMINI_DIR',
-      justification: 'Directory/env-var constant exported from core index.',
-    },
-    {
-      path: 'packages/core/src/index.ts',
-      name: 'GeminiCLIExtension',
-      justification:
-        'Deprecated public legacy alias re-exported from core index.',
-    },
-    {
-      path: 'packages/tools/src/index.ts',
-      name: 'GEMINI_DIR',
-      justification: 'Directory/env-var constant exported from tools index.',
-    },
-    {
-      path: 'packages/tools/src/tools/memoryTool.ts',
-      name: 'GEMINI_DIR',
-      justification: 'Directory/env-var constant used by the memory tool.',
     },
     // ── Finish-reason mapping (genuine converter/boundary module) ─────
     {
@@ -332,176 +292,12 @@ export const GEMINI_NAME_EXPLICIT_ALLOWLIST: readonly GeminiNameAllowlistEntry[]
       justification:
         'Neutral structural Gemini Content type in core llm-types/geminiContent.',
     },
-    // ── Deprecated public legacy aliases (geminiLegacyAliases.ts) ─────
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'GeminiEventType',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiStreamEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiFinishedOutcome',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiRetryEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiInvalidStreamEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiContextWindowWillOverflowEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiContentEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiSystemNoticeEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiThoughtEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiToolCallRequestEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiToolCallResponseEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiToolCallConfirmationEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiUserCancelledEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiStreamIdleTimeoutEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiErrorEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiChatCompressedEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiUsageMetadataEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiMaxSessionTurnsEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiFinishedEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiLoopDetectedEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiCitationEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiModelInfoEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiAgentExecutionStoppedEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'ServerGeminiAgentExecutionBlockedEvent',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'GeminiErrorEventValue',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
-    {
-      path: 'packages/core/src/core/geminiLegacyAliases.ts',
-      name: 'GeminiCodeRequest',
-      justification:
-        'Deprecated public legacy alias. Follow-up: rename in next major release.',
-    },
     // ── Privacy notice UI component ───────────────────────────────────
     {
       path: 'packages/cli/src/ui/privacy/GeminiPrivacyNotice.tsx',
       name: 'GeminiPrivacyNotice',
       justification:
         'Gemini privacy-notice UI component exported from cli (gemini-cli compat surface).',
-    },
-    // ── Test helpers (shared test infrastructure, not .test.ts files) ─
-    {
-      path: 'packages/agents/src/core/client-test-helpers.ts',
-      name: 'setupGeminiClient',
-      justification:
-        'Test helper exported from agents client-test-helpers.ts (shared test infrastructure, not a .test.ts file).',
     },
     {
       path: 'packages/core/test/models/__fixtures__/mock-data.ts',
