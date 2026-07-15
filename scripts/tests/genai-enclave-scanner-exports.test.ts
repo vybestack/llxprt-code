@@ -22,12 +22,13 @@ import { describe, it, expect } from 'vitest';
 import {
   scanGeminiExports,
   parseSourceFile,
+  getParseDiagnostics,
 } from '../genai-enclave/scanner.ts';
 
 describe('parseSourceFile — invalid syntax produces diagnostics', () => {
   it('produces parse diagnostics for broken syntax', () => {
     const sf = parseSourceFile('broken.ts', 'export const x = ((((;\n');
-    expect(sf.parseDiagnostics.length).toBeGreaterThan(0);
+    expect(getParseDiagnostics(sf).length).toBeGreaterThan(0);
   });
 });
 
@@ -494,5 +495,120 @@ describe('A2/A3: whole-target module.exports logical assignments inspect RHS', (
         false,
       );
     });
+  });
+});
+
+// ── #2: Transparent expression unwrapping + object initializer inspection ───
+
+describe('#2: transparent expression unwrapping in ESM exports', () => {
+  it('detects Gemini names through parenthesized export default', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      'export default ({ GeminiName: 1 });\n',
+    );
+    const violations = scanGeminiExports(sf, 'test.ts');
+    expect(violations.some((v) => v.exportName === 'GeminiName')).toBe(true);
+  });
+
+  it('detects Gemini names through as-assertion export default', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      'export default { GeminiName: 1 } as const;\n',
+    );
+    const violations = scanGeminiExports(sf, 'test.ts');
+    expect(violations.some((v) => v.exportName === 'GeminiName')).toBe(true);
+  });
+
+  it('detects Gemini names through satisfies export default', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      'type T = {};\nexport default { GeminiName: 1 } satisfies T;\n',
+    );
+    const violations = scanGeminiExports(sf, 'test.ts');
+    expect(violations.some((v) => v.exportName === 'GeminiName')).toBe(true);
+  });
+
+  it('detects Gemini names through non-null assertion export default', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      'const x: { GeminiName: number } | null = { GeminiName: 1 };\n' +
+        'export default x!;\n',
+    );
+    const violations = scanGeminiExports(sf, 'test.ts');
+    expect(violations.some((v) => v.exportName === 'GeminiName')).toBe(true);
+  });
+
+  it('detects nested Gemini through as-assertion in object literal', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      'export default { nested: { GeminiDeep: 1 } as Record<string, number> };\n',
+    );
+    const violations = scanGeminiExports(sf, 'test.ts');
+    expect(violations.some((v) => v.exportName === 'GeminiDeep')).toBe(true);
+  });
+});
+
+describe('#2: ESM exported const/let/var does NOT inspect object literal properties', () => {
+  // ESM `export const x = { GeminiKey: 42 }` does NOT export GeminiKey
+  // as a named export — only `x` is exported. Object-literal property
+  // names are internal, not part of the module's export surface.
+  it('does NOT flag Gemini property in exported const object initializer', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      'export const config = { GeminiKey: 42 };\n',
+    );
+    expect(scanGeminiExports(sf, 'test.ts')).toEqual([]);
+  });
+
+  it('does NOT flag Gemini property in exported let object initializer', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      'export let config = { GeminiKey: 42 };\n',
+    );
+    expect(scanGeminiExports(sf, 'test.ts')).toEqual([]);
+  });
+
+  it('does NOT flag Gemini property in exported var object initializer', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      'export var config = { GeminiKey: 42 };\n',
+    );
+    expect(scanGeminiExports(sf, 'test.ts')).toEqual([]);
+  });
+
+  it('does NOT flag exported const without Gemini in initializer', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      'export const config = { normalKey: 42 };\n',
+    );
+    expect(scanGeminiExports(sf, 'test.ts')).toEqual([]);
+  });
+});
+
+describe('#2: fail-closed for unresolved ESM export-assignment calls', () => {
+  it('does NOT fail-closed for export default = factory() (ESM default)', () => {
+    // ESM `export default expr` only exports `default`, not named exports.
+    // The expression's properties do not become export names.
+    const sf = parseSourceFile('test.ts', 'export default makeExports();\n');
+    const violations = scanGeminiExports(sf, 'test.ts');
+    expect(violations.some((v) => v.exportForm.includes('fail-closed'))).toBe(
+      false,
+    );
+  });
+
+  it('fail-closed for export = factory() (export equals)', () => {
+    const sf = parseSourceFile('test.ts', 'export = makeExports();\n');
+    const violations = scanGeminiExports(sf, 'test.ts');
+    expect(violations.some((v) => v.exportForm.includes('fail-closed'))).toBe(
+      true,
+    );
+  });
+
+  it('does NOT fail-closed for export default identifier', () => {
+    const sf = parseSourceFile('test.ts', 'const x = 42;\nexport default x;\n');
+    const violations = scanGeminiExports(sf, 'test.ts');
+    expect(violations.some((v) => v.exportForm.includes('fail-closed'))).toBe(
+      false,
+    );
   });
 });

@@ -56,6 +56,22 @@ export function parseSourceFile(
 }
 
 /**
+ * Stable scanner-owned API for retrieving parse diagnostics from a parsed
+ * SourceFile. Consumers should use this instead of directly accessing the
+ * internal `sourceFile.parseDiagnostics` property, which is an
+ * implementation detail of the TypeScript compiler API that could change
+ * across versions.
+ *
+ * Returns an array of diagnostic objects with `start` (position) and
+ * `messageText` properties, or an empty array if the source parsed cleanly.
+ */
+export function getParseDiagnostics(
+  sourceFile: ts.SourceFile,
+): readonly ts.Diagnostic[] {
+  return sourceFile.parseDiagnostics;
+}
+
+/**
  * Determine the appropriate ScriptKind from the file extension, including
  * `.mts`, `.cts`, `.d.ts`, `.d.mts`, `.d.cts`, `.tsx`, and `.jsx`.
  */

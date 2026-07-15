@@ -14,6 +14,75 @@ import ts from 'typescript';
 const REQUIRE_IDENTIFIER = 'require';
 
 /**
+ * Unwrap transparent wrapper expressions to reach the inner expression.
+ * Handles nested ParenthesizedExpression, AsExpression,
+ * SatisfiesExpression, and NonNullExpression.
+ *
+ * Used by both ESM and CommonJS export detectors so that wrapper
+ * expressions (`(x)`, `x as Type`, `x satisfies Type`, `x!`) do not
+ * hide the inner expression from property-name inspection.
+ */
+function unwrapTransparentExpression(
+  node: ts.Expression,
+): ts.Expression | null {
+  const guards: ReadonlyArray<
+    (candidate: ts.Expression) => candidate is ts.Expression & {
+      expression: ts.Expression;
+    }
+  > = [
+    ts.isParenthesizedExpression,
+    ts.isAsExpression,
+    ts.isTypeAssertionExpression,
+    ts.isSatisfiesExpression,
+    ts.isNonNullExpression,
+  ];
+  for (const guard of guards) {
+    if (guard(node)) return node.expression;
+  }
+  return null;
+}
+
+export function unwrapTransparentExpressions(
+  node: ts.Expression,
+): ts.Expression {
+  let current = node;
+  let inner = unwrapTransparentExpression(current);
+  while (inner !== null) {
+    current = inner;
+    inner = unwrapTransparentExpression(current);
+  }
+  return current;
+}
+
+/**
+ * Type guard for all function-like declarations (FunctionDeclaration,
+ * FunctionExpression, ArrowFunction, MethodDeclaration,
+ * ConstructorDeclaration). Shared by provenance-collection and
+ * export-provenance consumers.
+ */
+export function isFunctionLikeNode(
+  node: ts.Node,
+): node is
+  | ts.FunctionDeclaration
+  | ts.FunctionExpression
+  | ts.ArrowFunction
+  | ts.MethodDeclaration
+  | ts.ConstructorDeclaration
+  | ts.GetAccessorDeclaration
+  | ts.SetAccessorDeclaration {
+  const guards: ReadonlyArray<(candidate: ts.Node) => boolean> = [
+    ts.isFunctionDeclaration,
+    ts.isFunctionExpression,
+    ts.isArrowFunction,
+    ts.isMethodDeclaration,
+    ts.isConstructorDeclaration,
+    ts.isGetAccessorDeclaration,
+    ts.isSetAccessorDeclaration,
+  ];
+  return guards.some((guard) => guard(node));
+}
+
+/**
  * Extract the string literal text from a TS node, or null if it is not a
  * string literal or no-substitution template literal.
  */
@@ -140,20 +209,6 @@ export function importedNameOfBinding(element: ts.BindingElement): string {
  */
 export function importedNameOfSpecifier(element: ts.ImportSpecifier): string {
   return element.propertyName?.text ?? element.name.text;
-}
-
-/**
- * Determine if `text` is a logical-assignment operator token name
- * (`||=`, `??=`, `&&=`).
- */
-export function isLogicalAssignmentToken(
-  token: ts.Token<ts.SyntaxKind>,
-): boolean {
-  return (
-    token.kind === ts.SyntaxKind.BarBarEqualsToken ||
-    token.kind === ts.SyntaxKind.QuestionQuestionEqualsToken ||
-    token.kind === ts.SyntaxKind.AmpersandAmpersandEqualsToken
-  );
 }
 
 export { REQUIRE_IDENTIFIER };

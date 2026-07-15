@@ -35,6 +35,7 @@ import {
   objectPropertyName,
   inlineSpreadPropertyNames,
   isStaticSpreadSource,
+  unwrapTransparentExpressions,
 } from './ast-helpers.ts';
 import { GlobalShadowResolver } from './provenance.ts';
 import type { GeminiExportViolation } from './violation-types.ts';
@@ -159,6 +160,7 @@ function checkNamedDeclaration(
 
 /**
  * Check an exported variable statement for Gemini-containing binding names.
+ * Object-literal properties are not separately exported by ESM variables.
  */
 function checkVariableStatement(
   ctx: ExportScanContext,
@@ -172,6 +174,9 @@ function checkVariableStatement(
         addExportViolation(ctx, node, name, 'export const/let/var', violations);
       }
     }
+    // ESM `export const x = { GeminiName: 1 }` does NOT export GeminiName
+    // as a name — only `x` is exported. Object-literal property inspection
+    // is for CJS `module.exports = { ... }` (export-cjs.ts), not ESM.
   }
 }
 
@@ -226,10 +231,7 @@ function checkExportAssignment(
   violations: GeminiExportViolation[],
 ): void {
   const exportForm = node.isExportEquals ? 'export =' : 'export default';
-  let expr = node.expression;
-  while (ts.isParenthesizedExpression(expr)) {
-    expr = expr.expression;
-  }
+  const expr = unwrapTransparentExpressions(node.expression);
   if (ts.isIdentifier(expr) && containsGemini(expr.text)) {
     addExportViolation(ctx, node, expr.text, exportForm, violations);
     // Do NOT return early — fall through to inspect any object-literal
@@ -259,6 +261,22 @@ function checkExportAssignment(
     if (binding !== undefined) {
       checkObjectLiteralProperties(ctx, binding, exportForm, violations);
     }
+    return;
+  }
+  // Fail-closed: unresolved call expression in an `export =` assignment
+  // (e.g. `export = factory()`). For `export =`, the expression IS the
+  // module's export surface, so the call result's properties become named
+  // exports that the scanner cannot statically determine.
+  //
+  // `export default factory()` does NOT expose named exports — only
+  // `default` — so it does not trigger fail-closed.
+  if (ts.isCallExpression(expr) && node.isExportEquals) {
+    addFailClosedViolation(
+      ctx,
+      node,
+      `${exportForm} = unresolved call expression (fail-closed)`,
+      violations,
+    );
   }
 }
 
@@ -282,13 +300,10 @@ function checkObjectLiteralProperties(
     checkSinglePropertyName(ctx, property, propName, exportForm, violations);
     // F6: recurse into nested object literals so deeply nested Gemini
     // names are detected (e.g. export = { nested: { GeminiDeep: 1 } }).
-    // Unwrap parenthesized expressions so wrappers like
-    // { nested: ({ GeminiDeep: 1 }) } are also inspected.
+    // Unwrap transparent wrapper expressions so wrappers like
+    // { nested: ({ GeminiDeep: 1 } as Type) } are also inspected.
     if (ts.isPropertyAssignment(property)) {
-      let nestedInit: ts.Expression = property.initializer;
-      while (ts.isParenthesizedExpression(nestedInit)) {
-        nestedInit = nestedInit.expression;
-      }
+      const nestedInit = unwrapTransparentExpressions(property.initializer);
       if (ts.isObjectLiteralExpression(nestedInit)) {
         checkObjectLiteralProperties(ctx, nestedInit, exportForm, violations);
       }

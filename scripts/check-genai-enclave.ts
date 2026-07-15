@@ -69,6 +69,7 @@ import {
   scanGenaiImports,
   scanGeminiExports,
   parseSourceFile,
+  getParseDiagnostics,
   type Violation,
 } from './genai-enclave/scanner.ts';
 
@@ -509,8 +510,9 @@ function scanFile(filePath: string): FileScanResult {
     return { violations: [], errors: [`Cannot parse ${relPath}: ${message}`] };
   }
 
-  if (sourceFile.parseDiagnostics.length > 0) {
-    const diags = sourceFile.parseDiagnostics
+  const diagnostics = getParseDiagnostics(sourceFile);
+  if (diagnostics.length > 0) {
+    const diags = diagnostics
       .map(
         (d) =>
           `${relPath}:${

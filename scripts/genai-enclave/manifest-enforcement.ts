@@ -344,6 +344,29 @@ function duplicateDeclarationViolation(
   };
 }
 
+function collectDirectDeclarationViolation(
+  workspaceDir: string,
+  sectionName: DependencySectionKey,
+  version: string,
+): ManifestDependencyViolation | null {
+  if (!SANCTIONED_DIRS.has(workspaceDir)) {
+    return unauthorizedWorkspaceViolation(workspaceDir, sectionName);
+  }
+  if (sectionName !== 'dependencies') {
+    return wrongSectionViolation(workspaceDir, sectionName);
+  }
+  const allowed = getAllowedGenaiVersion(workspaceDir);
+  if (allowed !== undefined && version !== allowed) {
+    return versionMismatchViolation(
+      workspaceDir,
+      sectionName,
+      version,
+      allowed,
+    );
+  }
+  return null;
+}
+
 /**
  * Scan a single validated section for SDK declarations and alias targets.
  * Appends violations and records the section key if the SDK was found.
@@ -368,23 +391,14 @@ function scanSectionForSdk(
           version,
         ),
       );
-    }
-    // Direct SDK declaration
-    if (name !== GENAI_PACKAGE) continue;
-    foundIn.add(sectionName);
-    if (!SANCTIONED_DIRS.has(workspaceDir)) {
-      violations.push(
-        unauthorizedWorkspaceViolation(workspaceDir, sectionName),
+    } else if (name === GENAI_PACKAGE) {
+      foundIn.add(sectionName);
+      const violation = collectDirectDeclarationViolation(
+        workspaceDir,
+        sectionName,
+        version,
       );
-    } else if (sectionName !== 'dependencies') {
-      violations.push(wrongSectionViolation(workspaceDir, sectionName));
-    } else {
-      const allowed = getAllowedGenaiVersion(workspaceDir);
-      if (allowed !== undefined && version !== allowed) {
-        violations.push(
-          versionMismatchViolation(workspaceDir, sectionName, version, allowed),
-        );
-      }
+      if (violation !== null) violations.push(violation);
     }
   }
 }

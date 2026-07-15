@@ -16,7 +16,7 @@
  */
 
 import ts from 'typescript';
-import { collectBindingNames } from './ast-helpers.ts';
+import { collectBindingNames, isFunctionLikeNode } from './ast-helpers.ts';
 import { blockScopedRange, hoistedRange } from './provenance.ts';
 import type { ExportScanContext } from './export-detection.ts';
 
@@ -55,27 +55,6 @@ export function collectExportShadows(
 }
 
 /**
- * Determine if a node is a function-like declaration.
- */
-function isFunctionLikeNode(
-  node: ts.Node,
-): node is
-  | ts.FunctionDeclaration
-  | ts.FunctionExpression
-  | ts.ArrowFunction
-  | ts.MethodDeclaration
-  | ts.ConstructorDeclaration {
-  const guards: ReadonlyArray<(candidate: ts.Node) => boolean> = [
-    ts.isFunctionDeclaration,
-    ts.isFunctionExpression,
-    ts.isArrowFunction,
-    ts.isMethodDeclaration,
-    ts.isConstructorDeclaration,
-  ];
-  return guards.some((guard) => guard(node));
-}
-
-/**
  * Register CJS global name shadows from variable declaration bindings.
  */
 function registerVarShadows(
@@ -98,10 +77,15 @@ function registerFunctionShadows(
     | ts.FunctionExpression
     | ts.ArrowFunction
     | ts.MethodDeclaration
-    | ts.ConstructorDeclaration,
+    | ts.ConstructorDeclaration
+    | ts.GetAccessorDeclaration
+    | ts.SetAccessorDeclaration,
 ): void {
   const range = hoistedRange(node);
-  if ('name' in node && node.name !== undefined && ts.isIdentifier(node.name)) {
+  if (
+    (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) &&
+    node.name !== undefined
+  ) {
     ctx.globalShadows.registerShadow(node.name.text, range.from, range.to);
   }
   for (const param of node.parameters) {
@@ -135,6 +119,10 @@ function computeVarRange(decl: ts.VariableDeclaration): {
 }
 
 /**
+ * Type guards for named declaration node kinds.
+ */
+
+/**
  * Collect a map of local variable names → object-literal initializers from
  * all variable declarations in the source file (F2 identifier resolution).
  * Used to resolve `module.exports = someVar` when `someVar` points to a
@@ -159,6 +147,10 @@ export function collectObjectLiteralBindings(
 /**
  * Register all binding names from a variable declaration whose initializer
  * is a static object literal into the bindings map (F2).
+ *
+ * Only identifier declarations (`const x = { ... }`) are registered.
+ * Destructuring patterns (`const { a, b } = { ... }`) extract properties
+ * FROM the initializer, so the initializer is not the binding's value.
  */
 function registerObjectLiteralBinding(
   decl: ts.VariableDeclaration,
@@ -170,18 +162,19 @@ function registerObjectLiteralBinding(
   ) {
     return;
   }
+  // Only register for simple identifier declarations. Destructuring
+  // patterns do not establish a single-name → object-literal binding.
+  if (!ts.isIdentifier(decl.name)) return;
   const range = computeVarRange(decl);
   const entry: ObjectLiteralBindingEntry = {
     literal: decl.initializer,
     from: range.from,
     to: range.to,
   };
-  for (const name of collectBindingNames(decl.name)) {
-    const list = map.get(name);
-    if (list === undefined) {
-      map.set(name, [entry]);
-    } else {
-      list.push(entry);
-    }
+  const list = map.get(decl.name.text);
+  if (list === undefined) {
+    map.set(decl.name.text, [entry]);
+  } else {
+    list.push(entry);
   }
 }

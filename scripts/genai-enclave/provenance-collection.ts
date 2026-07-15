@@ -27,6 +27,7 @@ import {
   importedNameOfBinding,
   importedNameOfSpecifier,
   REQUIRE_IDENTIFIER,
+  isFunctionLikeNode,
 } from './ast-helpers.ts';
 import { blockScopedRange, hoistedRange, moduleRange } from './provenance.ts';
 import {
@@ -258,7 +259,7 @@ function tryRegisterCallInitializer(
   // Parentheses around the function expression must be unwrapped.
   const iifeCallee = unwrapParentheses(initializer.expression);
   if (
-    isFunctionLikeDeclaration(iifeCallee) &&
+    isFunctionLikeNode(iifeCallee) &&
     functionReturnsCreateRequire(ctx, iifeCallee)
   ) {
     registerBindings(ctx, declaration, 'binding', range);
@@ -563,27 +564,6 @@ function unwrapParentheses(node: ts.Expression): ts.Expression {
 }
 
 /**
- * Determine if a node is a function-like declaration.
- */
-function isFunctionLikeDeclaration(
-  node: ts.Node,
-): node is
-  | ts.FunctionDeclaration
-  | ts.FunctionExpression
-  | ts.ArrowFunction
-  | ts.MethodDeclaration
-  | ts.ConstructorDeclaration {
-  const guards: ReadonlyArray<(candidate: ts.Node) => boolean> = [
-    ts.isFunctionDeclaration,
-    ts.isFunctionExpression,
-    ts.isArrowFunction,
-    ts.isMethodDeclaration,
-    ts.isConstructorDeclaration,
-  ];
-  return guards.some((guard) => guard(node));
-}
-
-/**
  * Register shadow entries for function declaration parameters and the
  * function name itself. Parameters shadow broader provenance within the
  * function body.
@@ -595,7 +575,9 @@ function collectFunctionShadows(
     | ts.FunctionExpression
     | ts.ArrowFunction
     | ts.MethodDeclaration
-    | ts.ConstructorDeclaration,
+    | ts.ConstructorDeclaration
+    | ts.GetAccessorDeclaration
+    | ts.SetAccessorDeclaration,
 ): void {
   const range = hoistedRange(node);
   if ('name' in node && node.name !== undefined && ts.isIdentifier(node.name)) {
@@ -644,7 +626,7 @@ function collectCallAssignment(
     // Same logic as tryRegisterCallInitializer for variable declarations.
     const iifeCallee = unwrapParentheses(rhs.expression);
     if (
-      isFunctionLikeDeclaration(iifeCallee) &&
+      isFunctionLikeNode(iifeCallee) &&
       functionReturnsCreateRequire(ctx, iifeCallee)
     ) {
       kind = 'binding';
@@ -792,7 +774,7 @@ function collectBlockProvenanceVisit(
     }
   } else if (ts.isExpressionStatement(node)) {
     collectAssignment(ctx, node);
-  } else if (isFunctionLikeDeclaration(node)) {
+  } else if (isFunctionLikeNode(node)) {
     collectFunctionShadows(ctx, node);
     collectCreateRequireReturningFunction(ctx, node);
   }
@@ -815,14 +797,19 @@ function collectCreateRequireReturningFunction(
     | ts.FunctionExpression
     | ts.ArrowFunction
     | ts.MethodDeclaration
-    | ts.ConstructorDeclaration,
+    | ts.ConstructorDeclaration
+    | ts.GetAccessorDeclaration
+    | ts.SetAccessorDeclaration,
 ): void {
   let name: string | undefined;
   if ('name' in node && node.name !== undefined && ts.isIdentifier(node.name)) {
     name = node.name.text;
   }
-  if (name === undefined && ts.isArrowFunction(node)) {
-    name = getArrowFunctionName(node);
+  if (
+    name === undefined &&
+    (ts.isArrowFunction(node) || ts.isFunctionExpression(node))
+  ) {
+    name = getAnonymousFunctionVariableName(node);
   }
   if (name === undefined) return;
   if (functionReturnsCreateRequire(ctx, node)) {
@@ -831,10 +818,14 @@ function collectCreateRequireReturningFunction(
 }
 
 /**
- * Derive the variable name for an anonymous ArrowFunction assigned to a
- * variable declarator (e.g. `const getReq = (url) => createRequire(url)`).
+ * Derive the variable name for an anonymous ArrowFunction or
+ * FunctionExpression assigned to a variable declarator
+ * (e.g. `const getReq = (url) => createRequire(url)` or
+ * `const getReq = function(url) { return createRequire(url); }`).
  */
-function getArrowFunctionName(node: ts.ArrowFunction): string | undefined {
+function getAnonymousFunctionVariableName(
+  node: ts.ArrowFunction | ts.FunctionExpression,
+): string | undefined {
   const parent = node.parent;
   if (
     parent !== undefined &&
@@ -864,7 +855,9 @@ function functionReturnsCreateRequire(
     | ts.FunctionExpression
     | ts.ArrowFunction
     | ts.MethodDeclaration
-    | ts.ConstructorDeclaration,
+    | ts.ConstructorDeclaration
+    | ts.GetAccessorDeclaration
+    | ts.SetAccessorDeclaration,
 ): boolean {
   const body = node.body;
   if (body === undefined) return false;
@@ -877,7 +870,7 @@ function functionReturnsCreateRequire(
     if (found) return;
     // Skip nested function-like declarations — their return statements
     // belong to them, not to the enclosing function.
-    if (n !== body && isFunctionLikeDeclaration(n)) return;
+    if (n !== body && isFunctionLikeNode(n)) return;
     if (
       ts.isReturnStatement(n) &&
       n.expression !== undefined &&
@@ -907,7 +900,7 @@ function isCreateRequireReturnExpression(
   ) {
     return true;
   }
-  // createRequire(...) — the factory call (function returns the factory result)
+  // createRequire(...) — the factory call (function returns the factory)
   if (ts.isCallExpression(expr) && isCreateRequireFactoryCallee(ctx, expr)) {
     return true;
   }

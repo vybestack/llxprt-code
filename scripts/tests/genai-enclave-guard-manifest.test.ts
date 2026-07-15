@@ -97,6 +97,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('FAILS when a nested package manifest declares @google/genai', () => {
         const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
           write(
             'packages/cli/examples/server/package.json',
             JSON.stringify({
@@ -133,6 +134,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('FAILS when packages/cli declares @google/genai in optionalDependencies', () => {
         const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
           write(
             'packages/cli/package.json',
             JSON.stringify({
@@ -150,6 +152,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('FAILS when root package.json is malformed JSON (fail-closed)', () => {
         const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
+          // Overwrite root with broken JSON
           write(
             'package.json',
             '{ "name": "broken", "dependencies": { "@google/genai": ',
@@ -221,6 +225,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('FAILS when a dependency section is an array instead of an object (fail-closed)', () => {
         const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
+          // Overwrite root with array deps
           write(
             'package.json',
             JSON.stringify({
@@ -238,6 +244,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('FAILS when a dependency section is a string instead of an object (fail-closed)', () => {
         const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
+          // Overwrite core with string deps
           write(
             'packages/core/package.json',
             JSON.stringify({
@@ -254,6 +262,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('FAILS when a dependency section is null instead of an object (fail-closed)', () => {
         const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
           write(
             'packages/cli/package.json',
             JSON.stringify({
@@ -270,6 +279,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('FAILS when an npm alias targets @google/genai (F1)', () => {
         const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
           write(
             'packages/cli/package.json',
             JSON.stringify({
@@ -289,6 +299,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('FAILS when an npm alias targets a @google/genai subpath (F1)', () => {
         const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
           write(
             'packages/agents/package.json',
             JSON.stringify({
@@ -307,6 +318,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('FAILS when SDK declared in both dependencies and devDependencies (F9)', () => {
         const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
+          // Overwrite core with duplicate sections
           write(
             'packages/core/package.json',
             JSON.stringify({
@@ -324,6 +337,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('FAILS when SDK declared in both dependencies and peerDependencies (F9)', () => {
         const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
+          // Overwrite providers with duplicate sections
           write(
             'packages/providers/package.json',
             JSON.stringify({
@@ -340,7 +355,9 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       });
 
       it('FAILS when SDK declared in dependencies and optionalDependencies (F9)', () => {
-        const { code } = withFixture(({ root, write }) => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
+          // Overwrite core with duplicate deps + optionalDependencies
           write(
             'packages/core/package.json',
             JSON.stringify({
@@ -353,10 +370,14 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
           return runScript(root, 1);
         });
         expect(code).toBe(1);
+        expect(stdout).toContain('duplicate');
+        expect(stdout).toContain('optionalDependencies');
       });
 
       it('FAILS when a sanctioned workspace omits the SDK from dependencies (F10)', () => {
         const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
+          // Overwrite core with a manifest that omits the SDK
           write(
             'packages/core/package.json',
             JSON.stringify({
@@ -373,6 +394,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('FAILS when a dependency value is not a string (F6 fail-closed)', () => {
         const { code, stdout } = withFixture(({ root, write }) => {
+          writeRequiredManifests(write);
           write(
             'packages/cli/package.json',
             JSON.stringify({

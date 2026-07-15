@@ -104,26 +104,32 @@ export function isNpmAlias(version: string): boolean {
  * Extract the alias target package name from an npm alias specifier.
  * Returns null for non-alias specifiers.
  *
- * Finds the FIRST `@` that delimiters the package name from the version,
- * not `lastIndexOf('@')`, which corrupts the target when the version
- * contains `@` (e.g. a tarball URL).
+ * Finds the FIRST `@` that delimits the package name from the version — NOT
+ * `lastIndexOf('@')`, which corrupts the target when the version itself
+ * contains `@` (e.g. a tarball URL like `https://user@host/pkg.tgz`).
  *
- * - `npm:@scope/pkg@^1.2.3` → `@scope/pkg`
- * - `npm:plainpkg@^1.2.3`  → `plainpkg`
- * - `npm:@scope/pkg`        → `@scope/pkg` (versionless)
+ * - `npm:@scope/pkg@^1.2.3`                → `@scope/pkg`
+ * - `npm:plainpkg@^1.2.3`                  → `plainpkg`
+ * - `npm:@scope/pkg`                       → `@scope/pkg` (versionless)
+ * - `npm:plainpkg`                         → `plainpkg` (versionless)
+ * - `npm:@google/genai@https://u@h/p.tgz` → `@google/genai`
  */
 export function extractNpmAliasTarget(version: string): string | null {
   if (!isNpmAlias(version)) return null;
   const body = version.slice(4); // strip 'npm:'
+  if (body.length === 0) return null;
+  // For scoped packages (`@scope/name`), find the first `@` after the `/`.
+  // For plain packages, find the first `@`.
   let atIndex: number;
   if (body.startsWith('@')) {
     const slashIndex = body.indexOf('/');
-    if (slashIndex === -1) return body;
+    if (slashIndex === -1) return body; // versionless scoped package
     atIndex = body.indexOf('@', slashIndex + 1);
+    if (atIndex === -1) return body; // versionless scoped package
   } else {
     atIndex = body.indexOf('@');
+    if (atIndex === -1) return body; // versionless plain package
   }
-  if (atIndex <= 0) return body;
   return body.slice(0, atIndex);
 }
 
@@ -140,16 +146,13 @@ export function extractSemverRange(version: string): string | null {
     return null;
   }
   if (isNpmAlias(version)) {
-    // npm:realName@version — extract everything after the last '@'
-    // The package name itself may contain '@' (scoped packages):
-    //   npm:@scope/pkg@^1.2.3 → ^1.2.3
-    //   npm:plainpkg@^1.2.3    → ^1.2.3
-    const atIndex = version.lastIndexOf('@');
-    if (atIndex <= 3) {
-      // No version after the alias prefix — malformed, fail-closed
+    const target = extractNpmAliasTarget(version);
+    if (target === null) return null;
+    const delimiter = 4 + target.length;
+    if (version[delimiter] !== '@' || delimiter + 1 >= version.length) {
       return null;
     }
-    return version.slice(atIndex + 1);
+    return version.slice(delimiter + 1);
   }
   return version;
 }

@@ -124,6 +124,7 @@ function isSafeStaticExportValue(rhs: ts.Expression): boolean {
   const safeKinds: readonly ts.SyntaxKind[] = [
     ts.SyntaxKind.ClassExpression,
     ts.SyntaxKind.FunctionExpression,
+    ts.SyntaxKind.ArrowFunction,
     ts.SyntaxKind.CallExpression,
     ts.SyntaxKind.NumericLiteral,
     ts.SyntaxKind.StringLiteral,
@@ -216,9 +217,9 @@ function checkCommonJSAssignmentRhs(
   }
   // F2 fail-closed: a CallExpression RHS (e.g. `module.exports = someFunc()`)
   // cannot be statically inspected. The scanner must flag it.
-  // Exception: `createRequire(...)(...)` is a require call handled by the
-  // import-side detector, so it does not trigger a fail-closed export violation.
-  if (ts.isCallExpression(rhs) && !isRequireCallRhs(rhs)) {
+  // Only an unshadowed bare `require(...)` is exempt here. Other loader-like
+  // calls fail closed because this export scanner has no import provenance.
+  if (ts.isCallExpression(rhs) && !isRequireCallRhs(ctx, rhs)) {
     addFailClosedViolation(
       ctx,
       node,
@@ -253,24 +254,18 @@ function checkCommonJSAssignmentRhs(
  * call expressions like `makeExports()()` are NOT exempt — they are
  * fail-closed because the scanner cannot statically inspect their result.
  */
-function isRequireCallRhs(expr: ts.CallExpression): boolean {
+function isRequireCallRhs(
+  ctx: ExportScanContext,
+  expr: ts.CallExpression,
+): boolean {
   const callee = expr.expression;
-  if (!ts.isCallExpression(callee)) return false;
-  const factory = callee.expression;
-  // createRequire(...)(...) — bare identifier `createRequire`
-  if (ts.isIdentifier(factory) && factory.text === 'createRequire') {
-    return true;
+
+  // require(...) — exempt only the unshadowed CommonJS loader.
+  if (ts.isIdentifier(callee) && callee.text === 'require') {
+    return !ctx.globalShadows.isShadowed('require', callee.getStart());
   }
-  // mod.createRequire(...)(...) — property access `.createRequire`
-  if (
-    ts.isPropertyAccessExpression(factory) &&
-    factory.name.text === 'createRequire'
-  ) {
-    return true;
-  }
-  // require(...) — bare require call is an import-side concern handled by
-  // the import detector, not an export mutation, so skip fail-closed.
-  return ts.isIdentifier(factory) && factory.text === 'require';
+
+  return false;
 }
 
 /**
@@ -337,6 +332,9 @@ function checkCommonJSObjectProperty(
 ): void {
   const propName = objectPropertyName(property);
   addCommonJSViolation(ctx, property, propName, violations);
+  // Method declarations (`{ GeminiMethod() {} }`) are ObjectLiteralElementLike
+  // nodes parsed as MethodDeclaration; their name is covered by the
+  // objectPropertyName call above, so no separate branch is needed.
   // Recurse into nested object literals: `{ nested: { GeminiDeep: 1 } }`
   if (
     propName !== undefined &&
@@ -432,9 +430,9 @@ export function checkCommonJSExport(
   // name to already be on the LHS, which is handled above.
   if (expr.operatorToken.kind !== ts.SyntaxKind.EqualsToken) {
     // Whole-target logical assignments (`module.exports ||= { ... }`,
-    // `??=`, `&&=`) must also inspect the RHS because the assigned value
-    // becomes part of the exported surface.
-    if (isModuleExports(ctx, lhs)) {
+    // `exports ||= { ... }`, `??=`, `&&=`) must also inspect the RHS because
+    // the assigned value becomes part of the exported surface.
+    if (isCommonJSExports(ctx, lhs)) {
       checkCommonJSAssignmentRhs(ctx, node, expr.right, violations);
     }
     return;
@@ -490,6 +488,8 @@ function dispatchStaticMethod(
     checkDefinePropertiesCall(ctx, expr, violations);
   } else if (methodName === 'assign') {
     checkAssignCall(ctx, expr, violations);
+  } else if (methodName === 'set' && objectName === 'Reflect') {
+    checkReflectSetCall(ctx, expr, violations);
   }
 }
 
@@ -669,6 +669,33 @@ function checkAssignCall(
       ctx,
       expr,
       'Object.assign with mixed literal and non-literal sources',
+      violations,
+    );
+  }
+}
+
+/**
+ * Check a `Reflect.set(exports, 'GeminiName', value)` call. The signature is
+ * the same as Object.defineProperty — target, key, value — but without a
+ * descriptor map. The key is checked for Gemini content.
+ */
+function checkReflectSetCall(
+  ctx: ExportScanContext,
+  expr: ts.CallExpression,
+  violations: GeminiExportViolation[],
+): void {
+  const target = expr.arguments[0];
+  const keyArg = expr.arguments[1];
+  if (target === undefined || keyArg === undefined) return;
+  if (!isCommonJSExports(ctx, target)) return;
+  const keyText = literalText(keyArg);
+  if (keyText !== null) {
+    addCommonJSViolation(ctx, expr, keyText, violations);
+  } else {
+    addFailClosedViolation(
+      ctx,
+      expr,
+      'Reflect.set with computed key',
       violations,
     );
   }

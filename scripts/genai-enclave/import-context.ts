@@ -59,6 +59,13 @@ export function isCreateRequireFactoryCallee(
     if (!ts.isIdentifier(expr.expression)) return false;
     return ctx.resolver.isNamespace(expr.expression.text, expr.getStart());
   }
+  if (
+    ts.isElementAccessExpression(expr) &&
+    elementAccessLiteralText(expr.argumentExpression) === 'createRequire'
+  ) {
+    if (!ts.isIdentifier(expr.expression)) return false;
+    return ctx.resolver.isNamespace(expr.expression.text, expr.getStart());
+  }
   return false;
 }
 

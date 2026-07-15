@@ -188,18 +188,15 @@ describe('Finding2: module.exports = callExpression() fails closed', () => {
     expect(violations[0].exportForm).toContain('fail-closed');
   });
 
-  it('does NOT fail-closed for module.exports = createRequire(...)(...) (handled by import side)', () => {
+  it('fails closed for createRequire-style calls without export provenance', () => {
     const sf = parseSourceFile(
       'test.ts',
       "import { createRequire } from 'node:module';\n" +
         "module.exports = createRequire(import.meta.url)('node:fs');\n",
     );
     const violations = scanGeminiExports(sf, 'test.ts');
-    // createRequire(...)(...) is a call expression but should NOT trigger
-    // a fail-closed export violation — it's a require, not an export mutation.
-    expect(
-      violations.filter((v) => v.exportForm.includes('fail-closed')),
-    ).toEqual([]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].exportForm).toContain('fail-closed');
   });
 });
 
@@ -369,6 +366,294 @@ describe('A1: string-literal property name in destructured createRequire', () =>
   });
 });
 
+// ── #2: ImportTypeNode fail-closed + bracket createRequire chains ───────────
+
+describe('#2: non-literal ImportTypeNode fails closed', () => {
+  it('flags a template-literal import type as computed', () => {
+    const sf = parseSourceFile('test.ts', 'type T = import(`${pkg}`);\n');
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'computed-import')).toBe(true);
+  });
+
+  it('flags a non-literal identifier argument import type as computed', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      'const pkg = "x";\ntype T = import(pkg);\n',
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'computed-import')).toBe(true);
+  });
+
+  it('still detects a literal @google/genai import type', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "type T = import('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+});
+
+describe('#2: bracket namespace createRequire access', () => {
+  it('detects @google/genai via m["createRequire"] bracket access', () => {
+    const sf = parseSourceFile(
+      'test.cjs',
+      "const m = require('node:module');\n" +
+        "m['createRequire'](import.meta.url)('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.cjs');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+});
+
+describe('#2: provenance-safe createRequire.call/apply/bind chains', () => {
+  it('detects @google/genai via createRequire.call(null, url)(spec)', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "import { createRequire } from 'node:module';\n" +
+        "createRequire.call(null, import.meta.url)('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+
+  it('detects @google/genai via createRequire.apply(null, [url])(spec)', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "import { createRequire } from 'node:module';\n" +
+        "createRequire.apply(null, [import.meta.url])('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+
+  it('detects @google/genai via binding.call(null, spec)', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "import { createRequire } from 'node:module';\n" +
+        'const req = createRequire(import.meta.url);\n' +
+        "req.call(null, '@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+
+  it('detects @google/genai via binding.apply(null, [spec])', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "import { createRequire } from 'node:module';\n" +
+        'const req = createRequire(import.meta.url);\n' +
+        "req.apply(null, ['@google/genai']);\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+
+  it('detects @google/genai via binding.bind(null)(spec)', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "import { createRequire } from 'node:module';\n" +
+        'const req = createRequire(import.meta.url);\n' +
+        "req.bind(null)('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+});
+
+// ── Critical bug regressions ─────────────────────────────────────────────────
+
+describe('Critical: unresolved declaration identifiers fail closed', () => {
+  it('fails closed for a class identifier without scope-aware resolution', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'class Normal {}\nmodule.exports = Normal;',
+    );
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].exportForm).toContain('fail-closed');
+  });
+
+  it('fails closed for a function identifier without scope-aware resolution', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'function normal() {}\nmodule.exports = normal;',
+    );
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].exportForm).toContain('fail-closed');
+  });
+});
+
+describe('Critical: isCreateRequireReturnExpression checks callee not full call', () => {
+  it('detects function returning createRequire(url) as a factory-returning function', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "import { createRequire } from 'node:module';\n" +
+        'const getReq = (url) => createRequire(url);\n' +
+        "getReq(import.meta.url)('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+});
+
+describe('Critical: isRequireCallRhs checks bare require() before call-expression guard', () => {
+  it('does NOT fail-closed for module.exports = require(node:fs)', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      "module.exports = require('node:fs');\n",
+    );
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations).toEqual([]);
+  });
+});
+
+describe('Critical: anonymous arrow function expression RHS does NOT fail-closed', () => {
+  it('does NOT flag module.exports = () => {}', () => {
+    const sf = parseSourceFile('legacy.cjs', 'module.exports = () => {};\n');
+    expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
+  });
+
+  it('does NOT flag module.exports = (a) => a + 1', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'module.exports = (a) => a + 1;\n',
+    );
+    expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
+  });
+});
+
+describe('Critical: string-named import specifier is handled via destructuring', () => {
+  // Import specifiers use identifiers only; string-literal names apply to
+  // destructuring const { "createRequire": cr } = require('node:module').
+  // The A1 tests already cover the destructuring forms. This test confirms
+  // the regular `import { createRequire as cr }` alias still works.
+  it('detects createRequire via renamed import: import { createRequire as cr }', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "import { createRequire as cr } from 'node:module';\n" +
+        "cr(import.meta.url)('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+});
+
+describe('Critical: Reflect.set on exports detects Gemini names', () => {
+  it('detects Reflect.set(exports, "GeminiName", value)', () => {
+    const sf = parseSourceFile(
+      'test.cjs',
+      "Reflect.set(exports, 'GeminiName', 42);\n",
+    );
+    const violations = scanGeminiExports(sf, 'test.cjs');
+    expect(violations.some((v) => v.exportName === 'GeminiName')).toBe(true);
+  });
+
+  it('fail-closed for Reflect.set with computed key on exports', () => {
+    const sf = parseSourceFile(
+      'test.cjs',
+      'const key = "dynamic";\nReflect.set(exports, key, 42);\n',
+    );
+    const violations = scanGeminiExports(sf, 'test.cjs');
+    expect(violations.some((v) => v.exportForm.includes('fail-closed'))).toBe(
+      true,
+    );
+  });
+
+  it('does NOT flag Reflect.set on a non-exports target', () => {
+    const sf = parseSourceFile(
+      'test.cjs',
+      'const obj = {};\nReflect.set(obj, "GeminiName", 42);\n',
+    );
+    const violations = scanGeminiExports(sf, 'test.cjs');
+    expect(violations.some((v) => v.exportName === 'GeminiName')).toBe(false);
+  });
+});
+describe('Critical: method shorthand in module.exports object literal', () => {
+  it('detects Gemini-named method shorthand: module.exports = { GeminiMethod() {} }', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'module.exports = { GeminiMethod() {} };\n',
+    );
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations.some((v) => v.exportName === 'GeminiMethod')).toBe(true);
+  });
+});
+
+describe('#3: bare exports logical assignments inspect RHS', () => {
+  it('detects Gemini in exports ||= { GeminiLeak: 1 }', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'exports ||= { GeminiLeak: 1 };\n',
+    );
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations.some((v) => v.exportName === 'GeminiLeak')).toBe(true);
+  });
+
+  it('detects Gemini in module.exports ||= { GeminiLeak: 1 }', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'module.exports ||= { GeminiLeak: 1 };\n',
+    );
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations.some((v) => v.exportName === 'GeminiLeak')).toBe(true);
+  });
+
+  it('detects Gemini in exports ??= { GeminiLeak: 1 }', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'exports ??= { GeminiLeak: 1 };\n',
+    );
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations.some((v) => v.exportName === 'GeminiLeak')).toBe(true);
+  });
+
+  it('detects Gemini in exports &&= { GeminiLeak: 1 }', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'exports &&= { GeminiLeak: 1 };\n',
+    );
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations.some((v) => v.exportName === 'GeminiLeak')).toBe(true);
+  });
+
+  it('detects Gemini property in exports.GeminiName ||= value', () => {
+    const sf = parseSourceFile('legacy.cjs', 'exports.GeminiName ||= 42;\n');
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations.some((v) => v.exportName === 'GeminiName')).toBe(true);
+  });
+});
+
+describe('#3: bare require RHS exemption is correct', () => {
+  it('does NOT fail-closed for module.exports = require("node:fs")', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      "module.exports = require('node:fs');\n",
+    );
+    expect(scanGeminiExports(sf, 'legacy.cjs')).toEqual([]);
+  });
+
+  it('fails closed for createRequire calls without export provenance', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      "const { createRequire } = require('node:module');\n" +
+        "module.exports = createRequire(import.meta.url)('@google/genai');\n",
+    );
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].exportForm).toContain('fail-closed');
+  });
+
+  it('fail-closed for module.exports = someUnknownFunc()', () => {
+    const sf = parseSourceFile('legacy.cjs', 'module.exports = someFunc();\n');
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations.some((v) => v.exportForm.includes('fail-closed'))).toBe(
+      true,
+    );
+  });
+});
+
 // ─── A5: createRequire-returning IIFEs (#2546) ──────────────────────────────
 
 describe('A5: createRequire-returning direct arrow IIFEs', () => {
@@ -518,5 +803,54 @@ describe('A8: assignment lifetime follows outer LHS binding', () => {
     );
     const violations = scanGenaiImports(sf, 'test.cjs');
     expect(violations).toEqual([]);
+  });
+});
+
+// ── #4: anonymous FunctionExpression variable helper provenance ─────────────
+
+describe('#4: anonymous FunctionExpression helper returns createRequire', () => {
+  it('detects @google/genai via anonymous function expression helper', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "import { createRequire } from 'node:module';\n" +
+        'const getReq = function(url) { return createRequire(url); };\n' +
+        "getReq(import.meta.url)('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+
+  it('detects @google/genai via anonymous function expression with binding return', () => {
+    const sf = parseSourceFile(
+      'test.ts',
+      "import { createRequire } from 'node:module';\n" +
+        'const req = createRequire(import.meta.url);\n' +
+        'const getReq = function() { return req; };\n' +
+        "getReq()('@google/genai');\n",
+    );
+    const violations = scanGenaiImports(sf, 'test.ts');
+    expect(violations.some((v) => v.kind === 'genai-import')).toBe(true);
+  });
+});
+
+describe('#4: object-literal binding restricted to identifier declarations', () => {
+  it('does NOT resolve destructuring pattern to object literal binding', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'const { x } = { GeminiLeak: 1 };\nmodule.exports = x;\n',
+    );
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    // The destructuring `const { x } = { GeminiLeak: 1 }` does NOT create
+    // a binding `x` → { GeminiLeak: 1 }. Only `x`'s own name is checked.
+    expect(violations.some((v) => v.exportName === 'GeminiLeak')).toBe(false);
+  });
+
+  it('still resolves identifier declaration to object literal binding', () => {
+    const sf = parseSourceFile(
+      'legacy.cjs',
+      'const obj = { GeminiLeak: 1 };\nmodule.exports = obj;\n',
+    );
+    const violations = scanGeminiExports(sf, 'legacy.cjs');
+    expect(violations.some((v) => v.exportName === 'GeminiLeak')).toBe(true);
   });
 });

@@ -178,12 +178,6 @@ export function moduleRange(node: ts.Node): {
  */
 export class ProvenanceResolver {
   private readonly entries = new Map<string, ScopeEntry[]>();
-  private readonly nonShadowKinds: ReadonlySet<ProvenanceKind> = new Set([
-    'factory',
-    'binding',
-    'namespace',
-    'require-alias',
-  ]);
 
   /**
    * Register a provenance or shadow entry for `name`.
@@ -205,22 +199,6 @@ export class ProvenanceResolver {
       this.entries.set(name, [entry]);
     } else {
       list.push(entry);
-    }
-  }
-
-  /**
-   * Clear all non-shadow entries (factory, binding, namespace, require-alias)
-   * for all names. Used during fixed-point iteration so that entries registered
-   * in previous passes don't override fresh pass results (Finding1).
-   */
-  clearNonShadowEntries(): void {
-    for (const [name, list] of this.entries) {
-      const filtered = list.filter((e) => !this.nonShadowKinds.has(e.kind));
-      if (filtered.length === 0) {
-        this.entries.delete(name);
-      } else {
-        this.entries.set(name, filtered);
-      }
     }
   }
 
@@ -276,17 +254,6 @@ export class ProvenanceResolver {
   /** True if `name` holds a reference to the bare `require` function at `pos`. */
   isRequireAlias(name: string, pos: number): boolean {
     return this.resolve(name, pos) === 'require-alias';
-  }
-
-  /**
-   * True if `name` has ANY entry of `kind` (position-independent).
-   * Used for alias-chain detection where a source binding may be established
-   * elsewhere in the file.
-   */
-  hasKindEntry(name: string, kind: ProvenanceKind): boolean {
-    const list = this.entries.get(name);
-    if (list === undefined) return false;
-    return list.some((e) => e.kind === kind);
   }
 
   /**

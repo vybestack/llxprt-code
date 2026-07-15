@@ -207,6 +207,31 @@ function isCreateRequireCall(
   if (isCreateRequireFactoryCallee(ctx, callee.expression)) {
     return true;
   }
+  // createRequire.call(ctx, url)(...) / createRequire.apply(ctx, [url])(...)
+  // The inner callee expression is createRequire.call — a member access
+  // (dot or bracket) with name call/apply on a createRequire factory.
+  if (
+    isInvokeMemberAccess(callee.expression) &&
+    INDIRECT_INVOKE_METHODS.has(getMemberAccessName(callee.expression)!) &&
+    isCreateRequireFactoryCallee(
+      ctx,
+      getMemberAccessExpression(callee.expression),
+    )
+  ) {
+    return true;
+  }
+  // createRequire.bind(ctx)(url)(...) — the callee is
+  // createRequire.bind(ctx)(url), a CallExpression whose expression is
+  // createRequire.bind(ctx) — another CallExpression on a bind member access.
+  if (ts.isCallExpression(callee.expression)) {
+    const innerCallee = callee.expression.expression;
+    if (
+      isBindMemberAccess(innerCallee) &&
+      isCreateRequireFactoryCallee(ctx, getMemberAccessExpression(innerCallee))
+    ) {
+      return true;
+    }
+  }
   // Inline factory chain: require('node:module').createRequire(...)(...)
   // or module.require('node:module').createRequire(...)(...).
   // The callee is createRequire(...)(...), whose callee.expression is
@@ -268,6 +293,23 @@ function isNodeModuleRequireCallExpression(
 }
 
 /**
+ * Check whether an expression is a known binding, require-alias, or
+ * createRequire-returning helper at the given position. Used for
+ * `.call`/`.apply`/`.bind` invocation chains on bindings.
+ */
+function isBindingOrHelperIdentifier(
+  ctx: ImportScanContext,
+  expr: ts.Expression,
+): expr is ts.Identifier {
+  if (!ts.isIdentifier(expr)) return false;
+  return (
+    ctx.resolver.isBinding(expr.text, expr.getStart()) ||
+    ctx.resolver.isRequireAlias(expr.text, expr.getStart()) ||
+    ctx.createRequireReturningFunctions.has(expr.text)
+  );
+}
+
+/**
  * Check whether a CallExpression is a call through a lexical binding that
  * holds a `createRequire(...)` return value (e.g. `myReq('@google/genai')`),
  * a bare `require` alias (e.g. `const r = require; r('@google/genai')`),
@@ -278,12 +320,36 @@ function isBoundCreateRequireCall(
   ctx: ImportScanContext,
   expr: ts.CallExpression,
 ): boolean {
-  if (!ts.isIdentifier(expr.expression)) return false;
-  return (
-    ctx.resolver.isBinding(expr.expression.text, expr.getStart()) ||
-    ctx.resolver.isRequireAlias(expr.expression.text, expr.getStart()) ||
-    ctx.createRequireReturningFunctions.has(expr.expression.text)
-  );
+  const callee = expr.expression;
+  // Direct call through a binding/helper identifier
+  if (ts.isIdentifier(callee)) {
+    return (
+      ctx.resolver.isBinding(callee.text, callee.getStart()) ||
+      ctx.resolver.isRequireAlias(callee.text, callee.getStart()) ||
+      ctx.createRequireReturningFunctions.has(callee.text)
+    );
+  }
+  // binding.call(null, spec) / binding.apply(null, [spec])
+  // binding['call'](null, spec) / binding['apply'](null, [spec])
+  if (
+    isInvokeMemberAccess(callee) &&
+    INDIRECT_INVOKE_METHODS.has(getMemberAccessName(callee)!) &&
+    isBindingOrHelperIdentifier(ctx, getMemberAccessExpression(callee))
+  ) {
+    return true;
+  }
+  // binding.bind(null)(spec) / binding['bind'](null)(spec)
+  if (
+    ts.isCallExpression(callee) &&
+    isBindMemberAccess(callee.expression) &&
+    isBindingOrHelperIdentifier(
+      ctx,
+      getMemberAccessExpression(callee.expression),
+    )
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -572,8 +638,15 @@ function findGenaiImportViolation(
     if (specifier === null) {
       return createComputedViolation(ctx, node);
     }
-  } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
-    specifier = literalText(node.argument.literal);
+  } else if (ts.isImportTypeNode(node)) {
+    if (ts.isLiteralTypeNode(node.argument)) {
+      specifier = literalText(node.argument.literal);
+    } else {
+      // Non-string/non-literal ImportTypeNode argument (e.g. a template
+      // literal or identifier in type position) — the module specifier
+      // is not statically resolvable. Fail closed as a computed import.
+      return createComputedViolation(ctx, node);
+    }
   }
 
   if (specifier !== null && isGenaiSpecifier(specifier)) {

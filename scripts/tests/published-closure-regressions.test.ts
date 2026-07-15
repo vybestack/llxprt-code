@@ -368,9 +368,15 @@ describe('Finding6: createRealProtocolResolver — canonical path + target manif
       'package.json': JSON.stringify({ name: '@scope/wrong-name' }),
     });
     try {
+      // Create a consumer workspace so file: resolution is relative to it
+      mkdirSync(join(repoRoot, 'packages', 'cli'), { recursive: true });
+      writeFileSync(
+        join(repoRoot, 'packages', 'cli', 'package.json'),
+        JSON.stringify({ name: '@scope/cli' }),
+      );
       const nameToDir = new Map([['@scope/core', 'packages/core']]);
       const resolver = createRealProtocolResolver(repoRoot, nameToDir);
-      const result = resolver('@scope/core', 'file:../core');
+      const result = resolver('@scope/core', 'file:../core', 'packages/cli');
       // The target manifest's name (@scope/wrong-name) does not match the
       // dependency name (@scope/core), so resolution must fail.
       expect(result.resolved).toBe(false);
@@ -382,9 +388,19 @@ describe('Finding6: createRealProtocolResolver — canonical path + target manif
   it('rejects a file: protocol pointing to a non-existent directory', () => {
     const repoRoot = mkdtempSync(join(tmpdir(), 'ws-proto-'));
     try {
+      // Create a consumer workspace so file: resolution is relative to it
+      mkdirSync(join(repoRoot, 'packages', 'cli'), { recursive: true });
+      writeFileSync(
+        join(repoRoot, 'packages', 'cli', 'package.json'),
+        JSON.stringify({ name: '@scope/cli' }),
+      );
       const nameToDir = new Map([['@scope/core', 'packages/core']]);
       const resolver = createRealProtocolResolver(repoRoot, nameToDir);
-      const result = resolver('@scope/core', 'file:../nonexistent');
+      const result = resolver(
+        '@scope/core',
+        'file:../nonexistent',
+        'packages/cli',
+      );
       expect(result.resolved).toBe(false);
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
@@ -401,14 +417,20 @@ describe('Finding6: createRealProtocolResolver — canonical path + target manif
         join(repoRoot, 'packages', 'tools', 'package.json'),
         JSON.stringify({ name: '@scope/tools' }),
       );
+      // Create a consumer workspace so file: resolution is relative to it
+      mkdirSync(join(repoRoot, 'packages', 'cli'), { recursive: true });
+      writeFileSync(
+        join(repoRoot, 'packages', 'cli', 'package.json'),
+        JSON.stringify({ name: '@scope/cli' }),
+      );
       const nameToDir = new Map([
         ['@scope/core', 'packages/core'],
         ['@scope/tools', 'packages/tools'],
       ]);
       const resolver = createRealProtocolResolver(repoRoot, nameToDir);
-      // file:../tools points to packages/tools, but depName is @scope/core
-      // which maps to packages/core — mismatch must be rejected.
-      const result = resolver('@scope/core', 'file:../tools');
+      // file:../tools from packages/cli points to packages/tools, but depName
+      // is @scope/core which maps to packages/core — mismatch must be rejected.
+      const result = resolver('@scope/core', 'file:../tools', 'packages/cli');
       expect(result.resolved).toBe(false);
     } finally {
       cleanup();

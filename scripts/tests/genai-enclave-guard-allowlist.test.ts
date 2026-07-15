@@ -18,13 +18,41 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { REPO_ROOT } from './genai-enclave-guard-helpers.ts';
 
+function collectDependencyVersionDrift(
+  section: object,
+  depType: string,
+  genaiPackage: string,
+  workspaceDir: string,
+  expectedVersion: string,
+  drift: string[],
+): void {
+  const actualVersion = Object.fromEntries(Object.entries(section))[
+    genaiPackage
+  ];
+  if (actualVersion === undefined) return;
+  if (typeof actualVersion !== 'string') {
+    drift.push(
+      `${workspaceDir} ${depType}.${genaiPackage}: expected string version, got ${typeof actualVersion}`,
+    );
+    return;
+  }
+  if (actualVersion !== expectedVersion) {
+    drift.push(
+      `${workspaceDir} ${depType}: manifest has "${actualVersion}" but config has "${expectedVersion}"`,
+    );
+  }
+}
+
 /**
  * Collect version-drift entries for a single manifest. Extracted as a
  * top-level helper so the loop in the test does not nest more than three
  * levels deep (sonarjs/nested-control-flow).
+ *
+ * Runtime-validates each dependency section shape (must be an object) and
+ * each value type (must be a string) before accessing version info.
  */
 function collectVersionDrift(
-  pkg: Record<string, Record<string, string> | undefined>,
+  pkg: Record<string, unknown>,
   depTypes: readonly string[],
   genaiPackage: string,
   workspaceDir: string,
@@ -32,10 +60,28 @@ function collectVersionDrift(
   drift: string[],
 ): void {
   for (const depType of depTypes) {
-    const actualVersion = pkg[depType]?.[genaiPackage];
-    if (actualVersion !== undefined && actualVersion !== expectedVersion) {
+    const section = pkg[depType];
+    if (section === undefined) {
+      continue;
+    }
+    if (
+      typeof section !== 'object' ||
+      section === null ||
+      Array.isArray(section)
+    ) {
       drift.push(
-        `${workspaceDir} ${depType}: manifest has "${actualVersion}" but config has "${expectedVersion}"`,
+        `${workspaceDir} ${depType}: expected an object, got ${
+          Array.isArray(section) ? 'array' : typeof section
+        }`,
+      );
+    } else {
+      collectDependencyVersionDrift(
+        section,
+        depType,
+        genaiPackage,
+        workspaceDir,
+        expectedVersion,
+        drift,
       );
     }
   }
@@ -142,7 +188,7 @@ describe('check-genai-enclave — allowlist consistency', () => {
         const raw: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'));
         if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
           collectVersionDrift(
-            raw as Record<string, Record<string, string> | undefined>,
+            raw as Record<string, unknown>,
             depTypes,
             GENAI_PACKAGE,
             entry.workspaceDir,
