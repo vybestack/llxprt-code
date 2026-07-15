@@ -22,8 +22,6 @@ import {
   logDoubleEscapingInChunk,
 } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
 import { coerceParametersToSchema } from '@vybestack/llxprt-code-core/utils/parameterCoercion.js';
-import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry.js';
-import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 
 export type StreamProcessorOptions = {
   isOAuth: boolean;
@@ -34,18 +32,10 @@ export type StreamProcessorOptions = {
     name: string,
     isOAuth: boolean,
   ) => unknown;
-  maxAttempts: number;
-  initialDelayMs: number;
-  apiCallWithResponse: () => Promise<{
-    data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
-    response?: Response;
-  }>;
   logger: { debug: (fn: () => string) => void };
   cacheLogger: { debug: (fn: () => string) => void };
   rateLimitLogger: { debug: (fn: () => string) => void };
 };
-
-type StreamState = { hasYieldedContent: boolean };
 
 // Global counter appended to tool call IDs so providers that reset indices per
 // API call (e.g. Kimi on Fireworks) never produce duplicates across turns.
@@ -54,7 +44,6 @@ let toolCallSequence = 0;
 async function* processStreamEvents(
   stream: AsyncIterable<Anthropic.MessageStreamEvent>,
   options: StreamProcessorOptions,
-  state: StreamState,
 ): AsyncGenerator<IContent> {
   const {
     isOAuth,
@@ -87,7 +76,6 @@ async function* processStreamEvents(
         currentThinkingBlock = blockResult.currentThinkingBlock;
       }
       if (blockResult.content) {
-        state.hasYieldedContent = true;
         yield blockResult.content;
       }
     } else if (chunk.type === 'content_block_delta') {
@@ -98,7 +86,6 @@ async function* processStreamEvents(
         logger,
       );
       if (deltaResult.textDelta) {
-        state.hasYieldedContent = true;
         yield {
           speaker: 'ai',
           blocks: [{ type: 'text', text: deltaResult.textDelta }],
@@ -115,84 +102,26 @@ async function* processStreamEvents(
         logger,
       );
       if (stopResult.content) {
-        state.hasYieldedContent = true;
         yield stopResult.content;
       }
       currentToolCall = stopResult.currentToolCall;
       currentThinkingBlock = stopResult.currentThinkingBlock;
     } else if (chunk.type === 'message_delta') {
-      yield* handleMessageDelta(chunk, logger, state);
+      yield* handleMessageDelta(chunk, logger);
     }
   }
 }
 
 /**
- * Processes an Anthropic streaming response with retry logic for network errors
- * Yields IContent blocks as they arrive from the stream
+ * Processes one Anthropic streaming response. Retry ownership belongs to the
+ * central RetryOrchestrator so every API request consumes the same budget.
  */
 export async function* processAnthropicStream(
   response: AsyncIterable<Anthropic.MessageStreamEvent>,
   options: StreamProcessorOptions,
 ): AsyncGenerator<IContent> {
-  const { maxAttempts, initialDelayMs, apiCallWithResponse, logger } = options;
-
-  const streamRetryMaxDelayMs = 30000;
-  let streamingAttempt = 0;
-  let currentDelay = initialDelayMs;
-  let currentResponse = response;
-
-  while (streamingAttempt < maxAttempts) {
-    streamingAttempt++;
-
-    const state: StreamState = { hasYieldedContent: false };
-
-    try {
-      if (streamingAttempt > 1) {
-        logger.debug(
-          () =>
-            `Stream retry attempt ${streamingAttempt}/${maxAttempts}: Making fresh API call`,
-        );
-        const retryResult = await apiCallWithResponse();
-        currentResponse =
-          retryResult.data as AsyncIterable<Anthropic.MessageStreamEvent>;
-      }
-
-      logger.debug(() => 'Processing streaming response');
-      yield* processStreamEvents(currentResponse, options, state);
-      return;
-    } catch (error) {
-      const canRetryStream = isNetworkTransientError(error);
-      logger.debug(
-        () =>
-          `Stream attempt ${streamingAttempt}/${maxAttempts} error: ${error}`,
-      );
-
-      if (state.hasYieldedContent) {
-        logger.debug(
-          () =>
-            `Stream error after content was already yielded to consumer, cannot safely retry: ${error}`,
-        );
-        throw error;
-      }
-
-      if (!canRetryStream || streamingAttempt >= maxAttempts) {
-        logger.debug(
-          () =>
-            `Stream error not retryable or max attempts reached, throwing: ${error}`,
-        );
-        throw error;
-      }
-
-      const jitter = currentDelay * 0.3 * (Math.random() * 2 - 1);
-      const delayWithJitter = Math.max(0, currentDelay + jitter);
-      logger.debug(
-        () =>
-          `Stream retry attempt ${streamingAttempt}/${maxAttempts}: Transient error detected, waiting ${Math.round(delayWithJitter)}ms before retry`,
-      );
-      await delay(delayWithJitter);
-      currentDelay = Math.min(streamRetryMaxDelayMs, currentDelay * 2);
-    }
-  }
+  options.logger.debug(() => 'Processing streaming response');
+  yield* processStreamEvents(response, options);
 }
 
 function* handleMessageStart(
@@ -503,7 +432,6 @@ function readMessageDeltaStopReason(
 function* handleMessageDelta(
   chunk: Anthropic.MessageStreamEvent & { type: 'message_delta' },
   logger: { debug: (fn: () => string) => void },
-  state: StreamState,
 ): Generator<IContent> {
   const usage = chunk.usage as
     | {
@@ -523,7 +451,6 @@ function* handleMessageDelta(
     );
 
     if (stopReason) {
-      state.hasYieldedContent = true;
       yield {
         speaker: 'ai',
         blocks: [],

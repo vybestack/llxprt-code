@@ -7,8 +7,11 @@
 /**
  * Factory to create a standard abort error for delay helpers.
  */
-export function createAbortError(): Error {
-  const abortError = new Error('Aborted');
+export function createAbortError(reason?: unknown): Error {
+  const abortError =
+    reason === undefined
+      ? new Error('Aborted')
+      : new Error('Aborted', { cause: reason });
   abortError.name = 'AbortError';
   (abortError as NodeJS.ErrnoException).code = 'ABORT_ERR';
   return abortError;
@@ -28,7 +31,7 @@ export function delay(ms: number, signal?: AbortSignal): Promise<void> {
 
   // Immediately reject if signal has already been aborted
   if (signal.aborted) {
-    return Promise.reject(createAbortError());
+    return Promise.reject(createAbortError(signal.reason));
   }
 
   // remove abort and timeout listeners to prevent memory-leaks
@@ -36,7 +39,7 @@ export function delay(ms: number, signal?: AbortSignal): Promise<void> {
     const onAbort = () => {
       clearTimeout(timeoutId);
       signal.removeEventListener('abort', onAbort);
-      reject(createAbortError());
+      reject(createAbortError(signal.reason));
     };
 
     const timeoutId = setTimeout(() => {

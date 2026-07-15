@@ -2,6 +2,8 @@
 
 Part of the Gemini-containment umbrella [#2343](https://github.com/vybestack/llxprt-code/issues/2343). This document is the migration guide delivered by the foundation PR [#2347](https://github.com/vybestack/llxprt-code/issues/2347); downstream migration issues are #2348–#2351 and the enforcement ratchet is #2352.
 
+> **Status update (0.10.0, issue #2537):** The transitional `geminiLegacyAliases.ts` singleton alias module introduced by #2354 has been deleted. The canonical event types (`AgentEventType`, `ServerAgentStreamEvent`, `ServerAgent*Event`, `AgentErrorEventValue`, `ServerFinishedOutcome`, `InformationalStreamEvent`) are the sole names in `core/turn.js`. `GeminiCodeRequest` (formerly `PartListUnion`) had no internal usages and is removed; use `ContentBlock[]` / `IContent` for conversation content or `ToolResultContent` (`llm-types/toolCall.js`) for tool-result payloads. Architecture enforcement is now AST-based (`providerAgnosticNaming.test.ts`), scanning all workspace source roots for provider-neutral Gemini identifiers while exempting only exact compatibility boundaries. The migration targets below (#2348–#2351) for `@google/genai` type containment remain in progress.
+
 ## The lingua franca: `IContent`
 
 The provider-agnostic conversation model — `IContent` / `ContentBlock` in `packages/core/src/services/history/IContent.ts` — is the **lingua franca**. There are no Google-shaped "neutral" types. Wherever `Part` / `PartUnion` / `PartListUnion` / `Content` / `ContentListUnion` appears above the provider boundary, the neutral replacement is `ContentBlock` / `ContentBlock[]` / `IContent`. Tool results, file attachments, and thought content are already covered by `ToolResponseBlock`, `MediaBlock`, and `ThinkingBlock`.
@@ -49,6 +51,17 @@ The table below is the authoritative disposition of every `@google/genai` symbol
 | Core adapters/config: `CoreMessageBusAdapter.ts`, `CoreMcpToolServiceAdapter.ts`, `policy/policy-helpers.ts`, `config/lspIntegration.ts`                                                                                                     | **Migration targets (#2348)**: `FunctionCall` → `ToolCallRequest`, `Part[]` → `ContentBlock[]`, `CallableTool`/`Tool` → the neutral MCP/tool interfaces.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | a2a-server `PartUnion` (task.ts, task-runtime-helpers.ts)                                                                                                                                                                                    | **Covered by `ContentBlock[]`/`ToolResultContent`**; migrates in #2351 (leaf packages).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `SafetySetting`, `MediaResolution`, `ModelSelectionConfig`, `GenerationConfigRoutingConfig`, `SpeechConfigUnion`                                                                                                                             | **Stay Gemini-only** (providers/src/gemini/**, code_assist/**). Never get neutral equivalents.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+
+## Breaking rename mappings (0.10.0)
+
+The following ToolFormatter tool-declaration/schema conversion methods are renamed because they are provider-neutral conversion utilities, not Gemini-specific code. The old names implied Gemini ownership of tool-declaration shapes that are now neutral (`ToolDeclaration`).
+
+| Old name (removed)              | New name                             |
+| ------------------------------- | ------------------------------------ |
+| `convertGeminiToOpenAI`         | `convertToolDeclarationsToOpenAI`    |
+| `convertGeminiToAnthropic`      | `convertToolDeclarationsToAnthropic` |
+| `convertGeminiToFormat`         | `convertToolDeclarationsToFormat`    |
+| `convertGeminiSchemaToStandard` | `convertSchemaToStandard`            |
 
 ## Per-package migration guidance
 

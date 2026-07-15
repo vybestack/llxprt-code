@@ -64,8 +64,8 @@ vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
       }
       return [rawToolCall];
     }),
-    convertGeminiToAnthropic: vi.fn(() => []),
-    convertGeminiToFormat: vi.fn(() => undefined),
+    convertToolDeclarationsToAnthropic: vi.fn(() => []),
+    convertToolDeclarationsToFormat: vi.fn(() => undefined),
   })),
 }));
 

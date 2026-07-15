@@ -328,7 +328,7 @@ function useInputStreamSetup(
   };
   const bufferSetup = useInputBuffer(p, core);
   const { handleUserCancel } = bufferSetup;
-  const geminiResult = useAgentStream(
+  const agentStreamResult = useAgentStream(
     p.agent,
     history,
     addItem,
@@ -350,7 +350,7 @@ function useInputStreamSetup(
     recordingIntegration,
     runtimeMessageBus,
   );
-  return { ...bufferSetup, geminiResult };
+  return { ...bufferSetup, agentStreamResult };
 }
 
 function useInputStreamWiring(
@@ -367,16 +367,20 @@ function useInputStreamWiring(
     embeddedShellFocused,
     setEmbeddedShellFocused,
   } = p;
-  const { buffer, inputHistoryStore, lastSubmittedPromptRef, geminiResult } =
-    setup;
+  const {
+    buffer,
+    inputHistoryStore,
+    lastSubmittedPromptRef,
+    agentStreamResult,
+  } = setup;
   const pendingHistoryItems = useMemo(
     () => [
       ...(core.pendingHistoryItems as HistoryItem[]),
-      ...geminiResult.pendingHistoryItems,
+      ...agentStreamResult.pendingHistoryItems,
     ],
-    [core.pendingHistoryItems, geminiResult.pendingHistoryItems],
+    [core.pendingHistoryItems, agentStreamResult.pendingHistoryItems],
   );
-  const activeShellPtyId = geminiResult.activeShellPtyId;
+  const activeShellPtyId = agentStreamResult.activeShellPtyId;
   useShellFocusAutoReset({
     pendingHistoryItems,
     embeddedShellFocused,
@@ -386,7 +390,7 @@ function useInputStreamWiring(
   const { handleFinalSubmit } = useInputHandling({
     buffer,
     inputHistoryStore,
-    submitQuery: geminiResult.submitQuery,
+    submitQuery: agentStreamResult.submitQuery,
     pendingHistoryItems,
     lastSubmittedPromptRef,
     hadToolCallsRef,
@@ -401,16 +405,16 @@ function useInputStreamWiring(
     todos,
   });
   const {
-    activeShellPtyId: _ptyIdFromGemini,
-    pendingHistoryItems: _pendingFromGemini,
-    ...geminiRest
-  } = geminiResult;
+    activeShellPtyId: _ptyIdFromStream,
+    pendingHistoryItems: _pendingFromStream,
+    ...streamRest
+  } = agentStreamResult;
   return {
     handleFinalSubmit,
     handleUserInputSubmit,
     pendingHistoryItems,
     activeShellPtyId,
-    ...geminiRest,
+    ...streamRest,
   };
 }
 
@@ -420,7 +424,7 @@ function useInputStream(
 ) {
   const setup = useInputStreamSetup(p, core);
   const wiring = useInputStreamWiring(p, core, setup);
-  const { geminiResult: _geminiResult, ...setupRest } = setup;
+  const { agentStreamResult: _agentStreamResult, ...setupRest } = setup;
   return { ...setupRest, ...wiring };
 }
 

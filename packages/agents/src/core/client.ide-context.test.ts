@@ -15,7 +15,7 @@ import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentG
 import type { ChatSession } from './chatSession.js';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 import {
-  setupGeminiClient,
+  setupAgentClient,
   type MockResponseShape,
 } from './client-test-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -191,7 +191,7 @@ describe('AgentClient (client.ts)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
-    const ctx = await setupGeminiClient({
+    const ctx = await setupAgentClient({
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,

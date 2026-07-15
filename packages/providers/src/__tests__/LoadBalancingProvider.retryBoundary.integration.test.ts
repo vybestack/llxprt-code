@@ -10,12 +10,12 @@
  * (driven solely by the aggregate's `isRetryable` marker), NOT thrown fatally
  * via the bucket-failover / `onPersistent429` path.
  *
- * These tests use the REAL `retryWithBackoff` from core wrapping a REAL
+ * These tests use the real `RetryOrchestrator` wrapping a real
  * `LoadBalancingProvider` (real `ProviderManager`, fake delegate providers).
  * No mock theater — the unit under test is never mocked.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
@@ -24,14 +24,11 @@ import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
 } from '../LoadBalancingProvider.js';
-import { LoadBalancerFailoverError } from '../errors.js';
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../GenerateChatOptions.js';
-import {
-  retryWithBackoff,
-  isRetryableError,
-} from '@vybestack/llxprt-code-core/utils/retry.js';
+import { RetryOrchestrator } from '../RetryOrchestrator.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
 /** A mutable handle onto the fake delegate's behavior. */
 interface FakeBehavior {
@@ -69,11 +66,12 @@ function statusError(message: string, status: number): Error {
   return error;
 }
 
-function makeOptions(): GenerateChatOptions {
-  return {
-    prompt: 'test prompt',
-    messages: [{ role: 'user' as const, content: 'test' }],
-  };
+function makeOptions(retries: number): GenerateChatOptions {
+  return createProviderCallOptions({
+    providerName: 'load-balancer',
+    contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'test' }] }],
+    ephemerals: { retries, retrywait: 0 },
+  });
 }
 
 function makeFailoverConfig(profileName: string): LoadBalancingProviderConfig {
@@ -125,12 +123,17 @@ function* successChunk(): AsyncGenerator<IContent> {
  * On success it returns the first chunk so the caller can assert on it; on
  * failure the LB aggregate error propagates out to retryWithBackoff.
  */
+function requireProvider(provider: IProvider | undefined): IProvider {
+  if (provider === undefined) throw new Error('load balancer not registered');
+  return provider;
+}
+
 async function pullFirstChunk(
-  lb: LoadBalancingProvider,
+  provider: IProvider,
   options: GenerateChatOptions,
 ): Promise<IContent> {
-  const it = lb.generateChatCompletion(options);
-  const first = await it.next();
+  const iterator = provider.generateChatCompletion(options);
+  const first = await iterator.next();
   if (first.done === true) {
     throw new Error('stream ended immediately');
   }
@@ -171,19 +174,19 @@ describe('LoadBalancingProvider retry boundary integration (issue #2450)', () =>
     const { provider, counter } = makeFakeProvider(behavior);
     providerManager.registerProvider(provider);
 
-    const lb = new LoadBalancingProvider(
-      makeFailoverConfig('glm-retry-then-success'),
-      providerManager,
+    providerManager.registerProvider(
+      new LoadBalancingProvider(
+        makeFailoverConfig('glm-retry-then-success'),
+        providerManager,
+      ),
+    );
+    const providerChain = requireProvider(
+      providerManager.getProviderByName('load-balancer'),
     );
 
-    const firstChunk = await retryWithBackoff(
-      () => pullFirstChunk(lb, makeOptions()),
-      {
-        shouldRetryOnError: (e) => isRetryableError(e),
-        maxAttempts: 3,
-        initialDelayMs: 0,
-        maxDelayMs: 0,
-      },
+    const firstChunk = await pullFirstChunk(
+      providerChain,
+      makeOptions(NUM_BACKENDS + 1),
     );
 
     expect(firstChunk).toStrictEqual({ type: 'text', content: 'ok' });
@@ -193,34 +196,17 @@ describe('LoadBalancingProvider retry boundary integration (issue #2450)', () =>
   });
 
   /**
-   * Scenario B (bounded + bucket-failover-path guard): ALL rotations always
-   * 429. The call must:
-   *   - reject with LoadBalancerFailoverError (the underlying aggregate), and
-   *   - do so after EXACTLY `maxAttempts` full rotations
-   *     (= maxAttempts × NUM_BACKENDS delegate invocations).
+   * Scenario B (bounded + bucket-failover-path guard): every backend returns
+   * 429. Each transport failure must be observed before aggregation so a
+   * pre-request timeout can retain the provider's classified rate-limit error.
+   * The aggregate adds no new provider failure and must not be observed again.
    *
-   * Why the aggregate must NOT expose an HTTP `status` (the actual fix), and
-   * what this test guards:
-   *
-   * Inside retryWithBackoff, `classifyError` derives `is429` purely from the
-   * error's HTTP status (or an Anthropic overload body). The fixed aggregate
-   * has NO status, so `is429` is false, `attemptFailover` returns 'proceed'
-   * WITHOUT ever invoking `onPersistent429`, and recovery is driven solely by
-   * `isRetryableError` (the structural marker) under normal bounded retry —
-   * hence exactly maxAttempts × NUM_BACKENDS invocations.
-   *
-   * We deliberately wire `onPersistent429: async () => false` as a SAFETY NET
-   * to prove the negative: even with a bucket-failover callback present, the
-   * status-less aggregate never routes into it. Under the REJECTED `status =
-   * 429` design the aggregate WOULD reach `onPersistent429`; a `false` return
-   * there throws it fatally on attempt 1 (only NUM_BACKENDS invocations),
-   * whereas a `true` return decrements the attempt counter and loops
-   * unbounded. Asserting exactly maxAttempts × NUM_BACKENDS therefore fails
-   * under that design in both directions and passes only for the status-less
-   * fix. The callback is asserted to have been NEVER called to make the
-   * "bucket failover is not on the active path" guarantee explicit.
+   * The shared transport budget bounds the request to `maxAttempts` delegate
+   * invocations. Although the homogeneous aggregate safely retains status 429,
+   * its explicit bucket-failover policy keeps the profile's internal backend
+   * failures out of credential-bucket failover.
    */
-  it('Scenario B: bounded by maxAttempts and never routes a status-less aggregate into bucket failover', async () => {
+  it('Scenario B: observes each bounded backend 429 once without bucket failover or aggregate duplication', async () => {
     const behavior: FakeBehavior = {
       respond(): AsyncGenerator<IContent> {
         return always429();
@@ -229,38 +215,56 @@ describe('LoadBalancingProvider retry boundary integration (issue #2450)', () =>
     const { provider, counter } = makeFakeProvider(behavior);
     providerManager.registerProvider(provider);
 
-    const lb = new LoadBalancingProvider(
-      makeFailoverConfig('glm-always-429'),
-      providerManager,
-    );
-
     const maxAttempts = 3;
-    let onPersistent429Calls = 0;
-    const failoverCallback = async (): Promise<boolean> => {
-      onPersistent429Calls++;
-      return false;
+    const providerChain = new RetryOrchestrator(
+      new LoadBalancingProvider(
+        makeFailoverConfig('glm-always-429'),
+        providerManager,
+      ),
+      { maxAttempts, initialDelayMs: 0 },
+    );
+    const observed: Array<{
+      message: string;
+      status?: number;
+      category?: string;
+    }> = [];
+    const tryFailover = vi.fn(async () => true);
+    const bucketHandler = {
+      tryFailover,
+      getProviderName: () => 'test-provider',
+      getAttemptedBuckets: () => [],
+      getBucketFailureReasons: () => ({}),
+    };
+    const configWithBucketHandler = {
+      ...config,
+      getBucketFailoverHandler: () => bucketHandler,
+    } as Config;
+    const options = {
+      ...makeOptions(maxAttempts),
+      config: configWithBucketHandler,
+      onProviderError: (error: {
+        message: string;
+        status?: number;
+        category?: string;
+      }) => {
+        observed.push(error);
+      },
     };
 
-    let thrown: unknown;
-    try {
-      await retryWithBackoff(() => pullFirstChunk(lb, makeOptions()), {
-        shouldRetryOnError: (e) => isRetryableError(e),
-        maxAttempts,
-        initialDelayMs: 0,
-        maxDelayMs: 0,
-        onPersistent429: failoverCallback,
-      });
-    } catch (e) {
-      thrown = e;
-    }
-
-    expect(thrown).toBeInstanceOf(LoadBalancerFailoverError);
-    // Exactly maxAttempts full rotations × NUM_BACKENDS invocations. Not 1
-    // rotation (which a status-bearing aggregate would produce by routing into
-    // onPersistent429), and not unbounded.
-    expect(counter.value).toBe(maxAttempts * NUM_BACKENDS);
-    // The status-less aggregate is never classified as a 429, so the
-    // bucket-failover callback is never reached.
-    expect(onPersistent429Calls).toBe(0);
+    await expect(pullFirstChunk(providerChain, options)).rejects.toMatchObject({
+      status: 429,
+      category: 'rate_limit',
+      reason: 'retries_exhausted',
+      isRetryable: false,
+    });
+    expect(counter.value).toBe(maxAttempts);
+    expect(observed).toStrictEqual(
+      Array.from({ length: maxAttempts }, () => ({
+        message: 'rate limited',
+        status: 429,
+        category: 'rate_limit',
+      })),
+    );
+    expect(tryFailover).not.toHaveBeenCalled();
   });
 });

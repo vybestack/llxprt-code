@@ -48,7 +48,7 @@ export interface OpenAITool {
  * (missing descriptions become empty strings).
  */
 export function convertToolsToOpenAI(
-  geminiTools?: Array<{
+  toolDeclarations?: Array<{
     functionDeclarations?: Array<{
       name: string;
       description?: string;
@@ -56,7 +56,7 @@ export function convertToolsToOpenAI(
     }>;
   }>,
 ): OpenAITool[] | undefined {
-  const converted = convertToolDeclarations(geminiTools, {
+  const converted = convertToolDeclarations(toolDeclarations, {
     descriptionStrategy: 'always-string',
   });
 

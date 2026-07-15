@@ -473,7 +473,7 @@ describe('extension tests', () => {
       expect(extensions[0].name).toBe('good-ext');
       expect(consoleSpy).toHaveBeenCalledExactlyOnceWith(
         expect.stringContaining(
-          `Warning: Skipping extension in ${badExtDir}: Expected`,
+          `Warning: Skipping extension config ${badConfigPath}: Expected`,
         ),
       );
     });

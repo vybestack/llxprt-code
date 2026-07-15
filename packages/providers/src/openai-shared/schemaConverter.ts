@@ -436,16 +436,18 @@ export type DescriptionStrategy = 'always-string' | 'preserve';
  *   callers can identify the misconfigured declaration.
  */
 export function convertToolDeclarations(
-  geminiTools: Array<{ functionDeclarations?: ToolDeclaration[] }> | undefined,
+  toolDeclarations:
+    | Array<{ functionDeclarations?: ToolDeclaration[] }>
+    | undefined,
   options: { descriptionStrategy: DescriptionStrategy },
 ): ConvertedToolDeclaration[] | undefined {
-  if (!geminiTools || geminiTools.length === 0) {
+  if (!toolDeclarations || toolDeclarations.length === 0) {
     return undefined;
   }
 
   const converted: ConvertedToolDeclaration[] = [];
 
-  for (const toolGroup of geminiTools) {
+  for (const toolGroup of toolDeclarations) {
     if (!toolGroup.functionDeclarations) {
       continue;
     }

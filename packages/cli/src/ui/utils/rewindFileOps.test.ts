@@ -58,14 +58,14 @@ describe('rewindFileOps', () => {
         id: '1',
         timestamp: '1',
       };
-      const geminiMsg: BaseMessageRecord = {
+      const agentMsg: BaseMessageRecord = {
         type: 'gemini',
         role: 'model' as const,
         content: 'hi',
         id: '2',
         timestamp: '2',
       };
-      mockConversation.messages = [userMsg, geminiMsg];
+      mockConversation.messages = [userMsg, agentMsg];
 
       const stats = calculateTurnStats(mockConversation, userMsg);
       expect(stats).toBeNull();

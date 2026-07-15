@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Removed (0.10.0 breaking cleanup)
+
+- Removed provider-neutral Gemini legacy aliases and inherited internal naming as a 0.10.0 breaking cleanup. The `geminiLegacyAliases.ts` singleton alias module (the single legacy re-export location introduced in #2354) is deleted without replacement. External consumers must use the canonical names directly:
+  - Event types: `AgentEventType`, `ServerAgentStreamEvent`, `ServerAgent*Event`, `AgentErrorEventValue`, `ServerFinishedOutcome`, `InformationalStreamEvent` — import from `@vybestack/llxprt-code-core/core/turn.js`.
+  - `GeminiCodeRequest` had no internal usages and was already retired in #2354; use `ContentBlock[]` or `IContent` (`@vybestack/llxprt-code-core/services/history/IContent.js`) for conversation content, or `ToolResultContent` (`@vybestack/llxprt-code-core/llm-types/toolCall.js`) for tool-result payloads.
+  - `GeminiCLIExtension` type alias — use `LlxprtExtension`.
+  - `GEMINI_DIR` constant — use `LLXPRT_CONFIG_DIR`.
+- `GEMINI_YOLO_MODE` environment variable is no longer honored. Use `LLXPRT_YOLO_MODE` to enable yolo (auto-approve) mode.
+- Renamed provider-neutral LLxprt-owned internal identifiers: `getGeminiDir` → `getLlxprtDir`, `geminiResult` → `agentStreamResult`, `refreshGeminiTools` → `refreshAgentTools`, `maybeRefreshGeminiTools` → `maybeRefreshAgentTools`, `useGeminiignore` (filesearch option) → `useExtensionIgnore`, `setupGeminiClient` (agents test helper) → `setupAgentClient`.
+- Renamed ToolFormatter tool-declaration/schema conversion methods (provider-neutral, no longer Gemini-specific): `convertGeminiToOpenAI` → `convertToolDeclarationsToOpenAI`, `convertGeminiToAnthropic` → `convertToolDeclarationsToAnthropic`, `convertGeminiToFormat` → `convertToolDeclarationsToFormat`, `convertGeminiSchemaToStandard` → `convertSchemaToStandard`.
+- Added architecture enforcement (`providerAgnosticNaming.test.ts`) that rejects provider-neutral Gemini filenames and exported/declared identifiers using TypeScript AST-based scanning, while explicitly permitting genuine Gemini provider code, Code Assist/Google contracts, model/env identifiers, checkpoint wire strings, and tested gemini-cli interoperability boundaries.
+- **Note:** This cleanup removes LLxprt-owned TypeScript aliases and internal names only. gemini-cli extension compatibility is fully retained: `gemini-extension.json` manifest loading (with `llxprt-extension.json` precedence), `.gemini/extensions` discovery, `.gemini-extension-install.json`, `GEMINI.md`, `.geminiignore`, and gemini-cli manifest fields/context semantics continue to work unchanged.
+
 ### Removed
 
 - Removed the discontinued Qwen OAuth provider. Qwen discontinued its OAuth free tier on 2026-04-15; the OAuth flow, device-flow implementation, and all OAuth wiring have been removed. Qwen models remain reachable via **API key** through Alibaba Cloud DashScope (OpenAI-compatible endpoint `https://dashscope.aliyuncs.com/compatible-mode/v1`, environment variable `DASHSCOPE_API_KEY`). The `qwen` and `qwenvercel` aliases are now API-key-only. Users should obtain a DashScope API key (or use an OpenRouter API key) instead of `/auth qwen enable`. OAuth providers are now three: Gemini, Anthropic, and Codex.

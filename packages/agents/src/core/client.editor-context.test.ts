@@ -15,7 +15,7 @@ import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentG
 import type { ChatSession } from './chatSession.js';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 import {
-  setupGeminiClient,
+  setupAgentClient,
   type MockResponseShape,
 } from './client-test-helpers.js';
 
@@ -186,11 +186,11 @@ vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   },
 }));
 
-describe('Gemini Client (client.ts)', () => {
+describe('Agent Client (client.ts)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
-    const ctx = await setupGeminiClient({
+    const ctx = await setupAgentClient({
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,

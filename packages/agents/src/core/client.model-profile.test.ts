@@ -22,7 +22,7 @@ import {
 import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 import {
   fromAsync,
-  setupGeminiClient,
+  setupAgentClient,
   type MockResponseShape,
 } from './client-test-helpers.js';
 
@@ -197,7 +197,7 @@ describe('AgentClient (client.ts)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
-    const ctx = await setupGeminiClient({
+    const ctx = await setupAgentClient({
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,

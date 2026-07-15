@@ -24,11 +24,14 @@ import { describe, expect, it, vi } from 'vitest';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubAgentScope } from '../subagent.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import {
   makeForegroundConfig,
   createRuntimeBundle,
+  createOrchestratorForTurns,
+  extractRunConfig,
 } from './subagentOrchestrator-test-helpers.js';
 
 describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
@@ -346,5 +349,112 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       orchestrator.launch({ name: invalidSubagent.name }),
     ).rejects.toThrow(/must define a non-empty model/);
     expect(runtimeLoader).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Load-balancer max-turns resolution (Issue #2541).
+  //
+  // For a load-balancer selection the orchestrator reads maxTurnsPerPrompt from
+  // the load-balancer profile's own ephemeralSettings — NOT from any member
+  // profile. These tests pin that the LB profile is the source and that it
+  // outranks the foreground value, while a member profile setting is never
+  // consulted.
+  // ---------------------------------------------------------------------------
+
+  it('defaults max_turns to 1000 for a load-balancer profile with no maxTurnsPerPrompt', async () => {
+    const memberProfile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4o',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    const lbProfile: Profile = {
+      version: 1,
+      type: 'loadbalancer',
+      policy: 'roundrobin',
+      profiles: ['member'],
+      provider: '',
+      model: '',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    const { orchestrator, factory } = createOrchestratorForTurns({
+      subagentName: 'lb-default-turns-helper',
+      profileName: 'lb',
+      profile: lbProfile,
+      loadProfile: vi.fn(async (name: string) => {
+        if (name === 'lb') {
+          return lbProfile;
+        }
+        if (name === 'member') {
+          return memberProfile;
+        }
+        throw new Error(`unexpected profile ${name}`);
+      }),
+    });
+
+    await orchestrator.launch({ name: 'lb-default-turns-helper' });
+
+    const runConfigArg = extractRunConfig(factory);
+    expect(runConfigArg.max_turns).toBe(1000);
+  });
+
+  it('uses the load-balancer profile maxTurnsPerPrompt and outranks a foreground value, ignoring the member profile setting', async () => {
+    // The member profile carries a DISTINCT maxTurnsPerPrompt so the assertion
+    // proves the LB profile — not the member — is the source of the value.
+    const memberProfile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4o',
+      modelParams: {},
+      ephemeralSettings: {
+        maxTurnsPerPrompt: 7,
+      },
+    };
+
+    const lbProfile: Profile = {
+      version: 1,
+      type: 'loadbalancer',
+      policy: 'roundrobin',
+      profiles: ['member'],
+      provider: '',
+      model: '',
+      modelParams: {},
+      ephemeralSettings: {
+        maxTurnsPerPrompt: 400,
+      },
+    };
+
+    const configWithForegroundCap = {
+      ...makeForegroundConfig(),
+      getEphemeralSetting: (key: string) =>
+        key === 'maxTurnsPerPrompt' ? 55 : undefined,
+    } as unknown as Config;
+
+    const { orchestrator, factory } = createOrchestratorForTurns({
+      subagentName: 'lb-profile-turns-helper',
+      profileName: 'lb',
+      profile: lbProfile,
+      foregroundConfig: configWithForegroundCap,
+      loadProfile: vi.fn(async (name: string) => {
+        if (name === 'lb') {
+          return lbProfile;
+        }
+        if (name === 'member') {
+          return memberProfile;
+        }
+        throw new Error(`unexpected profile ${name}`);
+      }),
+    });
+
+    await orchestrator.launch({ name: 'lb-profile-turns-helper' });
+
+    const runConfigArg = extractRunConfig(factory);
+    // 400 from the LB profile wins — not 7 from the member, not 55 from the
+    // foreground, and not the 1000 fallback.
+    expect(runConfigArg.max_turns).toBe(400);
   });
 });

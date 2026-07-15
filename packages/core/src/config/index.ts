@@ -20,7 +20,6 @@ export {
   type SandboxConfig,
   type ActiveExtension,
   type LlxprtExtension,
-  type GeminiCLIExtension,
   type FileFilteringOptions,
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
   DEFAULT_FILE_FILTERING_OPTIONS,

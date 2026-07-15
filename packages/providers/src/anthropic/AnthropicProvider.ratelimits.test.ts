@@ -63,8 +63,8 @@ vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
       }
       return [rawToolCall];
     }),
-    convertGeminiToAnthropic: vi.fn(() => []),
-    convertGeminiToFormat: vi.fn(() => undefined),
+    convertToolDeclarationsToAnthropic: vi.fn(() => []),
+    convertToolDeclarationsToFormat: vi.fn(() => undefined),
   })),
 }));
 
@@ -459,6 +459,72 @@ describe('AnthropicProvider', () => {
         expect(sleepDuration).toBeLessThanOrEqual(5000);
 
         sleepSpy.mockRestore();
+      });
+
+      it('aborts proactive throttling before issuing the next transport call', async () => {
+        settingsService.setProviderSetting('anthropic', 'streaming', 'enabled');
+        settingsService.setProviderSetting(
+          'anthropic',
+          'rate-limit-throttle',
+          'on',
+        );
+        const headers = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '1',
+          'anthropic-ratelimit-requests-reset': new Date(
+            Date.now() + 60_000,
+          ).toISOString(),
+        });
+        const stream = {
+          async *[Symbol.asyncIterator]() {
+            yield {
+              type: 'content_block_delta',
+              delta: { type: 'text_delta', text: 'First' },
+            };
+          },
+        };
+        mockMessagesCreate.mockReturnValueOnce({
+          withResponse: vi.fn().mockResolvedValue({
+            data: stream,
+            response: { headers },
+          }),
+        } as unknown as Promise<Anthropic.Message>);
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'First request' }],
+          },
+        ];
+        await provider
+          .generateChatCompletion(buildCallOptions(messages))
+          .next();
+
+        const controller = new AbortController();
+        const reason = new Error('request cancelled during throttle');
+        const baseOptions = buildCallOptions(messages);
+        const throttledCall = provider.generateChatCompletion({
+          ...baseOptions,
+          invocation: { ...baseOptions.invocation, signal: controller.signal },
+        });
+        vi.useFakeTimers();
+        try {
+          const nextPromise = throttledCall.next();
+          await vi.advanceTimersByTimeAsync(0);
+          expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
+
+          controller.abort(reason);
+
+          await expect(nextPromise).rejects.toMatchObject({
+            name: 'AbortError',
+            cause: reason,
+          });
+          await vi.runAllTimersAsync();
+          expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
+          expect(vi.getTimerCount()).toBe(0);
+          await throttledCall.return?.();
+        } finally {
+          vi.useRealTimers();
+        }
       });
 
       it('should handle partial rate limit headers', async () => {

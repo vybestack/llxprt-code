@@ -52,8 +52,8 @@ vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
   ToolFormatter: vi.fn().mockImplementation(() => ({
     toProviderFormat: vi.fn((tools: unknown[]) => tools),
     fromProviderFormat: vi.fn((rawToolCall: unknown) => [rawToolCall]),
-    convertGeminiToAnthropic: vi.fn(() => []),
-    convertGeminiToFormat: vi.fn(() => undefined),
+    convertToolDeclarationsToAnthropic: vi.fn(() => []),
+    convertToolDeclarationsToFormat: vi.fn(() => undefined),
   })),
 }));
 

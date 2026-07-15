@@ -21,7 +21,7 @@ import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTele
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import {
   fromAsync,
-  setupGeminiClient,
+  setupAgentClient,
   type MockResponseShape,
 } from './client-test-helpers.js';
 
@@ -265,7 +265,7 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
-    const ctx = await setupGeminiClient({
+    const ctx = await setupAgentClient({
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,

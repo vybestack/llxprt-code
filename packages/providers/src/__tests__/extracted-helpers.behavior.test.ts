@@ -12,6 +12,7 @@ import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { CircuitBreakerState } from '../LoadBalancingProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import {
   extractFailoverSettings,
   isImmediateFailoverError,
@@ -21,6 +22,7 @@ import { CircuitBreakerManager } from '../loadBalancing/circuitBreakerManager.js
 import { buildExtendedStats } from '../loadBalancing/statsBuilder.js';
 import {
   isTimeoutError,
+  RequestTimeoutError,
   wrapWithTimeout,
 } from '../loadBalancing/streamTimeout.js';
 import { getBaseUrlFromProvider } from '../baseUrlResolver.js';
@@ -36,6 +38,7 @@ import {
 import { extractSimpleContent } from '../logging/streamChunkUtils.js';
 import { accumulateTokenUsage } from '../logging/tokenAccumulator.js';
 import { extractTokenCountsFromResponse } from '../logging/tokenCounts.js';
+import { getBackendSkipReasons } from '../loadBalancing/backendRuntime.js';
 
 function debugLoggerStub(): DebugLogger {
   return {
@@ -72,6 +75,17 @@ async function collectChunks(
 }
 
 describe('extracted provider helper behavior', () => {
+  it('reports every reason that makes a backend ineligible', () => {
+    expect(
+      getBackendSkipReasons(
+        'primary',
+        100,
+        () => false,
+        () => true,
+      ),
+    ).toStrictEqual(['unhealthy', 'tpm_below_threshold']);
+  });
+
   it('preserves load-balancer failover defaults and status classification', () => {
     const defaults = extractFailoverSettings(undefined);
 
@@ -154,6 +168,31 @@ describe('extracted provider helper behavior', () => {
     ).rejects.toThrow('Request timeout after 1ms');
     expect(closed).toBe(true);
     expect(isTimeoutError(new Error('Request timeout after 1ms'))).toBe(true);
+    const typedTimeout = new RequestTimeoutError(1);
+    typedTimeout.message = 'localized timeout text';
+    expect(isTimeoutError(typedTimeout)).toBe(true);
+  });
+
+  it('uses the attempt cancellation capability supplied by its owner', async () => {
+    const controller = new AbortController();
+    const cancel = vi.fn(() => controller.abort());
+    async function* delayedFirstChunk(): AsyncIterableIterator<IContent> {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'late' }] };
+    }
+
+    await expect(
+      collectChunks(
+        wrapWithTimeout(
+          delayedFirstChunk(),
+          1,
+          'owned-attempt',
+          debugLoggerStub(),
+          { signal: controller.signal, cancel },
+        ),
+      ),
+    ).rejects.toThrow('Request timeout after 1ms');
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it('preserves backend token extraction and request metrics accumulation', () => {
@@ -386,6 +425,43 @@ describe('extracted provider helper behavior', () => {
         'base-url': 'https://settings.example.test',
       },
     });
+  });
+
+  it('adds a metadata signal to an existing valid invocation', () => {
+    const settingsService = new SettingsService();
+    settingsService.set('activeProvider', 'provider-a');
+    settingsService.setProviderSetting('provider-a', 'model', 'model-a');
+    settingsService.setProviderSetting(
+      'provider-a',
+      'base-url',
+      'https://provider-a.example.test',
+    );
+    settingsService.setProviderSetting('provider-a', 'auth-key', 'test-token');
+    const config = createRuntimeConfigStub(settingsService);
+    const controller = new AbortController();
+    const rawOptions = createProviderCallOptions({
+      providerName: 'provider-a',
+      settings: settingsService,
+      ephemerals: {},
+    });
+
+    const normalized = normalizeRuntimeInputs(
+      {
+        ...rawOptions,
+        runtime: {
+          settingsService,
+          config,
+          runtimeId: 'runtime-signal',
+        },
+        metadata: { abortSignal: controller.signal },
+      },
+      {
+        getActiveProviderName: () => 'provider-a',
+        getProvider: () => providerStub(),
+      },
+    );
+
+    expect(normalized.invocation?.signal).toBe(controller.signal);
   });
 
   it('does not apply global ephemeral settings when config owns a different SettingsService', () => {

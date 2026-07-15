@@ -154,6 +154,53 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     return { error: thrown as LoadBalancerFailoverError, counter };
   }
 
+  it.each([
+    ['server', statusError('service unavailable', 503), 'server_error'],
+    ['network', new Error('socket hang up'), 'network'],
+  ])(
+    'records a %s failure when the global budget ends after one transport',
+    async (_label, failure, category) => {
+      const { provider, counter } = makeFakeProvider(async function* () {
+        throw failure;
+        yield undefined as unknown as IContent;
+      });
+      providerManager.registerProvider(provider);
+      const lb = new LoadBalancingProvider(
+        {
+          ...makeFailoverConfig('budget-one'),
+          lbProfileEphemeralSettings: {
+            failover_retry_count: 3,
+            failover_retry_delay_ms: 10_000,
+          },
+        },
+        providerManager,
+      );
+      const requestContext: Record<string, unknown> = {
+        transportAttemptBudget: { limit: 1, used: 0 },
+      };
+      const options = {
+        ...makeOptions(),
+        metadata: { _retryRequestContext: requestContext },
+      };
+
+      let thrown: unknown;
+      try {
+        for await (const _chunk of lb.generateChatCompletion(options)) {
+          // consume
+        }
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toMatchObject({
+        category,
+        reason: 'retries_exhausted',
+        failures: [{ error: failure }],
+      });
+      expect(counter.value).toBe(1);
+    },
+  );
+
   it('classifies an all-429 aggregate as retryable and does not masquerade as an HTTP 429', async () => {
     const { error, counter } = await captureFailoverError(
       function* (): AsyncGenerator<IContent> {
@@ -177,13 +224,14 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
    * to bucket state. Recovery is driven solely by the isRetryable marker via
    * normal bounded retry.
    */
-  it('does not expose an HTTP status on an all-429 aggregate (getErrorStatus === undefined)', () => {
+  it('exposes the safe homogeneous status on an all-429 aggregate', () => {
     const error = new LoadBalancerFailoverError('glm', [
       { profile: 'zai', error: statusError('rate limited', 429) },
       { profile: 'makoraglm51', error: statusError('rate limited', 429) },
       { profile: 'ollamaglm51', error: statusError('rate limited', 429) },
     ]);
-    expect(getErrorStatus(error)).toBeUndefined();
+    expect(getErrorStatus(error)).toBe(429);
+    expect(error.category).toBe('rate_limit');
   });
 
   it('classifies an all-5xx aggregate as retryable', async () => {
@@ -414,9 +462,17 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     );
 
     const received: IContent[] = [];
+    const observedErrors: Array<{
+      message: string;
+      status?: number;
+      category?: string;
+    }> = [];
     let thrown: unknown;
     try {
-      for await (const chunk of lb.generateChatCompletion(makeOptions())) {
+      for await (const chunk of lb.generateChatCompletion({
+        ...makeOptions(),
+        onProviderError: (error) => observedErrors.push(error),
+      })) {
         received.push(chunk);
       }
     } catch (e) {
@@ -429,6 +485,13 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     // instead of being collected into an aggregate.
     expect(thrown).not.toBeInstanceOf(LoadBalancerFailoverError);
     expect(getErrorStatus(thrown)).toBe(429);
+    expect(observedErrors).toStrictEqual([
+      {
+        message: 'rate limited',
+        status: 429,
+        category: 'rate_limit',
+      },
+    ]);
     // Only the first backend was ever invoked; no silent cross-backend retry.
     expect(counter.value).toBe(1);
   });

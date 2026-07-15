@@ -628,18 +628,18 @@ export class AgenticLoop {
     nextMessage: AgentMessageInput;
   }> {
     const { primaryTools } = classifyCompletedTools(completed);
-    const geminiTools = primaryTools.filter(
+    const agentTools = primaryTools.filter(
       (t) => t.request.isClientInitiated !== true,
     );
-    if (geminiTools.length === 0) {
+    if (agentTools.length === 0) {
       return { continueLoop: false, nextMessage: [] };
     }
-    if (geminiTools.every((tc) => tc.status === 'cancelled')) {
+    if (agentTools.every((tc) => tc.status === 'cancelled')) {
       // Await so the cancelled-tool history is persisted before the loop ends.
-      await recordCancelledToolHistory(geminiTools, this.agentClient);
+      await recordCancelledToolHistory(agentTools, this.agentClient);
       return { continueLoop: false, nextMessage: [] };
     }
-    const responseParts = buildToolResponses(geminiTools);
+    const responseParts = buildToolResponses(agentTools);
     if (responseParts.length === 0) {
       return { continueLoop: false, nextMessage: [] };
     }

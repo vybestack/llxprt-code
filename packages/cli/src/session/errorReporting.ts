@@ -1,5 +1,8 @@
 import {
   type Config,
+  getSafeCategory,
+  getSafeReason,
+  getSafeStatus,
   parseAndFormatApiError,
   OutputFormat,
   JsonFormatter,
@@ -7,6 +10,10 @@ import {
   JsonStreamEventType,
   writeToStderr,
 } from '@vybestack/llxprt-code-core';
+import {
+  markMachineErrorReported,
+  wasMachineErrorReported,
+} from './machineErrorReporting.js';
 
 /**
  * Test-injectable write function. Defaults to the real writeToStderr.
@@ -58,9 +65,10 @@ function normalizeErrorForJson(error: unknown): Error {
  * and the run-phase catch share a single error-reporting path.
  */
 export function reportNonInteractiveError(
-  config: Config,
+  config: Pick<Config, 'getOutputFormat'>,
   error: unknown,
 ): void {
+  if (wasMachineErrorReported(error)) return;
   const outputFormat = config.getOutputFormat();
   if (outputFormat === OutputFormat.JSON) {
     const formatter = new JsonFormatter();
@@ -73,16 +81,23 @@ export function reportNonInteractiveError(
     stderrWriter(`${formatter.formatError(normalizedError)}\n`);
   } else if (outputFormat === OutputFormat.STREAM_JSON) {
     const streamFormatter = new StreamJsonFormatter();
+    const category = getSafeCategory(error);
+    const status = getSafeStatus(error);
+    const reason = getSafeReason(error);
     stderrWriter(
       streamFormatter.formatEvent({
         type: JsonStreamEventType.ERROR,
         timestamp: new Date().toISOString(),
         severity: 'error',
         message: formatNonInteractiveError(error),
+        ...(status !== undefined ? { status } : {}),
+        ...(category !== undefined ? { category } : {}),
+        ...(reason !== undefined ? { reason } : {}),
       }),
     );
   } else {
     const printableError = formatNonInteractiveError(error);
     stderrWriter(`Non-interactive run failed: ${printableError}\n`);
   }
+  if (error instanceof Error) markMachineErrorReported(error);
 }

@@ -172,15 +172,13 @@ export interface LlxprtExtension {
   }>;
 }
 
-/** @deprecated Use LlxprtExtension instead. Will be removed in a future release. */
-export type GeminiCLIExtension = LlxprtExtension;
-
 export interface ExtensionInstallMetadata {
   source: string;
   type: 'git' | 'local' | 'link' | 'github-release';
   releaseTag?: string; // Only present for github-release installs.
   ref?: string;
   autoUpdate?: boolean;
+  allowPreRelease?: boolean;
 }
 
 export type { FileFilteringOptions };
@@ -280,6 +278,7 @@ export interface ActiveExtension {
 export interface FailoverContext {
   triggeringStatus?: number;
   authRetryTimeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 /**
@@ -299,6 +298,7 @@ export interface OnAuthErrorHandler {
     providerId: string;
     profileId?: string;
     errorStatus: number;
+    signal?: AbortSignal;
   }): Promise<void>;
 }
 

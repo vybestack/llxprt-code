@@ -22,6 +22,7 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '../providerRuntimeContext.js';
 import type { RuntimeInvocationContext } from '../RuntimeInvocationContext.js';
 import type { TelemetryContext } from './TelemetryContext.js';
+import type { StructuredError } from '../../core/turn.js';
 
 export interface RuntimeProviderTool {
   type: 'function';
@@ -46,6 +47,14 @@ export interface RuntimeAuthTokenProvider {
 
 export type RuntimeResolvedAuthToken = string | RuntimeAuthTokenProvider;
 
+export interface RuntimeUserMemoryProfileProvider {
+  getProfile:
+    | (() => Promise<string | Record<string, unknown> | undefined>)
+    | (() => string | Record<string, unknown> | undefined);
+}
+
+export type RuntimeUserMemoryInput = string | RuntimeUserMemoryProfileProvider;
+
 export interface RuntimeGenerateChatOptions {
   contents: IContent[];
   tools?: RuntimeProviderToolset;
@@ -53,6 +62,7 @@ export interface RuntimeGenerateChatOptions {
   config?: Config;
   runtime?: ProviderRuntimeContext;
   invocation?: RuntimeInvocationContext;
+  onProviderError?: (error: StructuredError) => void;
   metadata?: Record<string, unknown>;
   resolved?: {
     model?: string;
@@ -63,7 +73,7 @@ export interface RuntimeGenerateChatOptions {
     maxTokens?: number;
     streaming?: boolean;
   };
-  userMemory?: unknown;
+  userMemory?: RuntimeUserMemoryInput;
   /**
    * Caller-supplied system instruction (e.g. a subagent persona/task prompt).
    * When present, providers SHOULD merge this into their system prompt so the

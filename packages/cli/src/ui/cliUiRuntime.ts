@@ -148,7 +148,7 @@ export interface SessionIdentity {
   getProjectRoot(): string;
   getWorkingDir(): string;
   getProjectTempDir(): string;
-  getGeminiDir(): string;
+  getLlxprtDir(): string;
 }
 
 /**
@@ -494,7 +494,7 @@ function buildSessionRuntime(source: StreamRuntimeBareSource): SessionIdentity {
     getProjectRoot: () => source.getProjectRoot(),
     getWorkingDir: () => source.getWorkingDir(),
     getProjectTempDir: () => source.getProjectTempDir(),
-    getGeminiDir: () => source.getGeminiDir(),
+    getLlxprtDir: () => source.getLlxprtDir(),
   };
 }
 

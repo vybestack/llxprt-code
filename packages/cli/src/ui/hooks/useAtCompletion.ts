@@ -275,7 +275,7 @@ async function createFileSearcher(
     ignoreDirs: DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
     ignorePatterns: DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
     useGitignore: filteringOptions?.respectGitIgnore ?? true,
-    useGeminiignore: filteringOptions?.respectLlxprtIgnore ?? true,
+    useExtensionIgnore: filteringOptions?.respectLlxprtIgnore ?? true,
     cache: true,
     cacheTtl: 30, // 30 seconds
     enableRecursiveFileSearch: config?.getEnableRecursiveFileSearch() ?? true,

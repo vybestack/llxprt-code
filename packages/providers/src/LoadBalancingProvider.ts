@@ -15,7 +15,12 @@ import type { ProviderManager } from './ProviderManager.js';
 import { coreEvents } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { getErrorStatus } from '@vybestack/llxprt-code-core/utils/retry.js';
+import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { LoadBalancerFailoverError } from './errors.js';
+import {
+  markProviderErrorObservationHandled,
+  withProviderErrorObservationContext,
+} from './providerErrorObservation.js';
 import { CircuitBreakerManager } from './loadBalancing/circuitBreakerManager.js';
 import { TPMTracker } from './loadBalancing/tpmTracker.js';
 import { BackendMetricsCollector } from './loadBalancing/backendMetrics.js';
@@ -23,14 +28,31 @@ import {
   extractFailoverSettings as extractFailoverSettingsFromEphemeral,
   shouldFailover as shouldFailoverOnError,
   isImmediateFailoverError as isImmediateFailover,
+  permitsLoadBalancerFailover,
 } from './loadBalancing/failoverSettings.js';
 import {
-  wrapWithTimeout as wrapWithFirstChunkTimeout,
+  wrapWithTimeout,
   isTimeoutError,
 } from './loadBalancing/streamTimeout.js';
 import { buildExtendedStats } from './loadBalancing/statsBuilder.js';
 import { buildRoundRobinResolvedOptions as buildRoundRobinResolvedOptionsExternal } from './loadBalancing/resolvedOptionsBuilder.js';
 import { cloneContentsForCompression } from './loadBalancing/contentClone.js';
+import {
+  getRequestSignal,
+  rethrowIfAborted,
+} from './loadBalancing/requestAbort.js';
+import { hasTransportAttemptRemaining } from './transportAttemptBudget.js';
+import {
+  cleanupDelegateAttempt,
+  createDelegateAttempt,
+  requireTransportAttempt,
+} from './loadBalancing/delegateAttempt.js';
+import {
+  observeDelegateFailure,
+  recordBackendFailure,
+  shouldSkipBackend,
+  validateNotAllUnhealthy,
+} from './loadBalancing/backendRuntime.js';
 import {
   LoadBalancerAllContextLimitsExceededError,
   LoadBalancerCompressionCallbackError,
@@ -70,6 +92,7 @@ export type {
   LoadBalancingProviderConfig,
   ResolvedSubProfile,
 } from './loadBalancing/loadBalancerTypes.js';
+
 export { isResolvedSubProfile } from './loadBalancing/loadBalancerTypes.js';
 export type { TokenAccountingDiagnostics } from './loadBalancing/tokenAccountingDiagnostics.js';
 export { isLoadBalancerProfileFormat } from './loadBalancing/loadBalancerProfileFormat.js';
@@ -79,6 +102,7 @@ export { isLoadBalancerProfileFormat } from './loadBalancing/loadBalancerProfile
  */
 export class LoadBalancingProvider implements IProvider {
   readonly name = 'load-balancer';
+  readonly transportAttemptOwnership = 'provider' as const;
   private roundRobinIndex = 0;
   private readonly logger = new DebugLogger('llxprt:providers:load-balancer');
   private stats: Map<string, number> = new Map();
@@ -334,6 +358,7 @@ export class LoadBalancingProvider implements IProvider {
       subProfile,
       enforcedOptions,
     );
+    requireTransportAttempt(resolvedOptions);
 
     yield* this.yieldWithMetrics(
       delegateProvider,
@@ -623,19 +648,6 @@ export class LoadBalancingProvider implements IProvider {
   private readonly tpmTracker: TPMTracker;
   private readonly metricsCollector: BackendMetricsCollector;
 
-  private async *wrapWithTimeout(
-    iterator: AsyncIterableIterator<IContent>,
-    timeoutMs: number | undefined,
-    profileName: string,
-  ): AsyncGenerator<IContent> {
-    yield* wrapWithFirstChunkTimeout(
-      iterator,
-      timeoutMs,
-      profileName,
-      this.logger,
-    );
-  }
-
   private updateTPM(profileName: string, tokensUsed: number): void {
     this.tpmTracker.updateTPM(profileName, tokensUsed);
   }
@@ -677,6 +689,14 @@ export class LoadBalancingProvider implements IProvider {
   private async *executeWithFailover(
     options: GenerateChatOptions,
   ): AsyncGenerator<IContent> {
+    yield* withProviderErrorObservationContext(options, (observedOptions) =>
+      this.executeObservedFailover(observedOptions),
+    );
+  }
+
+  private async *executeObservedFailover(
+    options: GenerateChatOptions,
+  ): AsyncGenerator<IContent> {
     const { owner: requestOwner, startIndex } = this.failoverState.claim();
     const settings = this.extractFailoverSettings();
     const errors: Array<{ profile: string; error: Error }> = [];
@@ -689,18 +709,35 @@ export class LoadBalancingProvider implements IProvider {
     );
 
     // Check if all backends are unhealthy (circuit breakers open)
-    this.validateNotAllUnhealthy(settings, numProfiles);
+    validateNotAllUnhealthy(
+      settings.circuitBreakerEnabled,
+      this.config.subProfiles
+        .slice(0, numProfiles)
+        .map((profile) => profile.name),
+      (name) => this.circuitBreaker.canAttemptBackend(name),
+    );
 
     // Start from currentFailoverIndex and iterate through all backends (Issue #902)
     let visitedCount = 0;
     let currentIndex = startIndex;
 
-    while (visitedCount < numProfiles) {
+    while (
+      visitedCount < numProfiles &&
+      hasTransportAttemptRemaining(options)
+    ) {
       const subProfile = this.config.subProfiles[currentIndex];
       visitedCount++;
 
       // Skip unhealthy backends (circuit breaker + TPM checks)
-      if (this.shouldSkipBackend(subProfile.name, settings)) {
+      if (
+        shouldSkipBackend(
+          subProfile.name,
+          settings.tpmThreshold,
+          (name) => this.circuitBreaker.isBackendHealthy(name),
+          (name, threshold) => this.tpmTracker.shouldSkipOnTPM(name, threshold),
+          this.logger,
+        )
+      ) {
         currentIndex = (currentIndex + 1) % numProfiles;
         continue;
       }
@@ -731,58 +768,23 @@ export class LoadBalancingProvider implements IProvider {
     this.failoverState.setIfOwner(requestOwner, 0);
 
     if (errors.length === 0 && contextLimitErrors.length > 0) {
-      throw new LoadBalancerAllContextLimitsExceededError({
+      const aggregate = new LoadBalancerAllContextLimitsExceededError({
         profileName: this.config.profileName,
         failures: contextLimitErrors.map(({ profile, error }) => ({
           profile,
           error,
         })),
       });
+      markProviderErrorObservationHandled(options, aggregate);
+      throw aggregate;
     }
 
-    throw new LoadBalancerFailoverError(this.config.profileName, [
+    const aggregate = new LoadBalancerFailoverError(this.config.profileName, [
       ...errors,
       ...contextLimitErrors,
     ]);
-  }
-
-  private shouldSkipBackend(
-    profileName: string,
-    settings: FailoverSettings,
-  ): boolean {
-    if (!this.circuitBreaker.isBackendHealthy(profileName)) {
-      this.logger.debug(
-        () =>
-          `[LB:failover] Skipping unhealthy backend: ${profileName} (circuit breaker open)`,
-      );
-      return true;
-    }
-
-    if (this.tpmTracker.shouldSkipOnTPM(profileName, settings.tpmThreshold)) {
-      this.logger.debug(
-        () =>
-          `[LB:failover] Skipping backend: ${profileName} (TPM below threshold)`,
-      );
-      return true;
-    }
-
-    return false;
-  }
-
-  private validateNotAllUnhealthy(
-    settings: FailoverSettings,
-    numProfiles: number,
-  ): void {
-    if (settings.circuitBreakerEnabled) {
-      const allUnhealthy = this.config.subProfiles
-        .slice(0, numProfiles)
-        .every((sp) => !this.circuitBreaker.canAttemptBackend(sp.name));
-      if (allUnhealthy) {
-        throw new Error(
-          'All backends are currently unhealthy (circuit breakers open). Please wait for recovery or check backend configurations.',
-        );
-      }
-    }
+    markProviderErrorObservationHandled(options, aggregate);
+    throw aggregate;
   }
 
   private async *tryBackendWithRetries(
@@ -797,7 +799,7 @@ export class LoadBalancingProvider implements IProvider {
   ): AsyncGenerator<IContent, boolean> {
     let attempts = 0;
     const maxAttempts = Math.max(1, settings.retryCount);
-    while (attempts < maxAttempts) {
+    while (attempts < maxAttempts && hasTransportAttemptRemaining(options)) {
       attempts++;
       let startTime = 0;
       let requestStarted = false;
@@ -819,6 +821,8 @@ export class LoadBalancingProvider implements IProvider {
         this.failoverState.setIfOwner(requestOwner, currentIndex);
         return true;
       } catch (error) {
+        rethrowIfAborted(error, options);
+        observeDelegateFailure(options, error, this.logger);
         if (
           error instanceof LoadBalancerCompressionCallbackError ||
           error instanceof LoadBalancerContextLimitError
@@ -831,10 +835,7 @@ export class LoadBalancingProvider implements IProvider {
           );
         }
         if (!requestStarted) {
-          errors.push({
-            profile: subProfile.name,
-            error: error instanceof Error ? error : new Error(String(error)),
-          });
+          recordBackendFailure(errors, subProfile.name, error);
           return this.failoverState.advanceFrom(
             requestOwner,
             currentIndex,
@@ -853,13 +854,12 @@ export class LoadBalancingProvider implements IProvider {
           currentIndex,
           numProfiles,
           requestOwner,
+          hasTransportAttemptRemaining(options),
         );
         if (handled === 'immediate-throw') throw error;
         if (handled === 'break') break;
         if (settings.retryDelayMs > 0) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, settings.retryDelayMs),
-          );
+          await delay(settings.retryDelayMs, getRequestSignal(options));
         }
       }
     }
@@ -891,17 +891,24 @@ export class LoadBalancingProvider implements IProvider {
     if (!delegateProvider) {
       throw new Error(`Provider "${subProfile.providerName}" not found`);
     }
+    requireTransportAttempt(resolvedOptions);
 
-    const rawIterator =
-      delegateProvider.generateChatCompletion(resolvedOptions);
-    const iterator = this.wrapWithTimeout(
+    const attempt = createDelegateAttempt(resolvedOptions);
+    const chunks: IContent[] = [];
+    const rawIterator = delegateProvider.generateChatCompletion(
+      attempt.options,
+    );
+    const iterator = wrapWithTimeout(
       rawIterator,
       settings.timeoutMs,
       subProfile.name,
+      this.logger,
+      {
+        signal: attempt.linked.controller.signal,
+        cancel: () => attempt.linked.controller.abort(),
+      },
     );
-
-    const chunks: IContent[] = [];
-    for await (const chunk of iterator) {
+    for await (const chunk of cleanupDelegateAttempt(attempt, iterator)) {
       chunksYielded.value = true;
       chunks.push(chunk);
       yield chunk;
@@ -932,21 +939,19 @@ export class LoadBalancingProvider implements IProvider {
     currentIndex: number,
     numProfiles: number,
     requestOwner: symbol,
+    transportAttemptRemaining: boolean,
   ): 'immediate-throw' | 'break' | 'retry' {
+    if (chunksYielded) {
+      this.logger.debug(
+        () =>
+          `[LB:failover] ${subProfile.name} failed after yielding chunks, aborting stream`,
+      );
+      this.recordRequestFailure(subProfile.name, startTime, error as Error);
+      this.circuitBreaker.recordBackendFailure(subProfile.name, error as Error);
+      return 'immediate-throw';
+    }
+    if (!permitsLoadBalancerFailover(error)) return 'immediate-throw';
     if (this.isImmediateFailoverError(error)) {
-      if (chunksYielded) {
-        this.logger.debug(
-          () =>
-            `[LB:failover] ${subProfile.name} returned immediate failover error after yielding chunks, aborting stream`,
-        );
-        this.recordRequestFailure(subProfile.name, startTime, error as Error);
-        this.circuitBreaker.recordBackendFailure(
-          subProfile.name,
-          error as Error,
-        );
-        return 'immediate-throw';
-      }
-
       this.logger.debug(
         () =>
           `[LB:failover] ${subProfile.name} returned immediate failover error (${getErrorStatus(error)}), skipping retries`,
@@ -959,7 +964,10 @@ export class LoadBalancingProvider implements IProvider {
     }
 
     const isLastAttempt = attempts >= maxAttempts;
-    const shouldRetry = !isLastAttempt && this.shouldFailover(error, settings);
+    const shouldRetry =
+      !isLastAttempt &&
+      transportAttemptRemaining &&
+      this.shouldFailover(error, settings);
 
     if (shouldRetry) {
       if (settings.retryDelayMs > 0) {

@@ -20,6 +20,7 @@ import { isContainerSandbox } from './utils/containerSandbox.js';
 import { PROVIDER_CONFIG_KEYS } from './providerConfigKeys.js';
 import { ProviderRuntimeNormalizationError } from './errors.js';
 import { getBaseUrlFromProvider } from './baseUrlResolver.js';
+import { isAbortSignal } from './utils/abortSignal.js';
 
 const logger = new DebugLogger('llxprt:provider:manager');
 
@@ -440,6 +441,13 @@ function readConfigUserMemory(config: Config): string | undefined {
   return configWithOptionalMemory.getUserMemory?.() ?? undefined;
 }
 
+function getAbortSignal(
+  metadata: Record<string, unknown>,
+): AbortSignal | undefined {
+  const value = metadata.abortSignal;
+  return isAbortSignal(value) ? value : undefined;
+}
+
 /** REQ-SP4-005: Build final normalized options with runtime context. */
 function buildNormalizedOptions(
   rawOptions: GenerateChatOptions,
@@ -471,23 +479,30 @@ function buildNormalizedOptions(
   const userMemorySnapshot =
     typeof userMemory === 'string' ? userMemory : configUserMemory;
 
+  const metadataSignal = getAbortSignal(metadata);
+  const existingInvocation = rawOptions.invocation;
   const invocation =
-    rawOptions.invocation ??
-    createRuntimeInvocationContext({
-      runtime: normalizedRuntime,
-      settings: settingsService,
-      providerName: targetProvider,
-      ephemeralsSnapshot: buildEphemeralsSnapshot(
-        settingsService,
-        targetProvider,
-      ),
-      telemetry: resolved.telemetry as
-        | { runtimeId: string; normalizedAt: string; provider: string }
-        | undefined,
-      metadata,
-      userMemory: userMemorySnapshot,
-      fallbackRuntimeId: runtimeId,
-    });
+    existingInvocation === undefined ||
+    (existingInvocation.signal === undefined && metadataSignal !== undefined)
+      ? createRuntimeInvocationContext({
+          runtime: normalizedRuntime,
+          settings: settingsService,
+          providerName: targetProvider,
+          ephemeralsSnapshot:
+            existingInvocation?.ephemerals ??
+            buildEphemeralsSnapshot(settingsService, targetProvider),
+          telemetry:
+            existingInvocation?.telemetry ??
+            (resolved.telemetry as
+              | { runtimeId: string; normalizedAt: string; provider: string }
+              | undefined),
+          metadata: existingInvocation?.metadata ?? metadata,
+          userMemory: existingInvocation?.userMemory ?? userMemorySnapshot,
+          redaction: existingInvocation?.redaction,
+          signal: existingInvocation?.signal ?? metadataSignal,
+          fallbackRuntimeId: existingInvocation?.runtimeId ?? runtimeId,
+        })
+      : existingInvocation;
 
   return {
     ...rawOptions,

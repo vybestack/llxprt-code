@@ -119,6 +119,7 @@ export class CoderAgentExecutor implements AgentExecutor {
     );
     const extensions = (this.dependencies.loadExtensions ?? loadExtensions)(
       workspaceRoot,
+      { folderTrust: settings.folderTrust },
     );
     return (this.dependencies.loadConfig ?? loadConfig)(
       settings,
