@@ -189,7 +189,7 @@ export function dispatchZedConfigOption(
   if (typeof params.value !== 'string') {
     throw acp.RequestError.invalidParams(
       { configId: params.configId },
-      'Expected select value.',
+      'Config value must be a string.',
     );
   }
   return session.setConfigOption(params.configId, params.value);

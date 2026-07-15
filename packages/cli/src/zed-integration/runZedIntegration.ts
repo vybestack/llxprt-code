@@ -24,7 +24,7 @@ async function cleanupAgents(
     (result): result is PromiseRejectedResult => result.status === 'rejected',
   );
   for (const result of rejected) {
-    logger.debug(() => `Zed agent cleanup failed: ${String(result.reason)}`);
+    logger.warn(() => `Zed agent cleanup failed: ${String(result.reason)}`);
   }
   try {
     await runExitCleanup();

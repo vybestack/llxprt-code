@@ -28,7 +28,11 @@ export async function buildZedSession<T>(
     try {
       await agent.dispose();
     } catch (disposeError) {
-      onDisposeFailure(disposeError);
+      try {
+        onDisposeFailure(disposeError);
+      } catch {
+        // Preserve the original session build failure.
+      }
     }
     throw error;
   }

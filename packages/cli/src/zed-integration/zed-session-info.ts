@@ -175,12 +175,12 @@ export class SessionTitleTracker {
     return { wonTitle: true, title: this.title };
   }
 
-  hydrateFromMetadata(title: string | null): string | undefined {
+  hydrateFromMetadata(title: string | null | undefined): string | undefined {
     if (this.titleEligibilityConsumed) {
       return this.title;
     }
     this.titleEligibilityConsumed = true;
-    if (title !== null && title.length > 0) {
+    if (typeof title === 'string' && title.length > 0) {
       this.title = title;
     }
     return this.title;

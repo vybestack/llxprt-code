@@ -527,7 +527,11 @@ export class Session {
   async prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {
     await this.cancelPendingPrompt();
     const eligibility = this.sessionInfo.consumeTitleEligibility(params.prompt);
-    this.recordMetadataTitle(eligibility.title);
+    try {
+      this.recordMetadataTitle(eligibility.title);
+    } catch (error) {
+      this.logger.debug(() => `Session metadata recording failed: ${error}`);
+    }
     try {
       const commandResult = await tryHandleZedCommand(
         params.prompt,
@@ -541,7 +545,7 @@ export class Session {
       this.pendingPrompt = pendingSend;
       this.promptGeneration += 1;
       const promptGeneration = this.promptGeneration;
-      const promptId = Math.random().toString(16).slice(2);
+      const promptId = randomUUID();
       try {
         return await this.runPromptTurn(
           params,

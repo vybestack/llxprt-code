@@ -145,7 +145,7 @@ async function deleteResolvedSession(
       error: `Failed to delete session: ${(error as Error).message}`,
     };
   } finally {
-    await lock.release();
+    await lock.release().catch(() => undefined);
   }
   return result;
 }

@@ -12,7 +12,15 @@ import { parseZedAuthMethodId } from './zed-helpers.js';
 export async function initializeZedAgent(
   config: Config,
 ): Promise<acp.InitializeResponse> {
-  const profileNames = await getAvailableProfileNames(config);
+  let profileNames: string[];
+  try {
+    profileNames = await getAvailableProfileNames(config);
+  } catch (error) {
+    throw new Error(
+      `Failed to initialize Zed agent: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
   return {
     protocolVersion: acp.PROTOCOL_VERSION,
     authMethods: profileNames.map((name) => ({

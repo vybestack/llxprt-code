@@ -73,10 +73,7 @@ export function paginateSessions(
   if (remaining.length <= pageSize) {
     return { sessions: page };
   }
-  const last = page.at(-1);
-  if (last === undefined) {
-    return { sessions: page };
-  }
+  const last = page[page.length - 1];
   return { sessions: page, nextCursor: encodeCursor(last, request.cwd) };
 }
 
