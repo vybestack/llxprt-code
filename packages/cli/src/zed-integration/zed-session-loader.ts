@@ -116,29 +116,15 @@ export async function hasRecordedSessionFile(
     const entries = await listFiles(chatsDir);
     return findMatchingSessionFile(sessionId, entries) !== null;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    // FINDING C2: both branches fail-open to re-attach (a load must NOT crash on
-    // a probe issue), but distinguish the severity so a real problem is
-    // diagnosable rather than swallowed at the SAME level as the expected case:
-    //   - ENOENT (chats dir not created yet — the common fresh-project case) is
-    //     EXPECTED: log at debug only.
-    //   - any other error (EACCES, EIO, ...) is UNEXPECTED and means the probe
-    //     could not actually determine recording presence: log at warn so it is
-    //     visible, while still returning false (re-attach) rather than rethrowing.
     if (isEnoent(error)) {
       logger.debug(
         () =>
           `hasRecordedSessionFile: chats dir absent (ENOENT) for ${sessionId}; ` +
-          `treating as no on-disk recording (re-attach): ${message}`,
+          `treating as no on-disk recording (re-attach): ${String(error)}`,
       );
-    } else {
-      logger.warn(
-        () =>
-          `hasRecordedSessionFile: probe failed (non-ENOENT) for ${sessionId}; ` +
-          `could not determine recording presence, failing open to re-attach: ${message}`,
-      );
+      return false;
     }
-    return false;
+    throw error;
   }
 }
 
