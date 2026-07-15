@@ -199,7 +199,7 @@ async function waitForLatency(
   latencyMs: number,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (latencyMs <= 0) return;
+  if (latencyMs <= 0 || signal?.aborted === true) return;
   await new Promise<void>((resolve) => {
     let settled = false;
     const finish = () => {
@@ -211,6 +211,7 @@ async function waitForLatency(
     };
     const timeout = setTimeout(finish, latencyMs);
     signal?.addEventListener('abort', finish, { once: true });
+    if (signal?.aborted === true) finish();
   });
 }
 

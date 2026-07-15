@@ -19,7 +19,9 @@ const mockedUserConfig = vi.hoisted<{
   value: Record<string, TrustLevel>;
 }>(() => ({ value: {} }));
 const mockedResolvePathTrust = vi.hoisted<
-  ReturnType<typeof vi.fn<() => ResolvedTrustRule | undefined>>
+  ReturnType<
+    typeof vi.fn<(folderPath: string) => ResolvedTrustRule | undefined>
+  >
 >(() => vi.fn(() => undefined));
 const mockedGetValue = vi.hoisted(() =>
   vi.fn((folderPath: string) => mockedUserConfig.value[folderPath]),
@@ -392,6 +394,48 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     expect(mockedSetValue).toHaveBeenCalledWith(
       '/workspace/project',
       TrustLevel.TRUST_FOLDER,
+    );
+  });
+
+  it('recomputes the winning rule after persisting a direct override', async () => {
+    mockedUserConfig.value = {
+      '/workspace': TrustLevel.TRUST_FOLDER,
+    };
+    mockedResolvePathTrust.mockImplementation((folderPath: string) => {
+      if (folderPath in mockedUserConfig.value) {
+        const directLevel = mockedUserConfig.value[folderPath];
+        return {
+          rule: { path: folderPath, trustLevel: directLevel },
+          effectivePath: folderPath,
+          trusted: directLevel !== TrustLevel.DO_NOT_TRUST,
+          provenance: 'direct',
+        };
+      }
+      return {
+        rule: { path: '/workspace', trustLevel: TrustLevel.TRUST_FOLDER },
+        effectivePath: '/workspace',
+        trusted: true,
+        provenance: 'inherited',
+      };
+    });
+    const config: PermissionsTrustRuntime = {
+      getWorkingDir: () => '/workspace/project',
+      getFolderTrust: () => true,
+      getIdeClient: () => undefined,
+      isTrustedFolder: () => false,
+      setTrustedFolderLive: vi.fn(),
+    };
+    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+
+    expect(result.current.isParentTrusted).toBe(true);
+
+    await act(async () => {
+      await result.current.commitTrustLevel(TrustLevel.DO_NOT_TRUST);
+    });
+
+    expect(result.current.isParentTrusted).toBe(false);
+    expect(result.current.effectiveLocalTrustLevel).toBe(
+      TrustLevel.DO_NOT_TRUST,
     );
   });
 

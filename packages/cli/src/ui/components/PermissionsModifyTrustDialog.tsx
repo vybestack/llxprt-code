@@ -5,7 +5,7 @@
  */
 
 import type React from 'react';
-import { useCallback, useState, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { Box, Text } from 'ink';
 import * as path from 'node:path';
 import { Colors } from '../colors.js';
@@ -189,6 +189,7 @@ function useTrustSelectionHandler({
   setIsCommitting,
   setShowUpdatedPrompt,
   committingRef,
+  mountedRef,
   workingDirectory,
 }: {
   addItem: UseHistoryManagerReturn['addItem'];
@@ -198,6 +199,7 @@ function useTrustSelectionHandler({
   setIsCommitting: React.Dispatch<React.SetStateAction<boolean>>;
   setShowUpdatedPrompt: React.Dispatch<React.SetStateAction<boolean>>;
   committingRef: React.MutableRefObject<boolean>;
+  mountedRef: React.MutableRefObject<boolean>;
   workingDirectory: string;
 }) {
   return useCallback(
@@ -207,6 +209,7 @@ function useTrustSelectionHandler({
       setIsCommitting(true);
       try {
         const result = await commitTrustLevel(level);
+        if (!mountedRef.current) return;
         if (!result.success) {
           addItem(
             {
@@ -231,6 +234,7 @@ function useTrustSelectionHandler({
         if (changed) setShowUpdatedPrompt(true);
         else onExit();
       } catch (error) {
+        if (!mountedRef.current) return;
         addItem(
           {
             type: MessageType.ERROR,
@@ -240,13 +244,14 @@ function useTrustSelectionHandler({
         );
       } finally {
         committingRef.current = false;
-        setIsCommitting(false);
+        if (mountedRef.current) setIsCommitting(false);
       }
     },
     [
       addItem,
       commitTrustLevel,
       committingRef,
+      mountedRef,
       onExit,
       pendingTrustLevel,
       setIsCommitting,
@@ -275,6 +280,13 @@ function useTrustDialogState(
   const [showUpdatedPrompt, setShowUpdatedPrompt] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
   const committingRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const getDisplayText = useCallback(
     (level: TrustLevel | undefined): string =>
       getTrustLevelDisplay(level, isIdeTrusted, isParentTrusted),
@@ -293,6 +305,7 @@ function useTrustDialogState(
     setIsCommitting,
     setShowUpdatedPrompt,
     committingRef,
+    mountedRef,
     workingDirectory,
   });
 

@@ -10,7 +10,7 @@ import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 import { createDeferred } from '../../test-utils/async.js';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js';
-import type React from 'react';
+import React, { act } from 'react';
 import { SettingsContext } from '../contexts/SettingsContext.js';
 import { LoadedSettings } from '../../config/settings.js';
 import type { PermissionsTrustRuntime } from '../hooks/usePermissionsModifyTrust.js';
@@ -414,6 +414,34 @@ describe('PermissionsModifyTrustDialog', () => {
       expect(lastFrame()).toContain('Trust level updated');
     });
     expect(mockedSetValue).toHaveBeenCalledOnce();
+  });
+
+  it('does not publish a completed commit after unmount', async () => {
+    const transition = createDeferred<void>();
+    mockConfig.setTrustedFolderLive.mockReturnValueOnce(transition.promise);
+    const onExit = vi.fn();
+    const addItem = vi.fn();
+    const { stdin, unmount } = renderWithProviders(
+      <Wrapper>
+        <PermissionsModifyTrustDialog
+          onExit={onExit}
+          addItem={addItem}
+          config={mockConfig}
+        />
+      </Wrapper>,
+    );
+
+    stdin.write('\r');
+    await waitFor(() => expect(mockedSetValue).toHaveBeenCalledOnce());
+    unmount();
+
+    await act(async () => {
+      transition.resolve();
+      await transition.promise;
+    });
+
+    expect(addItem).not.toHaveBeenCalled();
+    expect(onExit).not.toHaveBeenCalled();
   });
 
   it('changes the selection before applying it', async () => {

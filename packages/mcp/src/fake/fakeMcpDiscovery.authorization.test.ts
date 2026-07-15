@@ -63,6 +63,37 @@ describe('applyFakeServerDiscovery authorization', () => {
     expect(getMCPServerStatus(name)).toBe(MCPServerStatus.DISCONNECTED);
   });
 
+  it('does not wait when authorization aborts immediately before latency', async () => {
+    vi.useFakeTimers();
+    const name = 'latency-already-aborted';
+    const registry = createToolRegistry();
+    const controller = new AbortController();
+    let authorizationChecks = 0;
+
+    const discovery = applyFakeServerDiscovery(
+      name,
+      registry,
+      fixtureWithTool(name, 50),
+      () => {
+        authorizationChecks += 1;
+        if (authorizationChecks === 2) {
+          controller.abort();
+        }
+        return true;
+      },
+      controller.signal,
+    );
+    const completed = vi.fn();
+    void discovery.then(completed);
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(completed).toHaveBeenCalledWith({
+      status: MCPServerStatus.DISCONNECTED,
+      registeredToolNames: [],
+    });
+  });
+
   it('removes the abort listener after latency completes', async () => {
     vi.useFakeTimers();
     const name = 'latency-listener-cleanup';

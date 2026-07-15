@@ -82,17 +82,18 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const committingRef = useRef(false);
   const exitingRef = useRef(false);
+  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   const mountedRef = useMountedRef();
-
+  useEffect(() => () => clearTimeout(exitTimerRef.current), []);
   useKeypress(
     (key) => {
-      if (committingRef.current || exitingRef.current) {
-        return;
-      }
+      if (committingRef.current || exitingRef.current) return;
       if (key.name === 'escape') {
         exitingRef.current = true;
         setExiting(true);
-        setTimeout(() => {
+        exitTimerRef.current = setTimeout(() => {
           process.exit(ExitCodes.FATAL_CONFIG_ERROR);
         }, 100);
       }
@@ -108,16 +109,13 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
       committingRef.current = true;
       setIsCommitting(true);
       setErrorMessage(null);
-      void Promise.resolve(onSelect(choice))
+      void Promise.resolve()
+        .then(() => onSelect(choice))
         .catch((error: unknown) => {
           debug.error('Folder trust selection failed', error);
-          if (mountedRef.current) {
-            const detail =
-              error instanceof Error ? error.message : String(error);
-            setErrorMessage(
-              `Failed to apply folder trust selection: ${detail}`,
-            );
-          }
+          if (!mountedRef.current) return;
+          const detail = error instanceof Error ? error.message : String(error);
+          setErrorMessage(`Failed to apply folder trust selection: ${detail}`);
         })
         .finally(() => {
           committingRef.current = false;
@@ -128,11 +126,10 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
     },
     [mountedRef, onSelect],
   );
-
-  const currentFolder = path.basename(workingDirectory);
-  const parentFolder = path.basename(path.dirname(workingDirectory));
-  const options = buildTrustOptions(currentFolder, parentFolder);
-
+  const options = buildTrustOptions(
+    path.basename(workingDirectory),
+    path.basename(path.dirname(workingDirectory)),
+  );
   return (
     <Box flexDirection="column" width="100%">
       <Box
@@ -144,7 +141,6 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
         marginRight={1}
       >
         <TrustDialogHeader />
-
         <RadioButtonSelect
           items={options}
           onSelect={handleSelect}

@@ -62,6 +62,7 @@ describe('Config live IDE trust', () => {
     mcpManager.startConfiguredMcpServers.mockResolvedValue(undefined);
     mcpManager.onFolderTrustGained.mockResolvedValue(undefined);
     mcpManager.onFolderTrustRevoked.mockResolvedValue(undefined);
+    mcpManager.quarantineForTrustRevocation.mockReset();
     mcpManager.stop.mockResolvedValue(undefined);
   });
 

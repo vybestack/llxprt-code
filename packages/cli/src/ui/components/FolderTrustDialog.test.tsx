@@ -85,6 +85,30 @@ describe('FolderTrustDialog', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
+  it('cancels the pending exit when the dialog unmounts', () => {
+    vi.useFakeTimers();
+    try {
+      const { stdin, unmount } = renderWithProviders(
+        <FolderTrustDialog
+          workingDirectory="/home/user/project"
+          onSelect={vi.fn()}
+        />,
+      );
+
+      act(() => {
+        stdin.write(KITTY_ESCAPE_SEQUENCE);
+      });
+      unmount();
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+
+      expect(mockedExit).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('serializes an async selection and ignores Enter and Escape until it settles', async () => {
     const selection = createDeferred<void>();
     const onSelect = vi.fn(() => selection.promise);
@@ -158,6 +182,27 @@ describe('FolderTrustDialog', () => {
     await waitFor(() => {
       expect(lastFrame()).toContain(
         'Failed to apply folder trust selection: disk full',
+      );
+    });
+  });
+
+  it('shows an actionable error when applying the selection throws synchronously', async () => {
+    const { lastFrame, stdin } = renderWithProviders(
+      <FolderTrustDialog
+        workingDirectory="/home/user/project"
+        onSelect={() => {
+          throw new Error('synchronous failure');
+        }}
+      />,
+    );
+
+    act(() => {
+      stdin.write('\r');
+    });
+
+    await waitFor(() => {
+      expect(lastFrame()).toContain(
+        'Failed to apply folder trust selection: synchronous failure',
       );
     });
   });
