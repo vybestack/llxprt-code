@@ -34,7 +34,7 @@ vi.mock('node:os', () => ({
   homedir: vi.fn(() => actualOs.homedir()),
 }));
 
-const loggerErrorSpy = vi.hoisted(() => vi.fn());
+const loggerErrorSpy = vi.fn();
 vi.mock('../utils/logger.js', () => ({
   logger: {
     info: vi.fn(),

@@ -36,11 +36,13 @@ describe('A2A settings folder trust authorization', () => {
     tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'a2a-settings-home-'));
     tempWorkspace = fs.mkdtempSync(path.join(tempHome, 'a2a-settings-ws-'));
     originalHome = os.homedir();
-    vi.mocked(os.homedir).mockReturnValue(tempHome);
+    const homedirMock = os.homedir as ReturnType<typeof vi.fn>;
+    homedirMock.mockReturnValue(tempHome);
   });
 
   afterEach(() => {
-    vi.mocked(os.homedir).mockReturnValue(originalHome);
+    const homedirMock = os.homedir as ReturnType<typeof vi.fn>;
+    homedirMock.mockReturnValue(originalHome);
     fs.rmSync(tempHome, { recursive: true, force: true });
   });
 
