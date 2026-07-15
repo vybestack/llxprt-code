@@ -335,57 +335,69 @@ describe('useFolderTrust', () => {
   });
 
   it('restores persisted and live trust after live application fails', async () => {
-    isWorkspaceTrustedSpy.mockReturnValue(undefined);
-    mockTrustedFolders.user.config['/test/path'] = TrustLevel.DO_NOT_TRUST;
-    mockConfig.setTrustedFolderLive
-      .mockRejectedValueOnce(new Error('live update failed'))
-      .mockResolvedValueOnce(undefined);
-    const { result } = renderHook(() =>
-      useFolderTrust(mockSettings, addItem, mockConfig),
-    );
-
-    await act(async () => {
-      await result.current.handleFolderTrustSelect(
-        FolderTrustChoice.TRUST_FOLDER,
+    vi.useFakeTimers();
+    try {
+      isWorkspaceTrustedSpy.mockReturnValue(undefined);
+      mockTrustedFolders.user.config['/test/path'] = TrustLevel.DO_NOT_TRUST;
+      mockConfig.setTrustedFolderLive
+        .mockRejectedValueOnce(new Error('live update failed'))
+        .mockResolvedValueOnce(undefined);
+      const { result } = renderHook(() =>
+        useFolderTrust(mockSettings, addItem, mockConfig),
       );
-    });
 
-    expect(mockTrustedFolders.user.config).toStrictEqual({
-      '/test/path': TrustLevel.DO_NOT_TRUST,
-    });
-    expect(mockConfig.setTrustedFolderLive).toHaveBeenNthCalledWith(1, true);
-    expect(mockConfig.setTrustedFolderLive).toHaveBeenNthCalledWith(2, false);
-    expect(addItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'error',
-        text: expect.stringContaining('live update failed'),
-      }),
-      expect.any(Number),
-    );
+      await act(async () => {
+        await result.current.handleFolderTrustSelect(
+          FolderTrustChoice.TRUST_FOLDER,
+        );
+      });
+
+      expect(mockTrustedFolders.user.config).toStrictEqual({
+        '/test/path': TrustLevel.DO_NOT_TRUST,
+      });
+      expect(mockConfig.setTrustedFolderLive).toHaveBeenNthCalledWith(1, true);
+      expect(mockConfig.setTrustedFolderLive).toHaveBeenNthCalledWith(2, false);
+      expect(addItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          text: expect.stringContaining('live update failed'),
+        }),
+        expect.any(Number),
+      );
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
   });
 
   it('reports incomplete rollback when restoring live trust also fails', async () => {
-    isWorkspaceTrustedSpy.mockReturnValue(undefined);
-    mockConfig.setTrustedFolderLive
-      .mockRejectedValueOnce(new Error('live update failed'))
-      .mockRejectedValueOnce(new Error('live rollback failed'));
-    const { result } = renderHook(() =>
-      useFolderTrust(mockSettings, addItem, mockConfig),
-    );
-
-    await act(async () => {
-      await result.current.handleFolderTrustSelect(
-        FolderTrustChoice.TRUST_FOLDER,
+    vi.useFakeTimers();
+    try {
+      isWorkspaceTrustedSpy.mockReturnValue(undefined);
+      mockConfig.setTrustedFolderLive
+        .mockRejectedValueOnce(new Error('live update failed'))
+        .mockRejectedValueOnce(new Error('live rollback failed'));
+      const { result } = renderHook(() =>
+        useFolderTrust(mockSettings, addItem, mockConfig),
       );
-    });
 
-    expect(addItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'error',
-        text: expect.stringContaining('rollback was incomplete'),
-      }),
-      expect.any(Number),
-    );
+      await act(async () => {
+        await result.current.handleFolderTrustSelect(
+          FolderTrustChoice.TRUST_FOLDER,
+        );
+      });
+
+      expect(addItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          text: expect.stringContaining('rollback was incomplete'),
+        }),
+        expect.any(Number),
+      );
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
   });
 
   it.skipIf(process.platform === 'win32')(
