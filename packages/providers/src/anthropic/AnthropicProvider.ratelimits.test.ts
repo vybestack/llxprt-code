@@ -516,8 +516,12 @@ describe('AnthropicProvider', () => {
 
           await expect(nextPromise).rejects.toMatchObject({
             name: 'AbortError',
+            cause: reason,
           });
+          await vi.runAllTimersAsync();
           expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
+          expect(vi.getTimerCount()).toBe(0);
+          await throttledCall.return?.();
         } finally {
           vi.useRealTimers();
         }

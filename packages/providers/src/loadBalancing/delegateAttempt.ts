@@ -6,7 +6,7 @@
 
 import type { GenerateChatOptions } from '../IProvider.js';
 import { RetriesExhaustedError } from '../errors.js';
-import { consumeTransportAttempt } from '../transportAttemptBudget.js';
+import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
 import {
   createLinkedAbortController,
   getRequestSignal,
@@ -15,7 +15,7 @@ import {
 } from '../utils/abortSignal.js';
 
 export function requireTransportAttempt(options: GenerateChatOptions): void {
-  if (!consumeTransportAttempt(options)) {
+  if (!tryConsumeTransportAttempt(options)) {
     const message = 'Transport attempt budget exhausted';
     throw new RetriesExhaustedError(message, 'server_error', {
       cause: new Error(message),

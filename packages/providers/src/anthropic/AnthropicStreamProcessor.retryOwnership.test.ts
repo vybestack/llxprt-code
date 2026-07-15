@@ -113,7 +113,7 @@ describe('Anthropic stream retry ownership', () => {
     });
     controller.abort();
 
-    await expect(result).rejects.toThrow(/abort/i);
+    await expect(result).rejects.toMatchObject({ name: 'AbortError' });
     expect(transportCalls).toBe(1);
   });
 });

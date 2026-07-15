@@ -57,37 +57,15 @@ export function createLinkedAbortController(
   };
 }
 
-export function withLegacyRequestSignal(
-  signal: AbortSignal | undefined,
-): GenerateChatOptions['invocation'] | undefined {
-  return signal === undefined
-    ? undefined
-    : ({ signal } as GenerateChatOptions['invocation']);
-}
-
-export function withOptionalRequestSignal(
-  invocation: GenerateChatOptions['invocation'],
-  signal: AbortSignal | undefined,
-): GenerateChatOptions['invocation'] | undefined {
-  if (signal === undefined) return invocation;
-  return invocation === undefined
-    ? withLegacyRequestSignal(signal)
-    : ({ ...invocation, signal } as GenerateChatOptions['invocation']);
-}
-
 export function withRequestSignal(
   options: GenerateChatOptions,
   signal: AbortSignal,
 ): GenerateChatOptions {
   return {
     ...options,
-    invocation:
-      options.invocation === undefined
-        ? ({ signal } as GenerateChatOptions['invocation'])
-        : ({
-            ...options.invocation,
-            signal,
-          } as GenerateChatOptions['invocation']),
+    ...(options.invocation === undefined
+      ? {}
+      : { invocation: { ...options.invocation, signal } }),
     metadata: { ...options.metadata, abortSignal: signal },
   };
 }
@@ -97,7 +75,10 @@ export function raceWithAbort<T>(
   signal: AbortSignal | undefined,
 ): Promise<T> {
   if (signal === undefined) return operation;
-  if (signal.aborted) return Promise.reject(createAbortError(signal.reason));
+  if (signal.aborted) {
+    void operation.catch(() => undefined);
+    return Promise.reject(createAbortError(signal.reason));
+  }
 
   return new Promise<T>((resolve, reject) => {
     const onAbort = () => reject(createAbortError(signal.reason));

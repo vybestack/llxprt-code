@@ -421,7 +421,7 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
     await vi.waitFor(() => expect(calls).toBe(1), { timeout: 1_000 });
     controller.abort();
 
-    await expect(promise).rejects.toThrow(/abort/i);
+    await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
     expect(calls).toBe(1);
     expect(observedErrors).toStrictEqual([]);
   });

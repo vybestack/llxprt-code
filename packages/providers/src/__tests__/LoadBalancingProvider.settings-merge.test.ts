@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -440,6 +440,14 @@ describe('LoadBalancingProvider', () => {
           name: 'anthropic',
           async *generateChatCompletion(options: GenerateChatOptions) {
             capturedSignal = options.invocation?.signal;
+            if (capturedSignal === undefined) {
+              throw new Error('Delegate invocation signal is required');
+            }
+            await new Promise<void>((resolve) => {
+              capturedSignal.addEventListener('abort', () => resolve(), {
+                once: true,
+              });
+            });
             yield { role: 'model', parts: [{ text: 'response' }] };
           },
           getModels: async () => [],
@@ -452,20 +460,26 @@ describe('LoadBalancingProvider', () => {
         providerManager.getProviderByName = () => delegate;
 
         try {
-          for await (const _chunk of provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
-            settings: settingsService,
-            config,
-            runtime: { settingsService, config },
-            metadata: { abortSignal: controller.signal },
-          })) {
-            // Consume
-          }
+          const completion = (async () => {
+            for await (const _chunk of provider.generateChatCompletion({
+              contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+              settings: settingsService,
+              config,
+              runtime: { settingsService, config },
+              metadata: { abortSignal: controller.signal },
+            })) {
+              void _chunk;
+            }
+          })();
+          await vi.waitFor(() => expect(capturedSignal).toBeDefined());
+          expect(capturedSignal?.aborted).toBe(false);
+          controller.abort();
+          await completion;
         } finally {
           providerManager.getProviderByName = originalGetProvider;
         }
 
-        expect(capturedSignal).toBe(controller.signal);
+        expect(capturedSignal?.aborted).toBe(true);
       });
     });
     describe('ephemeralSettings merge (dumb merge)', () => {

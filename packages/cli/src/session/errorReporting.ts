@@ -10,7 +10,10 @@ import {
   JsonStreamEventType,
   writeToStderr,
 } from '@vybestack/llxprt-code-core';
-import { wasMachineErrorReported } from './machineErrorReporting.js';
+import {
+  markMachineErrorReported,
+  wasMachineErrorReported,
+} from './machineErrorReporting.js';
 
 export function formatNonInteractiveError(error: unknown): string {
   const formatted = parseAndFormatApiError(error);
@@ -81,4 +84,5 @@ export function reportNonInteractiveError(
     const printableError = formatNonInteractiveError(error);
     writeToStderr(`Non-interactive run failed: ${printableError}\n`);
   }
+  if (error instanceof Error) markMachineErrorReported(error);
 }

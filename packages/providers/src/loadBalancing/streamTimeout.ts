@@ -44,12 +44,12 @@ async function waitForFirstChunk(
   timeoutMs: number | undefined,
   signal: AbortSignal,
 ): Promise<IteratorResult<IContent>> {
+  const next = iterator.next();
+  if (timeoutMs === undefined || timeoutMs <= 0) {
+    return raceWithAbort(next, signal);
+  }
   const waitController = new AbortController();
   try {
-    const next = iterator.next();
-    if (timeoutMs === undefined || timeoutMs <= 0) {
-      return await raceWithAbort(next, signal);
-    }
     const timeout = delay(timeoutMs, waitController.signal).then(() => {
       throw new RequestTimeoutError(timeoutMs);
     });

@@ -268,10 +268,17 @@ describe('Turn - first-response timeout (issue #2379)', () => {
         config: {
           onProviderError: (error: StructuredError) => void;
         };
-      }) => {
-        params.config.onProviderError(rateLimitError);
-        return Promise.resolve(createStreamWithStalledFirstNext());
-      },
+      }) =>
+        Promise.resolve({
+          [Symbol.asyncIterator]: () => ({
+            next: () => {
+              queueMicrotask(() =>
+                params.config.onProviderError(rateLimitError),
+              );
+              return new Promise<IteratorResult<never>>(() => {});
+            },
+          }),
+        }),
     );
 
     const events: ServerAgentStreamEvent[] = [];
@@ -461,9 +468,14 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     await runPromise;
 
     expect(transports).toBe(2);
-    expect(events.at(-1)).toMatchObject({
+    expect(events).toContainEqual({
       type: AgentEventType.Error,
-      value: { error: { status: 429, category: 'rate_limit' } },
+      value: {
+        error: expect.objectContaining({
+          status: 429,
+          category: 'rate_limit',
+        }),
+      },
     });
   });
 
@@ -509,6 +521,13 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       true,
     );
     expect(events.at(-1)?.type).toBe(AgentEventType.StreamIdleTimeout);
+    expect(
+      events.some(
+        (event) =>
+          event.type === AgentEventType.Error &&
+          event.value.error.status === 429,
+      ),
+    ).toBe(false);
   });
 
   it('resource cleanup: when the timeout wins but the first .next() resolves LATE, the acquired iterator is closed (no provider connection leak)', async () => {
@@ -670,6 +689,13 @@ describe('Turn - first-response timeout (issue #2379)', () => {
         }),
       },
     });
+    expect(
+      events.some(
+        (event) =>
+          event.type === AgentEventType.Error &&
+          event.value.error.status === 504,
+      ),
+    ).toBe(false);
   });
 
   it('control: first-response DISABLED (0) with a normal fast stream → events flow, no timeout', async () => {

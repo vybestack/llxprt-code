@@ -26,6 +26,7 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { getRequestSignal } from '../utils/abortSignal.js';
 
 async function consumeStream(
   stream: AsyncIterableIterator<IContent>,
@@ -228,13 +229,13 @@ describe('RetryOrchestrator invocation safety', () => {
     expect(providerCalls).toBeGreaterThanOrEqual(1);
   });
 
-  it('propagates signal to the wrapped provider via invocation', async () => {
+  it('propagates signal to the wrapped provider through request options', async () => {
     let receivedSignal: AbortSignal | undefined;
 
     const provider: IProvider = {
       name: 'signal-receiver-provider',
       async *generateChatCompletion(options: GenerateChatOptions) {
-        receivedSignal = options.invocation?.signal;
+        receivedSignal = getRequestSignal(options);
         yield {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'ok' }],

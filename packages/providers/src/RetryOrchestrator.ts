@@ -50,6 +50,7 @@ import type { StructuredErrorCategory } from '@vybestack/llxprt-code-core/core/t
 import {
   claimProviderErrorObservation,
   invokeProviderErrorObserver,
+  isStreamTimeoutError,
   toObservedProviderError,
 } from './providerErrorObservation.js';
 import type { OnAuthErrorHandler } from '@vybestack/llxprt-code-core/config/configTypes.js';
@@ -61,8 +62,6 @@ import {
   createLinkedAbortController,
   getRequestSignal,
   raceWithAbort,
-  withLegacyRequestSignal,
-  withOptionalRequestSignal,
   withRequestSignal,
 } from './utils/abortSignal.js';
 import {
@@ -254,24 +253,19 @@ export class RetryOrchestrator implements IProvider {
     let options: GenerateChatOptions;
 
     if (Array.isArray(optionsOrContents)) {
-      // Legacy signature: (contents, tools?, signal?)
-      // The signal is carried on invocation so retry logic and the wrapped
-      // provider can read it; BaseProvider normalization replaces this stub
-      // with a real RuntimeInvocationContext (preserving the signal).
-      options = {
+      const legacyOptions: GenerateChatOptions = {
         contents: optionsOrContents,
         tools,
-        invocation: withLegacyRequestSignal(signal),
-      } as GenerateChatOptions;
-    } else {
-      // Modern signature: (options)
-      options = {
-        ...optionsOrContents,
-        invocation: withOptionalRequestSignal(
-          optionsOrContents.invocation,
-          signal,
-        ),
       };
+      options =
+        signal === undefined
+          ? legacyOptions
+          : withRequestSignal(legacyOptions, signal);
+    } else {
+      options =
+        signal === undefined
+          ? optionsOrContents
+          : withRequestSignal(optionsOrContents, signal);
     }
 
     return this.generateChatCompletionWithRetry(options);
@@ -809,9 +803,7 @@ export class RetryOrchestrator implements IProvider {
     }
 
     // Retry stream timeouts
-    if (error instanceof Error && error.message.includes('Stream timeout')) {
-      return true;
-    }
+    if (isStreamTimeoutError(error)) return true;
 
     return false;
   }

@@ -9,6 +9,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IModel } from '../IModel.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
+import { getRequestSignal } from '../utils/abortSignal.js';
 
 async function collect(stream: AsyncIterable<IContent>): Promise<IContent[]> {
   const chunks: IContent[] = [];
@@ -31,14 +32,17 @@ describe('RetryOrchestrator timeout cleanup', () => {
         maximumActiveStreams = Math.max(maximumActiveStreams, activeStreams);
         try {
           if (attempts === 1) {
-            const signal = options.invocation?.signal;
+            const signal = getRequestSignal(options);
+            if (signal === undefined) {
+              throw new Error('Retry attempt signal is required');
+            }
             await new Promise<void>((resolve, reject) => {
               const onAbort = () => {
                 observedAborts++;
                 reject(new Error('transport aborted'));
               };
-              signal?.addEventListener('abort', onAbort, { once: true });
-              if (signal?.aborted === true) onAbort();
+              signal.addEventListener('abort', onAbort, { once: true });
+              if (signal.aborted) onAbort();
             });
           }
           yield {
@@ -58,7 +62,7 @@ describe('RetryOrchestrator timeout cleanup', () => {
       invokeServerTool: async () => null,
     };
     const orchestrator = new RetryOrchestrator(provider, {
-      streamingTimeoutMs: 10,
+      streamingTimeoutMs: 50,
       maxAttempts: 2,
       initialDelayMs: 0,
     });
@@ -69,7 +73,12 @@ describe('RetryOrchestrator timeout cleanup', () => {
       }),
     );
 
-    expect(chunks).toHaveLength(1);
+    expect(chunks).toStrictEqual([
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'success' }],
+      },
+    ]);
     expect({
       attempts,
       maximumActiveStreams,

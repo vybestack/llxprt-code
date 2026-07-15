@@ -27,6 +27,18 @@ describe('closeIteratorBounded', () => {
     vi.useRealTimers();
   });
 
+  it('returns immediately when no iterator was acquired', async () => {
+    await expect(closeIteratorBounded(undefined)).resolves.toBeUndefined();
+  });
+
+  it('returns immediately when the iterator has no return method', async () => {
+    const iterator: AsyncIterator<string> = {
+      next: async () => ({ done: true, value: undefined }),
+    };
+
+    await expect(closeIteratorBounded(iterator)).resolves.toBeUndefined();
+  });
+
   it('bounds cleanup for a noncooperative iterator', async () => {
     vi.useFakeTimers();
     let completed = false;

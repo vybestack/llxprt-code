@@ -18,7 +18,10 @@ import {
 } from '../BaseProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import {
+  createRuntimeInvocationContext,
+  type RuntimeInvocationContext,
+} from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,
@@ -168,7 +171,7 @@ describe('BaseProvider normalization invocation safety', () => {
     ).toBe(true);
   });
 
-  it('inherits a metadata signal when a valid invocation has no signal', async () => {
+  it('uses a metadata signal when a valid invocation has no signal', async () => {
     const { createProviderCallOptions } = await import(
       '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js'
     );
@@ -192,6 +195,43 @@ describe('BaseProvider normalization invocation safety', () => {
 
     expect(provider.lastNormalizedOptions?.invocation.signal).toBe(
       controller.signal,
+    );
+  });
+
+  it('uses an invocation signal ahead of a metadata signal', async () => {
+    const { createProviderCallOptions } = await import(
+      '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js'
+    );
+    const provider = new InvocationSafetyProvider();
+    wireProviderWithAuth(provider);
+    const settings = createSettings(provider);
+    const invocationController = new AbortController();
+    const metadataController = new AbortController();
+    const validOptions = createProviderCallOptions({
+      providerName: PROVIDER_NAME,
+      settings,
+      ephemerals: {},
+    });
+    const invocation = createRuntimeInvocationContext({
+      runtime: validOptions.runtime,
+      settings,
+      providerName: PROVIDER_NAME,
+      ephemeralsSnapshot: {},
+      signal: invocationController.signal,
+      fallbackRuntimeId: validOptions.runtime.runtimeId,
+    });
+
+    await provider
+      .generateChatCompletion({
+        ...validOptions,
+        contents: [prompt],
+        invocation,
+        metadata: { abortSignal: metadataController.signal },
+      })
+      .next();
+
+    expect(provider.lastNormalizedOptions?.invocation.signal).toBe(
+      invocationController.signal,
     );
   });
 

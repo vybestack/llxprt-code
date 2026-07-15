@@ -36,7 +36,6 @@ describe('provider error observation', () => {
       onFailure,
     );
     await Promise.resolve();
-    await Promise.resolve();
 
     expect(onFailure).toHaveBeenCalledWith(observerFailure);
   });
@@ -62,6 +61,14 @@ describe('provider error observation', () => {
       status: 429,
       category: 'rate_limit',
     });
+  });
+
+  it('extracts a safe provider message directly from a string payload', () => {
+    expect(
+      getSafeProviderMessage(
+        '429 {"error":{"message":"Rate limited by provider"}}',
+      ),
+    ).toBe('Rate limited by provider');
   });
 
   it('bounds oversized messages and safely handles malformed payloads', () => {

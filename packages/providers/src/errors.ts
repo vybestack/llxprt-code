@@ -308,15 +308,19 @@ function getHomogeneousValue<T>(
  * message, and HTTP status (when available) are included so callers can diagnose
  * auth, rate-limit, and server issues without inspecting structured fields.
  */
+const MAX_DISPLAYED_FAILURES = 3;
+
 function summarizeFailures(
   failures: Array<{ profile: string; error: Error }>,
 ): string {
   if (failures.length === 0) return 'no backend attempts were recorded';
-  const displayed = failures.slice(0, 3).map(({ profile, error }) => {
-    const status = getErrorStatus(error);
-    const statusSuffix = status !== undefined ? ` (status: ${status})` : '';
-    return `${summarizeProviderLabels([profile])}: ${getSafeProviderMessage(error)}${statusSuffix}`;
-  });
+  const displayed = failures
+    .slice(0, MAX_DISPLAYED_FAILURES)
+    .map(({ profile, error }) => {
+      const status = getErrorStatus(error);
+      const statusSuffix = status !== undefined ? ` (status: ${status})` : '';
+      return `${summarizeProviderLabels([profile])}: ${getSafeProviderMessage(error)}${statusSuffix}`;
+    });
   const omitted = failures.length - displayed.length;
   return `${displayed.join('; ')}${omitted > 0 ? `; +${omitted} more` : ''}`;
 }
@@ -540,6 +544,6 @@ export class AllBucketsExhaustedError extends Error {
    *      → 'Rate limited'
    */
   private static extractHumanReadableMessage(raw: string): string {
-    return getSafeProviderMessage(new Error(raw));
+    return getSafeProviderMessage(raw);
   }
 }

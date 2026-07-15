@@ -73,6 +73,36 @@ describe('JsonFormatter', () => {
       },
     });
   });
+
+  it.each([
+    {
+      category: 'rate_limit',
+      reason: 'future_reason',
+      expected: { category: 'rate_limit' },
+    },
+    {
+      category: 'future_category',
+      reason: 'retries_exhausted',
+      expected: { reason: 'retries_exhausted' },
+    },
+  ])(
+    'preserves recognized fields independently for $category and $reason',
+    ({ category, reason, expected }) => {
+      const error: Error & { category?: string; reason?: string } = new Error(
+        'provider failed',
+      );
+      error.category = category;
+      error.reason = reason;
+
+      expect(
+        JSON.parse(new JsonFormatter().formatError(error)).error,
+      ).toStrictEqual({
+        type: 'Error',
+        message: 'provider failed',
+        ...expected,
+      });
+    },
+  );
 });
 
 describe('StreamJsonFormatter', () => {

@@ -8,9 +8,11 @@ import type { GenerateChatOptions } from './IProvider.js';
 
 const PROVIDER_ERROR_OBSERVATION_CONTEXT_KEY =
   '_providerErrorObservationContext';
+const MAX_HANDLED_PRIMITIVE_ERRORS = 32;
 
 interface ProviderErrorObservationContext {
-  readonly handledErrors: Set<unknown>;
+  readonly handledObjects: WeakSet<object>;
+  readonly handledPrimitives: Set<unknown>;
 }
 
 const detachedObservationContexts = new WeakMap<
@@ -23,19 +25,75 @@ function getProviderErrorObservationContext(
 ): ProviderErrorObservationContext | undefined {
   const context = options.metadata?.[PROVIDER_ERROR_OBSERVATION_CONTEXT_KEY];
   if (typeof context !== 'object' || context === null) return undefined;
-  if (!('handledErrors' in context)) return undefined;
-  return context.handledErrors instanceof Set
-    ? { handledErrors: context.handledErrors }
-    : undefined;
+  if (!('handledObjects' in context) || !('handledPrimitives' in context)) {
+    return undefined;
+  }
+  if (
+    !(context.handledObjects instanceof WeakSet) ||
+    !(context.handledPrimitives instanceof Set)
+  ) {
+    return undefined;
+  }
+  return {
+    handledObjects: context.handledObjects,
+    handledPrimitives: context.handledPrimitives,
+  };
+}
+
+function createProviderErrorObservationContext(): ProviderErrorObservationContext {
+  return {
+    handledObjects: new WeakSet<object>(),
+    handledPrimitives: new Set<unknown>(),
+  };
+}
+
+function getOrCreateProviderErrorObservationContext(
+  options: GenerateChatOptions,
+): ProviderErrorObservationContext {
+  const attached = getProviderErrorObservationContext(options);
+  if (attached !== undefined) return attached;
+  const detached = detachedObservationContexts.get(options);
+  if (detached !== undefined) return detached;
+  const context = createProviderErrorObservationContext();
+  detachedObservationContexts.set(options, context);
+  return context;
+}
+
+function isObjectError(error: unknown): error is object {
+  return (
+    (typeof error === 'object' && error !== null) || typeof error === 'function'
+  );
+}
+
+function hasHandledError(
+  context: ProviderErrorObservationContext,
+  error: unknown,
+): boolean {
+  return isObjectError(error)
+    ? context.handledObjects.has(error)
+    : context.handledPrimitives.has(error);
+}
+
+function markHandledError(
+  context: ProviderErrorObservationContext,
+  error: unknown,
+): void {
+  if (isObjectError(error)) {
+    context.handledObjects.add(error);
+  } else {
+    if (context.handledPrimitives.size >= MAX_HANDLED_PRIMITIVE_ERRORS) {
+      const oldest = context.handledPrimitives.values().next();
+      if (oldest.done !== true) context.handledPrimitives.delete(oldest.value);
+    }
+    context.handledPrimitives.add(error);
+  }
 }
 
 export function attachProviderErrorObservationContext(
   options: GenerateChatOptions,
 ): GenerateChatOptions {
   if (getProviderErrorObservationContext(options) !== undefined) return options;
-  const context: ProviderErrorObservationContext = {
-    handledErrors: new Set<unknown>(),
-  };
+  const context = getOrCreateProviderErrorObservationContext(options);
   return {
     ...options,
     metadata: {
@@ -50,13 +108,9 @@ export function claimProviderErrorObservation(
   error: unknown,
 ): boolean {
   if (options.onProviderError === undefined) return false;
-  const context = getProviderErrorObservationContext(options) ??
-    detachedObservationContexts.get(options) ?? {
-      handledErrors: new Set<unknown>(),
-    };
-  detachedObservationContexts.set(options, context);
-  if (context.handledErrors.has(error)) return false;
-  context.handledErrors.add(error);
+  const context = getOrCreateProviderErrorObservationContext(options);
+  if (hasHandledError(context, error)) return false;
+  markHandledError(context, error);
   return true;
 }
 
@@ -65,12 +119,7 @@ export function markProviderErrorObservationHandled(
   error: unknown,
 ): void {
   if (options.onProviderError === undefined) return;
-  const context = getProviderErrorObservationContext(options) ??
-    detachedObservationContexts.get(options) ?? {
-      handledErrors: new Set<unknown>(),
-    };
-  detachedObservationContexts.set(options, context);
-  context.handledErrors.add(error);
+  markHandledError(getOrCreateProviderErrorObservationContext(options), error);
 }
 
 export function invokeProviderErrorObserver(
@@ -181,6 +230,11 @@ export function summarizeProviderLabels(values: readonly string[]): string {
 }
 
 export function getSafeProviderMessage(error: unknown): string {
+  if (typeof error === 'string') {
+    const jsonDetail = getJsonDetail(error);
+    const jsonMessage = readStringProperty(jsonDetail, 'message');
+    return normalizePublicProviderText(jsonMessage ?? error);
+  }
   const detail = unwrapTwoLevelProviderErrorEnvelope(error);
   const detailMessage =
     detail === error ? undefined : readStringProperty(detail, 'message');
@@ -219,6 +273,10 @@ function isStructuredErrorCategory(
   );
 }
 
+export function isStreamTimeoutError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('Stream timeout');
+}
+
 export function classifyProviderError(
   error: unknown,
   status: number | undefined,
@@ -246,9 +304,7 @@ export function classifyProviderError(
     return 'client_error';
   }
   if (isNetworkTransientError(error)) return 'network';
-  if (error instanceof Error && error.message.includes('Stream timeout')) {
-    return 'server_error';
-  }
+  if (isStreamTimeoutError(error)) return 'server_error';
   return undefined;
 }
 

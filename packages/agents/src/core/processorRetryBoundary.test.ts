@@ -128,7 +128,7 @@ describe('agent processor retry boundaries', () => {
           [{ speaker: 'human', blocks: [] }],
         ],
       ),
-    ).rejects.toThrow(/abort/i);
+    ).rejects.toMatchObject({ name: 'AbortError' });
     expect(calls).toBe(0);
   });
 

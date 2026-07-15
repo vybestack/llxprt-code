@@ -552,6 +552,10 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       isRetryable: false,
       shouldFailover: false,
       reason: 'retries_exhausted',
+      cause: {
+        name: 'EmptyStreamError',
+        message: 'Model stream ended immediately with no content.',
+      },
       failures: [
         {
           name: 'EmptyStreamError',

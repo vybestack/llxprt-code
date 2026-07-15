@@ -35,7 +35,9 @@ function isTransportAttemptBudget(
   if (typeof value.limit !== 'number') return false;
   if (!Number.isInteger(value.limit) || value.limit <= 0) return false;
   if (typeof value.used !== 'number') return false;
-  return Number.isInteger(value.used) && value.used >= 0;
+  return (
+    Number.isInteger(value.used) && value.used >= 0 && value.used <= value.limit
+  );
 }
 
 function getRequestContext(
@@ -130,7 +132,9 @@ export function hasTransportAttemptRemaining(
   return budget === undefined || budget.used < budget.limit;
 }
 
-export function consumeTransportAttempt(options: GenerateChatOptions): boolean {
+export function tryConsumeTransportAttempt(
+  options: GenerateChatOptions,
+): boolean {
   const budget = getTransportAttemptBudget(options);
   if (budget === undefined) return true;
   if (budget.used >= budget.limit) return false;

@@ -10,16 +10,20 @@ import type { GenerateChatOptions } from '../IProvider.js';
 import { permitsBucketFailover, RetriesExhaustedError } from '../errors.js';
 import { requireTransportAttempt } from '../loadBalancing/delegateAttempt.js';
 import { rethrowIfAborted } from '../loadBalancing/requestAbort.js';
-import { claimProviderErrorObservation } from '../providerErrorObservation.js';
+import {
+  attachProviderErrorObservationContext,
+  claimProviderErrorObservation,
+} from '../providerErrorObservation.js';
 import {
   classifyRetryError,
   isTerminalRetryError,
   markErrorAfterStreamOutput,
 } from '../retryErrorClassification.js';
+import { throwIfEmptyStreamExhaustsBudget } from '../retryExhaustion.js';
 import { resolveRetryRequestContext } from '../retryRequestContext.js';
 import {
   attachTransportAttemptBudget,
-  consumeTransportAttempt,
+  tryConsumeTransportAttempt,
 } from '../transportAttemptBudget.js';
 import {
   createLinkedAbortController,
@@ -55,7 +59,7 @@ describe('request-scoped retry infrastructure', () => {
     };
 
     const firstRequest = attachTransportAttemptBudget(originalOptions, 2);
-    expect(consumeTransportAttempt(firstRequest.options)).toBe(true);
+    expect(tryConsumeTransportAttempt(firstRequest.options)).toBe(true);
     const nestedWrapper = attachTransportAttemptBudget(
       firstRequest.options,
       99,
@@ -89,19 +93,38 @@ describe('request-scoped retry infrastructure', () => {
     expect(originalOptions.metadata?._retryRequestContext).toStrictEqual([]);
   });
 
-  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
-    'bounds non-finite transport limit %s to one attempt',
-    (limit) => {
-      const { options, budget } = attachTransportAttemptBudget(
-        { contents: [] },
-        limit,
-      );
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+    0,
+    -1,
+  ])('bounds invalid transport limit %s to one attempt', (limit) => {
+    const { options, budget } = attachTransportAttemptBudget(
+      { contents: [] },
+      limit,
+    );
 
-      expect(budget).toStrictEqual({ limit: 1, used: 0 });
-      expect(consumeTransportAttempt(options)).toBe(true);
-      expect(consumeTransportAttempt(options)).toBe(false);
-    },
-  );
+    expect(budget).toStrictEqual({ limit: 1, used: 0 });
+    expect(tryConsumeTransportAttempt(options)).toBe(true);
+    expect(tryConsumeTransportAttempt(options)).toBe(false);
+  });
+
+  it('replaces a malformed budget whose used count exceeds its limit', () => {
+    const malformed = { limit: 2, used: 3 };
+    const request = attachTransportAttemptBudget(
+      {
+        contents: [],
+        metadata: {
+          _retryRequestContext: { transportAttemptBudget: malformed },
+        },
+      },
+      4,
+    );
+
+    expect(request.budget).not.toBe(malformed);
+    expect(request.budget).toStrictEqual({ limit: 4, used: 0 });
+  });
 
   it('admits no more concurrent consumers than the shared budget limit', async () => {
     const { options, budget } = attachTransportAttemptBudget(
@@ -110,7 +133,9 @@ describe('request-scoped retry infrastructure', () => {
     );
 
     const admitted = await Promise.all(
-      Array.from({ length: 8 }, async () => consumeTransportAttempt(options)),
+      Array.from({ length: 8 }, async () =>
+        tryConsumeTransportAttempt(options),
+      ),
     );
 
     expect(admitted.filter(Boolean)).toHaveLength(2);
@@ -205,6 +230,18 @@ describe('request-scoped retry infrastructure', () => {
       failoverEligible: false,
     });
   });
+  it('preserves EmptyStreamError as the terminal exhaustion cause', () => {
+    expect(() => throwIfEmptyStreamExhaustsBudget(false, 2, 2)).toThrowError(
+      expect.objectContaining({
+        name: 'RetriesExhaustedError',
+        cause: expect.objectContaining({
+          name: 'EmptyStreamError',
+          message: 'Model stream ended immediately with no content.',
+        }),
+      }),
+    );
+  });
+
   it('classifies primitive retry errors safely and preserves object error identity', () => {
     expect(isTerminalRetryError(null)).toBe(false);
     expect(isTerminalRetryError('provider failed')).toBe(false);
@@ -253,6 +290,37 @@ describe('request-scoped retry infrastructure', () => {
     expect(claimProviderErrorObservation(options, error)).toBe(false);
   });
 
+  it('preserves detached claims when observation context is attached', () => {
+    const options: GenerateChatOptions = {
+      contents: [],
+      onProviderError: () => undefined,
+    };
+    const error = new Error('delegate failure');
+
+    expect(claimProviderErrorObservation(options, error)).toBe(true);
+    expect(
+      claimProviderErrorObservation(
+        attachProviderErrorObservationContext(options),
+        error,
+      ),
+    ).toBe(false);
+  });
+
+  it('bounds detached primitive error deduplication', () => {
+    const options: GenerateChatOptions = {
+      contents: [],
+      onProviderError: () => undefined,
+    };
+
+    for (let index = 0; index < 64; index++) {
+      expect(claimProviderErrorObservation(options, `failure-${index}`)).toBe(
+        true,
+      );
+    }
+
+    expect(claimProviderErrorObservation(options, 'failure-0')).toBe(true);
+  });
+
   it('retains the abort reason when racing an operation', async () => {
     const controller = new AbortController();
     const reason = new Error('request deadline expired');
@@ -292,7 +360,7 @@ describe('request-scoped retry infrastructure', () => {
     );
   });
 
-  it('contains synchronous iterator return failures', async () => {
+  it('suppresses synchronous iterator return failures during cleanup', async () => {
     const iterator: AsyncIterator<unknown> = {
       next: async () => ({ done: true, value: undefined }),
       return: () => {

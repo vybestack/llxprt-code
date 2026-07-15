@@ -6,7 +6,7 @@
 
 import type { GenerateChatOptions, IProvider } from './IProvider.js';
 import {
-  consumeTransportAttempt,
+  tryConsumeTransportAttempt,
   type TransportAttemptBudget,
 } from './transportAttemptBudget.js';
 
@@ -18,7 +18,7 @@ export function beginProviderTransportAttempt(
   providerOwnsAttempts: boolean,
   options: GenerateChatOptions,
 ): void {
-  if (!providerOwnsAttempts) consumeTransportAttempt(options);
+  if (!providerOwnsAttempts) tryConsumeTransportAttempt(options);
 }
 
 export function accountProviderAttempt(
@@ -28,7 +28,7 @@ export function accountProviderAttempt(
   usedBefore: number,
 ): void {
   if (providerOwnsTransportAttempts(provider) && budget.used === usedBefore) {
-    consumeTransportAttempt(options);
+    tryConsumeTransportAttempt(options);
   }
 }
 
