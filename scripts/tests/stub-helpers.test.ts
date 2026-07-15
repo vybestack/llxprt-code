@@ -5,11 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  StubRegistry,
-  waitFor,
-  isMockFunction,
-} from '../../test-setup/stub-helpers.js';
+import { StubRegistry, isMockFunction } from '../../test-setup/stub-helpers.js';
 
 describe('StubRegistry', () => {
   it('restores a key that existed to its original value', () => {
@@ -84,26 +80,170 @@ describe('StubRegistry', () => {
     expect(target.a).toBe(1);
   });
 
-  it('stubs a non-configurable accessor with a setter', () => {
+  // -------------------------------------------------------------------------
+  // Non-configurable accessor rejection contract
+  // -------------------------------------------------------------------------
+  // StubRegistry rejects non-configurable accessor properties because
+  // restoration via the setter is unsound: a transforming setter stores a
+  // value derived from (not identical to) its input, so passing the getter's
+  // observed output back through the setter may not reproduce the original
+  // state. This prevents silent leaks/corruption while preserving normal data
+  // property and configurable-accessor behavior.
+
+  it('rejects stubbing a non-configurable accessor with a setter (identity setter)', () => {
     let current = 'original';
     const target: Record<string, unknown> = {};
     Object.defineProperty(target, 'value', {
       configurable: false,
       enumerable: true,
-
       get: () => current,
       set: (value: unknown) => {
-        current = String(value);
+        current = value as string;
+      },
+    });
+    const registry = new StubRegistry(target);
+
+    expect(() => registry.stub('value', 'stubbed')).toThrow(TypeError);
+  });
+
+  it('rejects stubbing a non-configurable accessor with a transforming setter and does not mutate the value', () => {
+    // A transforming setter: stored value differs from input.
+    let backing = 0;
+    const target: Record<string, unknown> = {};
+    Object.defineProperty(target, 'scaled', {
+      configurable: false,
+      enumerable: true,
+      get: () => backing,
+      set: (value: unknown) => {
+        backing = Number(value) * 2;
+      },
+    });
+    const registry = new StubRegistry(target);
+
+    const originalValue = target.scaled;
+    expect(() => registry.stub('scaled', 5)).toThrow(TypeError);
+
+    // The target was NOT mutated — the rejection prevented the stub.
+    expect(target.scaled).toBe(originalValue);
+  });
+
+  it('rejects stubbing a non-configurable accessor whose getter throws', () => {
+    const target: Record<string, unknown> = {};
+    Object.defineProperty(target, 'failget', {
+      configurable: false,
+      enumerable: true,
+      // The getter genuinely throws on every read. The StubRegistry rejection
+      // must happen at descriptor-snapshot time (via getOwnPropertyDescriptor)
+      // without ever invoking the getter.
+      get: () => {
+        throw new Error('getter explosion');
+      },
+      set: () => {
+        // no-op; included only to make this an accessor
+      },
+    });
+    const registry = new StubRegistry(target);
+
+    expect(() => registry.stub('failget', 'stubbed')).toThrow(TypeError);
+
+    // Reading the property still throws — the target was not mutated and the
+    // getter is still the original throwing getter.
+    expect(() => target.failget).toThrow('getter explosion');
+  });
+
+  it('does not leave a stale snapshot after rejecting a non-configurable accessor', () => {
+    let current = 'original';
+    const target: Record<string | symbol, unknown> = {};
+    Object.defineProperty(target, 'accessor', {
+      configurable: false,
+      enumerable: true,
+      get: () => current,
+      set: (value: unknown) => {
+        current = value as string;
+      },
+    });
+    target.safe = 'old';
+    const registry = new StubRegistry(target);
+
+    // The accessor rejection must not prevent stubbing other safe keys.
+    expect(() => registry.stub('accessor', 'stubbed')).toThrow(TypeError);
+
+    // A normal data property on the same target works fine.
+    registry.stub('safe', 'new');
+    expect(target.safe).toBe('new');
+
+    registry.restoreAll();
+    expect(target.safe).toBe('old');
+    expect(target.accessor).toBe('original');
+  });
+
+  it('allows stubbing a configurable accessor property and restores it exactly', () => {
+    let current = 'original';
+    const target: Record<string, unknown> = {};
+    Object.defineProperty(target, 'value', {
+      configurable: true,
+      enumerable: true,
+      get: () => current,
+      set: (value: unknown) => {
+        current = value as string;
       },
     });
     const registry = new StubRegistry(target);
 
     registry.stub('value', 'stubbed');
-
     expect(target.value).toBe('stubbed');
+
+    registry.restoreAll();
+    // Restoration via defineProperty restores the original get/set descriptor.
+    const descriptor = Object.getOwnPropertyDescriptor(target, 'value');
+    expect(descriptor?.configurable).toBe(true);
+    expect(target.value).toBe('original');
   });
 
-  it('restores remaining keys and clears snapshots after one restore fails', () => {
+  it('rejects when a property transitions from configurable to non-configurable between stubs', () => {
+    // First stub succeeds because the accessor is configurable.
+    let current = 'original';
+    const target: Record<string, unknown> = {};
+    Object.defineProperty(target, 'value', {
+      configurable: true,
+      enumerable: true,
+      get: () => current,
+      set: (value: unknown) => {
+        current = value as string;
+      },
+    });
+    const registry = new StubRegistry(target);
+
+    registry.stub('value', 'first');
+    expect(target.value).toBe('first');
+
+    // Now redefine the property as non-configurable (simulating an external
+    // mutation between stubs). The next stub call must detect this.
+    Object.defineProperty(target, 'value', {
+      configurable: false,
+      enumerable: true,
+      get: () => current,
+      set: (value: unknown) => {
+        current = value as string;
+      },
+    });
+
+    expect(() => registry.stub('value', 'second')).toThrow(TypeError);
+
+    // Once externally locked to non-configurable, the original snapshot
+    // (configurable: true) cannot be restored via defineProperty — the
+    // external mutation is unrecoverable. restoreAll throws and retains
+    // the snapshot. The restub rejection was the honest signal; the caller
+    // is responsible for the external mutation.
+    expect(() => registry.restoreAll()).toThrow(AggregateError);
+    // The external redefine replaced the data-property stub ('first') with a
+    // non-configurable accessor reading `current`, which is still 'original'
+    // (stub replaced the property with a data property and never invoked the
+    // setter). The restore cannot change configurable back to true.
+    expect(target.value).toBe('original');
+  });
+
+  it('restores remaining keys and retains failed snapshots for retry after one restore fails', () => {
     const backing: Record<string, unknown> = { blocked: 'old', safe: 'old' };
     let rejectBlockedRestore = false;
     const target = new Proxy(backing, {
@@ -120,12 +260,18 @@ describe('StubRegistry', () => {
     registry.stub('safe', 'new');
     rejectBlockedRestore = true;
 
+    // First restoreAll: safe succeeds (removed), blocked fails (retained)
     expect(() => registry.restoreAll()).toThrow('Failed to restore all');
     expect(target.safe).toBe('old');
+    expect(target.blocked).toBe('new');
+
+    // Disabling the failure allows the retained blocked snapshot to retry
+    rejectBlockedRestore = false;
     expect(() => registry.restoreAll()).not.toThrow();
+    expect(target.blocked).toBe('old');
   });
 
-  it('reports a failed deletion when restoring an originally absent key', () => {
+  it('reports a failed deletion when restoring an originally absent key, then retries successfully', () => {
     const backing: Record<string, unknown> = {};
     let rejectDeletion = false;
     const target = new Proxy(backing, {
@@ -138,9 +284,16 @@ describe('StubRegistry', () => {
     registry.stub('temporary', 'value');
     rejectDeletion = true;
 
+    // First restoreAll fails: snapshot retained, property still stubbed
     expect(() => registry.restoreAll()).toThrow('Failed to restore all');
     expect(target.temporary).toBe('value');
+
+    // Allowing deletion: retained snapshot retries successfully
+    rejectDeletion = false;
     expect(() => registry.restoreAll()).not.toThrow();
+    expect(Object.prototype.hasOwnProperty.call(target, 'temporary')).toBe(
+      false,
+    );
   });
 
   it('resnapshots current state after a failed first defineProperty stub', () => {
@@ -251,135 +404,6 @@ describe('StubRegistry', () => {
 
     registry.restoreAll();
     expect(target.x).toBe('original');
-  });
-});
-
-describe('waitFor', () => {
-  it('throws on non-finite interval or timeout', () => {
-    expect(() => waitFor(() => 1, { interval: NaN })).toThrow(TypeError);
-    expect(() => waitFor(() => 1, { timeout: Infinity })).toThrow(TypeError);
-    expect(() => waitFor(() => 1, { interval: -Infinity })).toThrow(TypeError);
-    expect(() => waitFor(() => 1, { timeout: -Infinity })).toThrow(TypeError);
-  });
-
-  it('resolves immediately when the callback succeeds on the first try', async () => {
-    const result = await waitFor(() => 42);
-    expect(result).toBe(42);
-  });
-
-  it('retries until the callback succeeds', async () => {
-    let attempts = 0;
-    const result = await waitFor(
-      () => {
-        attempts++;
-        if (attempts < 3) {
-          throw new Error('not ready');
-        }
-        return 'done';
-      },
-      { interval: 10, timeout: 1000 },
-    );
-
-    expect(result).toBe('done');
-    expect(attempts).toBe(3);
-  });
-
-  it('rejects with the last error after timeout', async () => {
-    await expect(
-      waitFor(
-        () => {
-          throw new Error('always fails');
-        },
-        { interval: 10, timeout: 50 },
-      ),
-    ).rejects.toThrow('always fails');
-  });
-
-  it('respects custom interval and timeout options', async () => {
-    const start = Date.now();
-    await expect(
-      waitFor(
-        () => {
-          throw new Error('nope');
-        },
-        { interval: 20, timeout: 60 },
-      ),
-    ).rejects.toThrow('nope');
-
-    const elapsed = Date.now() - start;
-    expect(elapsed).toBeGreaterThanOrEqual(50);
-    expect(elapsed).toBeLessThan(150);
-  });
-
-  it('caps the polling delay at the remaining timeout', async () => {
-    const start = Date.now();
-    await expect(
-      waitFor(
-        () => {
-          throw new Error('still waiting');
-        },
-        { interval: 100, timeout: 30 },
-      ),
-    ).rejects.toThrow('still waiting');
-
-    expect(Date.now() - start).toBeLessThan(90);
-  });
-
-  it('times out when an async callback never settles', async () => {
-    await expect(
-      waitFor(() => new Promise<never>(() => {}), {
-        interval: 10,
-        timeout: 30,
-      }),
-    ).rejects.toThrow('waitFor timed out');
-  });
-
-  it('rejects with the most recent callback error at the deadline', async () => {
-    let attempt = 0;
-    let thrown: unknown;
-    try {
-      await waitFor(
-        () => {
-          attempt++;
-          throw new Error(`attempt ${attempt}`);
-        },
-        { interval: 10, timeout: 30 },
-      );
-    } catch (error: unknown) {
-      thrown = error;
-    }
-
-    expect(attempt).toBeGreaterThan(1);
-    expect(thrown).toBeInstanceOf(Error);
-    expect((thrown as Error).message).toBe(`attempt ${attempt}`);
-  });
-
-  it('supports async callbacks that reject and retries them', async () => {
-    let attempts = 0;
-    const result = await waitFor(
-      async () => {
-        attempts++;
-        if (attempts < 2) {
-          throw new Error('async not ready');
-        }
-        return 'async-done';
-      },
-      { interval: 10, timeout: 1000 },
-    );
-
-    expect(result).toBe('async-done');
-    expect(attempts).toBe(2);
-  });
-
-  it('rejects when an async callback consistently rejects', async () => {
-    await expect(
-      waitFor(
-        async () => {
-          throw new Error('async always fails');
-        },
-        { interval: 10, timeout: 50 },
-      ),
-    ).rejects.toThrow('async always fails');
   });
 });
 

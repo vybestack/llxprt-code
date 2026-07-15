@@ -13,6 +13,8 @@ vi.mock('./import-actual-fixture.js', async (importOriginal) => {
   return { ...actual, fixtureValue: 'mocked' };
 });
 
+vi.mock('./automock-fixture.js');
+
 describe('Bun vi augmentation', () => {
   it('resolves importOriginal relative to the registering test file', async () => {
     const imported = await import('./import-actual-fixture.js');
@@ -46,6 +48,21 @@ describe('Bun vi augmentation', () => {
       await vi.importActual<typeof import('node:path')>('node:path');
 
     expect(actual.basename('/tmp/example.txt')).toBe('example.txt');
+  });
+
+  it('automocks factoryless modules while preserving their export shape', async () => {
+    const imported = await import('./automock-fixture.js');
+
+    expect(imported.primitive).toBe(42);
+    expect(vi.isMockFunction(imported.exportedFunction)).toBe(true);
+    expect(imported.exportedFunction('value')).toBeUndefined();
+    expect(vi.isMockFunction(imported.ExportedClass)).toBe(true);
+    const instance = new imported.ExportedClass();
+    expect(vi.isMockFunction(instance.method)).toBe(true);
+    expect(instance.method()).toBeUndefined();
+    expect(imported.nested.label).toBe('nested');
+    expect(vi.isMockFunction(imported.nested.callable)).toBe(true);
+    expect(imported.nested.callable()).toBeUndefined();
   });
 
   it('settles async timer helpers without a fixed draining delay', async () => {
@@ -118,6 +135,25 @@ describe('Bun vi augmentation', () => {
     }
   });
 
+  it('drains a timer scheduled after an awaited timer callback', async () => {
+    vi.useFakeTimers();
+    try {
+      const order: string[] = [];
+      setTimeout(async () => {
+        order.push('first');
+        await Promise.resolve();
+        setTimeout(() => order.push('second'), 10);
+      }, 10);
+
+      await vi.runAllTimersAsync();
+
+      expect(order).toEqual(['first', 'second']);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('drains recursively queued microtasks from runOnlyPendingTimersAsync', async () => {
     vi.useFakeTimers();
     try {
@@ -137,6 +173,50 @@ describe('Bun vi augmentation', () => {
       await vi.runOnlyPendingTimersAsync();
 
       expect(order).toEqual(['timer1', 'micro1', 'micro2']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not run an awaited callback timer beyond the initial pending boundary', async () => {
+    vi.useFakeTimers({ now: 0 });
+    try {
+      const order: string[] = [];
+      setTimeout(async () => {
+        order.push(`first@${Date.now()}`);
+        await Promise.resolve();
+        setTimeout(() => order.push(`nested@${Date.now()}`), 15);
+      }, 10);
+      setTimeout(() => order.push(`boundary@${Date.now()}`), 20);
+
+      await vi.runOnlyPendingTimersAsync();
+
+      expect(order).toEqual(['first@10', 'boundary@20']);
+      expect(Date.now()).toBe(20);
+      expect(vi.getTimerCount()).toBe(1);
+
+      await vi.runOnlyPendingTimersAsync();
+      expect(order).toEqual(['first@10', 'boundary@20', 'nested@35']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not deadlock when a callback clears the timer queue during advancement', async () => {
+    vi.useFakeTimers({ now: 0 });
+    try {
+      const order: string[] = [];
+      setTimeout(async () => {
+        order.push(`first@${Date.now()}`);
+        vi.clearAllTimers();
+        await Promise.resolve();
+        setTimeout(() => order.push(`nested@${Date.now()}`), 5);
+      }, 10);
+
+      await vi.advanceTimersByTimeAsync(20);
+
+      expect(order).toEqual(['first@10', 'nested@15']);
+      expect(Date.now()).toBe(20);
     } finally {
       vi.useRealTimers();
     }
@@ -173,7 +253,7 @@ describe('Bun vi augmentation', () => {
   });
 
   it('fails fast instead of returning false mock-registry results', () => {
-    expect(() => Reflect.get(vi.mocks, 'fixture')).toThrow(
+    expect(() => Reflect.get(Reflect.get(vi, 'mocks'), 'fixture')).toThrow(
       'Bun does not expose its module mock registry',
     );
   });

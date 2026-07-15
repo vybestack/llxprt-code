@@ -40,46 +40,51 @@ type CommandResponse = {
   subCommands: CommandResponse[];
 };
 
-const coderAgentCard: AgentCard = {
-  name: 'Gemini SDLC Agent',
-  description:
-    'An agent that generates code based on natural language instructions and streams file outputs.',
-  url: 'http://localhost:41242/',
-  provider: {
-    organization: 'Google',
-    url: 'https://google.com',
-  },
-  protocolVersion: '0.3.0',
-  version: '0.0.2', // Incremented version
-  capabilities: {
-    streaming: true,
-    pushNotifications: false,
-    stateTransitionHistory: true,
-  },
-  securitySchemes: undefined,
-  security: undefined,
-  defaultInputModes: ['text'],
-  defaultOutputModes: ['text'],
-  skills: [
-    {
-      id: 'code_generation',
-      name: 'Code Generation',
-      description:
-        'Generates code snippets or complete files based on user requests, streaming the results.',
-      tags: ['code', 'development', 'programming'],
-      examples: [
-        'Write a python function to calculate fibonacci numbers.',
-        'Create an HTML file with a basic button that alerts "Hello!" when clicked.',
-      ],
-      inputModes: ['text'],
-      outputModes: ['text'],
+export function createCoderAgentCard(): AgentCard {
+  return {
+    name: 'Gemini SDLC Agent',
+    description:
+      'An agent that generates code based on natural language instructions and streams file outputs.',
+    url: 'http://localhost:41242/',
+    provider: {
+      organization: 'Google',
+      url: 'https://google.com',
     },
-  ],
-  supportsAuthenticatedExtendedCard: false,
-};
+    protocolVersion: '0.3.0',
+    version: '0.0.2', // Incremented version
+    capabilities: {
+      streaming: true,
+      pushNotifications: false,
+      stateTransitionHistory: true,
+    },
+    securitySchemes: undefined,
+    security: undefined,
+    defaultInputModes: ['text'],
+    defaultOutputModes: ['text'],
+    skills: [
+      {
+        id: 'code_generation',
+        name: 'Code Generation',
+        description:
+          'Generates code snippets or complete files based on user requests, streaming the results.',
+        tags: ['code', 'development', 'programming'],
+        examples: [
+          'Write a python function to calculate fibonacci numbers.',
+          'Create an HTML file with a basic button that alerts "Hello!" when clicked.',
+        ],
+        inputModes: ['text'],
+        outputModes: ['text'],
+      },
+    ],
+    supportsAuthenticatedExtendedCard: false,
+  };
+}
 
-export function updateCoderAgentCardUrl(port: number) {
-  coderAgentCard.url = `http://localhost:${port}/`;
+export function updateCoderAgentCardUrl(
+  port: number,
+  agentCard: AgentCard,
+): void {
+  agentCard.url = `http://localhost:${port}/`;
 }
 
 export interface AppTaskWrapper {
@@ -117,6 +122,8 @@ export type TaskStores = {
 };
 
 export interface CreateAppDependencies {
+  agentCard?: AgentCard;
+  createAgentCard?: () => AgentCard;
   createStartupContext?: () => Promise<AppContext & TaskStores>;
   getGitService?: (
     config: Awaited<ReturnType<typeof loadConfig>>,
@@ -128,8 +135,11 @@ export async function createApp(dependencies: CreateAppDependencies = {}) {
     const { config, agentExecutor, taskStoreForExecutor, taskStoreForHandler } =
       await (dependencies.createStartupContext ?? createStartupContext)();
     const git = await (dependencies.getGitService ?? getGitService)(config);
+    const agentCard =
+      dependencies.agentCard ??
+      (dependencies.createAgentCard ?? createCoderAgentCard)();
     const requestHandler = new DefaultRequestHandler(
-      coderAgentCard,
+      agentCard,
       taskStoreForHandler,
       agentExecutor,
     );
@@ -451,7 +461,8 @@ async function handleTaskMetadata(
 
 export async function main() {
   try {
-    const expressApp = await createApp();
+    const agentCard = createCoderAgentCard();
+    const expressApp = await createApp({ agentCard });
     const rawPortEnv = process.env['CODER_AGENT_PORT'];
     const portEnv = rawPortEnv?.trim();
     const hasExplicitPort = portEnv !== undefined && portEnv !== '';
@@ -473,7 +484,7 @@ export async function main() {
       } else {
         throw new Error('[Core Agent] Could not find port number.');
       }
-      updateCoderAgentCardUrl(Number(actualPort));
+      updateCoderAgentCardUrl(Number(actualPort), agentCard);
       logger.info(
         `[CoreAgent] Agent Server started on http://localhost:${actualPort}`,
       );

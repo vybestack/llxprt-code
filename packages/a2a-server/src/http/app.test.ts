@@ -25,6 +25,7 @@ import type { Server } from 'node:http';
 import request from 'supertest';
 import {
   afterAll,
+  afterEach,
   beforeEach,
   beforeAll,
   describe,
@@ -95,6 +96,12 @@ const mockAgentClientInstance = {
 describe('E2E Tests', () => {
   let app: express.Express;
   let server: Server;
+  const commandLookupSpies: Array<ReturnType<typeof vi.spyOn>> = [];
+  const mockCommandLookup = (command: Command): void => {
+    commandLookupSpies.push(
+      vi.spyOn(commandRegistry, 'get').mockReturnValue(command),
+    );
+  };
 
   beforeAll(async () => {
     config = createMockConfig({
@@ -144,18 +151,21 @@ describe('E2E Tests', () => {
     getExtensionsSpy.mockReset();
   });
 
-  afterAll(
-    () =>
-      new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-          } else {
-            resolve();
-          }
-        });
-      }),
-  );
+  afterEach(() => {
+    commandLookupSpies.splice(0).forEach((spy) => spy.mockRestore());
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve();
+        }
+      });
+    });
+  });
 
   it('should create a new task and stream status updates (text-content) via POST /', async () => {
     sendMessageStreamSpy.mockImplementation(async function* () {
@@ -828,7 +838,7 @@ describe('E2E Tests', () => {
           return { name: 'context-check-command', data: 'success' };
         }),
       };
-      vi.spyOn(commandRegistry, 'get').mockReturnValue(mockCommand);
+      mockCommandLookup(mockCommand);
 
       const agent = request.agent(app);
       const res = await agent
@@ -866,7 +876,7 @@ describe('E2E Tests', () => {
           streaming: true,
           execute: executeSpy,
         };
-        vi.spyOn(commandRegistry, 'get').mockReturnValue(mockStreamCommand);
+        mockCommandLookup(mockStreamCommand);
 
         const response = await request(app)
           .post('/executeCommand')
@@ -901,7 +911,7 @@ describe('E2E Tests', () => {
             .fn()
             .mockResolvedValue({ name: 'non-stream-test', data: 'done' }),
         };
-        vi.spyOn(commandRegistry, 'get').mockReturnValue(mockNonStreamCommand);
+        mockCommandLookup(mockNonStreamCommand);
 
         const agent = request.agent(app);
         const res = await agent

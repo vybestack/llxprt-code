@@ -4,7 +4,8 @@
     "allowImportingTsExtensions": true,
     "composite": false,
     "incremental": false,
-    "noEmit": true
+    "noEmit": true,
+    "types": ["node", "bun"]
   },
   "include": [
     "scripts/agents-neutral-gate.ts",
@@ -40,6 +41,16 @@
     "scripts/start.ts",
     "scripts/telemetry.ts",
     "scripts/utils/**/*.ts",
-    "scripts/version.ts"
+    "scripts/version.ts",
+    "scripts/bun-test-manifest.ts",
+    "scripts/run_bun_tests.ts",
+    "scripts/tests/bun-test-manifest.test.ts",
+    "scripts/tests/run_bun_tests.test.ts",
+    "scripts/tests/stub-helpers.test.ts",
+    "scripts/tests/stub-helpers.wait-for.test.ts",
+    "test-setup/stub-helpers.ts",
+    "test-setup/stub-helpers.bun.test.ts",
+    "test-setup/augment-bun-vi.ts",
+    "test-setup/augment-bun-vi.test.ts"
   ]
 }

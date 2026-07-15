@@ -525,7 +525,7 @@ runs the native Bun test files in isolated processes via
 `scripts/run_bun_tests.ts`:
 
 ```json
-"test:bun": "bun ../../scripts/run_bun_tests.ts"
+"test:bun": "bun ../../scripts/run_bun_tests.ts --workspace a2a-server"
 ```
 
 The isolation (one fresh Bun process per test file) preserves the same
@@ -545,10 +545,24 @@ plugins. The shim at `test-setup/augment-bun-vi.ts` augments Bun's injected
 - `vi.stubGlobal` / `vi.unstubAllGlobals` — global stubbing
 - `vi.importActual` — real module loading via query-string bypass
 - `vi.waitFor` — async wait helper
-- `vi.advanceTimersByTimeAsync` / `vi.runAllTimersAsync` — async timer helpers
+- `vi.advanceTimersByTimeAsync` / `vi.runAllTimersAsync` /
+  `vi.runOnlyPendingTimersAsync` — async timer helpers. Bun provides only the
+  **sync** variants (`advanceTimersByTime`, `advanceTimersToNextTimer`,
+  `runAllTimers`, `runOnlyPendingTimers`). The elapsed-time helper advances
+  between scheduled timer boundaries, preserves fractional advances across
+  calls, and drains microtasks after each fired callback. `runAllTimersAsync`
+  performs a bounded, interleaved timer/microtask drain so a timer scheduled
+  after an awaited timer callback also runs. `runOnlyPendingTimersAsync` uses
+  Bun's pending-timer primitive once, preserving the initial last-timer
+  boundary: a timer scheduled after `await` runs only when its due time is at
+  or before that boundary. These semantics preserve async timer scheduling
+  without work proportional to elapsed milliseconds and enable `waitFor` to
+  auto-advance fake timers under Bun (see `setWaitForScheduler` in
+  `stub-helpers.ts`).
 - `vi.mock` / `vi.doMock` — overridden to pass `importOriginal` to factories
 
-Each workspace's `bunfig.toml` includes this shim as a preload:
+The root `bunfig.toml` and migrated workspace configurations preload this
+shim. Workspace paths are relative to that workspace, for example:
 
 ```toml
 [test]
@@ -579,15 +593,28 @@ The CLI workspace has additional complexities:
 
 ```bash
 # All workspaces
-npm run test:bun --workspaces --if-present
+bun scripts/run_bun_tests.ts
 
-# Single workspace
-cd packages/agents && bun ../../scripts/run_bun_tests.ts
+# Single workspace (exact manifest workspace name)
+bun scripts/run_bun_tests.ts --workspace a2a-server
 
-# With exclusions (CLI excludes UI component tests)
-cd packages/cli && bun ../../scripts/run_bun_tests.ts \
-  --exclude 'src/ui/**/*.test.tsx'
+# Or through a migrated workspace's package script
+npm run test:bun --workspace @vybestack/llxprt-code-a2a-server
 ```
+
+`run_bun_tests.ts` does not support `--exclude` — every file run must be
+explicitly listed in the manifest (`scripts/bun-test-manifest.ts`). Files
+that are not Bun-compatible are simply absent from the manifest rather than
+excluded at invocation time.
+
+Only `packages/a2a-server`, `packages/cli`, and `packages/providers` define a
+package-level `test:bun` script; each passes its exact manifest workspace name.
+The native `core` and `test-setup` entries are run through the root runner
+instead: `bun scripts/run_bun_tests.ts --workspace core` and
+`bun scripts/run_bun_tests.ts --workspace test-setup`. The root package's own
+`test:bun` command remains the separate Bun-backed Vitest orchestrator
+(`scripts/test.ts`), not the native runner. Use `bun scripts/run_bun_tests.ts`
+for all native manifest entries.
 
 ### CI parity
 

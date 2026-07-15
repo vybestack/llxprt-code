@@ -10,19 +10,112 @@
  * so we cannot redirect the specifier. Instead, we augment the injected `vi`
  * object in-place by adding the missing Vitest-compatible methods.
  *
- * This module must be imported as a preload BEFORE any test file that uses
- * `vi.hoisted`, `vi.mocked`, `vi.stubEnv`, etc.
+ * This module is imported as a preload BEFORE any test file that uses
+ * `vi.hoisted`, `vi.mocked`, `vi.stubEnv`, etc. It augments Bun's built-in
+ * `vi` (not by using a base Vitest API — Bun does not provide one — but by
+ * adding local compatibility implementations of the missing Vitest methods on
+ * top of Bun's real fake-timer primitives).
  */
 
 import { afterEach, vi as bunVi, mock } from 'bun:test';
 import { createRequire, isBuiltin } from 'node:module';
-import { StubRegistry, waitFor, isMockFunction } from './stub-helpers.js';
+import {
+  StubRegistry,
+  waitFor,
+  isMockFunction,
+  setWaitForScheduler,
+  type WaitForScheduler,
+} from './stub-helpers.js';
 import { resolveModuleSpecifier } from './module-resolution.js';
+
+/**
+ * Models the surface of Bun's built-in `vi` object (from `bun:test`), which
+ * provides sync fake-timer primitives (`advanceTimersByTime`, `runAllTimers`,
+ * `runOnlyPendingTimers`, `isFakeTimers`, `useFakeTimers`, `useRealTimers`,
+ * `restoreAllMocks`, etc.) but lacks the async variants and the env/global
+ * stubbing helpers that Vitest provides. This interface documents the exact
+ * subset of Bun's `vi` that the local compatibility implementation relies on,
+ * so we call only genuinely available Bun APIs — never an absent base method.
+ */
+interface BunViBase {
+  fn: typeof import('bun:test').vi.fn;
+  spyOn: typeof import('bun:test').vi.spyOn;
+  mock: typeof import('bun:test').vi.mock;
+  restoreAllMocks: () => void;
+  clearAllMocks: () => void;
+  resetAllMocks: () => void;
+  useFakeTimers: (options?: { now?: number | Date }) => unknown;
+  useRealTimers: () => unknown;
+  advanceTimersByTime: (milliseconds: number) => unknown;
+  advanceTimersToNextTimer: () => unknown;
+  runAllTimers: () => unknown;
+  runOnlyPendingTimers: () => unknown;
+  getTimerCount: () => number;
+  clearAllTimers: () => void;
+  isFakeTimers: () => boolean;
+}
+
+/**
+ * Models the result of Bun.build() — the @types/bun BuildConfig omits `write`,
+ * but Bun supports it at runtime. This interface lets us pass `write: false`
+ * without suppressing type errors on the base declaration.
+ */
+interface BunBuildOptions {
+  entrypoints: readonly string[];
+  format?: 'esm' | 'cjs' | 'iife';
+  target?: 'bun' | 'node' | 'browser' | 'bundler';
+  write?: boolean;
+}
+
+interface BunBuildOutput {
+  success: boolean;
+  outputs: readonly { text(): Promise<string> }[];
+  logs: readonly { message: string }[];
+}
+
+/**
+ * Typed wrapper around Bun.build() that accepts the runtime-supported
+ * `write: false` option without relying on the (incomplete) base type.
+ */
+async function bunBuild(options: BunBuildOptions): Promise<BunBuildOutput> {
+  return (
+    Bun as unknown as {
+      build(opts: BunBuildOptions): Promise<BunBuildOutput>;
+    }
+  ).build(options);
+}
 
 const localRequire = createRequire(import.meta.url);
 
-const envRegistry = new StubRegistry(process.env);
+const envRegistry = new StubRegistry(
+  process.env as unknown as Record<string | symbol, unknown>,
+);
 const globalRegistry = new StubRegistry(globalThis);
+
+/**
+ * Captured before any fake-timer activation or augmentation so async timer
+ * helpers can call Bun's real sync timer primitives even after augmentation
+ * overwrites some properties on `bunVi`.
+ *
+ * Bun does NOT provide async fake-timer methods (`advanceTimersByTimeAsync`,
+ * `runAllTimersAsync`, `runOnlyPendingTimersAsync`); only the sync variants
+ * exist. We implement the async behavior by calling the sync primitive and
+ * then yielding to the real event loop via `flushPendingTasks()` to drain
+ * microtasks that were queued by callbacks fired during advancement.
+ */
+const realAdvanceTimersByTime = (bunVi as BunViBase).advanceTimersByTime.bind(
+  bunVi,
+);
+const realAdvanceTimersToNextTimer = (
+  bunVi as BunViBase
+).advanceTimersToNextTimer.bind(bunVi);
+const realUseFakeTimers = (bunVi as BunViBase).useFakeTimers.bind(bunVi);
+const realUseRealTimers = (bunVi as BunViBase).useRealTimers.bind(bunVi);
+const realRunAllTimers = (bunVi as BunViBase).runAllTimers.bind(bunVi);
+const realRunOnlyPendingTimers = (bunVi as BunViBase).runOnlyPendingTimers.bind(
+  bunVi,
+);
+const realGetTimerCount = (bunVi as BunViBase).getTimerCount.bind(bunVi);
 
 /**
  * Captured before any fake-timer activation so async timer helpers can await
@@ -43,6 +136,69 @@ const flushPendingTasks = async (): Promise<void> => {
   await new Promise<void>((resolve) => realSetImmediate(resolve));
 };
 
+const MAX_TIMER_ADVANCE = 4_294_967_295;
+const MAX_TIMER_DELAY = 2_147_483_647;
+const MAX_ASYNC_TIMER_DRAIN_PASSES = 10_000;
+let pendingTimerFraction = 0;
+
+async function advanceTimerChunk(ms: number): Promise<void> {
+  const target = Date.now() + ms;
+
+  while (Date.now() < target) {
+    const remaining = target - Date.now();
+    if (realGetTimerCount() === 0) {
+      realAdvanceTimersByTime(remaining);
+      await flushPendingTasks();
+      continue;
+    }
+
+    let reachedTarget = false;
+    const targetTimer = setTimeout(() => {
+      reachedTarget = true;
+    }, remaining);
+    const before = Date.now();
+
+    realAdvanceTimersToNextTimer();
+    clearTimeout(targetTimer);
+    await flushPendingTasks();
+
+    if (reachedTarget) return;
+    if (Date.now() <= before) {
+      realAdvanceTimersByTime(Math.min(remaining, 1));
+      await flushPendingTasks();
+    }
+  }
+}
+
+const advanceTimersByTimeAsyncImpl = async (ms: number): Promise<void> => {
+  if (!Number.isFinite(ms) || ms < 0 || ms > MAX_TIMER_ADVANCE) {
+    realAdvanceTimersByTime(ms);
+    await flushPendingTasks();
+    return;
+  }
+
+  const total = pendingTimerFraction + ms;
+  let remaining = Math.floor(total);
+  pendingTimerFraction = total - remaining;
+
+  while (remaining > 0) {
+    const chunk = Math.min(remaining, MAX_TIMER_DELAY);
+    await advanceTimerChunk(chunk);
+    remaining -= chunk;
+  }
+
+  if (Math.floor(total) === 0) {
+    await flushPendingTasks();
+  }
+};
+
+const bunWaitForScheduler: WaitForScheduler = {
+  isFakeTimers: () => (bunVi as BunViBase).isFakeTimers(),
+  advanceTimersByTime: realAdvanceTimersByTime,
+};
+
+setWaitForScheduler(bunWaitForScheduler);
+
 const resolveActualId = (id: string): string => {
   const resolvedId = resolveModuleSpecifier(id);
   return isBuiltin(resolvedId) ? resolvedId : localRequire.resolve(resolvedId);
@@ -54,7 +210,7 @@ let actualImportSequence = 0;
 const loadIsolatedModule = async (resolvedId: string): Promise<unknown> => {
   if (isBuiltin(resolvedId)) return localRequire(resolvedId);
 
-  const result = await Bun.build({
+  const result = await bunBuild({
     entrypoints: [resolvedId],
     format: 'esm',
     target: 'bun',
@@ -95,12 +251,96 @@ const importActual = (id: string): Promise<unknown> => {
   }
 };
 
+function isClassFunction(value: unknown): boolean {
+  return Function.prototype.toString.call(value).startsWith('class ');
+}
+
+function automockValue(
+  value: unknown,
+  references: Map<object, unknown>,
+): unknown {
+  if ((typeof value !== 'object' && typeof value !== 'function') || !value) {
+    return value;
+  }
+  const existing = references.get(value);
+  if (existing !== undefined) return existing;
+
+  if (Array.isArray(value)) {
+    const mocked: unknown[] = [];
+    references.set(value, mocked);
+    return mocked;
+  }
+
+  if (typeof value === 'function') {
+    if (isClassFunction(value)) {
+      const state: { prototype: object | null } = { prototype: null };
+      const MockedClass = function (): object {
+        return Object.create(state.prototype);
+      };
+      const mockedConstructor = bunVi.fn(MockedClass);
+      references.set(value, mockedConstructor);
+      const mockedPrototype = automockValue(value.prototype, references);
+      state.prototype =
+        mockedPrototype !== null &&
+        (typeof mockedPrototype === 'object' ||
+          typeof mockedPrototype === 'function')
+          ? mockedPrototype
+          : null;
+      Object.defineProperty(mockedConstructor, 'prototype', {
+        value: state.prototype,
+      });
+      for (const key of Reflect.ownKeys(value)) {
+        if (!['length', 'name', 'prototype'].includes(String(key))) {
+          Object.defineProperty(mockedConstructor, key, {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            value: automockValue(Reflect.get(value, key), references),
+          });
+        }
+      }
+      return mockedConstructor;
+    }
+    const mockedFunction = bunVi.fn();
+    references.set(value, mockedFunction);
+    return mockedFunction;
+  }
+
+  const mockedObject: Record<string | symbol, unknown> = {};
+  references.set(value, mockedObject);
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor) continue;
+    Object.defineProperty(mockedObject, key, {
+      configurable: true,
+      enumerable: descriptor.enumerable,
+      writable: true,
+      value: automockValue(Reflect.get(value, key), references),
+    });
+  }
+  return mockedObject;
+}
+
+const automockModule = async (resolvedId: string): Promise<object> => {
+  const actual = await importResolvedActual(resolvedId);
+  if ((typeof actual !== 'object' && typeof actual !== 'function') || !actual) {
+    throw new TypeError(`Cannot automock non-object module "${resolvedId}"`);
+  }
+  const mocked = automockValue(actual, new Map());
+  if (typeof mocked !== 'object' || !mocked) {
+    throw new TypeError(`Cannot automock module "${resolvedId}"`);
+  }
+  return mocked;
+};
+
 const registerModuleMock = (
   id: string,
   factory?: (importOriginal: () => Promise<unknown>) => unknown,
 ): unknown => {
   const resolvedId = resolveActualId(id);
-  if (!factory) return mock.module(resolvedId);
+  if (!factory) {
+    return mock.module(resolvedId, () => automockModule(resolvedId));
+  }
 
   return mock.module(resolvedId, () =>
     factory(() => importResolvedActual(resolvedId)),
@@ -150,6 +390,12 @@ const unsupportedMockRegistry = new Proxy(Object.freeze({}), {
   },
 });
 
+// Capture the original restoreAllMocks BEFORE defining viAugmentations so
+// the augmentation object can include restoreAllMocks in its initial type.
+const originalRestoreAllMocks = (bunVi as BunViBase).restoreAllMocks.bind(
+  bunVi,
+);
+
 const viAugmentations = {
   mocked: <T>(item: T): T => item,
   hoisted: <T>(factory: () => T): T => factory(),
@@ -165,6 +411,21 @@ const viAugmentations = {
   unstubAllGlobals: (): void => {
     globalRegistry.restoreAll();
   },
+  useFakeTimers: (options?: { now?: number | Date }): unknown => {
+    pendingTimerFraction = 0;
+    return realUseFakeTimers(options);
+  },
+  useRealTimers: (): unknown => {
+    pendingTimerFraction = 0;
+    return realUseRealTimers();
+  },
+  restoreAllMocks: (): void => {
+    runCleanupSteps([
+      () => originalRestoreAllMocks(),
+      () => envRegistry.restoreAll(),
+      () => globalRegistry.restoreAll(),
+    ]);
+  },
   waitFor,
   importActual,
   resetModules: unsupportedModuleIsolation,
@@ -173,16 +434,21 @@ const viAugmentations = {
   doUnmock: unsupportedModuleIsolation,
   unmock: unsupportedModuleIsolation,
   isMockFunction,
-  advanceTimersByTimeAsync: async (ms: number): Promise<void> => {
-    bunVi.advanceTimersByTime(ms);
-    await flushPendingTasks();
-  },
+  advanceTimersByTimeAsync: advanceTimersByTimeAsyncImpl,
   runAllTimersAsync: async (): Promise<void> => {
-    bunVi.runAllTimers();
-    await flushPendingTasks();
+    for (let pass = 0; pass < MAX_ASYNC_TIMER_DRAIN_PASSES; pass++) {
+      realRunAllTimers();
+      await flushPendingTasks();
+      if (realGetTimerCount() === 0) {
+        return;
+      }
+    }
+    throw new Error(
+      `Aborting runAllTimersAsync after ${MAX_ASYNC_TIMER_DRAIN_PASSES} interleaved timer drains`,
+    );
   },
   runOnlyPendingTimersAsync: async (): Promise<void> => {
-    bunVi.runOnlyPendingTimers();
+    realRunOnlyPendingTimers();
     await flushPendingTasks();
   },
   mocks: unsupportedMockRegistry,
@@ -208,17 +474,10 @@ const forceOverride = new Set([
   'unstubAllEnvs',
   'stubGlobal',
   'unstubAllGlobals',
+  'useFakeTimers',
+  'useRealTimers',
   'restoreAllMocks',
 ]);
-
-const originalRestoreAllMocks = bunVi.restoreAllMocks.bind(bunVi);
-viAugmentations.restoreAllMocks = (): void => {
-  runCleanupSteps([
-    () => originalRestoreAllMocks(),
-    () => envRegistry.restoreAll(),
-    () => globalRegistry.restoreAll(),
-  ]);
-};
 
 for (const [key, value] of Object.entries(viAugmentations)) {
   if (forceOverride.has(key) || !(key in bunVi)) {

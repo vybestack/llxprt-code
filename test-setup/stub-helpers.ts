@@ -8,19 +8,82 @@ interface StubRecord {
   descriptor?: PropertyDescriptor;
 }
 
-interface WaitForOptions {
+export interface WaitForOptions {
   interval?: number;
   timeout?: number;
 }
 
 const DEFAULT_INTERVAL_MS = 50;
 const DEFAULT_TIMEOUT_MS = 1000;
-const MIN_INTERVAL_MS = 1;
-const MIN_TIMEOUT_MS = 0;
+const WAIT_FOR_TIMEOUT_MESSAGE = 'Timed out in waitFor!';
+const safeSetTimeout = globalThis.setTimeout.bind(globalThis);
+const safeSetInterval = globalThis.setInterval.bind(globalThis);
+const safeClearTimeout = globalThis.clearTimeout.bind(globalThis);
+const safeClearInterval = globalThis.clearInterval.bind(globalThis);
+
+export interface WaitForScheduler {
+  isFakeTimers(): boolean;
+  advanceTimersByTime(milliseconds: number): void;
+}
+
+let activeScheduler: WaitForScheduler | null = null;
+
+export function setWaitForScheduler(scheduler: WaitForScheduler | null): void {
+  activeScheduler = scheduler;
+}
+
+/**
+ * Error thrown when an attempt is made to stub a non-configurable accessor
+ * property. Non-configurable accessors cannot be restored by
+ * `Object.defineProperty` (it throws `TypeError`), and the only alternative —
+ * restoring via the setter with the getter's observed value — is unsound for
+ * transforming setters (those whose stored value is not identical to their
+ * input). Rather than silently claiming a restoration that may not round-trip
+ * correctly, StubRegistry rejects such properties so the caller gets an
+ * immediate, honest signal.
+ */
+class NonConfigurableAccessorError extends TypeError {
+  readonly key: string | symbol;
+
+  constructor(key: string | symbol) {
+    super(
+      `Cannot stub non-configurable accessor property ${String(key)}: ` +
+        'restoration would require an unsafe getter-to-setter value ' +
+        'round-trip that cannot be guaranteed. Use a configurable property ' +
+        'or restore manually.',
+    );
+    this.name = 'NonConfigurableAccessorError';
+    this.key = key;
+  }
+}
+
+/**
+ * Returns `true` when `descriptor` describes a non-configurable accessor
+ * (i.e. it has get/set, is not configurable). These descriptors cannot be
+ * safely stubbed and restored.
+ */
+function isNonConfigurableAccessor(
+  descriptor: PropertyDescriptor | undefined,
+): boolean {
+  return (
+    descriptor !== undefined &&
+    !descriptor.configurable &&
+    !('value' in descriptor)
+  );
+}
 
 /**
  * Snapshots and restores properties on a target object (e.g. process.env or
  * globalThis) so that stubs can be automatically rolled back after each test.
+ *
+ * Safe contract:
+ * - Normal data properties and configurable accessors are snapshotted by
+ *   descriptor and restored via `Object.defineProperty`, which is exact.
+ * - Non-configurable accessor properties are **rejected** because restoration
+ *   via the setter cannot be guaranteed to round-trip (transforming setters
+ *   store a derived value, so passing the getter's output back through the
+ *   setter may not reproduce the original state). Rejecting prevents silent
+ *   leaks or corrupted state.
  */
 export class StubRegistry {
   private readonly target: Record<string | symbol, unknown>;
@@ -32,10 +95,34 @@ export class StubRegistry {
 
   stub(key: string | symbol, value: unknown): void {
     const isFirstStub = !this.snapshots.has(key);
+
+    // Re-read the descriptor on every call so we catch a property that
+    // transitioned from configurable to non-configurable between stubs.
+    const descriptor = Object.getOwnPropertyDescriptor(this.target, key);
+    if (isNonConfigurableAccessor(descriptor)) {
+      throw new NonConfigurableAccessorError(key);
+    }
+
+    // Reject any current descriptor transition that makes original restoration
+    // impossible. If the property transitioned to non-configurable (data or
+    // accessor) after the first stub, and the original snapshot was configurable
+    // or absent, defineProperty cannot restore it (non-configurable properties
+    // cannot be made configurable again, and absent properties cannot be
+    // re-deleted once non-configurable). This covers non-configurable writable
+    // data properties, which are stubbable via assignment but whose original
+    // configurable snapshot cannot be restored via defineProperty.
+    if (!isFirstStub && descriptor && !descriptor.configurable) {
+      const original = this.snapshots.get(key)?.descriptor;
+      if (!original || original.configurable) {
+        throw new TypeError(
+          `Cannot restub property ${String(key)}: it transitioned to ` +
+            'non-configurable, making original restoration impossible',
+        );
+      }
+    }
+
     if (isFirstStub) {
-      this.snapshots.set(key, {
-        descriptor: Object.getOwnPropertyDescriptor(this.target, key),
-      });
+      this.snapshots.set(key, { descriptor });
     }
     try {
       const descriptor = Object.getOwnPropertyDescriptor(this.target, key);
@@ -74,11 +161,13 @@ export class StubRegistry {
             `Failed to delete stubbed property ${String(key)}`,
           );
         }
+        // Remove only after a successful restoration so that failed records
+        // are retained for a subsequent retry once the underlying cause is fixed.
+        this.snapshots.delete(key);
       } catch (error: unknown) {
         errors.push(error);
       }
     }
-    this.snapshots.clear();
     if (errors.length > 0) {
       throw new AggregateError(
         errors,
@@ -88,78 +177,76 @@ export class StubRegistry {
   }
 }
 
+function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
+  if (typeof value !== 'object' || value === null) return false;
+  return typeof Reflect.get(value, 'then') === 'function';
+}
+
 /**
- * Async polling helper that repeatedly invokes callback until it stops
- * throwing, mirroring Vitest's vi.waitFor. Supports sync and async callbacks.
+ * Async polling helper matching Vitest 3.2.6's waitFor state machine.
  */
 export function waitFor<T>(
   callback: () => T | Promise<T>,
-  options?: WaitForOptions,
+  options: number | WaitForOptions = {},
 ): Promise<T> {
-  const requestedInterval = options?.interval ?? DEFAULT_INTERVAL_MS;
-  const requestedTimeout = options?.timeout ?? DEFAULT_TIMEOUT_MS;
+  const normalizedOptions =
+    typeof options === 'number' ? { timeout: options } : options;
+  const interval = normalizedOptions.interval ?? DEFAULT_INTERVAL_MS;
+  const timeout = normalizedOptions.timeout ?? DEFAULT_TIMEOUT_MS;
 
-  if (
-    !Number.isFinite(requestedInterval) ||
-    !Number.isFinite(requestedTimeout)
-  ) {
-    throw new TypeError('waitFor: interval and timeout must be finite numbers');
-  }
+  return new Promise<T>((resolve, reject) => {
+    let lastError: unknown;
+    let promiseStatus: 'idle' | 'pending' | 'resolved' | 'rejected' = 'idle';
+    const timerIds: {
+      timeout?: ReturnType<typeof safeSetTimeout>;
+      interval?: ReturnType<typeof safeSetInterval>;
+    } = {};
 
-  const interval = Math.max(requestedInterval, MIN_INTERVAL_MS);
-  const timeout = Math.max(requestedTimeout, MIN_TIMEOUT_MS);
-  return waitForImpl(callback, interval, timeout);
-}
+    const onResolve = (result: T): void => {
+      if (timerIds.timeout) safeClearTimeout(timerIds.timeout);
+      if (timerIds.interval) safeClearInterval(timerIds.interval);
+      resolve(result);
+    };
 
-async function waitForImpl<T>(
-  callback: () => T | Promise<T>,
-  interval: number,
-  timeout: number,
-): Promise<T> {
-  const deadline = performance.now() + timeout;
-  let lastError: unknown;
+    const handleTimeout = (): void => {
+      if (timerIds.interval) safeClearInterval(timerIds.interval);
+      reject(lastError || new Error(WAIT_FOR_TIMEOUT_MESSAGE));
+    };
 
-  for (;;) {
-    const remaining = deadline - performance.now();
-    if (remaining <= 0) {
-      throw lastError ?? new Error('waitFor timed out');
-    }
-
-    try {
-      return await invokeBeforeDeadline(callback, remaining);
-    } catch (error: unknown) {
-      lastError = error;
-      if (performance.now() >= deadline) {
-        throw lastError;
+    const checkCallback = (): true | undefined => {
+      if (activeScheduler?.isFakeTimers()) {
+        activeScheduler.advanceTimersByTime(interval);
       }
-    }
-    const delay = Math.min(interval, deadline - performance.now());
-    if (delay > 0) {
-      await new Promise<void>((resolve) => setTimeout(resolve, delay));
-    }
-  }
-}
+      if (promiseStatus === 'pending') return undefined;
 
-async function invokeBeforeDeadline<T>(
-  callback: () => T | Promise<T>,
-  remaining: number,
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      Promise.resolve().then(callback),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error('waitFor timed out')),
-          remaining,
-        );
-      }),
-    ]);
-  } finally {
-    if (timer !== undefined) {
-      clearTimeout(timer);
-    }
-  }
+      try {
+        const result = callback();
+        if (isPromiseLike(result)) {
+          promiseStatus = 'pending';
+          result.then(
+            (resolvedValue: T) => {
+              promiseStatus = 'resolved';
+              onResolve(resolvedValue);
+            },
+            (rejectedValue: unknown) => {
+              promiseStatus = 'rejected';
+              lastError = rejectedValue;
+            },
+          );
+        } else {
+          onResolve(result);
+          return true;
+        }
+      } catch (error: unknown) {
+        lastError = error;
+      }
+      return undefined;
+    };
+
+    if (checkCallback() === true) return;
+    timerIds.timeout = safeSetTimeout(handleTimeout, timeout);
+    timerIds.interval = safeSetInterval(checkCallback, interval);
+  });
 }
 
 /**

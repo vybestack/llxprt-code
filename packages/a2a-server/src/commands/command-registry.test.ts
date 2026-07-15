@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { CommandRegistry } from './command-registry.js';
+import { CommandRegistry, commandRegistry } from './command-registry.js';
 import type { Command } from './types.js';
 
 describe('CommandRegistry', () => {
@@ -116,5 +116,52 @@ describe('CommandRegistry', () => {
       'Command cyclic-command already registered. Skipping.',
     );
     // If the test finishes, it means we didn't get into an infinite loop.
+  });
+});
+
+describe('CommandRegistry default commands', () => {
+  it('registers real top-level commands when constructed with no arguments', () => {
+    const registry = new CommandRegistry();
+    const extensions = registry.get('extensions');
+    const restore = registry.get('restore');
+    const init = registry.get('init');
+
+    expect(extensions).toBeDefined();
+    expect(extensions?.name).toBe('extensions');
+    expect(extensions?.topLevel).toBe(true);
+
+    expect(restore).toBeDefined();
+    expect(restore?.name).toBe('restore');
+    expect(restore?.topLevel).toBe(true);
+
+    expect(init).toBeDefined();
+    expect(init?.name).toBe('init');
+  });
+
+  it('recursively registers real subcommands from the default top-level commands', () => {
+    const registry = new CommandRegistry();
+
+    const extensionsList = registry.get('extensions list');
+    expect(extensionsList).toBeDefined();
+    expect(extensionsList?.name).toBe('extensions list');
+
+    const restoreList = registry.get('restore list');
+    expect(restoreList).toBeDefined();
+    expect(restoreList?.name).toBe('restore list');
+  });
+});
+
+describe('exported commandRegistry singleton', () => {
+  it('exposes the real top-level commands', () => {
+    expect(commandRegistry.get('extensions')?.name).toBe('extensions');
+    expect(commandRegistry.get('restore')?.name).toBe('restore');
+    expect(commandRegistry.get('init')?.name).toBe('init');
+  });
+
+  it('exposes the real recursively registered subcommands', () => {
+    expect(commandRegistry.get('extensions list')?.name).toBe(
+      'extensions list',
+    );
+    expect(commandRegistry.get('restore list')?.name).toBe('restore list');
   });
 });
