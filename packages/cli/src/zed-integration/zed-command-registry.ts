@@ -162,6 +162,6 @@ export async function executeZedCommand(
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     logger.error(() => `Command /${command.name} failed: ${detail}`);
-    return { text: `Command /${command.name} failed: ${detail}` };
+    return { text: `Command /${command.name} failed. See logs for details.` };
   }
 }

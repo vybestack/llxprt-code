@@ -60,31 +60,34 @@ describe('buildZedTerminalSetup', () => {
     expect(tool).not.toBe(baseShellTool);
   });
 
-  it('ignores non-positive terminal output token limits', async () => {
-    const baseRegistry = {
-      getAllTools: vi.fn(() => []),
-    } as unknown as ToolRegistry;
-    const connection = new RecordingConnection();
-    const setup = buildZedTerminalSetup(
-      'session-1',
-      configFixture(-1),
-      baseRegistry,
-      connection as unknown as acp.AgentSideConnection,
-      new DebugLogger('llxprt:zed-terminal-setup-test'),
-    );
+  it.each([-1, 0])(
+    'ignores a non-positive terminal output token limit of %i',
+    async (limit) => {
+      const baseRegistry = {
+        getAllTools: vi.fn(() => []),
+      } as unknown as ToolRegistry;
+      const connection = new RecordingConnection();
+      const setup = buildZedTerminalSetup(
+        'session-1',
+        configFixture(limit),
+        baseRegistry,
+        connection as unknown as acp.AgentSideConnection,
+        new DebugLogger('llxprt:zed-terminal-setup-test'),
+      );
 
-    await setup.terminals.executeShellCommand(
-      'echo test',
-      '/project',
-      () => undefined,
-      new AbortController().signal,
-    );
+      await setup.terminals.executeShellCommand(
+        'echo test',
+        '/project',
+        () => undefined,
+        new AbortController().signal,
+      );
 
-    expect(connection.createTerminalCalls).toHaveLength(1);
-    expect(connection.createTerminalCalls[0]).not.toHaveProperty(
-      'outputByteLimit',
-    );
-  });
+      expect(connection.createTerminalCalls).toHaveLength(1);
+      expect(connection.createTerminalCalls[0]).not.toHaveProperty(
+        'outputByteLimit',
+      );
+    },
+  );
 
   it('converts a positive output token limit to bytes', async () => {
     const baseRegistry = {

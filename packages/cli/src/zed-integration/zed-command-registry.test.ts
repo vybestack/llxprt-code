@@ -61,15 +61,15 @@ describe('Zed available commands', () => {
     ).resolves.toStrictEqual({ text: 'Current model: test-model' });
   });
 
-  it('returns a protocol-visible error when command execution fails', async () => {
+  it('returns a protocol-visible error without exposing command details', async () => {
     const agent = buildAgent();
     vi.mocked(agent.compress).mockRejectedValue(
-      new Error('compression unavailable'),
+      new Error('secret compression diagnostic'),
     );
     await expect(
       executeZedCommand('/compact', { agent }),
     ).resolves.toStrictEqual({
-      text: 'Command /compact failed: compression unavailable',
+      text: 'Command /compact failed. See logs for details.',
     });
   });
 

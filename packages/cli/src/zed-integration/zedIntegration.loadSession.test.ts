@@ -804,7 +804,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
         sessionId: created.sessionId,
         prompt: [{ type: 'text', text: 'recovered?' }],
       } as acp.PromptRequest),
-    ).rejects.toThrow('Session not found:');
+    ).rejects.toThrow(/Session not found/);
     expect(mockFromConfig).toHaveBeenCalledTimes(1);
   });
 
