@@ -425,7 +425,7 @@ export class McpClient {
     }
     this.connectionGeneration++;
     if (wasActive) {
-      this.updateStatus(MCPServerStatus.DISCONNECTING);
+      this.updateStatus(MCPServerStatus.DISCONNECTING, cleanupErrors);
     }
     this.connectionAbortController?.abort();
     this.connectionAbortController = undefined;
@@ -447,7 +447,7 @@ export class McpClient {
       cleanupErrors.push(error);
     } finally {
       if (wasActive) {
-        this.updateStatus(MCPServerStatus.DISCONNECTED);
+        this.updateStatus(MCPServerStatus.DISCONNECTED, cleanupErrors);
       }
     }
     if (cleanupErrors.length === 1) {
@@ -465,9 +465,9 @@ export class McpClient {
     return this.status;
   }
 
-  private updateStatus(status: MCPServerStatus): void {
+  private updateStatus(status: MCPServerStatus, failures?: unknown[]): void {
     this.status = status;
-    updateMCPServerStatus(this.serverName, status);
+    updateMCPServerStatus(this.serverName, status, failures);
   }
 
   private assertConnected(): void {

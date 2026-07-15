@@ -17,6 +17,7 @@ import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceCon
 import { McpClient } from './mcp-client.js';
 import {
   addMCPStatusChangeListener,
+  MCPServerStatus,
   removeMCPStatusChangeListener,
 } from './mcp-status.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
@@ -113,6 +114,64 @@ describe('McpClient disconnect cleanup', () => {
     expect(sdkClient.close).toHaveBeenCalledOnce();
 
     expect(client.getStatus()).toBe('disconnected');
+  });
+
+  it('finishes cleanup and reports status listener failures during disconnect', async () => {
+    const sdkClient = {
+      connect: vi.fn(),
+      close: vi.fn().mockResolvedValue(undefined),
+      registerCapabilities: vi.fn(),
+      setRequestHandler: vi.fn(),
+      getServerCapabilities: vi.fn().mockReturnValue({}),
+    };
+    vi.mocked(ClientLib.Client).mockReturnValue(
+      sdkClient as unknown as ClientLib.Client,
+    );
+    vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+      {} as SdkClientStdioLib.StdioClientTransport,
+    );
+    const client = new McpClient(
+      'test-server',
+      { command: 'test-command' },
+      { removeMcpToolsByServer: vi.fn() } as unknown as ToolRegistry,
+      { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
+      createMockResourceRegistry(),
+      workspaceContext,
+      createTrustedConfig(),
+      false,
+      '0.0.1',
+    );
+    await client.connect();
+    const disconnectingFailure = new Error('disconnecting listener failed');
+    const disconnectedFailure = new Error('disconnected listener failed');
+    const throwingStatusListener = (
+      _serverName: string,
+      status: MCPServerStatus,
+    ) => {
+      if (status === MCPServerStatus.DISCONNECTING) {
+        throw disconnectingFailure;
+      }
+      if (status === MCPServerStatus.DISCONNECTED) {
+        throw disconnectedFailure;
+      }
+    };
+    addMCPStatusChangeListener(throwingStatusListener);
+
+    let failure: unknown;
+    try {
+      await client.disconnect();
+    } catch (error) {
+      failure = error;
+    } finally {
+      removeMCPStatusChangeListener(throwingStatusListener);
+    }
+
+    expect(sdkClient.close).toHaveBeenCalledOnce();
+    expect(client.getStatus()).toBe(MCPServerStatus.DISCONNECTED);
+    expect(failure).toMatchObject({
+      message: "Disconnect cleanup failed for 'test-server'",
+      errors: [disconnectingFailure, disconnectedFailure],
+    });
   });
 
   it('times out a hanging SDK client close and keeps it retryable', async () => {
