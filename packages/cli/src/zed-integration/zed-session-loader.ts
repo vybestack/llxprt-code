@@ -97,9 +97,9 @@ async function listSessionFileNames(
  * (replaying its in-memory history) instead of destroying it and failing a disk
  * resume that would find no file. Once the session has been prompted (a file
  * exists), this returns true and loadSession takes the destroy-prior + disk-resume
- * path. Any probe failure (e.g. the chats dir does not exist yet, ENOENT) is
- * treated as "no recording present" (returns false, logged at debug) so a missing
- * directory safely routes to re-attach rather than surfacing an error.
+ * path. An ENOENT probe failure is treated as "no recording present" (returns
+ * false, logged at debug) so a missing directory safely routes to re-attach;
+ * other probe failures propagate so permission and I/O errors remain visible.
  *
  * The directory is derived the SAME way the recording layer does
  * (via Storage.getProjectChatsDir()) and matched with the SAME

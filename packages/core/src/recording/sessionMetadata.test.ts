@@ -98,7 +98,7 @@ describe('session_metadata recording (issue #1611)', () => {
       expect(metadataLine.payload).toStrictEqual({ title: null });
     });
 
-    it('materializes the recording BEFORE any content event (slash/failure sessions)', async () => {
+    it('materializes the recording without any content event (slash/failure sessions)', async () => {
       const chatsDir = await makeTempChatsDir();
       const service = new SessionRecordingService(makeConfig({ chatsDir }));
       services.push(service);

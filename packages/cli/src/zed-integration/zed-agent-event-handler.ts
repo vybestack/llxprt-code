@@ -24,10 +24,8 @@ const logger = new DebugLogger('llxprt:zed-integration:agent-events');
 
 /**
  * Flushes pending batched chunks without letting a flush failure replace the
- * original event context. StreamBatcher.flush is designed to never reject
- * (settleChainLink catches), but this guard ensures a future contract change
- * cannot cause an 'error' event to be swallowed or a 'done' stop reason to be
- * dropped by a flush exception.
+ * original event context, so an 'error' event is not swallowed and a 'done'
+ * stop reason is not dropped by a flush exception.
  */
 async function safeFlush(batcher: StreamBatcher): Promise<void> {
   try {

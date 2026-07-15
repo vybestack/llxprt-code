@@ -339,6 +339,8 @@ function resolveCallCwd(call: AgentToolCall, targetDir: string): string {
 }
 
 function commandsMatch(preparedCommand: string, rawCommand: string): boolean {
+  // ShellExecutionService wraps commands to capture their exit code. Match only
+  // that exact prefix so terminal updates attach to the originating raw command.
   const trimmed = rawCommand.trim();
   if (preparedCommand === trimmed) {
     return true;

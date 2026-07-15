@@ -12,8 +12,8 @@
  * buffer flush).
  *
  * Extracted from zedIntegration.ts into its own module so the integration file
- * stays within the max-lines complexity budget; the behavior is unchanged and
- * fully exercised by zedIntegration.prompt.test.ts.
+ * stays within the max-lines complexity budget; focused behavior is exercised by
+ * zed-stream-batcher.test.ts and prompt integration coverage.
  */
 
 import type * as acp from '@agentclientprotocol/sdk';
