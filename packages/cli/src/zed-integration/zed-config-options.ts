@@ -80,7 +80,9 @@ export async function buildZedConfigOptions(
   const currentModel = agent.getModel();
   const models = await availableModels(agent, config);
   return [
-    ...(models === undefined ? [] : [modelOption(currentModel, models)]),
+    ...(models === undefined || currentModel.length === 0
+      ? []
+      : [modelOption(currentModel, models)]),
     settingOption(
       config,
       'reasoning.effort',
@@ -207,6 +209,8 @@ export function observeZedConfigOptions(
   const isStopped = () => stopped;
   const refresh = () => {
     pending = true;
+    // One loop owns refresh work; events received while it runs coalesce into
+    // one additional pass instead of starting concurrent snapshots.
     if (running) return;
     running = true;
     void runRefreshLoop();

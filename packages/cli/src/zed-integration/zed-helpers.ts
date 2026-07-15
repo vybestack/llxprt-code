@@ -288,7 +288,7 @@ export function translateIdleTimeout(
 export function describeSessionUpdateForLog(update: acp.SessionUpdate): string {
   const chars =
     'content' in update && update.content && 'text' in update.content
-      ? `(${(update.content as { text: string }).text.length} chars)`
+      ? `(${update.content.text.length} chars)`
       : '';
   return `sendUpdate: ${update.sessionUpdate} ${chars}`;
 }

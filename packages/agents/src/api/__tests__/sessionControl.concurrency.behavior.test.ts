@@ -176,8 +176,11 @@ function remainingLockFiles(projectRoot: string): string[] {
     return readdirSync(chatsDirOf(projectRoot)).filter((n) =>
       n.endsWith('.lock'),
     );
-  } catch {
-    return [];
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return [];
+    }
+    throw error;
   }
 }
 

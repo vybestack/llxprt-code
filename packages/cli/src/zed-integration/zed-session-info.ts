@@ -164,9 +164,6 @@ export class SessionTitleTracker {
       return { wonTitle: false, title: this.title };
     }
     this.titleEligibilityConsumed = true;
-    if (this.title !== undefined) {
-      return { wonTitle: false, title: this.title };
-    }
     const derived = deriveSessionTitle(prompt);
     if (derived === null) {
       return { wonTitle: false, title: undefined };

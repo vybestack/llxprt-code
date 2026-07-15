@@ -63,6 +63,10 @@ const logger = new DebugLogger('llxprt:zed-integration:session-errors');
 // envelope SessionControl.resume adds, so substring matching is used.
 
 /**
+ * Maps a resume rejection without probing durable state. Resume-flow callers
+ * must use {@link classifyResumeFailure}; this pure mapper remains exported for
+ * focused contract tests only.
+ *
  * Maps a resume rejection to the closest ACP {@link acp.RequestError}. A
  * not-found-style reason yields {@link acp.RequestError.resourceNotFound}
  * (JSON-RPC -32002) carrying the session id; every other reason (locked,

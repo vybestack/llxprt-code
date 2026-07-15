@@ -13,7 +13,11 @@ export async function enableZedSessionRecording(
   try {
     await agent.session.setRecording({ enabled: true });
   } catch (error) {
-    onFailure(error);
+    try {
+      onFailure(error);
+    } catch {
+      // Recording remains best-effort even when failure notification fails.
+    }
   }
 }
 

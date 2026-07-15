@@ -67,6 +67,25 @@ describe('Zed config options', () => {
     });
   });
 
+  it('omits the model selector when the agent has no current model', async () => {
+    const options = await buildZedConfigOptions(
+      {
+        getModel: () => '',
+        getProviderStatus: () => ({
+          provider: 'test',
+          model: '',
+          authStatus: 'authenticated' as const,
+        }),
+      },
+      configFixture(),
+    );
+
+    expect(options.map(({ id }) => id)).toStrictEqual([
+      'reasoning.effort',
+      'emojifilter',
+    ]);
+  });
+
   it('applies validated settings and returns the updated snapshot', async () => {
     const values: Record<string, unknown> = {};
     const options = await applyZedConfigOption(

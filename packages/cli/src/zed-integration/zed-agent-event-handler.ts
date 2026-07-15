@@ -6,6 +6,7 @@
 
 import type * as acp from '@agentclientprotocol/sdk';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 import {
   extractThoughtText,
   mapDoneReasonToStopReason,
@@ -19,6 +20,8 @@ import {
   emitToolStatus,
 } from './zed-tool-handler.js';
 
+const logger = new DebugLogger('llxprt:zed-integration:agent-events');
+
 /**
  * Flushes pending batched chunks without letting a flush failure replace the
  * original event context. StreamBatcher.flush is designed to never reject
@@ -29,9 +32,8 @@ import {
 async function safeFlush(batcher: StreamBatcher): Promise<void> {
   try {
     await batcher.flush();
-  } catch {
-    // Best-effort: the batcher's internal chain swallows its own errors, so
-    // this is a defense-in-depth guard against unexpected rejections.
+  } catch (error) {
+    logger.debug(() => `Stream flush failed: ${String(error)}`);
   }
 }
 

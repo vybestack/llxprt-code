@@ -12,7 +12,9 @@ import {
   type LifecycleSession,
 } from './zed-session-pagination.js';
 
+// Keep responses responsive without returning an unwieldy session list.
 const SESSION_PAGE_SIZE = 50;
+// Bound concurrent metadata reads to avoid I/O spikes on large histories.
 const LIST_CONCURRENCY_LIMIT = 8;
 
 async function mapWithConcurrencyLimit<T, R>(

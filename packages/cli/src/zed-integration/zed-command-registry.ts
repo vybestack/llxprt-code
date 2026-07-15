@@ -155,7 +155,7 @@ export async function executeZedCommand(
 ): Promise<ZedCommandResult | null> {
   const parsed = parseZedCommandPrompt(prompt);
   if (parsed === null) return null;
-  const command = COMMAND_MAP.get(parsed.name.toLowerCase());
+  const command = COMMAND_MAP.get(parsed.name);
   if (command === undefined) return null;
   try {
     return await command.handler(context, parsed.args);
