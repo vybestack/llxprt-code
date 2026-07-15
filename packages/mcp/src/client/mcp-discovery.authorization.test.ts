@@ -683,6 +683,50 @@ describe('MCP capability authorization', () => {
     expect(closeFn).toHaveBeenCalledOnce();
   });
 
+  it('does not publish capabilities after a server error clears the client during discovery', async () => {
+    const closeFn = vi.fn().mockResolvedValue(undefined);
+    connection.client = {
+      close: closeFn,
+      getServerCapabilities: () => ({ tools: {} }),
+      listTools: vi.fn().mockImplementation(async () => {
+        queueMicrotask(() => {
+          (
+            connection.client as unknown as {
+              onerror: (error: Error) => void;
+            }
+          ).onerror(new Error('connection lost'));
+        });
+        return {
+          tools: [{ name: 'tool', inputSchema: { type: 'object' } }],
+        };
+      }),
+    } as unknown as Client;
+    const registerTool = vi.fn();
+    const toolRegistry = {
+      registerTool,
+      sortTools: vi.fn(),
+      removeMcpToolsByServer: vi.fn(),
+    } as unknown as ToolRegistry;
+
+    await connectAndDiscover(
+      '0.0.1',
+      'server',
+      { command: 'server' },
+      toolRegistry,
+      new PromptRegistry(),
+      false,
+      {} as WorkspaceContext,
+      { isTrustedFolder: () => true } as Config,
+    );
+
+    expect(closeFn).toHaveBeenCalledOnce();
+    expect(registerTool).not.toHaveBeenCalled();
+    expect(updateMCPServerStatus).toHaveBeenLastCalledWith(
+      'server',
+      MCPServerStatus.DISCONNECTED,
+    );
+  });
+
   it('server error handler closes client and disconnects even when registry cleanup throws', async () => {
     const closeFn = vi.fn().mockResolvedValue(undefined);
     const removeTools = vi.fn().mockImplementation(() => {

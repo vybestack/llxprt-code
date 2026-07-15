@@ -170,7 +170,14 @@ export class McpClient {
         const failedClient = this.client;
         this.invalidateCapabilities();
         this.client = undefined;
-        this.updateStatus(MCPServerStatus.DISCONNECTED);
+        try {
+          this.updateStatus(MCPServerStatus.DISCONNECTED);
+        } catch (statusError) {
+          debugLogger.warn(
+            `MCP status listener failed for ${this.serverName}:`,
+            statusError,
+          );
+        }
         failedClient.close().catch(() => {});
       };
       this.activeCapabilityGeneration = ++this.capabilityGeneration;

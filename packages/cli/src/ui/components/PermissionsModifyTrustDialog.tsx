@@ -318,6 +318,7 @@ function useTrustDialogState(
     committedTrustLevel,
     effectiveTrust,
     isIdeTrusted,
+    isParentTrusted,
   );
 
   return {

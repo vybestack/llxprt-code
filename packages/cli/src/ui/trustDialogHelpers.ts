@@ -106,6 +106,7 @@ export function getTrustUpdateDisplay(
   committedTrustLevel: TrustLevel | undefined,
   effectiveTrust: boolean | undefined,
   isIdeTrusted: boolean | undefined,
+  isParentTrusted: boolean | undefined,
 ): { savedLocalFallback: string; effectiveNow: string } {
   let effectiveTrustLevel: TrustLevel | undefined;
   if (effectiveTrust !== undefined) {
@@ -118,7 +119,7 @@ export function getTrustUpdateDisplay(
     effectiveNow: getTrustLevelDisplay(
       effectiveTrustLevel,
       isIdeTrusted,
-      false,
+      isParentTrusted,
     ),
   };
 }

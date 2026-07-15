@@ -133,10 +133,19 @@ describe('trustDialogHelpers', () => {
   describe('getTrustUpdateDisplay', () => {
     it('distinguishes a saved local fallback from the live IDE override', () => {
       expect(
-        getTrustUpdateDisplay(TrustLevel.TRUST_FOLDER, false, false),
+        getTrustUpdateDisplay(TrustLevel.TRUST_FOLDER, false, false, false),
       ).toStrictEqual({
         savedLocalFallback: 'Trusted',
         effectiveNow: 'Not trusted (via IDE)',
+      });
+    });
+
+    it('preserves inherited parent provenance in the live display', () => {
+      expect(
+        getTrustUpdateDisplay(TrustLevel.TRUST_PARENT, true, undefined, true),
+      ).toStrictEqual({
+        savedLocalFallback: 'Trust parent',
+        effectiveNow: 'Trusted (via parent folder)',
       });
     });
   });

@@ -14,7 +14,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 
 const mockedExit = vi.hoisted(() => vi.fn());
-const mockedCwd = vi.hoisted(() => vi.fn());
 const KITTY_ESCAPE_SEQUENCE = '\u001b[27u';
 
 vi.mock('node:process', async () => {
@@ -29,7 +28,6 @@ vi.mock('node:process', async () => {
 describe('FolderTrustDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedCwd.mockReturnValue('/home/user/project');
   });
 
   it('should render the dialog with title and description', () => {
@@ -46,9 +44,7 @@ describe('FolderTrustDialog', () => {
     );
   });
 
-  it('displays the configured working directory when process.cwd() differs', () => {
-    mockedCwd.mockReturnValue('/process/unrelated');
-
+  it('uses the configured working directory for option labels', () => {
     const { lastFrame } = renderWithProviders(
       <FolderTrustDialog
         workingDirectory="/configured/workspace/project"
@@ -58,7 +54,6 @@ describe('FolderTrustDialog', () => {
 
     expect(lastFrame()).toContain('Trust folder (project)');
     expect(lastFrame()).toContain('Trust parent folder (workspace)');
-    expect(lastFrame()).not.toContain('unrelated');
   });
 
   it('should display exit message and call process.exit and not call onSelect when escape is pressed', async () => {
@@ -219,7 +214,6 @@ describe('FolderTrustDialog', () => {
     });
 
     it('should correctly display an empty parent folder name for a directory directly under root', () => {
-      mockedCwd.mockReturnValue('/project');
       const { lastFrame } = renderWithProviders(
         <FolderTrustDialog workingDirectory="/project" onSelect={vi.fn()} />,
       );

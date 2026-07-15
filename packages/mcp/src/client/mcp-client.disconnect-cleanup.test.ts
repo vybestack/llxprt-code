@@ -15,6 +15,10 @@ import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-
 import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
 import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
 import { McpClient } from './mcp-client.js';
+import {
+  addMCPStatusChangeListener,
+  removeMCPStatusChangeListener,
+} from './mcp-status.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
 vi.mock('@modelcontextprotocol/sdk/client/stdio.js');
@@ -345,7 +349,15 @@ describe('McpClient disconnect cleanup', () => {
     ).onerror;
     expect(errorHandler).toBeTypeOf('function');
 
-    expect(() => errorHandler(new Error('connection lost'))).not.toThrow();
+    const throwingStatusListener = () => {
+      throw new Error('status listener failed');
+    };
+    addMCPStatusChangeListener(throwingStatusListener);
+    try {
+      expect(() => errorHandler(new Error('connection lost'))).not.toThrow();
+    } finally {
+      removeMCPStatusChangeListener(throwingStatusListener);
+    }
 
     await vi.waitFor(() => {
       expect(sdkClient.close).toHaveBeenCalled();

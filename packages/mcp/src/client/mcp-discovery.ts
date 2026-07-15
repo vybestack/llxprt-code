@@ -134,12 +134,14 @@ export async function connectAndDiscover(
       return;
     }
 
+    const connectionState = { cleared: false };
     mcpClient.onerror = createServerErrorHandler(
       mcpServerName,
       mcpClient,
       toolRegistry,
       promptRegistry,
       () => {
+        connectionState.cleared = true;
         mcpClient = undefined;
       },
     );
@@ -152,7 +154,7 @@ export async function connectAndDiscover(
       promptRegistry,
       cliConfig,
     );
-    if (authorized === null) {
+    if (authorized === null || connectionState.cleared) {
       return;
     }
 
