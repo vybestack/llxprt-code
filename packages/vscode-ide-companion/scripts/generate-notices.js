@@ -306,7 +306,10 @@ async function getDependencyLicense(depName, depVersion) {
     );
     const depPackageJson = JSON.parse(depPackageJsonContent);
 
-    repositoryUrl = depPackageJson.repository?.url || repositoryUrl;
+    repositoryUrl =
+      packageMetadataFallbacks[depName]?.repository ??
+      depPackageJson.repository?.url ??
+      repositoryUrl;
 
     const packageDir = path.dirname(depPackageJsonPath);
 
