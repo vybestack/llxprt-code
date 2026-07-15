@@ -89,11 +89,13 @@ describe('A2A extension loader', () => {
   beforeEach(() => {
     harness = createHarness();
     fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'a2a-ext-test-home-'));
-    vi.mocked(os.homedir).mockReturnValue(fakeHome);
+    const homedirMock = os.homedir as ReturnType<typeof vi.fn>;
+    homedirMock.mockReturnValue(fakeHome);
   });
 
   afterEach(() => {
-    vi.mocked(os.homedir).mockRestore();
+    const homedirMock = os.homedir as ReturnType<typeof vi.fn>;
+    homedirMock.mockRestore();
     fs.rmSync(fakeHome, { recursive: true, force: true });
     fs.rmSync(harness.workspaceDir, { recursive: true, force: true });
   });
