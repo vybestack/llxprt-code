@@ -133,7 +133,7 @@ describe('A2A extension loader', () => {
 
   afterEach(() => {
     const homedirMock = os.homedir as ReturnType<typeof vi.fn>;
-    homedirMock.mockRestore();
+    homedirMock.mockImplementation(() => actualOs.homedir());
     fs.rmSync(fakeHome, { recursive: true, force: true });
     fs.rmSync(harness.workspaceDir, { recursive: true, force: true });
   });
