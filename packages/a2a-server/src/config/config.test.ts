@@ -6,6 +6,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import {
+  ApprovalMode,
   Config,
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
@@ -85,7 +86,7 @@ describe('getApprovalMode LLXPRT_YOLO_MODE', () => {
     delete process.env.GEMINI_YOLO_MODE;
 
     const config = await loadConfig({} as never, [], 'test-task-id');
-    expect(config.getApprovalMode()).toBe('yolo');
+    expect(config.getApprovalMode()).toBe(ApprovalMode.YOLO);
   });
 
   it('uses DEFAULT mode when LLXPRT_YOLO_MODE is not set', async () => {
@@ -103,7 +104,7 @@ describe('getApprovalMode LLXPRT_YOLO_MODE', () => {
     delete process.env.GEMINI_YOLO_MODE;
 
     const config = await loadConfig({} as never, [], 'test-task-id');
-    expect(config.getApprovalMode()).toBe('default');
+    expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
   });
 
   it('does not enable YOLO mode via GEMINI_YOLO_MODE fallback', async () => {
@@ -121,7 +122,7 @@ describe('getApprovalMode LLXPRT_YOLO_MODE', () => {
     process.env.GEMINI_YOLO_MODE = 'true';
 
     const config = await loadConfig({} as never, [], 'test-task-id');
-    expect(config.getApprovalMode()).toBe('default');
+    expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
   });
 });
 
