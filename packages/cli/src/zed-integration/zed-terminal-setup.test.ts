@@ -107,6 +107,7 @@ describe('buildZedTerminalSetup', () => {
     );
 
     expect(connection.createTerminalCalls).toHaveLength(1);
+    // Terminal output limits approximate one token as four bytes.
     expect(connection.createTerminalCalls[0]?.outputByteLimit).toBe(400);
   });
 });

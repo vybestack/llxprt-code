@@ -55,14 +55,11 @@ export async function runZedIntegration(
       agents.push(agent);
       return agent;
     }, stream);
-    try {
-      await connection.closed;
-    } finally {
-      await cleanupAgents(agents, logger);
-    }
+    await connection.closed;
   } catch (error) {
     logger.warn(() => `Zed agent connection error: ${error}`);
-    await cleanupAgents(agents, logger);
     throw error;
+  } finally {
+    await cleanupAgents(agents, logger);
   }
 }

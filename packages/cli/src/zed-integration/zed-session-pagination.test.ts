@@ -181,6 +181,34 @@ describe('session lifecycle pagination', () => {
     ]);
   });
 
+  it('falls back to updatedAt when createdAt is invalid', () => {
+    const sessionsWithInvalidCreatedAt: LifecycleSession[] = [
+      {
+        sessionId: 'old',
+        cwd: '/w',
+        createdAt: 'not-a-date',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        sessionId: 'new',
+        cwd: '/w',
+        createdAt: '',
+        updatedAt: '2026-06-01T00:00:00.000Z',
+      },
+    ];
+
+    const result = paginateSessions(
+      sessionsWithInvalidCreatedAt,
+      { cwd: null, cursor: null },
+      10,
+    );
+
+    expect(result.sessions.map((session) => session.sessionId)).toStrictEqual([
+      'new',
+      'old',
+    ]);
+  });
+
   it('continues a legacy page when updatedAt is valid but not canonical', () => {
     const legacy: LifecycleSession[] = [
       { sessionId: 'new', cwd: '/w', updatedAt: '2026-06-01T00:00:00Z' },

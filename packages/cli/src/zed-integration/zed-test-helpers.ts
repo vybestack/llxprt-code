@@ -346,17 +346,16 @@ export class RecordingConnection {
 
   sessionUpdate: Mock = vi.fn(
     async (params: acp.SessionNotification): Promise<void> => {
-      if (
+      const shouldFail =
         this.sessionUpdateFailAfter !== null &&
-        this.sessionUpdateCalls >= this.sessionUpdateFailAfter
-      ) {
-        this.sessionUpdateCalls++;
+        this.sessionUpdateCalls >= this.sessionUpdateFailAfter;
+      this.sessionUpdateCalls++;
+      if (shouldFail) {
         throw (
           this.sessionUpdateError ??
           new Error('sessionUpdate transport failure')
         );
       }
-      this.sessionUpdateCalls++;
       this.messages.push({ kind: 'sessionUpdate', update: params.update });
       if (this.hasTerminalContentUpdate()) {
         const waiters = [...this.terminalContentWaiters];

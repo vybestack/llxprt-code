@@ -122,7 +122,11 @@ export async function applyZedConfigOption(
     try {
       await agent.setModel(value);
     } catch (error) {
-      throw acp.RequestError.internalError({ configId, error: String(error) });
+      logger.debug(() => `Failed to set model: ${String(error)}`);
+      throw acp.RequestError.internalError(
+        { configId },
+        'Unable to set model.',
+      );
     }
     return buildZedConfigOptions(agent, config);
   }
@@ -140,7 +144,11 @@ export async function applyZedConfigOption(
     config.setEphemeralSetting(configId, parsed.value);
     coreEvents.emitSettingsChanged();
   } catch (error) {
-    throw acp.RequestError.internalError({ configId, error: String(error) });
+    logger.debug(() => `Failed to apply config option: ${String(error)}`);
+    throw acp.RequestError.internalError(
+      { configId },
+      'Unable to apply config option.',
+    );
   }
   return buildZedConfigOptions(agent, config);
 }

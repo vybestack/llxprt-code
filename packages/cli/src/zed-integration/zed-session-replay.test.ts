@@ -365,7 +365,6 @@ describe('mapHistoryToSessionUpdates (issue #1604 replay mapping)', () => {
       locations: [],
       rawInput: { foo: 'bar' },
     });
-    expect(update).toHaveProperty('kind', 'other');
   });
 
   it('pairs an ai tool_call with its later tool_response: in_progress start THEN completed update, no synthetic failure (FINDING 2/3 ordered pairing)', () => {

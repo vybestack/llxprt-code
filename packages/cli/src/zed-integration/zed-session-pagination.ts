@@ -126,12 +126,18 @@ function compareDescending(a: string, b: string): number {
 }
 
 function getCreatedAt(session: LifecycleSession): string {
-  const value = session.createdAt ?? session.updatedAt;
-  const timestamp = Date.parse(value);
-  if (Number.isFinite(timestamp)) {
-    return new Date(timestamp).toISOString();
+  const createdAt =
+    session.createdAt === undefined
+      ? Number.NaN
+      : Date.parse(session.createdAt);
+  if (Number.isFinite(createdAt)) {
+    return new Date(createdAt).toISOString();
   }
-  // Invalid or non-standard timestamp (corrupted/legacy data). Fall back to
+  const updatedAt = Date.parse(session.updatedAt);
+  if (Number.isFinite(updatedAt)) {
+    return new Date(updatedAt).toISOString();
+  }
+  // Invalid or non-standard timestamps (corrupted/legacy data). Fall back to
   // the epoch sentinel so sort order is deterministic and cursor encoding
   // never embeds an invalid value that would break decode (issue #1611).
   return new Date(0).toISOString();

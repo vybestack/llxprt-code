@@ -208,11 +208,11 @@ describe('Zed config options', () => {
     );
   });
 
-  it('wraps model switch failures as structured ACP internal errors', async () => {
+  it('wraps model switch failures without exposing provider details', async () => {
     const failure = applyZedConfigOption(
       {
         setModel: async () => {
-          throw new Error('provider disconnected');
+          throw new Error('secret provider diagnostic');
         },
         getModel: () => 'alpha',
         getProviderStatus: () => ({
@@ -226,7 +226,12 @@ describe('Zed config options', () => {
       'beta',
     );
 
-    await expect(failure).rejects.toMatchObject({ code: -32603 });
+    const error = await failure.catch((caught: unknown) => caught);
+    expect(error).toMatchObject({
+      code: -32603,
+      data: { configId: 'model' },
+    });
+    expect(JSON.stringify(error)).not.toContain('secret provider diagnostic');
   });
 
   it('publishes agent-side setting changes and removes listeners on teardown', async () => {
