@@ -27,13 +27,12 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:os')>();
-  return {
-    ...actual,
-    homedir: vi.fn(() => actual.homedir()),
-  };
-});
+const actualOs = { ...os };
+
+vi.mock('node:os', () => ({
+  ...actualOs,
+  homedir: vi.fn(() => actualOs.homedir()),
+}));
 
 const loggerErrorSpy = vi.hoisted(() => vi.fn());
 vi.mock('../utils/logger.js', () => ({

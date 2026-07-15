@@ -18,13 +18,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:os')>();
-  return {
-    ...actual,
-    homedir: vi.fn(() => actual.homedir()),
-  };
-});
+const actualOs = { ...os };
+
+vi.mock('node:os', () => ({
+  ...actualOs,
+  homedir: vi.fn(() => actualOs.homedir()),
+}));
 
 const { loadSettings } = await import('./settings.js');
 

@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import { TurnProcessor } from './TurnProcessor.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
@@ -76,6 +77,7 @@ describe('agent processor retry boundaries', () => {
       DirectMessageProcessor.prototype,
     ) as DirectMessageProcessor;
     Object.assign(processor, {
+      retry: retryWithBackoff,
       _executeDirectProviderCall: async () => {
         calls++;
         throw error;
@@ -109,6 +111,7 @@ describe('agent processor retry boundaries', () => {
       DirectMessageProcessor.prototype,
     ) as DirectMessageProcessor;
     Object.assign(processor, {
+      retry: retryWithBackoff,
       _executeDirectProviderCall: async () => {
         calls++;
       },
