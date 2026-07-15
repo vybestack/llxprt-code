@@ -761,7 +761,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     expect(stub.dispose).toHaveBeenCalledTimes(0);
   });
 
-  it('RE-ATTACH propagates a wrapped internalError WITHOUT disposing the healthy live session when replay delivery fails', async () => {
+  it('RE-ATTACH propagates a wrapped internalError and removes the partially replayed live session', async () => {
     const stub = buildStubAgent({
       liveHistory: [modelMessage('will fail to deliver')],
     });
@@ -795,18 +795,16 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     expect(caught).toBeInstanceOf(RequestError);
     expect((caught as RequestError).code).toBe(-32603);
     expect((caught as RequestError).message).toContain('replay');
-    // CRUCIAL re-attach cleanup semantics: the healthy live session is NOT
-    // disposed on a replay failure (it was never destroyed), so it is still
-    // live and promptable — unlike the disk path which disposes on replay failure.
-    expect(stub.dispose).toHaveBeenCalledTimes(0);
-    // clearing the transport, the SAME live session still serves a prompt.
+    // Once replay delivery partially fails, retaining the live session would
+    // leave client and server transcript state inconsistent.
+    expect(stub.dispose).toHaveBeenCalledTimes(1);
     connection.clearSessionUpdateFailure();
     await expect(
       zedAgent.prompt({
         sessionId: created.sessionId,
         prompt: [{ type: 'text', text: 'recovered?' }],
       } as acp.PromptRequest),
-    ).resolves.toBeDefined();
+    ).rejects.toThrow('Session not found:');
     expect(mockFromConfig).toHaveBeenCalledTimes(1);
   });
 

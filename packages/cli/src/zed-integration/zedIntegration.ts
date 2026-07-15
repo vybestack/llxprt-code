@@ -257,8 +257,13 @@ export class ZedAgent {
     this.logger.debug(
       () => `loadSession - re-attaching live session ${sessionId}`,
     );
-    await existing.replayLiveHistory();
-    return existing;
+    try {
+      await existing.replayLiveHistory();
+      return existing;
+    } catch (error) {
+      await this.rollbackSession(sessionId, existing);
+      throw error;
+    }
   }
   private async rollbackSession(
     sessionId: string,
