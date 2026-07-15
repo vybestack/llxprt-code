@@ -295,7 +295,15 @@ export function wrapReplayFailure(
  * when available, else its String() form) so the mapper can classify it.
  */
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) return error.message;
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    typeof (error as Record<string, unknown>).message === 'string'
+  ) {
+    return (error as { message: string }).message;
+  }
+  return String(error);
 }
 
 /**

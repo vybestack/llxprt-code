@@ -215,13 +215,12 @@ export class ZedAgent {
     const { sessionId } = params;
     const reattached = await this.tryReattachLiveSession(sessionId);
     if (reattached !== null) {
-      await reattached
-        .sendAvailableCommands()
-        .catch((error: unknown) =>
-          this.logger.debug(
-            () => `Available commands delivery failed: ${error}`,
-          ),
-        );
+      try {
+        await reattached.sendAvailableCommands();
+      } catch (error) {
+        await this.rollbackSession(sessionId, reattached);
+        throw error;
+      }
       return {
         modes: buildSessionModes(reattached.getApprovalMode()),
         ...(await zedSessionConfigOptions(this.clientCapabilities, reattached)),
@@ -229,11 +228,12 @@ export class ZedAgent {
     }
     await this.disposePriorSession(sessionId);
     const session = await this.installResumedSession(sessionId, params.cwd);
-    await session
-      .sendAvailableCommands()
-      .catch((error: unknown) =>
-        this.logger.debug(() => `Available commands delivery failed: ${error}`),
-      );
+    try {
+      await session.sendAvailableCommands();
+    } catch (error) {
+      await this.rollbackSession(sessionId, session);
+      throw error;
+    }
     return {
       modes: buildSessionModes(session.getApprovalMode()),
       ...(await zedSessionConfigOptions(this.clientCapabilities, session)),

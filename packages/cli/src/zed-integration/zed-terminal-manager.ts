@@ -112,6 +112,9 @@ export class TerminalManager {
     if (signal.aborted) {
       return abortedResult();
     }
+    if (command.trim().length === 0) {
+      throw new Error('Shell command must not be empty');
+    }
     const shell = getShellConfiguration();
     const handle = await this.connection.createTerminal({
       command: shell.executable,
