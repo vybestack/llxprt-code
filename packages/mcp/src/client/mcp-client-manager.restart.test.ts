@@ -86,16 +86,23 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     ...overrides,
   });
 
+  const useClientsByServer = (
+    clientsByServer: Record<string, MockMcpClient[]>,
+  ): void => {
+    vi.mocked(McpClient).mockImplementation((serverName) => {
+      const client = clientsByServer[serverName].shift();
+      if (client === undefined) {
+        throw new Error(`No queued MCP client for '${serverName}'`);
+      }
+      return client as unknown as McpClient;
+    });
+  };
+
   it('restartServer does not leave a stale dead client when existing.disconnect throws (reconnects with a fresh client)', async () => {
     const goodClient = createMockMcpClient();
     const freshClient = createMockMcpClient();
 
-    let callCount = 0;
-    vi.mocked(McpClient).mockImplementation(() => {
-      const client = callCount === 0 ? goodClient : freshClient;
-      callCount++;
-      return client as unknown as McpClient;
-    });
+    useClientsByServer({ 'my-server': [goodClient, freshClient] });
 
     const registries = createRegistries();
     const config = createConfig({ 'my-server': {} }, registries);
@@ -148,12 +155,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
       getStatus: vi.fn().mockReturnValue('disconnected'),
     });
 
-    let callCount = 0;
-    vi.mocked(McpClient).mockImplementation(() => {
-      const client = callCount === 0 ? goodClient : freshClient;
-      callCount++;
-      return client as unknown as McpClient;
-    });
+    useClientsByServer({ 'my-server': [goodClient, freshClient] });
 
     const registries = createRegistries();
     const config = createConfig({ 'my-server': {} }, registries);
@@ -188,12 +190,9 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const freshA = createMockMcpClient();
     const freshB = createMockMcpClient();
 
-    let callCount = 0;
-    vi.mocked(McpClient).mockImplementation(() => {
-      const pool = [serverAClient, serverBClient, freshA, freshB];
-      const client = pool[callCount] ?? pool[pool.length - 1];
-      callCount++;
-      return client as unknown as McpClient;
+    useClientsByServer({
+      'server-a': [serverAClient, freshA],
+      'server-b': [serverBClient, freshB],
     });
 
     const registries = createRegistries();
@@ -233,12 +232,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
       getStatus: vi.fn().mockReturnValue('disconnected'),
     });
 
-    let callCount = 0;
-    vi.mocked(McpClient).mockImplementation(() => {
-      const client = callCount === 0 ? goodClient : freshClient;
-      callCount++;
-      return client as unknown as McpClient;
-    });
+    useClientsByServer({ 'my-server': [goodClient, freshClient] });
 
     const registries = createRegistries();
     const config = createConfig({ 'my-server': {} }, registries);
@@ -272,12 +266,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const initialClient = createMockMcpClient();
     const freshClient = createMockMcpClient();
 
-    let callCount = 0;
-    vi.mocked(McpClient).mockImplementation(() => {
-      const client = callCount === 0 ? initialClient : freshClient;
-      callCount++;
-      return client as unknown as McpClient;
-    });
+    useClientsByServer({ 'my-server': [initialClient, freshClient] });
 
     const registries = createRegistries();
     const config = createConfig({ 'my-server': {} }, registries);
@@ -306,12 +295,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const initialClient = createMockMcpClient();
     const freshClient = createMockMcpClient();
 
-    let callCount = 0;
-    vi.mocked(McpClient).mockImplementation(() => {
-      const client = callCount === 0 ? initialClient : freshClient;
-      callCount++;
-      return client as unknown as McpClient;
-    });
+    useClientsByServer({ 'my-server': [initialClient, freshClient] });
 
     const registries = createRegistries();
     const config = createConfig({ 'my-server': {} }, registries);

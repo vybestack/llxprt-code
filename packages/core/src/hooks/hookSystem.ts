@@ -134,12 +134,19 @@ export class HookSystem {
       const signal = requestedSignal
         ? AbortSignal.any([requestedSignal, this.disposalController.signal])
         : this.disposalController.signal;
-      await this.initializeGeneration(signal);
-      completedGeneration = generation;
-      for (const queuedGeneration of this.initializationSignals.keys()) {
-        if (queuedGeneration <= completedGeneration) {
-          this.initializationSignals.delete(queuedGeneration);
-        }
+      try {
+        await this.initializeGeneration(signal);
+        completedGeneration = generation;
+      } finally {
+        this.deleteInitializationSignalsThrough(generation);
+      }
+    }
+  }
+
+  private deleteInitializationSignalsThrough(generation: number): void {
+    for (const queuedGeneration of this.initializationSignals.keys()) {
+      if (queuedGeneration <= generation) {
+        this.initializationSignals.delete(queuedGeneration);
       }
     }
   }

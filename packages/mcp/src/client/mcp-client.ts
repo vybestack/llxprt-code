@@ -193,6 +193,18 @@ export class McpClient {
     }
   }
 
+  markConnectedForFakeDiscovery(): void {
+    if (
+      this.client !== undefined ||
+      this.status !== MCPServerStatus.DISCONNECTED
+    ) {
+      throw new Error(
+        `Can only mark a disconnected client as fake-connected, current state is ${this.status}`,
+      );
+    }
+    this.status = MCPServerStatus.CONNECTED;
+  }
+
   invalidateCapabilities(): void {
     this.capabilityGeneration++;
     this.activeCapabilityGeneration = undefined;
@@ -205,20 +217,33 @@ export class McpClient {
   }
 
   private createCapabilityAuthorization(client: Client): () => boolean {
-    // Capturing both generations prevents late discovery and refresh callbacks
-    // from publishing capabilities after disconnect or trust revocation.
-    const generation = this.activeCapabilityGeneration;
-    return () => {
-      const capabilityIsCurrent =
-        generation !== undefined &&
-        this.activeCapabilityGeneration === generation &&
-        this.client === client;
-      return (
-        capabilityIsCurrent &&
-        this.status === MCPServerStatus.CONNECTED &&
-        this.cliConfig.isTrustedFolder()
+    const connectionGeneration = this.connectionGeneration;
+    const capabilityGeneration = this.activeCapabilityGeneration;
+    return () =>
+      this.isCapabilityAuthorized(
+        client,
+        connectionGeneration,
+        capabilityGeneration,
       );
-    };
+  }
+
+  private isCapabilityAuthorized(
+    client: Client,
+    connectionGeneration: number,
+    capabilityGeneration: number | undefined,
+  ): boolean {
+    const hasActiveConnection =
+      this.client === client &&
+      this.connectionGeneration === connectionGeneration &&
+      this.status === MCPServerStatus.CONNECTED;
+    const hasActiveCapability =
+      capabilityGeneration !== undefined &&
+      this.activeCapabilityGeneration === capabilityGeneration;
+    return (
+      hasActiveConnection &&
+      hasActiveCapability &&
+      this.cliConfig.isTrustedFolder()
+    );
   }
 
   async discover(
@@ -638,17 +663,10 @@ export class McpClient {
     connectionGeneration: number,
     capabilityGeneration: number | undefined,
   ): boolean {
-    const hasActiveConnection =
-      this.client === client &&
-      this.connectionGeneration === connectionGeneration &&
-      this.status === MCPServerStatus.CONNECTED;
-    const hasActiveCapability =
-      capabilityGeneration !== undefined &&
-      this.activeCapabilityGeneration === capabilityGeneration;
-    return (
-      hasActiveConnection &&
-      hasActiveCapability &&
-      this.cliConfig.isTrustedFolder()
+    return this.isCapabilityAuthorized(
+      client,
+      connectionGeneration,
+      capabilityGeneration,
     );
   }
 

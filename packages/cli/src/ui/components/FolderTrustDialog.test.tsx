@@ -8,6 +8,7 @@
 
 import { ExitCodes } from '@vybestack/llxprt-code-core';
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
+import { createDeferred } from '../../test-utils/async.js';
 import { act, StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FolderTrustDialog } from './FolderTrustDialog.js';
@@ -15,24 +16,6 @@ import { FolderTrustDialog } from './FolderTrustDialog.js';
 const mockedExit = vi.hoisted(() => vi.fn());
 const mockedCwd = vi.hoisted(() => vi.fn());
 const KITTY_ESCAPE_SEQUENCE = '\u001b[27u';
-
-function createDeferred(): {
-  readonly promise: Promise<void>;
-  readonly resolve: () => void;
-  readonly reject: (error: Error) => void;
-} {
-  let resolvePromise: (() => void) | undefined;
-  let rejectPromise: ((error: Error) => void) | undefined;
-  const promise = new Promise<void>((resolve, reject) => {
-    resolvePromise = resolve;
-    rejectPromise = reject;
-  });
-  return {
-    promise,
-    resolve: () => resolvePromise?.(),
-    reject: (error) => rejectPromise?.(error),
-  };
-}
 
 vi.mock('node:process', async () => {
   const actual =
@@ -104,7 +87,7 @@ describe('FolderTrustDialog', () => {
   });
 
   it('serializes an async selection and ignores Enter and Escape until it settles', async () => {
-    const selection = createDeferred();
+    const selection = createDeferred<void>();
     const onSelect = vi.fn(() => selection.promise);
     const { stdin } = renderWithProviders(
       <FolderTrustDialog
@@ -131,7 +114,7 @@ describe('FolderTrustDialog', () => {
   });
 
   it('allows another selection after StrictMode replays the mount effect', async () => {
-    const selection = createDeferred();
+    const selection = createDeferred<void>();
     const onSelect = vi
       .fn()
       .mockReturnValueOnce(selection.promise)
@@ -160,7 +143,7 @@ describe('FolderTrustDialog', () => {
   });
 
   it('shows an actionable error when applying the selection fails', async () => {
-    const selection = createDeferred();
+    const selection = createDeferred<void>();
     const { lastFrame, stdin } = renderWithProviders(
       <FolderTrustDialog
         workingDirectory="/home/user/project"

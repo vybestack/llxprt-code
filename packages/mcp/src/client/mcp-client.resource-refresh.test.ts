@@ -32,17 +32,27 @@ vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
 
 const RESOURCE_LIST_CHANGED_METHOD = 'notifications/resources/list_changed';
 
-describe('McpClient resource refresh', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+type ResourceListHandler = (notification: unknown) => Promise<void> | void;
 
-  it('aborts an in-flight resource refresh when disconnected', async () => {
-    let resourceListHandler:
-      | ((notification: unknown) => Promise<void> | void)
-      | undefined;
-    let refreshSignal: AbortSignal | undefined;
-    const mockedClient = {
+function createMockSdkClient(
+  request: ReturnType<typeof vi.fn> = vi
+    .fn()
+    .mockResolvedValue({ resources: [] }),
+): {
+  readonly mockedClient: {
+    readonly connect: ReturnType<typeof vi.fn>;
+    readonly close: ReturnType<typeof vi.fn>;
+    readonly registerCapabilities: ReturnType<typeof vi.fn>;
+    readonly setRequestHandler: ReturnType<typeof vi.fn>;
+    readonly setNotificationHandler: ReturnType<typeof vi.fn>;
+    readonly getServerCapabilities: ReturnType<typeof vi.fn>;
+    readonly request: ReturnType<typeof vi.fn>;
+  };
+  readonly getResourceListHandler: () => ResourceListHandler | undefined;
+} {
+  let resourceListHandler: ResourceListHandler | undefined;
+  return {
+    mockedClient: {
       connect: vi.fn(),
       close: vi.fn().mockResolvedValue(undefined),
       registerCapabilities: vi.fn(),
@@ -55,8 +65,21 @@ describe('McpClient resource refresh', () => {
       getServerCapabilities: vi
         .fn()
         .mockReturnValue({ resources: { listChanged: true } }),
-      request: vi.fn().mockResolvedValue({ resources: [] }),
-    };
+      request,
+    },
+    getResourceListHandler: () => resourceListHandler,
+  };
+}
+
+describe('McpClient resource refresh', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('aborts an in-flight resource refresh when disconnected', async () => {
+    let refreshSignal: AbortSignal | undefined;
+    const requestStarted = Promise.withResolvers<void>();
+    const { mockedClient, getResourceListHandler } = createMockSdkClient();
     vi.mocked(ClientLib.Client).mockReturnValue(
       mockedClient as unknown as Client,
     );
@@ -83,6 +106,7 @@ describe('McpClient resource refresh', () => {
     await client.connect();
     mockedClient.request.mockImplementation((_request, _schema, options) => {
       refreshSignal = options?.signal;
+      requestStarted.resolve();
       return new Promise((_resolve, reject) => {
         options?.signal?.addEventListener(
           'abort',
@@ -93,11 +117,11 @@ describe('McpClient resource refresh', () => {
     });
 
     const refresh = Promise.resolve(
-      resourceListHandler?.({
+      getResourceListHandler()?.({
         method: RESOURCE_LIST_CHANGED_METHOD,
       }),
     );
-    await vi.waitFor(() => expect(refreshSignal).toBeDefined());
+    await requestStarted.promise;
 
     await client.disconnect();
 
@@ -107,25 +131,9 @@ describe('McpClient resource refresh', () => {
 
   it('rolls back resources when authorization is revoked during publication', async () => {
     let trusted = true;
-    let resourceListHandler:
-      | ((notification: unknown) => Promise<void> | void)
-      | undefined;
-    const mockedClient = {
-      connect: vi.fn(),
-      registerCapabilities: vi.fn(),
-      setRequestHandler: vi.fn(),
-      setNotificationHandler: vi.fn((schema, handler) => {
-        if (schema === ResourceListChangedNotificationSchema) {
-          resourceListHandler = handler;
-        }
-      }),
-      getServerCapabilities: vi
-        .fn()
-        .mockReturnValue({ resources: { listChanged: true } }),
-      request: vi
-        .fn()
-        .mockResolvedValue({ resources: [{ uri: 'file:///new' }] }),
-    };
+    const { mockedClient, getResourceListHandler } = createMockSdkClient(
+      vi.fn().mockResolvedValue({ resources: [{ uri: 'file:///new' }] }),
+    );
     vi.mocked(ClientLib.Client).mockReturnValue(
       mockedClient as unknown as Client,
     );
@@ -163,7 +171,7 @@ describe('McpClient resource refresh', () => {
     );
     await client.connect();
 
-    await resourceListHandler?.({
+    await getResourceListHandler()?.({
       method: RESOURCE_LIST_CHANGED_METHOD,
     });
 
@@ -176,25 +184,11 @@ describe('McpClient resource refresh', () => {
   });
 
   it('clears the refresh timeout when registry publication fails', async () => {
-    let resourceListHandler:
-      | ((notification: unknown) => Promise<void> | void)
-      | undefined;
-    const mockedClient = {
-      connect: vi.fn(),
-      registerCapabilities: vi.fn(),
-      setRequestHandler: vi.fn(),
-      setNotificationHandler: vi.fn((schema, handler) => {
-        if (schema === ResourceListChangedNotificationSchema) {
-          resourceListHandler = handler;
-        }
-      }),
-      getServerCapabilities: vi
-        .fn()
-        .mockReturnValue({ resources: { listChanged: true } }),
-      request: vi.fn().mockResolvedValue({
+    const { mockedClient, getResourceListHandler } = createMockSdkClient(
+      vi.fn().mockResolvedValue({
         resources: [{ uri: 'file:///resource' }],
       }),
-    };
+    );
     vi.mocked(ClientLib.Client).mockReturnValue(
       mockedClient as unknown as Client,
     );
@@ -228,7 +222,7 @@ describe('McpClient resource refresh', () => {
     );
     const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
 
-    await resourceListHandler?.({
+    await getResourceListHandler()?.({
       method: RESOURCE_LIST_CHANGED_METHOD,
     });
 
@@ -238,25 +232,9 @@ describe('McpClient resource refresh', () => {
   });
 
   it('removes resources from the real registry after rollback when authorization is revoked', async () => {
-    let resourceListHandler:
-      | ((notification: unknown) => Promise<void> | void)
-      | undefined;
-    const mockedClient = {
-      connect: vi.fn(),
-      registerCapabilities: vi.fn(),
-      setRequestHandler: vi.fn(),
-      setNotificationHandler: vi.fn((schema, handler) => {
-        if (schema === ResourceListChangedNotificationSchema) {
-          resourceListHandler = handler;
-        }
-      }),
-      getServerCapabilities: vi
-        .fn()
-        .mockReturnValue({ resources: { listChanged: true } }),
-      request: vi
-        .fn()
-        .mockResolvedValue({ resources: [{ uri: 'file:///new' }] }),
-    };
+    const { mockedClient, getResourceListHandler } = createMockSdkClient(
+      vi.fn().mockResolvedValue({ resources: [{ uri: 'file:///new' }] }),
+    );
     vi.mocked(ClientLib.Client).mockReturnValue(
       mockedClient as unknown as Client,
     );
@@ -282,7 +260,7 @@ describe('McpClient resource refresh', () => {
     );
     await client.connect();
 
-    await resourceListHandler?.({
+    await getResourceListHandler()?.({
       method: RESOURCE_LIST_CHANGED_METHOD,
     });
 

@@ -38,7 +38,7 @@ vi.mock('fs', async (importOriginal) => {
     readFileSync: vi.fn(),
     writeFileSync: vi.fn(),
     mkdirSync: vi.fn(),
-    realpathSync: vi.fn((path: fs.PathLike) => path),
+    realpathSync: vi.fn((location: fs.PathLike): string => String(location)),
   };
 });
 
@@ -67,7 +67,7 @@ describe('settingsLoader workspace trust provenance', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     (vi.mocked(fs.realpathSync) as Mock).mockImplementation(
-      (path: fs.PathLike) => path,
+      (location: fs.PathLike): string => String(location),
     );
     resetTrustedFoldersForTesting();
     process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH = '/mock/system/settings.json';
@@ -148,9 +148,9 @@ describe('settingsLoader workspace trust provenance', () => {
       [workspaceSymlink]: TrustLevel.TRUST_FOLDER,
     });
     (vi.mocked(fs.realpathSync) as Mock).mockImplementation(
-      (location: fs.PathLike) =>
-        location === '/mock/home/user'
-          ? location
+      (location: fs.PathLike): string =>
+        String(location) === '/mock/home/user'
+          ? String(location)
           : realFs.realpathSync(location),
     );
 
@@ -173,11 +173,11 @@ describe('settingsLoader workspace trust provenance', () => {
     const workspace = '/trusted/workspace';
     exposeTrustRules({ [workspace]: TrustLevel.TRUST_FOLDER });
     (vi.mocked(fs.realpathSync) as Mock).mockImplementation(
-      (location: fs.PathLike) => {
-        if (location === path.resolve(workspace)) {
+      (location: fs.PathLike): string => {
+        if (String(location) === path.resolve(workspace)) {
           throw new Error('canonical identity unavailable');
         }
-        return location;
+        return String(location);
       },
     );
 

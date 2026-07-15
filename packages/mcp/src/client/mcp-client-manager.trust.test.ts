@@ -397,28 +397,21 @@ describe('McpClientManager trust transitions', () => {
         const failCleanup = () => {
           throw new Error('cleanup failed');
         };
-        switch (failingRegistry) {
-          case 'tools':
-            vi.spyOn(
-              toolRegistry,
-              'removeMcpToolsByServer',
-            ).mockImplementationOnce(failCleanup);
-            break;
-          case 'prompts':
-            vi.spyOn(
-              promptRegistry,
-              'removePromptsByServer',
-            ).mockImplementationOnce(failCleanup);
-            break;
-          case 'resources':
-            vi.spyOn(
-              resourceRegistry,
-              'removeResourcesByServer',
-            ).mockImplementationOnce(failCleanup);
-            break;
-          default:
-            throw new Error(`Unknown registry: ${failingRegistry}`);
-        }
+        const installCleanupFailure = {
+          tools: () =>
+            vi
+              .spyOn(toolRegistry, 'removeMcpToolsByServer')
+              .mockImplementationOnce(failCleanup),
+          prompts: () =>
+            vi
+              .spyOn(promptRegistry, 'removePromptsByServer')
+              .mockImplementationOnce(failCleanup),
+          resources: () =>
+            vi
+              .spyOn(resourceRegistry, 'removeResourcesByServer')
+              .mockImplementationOnce(failCleanup),
+        };
+        installCleanupFailure[failingRegistry]();
         const manager = new McpClientManager(
           CLIENT_VERSION,
           toolRegistry,

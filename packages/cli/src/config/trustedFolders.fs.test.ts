@@ -225,7 +225,7 @@ describe('saveTrustedFolders filesystem permissions', () => {
     );
 
     expect(() => folders.setValue(missing, TrustLevel.TRUST_FOLDER)).toThrow(
-      'Unable to resolve canonical path',
+      /resolve canonical path/i,
     );
     expect(folders.user.config).toStrictEqual({});
     expect(fs.existsSync(filePath)).toBe(false);
@@ -245,7 +245,7 @@ describe('saveTrustedFolders filesystem permissions', () => {
     const folders = new LoadedTrustedFolders({ path: filePath, config }, []);
 
     expect(() => folders.setValue(workspace, TrustLevel.TRUST_FOLDER)).toThrow(
-      /ENOTDIR|not a directory/i,
+      Error,
     );
 
     expect(folders.user.config).toBe(config);

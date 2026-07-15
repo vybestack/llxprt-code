@@ -161,9 +161,10 @@ describe('McpClient disconnect cleanup', () => {
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue({
       close: vi.fn().mockResolvedValue(undefined),
     } as unknown as SdkClientStdioLib.StdioClientTransport);
+    const cleanupFailure = new Error('tool cleanup failed');
     const toolRegistry = {
       removeMcpToolsByServer: vi.fn().mockImplementation(() => {
-        throw new Error('tool cleanup failed');
+        throw cleanupFailure;
       }),
     } as unknown as ToolRegistry;
     const client = new McpClient(
@@ -179,7 +180,7 @@ describe('McpClient disconnect cleanup', () => {
     );
     await client.connect();
 
-    await expect(client.disconnect()).rejects.toThrow('tool cleanup failed');
+    await expect(client.disconnect()).rejects.toBe(cleanupFailure);
 
     expect(sdkClient.close).toHaveBeenCalledOnce();
     expect(client.getStatus()).toBe('disconnected');
@@ -199,14 +200,16 @@ describe('McpClient disconnect cleanup', () => {
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue({
       close: vi.fn().mockResolvedValue(undefined),
     } as unknown as SdkClientStdioLib.StdioClientTransport);
+    const toolCleanupFailure = new Error('tool cleanup failed');
+    const promptCleanupFailure = new Error('prompt cleanup failed');
     const toolRegistry = {
       removeMcpToolsByServer: vi.fn().mockImplementation(() => {
-        throw new Error('tool cleanup failed');
+        throw toolCleanupFailure;
       }),
     } as unknown as ToolRegistry;
     const promptRegistry = {
       removePromptsByServer: vi.fn().mockImplementation(() => {
-        throw new Error('prompt cleanup failed');
+        throw promptCleanupFailure;
       }),
     } as unknown as PromptRegistry;
     const client = new McpClient(
@@ -222,9 +225,14 @@ describe('McpClient disconnect cleanup', () => {
     );
     await client.connect();
 
-    await expect(client.disconnect()).rejects.toThrow(
-      'Disconnect cleanup failed',
+    const failure = await client.disconnect().then(
+      () => undefined,
+      (error: unknown) => error,
     );
+    expect(failure).toMatchObject({
+      message: "Disconnect cleanup failed for 'test-server'",
+      errors: [toolCleanupFailure, promptCleanupFailure],
+    });
 
     expect(sdkClient.close).toHaveBeenCalledOnce();
     expect(client.getStatus()).toBe('disconnected');
@@ -283,8 +291,6 @@ describe('McpClient disconnect cleanup', () => {
     ).onerror;
     expect(errorHandler).toBeTypeOf('function');
 
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
     expect(() => errorHandler(new Error('connection lost'))).not.toThrow();
 
     await vi.waitFor(() => {

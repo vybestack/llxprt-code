@@ -161,13 +161,13 @@ describe('MCP capability authorization', () => {
     ]);
   });
 
-  it('fails closed when prompt invocation has no authorization callback', async () => {
+  it('fails closed when prompt invocation is unauthorized', async () => {
     const client = {
       getPrompt: vi.fn().mockResolvedValue({ messages: [] }),
     } as unknown as Client;
 
     await expect(
-      invokeMcpPrompt('server', client, 'prompt', {}, undefined),
+      invokeMcpPrompt('server', client, 'prompt', {}, () => false),
     ).rejects.toThrow(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
     expect(client.getPrompt).not.toHaveBeenCalled();
   });
@@ -532,6 +532,7 @@ describe('MCP capability authorization', () => {
       registerTool: (tool: { name: string }) => publishedTools.add(tool.name),
       sortTools: vi.fn(),
       removeMcpToolsByServer: () => publishedTools.clear(),
+      getMessageBus: vi.fn(),
     } as unknown as ToolRegistry;
     const promptRegistry = new PromptRegistry();
     const config = { isTrustedFolder: () => trusted } as Config;

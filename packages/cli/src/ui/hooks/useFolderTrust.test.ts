@@ -21,7 +21,11 @@ import { TrustLevel } from '../../config/trustedFolders.js';
 import * as trustedFolders from '../../config/trustedFolders.js';
 
 const mockedCwd = vi.hoisted(() => vi.fn());
-const mockedExit = vi.hoisted(() => vi.fn());
+const mockedExit = vi.hoisted(() =>
+  vi.fn((code: number) => {
+    throw new Error(`process.exit unexpectedly called with "${code}"`);
+  }),
+);
 const temporaryDirectories: string[] = [];
 
 vi.mock('node:process', async () => {
@@ -166,6 +170,27 @@ describe('useFolderTrust', () => {
     );
     expect(result.current.isFolderTrustDialogOpen).toBe(false);
     expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(true);
+  });
+
+  it('persists trust for the working directory current at selection time', async () => {
+    let workingDirectory = '/test/path';
+    mockConfig.getWorkingDir = () => workingDirectory;
+    isWorkspaceTrustedSpy.mockReturnValue(undefined);
+    const { result } = renderHook(() =>
+      useFolderTrust(mockSettings, addItem, mockConfig),
+    );
+    workingDirectory = '/test/changed-path';
+
+    await act(async () => {
+      await result.current.handleFolderTrustSelect(
+        FolderTrustChoice.TRUST_FOLDER,
+      );
+    });
+
+    expect(mockTrustedFolders.setValue).toHaveBeenCalledWith(
+      '/test/changed-path',
+      TrustLevel.TRUST_FOLDER,
+    );
   });
 
   it('should close dialog and call setTrustedFolderLive(true) for TRUST_PARENT', async () => {

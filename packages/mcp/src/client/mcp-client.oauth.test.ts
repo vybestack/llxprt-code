@@ -122,8 +122,7 @@ describe('connectToMcpServer with OAuth', () => {
       () => 'resolved',
       (error: unknown) => error,
     );
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(mockedClient.close).toHaveBeenCalledOnce());
 
     expect(await Promise.race([outcome, Promise.resolve('pending')])).toBe(
       'pending',
@@ -198,7 +197,7 @@ describe('connectToMcpServer with OAuth', () => {
     await connectStarted;
     controller.abort();
     rejectConnect?.(new Error('connect failed'));
-    await Promise.resolve();
+    await vi.waitFor(() => expect(transport.close).toHaveBeenCalledOnce());
 
     expect(await Promise.race([outcome, Promise.resolve('pending')])).toBe(
       'pending',
@@ -253,7 +252,7 @@ describe('connectToMcpServer with OAuth', () => {
     await connectStarted;
     controller.abort();
     resolveConnect?.();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(transport.close).toHaveBeenCalledOnce());
 
     expect(await Promise.race([outcome, Promise.resolve('pending')])).toBe(
       'pending',

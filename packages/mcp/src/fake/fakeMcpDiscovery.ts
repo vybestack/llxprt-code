@@ -101,7 +101,9 @@ export function loadFakeMcpFixture(): FakeMcpFixture | undefined {
   const parsed: unknown = JSON.parse(raw);
   const result = FakeMcpFixtureSchema.safeParse(parsed);
   if (!result.success) {
-    throw new Error(`Invalid fake MCP fixture: ${result.error.message}`);
+    throw new Error(
+      `Invalid fake MCP fixture '${path}': ${result.error.message}`,
+    );
   }
   return result.data;
 }

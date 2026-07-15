@@ -232,6 +232,7 @@ describe('McpClient capability publication', () => {
     await discovery;
 
     expect(resourceRpcStarted).toBe(false);
+    expect(harness.publishedPrompts.size).toBe(0);
     expect(harness.publishedTools.size).toBe(0);
     expect(harness.client.getStatus()).toBe(MCPServerStatus.DISCONNECTED);
   });

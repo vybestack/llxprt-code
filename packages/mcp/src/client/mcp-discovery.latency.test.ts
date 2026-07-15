@@ -174,7 +174,7 @@ describe('connectAndDiscover revocation-during-latency', () => {
       config,
     );
 
-    expect(registeredTools.length).toBeLessThan(3);
+    expect(registeredTools).toHaveLength(1);
     expect(registry.removeMcpToolsByServer).toHaveBeenCalledWith('server');
   });
 

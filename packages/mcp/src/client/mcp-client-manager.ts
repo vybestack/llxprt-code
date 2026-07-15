@@ -537,6 +537,7 @@ export class McpClientManager {
         return;
       }
 
+      client.markConnectedForFakeDiscovery();
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
         clients: new Map(this.clients),
       });

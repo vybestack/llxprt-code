@@ -111,6 +111,9 @@ describe('McpClientManager fake discovery lifecycle', () => {
     expect(manager.getDiscoveryFailures().get(SERVER_NAME)).toContain(
       'Invalid fake MCP fixture',
     );
+    expect(manager.getDiscoveryFailures().get(SERVER_NAME)).toContain(
+      fixturePath,
+    );
   });
 
   it('publishes canonical MCP names and avoids collisions between servers', async () => {
@@ -133,6 +136,9 @@ describe('McpClientManager fake discovery lifecycle', () => {
       toolRegistry.getTool('mcp__other-server__shared-tool'),
     ).toBeDefined();
     expect(toolRegistry.getTool('shared-tool')).toBeUndefined();
+    expect(manager.getClient(SERVER_NAME)?.getStatus()).toBe(
+      MCPServerStatus.CONNECTED,
+    );
   });
 
   it('aborts and drains long-latency fake discovery during stop', async () => {

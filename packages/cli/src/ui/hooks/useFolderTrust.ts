@@ -14,6 +14,7 @@ import {
   resolveLocalWorkspaceTrust,
   TrustLevel,
   isWorkspaceTrusted,
+  type TrustedFolderSnapshot,
 } from '../../config/trustedFolders.js';
 import { type HistoryItemWithoutId, MessageType } from '../types.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
@@ -28,6 +29,7 @@ export type FolderTrustRuntime = Pick<
 const debug = new DebugLogger('llxprt:ui:useFolderTrust');
 
 type AddItemFn = (item: HistoryItemWithoutId, timestamp: number) => number;
+type SetDialogOpenFn = (open: boolean) => void;
 
 function getTrustLevelFromChoice(choice: FolderTrustChoice): TrustLevel | null {
   switch (choice) {
@@ -51,28 +53,91 @@ function showStartupMessage(
     debug.log(
       'Folder is untrusted - displaying permissions command hint on startup',
     );
-    if (addItem) {
-      addItem(
-        {
-          type: MessageType.INFO,
-          text: 'This folder is not trusted. Some features may be disabled. Use the `/permissions` command to change the trust level.',
-        },
-        Date.now(),
-      );
-    }
+    addItem?.(
+      {
+        type: MessageType.INFO,
+        text: 'This folder is not trusted. Some features may be disabled. Use the `/permissions` command to change the trust level.',
+      },
+      Date.now(),
+    );
     startupMessageSent.current = true;
+  }
+}
+
+async function applyFolderTrustChoice(
+  choice: FolderTrustChoice,
+  settings: LoadedSettings,
+  config: FolderTrustRuntime | undefined,
+  addItem: AddItemFn | undefined,
+  setDialogOpen: SetDialogOpenFn,
+): Promise<void> {
+  const trustLevel = getTrustLevelFromChoice(choice);
+  if (trustLevel === null) {
+    return;
+  }
+  const workingDirectory = config?.getWorkingDir() ?? process.cwd();
+  let trustedFolders: ReturnType<typeof loadTrustedFolders> | undefined;
+  let savedSnapshot: TrustedFolderSnapshot | undefined;
+  let previousLiveTrust = false;
+  let failedPhase: 'persistence' | 'live' = 'persistence';
+  try {
+    trustedFolders = loadTrustedFolders();
+    savedSnapshot = trustedFolders.snapshotValue(workingDirectory);
+    previousLiveTrust = config?.isTrustedFolder() ?? false;
+    trustedFolders.setValue(workingDirectory, trustLevel);
+    failedPhase = 'live';
+    const newIsTrusted =
+      resolveLocalWorkspaceTrust(
+        settings.merged,
+        trustedFolders,
+        workingDirectory,
+      ) ?? false;
+    await config?.setTrustedFolderLive(newIsTrusted);
+    setDialogOpen(false);
+  } catch (error) {
+    const rollbackFailures: unknown[] = [];
+    if (trustedFolders !== undefined && savedSnapshot !== undefined) {
+      try {
+        trustedFolders.restoreSnapshot(savedSnapshot);
+      } catch (rollbackError) {
+        rollbackFailures.push(rollbackError);
+      }
+    }
+    if (failedPhase === 'live') {
+      try {
+        await config?.setTrustedFolderLive(previousLiveTrust);
+      } catch (rollbackError) {
+        rollbackFailures.push(rollbackError);
+      }
+    }
+    const reportedError =
+      rollbackFailures.length === 0
+        ? error
+        : new AggregateError(
+            [error, ...rollbackFailures],
+            'Trust update and rollback failed',
+          );
+    const message = `${getTrustCommitErrorMessage(
+      failedPhase,
+      reportedError,
+      rollbackFailures.length === 0,
+    )} Exiting LLxprt Code.`;
+    debug.error(message);
+    addItem?.({ type: MessageType.ERROR, text: message }, Date.now());
+    setTimeout(() => process.exit(ExitCodes.FATAL_CONFIG_ERROR), 100);
   }
 }
 
 export const useFolderTrust = (
   settings: LoadedSettings,
   addItem?: AddItemFn,
-  config?: CliUiRuntime,
+  config?: FolderTrustRuntime,
 ) => {
-  // Folder trust feature flag removed - now using settings directly
   const { folderTrust } = settings.merged;
-  const workingDirectory = config?.getWorkingDir() ?? process.cwd();
-  const initialTrust = isWorkspaceTrusted(settings.merged, workingDirectory);
+  const initialTrust = isWorkspaceTrusted(
+    settings.merged,
+    config?.getWorkingDir() ?? process.cwd(),
+  );
   const [isFolderTrustDialogOpen, setIsFolderTrustDialogOpen] = useState(
     initialTrust === undefined,
   );
@@ -82,86 +147,27 @@ export const useFolderTrust = (
   useEffect(() => {
     const folderTrustChanged = previousFolderTrust.current !== folderTrust;
     previousFolderTrust.current = folderTrust;
-    const trusted = isWorkspaceTrusted(settings.merged, workingDirectory);
+    const trusted = isWorkspaceTrusted(
+      settings.merged,
+      config?.getWorkingDir() ?? process.cwd(),
+    );
     if (folderTrustChanged) {
       setIsFolderTrustDialogOpen(trusted === undefined);
     }
-
     showStartupMessage(trusted, addItem, startupMessageSent);
-  }, [folderTrust, addItem, settings.merged, workingDirectory]);
+  }, [folderTrust, addItem, config, settings.merged]);
 
   const handleFolderTrustSelect = useCallback(
-    async (choice: FolderTrustChoice): Promise<void> => {
-      const trustLevel = getTrustLevelFromChoice(choice);
-      if (trustLevel === null) {
-        return;
-      }
-      let trustedFolders: ReturnType<typeof loadTrustedFolders> | undefined;
-      let savedSnapshot:
-        | ReturnType<ReturnType<typeof loadTrustedFolders>['snapshotValue']>
-        | undefined;
-      let previousLiveTrust = false;
-      let failedPhase: 'persistence' | 'live' = 'persistence';
-      try {
-        trustedFolders = loadTrustedFolders();
-        savedSnapshot = trustedFolders.snapshotValue(workingDirectory);
-        previousLiveTrust = config?.isTrustedFolder() ?? false;
-        trustedFolders.setValue(workingDirectory, trustLevel);
-        failedPhase = 'live';
-        const newIsTrusted =
-          resolveLocalWorkspaceTrust(
-            settings.merged,
-            trustedFolders,
-            workingDirectory,
-          ) ?? false;
-        await config?.setTrustedFolderLive(newIsTrusted);
-        setIsFolderTrustDialogOpen(false);
-      } catch (error) {
-        const rollbackFailures: unknown[] = [];
-        if (trustedFolders !== undefined && savedSnapshot !== undefined) {
-          try {
-            trustedFolders.restoreSnapshot(savedSnapshot);
-          } catch (rollbackError) {
-            rollbackFailures.push(rollbackError);
-          }
-        }
-        if (failedPhase === 'live') {
-          try {
-            await config?.setTrustedFolderLive(previousLiveTrust);
-          } catch (rollbackError) {
-            rollbackFailures.push(rollbackError);
-          }
-        }
-        const reportedError =
-          rollbackFailures.length === 0
-            ? error
-            : new AggregateError(
-                [error, ...rollbackFailures],
-                'Trust update and rollback failed',
-              );
-        const message = `${getTrustCommitErrorMessage(
-          failedPhase,
-          reportedError,
-          rollbackFailures.length === 0,
-        )} Exiting LLxprt Code.`;
-        debug.error(message);
-        addItem?.(
-          {
-            type: MessageType.ERROR,
-            text: message,
-          },
-          Date.now(),
-        );
-        setTimeout(() => {
-          process.exit(ExitCodes.FATAL_CONFIG_ERROR);
-        }, 100);
-      }
-    },
-    [addItem, config, settings.merged, workingDirectory],
+    (choice: FolderTrustChoice): Promise<void> =>
+      applyFolderTrustChoice(
+        choice,
+        settings,
+        config,
+        addItem,
+        setIsFolderTrustDialogOpen,
+      ),
+    [addItem, config, settings],
   );
 
-  return {
-    isFolderTrustDialogOpen,
-    handleFolderTrustSelect,
-  };
+  return { isFolderTrustDialogOpen, handleFolderTrustSelect };
 };

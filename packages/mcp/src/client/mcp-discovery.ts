@@ -627,7 +627,7 @@ export async function invokeMcpPrompt(
   mcpClient: Client,
   promptName: string,
   promptParams: Record<string, unknown>,
-  isAuthorized?: () => boolean,
+  isAuthorized: () => boolean,
 ): Promise<GetPromptResult> {
   const checkAuthorized = requireAuthorization(isAuthorized);
   try {

@@ -7,11 +7,12 @@
 /** @vitest-environment jsdom */
 
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
+import { createDeferred } from '../../test-utils/async.js';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js';
 import type React from 'react';
 import { SettingsContext } from '../contexts/SettingsContext.js';
-import type { LoadedSettings } from '../../config/settings.js';
+import { LoadedSettings } from '../../config/settings.js';
 import type { PermissionsTrustRuntime } from '../hooks/usePermissionsModifyTrust.js';
 import { ideContext } from '@vybestack/llxprt-code-core';
 import { TrustLevel } from '../../config/trustedFolders.js';
@@ -65,38 +66,19 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
-const mockSettings = {
-  merged: {
-    folderTrust: false,
-  },
-  user: {
-    settings: {},
-  },
-  workspace: {
-    settings: {},
-  },
-  setValue: vi.fn(),
-} as unknown as LoadedSettings;
+const mockSettings = new LoadedSettings(
+  { settings: {}, path: '/mock/system.json' },
+  { settings: {}, path: '/mock/system-defaults.json' },
+  { settings: { folderTrust: false }, path: '/mock/user.json' },
+  { settings: {}, path: '/mock/workspace.json' },
+  true,
+);
 
 const Wrapper = ({ children }: { children: React.ReactNode }) => (
   <SettingsContext.Provider value={mockSettings}>
     {children}
   </SettingsContext.Provider>
 );
-
-function createDeferred(): {
-  readonly promise: Promise<void>;
-  readonly resolve: () => void;
-} {
-  let resolvePromise: (() => void) | undefined;
-  const promise = new Promise<void>((resolve) => {
-    resolvePromise = resolve;
-  });
-  return {
-    promise,
-    resolve: () => resolvePromise?.(),
-  };
-}
 
 describe('PermissionsModifyTrustDialog', () => {
   let mockConfig: PermissionsTrustRuntime & {
@@ -396,8 +378,10 @@ describe('PermissionsModifyTrustDialog', () => {
     expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(false);
 
     stdin.write('x');
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(onExit).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(lastFrame()).toContain('Trust level updated');
+      expect(onExit).not.toHaveBeenCalled();
+    });
 
     stdin.write('\r');
     await waitFor(() => {
@@ -406,7 +390,7 @@ describe('PermissionsModifyTrustDialog', () => {
   });
 
   it('serializes an async commit and ignores repeat Enter and Escape until it settles', async () => {
-    const transition = createDeferred();
+    const transition = createDeferred<void>();
     mockConfig.setTrustedFolderLive.mockReturnValueOnce(transition.promise);
     const onExit = vi.fn();
     const { stdin, lastFrame } = renderWithProviders(
