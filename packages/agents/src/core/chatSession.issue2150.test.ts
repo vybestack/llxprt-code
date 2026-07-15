@@ -49,8 +49,10 @@ import {
   InvalidStreamError,
   EmptyStreamError,
 } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
-import { RetryOrchestrator } from '../../../providers/src/RetryOrchestrator.js';
-import type { IProvider as ConcreteProvider } from '../../../providers/src/IProvider.js';
+import {
+  RetryOrchestrator,
+  type IProvider as ConcreteProvider,
+} from '@vybestack/llxprt-code-providers';
 
 describe('Issue 2150: transient connection error must retry the turn, not break the loop', () => {
   let settingsService: SettingsService;
@@ -546,20 +548,16 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
 
     await expect(collectEvents(stream)).rejects.toMatchObject({
       name: 'RetriesExhaustedError',
-      message:
-        'Provider retries exhausted after 1 transport attempts: Model stream ended immediately with no content.',
       category: 'server_error',
       isRetryable: false,
       shouldFailover: false,
       reason: 'retries_exhausted',
       cause: {
         name: 'EmptyStreamError',
-        message: 'Model stream ended immediately with no content.',
       },
       failures: [
         {
           name: 'EmptyStreamError',
-          message: 'Model stream ended immediately with no content.',
         },
       ],
     });

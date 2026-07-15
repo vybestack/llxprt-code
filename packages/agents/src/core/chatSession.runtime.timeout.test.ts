@@ -105,6 +105,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     process.env = originalEnv;
   });
