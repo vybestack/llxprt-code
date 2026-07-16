@@ -21,6 +21,28 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MockFileSystem } from './IFileSystem.js';
 
+/**
+ * Builds a minimal Config stub sufficient for createProviderManager when the
+ * `config` option is passed. Only the methods called by ProviderManager.setConfig
+ * and the composition layer are provided.
+ */
+function makeMinimalConfig(
+  overrides: Record<string, unknown> = {},
+): import('@vybestack/llxprt-code-core').Config {
+  return {
+    getConversationLoggingEnabled: () => false,
+    setProviderManager: () => {},
+    setContentGeneratorFactory: () => {},
+    setTokenizerFactory: () => {},
+    getRedactionConfig: () => undefined,
+    getModel: () => 'placeholder-model',
+    getProxy: () => undefined,
+    getEphemeralSettings: () => ({}),
+    getDebugMode: () => false,
+    ...overrides,
+  } as unknown as import('@vybestack/llxprt-code-core').Config;
+}
+
 function captureThrown(fn: () => unknown): { error: unknown } {
   try {
     fn();
@@ -212,5 +234,78 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
     });
 
     expect(manager.hasActiveProvider()).toBe(false);
+  });
+
+  it('getActiveProviderName returns undefined for whitespace-only configuration', () => {
+    const settingsService = new SettingsService();
+    settingsService.set('activeProvider', '   ');
+    const runtime = createProviderRuntimeContext({ settingsService });
+    const { manager } = createProviderManager(runtime, {
+      allowBrowserEnvironment: true,
+    });
+
+    expect(manager.getActiveProviderName()).toBeUndefined();
+  });
+
+  it('getActiveProvider returns undefined for whitespace-only configuration', () => {
+    const settingsService = new SettingsService();
+    settingsService.set('activeProvider', '   ');
+    const runtime = createProviderRuntimeContext({ settingsService });
+    const { manager } = createProviderManager(runtime, {
+      allowBrowserEnvironment: true,
+    });
+
+    expect(manager.getActiveProvider()).toBeUndefined();
+  });
+});
+
+describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#2481)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    const mockFs = new MockFileSystem();
+    setFileSystem(mockFs);
+  });
+
+  it('treats UNCONFIGURED_PROVIDER sentinel in settingsService as absent', () => {
+    const settingsService = new SettingsService();
+    settingsService.set('activeProvider', 'unconfigured');
+    const runtime = createProviderRuntimeContext({ settingsService });
+    const { manager } = createProviderManager(runtime, {
+      allowBrowserEnvironment: true,
+    });
+
+    // The sentinel must NOT activate a provider named 'unconfigured'.
+    expect(manager.hasActiveProvider()).toBe(false);
+  });
+
+  it('falls through sentinel config provider to a real lower-precedence provider', () => {
+    // config.getProvider() returns the sentinel; settingsService has a real
+    // provider. resolveExplicitProvider must skip the sentinel and continue
+    // to the settingsService source, activating the real provider.
+    const settingsService = new SettingsService();
+    settingsService.set('activeProvider', 'gemini');
+    const runtime = createProviderRuntimeContext({ settingsService });
+    const config = makeMinimalConfig({ getProvider: () => 'unconfigured' });
+    const { manager } = createProviderManager(runtime, {
+      config,
+      allowBrowserEnvironment: true,
+    });
+
+    expect(manager.hasActiveProvider()).toBe(true);
+    expect(manager.getActiveProviderName()).toBe('gemini');
+  });
+
+  it('falls through whitespace-only config provider to a real settingsService provider', () => {
+    const settingsService = new SettingsService();
+    settingsService.set('activeProvider', 'gemini');
+    const runtime = createProviderRuntimeContext({ settingsService });
+    const config = makeMinimalConfig({ getProvider: () => '   ' });
+    const { manager } = createProviderManager(runtime, {
+      config,
+      allowBrowserEnvironment: true,
+    });
+
+    expect(manager.hasActiveProvider()).toBe(true);
+    expect(manager.getActiveProviderName()).toBe('gemini');
   });
 });

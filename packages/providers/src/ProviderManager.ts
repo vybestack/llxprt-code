@@ -514,10 +514,9 @@ export class ProviderManager implements IProviderManager {
   }
 
   getActiveProvider(): IProvider | undefined {
-    const activeProviderName =
-      (this.settingsService.get('activeProvider') as string) || '';
+    const activeProviderName = this.resolveActiveProviderName();
 
-    if (!activeProviderName) {
+    if (activeProviderName === undefined) {
       return undefined;
     }
 
@@ -580,14 +579,25 @@ export class ProviderManager implements IProviderManager {
   }
 
   getActiveProviderName(): string | undefined {
-    const name = (this.settingsService.get('activeProvider') as string) || '';
-    return name === '' ? undefined : name;
+    return this.resolveActiveProviderName();
+  }
+
+  /**
+   * Reads the stored activeProvider name, trims it, and returns undefined
+   * when it is blank. Whitespace-only stored values are treated as absent so
+   * callers always see a clean name or nothing.
+   */
+  private resolveActiveProviderName(): string | undefined {
+    const raw = (this.settingsService.get('activeProvider') as string) || '';
+    const trimmed = raw.trim();
+    return trimmed === '' ? undefined : trimmed;
   }
 
   hasActiveProvider(): boolean {
-    const activeProviderName =
-      (this.settingsService.get('activeProvider') as string) || '';
-    return activeProviderName !== '' && this.providers.has(activeProviderName);
+    const activeProviderName = this.resolveActiveProviderName();
+    return (
+      activeProviderName !== undefined && this.providers.has(activeProviderName)
+    );
   }
 
   getServerToolsProvider(): IProvider | null {

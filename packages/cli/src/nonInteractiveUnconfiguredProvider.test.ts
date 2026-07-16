@@ -48,6 +48,12 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
+vi.mock('./utils/cleanup.js', () => ({
+  runExitCleanup: vi.fn().mockResolvedValue(undefined),
+  cleanupCheckpoints: vi.fn().mockResolvedValue(undefined),
+  registerSyncCleanup: vi.fn(),
+}));
+
 vi.mock('./ui/hooks/atCommandProcessor.js');
 vi.mock('./services/CommandService.js', () => ({
   CommandService: {
@@ -265,6 +271,55 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
     expect(combined).toContain('--provider');
     expect(combined).toContain('--profile-load');
     expect(combined).toContain('LLXPRT_DEFAULT_PROVIDER');
+  });
+
+  it('runs centralized cleanup before exiting 52 (cleanup ordering)', async () => {
+    const { runExitCleanup } = await import('./utils/cleanup.js');
+    const cleanupMock = vi.mocked(runExitCleanup);
+    cleanupMock.mockClear();
+    const exitOrder: string[] = [];
+    cleanupMock.mockImplementation(async () => {
+      exitOrder.push('cleanup');
+    });
+    vi.spyOn(process, 'exit').mockImplementation((code) => {
+      exitOrder.push(`exit(${code})`);
+      throw new Error(`process.exit(${code}) called`);
+    });
+
+    const config = makeUnconfiguredConfig();
+
+    await expect(
+      runNonInteractive({
+        config,
+        settings: makeSettings(),
+        input: 'hello',
+        prompt_id: 'test-cleanup-ordering',
+      }),
+    ).rejects.toThrow('process.exit(52) called');
+
+    // Centralized cleanup must complete BEFORE process.exit fires.
+    expect(cleanupMock).toHaveBeenCalledTimes(1);
+    expect(exitOrder).toStrictEqual(['cleanup', 'exit(52)']);
+  });
+
+  it('still exits 52 when cleanup throws (cleanup failure does not prevent exit)', async () => {
+    const { runExitCleanup } = await import('./utils/cleanup.js');
+    const cleanupMock = vi.mocked(runExitCleanup);
+    cleanupMock.mockClear();
+    cleanupMock.mockRejectedValue(new Error('cleanup exploded'));
+
+    const config = makeUnconfiguredConfig();
+
+    await expect(
+      runNonInteractive({
+        config,
+        settings: makeSettings(),
+        input: 'hello',
+        prompt_id: 'test-cleanup-throws',
+      }),
+    ).rejects.toThrow('process.exit(52) called');
+
+    expect(cleanupMock).toHaveBeenCalledTimes(1);
   });
 
   it('passes through when a provider IS explicitly configured', async () => {

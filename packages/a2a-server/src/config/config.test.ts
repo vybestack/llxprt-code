@@ -11,6 +11,7 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
   PLACEHOLDER_MODEL,
+  UNCONFIGURED_PROVIDER,
 } from '@vybestack/llxprt-code-core';
 import { loadConfig } from './config.js';
 
@@ -231,5 +232,46 @@ describe('loadConfig provider-neutral defaults', () => {
 
     // Explicit Gemini provider via env → OAuth fallback for Gemini.
     expect(refreshAuthSpy).toHaveBeenCalledWith('oauth-personal');
+  });
+
+  it('treats whitespace-only LLXPRT_DEFAULT_PROVIDER as unconfigured', async () => {
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
+    const refreshAuthSpy = vi
+      .spyOn(Config.prototype, 'refreshAuth')
+      .mockResolvedValue(undefined);
+
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.USE_CCPA;
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+    delete process.env.GOOGLE_CLOUD_LOCATION;
+    delete process.env.GOOGLE_API_KEY;
+    process.env.LLXPRT_DEFAULT_PROVIDER = '   ';
+
+    const config = await loadConfig({} as never, [], 'test-task-id');
+
+    // A whitespace-only env value must not select any provider or trigger auth.
+    expect(refreshAuthSpy).not.toHaveBeenCalled();
+    expect(config.getProvider()).toBe(UNCONFIGURED_PROVIDER);
+  });
+
+  it('trims a padded explicit provider from LLXPRT_DEFAULT_PROVIDER', async () => {
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
+    vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
+
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.USE_CCPA;
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+    delete process.env.GOOGLE_CLOUD_LOCATION;
+    delete process.env.GOOGLE_API_KEY;
+    process.env.LLXPRT_DEFAULT_PROVIDER = '  openai  ';
+
+    const config = await loadConfig({} as never, [], 'test-task-id');
+
+    // The padded value must be trimmed to 'openai'.
+    expect(config.getProvider()).toBe('openai');
   });
 });

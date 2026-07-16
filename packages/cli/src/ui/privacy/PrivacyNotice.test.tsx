@@ -49,6 +49,19 @@ describe('PrivacyNotice: unconfigured state (#2481)', () => {
     expect(frame).not.toContain('API Key Notice');
   });
 
+  it('uses the canonical vybestack docs URL (not a stale fork URL)', () => {
+    const config = makeConfig(undefined);
+    const { lastFrame } = renderWithProviders(
+      <PrivacyNotice onExit={mockOnExit} config={config} />,
+    );
+
+    const frame = lastFrame();
+    expect(frame).toContain(
+      'https://github.com/vybestack/llxprt-code/blob/main/docs/tos-privacy.md',
+    );
+    expect(frame).not.toContain('github.com/acoliver/llxprt-code');
+  });
+
   it('renders ONLY the Gemini notice when gemini is the explicit active provider (mutually exclusive)', () => {
     const config = makeConfig('gemini');
     const { lastFrame } = renderWithProviders(

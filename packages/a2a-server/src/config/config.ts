@@ -123,10 +123,11 @@ function getApprovalMode(): ApprovalMode {
 /**
  * Resolve the provider from LLXPRT_DEFAULT_PROVIDER env var.
  * Returns UNCONFIGURED_PROVIDER when no explicit provider is selected,
- * keeping the A2A server provider-neutral by default.
+ * keeping the A2A server provider-neutral by default. The value is trimmed
+ * so whitespace-only entries are treated as unconfigured.
  */
 function resolveProviderFromEnv(): string {
-  const envProvider = process.env['LLXPRT_DEFAULT_PROVIDER'];
+  const envProvider = process.env['LLXPRT_DEFAULT_PROVIDER']?.trim();
   if (envProvider !== undefined && envProvider !== '') {
     return envProvider;
   }
@@ -226,7 +227,7 @@ function resolveAuthSelection(): AuthSelection {
     return 'vertex-ai';
   }
   // Only fall back to Gemini OAuth when Gemini is explicitly selected.
-  const defaultProvider = process.env['LLXPRT_DEFAULT_PROVIDER'];
+  const defaultProvider = process.env['LLXPRT_DEFAULT_PROVIDER']?.trim();
   if (defaultProvider === 'gemini') {
     return 'gemini-oauth';
   }

@@ -125,9 +125,14 @@ export class Task {
       this.config.getDebugMode(),
     );
     const contentConfig = this.config.getContentGeneratorConfig();
+    const trimmedProvider = this.config.getProvider()?.trim();
+    const resolvedProvider =
+      trimmedProvider === undefined || trimmedProvider === ''
+        ? UNCONFIGURED_PROVIDER
+        : trimmedProvider;
     const runtimeState = createAgentRuntimeState({
       runtimeId: `${this.contextId}-task-runtime`,
-      provider: this.config.getProvider() ?? UNCONFIGURED_PROVIDER,
+      provider: resolvedProvider,
       model: resolveModel(
         this.config.getModel(),
         contentConfig?.model,

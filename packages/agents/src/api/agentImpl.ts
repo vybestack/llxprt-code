@@ -92,7 +92,7 @@ import { UNCONFIGURED_PROVIDER } from './constants.js';
  * closed with this message so the user is guided to /setup.
  */
 const UNCONFIGURED_AGENT_MESSAGE =
-  'No provider is configured. Run /setup to choose a hosted provider, configure a local model, or select an existing profile before using the agent.';
+  'No provider is configured. Run /setup to choose a hosted provider, configure a local model, set up a custom compatible endpoint, or select an existing profile before using the agent.';
 import { registerInternalConfig } from './internalConfigAccess.js';
 import {
   drainToResult,

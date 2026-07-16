@@ -84,4 +84,49 @@ describe('Task: provider-neutral default (not gemini)', () => {
     expect(capturedRuntimeStates[0].provider).toBe('openai');
     expect(capturedRuntimeStates[0].model).toBe('gpt-4o');
   });
+
+  it('treats whitespace-only provider as UNCONFIGURED_PROVIDER', async () => {
+    capturedRuntimeStates.length = 0;
+
+    const mockConfig = createMockConfig({
+      getProvider: () => '   ',
+      getModel: () => '',
+      getContentGeneratorConfig: () => undefined,
+    });
+
+    await Task.create('task-id', 'context-id', mockConfig as never, undefined);
+
+    expect(capturedRuntimeStates.length).toBe(1);
+    expect(capturedRuntimeStates[0].provider).toBe(UNCONFIGURED_PROVIDER);
+  });
+
+  it('treats empty-string provider as UNCONFIGURED_PROVIDER', async () => {
+    capturedRuntimeStates.length = 0;
+
+    const mockConfig = createMockConfig({
+      getProvider: () => '',
+      getModel: () => '',
+      getContentGeneratorConfig: () => undefined,
+    });
+
+    await Task.create('task-id', 'context-id', mockConfig as never, undefined);
+
+    expect(capturedRuntimeStates.length).toBe(1);
+    expect(capturedRuntimeStates[0].provider).toBe(UNCONFIGURED_PROVIDER);
+  });
+
+  it('trims a padded explicit provider before passing to createAgentClient', async () => {
+    capturedRuntimeStates.length = 0;
+
+    const mockConfig = createMockConfig({
+      getProvider: () => '  openai  ',
+      getModel: () => 'gpt-4o',
+      getContentGeneratorConfig: () => ({ model: 'gpt-4o' }),
+    });
+
+    await Task.create('task-id', 'context-id', mockConfig as never, undefined);
+
+    expect(capturedRuntimeStates.length).toBe(1);
+    expect(capturedRuntimeStates[0].provider).toBe('openai');
+  });
 });

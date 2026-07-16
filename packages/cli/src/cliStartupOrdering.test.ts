@@ -14,7 +14,9 @@
  *
  * These tests exercise the REAL guard helper (not a copy) to verify the
  * observable contract: exit 52 on unconfigured non-interactive, fall-through
- * on configured or interactive.
+ * on configured or interactive. The orchestration test below exercises the
+ * REAL main() entrypoint to prove the guard fires BEFORE provider activation
+ * and Agent construction.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -116,5 +118,194 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
       guardUnconfiguredProvider(config, failingCleanup),
     ).rejects.toThrow('process.exit(52) called');
     expect(failingCleanup).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── Real main() orchestration test (#2481) ─────────────────────────────────
+//
+// Exercises the REAL main() entrypoint to prove the production
+// guardUnconfiguredProvider call stops the startup sequence BEFORE
+// activateConfiguredProvider and Agent construction. The guard is NOT
+// re-implemented here — main() calls the real helper from
+// ./unconfiguredProviderGuard.js. Only the heavy startup dependencies
+// (bootstrap, provider init, agent construction, session dispatch) are mocked
+// so the ordering between the guard and activation is observable.
+
+describe('main() orchestration: guard stops before activation (#2481)', () => {
+  const callOrder: string[] = [];
+
+  beforeEach(() => {
+    callOrder.length = 0;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  async function runMainWithConfig(config: Config): Promise<void> {
+    vi.resetModules();
+
+    // Mock heavy startup modules to no-ops, recording call order at the
+    // key boundaries (guard, activation, agent construction).
+    vi.doMock('./unconfiguredProviderGuard.js', async (importOriginal) => {
+      const actual =
+        await importOriginal<typeof import('./unconfiguredProviderGuard.js')>();
+      return {
+        ...actual,
+        // Wrap the REAL guard so we can observe it was reached, then let it
+        // run. The real guard calls process.exit (mocked to throw) on the
+        // unconfigured path.
+        guardUnconfiguredProvider: async (
+          cfg: Config,
+          runCleanup: () => Promise<void>,
+        ) => {
+          callOrder.push('guard');
+          return actual.guardUnconfiguredProvider(cfg, runCleanup);
+        },
+      };
+    });
+
+    vi.doMock('./cliProviderInit.js', () => ({
+      activateConfiguredProvider: async () => {
+        callOrder.push('activation');
+        return { authFailed: false, token: undefined, intent: undefined };
+      },
+      configureProvidersAndServices: async () => ({}),
+      connectIdeClientIfEnabled: async () => {},
+      ensureAcpProviderActivated: () => {},
+    }));
+
+    vi.doMock('./cliTerminalSession.js', () => ({
+      constructAgentWithSpinner: async () => {
+        callOrder.push('agent-construction');
+        return {};
+      },
+      prepareTerminalSession: async () => {},
+    }));
+
+    vi.doMock('./cliSessionBootstrap.js', () => ({
+      bootstrapRuntimeAndConfig: async () => ({
+        config,
+        runtimeSettingsService: {},
+      }),
+      setupSessionRecording: async () => undefined,
+    }));
+
+    vi.doMock('./session/nonInteractiveSession.js', () => ({
+      dispatchInteractiveOrNonInteractive: async () => {
+        callOrder.push('dispatch');
+      },
+    }));
+
+    vi.doMock('./cliSandbox.js', () => ({
+      maybeHopIntoSandbox: async () => {},
+    }));
+
+    vi.doMock('./config/cliArgParser.js', () => ({
+      parseArguments: async () => ({ prompt: 'hello' }),
+    }));
+
+    vi.doMock('./config/settings.js', () => ({
+      loadSettings: () => ({ merged: {}, errors: [] }),
+    }));
+
+    vi.doMock('./cliBootstrap.js', () => ({
+      configureEarlyDebugLogging: () => {},
+      createMemoizedStdinReader: () => async () => '',
+      ensureStdinOrPromptProvided: async () => {},
+      handleVersionAndHelpFlags: async () => {},
+      maybeRelaunchForMemory: async () => {},
+      redirectConsoleForAcp: () => {},
+      rejectPromptInteractiveWithPipedStdin: async () => {},
+      throwIfSettingsErrors: () => {},
+      ParsedCliArgs: {} as never,
+    }));
+
+    vi.doMock('./utils/cleanup.js', () => ({
+      cleanupCheckpoints: async () => {},
+      runExitCleanup: async () => {},
+      registerSyncCleanup: () => {},
+    }));
+
+    vi.doMock('./utils/sessionCleanup.js', () => ({
+      cleanupExpiredSessions: async () => {},
+    }));
+
+    vi.doMock('./zed-integration/zedIntegration.js', () => ({
+      runZedIntegration: async () => {},
+    }));
+
+    vi.doMock('./config/pathMigration.js', () => ({
+      runStartupMigration: () => ({ migrated: false }),
+      reportStartupResult: () => ({ messages: [], needsLegacyFallback: false }),
+    }));
+
+    vi.doMock('./session/errorReporting.js', () => ({
+      formatNonInteractiveError: () => '',
+    }));
+    vi.doMock('./session/outputListeners.js', () => ({
+      initializeOutputListenersAndFlush: () => {},
+    }));
+    vi.doMock('./session/signalHandlers.js', () => ({
+      installNonInteractiveSigintHandler: () => {},
+      setupUnhandledRejectionHandler: () => {},
+      __resetUnhandledRejectionStateForTesting: () => {},
+    }));
+    vi.doMock('./session/interactiveUI.js', () => ({
+      startInteractiveUI: async () => {},
+    }));
+
+    const { main } = await import('./cli.js');
+    await main();
+  }
+
+  it('non-interactive + unconfigured: guard fires and activation is never reached', async () => {
+    const config = {
+      getProviderManager: () => ({ hasActiveProvider: () => false }),
+      isInteractive: () => false,
+      getOutputFormat: () => 'text',
+      getListExtensions: () => false,
+      getExperimentalZedIntegration: () => false,
+    } as unknown as Config;
+
+    // Mock process.exit to throw so the guard's exit is observable without
+    // terminating the test process.
+    vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new Error(`process.exit(${code})`);
+    });
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    await expect(runMainWithConfig(config)).rejects.toThrow('process.exit(52)');
+
+    expect(callOrder).toContain('guard');
+    expect(callOrder).not.toContain('activation');
+    expect(callOrder).not.toContain('agent-construction');
+  });
+
+  it('configured: guard falls through and activation + dispatch proceed', async () => {
+    const config = {
+      getProviderManager: () => ({ hasActiveProvider: () => true }),
+      isInteractive: () => false,
+      getOutputFormat: () => 'text',
+      getListExtensions: () => false,
+      getExperimentalZedIntegration: () => false,
+    } as unknown as Config;
+
+    vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('unexpected process.exit');
+    });
+
+    await runMainWithConfig(config);
+
+    // Guard was reached (fell through) and activation + dispatch ran after it.
+    expect(callOrder).toContain('guard');
+    expect(callOrder).toContain('activation');
+    expect(callOrder).toContain('dispatch');
+
+    // Ordering: guard must come before activation.
+    expect(callOrder.indexOf('guard')).toBeLessThan(
+      callOrder.indexOf('activation'),
+    );
   });
 });

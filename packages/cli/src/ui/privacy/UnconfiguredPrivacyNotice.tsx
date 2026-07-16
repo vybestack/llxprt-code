@@ -64,7 +64,7 @@ export const UnconfiguredPrivacyNotice = ({
       <Newline />
       <Text color={Colors.Gray}>
         For full provider information, see:
-        https://github.com/acoliver/llxprt-code/blob/main/docs/tos-privacy.md
+        https://github.com/vybestack/llxprt-code/blob/main/docs/tos-privacy.md
       </Text>
       <Newline />
       <Text color={Colors.Gray}>Press Esc to exit.</Text>

@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type MockInstance,
+} from 'vitest';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
@@ -195,7 +203,23 @@ describe('reportUnconfiguredProviderError: single emission', () => {
 });
 
 describe('guardUnconfiguredProvider: void return and exit behavior', () => {
-  it('returns a Promise<void>', () => {
+  let stderrSpy: MockInstance;
+  let exitSpy: MockInstance;
+
+  beforeEach(() => {
+    stderrSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
+    exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit should not be called');
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns a Promise<void> and settles before mocks restore', async () => {
     const config = {
       getProviderManager: () => ({
         hasActiveProvider: () => false,
@@ -204,15 +228,19 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
       getOutputFormat: () => 'text' as Config['outputFormat'],
     } as unknown as Config;
 
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-    vi.spyOn(process, 'exit').mockImplementation((code) => {
+    // Re-stub process.exit for this test so the guard's awaited cleanup +
+    // finally can run through to the exit call without terminating the
+    // process. The promise must be fully settled before mocks restore.
+    exitSpy.mockImplementation((code) => {
       throw new Error(`process.exit(${code}) called`);
     });
 
     const result = guardUnconfiguredProvider(config, () => Promise.resolve());
     expect(result).toBeInstanceOf(Promise);
-    result.catch(() => {});
-    vi.restoreAllMocks();
+    // Await settlement so the real guard's runCleanup + finally complete
+    // before the afterEach restores the real process.exit.
+    await expect(result).rejects.toThrow('process.exit(52) called');
+    expect(exitSpy).toHaveBeenCalledWith(52);
   });
 
   it('resolves void when provider IS configured', async () => {
@@ -252,8 +280,7 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
       getOutputFormat: () => 'text' as Config['outputFormat'],
     } as unknown as Config;
 
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+    exitSpy.mockImplementation((code) => {
       throw new Error(`process.exit(${code}) called`);
     });
 
@@ -261,7 +288,6 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
       guardUnconfiguredProvider(config, () => Promise.resolve()),
     ).rejects.toThrow('process.exit(52) called');
     expect(exitSpy).toHaveBeenCalledWith(52);
-    vi.restoreAllMocks();
   });
 
   it('still exits 52 even when cleanup throws', async () => {
@@ -273,8 +299,7 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
       getOutputFormat: () => 'text' as Config['outputFormat'],
     } as unknown as Config;
 
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+    exitSpy.mockImplementation((code) => {
       throw new Error(`process.exit(${code}) called`);
     });
 
@@ -284,7 +309,6 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
       ),
     ).rejects.toThrow('process.exit(52) called');
     expect(exitSpy).toHaveBeenCalledWith(52);
-    vi.restoreAllMocks();
   });
 
   it('runs cleanup before exiting', async () => {
@@ -297,8 +321,7 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
     } as unknown as Config;
 
     const cleanupFn = vi.fn().mockResolvedValue(undefined);
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-    vi.spyOn(process, 'exit').mockImplementation((code) => {
+    exitSpy.mockImplementation((code) => {
       throw new Error(`process.exit(${code}) called`);
     });
 
@@ -306,7 +329,6 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
       'process.exit(52) called',
     );
     expect(cleanupFn).toHaveBeenCalledTimes(1);
-    vi.restoreAllMocks();
   });
 
   it('logs cleanup failure via debugLogger (not stderr) and still exits 52', async () => {
@@ -319,16 +341,14 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
     } as unknown as Config;
 
     const stderrCalls: string[] = [];
-    vi.spyOn(process.stderr, 'write').mockImplementation(
-      (chunk: string | Uint8Array) => {
-        stderrCalls.push(typeof chunk === 'string' ? chunk : String(chunk));
-        return true;
-      },
-    );
+    stderrSpy.mockImplementation((chunk: string | Uint8Array) => {
+      stderrCalls.push(typeof chunk === 'string' ? chunk : String(chunk));
+      return true;
+    });
     const debugErrorSpy = vi
       .spyOn(debugLogger, 'error')
       .mockImplementation(() => {});
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+    exitSpy.mockImplementation((code) => {
       throw new Error(`process.exit(${code}) called`);
     });
 
@@ -348,7 +368,5 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
     const occurrences = (combined.match(/No provider is configured/g) ?? [])
       .length;
     expect(occurrences).toBe(1);
-
-    vi.restoreAllMocks();
   });
 });

@@ -99,6 +99,9 @@ describe('prompts', () => {
       // start the neutral sentinel must flow through — the prompt must NOT
       // reference 'gemini' as the provider.
       expect(prompt).not.toContain('via gemini.');
+      // Positive assertion: the UNCONFIGURED_PROVIDER sentinel must be
+      // present in the rendered prompt (the required verification).
+      expect(prompt).toContain(UNCONFIGURED_PROVIDER);
     });
 
     it('renders placeholder model (not gemini-1.5-pro) when no model given', async () => {

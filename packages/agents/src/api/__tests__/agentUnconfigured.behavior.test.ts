@@ -256,6 +256,20 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
       '/setup',
     );
     expect(doneEvent?.type === 'done' && doneEvent.reason).toBe('error');
+
+    // Event contract: the error event precedes the done event, and the done
+    // event carries reason 'error' without a finished payload (the error
+    // details live on the error event, not the done event's optional
+    // `finished` field).
+    const errorIdx = events.findIndex((e) => e.type === 'error');
+    const doneIdx = events.findIndex((e) => e.type === 'done');
+    expect(errorIdx).toBeLessThan(doneIdx);
+    // doneEvent is guaranteed to be the 'done' variant by the assertion above.
+    const doneTyped = doneEvent as Extract<
+      (typeof events)[number],
+      { type: 'done' }
+    >;
+    expect(doneTyped.finished).toBeUndefined();
   });
 
   it('stream makes ZERO generation calls to the client', async () => {

@@ -15,9 +15,9 @@ import type { LoadedSettings } from './config/settings.js';
 import { guardUnconfiguredProvider } from './unconfiguredProviderGuard.js';
 
 /**
- * Gate-only validation for non-interactive mode. Checks for an explicit
- * provider, then for auth credentials, applies compression settings, and
- * wires the serverToolsProvider. Does NOT perform authentication.
+ * Gate-only validation for non-interactive mode. Delegates to the
+ * unconfigured-provider guard, applies compression settings, and wires the
+ * serverToolsProvider. Does NOT perform authentication.
  *
  * When no provider is configured, this delegates to
  * {@link guardUnconfiguredProvider} which reports the error, runs cleanup

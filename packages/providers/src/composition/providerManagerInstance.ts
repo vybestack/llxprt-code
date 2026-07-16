@@ -20,6 +20,7 @@ import {
   type RuntimeTokenizer,
   type RuntimeTokenizerFactory,
   type ProviderRuntimeContext,
+  UNCONFIGURED_PROVIDER,
 } from '@vybestack/llxprt-code-core';
 import { ProviderManager } from '../ProviderManager.js';
 import { FakeProvider } from '../fake/FakeProvider.js';
@@ -187,6 +188,23 @@ export function configureProviderRuntimeFactories(
 }
 
 /**
+ * Normalizes a candidate explicit-provider value. Returns the trimmed value
+ * when it is a non-empty, non-sentinel string; otherwise undefined. The
+ * neutral UNCONFIGURED_PROVIDER sentinel and whitespace-only values are
+ * treated as absent so precedence falls through to lower sources.
+ */
+function normalizeExplicitProvider(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (trimmed === '' || trimmed === UNCONFIGURED_PROVIDER) {
+    return undefined;
+  }
+  return trimmed;
+}
+
+/**
  * Resolves an explicitly-configured provider name (or undefined when
  * nothing is configured). Checks, in order: config.getProvider(), the
  * settingsService's activeProvider, and the user-settings file's
@@ -196,6 +214,11 @@ export function configureProviderRuntimeFactories(
  * Bare API keys / env credentials are intentionally NOT consulted here —
  * they do not select a provider. Only an explicit provider/profile/default
  * counts.
+ *
+ * The neutral `UNCONFIGURED_PROVIDER` sentinel and whitespace-only values
+ * are treated as absent at every source so resolution continues to
+ * lower-precedence sources and never passes the sentinel to
+ * activateExplicitProvider or setActiveProvider.
  */
 function resolveExplicitProvider(
   config: Config | undefined,
@@ -206,36 +229,31 @@ function resolveExplicitProvider(
   // LLXPRT_DEFAULT_PROVIDER during config resolution).
   if (config && typeof config.getProvider === 'function') {
     const configProvider = config.getProvider();
-    if (typeof configProvider === 'string' && configProvider.trim() !== '') {
-      return configProvider.trim();
+    const resolvedConfig = normalizeExplicitProvider(configProvider);
+    if (resolvedConfig !== undefined) {
+      return resolvedConfig;
     }
   }
 
   // 2. SettingsService activeProvider (ephemeral runtime state, not
   // persisted — set by a prior switchActiveProvider or from profile load).
   const settingsActiveProvider = context.settingsService.get('activeProvider');
-  if (
-    typeof settingsActiveProvider === 'string' &&
-    settingsActiveProvider.trim() !== ''
-  ) {
-    return settingsActiveProvider.trim();
+  const resolvedSettings = normalizeExplicitProvider(settingsActiveProvider);
+  if (resolvedSettings !== undefined) {
+    return resolvedSettings;
   }
 
   // 3. User-settings file activeProvider or defaultProvider.
   if (userSettings) {
     const userActiveProvider = userSettings['activeProvider'];
-    if (
-      typeof userActiveProvider === 'string' &&
-      userActiveProvider.trim() !== ''
-    ) {
-      return userActiveProvider.trim();
+    const resolvedUserActive = normalizeExplicitProvider(userActiveProvider);
+    if (resolvedUserActive !== undefined) {
+      return resolvedUserActive;
     }
     const userDefaultProvider = userSettings['defaultProvider'];
-    if (
-      typeof userDefaultProvider === 'string' &&
-      userDefaultProvider.trim() !== ''
-    ) {
-      return userDefaultProvider.trim();
+    const resolvedUserDefault = normalizeExplicitProvider(userDefaultProvider);
+    if (resolvedUserDefault !== undefined) {
+      return resolvedUserDefault;
     }
   }
 

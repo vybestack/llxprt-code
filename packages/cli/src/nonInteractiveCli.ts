@@ -57,6 +57,7 @@ import {
   isProviderConfigured,
   reportUnconfiguredProviderError,
 } from './unconfiguredProviderGuard.js';
+import { runExitCleanup } from './utils/cleanup.js';
 
 interface RunNonInteractiveParams {
   config: Config;
@@ -498,6 +499,12 @@ export async function runNonInteractive(
 
   if (!isProviderConfigured(config)) {
     reportUnconfiguredProviderError(config);
+    try {
+      await runExitCleanup();
+    } catch {
+      // Swallow cleanup errors on the unconfigured exit path so exit code 52
+      // is always reached (matches guardUnconfiguredProvider semantics).
+    }
     process.exit(ExitCodes.FATAL_CONFIG_ERROR);
   }
 

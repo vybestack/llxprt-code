@@ -349,10 +349,12 @@ describe('First provider selection from no active provider (#2481)', () => {
       .mockResolvedValue(new Response('{}', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await switchActiveProvider('anthropic');
-
-    expect(fetchMock).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
+    try {
+      await switchActiveProvider('anthropic');
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('permits a subsequent switch to another explicit provider', async () => {
