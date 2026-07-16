@@ -13,8 +13,11 @@ import type { SubAgentScope } from '../core/subagent.js';
 import { type ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
-import { type ToolResult, ToolErrorType } from '@vybestack/llxprt-code-tools';
-import { toLosslessTextDelta } from '@vybestack/llxprt-code-tools';
+import {
+  type ToolResult,
+  ToolErrorType,
+  createStreamNormalizer,
+} from '@vybestack/llxprt-code-tools';
 import { type TaskToolInvocationParams } from './taskToolGovernance.js';
 import {
   handleBackgroundAbort,
@@ -59,8 +62,10 @@ export interface AsyncTaskCollaborators {
  * LLM's own whitespace and newlines are authoritative; we only normalize
  * carriage-return variants to '\n'.
  *
- * Preserved for backward compatibility; new callers should use
- * {@link toLosslessTextDelta} from `@vybestack/llxprt-code-tools`.
+ * Preserved for backward compatibility. Prefer `toLosslessTextDelta` for an
+ * isolated single delta (stateless CR/CRLF→LF), or `createStreamNormalizer`
+ * for a stream spanning chunk boundaries (correctly joins a CRLF pair split
+ * across consecutive deltas and flushes a trailing lone CR on close).
  */
 export function normalizeSubagentStreamingText(text: string): string {
   return text.replace(/\r\n?/g, '\n');
@@ -291,10 +296,15 @@ export function setupAsyncStreaming(
 ): { emitAsyncClosingSubagentTag: () => void } | undefined {
   if (!updateOutput) return undefined;
 
+  const normalizer = createStreamNormalizer();
   let asyncXmlOutputOpen = false;
   const emitAsyncClosingSubagentTag = () => {
     if (!asyncXmlOutputOpen) {
       return;
+    }
+    const flushed = normalizer.flush();
+    if (flushed !== undefined) {
+      updateOutput(flushed);
     }
     updateOutput(`</subagent name="${subagentName}" id="${agentId}">\n`);
     asyncXmlOutputOpen = false;
@@ -305,7 +315,7 @@ export function setupAsyncStreaming(
 
   const existingHandler = scope.onMessage;
   scope.onMessage = (message: string) => {
-    const delta = toLosslessTextDelta(message);
+    const delta = normalizer.push(message);
     if (delta !== undefined) {
       updateOutput(delta);
     }

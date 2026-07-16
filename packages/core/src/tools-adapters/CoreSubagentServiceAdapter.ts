@@ -6,7 +6,7 @@
 
 import {
   ToolErrorType,
-  toLosslessTextDelta,
+  createStreamNormalizer,
   type ISubagentService,
   type SubagentConfig as ToolsSubagentConfig,
   type SubagentExecutionOptions,
@@ -621,10 +621,11 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
       return () => undefined;
     }
 
+    const normalizer = createStreamNormalizer();
     updateOutput(`<subagent name="${subagentName}" id="${agentId}">\n`);
     const existingHandler = scope.onMessage;
     scope.onMessage = (message: string) => {
-      const delta = toLosslessTextDelta(message);
+      const delta = normalizer.push(message);
       if (delta !== undefined) {
         updateOutput(delta);
       }
@@ -635,6 +636,10 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
     return () => {
       if (!xmlOutputOpen) {
         return;
+      }
+      const flushed = normalizer.flush();
+      if (flushed !== undefined) {
+        updateOutput(flushed);
       }
       updateOutput(`</subagent name="${subagentName}" id="${agentId}">\n`);
       xmlOutputOpen = false;

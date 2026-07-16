@@ -95,11 +95,15 @@ function createAsyncStreamingHarness(
   return { tool, mockAsyncTaskManager, completionPromise };
 }
 
-/** Filters out XML wrapper tags, leaving only streamed text deltas. */
+/** Asserts the exact XML wrapper tags then returns the interior deltas only. */
 function extractMessageDeltas(outputs: string[]): string[] {
-  return outputs.filter(
-    (s) => !s.startsWith('<subagent') && !s.startsWith('</subagent'),
-  );
+  const [opening] = outputs;
+  expect(opening.startsWith('<subagent name="')).toBe(true);
+  expect(opening.endsWith('">\n')).toBe(true);
+  const closing = outputs[outputs.length - 1];
+  expect(closing.startsWith('</subagent name="')).toBe(true);
+  expect(closing.endsWith('">\n')).toBe(true);
+  return outputs.slice(1, -1);
 }
 
 describe('TaskTool async streaming through real async path', () => {
@@ -221,6 +225,80 @@ describe('TaskTool async streaming through real async path', () => {
     );
     expect(outputs[outputs.length - 1]).toBe(
       '</subagent name="reviewer" id="async-xml-stream">\n',
+    );
+  });
+
+  it('preserves CRLF semantics across split chunk boundaries through the async path', async () => {
+    const { tool, completionPromise } = createAsyncStreamingHarness(
+      async (scope) => {
+        scope.onMessage?.('a\r');
+        scope.onMessage?.('\nb');
+      },
+    );
+
+    const outputs: string[] = [];
+    const invocation = tool.build({
+      subagent_name: 'reviewer',
+      goal_prompt: 'Review',
+      async: true,
+    } satisfies TaskToolParams);
+
+    await invocation.execute(new AbortController().signal, (chunk) =>
+      outputs.push(chunk),
+    );
+
+    await completionPromise;
+
+    expect(extractMessageDeltas(outputs).join('')).toBe('a\nb');
+  });
+
+  it('flushes a pending CR as LF when the async stream ends in a lone CR', async () => {
+    const { tool, completionPromise } = createAsyncStreamingHarness(
+      async (scope) => {
+        scope.onMessage?.('hello');
+        scope.onMessage?.('\r');
+      },
+    );
+
+    const outputs: string[] = [];
+    const invocation = tool.build({
+      subagent_name: 'reviewer',
+      goal_prompt: 'Review',
+      async: true,
+    } satisfies TaskToolParams);
+
+    await invocation.execute(new AbortController().signal, (chunk) =>
+      outputs.push(chunk),
+    );
+
+    await completionPromise;
+
+    expect(extractMessageDeltas(outputs).join('')).toBe('hello\n');
+  });
+
+  it('preserves model text that begins with exact subagent wrapper prefixes verbatim', async () => {
+    const { tool, completionPromise } = createAsyncStreamingHarness(
+      async (scope) => {
+        scope.onMessage?.('<subagent name="not-wrapper">begin');
+        scope.onMessage?.('</subagent name="not-wrapper">end');
+      },
+    );
+
+    const outputs: string[] = [];
+    const invocation = tool.build({
+      subagent_name: 'reviewer',
+      goal_prompt: 'Review',
+      async: true,
+    } satisfies TaskToolParams);
+
+    await invocation.execute(new AbortController().signal, (chunk) =>
+      outputs.push(chunk),
+    );
+
+    await completionPromise;
+
+    expect(extractMessageDeltas(outputs).join('')).toBe(
+      '<subagent name="not-wrapper">begin</subagent name="not-wrapper">end',
     );
   });
 });

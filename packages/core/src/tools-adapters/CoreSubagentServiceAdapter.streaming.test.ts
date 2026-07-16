@@ -25,7 +25,10 @@ interface StreamingScope {
   runNonInteractive: ReturnType<typeof vi.fn>;
 }
 
-function createStreamingAdapter(emit: (scope: StreamingScope) => void): {
+function createStreamingAdapter(
+  emit: (scope: StreamingScope) => void,
+  options: { existingHandler?: (message: string) => void } = {},
+): {
   adapter: CoreSubagentServiceAdapter;
 } {
   const scope: StreamingScope = {
@@ -33,7 +36,7 @@ function createStreamingAdapter(emit: (scope: StreamingScope) => void): {
       terminate_reason: SubagentTerminateMode.GOAL,
       emitted_vars: {},
     },
-    onMessage: undefined,
+    onMessage: options.existingHandler,
     runInteractive: vi.fn().mockImplementation(async () => {
       emit(scope);
     }),
@@ -66,12 +69,20 @@ function createStreamingAdapter(emit: (scope: StreamingScope) => void): {
   return { adapter };
 }
 
+/**
+ * Asserts the exact XML wrapper tags then returns the interior deltas only.
+ * Avoids prefix filtering so model text starting with `<subagent ` is not dropped.
+ */
 function extractMessageDeltas(
   calls: ReturnType<typeof vi.fn>['mock']['calls'],
 ): string[] {
-  return calls
-    .map((c) => c[0] as string)
-    .filter((s) => !s.startsWith('<subagent') && !s.startsWith('</subagent'));
+  const all = calls.map((c) => c[0] as string);
+  expect(all.length).toBeGreaterThanOrEqual(2);
+  expect(all[0].startsWith('<subagent name="')).toBe(true);
+  expect(all[0].endsWith('">\n')).toBe(true);
+  expect(all[all.length - 1].startsWith('</subagent name="')).toBe(true);
+  expect(all[all.length - 1].endsWith('">\n')).toBe(true);
+  return all.slice(1, -1);
 }
 
 describe('CoreSubagentServiceAdapter lossless text streaming', () => {
@@ -163,37 +174,12 @@ describe('CoreSubagentServiceAdapter lossless text streaming', () => {
 
   it('forwards raw messages to the existing handler', async () => {
     const existingHandler = vi.fn();
-    const scope: StreamingScope = {
-      output: {
-        terminate_reason: SubagentTerminateMode.GOAL,
-        emitted_vars: {},
-      },
-      onMessage: existingHandler,
-      runInteractive: vi.fn().mockImplementation(async () => {
+    const { adapter } = createStreamingAdapter(
+      (scope) => {
         scope.onMessage?.('raw\r\nmessage');
-      }),
-      runNonInteractive: vi.fn(),
-    };
-    const launchResult: CoreSubagentLaunchResult = {
-      agentId: 'agent-raw',
-      scope,
-      dispose: vi.fn().mockResolvedValue(undefined),
-    } as unknown as CoreSubagentLaunchResult;
-    const fakeOrchestrator = {
-      launch: vi.fn().mockResolvedValue(launchResult),
-    } as unknown as CoreSubagentLauncher;
-    const config = {
-      getEphemeralSettings: () => ({}),
-      getSessionId: () => 'session-test',
-      isInteractive: () => true,
-    } as unknown as Config;
-    const adapter = new CoreSubagentServiceAdapter({
-      managerProvider: () => ({}) as unknown as SubagentManager,
-      profileManagerProvider: () => ({}) as unknown as ProfileManager,
-      config,
-      isInteractiveEnvironment: () => true,
-      orchestratorFactory: () => fakeOrchestrator,
-    });
+      },
+      { existingHandler },
+    );
     const updateOutput = vi.fn();
 
     await adapter.executeSubagent(
@@ -202,5 +188,54 @@ describe('CoreSubagentServiceAdapter lossless text streaming', () => {
     );
 
     expect(existingHandler).toHaveBeenCalledWith('raw\r\nmessage');
+  });
+
+  it('preserves CRLF semantics across split chunk boundaries', async () => {
+    const { adapter } = createStreamingAdapter((scope) => {
+      scope.onMessage?.('a\r');
+      scope.onMessage?.('\nb');
+    });
+    const updateOutput = vi.fn();
+
+    await adapter.executeSubagent(
+      { name: 'helper', prompt: 'Do work' },
+      { updateOutput },
+    );
+
+    const messageDeltas = extractMessageDeltas(updateOutput.mock.calls);
+    expect(messageDeltas.join('')).toBe('a\nb');
+  });
+
+  it('flushes a pending CR as LF when the stream ends in a lone CR', async () => {
+    const { adapter } = createStreamingAdapter((scope) => {
+      scope.onMessage?.('hello\r');
+    });
+    const updateOutput = vi.fn();
+
+    await adapter.executeSubagent(
+      { name: 'helper', prompt: 'Do work' },
+      { updateOutput },
+    );
+
+    const messageDeltas = extractMessageDeltas(updateOutput.mock.calls);
+    expect(messageDeltas.join('')).toBe('hello\n');
+  });
+
+  it('preserves model text that begins with exact subagent wrapper prefixes verbatim', async () => {
+    const { adapter } = createStreamingAdapter((scope) => {
+      scope.onMessage?.('<subagent name="not-wrapper">begin');
+      scope.onMessage?.('</subagent name="not-wrapper">end');
+    });
+    const updateOutput = vi.fn();
+
+    await adapter.executeSubagent(
+      { name: 'helper', prompt: 'Do work' },
+      { updateOutput },
+    );
+
+    const messageDeltas = extractMessageDeltas(updateOutput.mock.calls);
+    expect(messageDeltas.join('')).toBe(
+      '<subagent name="not-wrapper">begin</subagent name="not-wrapper">end',
+    );
   });
 });

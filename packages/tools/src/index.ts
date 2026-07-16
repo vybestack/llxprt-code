@@ -177,7 +177,11 @@ export {
   type Replacer,
 } from './utils/fuzzy-replacer.js';
 export { ensureParentDirectoriesExist } from './utils/ensure-dirs.js';
-export { toLosslessTextDelta } from './utils/textDelta.js';
+export {
+  toLosslessTextDelta,
+  createStreamNormalizer,
+  type StreamNormalizer,
+} from './utils/textDelta.js';
 export {
   getRipgrepPath,
   isRipgrepAvailable,
