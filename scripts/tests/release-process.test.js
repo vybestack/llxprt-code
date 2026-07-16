@@ -131,6 +131,32 @@ describe('scripts/version.ts', () => {
 
 describe('.github/workflows/release.yml', () => {
   const releaseYml = readRootFile('.github/workflows/release.yml');
+  const releaseSteps = yaml.load(releaseYml).jobs.release.steps;
+  const stepById = (id) =>
+    releaseSteps.find((s) => s.id === id) ??
+    expect.fail(`missing step id: ${id}`);
+  const stepByName = (name) =>
+    releaseSteps.find((s) => s.name === name) ??
+    expect.fail(`missing step: ${name}`);
+
+  it('selects keys before standard release notes without blocking skipped-test fallback', () => {
+    const quota = stepById('quota');
+    const releaseNotes = stepByName('Generate Release Notes');
+    const quotaIndex = releaseSteps.indexOf(quota);
+    const releaseNotesIndex = releaseSteps.indexOf(releaseNotes);
+    expect(quota.if.replace(/\s+/g, ' ').trim()).toBe(
+      "github.event.inputs.force_skip_tests != 'true' || (github.event.inputs.dry_run != 'true' && github.event.inputs.publish_vscode_only != 'true')",
+    );
+    expect(quotaIndex >= 0 && releaseNotesIndex > quotaIndex).toBe(true);
+    expect(quota['continue-on-error']).toBe(
+      "${{ github.event.inputs.force_skip_tests == 'true' }}",
+    );
+    expect(quota.run).toBe('node scripts/ci-quota-check.js');
+    expect(releaseNotes.env.OPENAI_API_KEY).toContain(
+      "steps.quota.outputs.selected_key == 'secondary'",
+    );
+    expect(quota.env.OPENAI_API_KEY).toBe('${{ secrets[vars.KEY_VAR_NAME] }}');
+  });
 
   it('publishes every npm release package', () => {
     for (const packageName of npmReleasePackages()) {

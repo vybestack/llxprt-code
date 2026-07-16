@@ -10,11 +10,6 @@ on:
         description: 'The version to release (e.g., v0.1.11). Required for manual patch releases.'
         required: false # Not required for scheduled runs
         type: string
-      ref:
-        description: 'The branch or ref (full git sha) to release from.'
-        required: true
-        type: string
-        default: 'main'
       dry_run:
         description: >-
           Run a dry-run of the release process; no branches, npm packages or GitHub
@@ -60,6 +55,7 @@ jobs:
     # See: https://github.com/lovell/sharp/issues/4351
     # Can revert to ubuntu-latest once sharp fixes Ubuntu 24.04 support
     runs-on: ubuntu-22.04
+    timeout-minutes: 120
     environment:
       name: production-release
       url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version.outputs.RELEASE_TAG }}
@@ -72,6 +68,7 @@ jobs:
       packages: write
       id-token: write
       issues: write # For creating issues on failure
+      pull-requests: read # For enrichment (gh api GraphQL on PR metadata)
     outputs:
       RELEASE_TAG: ${{ steps.version.outputs.RELEASE_TAG }}
 
@@ -193,7 +190,11 @@ jobs:
           echo "should_create_branch=${should_create_branch}" >> "$GITHUB_OUTPUT"
 
       - name: Check API quota and select optimal key
-        if: github.event.inputs.force_skip_tests != 'true'
+        id: quota
+        if: >-
+          github.event.inputs.force_skip_tests != 'true' ||
+          (github.event.inputs.dry_run != 'true' && github.event.inputs.publish_vscode_only != 'true')
+        continue-on-error: ${{ github.event.inputs.force_skip_tests == 'true' }}
         run: node scripts/ci-quota-check.js
         env:
           KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
@@ -204,8 +205,7 @@ jobs:
         if: github.event.inputs.force_skip_tests != 'true'
         run: node scripts/preflight-ci.js
         env:
-          # Provider configuration from repository secrets/variables
-          # OPENAI_API_KEY is set via GITHUB_ENV by quota check step
+          OPENAI_API_KEY: ${{ steps.quota.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}
           OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
           KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
@@ -221,8 +221,7 @@ jobs:
           # Skipping Docker tests due to flakiness
           # npm run test:integration:sandbox:docker
         env:
-          # Provider configuration from repository secrets/variables
-          # OPENAI_API_KEY is set via GITHUB_ENV by quota check step
+          OPENAI_API_KEY: ${{ steps.quota.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}
           OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
           KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
@@ -297,6 +296,21 @@ jobs:
             exit 1
           fi
           echo "VSIX_PATH=$VSIX_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Release Notes
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
+        id: release_notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.version.outputs.RELEASE_TAG }}
+          IS_NIGHTLY: ${{ steps.vars.outputs.is_nightly }}
+          KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
+          LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
+          LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+          OPENAI_API_KEY: ${{ steps.quota.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}
+        run: bun scripts/generate-release-notes.ts
 
       - name: Publish VS Code extension
         if: ${{ steps.vars.outputs.should_publish_vscode == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
@@ -433,162 +447,6 @@ jobs:
           build-args: |
             CLI_VERSION_ARG=${{ steps.version.outputs.RELEASE_VERSION }}
 
-      - name: Generate Release Notes
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
-        id: release_notes
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Get the last stable release tag (excluding pre-release tags)
-          LAST_STABLE_TAG=$(git tag -l 'v*' | grep -v '\-' | sort -V | tail -n 1)
-          if [ -z "$LAST_STABLE_TAG" ]; then
-            # If no stable tag, get the most recent tag
-            LAST_STABLE_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-
-          fi
-          if [ -z "$LAST_STABLE_TAG" ]; then
-            echo "No previous release tag found, using first commit"
-            LAST_STABLE_TAG=$(git rev-list --max-parents=0 HEAD)
-          fi
-
-          # Save last tag for comparison link
-          echo "LAST_TAG=$LAST_STABLE_TAG" >> "$GITHUB_OUTPUT"
-
-          # Get commit messages since last tag
-          echo "Getting commits from $LAST_STABLE_TAG to HEAD"
-          git log --pretty=format:"- %s (%h)" "$LAST_STABLE_TAG"..HEAD > commits.txt
-
-          # Start building the release notes with static header and installation
-          {
-            echo "## Release ${{ steps.version.outputs.RELEASE_TAG }}"
-            echo ""
-          } > release-notes.md
-
-          # Static installation instructions - always the same format
-          {
-            echo "### Installation"
-            echo ""
-            echo "Install or upgrade LLxprt Code using npm:"
-            echo ""
-            echo '```bash'
-            echo "npm install -g @vybestack/llxprt-code"
-            echo '```'
-            echo ""
-            echo "Or use directly with npx:"
-            echo ""
-            echo '```bash'
-            echo "npx @vybestack/llxprt-code"
-            echo '```'
-            echo ""
-          } >> release-notes.md
-
-          # Generate feature summary with LLxprt or fall back to basic format
-          echo "Attempting to generate feature summary with LLxprt Code..."
-
-          # Create a focused prompt for feature extraction only
-          PROMPT="Analyze the following git commits and identify ONLY the user-facing features and bug fixes worth highlighting.
-
-          Write your analysis to a file called 'features.md' with ONLY a '### What's New' section containing a bulleted list of the most important user-facing changes.
-
-          Here are the commits since $LAST_STABLE_TAG:
-          $(cat commits.txt)
-
-          RULES:
-          1. ONLY include features that directly affect users:
-             - New AI provider support or model support
-             - New command-line flags or options
-             - Performance improvements users will notice
-             - Bug fixes for user-facing issues
-             - New tools or tool improvements
-             - UI/UX improvements
-             - New capabilities or features
-
-          2. EXCLUDE these entirely:
-             - Test file changes
-             - Internal refactoring
-             - Build system changes
-             - CI/CD updates
-             - Dependency updates (unless they add new features)
-             - Documentation updates (unless for new features)
-             - Development tooling changes
-             - Any bugs that were both introduced AND fixed in this same release
-
-          3. Write concise, clear bullet points that explain the benefit to users
-          4. NO EMOJIS
-          5. If there are no user-facing changes, write 'No major user-facing changes in this release.'
-
-          Use the write_file tool to save ONLY the feature list to 'features.md'."
-
-          # Try LLxprt generation for features
-          set +e
-          npx @vybestack/llxprt-code@latest \
-            --provider ${{ vars.LLXPRT_DEFAULT_PROVIDER }} \
-            --model ${{ vars.LLXPRT_DEFAULT_MODEL }} \
-            --key "${{ secrets[vars.KEY_VAR_NAME] }}" \
-            --baseurl ${{ vars.OPENAI_BASE_URL }} \
-            --yolo \
-            --prompt "$PROMPT" > /dev/null 2>&1
-          LLXPRT_EXIT=$?
-          set -e
-
-          # Add features section if generation succeeded
-          if [ $LLXPRT_EXIT -eq 0 ] && [ -s features.md ]; then
-            echo "Adding LLxprt-generated feature summary"
-            cat features.md >> release-notes.md
-            echo "" >> release-notes.md
-          else
-            echo "Skipping feature summary (LLxprt generation failed)"
-          fi
-
-          # Gather contributor acknowledgements (exclude maintainer acoliver)
-          echo "Collecting contributor acknowledgements..."
-          PR_NUMBERS=$(git log "$LAST_STABLE_TAG"..HEAD --merges --pretty='%s' | sed -n 's/.*#\([0-9]\+\).*/\1/p' | sort -u)
-          CONTRIBUTORS=""
-          for PR_NUMBER in $PR_NUMBERS; do
-            if [ -z "$PR_NUMBER" ]; then
-              continue
-            fi
-            LOGIN=$(gh pr view "$PR_NUMBER" --json author --jq '.author.login' 2>/dev/null || echo "")
-            if [ -n "$LOGIN" ] && [ "$LOGIN" != "acoliver" ]; then
-              CONTRIBUTORS="${CONTRIBUTORS}"$'\n'"$LOGIN"
-            fi
-          done
-
-          CONTRIBUTORS=$(printf "%s\n" "$CONTRIBUTORS" | sed '/^$/d' | sort -u)
-          if [ -n "$CONTRIBUTORS" ]; then
-            {
-              echo "### Thanks"
-              echo ""
-              echo "Huge thanks to the following contributors for their pull requests in this release:"
-              echo ""
-            } >> release-notes.md
-            while IFS= read -r contributor; do
-              echo "- @$contributor" >> release-notes.md
-            done <<< "$CONTRIBUTORS"
-            echo "" >> release-notes.md
-          else
-            echo "No external contributors to acknowledge for this release."
-          fi
-
-          # Always add the full commit list
-          {
-            echo "### All Changes"
-            echo ""
-          } >> release-notes.md
-          cat commits.txt >> release-notes.md
-
-          # Add comparison link if we have a real previous tag
-          if [[ "$LAST_STABLE_TAG" != $(git rev-list --max-parents=0 HEAD) ]]; then
-            {
-              echo ""
-              echo "---"
-              echo ""
-              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LAST_STABLE_TAG}...${{ steps.version.outputs.RELEASE_TAG }}"
-            } >> release-notes.md
-          fi
-
-          echo "Release notes generated"
-
       - name: Create GitHub Release and Tag
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
         env:
@@ -605,7 +463,7 @@ jobs:
           if [[ "$SHOULD_CREATE_BRANCH" == "true" && -n "$RELEASE_BRANCH" ]]; then
             TARGET_REF="$RELEASE_BRANCH"
           else
-            TARGET_REF="${{ github.sha }}"
+            TARGET_REF="$(git rev-parse HEAD)"
           fi
 
           # Ship the source-containing CLI npm tarball as the release asset
