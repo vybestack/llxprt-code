@@ -453,4 +453,31 @@ describe('resolveProviderAndModel: alias default model preserved (#2481)', () =>
     expect(result.provider).toBe('myalias');
     expect(result.model).toBe('alias-default-model');
   });
+
+  it('treats a canonical provider entry as a provider default, not an explicit alias default', () => {
+    vi.mocked(loadProviderAliasEntries).mockReturnValue([
+      {
+        alias: 'gemini',
+        config: {
+          baseProvider: 'gemini',
+          defaultModel: DEFAULT_GEMINI_MODEL,
+        },
+        filePath: '/test/providers/gemini.json',
+        source: 'builtin',
+      },
+    ]);
+
+    const result = resolveProviderAndModel({
+      cliProvider: 'gemini',
+      profileProvider: undefined,
+      envDefaultProvider: undefined,
+      cliModel: undefined,
+      profileModel: undefined,
+      settingsModel: undefined,
+      envDefaultModel: undefined,
+      envGeminiModel: 'gemini-environment-model',
+    });
+    expect(result.provider).toBe('gemini');
+    expect(result.model).toBe('gemini-environment-model');
+  });
 });
