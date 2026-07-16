@@ -51,7 +51,8 @@
     "sandboxImageUri": "ghcr.io/vybestack/llxprt-code/sandbox:0.10.0"
   },
   "scripts": {
-    "start": "cross-env NODE_ENV=development bun scripts/start.ts",
+    "prestart": "bun run generate",
+    "start": "bun --preload ./scripts/dev-env.ts packages/cli/index.ts",
     "start:a2a-server": "CODER_AGENT_PORT=41242 npm run start --workspace @vybestack/llxprt-code-a2a-server",
     "debug": "cross-env DEBUG=1 bun --inspect-brk scripts/start.ts",
     "deflake": "bun scripts/deflake.ts",

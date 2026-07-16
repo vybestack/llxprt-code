@@ -100,7 +100,7 @@ describe('Issue #2242: package.json scripts use Bun for converted .ts scripts', 
   const pkg = rootPkg;
   const scripts = pkg.scripts ?? {};
   const BUN_INVOCATIONS: ReadonlyArray<readonly [string, string]> = [
-    ['start', 'scripts/start.ts'],
+    ['start', 'scripts/dev-env.ts'],
     ['debug', 'scripts/start.ts'],
     ['deflake', 'scripts/deflake.ts'],
     ['generate', 'scripts/generate-git-commit-info.ts'],
