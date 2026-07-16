@@ -76,16 +76,13 @@ describe('Issue #2342: Bun-native cross-platform dev launcher', () => {
 });
 
 function findBunExecutableForRuntimeTest(): string {
-  if (process.platform === 'win32') {
-    return '';
-  }
-  const result = spawnSync('sh', ['-c', 'command -v bun'], {
+  const result = spawnSync('bun', ['--version'], {
     encoding: 'utf-8',
   });
   if (result.error || result.status !== 0) {
     return '';
   }
-  return result.stdout.trim();
+  return 'bun';
 }
 
 const realBunForRuntimeTest = findBunExecutableForRuntimeTest();
