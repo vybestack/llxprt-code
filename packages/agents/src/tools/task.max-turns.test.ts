@@ -27,6 +27,55 @@ describe('TaskTool', () => {
     } as unknown as Config;
   });
 
+  async function streamSubagentDeltas(
+    emitDeltas: (emit: (message: string) => void) => Promise<void> | void,
+  ): Promise<string[]> {
+    const scope: {
+      output: {
+        emitted_vars: Record<string, string>;
+        terminate_reason: SubagentTerminateMode;
+      };
+      runInteractive: ReturnType<typeof vi.fn>;
+      runNonInteractive: ReturnType<typeof vi.fn>;
+      onMessage?: (message: string) => void;
+    } = {
+      output: {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+      },
+      runInteractive: vi.fn().mockImplementation(async (_ctx: ContextState) => {
+        await emitDeltas((message: string) => scope.onMessage?.(message));
+      }),
+      runNonInteractive: vi.fn(),
+      onMessage: undefined,
+    };
+    const launch = vi.fn().mockResolvedValue({
+      agentId: 'agent-stream',
+      scope,
+      dispose: vi.fn().mockResolvedValue(undefined),
+      prompt: {} as unknown,
+      profile: {} as unknown,
+      config: {} as unknown,
+      runtime: {} as unknown,
+    });
+    const orchestrator = { launch } as unknown as SubagentOrchestrator;
+    const tool = new TaskTool(config, {
+      orchestratorFactory: () => orchestrator,
+      isInteractiveEnvironment: () => true,
+    });
+    const updateOutput = vi.fn();
+    const invocation = tool.build({
+      subagent_name: 'helper',
+      goal_prompt: 'Ship it',
+    });
+
+    await invocation.execute(new AbortController().signal, updateOutput);
+
+    return updateOutput.mock.calls
+      .map((c) => c[0] as string)
+      .filter((s) => !s.startsWith('<subagent') && !s.startsWith('</subagent'));
+  }
+
   describe('max_turns handling', () => {
     it('passes max_turns from params into launch request runConfig', async () => {
       const dispose = vi.fn().mockResolvedValue(undefined);
@@ -370,169 +419,35 @@ describe('TaskTool', () => {
   });
 
   it('preserves standalone newline chunks without dropping them', async () => {
-    const dispose = vi.fn().mockResolvedValue(undefined);
-    const updateOutput = vi.fn();
-    const scope: {
-      output: {
-        emitted_vars: Record<string, string>;
-        terminate_reason: SubagentTerminateMode;
-      };
-      runInteractive: ReturnType<typeof vi.fn>;
-      runNonInteractive: ReturnType<typeof vi.fn>;
-      onMessage?: (message: string) => void;
-    } = {
-      output: {
-        emitted_vars: {},
-        terminate_reason: SubagentTerminateMode.GOAL,
-      },
-      runInteractive: vi.fn().mockImplementation(async (_ctx: ContextState) => {
-        scope.onMessage?.('Hello');
-        scope.onMessage?.('\n');
-        scope.onMessage?.('World');
-      }),
-      runNonInteractive: vi.fn(),
-      onMessage: undefined,
-    };
-    const launch = vi.fn().mockResolvedValue({
-      agentId: 'agent-nl',
-      scope,
-      dispose,
-      prompt: {} as unknown,
-      profile: {} as unknown,
-      config: {} as unknown,
-      runtime: {} as unknown,
-    });
-    const orchestrator = { launch } as unknown as SubagentOrchestrator;
-    const tool = new TaskTool(config, {
-      orchestratorFactory: () => orchestrator,
-      isInteractiveEnvironment: () => true,
-    });
-    const invocation = tool.build({
-      subagent_name: 'helper',
-      goal_prompt: 'Ship it',
+    const deltas = await streamSubagentDeltas((emit) => {
+      emit('Hello');
+      emit('\n');
+      emit('World');
     });
 
-    await invocation.execute(new AbortController().signal, updateOutput);
-
-    const messageDeltas = updateOutput.mock.calls
-      .map((c) => c[0] as string)
-      .filter((s) => !s.startsWith('<subagent') && !s.startsWith('</subagent'));
-    const accumulated = messageDeltas.join('');
-    expect(accumulated).toBe('Hello\nWorld');
+    expect(deltas.join('')).toBe('Hello\nWorld');
   });
 
   it('does not invent separators at word-token fragment boundaries', async () => {
-    const dispose = vi.fn().mockResolvedValue(undefined);
-    const updateOutput = vi.fn();
-    const scope: {
-      output: {
-        emitted_vars: Record<string, string>;
-        terminate_reason: SubagentTerminateMode;
-      };
-      runInteractive: ReturnType<typeof vi.fn>;
-      runNonInteractive: ReturnType<typeof vi.fn>;
-      onMessage?: (message: string) => void;
-    } = {
-      output: {
-        emitted_vars: {},
-        terminate_reason: SubagentTerminateMode.GOAL,
-      },
-      runInteractive: vi.fn().mockImplementation(async (_ctx: ContextState) => {
-        for (const token of 'Hello World'.match(/(\w+|\s)/g) ?? []) {
-          scope.onMessage?.(token);
-        }
-      }),
-      runNonInteractive: vi.fn(),
-      onMessage: undefined,
-    };
-    const launch = vi.fn().mockResolvedValue({
-      agentId: 'agent-frag',
-      scope,
-      dispose,
-      prompt: {} as unknown,
-      profile: {} as unknown,
-      config: {} as unknown,
-      runtime: {} as unknown,
-    });
-    const orchestrator = { launch } as unknown as SubagentOrchestrator;
-    const tool = new TaskTool(config, {
-      orchestratorFactory: () => orchestrator,
-      isInteractiveEnvironment: () => true,
-    });
-    const invocation = tool.build({
-      subagent_name: 'helper',
-      goal_prompt: 'Ship it',
+    const deltas = await streamSubagentDeltas((emit) => {
+      for (const token of 'Hello World'.match(/(\w+|\s)/g) ?? []) {
+        emit(token);
+      }
     });
 
-    await invocation.execute(new AbortController().signal, updateOutput);
-
-    const messageDeltas = updateOutput.mock.calls
-      .map((c) => c[0] as string)
-      .filter((s) => !s.startsWith('<subagent') && !s.startsWith('</subagent'));
-    const accumulated = messageDeltas.join('');
-    expect(accumulated).toBe('Hello World');
+    expect(deltas.join('')).toBe('Hello World');
   });
 
   it('filters out only truly empty messages when streaming', async () => {
-    const dispose = vi.fn().mockResolvedValue(undefined);
-    const updateOutput = vi.fn();
-    const scope: {
-      output: {
-        emitted_vars: Record<string, string>;
-        terminate_reason: SubagentTerminateMode;
-      };
-      runInteractive: ReturnType<typeof vi.fn>;
-      runNonInteractive: ReturnType<typeof vi.fn>;
-      onMessage?: (message: string) => void;
-    } = {
-      output: {
-        emitted_vars: {},
-        terminate_reason: SubagentTerminateMode.GOAL,
-      },
-      runInteractive: vi.fn().mockImplementation(async (_ctx: ContextState) => {
-        scope.onMessage?.('');
-        scope.onMessage?.('  ');
-        scope.onMessage?.('\n');
-        scope.onMessage?.('\t');
-        scope.onMessage?.('actual message');
-      }),
-      runNonInteractive: vi.fn(),
-      onMessage: undefined,
-    };
-    const launch = vi.fn().mockResolvedValue({
-      agentId: 'agent-42',
-      scope,
-      dispose,
-      prompt: {} as unknown,
-      profile: {} as unknown,
-      config: {} as unknown,
-      runtime: {} as unknown,
-    });
-    const orchestrator = { launch } as unknown as SubagentOrchestrator;
-    const tool = new TaskTool(config, {
-      orchestratorFactory: () => orchestrator,
-      isInteractiveEnvironment: () => true,
-    });
-    const invocation = tool.build({
-      subagent_name: 'helper',
-      goal_prompt: 'Ship it',
+    const deltas = await streamSubagentDeltas((emit) => {
+      emit('');
+      emit('  ');
+      emit('\n');
+      emit('\t');
+      emit('actual message');
     });
 
-    await invocation.execute(new AbortController().signal, updateOutput);
-
-    expect(updateOutput).toHaveBeenNthCalledWith(
-      1,
-      '<subagent name="helper" id="agent-42">\n',
-    );
-    expect(updateOutput).toHaveBeenNthCalledWith(2, '  ');
-    expect(updateOutput).toHaveBeenNthCalledWith(3, '\n');
-    expect(updateOutput).toHaveBeenNthCalledWith(4, '\t');
-    expect(updateOutput).toHaveBeenNthCalledWith(5, 'actual message');
-    expect(updateOutput).toHaveBeenNthCalledWith(
-      6,
-      '</subagent name="helper" id="agent-42">\n',
-    );
-    expect(updateOutput).toHaveBeenCalledTimes(6);
+    expect(deltas).toStrictEqual(['  ', '\n', '\t', 'actual message']);
   });
 
   /**
