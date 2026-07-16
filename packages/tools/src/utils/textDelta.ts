@@ -40,24 +40,24 @@ export function createStreamNormalizer(): StreamNormalizer {
         return undefined;
       }
 
-      let work = text;
+      let candidateChunk = text;
 
       if (pendingCR) {
         pendingCR = false;
         if (text.charCodeAt(0) === 0x0a) {
-          work = '\n' + text.slice(1);
+          candidateChunk = '\n' + text.slice(1);
         } else {
-          work = '\n' + text;
+          candidateChunk = '\n' + text;
         }
       }
 
       if (text.charCodeAt(text.length - 1) === 0x0d) {
         pendingCR = true;
-        work = work.slice(0, -1);
+        candidateChunk = candidateChunk.slice(0, -1);
       }
 
-      const normalized = work.replace(/\r\n?/g, '\n');
-      return normalized.length > 0 ? normalized : undefined;
+      const normalizedChunk = candidateChunk.replace(/\r\n?/g, '\n');
+      return normalizedChunk.length > 0 ? normalizedChunk : undefined;
     },
 
     flush(): string | undefined {

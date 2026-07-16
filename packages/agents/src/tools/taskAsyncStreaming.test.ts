@@ -23,7 +23,48 @@ import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyn
 interface AsyncStreamingHarness {
   tool: TaskTool;
   mockAsyncTaskManager: Record<string, ReturnType<typeof vi.fn>>;
+  /**
+   * Resolves when completeTask or failTask is invoked by the background
+   * execution path. Await via {@link expectCompletionWithin} to guard against
+   * indefinite hangs if the wiring regresses.
+   */
   completionPromise: Promise<void>;
+}
+
+/**
+ * Default deadline for the completion guard. Well below the 30s global Vitest
+ * testTimeout so a hang produces a clear, fast failure rather than a slow one.
+ */
+const COMPLETION_TIMEOUT_MS = 5_000;
+
+/**
+ * Races a completion promise against a deterministic local timeout. If the
+ * promise does not settle within `timeoutMs`, rejects with a message pointing
+ * at the completeTask/failTask wiring as the likely cause. Avoids repeating
+ * Promise.race boilerplate at each await site.
+ */
+function expectCompletionWithin(
+  completionPromise: Promise<void>,
+  timeoutMs: number = COMPLETION_TIMEOUT_MS,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(
+          new Error(
+            `completionPromise did not settle within ${timeoutMs}ms — ` +
+              'completeTask/failTask wiring may be broken',
+          ),
+        ),
+      timeoutMs,
+    );
+  });
+  return Promise.race([completionPromise, timeout]).finally(() => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  });
 }
 
 /**
@@ -128,7 +169,7 @@ describe('TaskTool async streaming through real async path', () => {
       outputs.push(chunk),
     );
 
-    await completionPromise;
+    await expectCompletionWithin(completionPromise);
 
     const accumulated = extractMessageDeltas(outputs).join('');
 
@@ -163,7 +204,7 @@ describe('TaskTool async streaming through real async path', () => {
       outputs.push(chunk),
     );
 
-    await completionPromise;
+    await expectCompletionWithin(completionPromise);
 
     const accumulated = extractMessageDeltas(outputs).join('');
 
@@ -191,7 +232,7 @@ describe('TaskTool async streaming through real async path', () => {
       outputs.push(chunk),
     );
 
-    await completionPromise;
+    await expectCompletionWithin(completionPromise);
 
     // The existing handler receives the UN-normalized raw message.
     expect(receivedRaw).toStrictEqual(['raw\r\nmessage']);
@@ -218,7 +259,7 @@ describe('TaskTool async streaming through real async path', () => {
       outputs.push(chunk),
     );
 
-    await completionPromise;
+    await expectCompletionWithin(completionPromise);
 
     expect(outputs[0]).toBe(
       '<subagent name="reviewer" id="async-xml-stream">\n',
@@ -247,7 +288,7 @@ describe('TaskTool async streaming through real async path', () => {
       outputs.push(chunk),
     );
 
-    await completionPromise;
+    await expectCompletionWithin(completionPromise);
 
     expect(extractMessageDeltas(outputs).join('')).toBe('a\nb');
   });
@@ -271,7 +312,7 @@ describe('TaskTool async streaming through real async path', () => {
       outputs.push(chunk),
     );
 
-    await completionPromise;
+    await expectCompletionWithin(completionPromise);
 
     expect(extractMessageDeltas(outputs).join('')).toBe('hello\n');
   });
@@ -295,7 +336,7 @@ describe('TaskTool async streaming through real async path', () => {
       outputs.push(chunk),
     );
 
-    await completionPromise;
+    await expectCompletionWithin(completionPromise);
 
     expect(extractMessageDeltas(outputs).join('')).toBe(
       '<subagent name="not-wrapper">begin</subagent name="not-wrapper">end',
