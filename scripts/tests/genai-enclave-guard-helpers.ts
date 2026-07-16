@@ -7,15 +7,18 @@
 /**
  * Shared test helpers for the genai-enclave guard behavioral tests.
  *
- * These helpers invoke the real guard script via execFileSync (no mock
- * theater) and manage temp-fixture creation/cleanup.
+ * These helpers invoke the real guard script via an async child process
+ * (no mock theater) and manage temp-fixture creation/cleanup.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
+import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+
+const execFileAsync = promisify(execFile);
 
 export const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = join(SCRIPT_DIR, '..', '..');
@@ -52,12 +55,12 @@ export interface ScriptResult {
 }
 
 interface ExecErrorLike {
-  readonly status?: number | null;
+  readonly exitCode?: number | null;
+  readonly systemCode?: string;
   readonly signal?: string;
-  readonly code?: string;
   readonly message: string;
-  readonly stdout?: string | Buffer;
-  readonly stderr?: string | Buffer;
+  readonly stdout?: string;
+  readonly stderr?: string;
 }
 
 function toExecError(error: unknown): ExecErrorLike {
@@ -65,29 +68,26 @@ function toExecError(error: unknown): ExecErrorLike {
     return { message: String(error) };
   }
   const candidate = error as Record<string, unknown>;
+  const rawCode = candidate.code;
   return {
-    status:
-      typeof candidate.status === 'number' || candidate.status === null
-        ? candidate.status
-        : undefined,
+    exitCode: typeof rawCode === 'number' ? rawCode : null,
+    systemCode: typeof rawCode === 'string' ? rawCode : undefined,
     signal: typeof candidate.signal === 'string' ? candidate.signal : undefined,
-    code: typeof candidate.code === 'string' ? candidate.code : undefined,
     message:
       typeof candidate.message === 'string' ? candidate.message : String(error),
-    stdout: isOutput(candidate.stdout) ? candidate.stdout : undefined,
-    stderr: isOutput(candidate.stderr) ? candidate.stderr : undefined,
+    stdout: typeof candidate.stdout === 'string' ? candidate.stdout : undefined,
+    stderr: typeof candidate.stderr === 'string' ? candidate.stderr : undefined,
   };
-}
-
-function isOutput(value: unknown): value is string | Buffer {
-  return typeof value === 'string' || Buffer.isBuffer(value);
 }
 
 /**
  * Run the guard script against `root` (a temp fixture root). Returns exit
  * code, stdout, stderr.
  */
-export function runScript(root: string, expectedCode?: number): ScriptResult {
+export function runScript(
+  root: string,
+  expectedCode?: number,
+): Promise<ScriptResult> {
   const env = { ...process.env, GENAI_ENCLAVE_ROOT: root };
   return runGuard(env, 30_000, 10 * 1024 * 1024, expectedCode);
 }
@@ -95,48 +95,68 @@ export function runScript(root: string, expectedCode?: number): ScriptResult {
 /**
  * Run the guard script against the real repository (no GENAI_ENCLAVE_ROOT).
  */
-export function runScriptRealRepo(expectedCode?: number): ScriptResult {
+export function runScriptRealRepo(
+  expectedCode?: number,
+): Promise<ScriptResult> {
   const env = { ...process.env };
   delete env.GENAI_ENCLAVE_ROOT;
   return runGuard(env, 60_000, 20 * 1024 * 1024, expectedCode);
 }
-function runGuard(
+
+export function runScriptWithMaxBuffer(
+  root: string,
+  maxBuffer: number,
+  expectedCode?: number,
+): Promise<ScriptResult> {
+  const env = { ...process.env, GENAI_ENCLAVE_ROOT: root };
+  return runGuard(env, 30_000, maxBuffer, expectedCode);
+}
+
+async function runGuard(
   env: NodeJS.ProcessEnv,
   timeout: number,
   maxBuffer: number,
   expectedCode?: number,
-): ScriptResult {
+): Promise<ScriptResult> {
   let stdout = '';
   let stderr = '';
   let exitCode = 0;
   try {
-    stdout = execFileSync(RUNTIME, [SCRIPT], {
+    const result = await execFileAsync(RUNTIME, [SCRIPT], {
       cwd: REPO_ROOT,
       env,
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'pipe'],
+      encoding: 'utf8',
       timeout,
       maxBuffer,
     });
+    stdout = result.stdout;
+    stderr = result.stderr;
   } catch (error) {
     const err = toExecError(error);
-    const isTimeout =
-      err.status === null &&
-      (err.signal === 'SIGTERM' || err.code === 'ETIMEDOUT');
-    if (isTimeout) {
+    if (
+      err.systemCode === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ||
+      err.systemCode === 'ENOBUFS'
+    ) {
+      throw new Error(
+        `Guard script exceeded maxBuffer (${maxBuffer} bytes) and was killed ` +
+          `(${err.systemCode}). This is an operational harness failure, not a ` +
+          `guard exit — output was truncated. Original: ${err.message}`,
+      );
+    }
+    if (err.signal === 'SIGTERM' || err.systemCode === 'ETIMEDOUT') {
       throw new Error(
         `Guard script timed out after ${timeout / 1000}s (SIGTERM/ETIMEDOUT).`,
       );
     }
-    if (err.code === 'ENOENT') {
+    if (err.systemCode === 'ENOENT') {
       throw new Error(
         `Guard script failed with ENOENT. Runtime "${RUNTIME}" not on PATH ` +
           `or script missing: ${SCRIPT}. Original: ${err.message}`,
       );
     }
-    stdout = err.stdout ? err.stdout.toString() : '';
-    stderr = err.stderr ? err.stderr.toString() : '';
-    exitCode = err.status ?? 1;
+    stdout = err.stdout ?? '';
+    stderr = err.stderr ?? '';
+    exitCode = err.exitCode ?? 1;
   }
   if (expectedCode !== undefined && exitCode !== expectedCode) {
     throw new Error(
@@ -186,9 +206,9 @@ export function writeRequiredManifests(write: FixtureHelpers['write']): void {
  * Create a temp fixture directory, run `fn` with write helpers, and clean up.
  * Cleanup errors are emitted as warnings rather than thrown.
  */
-export function withFixture(
-  fn: (helpers: FixtureHelpers) => ScriptResult,
-): ScriptResult {
+export async function withFixture(
+  fn: (helpers: FixtureHelpers) => Promise<ScriptResult>,
+): Promise<ScriptResult> {
   const root = mkdtempSync(join(tmpdir(), 'genai-enclave-'));
   let result: ScriptResult;
   try {
@@ -197,7 +217,7 @@ export function withFixture(
       mkdirSync(dirname(full), { recursive: true });
       writeFileSync(full, content);
     };
-    result = fn({ root, write });
+    result = await fn({ root, write });
   } finally {
     try {
       rmSync(root, { recursive: true, force: true });

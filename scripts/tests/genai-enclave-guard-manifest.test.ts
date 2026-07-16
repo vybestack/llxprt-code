@@ -13,7 +13,7 @@
  * (package.json dependency declarations) and operational fail-closed
  * behavior.
  *
- * Tests invoke the real guard script via execFileSync (no mock theater).
+ * Tests invoke the real guard script via an async child process (no mock theater).
  *
  * Per RULES.md: positive tests ISOLATE the enclave under test; negative
  * tests verify the exact file that should be flagged.
@@ -47,8 +47,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
     // reaches the manifest check and fails specifically on the manifest
     // violation (not on "no scannable files found").
     describe('manifest violations', () => {
-      it('allows the root packaging bridge at the sanctioned version', () => {
-        const { code } = withFixture(({ root, write }) => {
+      it('allows the root packaging bridge at the sanctioned version', async () => {
+        const { code } = await withFixture(({ root, write }) => {
           write(
             'package.json',
             JSON.stringify({
@@ -77,8 +77,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(code).toBe(0);
       });
 
-      it('FAILS when packages/cli declares @google/genai', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS when packages/cli declares @google/genai', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
           write(
             'packages/cli/package.json',
@@ -95,8 +95,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('@google/genai');
       });
 
-      it('FAILS when a nested package manifest declares @google/genai', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS when a nested package manifest declares @google/genai', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
           write(
             'packages/cli/examples/server/package.json',
@@ -113,8 +113,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('@google/genai');
       });
 
-      it('FAILS when packages/core declares wrong version of @google/genai', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS when packages/core declares wrong version of @google/genai', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
           // Overwrite packages/core with the wrong version
           write(
@@ -132,8 +132,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('1.30.0');
       });
 
-      it('FAILS when packages/cli declares @google/genai in optionalDependencies', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS when packages/cli declares @google/genai in optionalDependencies', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
           write(
             'packages/cli/package.json',
@@ -150,8 +150,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('@google/genai');
       });
 
-      it('FAILS when root package.json is malformed JSON (fail-closed)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS when root package.json is malformed JSON (fail-closed)', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
           // Overwrite root with broken JSON
           write(
@@ -165,8 +165,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('fail-closed');
       });
 
-      it('allows packages/core to declare @google/genai at 1.30.0', () => {
-        const { code } = withFixture(({ root, write }) => {
+      it('allows packages/core to declare @google/genai at 1.30.0', async () => {
+        const { code } = await withFixture(({ root, write }) => {
           write(
             'package.json',
             JSON.stringify({
@@ -194,8 +194,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(code).toBe(0);
       });
 
-      it('allows packages/providers to declare @google/genai at 1.30.0', () => {
-        const { code } = withFixture(({ root, write }) => {
+      it('allows packages/providers to declare @google/genai at 1.30.0', async () => {
+        const { code } = await withFixture(({ root, write }) => {
           write(
             'package.json',
             JSON.stringify({
@@ -223,8 +223,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(code).toBe(0);
       });
 
-      it('FAILS when a dependency section is an array instead of an object (fail-closed)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS when a dependency section is an array instead of an object (fail-closed)', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
           // Overwrite root with array deps
           write(
@@ -242,8 +242,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('dependencies');
       });
 
-      it('FAILS when a dependency section is a string instead of an object (fail-closed)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS when a dependency section is a string instead of an object (fail-closed)', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
           // Overwrite core with string deps
           write(
@@ -260,8 +260,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('fail-closed');
       });
 
-      it('FAILS when a dependency section is null instead of an object (fail-closed)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS when a dependency section is null instead of an object (fail-closed)', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
           write(
             'packages/cli/package.json',
@@ -277,8 +277,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('fail-closed');
       });
 
-      it('FAILS when an npm alias targets @google/genai (F1)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS when an npm alias targets @google/genai (F1)', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
           write(
             'packages/cli/package.json',
@@ -297,8 +297,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('@google/genai');
       });
 
-      it('FAILS when an npm alias targets a @google/genai subpath (F1)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS when an npm alias targets a @google/genai subpath (F1)', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
           write(
             'packages/agents/package.json',
@@ -316,8 +316,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('npm alias');
       });
 
-      it('FAILS when SDK declared in both dependencies and devDependencies (F9)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS when SDK declared in both dependencies and devDependencies (F9)', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
           // Overwrite core with duplicate sections
           write(
@@ -335,8 +335,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('duplicate');
       });
 
-      it('FAILS when SDK declared in both dependencies and peerDependencies (F9)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS when SDK declared in both dependencies and peerDependencies (F9)', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
           // Overwrite providers with duplicate sections
           write(
@@ -354,8 +354,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('duplicate');
       });
 
-      it('FAILS when SDK declared in dependencies and optionalDependencies (F9)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS when SDK declared in dependencies and optionalDependencies (F9)', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
           // Overwrite core with duplicate deps + optionalDependencies
           write(
@@ -374,8 +374,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('optionalDependencies');
       });
 
-      it('FAILS when a sanctioned workspace omits the SDK from dependencies (F10)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS when a sanctioned workspace omits the SDK from dependencies (F10)', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
           // Overwrite core with a manifest that omits the SDK
           write(
@@ -392,8 +392,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('missing');
       });
 
-      it('FAILS when a dependency value is not a string (F6 fail-closed)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS when a dependency value is not a string (F6 fail-closed)', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
           write(
             'packages/cli/package.json',
@@ -409,10 +409,10 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('fail-closed');
       });
 
-      it('FAILS when a required root manifest is absent (F4 fail-closed)', () => {
+      it('FAILS when a required root manifest is absent (F4 fail-closed)', async () => {
         // Root package.json is missing entirely — the packaging bridge
         // must be checked, so its absence is an operational failure.
-        const { code, stdout } = withFixture(({ root, write }) => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           write('packages/cli/src/index.ts', 'export const x = 1;\n');
           return runScript(root, 1);
         });
@@ -421,8 +421,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('package.json');
       });
 
-      it('FAILS when packages/core manifest is absent (F4 fail-closed)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS when packages/core manifest is absent (F4 fail-closed)', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           write(
             'package.json',
             JSON.stringify({
@@ -446,8 +446,8 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('packages/core');
       });
 
-      it('FAILS when packages/providers manifest is absent (F4 fail-closed)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS when packages/providers manifest is absent (F4 fail-closed)', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           write(
             'package.json',
             JSON.stringify({
@@ -473,15 +473,17 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
     // ── Operational failures (fail-closed) ─────────────────────────────
     describe('operational failures (fail-closed)', () => {
-      it('FAILS when zero TypeScript files are found (temp root with no packages)', () => {
+      it('FAILS when zero TypeScript files are found (temp root with no packages)', async () => {
         // No files written — packages/ dir does not exist
-        const { code, stdout } = withFixture(({ root }) => runScript(root));
+        const { code, stdout } = await withFixture(({ root }) =>
+          runScript(root),
+        );
         expect(code).toBe(1);
         expect(stdout).toContain('no scannable files found');
       });
 
-      it('FAILS on source with parse diagnostics (invalid syntax)', () => {
-        const { code, stdout } = withFixture(({ root, write }) => {
+      it('FAILS on source with parse diagnostics (invalid syntax)', async () => {
+        const { code, stdout } = await withFixture(({ root, write }) => {
           write(
             'packages/cli/src/broken-syntax.ts',
             'export const x = ((((;\n',
