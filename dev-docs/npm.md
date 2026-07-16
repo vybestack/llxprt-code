@@ -44,13 +44,13 @@ Every night at midnight UTC, the [Release workflow](https://github.com/acoliver/
 1.  Checks out the latest code from the `main` branch.
 2.  Installs all dependencies.
 3.  Runs the full suite of `preflight` checks and integration tests.
-4.  If all tests succeed, it calculates the next nightly version number (e.g., `v0.2.1-nightly.20230101`).
+4.  If all tests succeed, it calculates the next nightly version number. The base version is taken from `package.json` for scheduled runs. For manual nightly dispatch (`create_nightly_release`), the optional `version` input is used as the nightly base when provided as a stable `X.Y.Z` or `vX.Y.Z`; otherwise `package.json` is used. The resulting tag has the shape `vX.Y.Z-nightly.YYMMDD.shortsha` (e.g., `v0.1.0-nightly.250720.abcdef`), where `YYMMDD` is the UTC date and `shortsha` is the short commit SHA.
 5.  It then builds and publishes the packages to npm with the `nightly` dist-tag.
 6.  Finally, it creates a GitHub Release for the nightly version.
 
 ### Failure Handling
 
-If any step in the nightly workflow fails, it will automatically create a new issue in the repository with the labels `bug` and `nightly-failure`. The issue will contain a link to the failed workflow run for easy debugging.
+If the nightly workflow fails, the `notify_failure` job creates (or comments on) a GitHub issue labeled `ci/cd` linking to the failed workflow run. (Release workflow failures create an issue labeled `ci/cd` as well.) These issues are tracked for debugging rather than being filed as generic bugs.
 
 ### How to Use the Nightly Build
 

@@ -31,8 +31,31 @@ function getShortSha(): string {
   return execSync('git rev-parse --short HEAD').toString().trim();
 }
 
-export function getNightlyTagName(): string {
-  const version = getPackageVersion();
+const STABLE_SEMVER_RE = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
+
+function stripLeadingV(version: string): string {
+  return version.startsWith('v') ? version.slice(1) : version;
+}
+
+function assertStableManualNightlyBase(manualVersion: string): void {
+  const base = stripLeadingV(manualVersion);
+  if (!STABLE_SEMVER_RE.test(base)) {
+    throw new Error(
+      'Error: Nightly manual version must be a stable numeric semver (X.Y.Z). Pre-release, build metadata, and other formats are not supported for nightly bases.',
+    );
+  }
+}
+
+function getNightlyBaseVersion(manualVersion?: string): string {
+  if (manualVersion === undefined || manualVersion === '') {
+    return getPackageVersion();
+  }
+  assertStableManualNightlyBase(manualVersion);
+  return stripLeadingV(manualVersion);
+}
+
+export function getNightlyTagName(manualVersion?: string): string {
+  const version = getNightlyBaseVersion(manualVersion);
   const now = new Date();
   const year = now.getUTCFullYear().toString().slice(-2);
   const month = (now.getUTCMonth() + 1).toString().padStart(2, '0');
@@ -59,7 +82,7 @@ export function getReleaseVersion(): ReleaseVersionInfo {
 
   if (isNightly) {
     console.error('Calculating next nightly version...');
-    releaseTag = getNightlyTagName();
+    releaseTag = getNightlyTagName(manualVersion);
   } else if (isPreview) {
     console.error('Calculating next beta version...');
     const betaVersion = getBetaVersion();

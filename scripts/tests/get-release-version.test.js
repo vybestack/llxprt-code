@@ -38,12 +38,19 @@ describe('getReleaseVersion', () => {
   beforeEach(() => {
     vi.resetModules();
     process.env = { ...originalEnv };
+    delete process.env.IS_NIGHTLY;
+    delete process.env.IS_PREVIEW;
+    delete process.env.MANUAL_VERSION;
     vi.useFakeTimers();
+    vi.mocked(fs.default.readFileSync).mockReturnValue(
+      JSON.stringify({ version: '0.1.0' }),
+    );
+    vi.mocked(execSync).mockReturnValue('abcdef');
   });
 
   afterEach(() => {
     process.env = originalEnv;
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     vi.useRealTimers();
   });
 
@@ -51,14 +58,122 @@ describe('getReleaseVersion', () => {
     process.env.IS_NIGHTLY = 'true';
     const knownDate = new Date('2025-07-20T10:00:00.000Z');
     vi.setSystemTime(knownDate);
-    vi.mocked(fs.default.readFileSync).mockReturnValue(
-      JSON.stringify({ version: '0.1.0' }),
-    );
-    vi.mocked(execSync).mockReturnValue('abcdef');
     const { releaseTag, releaseVersion, npmTag } = getReleaseVersion();
     expect(releaseTag).toBe('v0.1.0-nightly.250720.abcdef');
     expect(releaseVersion).toBe('0.1.0-nightly.250720.abcdef');
     expect(npmTag).toBe('nightly');
+  });
+
+  it('should use MANUAL_VERSION as nightly base when IS_NIGHTLY and MANUAL_VERSION are set', () => {
+    process.env.IS_NIGHTLY = 'true';
+    process.env.MANUAL_VERSION = '0.11.0';
+    const knownDate = new Date('2025-07-20T10:00:00.000Z');
+    vi.setSystemTime(knownDate);
+    const { releaseTag, releaseVersion, npmTag } = getReleaseVersion();
+    expect(releaseTag).toBe('v0.11.0-nightly.250720.abcdef');
+    expect(releaseVersion).toBe('0.11.0-nightly.250720.abcdef');
+    expect(npmTag).toBe('nightly');
+  });
+
+  it('should support v-prefixed MANUAL_VERSION as nightly base', () => {
+    process.env.IS_NIGHTLY = 'true';
+    process.env.MANUAL_VERSION = 'v0.11.0';
+    const knownDate = new Date('2025-07-20T10:00:00.000Z');
+    vi.setSystemTime(knownDate);
+    const { releaseTag, releaseVersion, npmTag } = getReleaseVersion();
+    expect(releaseTag).toBe('v0.11.0-nightly.250720.abcdef');
+    expect(releaseVersion).toBe('0.11.0-nightly.250720.abcdef');
+    expect(npmTag).toBe('nightly');
+  });
+
+  it('should fall back to package.json when MANUAL_VERSION is absent for nightly', () => {
+    process.env.IS_NIGHTLY = 'true';
+    delete process.env.MANUAL_VERSION;
+    const knownDate = new Date('2025-07-20T10:00:00.000Z');
+    vi.setSystemTime(knownDate);
+    const { releaseTag, releaseVersion, npmTag } = getReleaseVersion();
+    expect(releaseTag).toBe('v0.1.0-nightly.250720.abcdef');
+    expect(releaseVersion).toBe('0.1.0-nightly.250720.abcdef');
+    expect(npmTag).toBe('nightly');
+  });
+
+  it('should fall back to package.json when MANUAL_VERSION is empty for nightly', () => {
+    process.env.IS_NIGHTLY = 'true';
+    process.env.MANUAL_VERSION = '';
+    const knownDate = new Date('2025-07-20T10:00:00.000Z');
+    vi.setSystemTime(knownDate);
+    const { releaseTag, releaseVersion, npmTag } = getReleaseVersion();
+    expect(releaseTag).toBe('v0.1.0-nightly.250720.abcdef');
+    expect(releaseVersion).toBe('0.1.0-nightly.250720.abcdef');
+    expect(npmTag).toBe('nightly');
+  });
+
+  it('should throw for prerelease MANUAL_VERSION base under nightly', () => {
+    process.env.IS_NIGHTLY = 'true';
+    process.env.MANUAL_VERSION = 'v0.11.0-beta.1';
+    expect(() => getReleaseVersion()).toThrow(
+      'Error: Nightly manual version must be a stable numeric semver',
+    );
+  });
+
+  it('should throw for build-metadata MANUAL_VERSION base under nightly', () => {
+    process.env.IS_NIGHTLY = 'true';
+    process.env.MANUAL_VERSION = '0.11.0+build1';
+    expect(() => getReleaseVersion()).toThrow(
+      'Error: Nightly manual version must be a stable numeric semver',
+    );
+  });
+
+  it('should throw for malformed MANUAL_VERSION base under nightly', () => {
+    process.env.IS_NIGHTLY = 'true';
+    process.env.MANUAL_VERSION = '0.11';
+    expect(() => getReleaseVersion()).toThrow(
+      'Error: Nightly manual version must be a stable numeric semver',
+    );
+  });
+
+  it('should reject leading-zero major component in nightly base (01.2.3)', () => {
+    process.env.IS_NIGHTLY = 'true';
+    process.env.MANUAL_VERSION = '01.2.3';
+    expect(() => getReleaseVersion()).toThrow(
+      'Error: Nightly manual version must be a stable numeric semver',
+    );
+  });
+
+  it('should reject leading-zero minor component in nightly base (1.02.3)', () => {
+    process.env.IS_NIGHTLY = 'true';
+    process.env.MANUAL_VERSION = '1.02.3';
+    expect(() => getReleaseVersion()).toThrow(
+      'Error: Nightly manual version must be a stable numeric semver',
+    );
+  });
+
+  it('should reject leading-zero patch component in nightly base (1.2.03)', () => {
+    process.env.IS_NIGHTLY = 'true';
+    process.env.MANUAL_VERSION = '1.2.03';
+    expect(() => getReleaseVersion()).toThrow(
+      'Error: Nightly manual version must be a stable numeric semver',
+    );
+  });
+
+  it('should reject v-prefixed leading-zero nightly base (v01.2.3)', () => {
+    process.env.IS_NIGHTLY = 'true';
+    process.env.MANUAL_VERSION = 'v01.2.3';
+    expect(() => getReleaseVersion()).toThrow(
+      'Error: Nightly manual version must be a stable numeric semver',
+    );
+  });
+
+  it('should accept zero-valued components in nightly base (0.0.0, 0.10.0)', () => {
+    process.env.IS_NIGHTLY = 'true';
+    process.env.MANUAL_VERSION = '0.0.0';
+    vi.setSystemTime(new Date('2025-07-20T10:00:00.000Z'));
+    expect(getReleaseVersion().releaseTag).toBe('v0.0.0-nightly.250720.abcdef');
+
+    process.env.MANUAL_VERSION = '0.10.0';
+    expect(getReleaseVersion().releaseTag).toBe(
+      'v0.10.0-nightly.250720.abcdef',
+    );
   });
 
   it('should use manual version when provided', () => {
@@ -247,6 +362,177 @@ describe('get-release-version script CLI contract', () => {
     expect(parsed.releaseTag).toMatch(
       /^v\d+\.\d+\.\d+-nightly\.\d{6}\.[0-9a-f]+$/,
     );
+  });
+
+  it('uses MANUAL_VERSION as nightly base for manual nightly dispatch', (ctx) => {
+    if (skipWhenBunUnavailable(ctx)) {
+      return;
+    }
+    if (!gitAvailable()) {
+      if (process.env.CI === 'true') {
+        throw new Error(
+          'git is required for nightly get-release-version CLI contract tests in CI.',
+        );
+      }
+      ctx.skip();
+      return;
+    }
+    const result = runScript({
+      IS_NIGHTLY: 'true',
+      IS_PREVIEW: '',
+      MANUAL_VERSION: '0.11.0',
+    });
+    expectCleanJsonStdout(result);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.npmTag).toBe('nightly');
+    expect(parsed.releaseTag).toMatch(/^v0\.11\.0-nightly\.\d{6}\.[0-9a-f]+$/);
+    expect(parsed.releaseVersion).toMatch(
+      /^0\.11\.0-nightly\.\d{6}\.[0-9a-f]+$/,
+    );
+  });
+
+  it('supports v-prefixed MANUAL_VERSION for manual nightly dispatch', (ctx) => {
+    if (skipWhenBunUnavailable(ctx)) {
+      return;
+    }
+    if (!gitAvailable()) {
+      if (process.env.CI === 'true') {
+        throw new Error(
+          'git is required for nightly get-release-version CLI contract tests in CI.',
+        );
+      }
+      ctx.skip();
+      return;
+    }
+    const result = runScript({
+      IS_NIGHTLY: 'true',
+      IS_PREVIEW: '',
+      MANUAL_VERSION: 'v0.11.0',
+    });
+    expectCleanJsonStdout(result);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.npmTag).toBe('nightly');
+    expect(parsed.releaseTag).toMatch(/^v0\.11\.0-nightly\.\d{6}\.[0-9a-f]+$/);
+  });
+
+  it('rejects malformed MANUAL_VERSION base under nightly dispatch', (ctx) => {
+    if (skipWhenBunUnavailable(ctx)) {
+      return;
+    }
+    const result = runScript({
+      IS_NIGHTLY: 'true',
+      IS_PREVIEW: '',
+      MANUAL_VERSION: '0.11',
+    });
+    expect(result.status).not.toBeNull();
+    expect(result.status, `stderr: ${result.stderr}`).toBeGreaterThan(0);
+    expect(result.stderr).toMatch(
+      /Error: Nightly manual version must be a stable numeric semver/,
+    );
+    const trimmed = result.stdout.trim();
+    if (trimmed.startsWith('{')) {
+      throw new Error(`Unexpected JSON on stdout for error case: ${trimmed}`);
+    }
+  });
+
+  it('rejects prerelease MANUAL_VERSION base under nightly dispatch', (ctx) => {
+    if (skipWhenBunUnavailable(ctx)) {
+      return;
+    }
+    const result = runScript({
+      IS_NIGHTLY: 'true',
+      IS_PREVIEW: '',
+      MANUAL_VERSION: 'v0.11.0-beta.1',
+    });
+    expect(result.status).not.toBeNull();
+    expect(result.status, `stderr: ${result.stderr}`).toBeGreaterThan(0);
+    expect(result.stderr).toMatch(
+      /Error: Nightly manual version must be a stable numeric semver/,
+    );
+    const trimmed = result.stdout.trim();
+    if (trimmed.startsWith('{')) {
+      throw new Error(`Unexpected JSON on stdout for error case: ${trimmed}`);
+    }
+  });
+
+  it('rejects build-metadata MANUAL_VERSION base under nightly dispatch', (ctx) => {
+    if (skipWhenBunUnavailable(ctx)) {
+      return;
+    }
+    const result = runScript({
+      IS_NIGHTLY: 'true',
+      IS_PREVIEW: '',
+      MANUAL_VERSION: '0.11.0+build1',
+    });
+    expect(result.status).not.toBeNull();
+    expect(result.status, `stderr: ${result.stderr}`).toBeGreaterThan(0);
+    expect(result.stderr).toMatch(
+      /Error: Nightly manual version must be a stable numeric semver/,
+    );
+    const trimmed = result.stdout.trim();
+    if (trimmed.startsWith('{')) {
+      throw new Error(`Unexpected JSON on stdout for error case: ${trimmed}`);
+    }
+  });
+
+  it('rejects leading-zero major in MANUAL_VERSION nightly base before tag creation', (ctx) => {
+    if (skipWhenBunUnavailable(ctx)) {
+      return;
+    }
+    const result = runScript({
+      IS_NIGHTLY: 'true',
+      IS_PREVIEW: '',
+      MANUAL_VERSION: '01.2.3',
+    });
+    expect(result.status).not.toBeNull();
+    expect(result.status, `stderr: ${result.stderr}`).toBeGreaterThan(0);
+    expect(result.stderr).toMatch(
+      /Error: Nightly manual version must be a stable numeric semver/,
+    );
+    const trimmed = result.stdout.trim();
+    if (trimmed.startsWith('{')) {
+      throw new Error(`Unexpected JSON on stdout for error case: ${trimmed}`);
+    }
+  });
+
+  it('rejects leading-zero minor in MANUAL_VERSION nightly base before tag creation', (ctx) => {
+    if (skipWhenBunUnavailable(ctx)) {
+      return;
+    }
+    const result = runScript({
+      IS_NIGHTLY: 'true',
+      IS_PREVIEW: '',
+      MANUAL_VERSION: '1.02.3',
+    });
+    expect(result.status).not.toBeNull();
+    expect(result.status, `stderr: ${result.stderr}`).toBeGreaterThan(0);
+    expect(result.stderr).toMatch(
+      /Error: Nightly manual version must be a stable numeric semver/,
+    );
+    const trimmed = result.stdout.trim();
+    if (trimmed.startsWith('{')) {
+      throw new Error(`Unexpected JSON on stdout for error case: ${trimmed}`);
+    }
+  });
+
+  it('rejects leading-zero patch in MANUAL_VERSION nightly base before tag creation', (ctx) => {
+    if (skipWhenBunUnavailable(ctx)) {
+      return;
+    }
+    const result = runScript({
+      IS_NIGHTLY: 'true',
+      IS_PREVIEW: '',
+      MANUAL_VERSION: '1.2.03',
+    });
+    expect(result.status).not.toBeNull();
+    expect(result.status, `stderr: ${result.stderr}`).toBeGreaterThan(0);
+    expect(result.stderr).toMatch(
+      /Error: Nightly manual version must be a stable numeric semver/,
+    );
+    const trimmed = result.stdout.trim();
+    if (trimmed.startsWith('{')) {
+      throw new Error(`Unexpected JSON on stdout for error case: ${trimmed}`);
+    }
   });
 
   it('keeps manual-version diagnostic text off stdout', (ctx) => {

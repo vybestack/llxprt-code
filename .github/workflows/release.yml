@@ -23,7 +23,11 @@ on:
         type: boolean
         default: true
       create_nightly_release:
-        description: 'Auto apply the nightly release tag, input version is ignored.'
+        description: >-
+          Create a nightly release. For scheduled runs the version is derived
+          from package.json. For manual dispatch the version input is used as
+          the nightly base version when provided, otherwise package.json is
+          used.
         required: false
         type: boolean
         default: false

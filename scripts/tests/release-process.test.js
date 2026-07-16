@@ -257,6 +257,20 @@ describe('.github/workflows/release.yml', () => {
     );
     expect(releaseYml).toContain('npm pack -w @vybestack/llxprt-code-agents');
   });
+
+  it('does not claim create_nightly_release ignores the version input', () => {
+    expect(releaseYml).not.toContain('input version is ignored');
+  });
+
+  it('documents that create_nightly_release distinguishes manual from scheduled dispatch', () => {
+    expect(releaseYml).toContain('create_nightly_release');
+    const nightlyInput = releaseYml.slice(
+      releaseYml.indexOf('create_nightly_release'),
+      releaseYml.indexOf('force_skip_tests'),
+    );
+    expect(nightlyInput).toContain('manual');
+    expect(nightlyInput).toContain('scheduled');
+  });
 });
 
 describe('scripts/build_sandbox.ts', () => {
