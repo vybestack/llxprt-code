@@ -670,8 +670,8 @@ describe('profileOverridePrecedenceParity: CLI model override after provider swi
     expect(switchProviderCalls).toContain('openai');
   });
 
-  it('switchActiveProvider is called with gemini when no --provider is given', async () => {
+  it('switchActiveProvider is not called when no provider is configured', async () => {
     await runConfig({});
-    expect(switchProviderCalls).toContain('gemini');
+    expect(switchProviderCalls).toHaveLength(0);
   });
 });

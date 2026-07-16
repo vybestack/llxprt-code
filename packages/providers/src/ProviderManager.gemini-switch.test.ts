@@ -48,7 +48,7 @@ describe('ProviderManager - Gemini switching', () => {
 
   it('should start with no active provider', () => {
     expect(manager.hasActiveProvider()).toBe(false);
-    expect(manager.getActiveProviderName()).toBe('');
+    expect(manager.getActiveProviderName()).toBeUndefined();
   });
 
   it('should allow clearing active provider to switch back to Gemini', () => {
@@ -61,7 +61,7 @@ describe('ProviderManager - Gemini switching', () => {
     // Clear active provider (switch back to Gemini)
     manager.clearActiveProvider();
     expect(manager.hasActiveProvider()).toBe(false);
-    expect(manager.getActiveProviderName()).toBe('');
+    expect(manager.getActiveProviderName()).toBeUndefined();
   });
 
   it('should correctly report hasActiveProvider state', () => {

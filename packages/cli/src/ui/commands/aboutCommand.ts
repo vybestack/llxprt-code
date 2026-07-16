@@ -158,7 +158,7 @@ async function getKeyfilePath(context: CommandContext): Promise<string> {
     );
     const providerManager = getProviderManager();
     const providerName = providerManager.getActiveProviderName();
-    if (providerName !== '') {
+    if (providerName !== undefined && providerName !== '') {
       return context.services.settings.getProviderKeyfile(providerName) ?? '';
     }
   } catch {

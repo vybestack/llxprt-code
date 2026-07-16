@@ -18,6 +18,7 @@ import {
   initializePromptSystem,
   type CoreSystemPromptOptions,
 } from './prompts.js';
+import { UNCONFIGURED_PROVIDER, PLACEHOLDER_MODEL } from '../config/models.js';
 import process from 'node:process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -86,6 +87,53 @@ describe('prompts', () => {
       const prompt = await callPrompt({ tools });
       expect(prompt).toBeTruthy();
       expect(typeof prompt).toBe('string');
+    });
+  });
+
+  describe('provider/model neutrality (no implicit gemini fallback)', () => {
+    it('uses UNCONFIGURED_PROVIDER sentinel when no provider is given', async () => {
+      // Pass no provider/model — must not default to 'gemini'/'gemini-1.5-pro'.
+      const prompt = await getCoreSystemPromptAsync({});
+      expect(prompt).toBeTruthy();
+      // The rendered prompt substitutes {{PROVIDER}}. With an unconfigured
+      // start the neutral sentinel must flow through — the prompt must NOT
+      // reference 'gemini' as the provider.
+      expect(prompt).not.toContain('via gemini.');
+    });
+
+    it('renders placeholder model (not gemini-1.5-pro) when no model given', async () => {
+      const prompt = await getCoreSystemPromptAsync({});
+      expect(prompt).toBeTruthy();
+      expect(prompt).toContain(PLACEHOLDER_MODEL);
+      expect(prompt).not.toContain('gemini-1.5-pro');
+    });
+
+    it('flows explicit gemini provider/model through unchanged', async () => {
+      const prompt = await getCoreSystemPromptAsync({
+        provider: 'gemini',
+        model: 'gemini-2.5-pro',
+      });
+      expect(prompt).toBeTruthy();
+      // Explicit gemini must still work and render with gemini provider.
+      expect(prompt).toContain('via gemini.');
+      expect(prompt).toContain('gemini-2.5-pro');
+    });
+
+    it('flows explicit non-gemini provider/model through unchanged', async () => {
+      const prompt = await getCoreSystemPromptAsync({
+        provider: 'openai',
+        model: 'gpt-4o',
+      });
+      expect(prompt).toBeTruthy();
+      expect(prompt).toContain('via openai.');
+      expect(prompt).toContain('gpt-4o');
+    });
+
+    it('neutral sentinel constants are stable', () => {
+      expect(UNCONFIGURED_PROVIDER).toBe('unconfigured');
+      expect(PLACEHOLDER_MODEL).toBe('placeholder-model');
+      expect(UNCONFIGURED_PROVIDER).not.toBe('gemini');
+      expect(PLACEHOLDER_MODEL).not.toBe('gemini-1.5-pro');
     });
   });
 

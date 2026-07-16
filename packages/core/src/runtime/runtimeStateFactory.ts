@@ -18,7 +18,7 @@ import type {
   AgentRuntimeState,
   RuntimeStateParams,
 } from './AgentRuntimeState.js';
-import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
+import { PLACEHOLDER_MODEL, UNCONFIGURED_PROVIDER } from '../config/models.js';
 
 export interface RuntimeStateConfigSource {
   getSessionId?(): string | undefined;
@@ -75,9 +75,12 @@ function resolveProvider(
     return override;
   }
   if (typeof config.getProvider === 'function') {
-    return config.getProvider() ?? 'gemini';
+    const provider = config.getProvider();
+    if (typeof provider === 'string' && provider.trim() !== '') {
+      return provider.trim();
+    }
   }
-  return 'gemini';
+  return UNCONFIGURED_PROVIDER;
 }
 
 function resolveModel(
@@ -97,7 +100,7 @@ function resolveModel(
       return model;
     }
   }
-  return DEFAULT_GEMINI_MODEL;
+  return PLACEHOLDER_MODEL;
 }
 
 /**

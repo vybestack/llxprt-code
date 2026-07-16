@@ -23,7 +23,7 @@ export interface ProviderModelInput {
 }
 
 export interface ProviderModelResult {
-  readonly provider: string;
+  readonly provider: string | undefined;
   readonly model: string;
 }
 
@@ -48,7 +48,8 @@ function getAliasDefaultModel(provider: string): string | undefined {
 /**
  * Resolves provider (4-level precedence) and model (6-level precedence).
  *
- * Provider: CLI --provider > profile > LLXPRT_DEFAULT_PROVIDER env > 'gemini'
+ * Provider: CLI --provider > profile > LLXPRT_DEFAULT_PROVIDER env > undefined
+ * (no implicit hosted provider fallback)
  * Model: CLI --model > profile > settings > env vars > alias default > Gemini default
  */
 export function resolveProviderAndModel(
@@ -65,23 +66,24 @@ export function resolveProviderAndModel(
     envGeminiModel,
   } = input;
 
-  let provider: string;
-  if (cliProvider) {
-    provider = cliProvider;
+  let provider: string | undefined;
+  if (cliProvider && cliProvider.trim() !== '') {
+    provider = cliProvider.trim();
   } else if (profileProvider && profileProvider.trim() !== '') {
-    provider = profileProvider;
-  } else if (envDefaultProvider) {
-    provider = envDefaultProvider;
+    provider = profileProvider.trim();
+  } else if (envDefaultProvider && envDefaultProvider.trim() !== '') {
+    provider = envDefaultProvider.trim();
   } else {
-    provider = 'gemini';
+    provider = undefined;
   }
 
   logger.debug(
     () =>
-      `Provider selection: cli=${cliProvider}, profile=${profileProvider}, env=${envDefaultProvider}, final=${provider}`,
+      `Provider selection: cli=${cliProvider}, profile=${profileProvider}, env=${envDefaultProvider}, final=${provider ?? '(none)'}`,
   );
 
-  const aliasDefaultModel = getAliasDefaultModel(provider);
+  const aliasDefaultModel =
+    provider !== undefined ? getAliasDefaultModel(provider) : undefined;
 
   const providerDefault =
     provider === 'gemini' ? DEFAULT_GEMINI_MODEL : (aliasDefaultModel ?? '');

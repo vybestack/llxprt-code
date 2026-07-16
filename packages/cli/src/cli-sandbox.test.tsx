@@ -248,6 +248,7 @@ function buildSandboxConfig(): Config {
     getProviderManager: fn(() => ({
       getActiveProvider: fn().mockReturnValue(null),
       getActiveProviderName: fn().mockReturnValue(undefined),
+      hasActiveProvider: fn(() => true),
       getServerToolsProvider: fn().mockReturnValue(null),
     })),
     getConversationLoggingEnabled: fn(() => false),

@@ -131,7 +131,11 @@ function resolveApprovalAndProvider(
     envDefaultModel: process.env.LLXPRT_DEFAULT_MODEL,
     envGeminiModel: process.env.GEMINI_MODEL,
   });
-  if (providerModel.model && providerModel.model.trim() !== '') {
+  if (
+    providerModel.provider !== undefined &&
+    providerModel.model &&
+    providerModel.model.trim() !== ''
+  ) {
     runtimeState.runtime.settingsService.setProviderSetting(
       providerModel.provider,
       'model',

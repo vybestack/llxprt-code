@@ -316,7 +316,9 @@ function registerProvidersOntoManager(
   }
   try {
     const active = registered.getActiveProvider();
-    void isolatedManager.setActiveProvider(active.name);
+    if (active) {
+      void isolatedManager.setActiveProvider(active.name);
+    }
   } catch {
     /* No active provider — safe to skip. */
   }

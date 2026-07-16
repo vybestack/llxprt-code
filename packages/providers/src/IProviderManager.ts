@@ -38,15 +38,14 @@ export interface IProviderManager {
   hasActiveProvider(): boolean;
 
   /**
-   * Get the currently active provider
-   * @throws Error if no active provider is set
+   * Get the currently active provider, or undefined when no provider is active.
    */
-  getActiveProvider(): IProvider;
+  getActiveProvider(): IProvider | undefined;
 
   /**
-   * Get the name of the active provider
+   * Get the name of the active provider, or undefined when none is active.
    */
-  getActiveProviderName(): string;
+  getActiveProviderName(): string | undefined;
 
   /**
    * Get available models from a provider, hydrated with models.dev data.

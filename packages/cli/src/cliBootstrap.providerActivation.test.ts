@@ -75,6 +75,13 @@ function makeProviderManager(activeProviderName: string): CliProviderManager {
   } as unknown as CliProviderManager;
 }
 
+function makeProviderManagerWithNoActive(): CliProviderManager {
+  return {
+    getActiveProviderName: () => undefined,
+    getActiveProvider: () => undefined,
+  } as unknown as CliProviderManager;
+}
+
 function makeArgs(): ParsedCliArgs {
   return {
     provider: undefined,
@@ -145,20 +152,37 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
     });
   });
 
-  it('assembles the intent with defaultProvider when config has no provider', async () => {
+  it('assembles the intent with defaultProvider when config has no provider but manager has an active provider', async () => {
     const config = makeConfig(undefined);
-    const providerManager = makeProviderManager('gemini');
+    const providerManager = makeProviderManager('anthropic');
 
     await activateConfiguredProvider(config, providerManager, makeArgs());
 
     const intent: ProviderActivationIntent =
       preflightAgentActivationMock.mock.calls[0][1];
     expect(intent).toStrictEqual({
-      defaultProvider: 'gemini',
+      defaultProvider: 'anthropic',
       modelParams: {},
       cliOverrides: {},
       authMode: 'auto',
     });
+  });
+
+  it('assembles the intent with neither provider nor defaultProvider when unconfigured (#2481)', async () => {
+    const config = makeConfig(undefined);
+    const providerManager = makeProviderManagerWithNoActive();
+
+    await activateConfiguredProvider(config, providerManager, makeArgs());
+
+    const intent: ProviderActivationIntent =
+      preflightAgentActivationMock.mock.calls[0][1];
+    expect(intent).toStrictEqual({
+      modelParams: {},
+      cliOverrides: {},
+      authMode: 'auto',
+    });
+    expect(intent.provider).toBeUndefined();
+    expect(intent.defaultProvider).toBeUndefined();
   });
 
   it('assembles the intent with the CLI model override when present', async () => {

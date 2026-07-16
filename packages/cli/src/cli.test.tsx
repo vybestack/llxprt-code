@@ -466,6 +466,7 @@ describe('cli.tsx main function', () => {
     const providerManager = {
       getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
       getActiveProviderName: vi.fn().mockReturnValue('gemini'),
+      hasActiveProvider: vi.fn().mockReturnValue(true),
       getServerToolsProvider: vi.fn().mockReturnValue(null),
     };
     const mockConfig = {
@@ -617,6 +618,7 @@ describe('cli.tsx main function', () => {
     const providerManager = {
       getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
       getActiveProviderName: vi.fn().mockReturnValue('gemini'),
+      hasActiveProvider: vi.fn().mockReturnValue(true),
       getServerToolsProvider: vi.fn().mockReturnValue(null),
     };
     const mockConfig = {

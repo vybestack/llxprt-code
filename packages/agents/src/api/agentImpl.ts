@@ -84,6 +84,15 @@ import type {
   ApprovalHandler,
   DisplayCallbacks,
 } from '../core/agenticLoop/types.js';
+import { UNCONFIGURED_PROVIDER } from './constants.js';
+
+/**
+ * Actionable error message used when the Agent is unconfigured — no active
+ * provider is set on the manager. Every model-dependent path must fail
+ * closed with this message so the user is guided to /setup.
+ */
+const UNCONFIGURED_AGENT_MESSAGE =
+  'No provider is configured. Run /setup to choose a hosted provider, configure a local model, or select an existing profile before using the agent.';
 import { registerInternalConfig } from './internalConfigAccess.js';
 import {
   drainToResult,
@@ -564,6 +573,16 @@ export class AgentImpl implements Agent {
     input: AgentInput,
     opts?: TurnOptions,
   ): AsyncIterable<AgentEvent> {
+    if (!this.isProviderReady()) {
+      yield {
+        type: 'error',
+        error: {
+          message: UNCONFIGURED_AGENT_MESSAGE,
+        },
+      };
+      yield { type: 'done', reason: 'error' };
+      return;
+    }
     // @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-013
     // MCP discovery gate: by default await readiness before the model turn.
     // Per-server discovery failures are NON-FATAL — each failed server is
@@ -695,7 +714,7 @@ export class AgentImpl implements Agent {
         : {};
     const baseUrlPart = s.baseUrl !== undefined ? { baseUrl: s.baseUrl } : {};
     return {
-      provider: s.provider,
+      provider: s.provider === UNCONFIGURED_PROVIDER ? '' : s.provider,
       model: s.model,
       authStatus: winner !== 'none' ? 'authenticated' : 'unauthenticated',
       ...baseUrlPart,
@@ -723,6 +742,9 @@ export class AgentImpl implements Agent {
    * @pseudocode switch-rebind.md steps 50-60
    */
   async setModel(model: string): Promise<void> {
+    if (!this.isProviderReady()) {
+      throw new Error(UNCONFIGURED_AGENT_MESSAGE);
+    }
     await setActiveModel(model);
     await this.deps.config.initializeContentGeneratorConfig();
     await this.restoreChatVisibility();
@@ -936,6 +958,9 @@ export class AgentImpl implements Agent {
   async compress(opts?: {
     readonly promptId?: string;
   }): Promise<CompressionResult> {
+    if (!this.isProviderReady()) {
+      throw new Error(UNCONFIGURED_AGENT_MESSAGE);
+    }
     const promptId = opts?.promptId ?? `compress-${Date.now()}`;
     // Ensure the chat is initialized before accessing it: setHistory can run
     // before the first turn (startChat is otherwise lazy on first turn).
@@ -997,6 +1022,9 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-012
    */
   async generate(input: AgentInput, opts?: GenerateOptions): Promise<string> {
+    if (!this.isProviderReady()) {
+      throw new Error(UNCONFIGURED_AGENT_MESSAGE);
+    }
     const client = this.deps.resolveClient();
     const message = toPartListUnion(input);
     const promptId = opts?.promptId ?? `generate-${Date.now()}`;
@@ -1016,6 +1044,9 @@ export class AgentImpl implements Agent {
     schema: Readonly<Record<string, unknown>>,
     opts?: GenerateOptions,
   ): Promise<Record<string, unknown>> {
+    if (!this.isProviderReady()) {
+      throw new Error(UNCONFIGURED_AGENT_MESSAGE);
+    }
     const client = this.deps.resolveClient();
     const contentsArr = [...contents] as Parameters<
       typeof client.generateJson
@@ -1033,6 +1064,9 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-012
    */
   async generateEmbedding(texts: readonly string[]): Promise<number[][]> {
+    if (!this.isProviderReady()) {
+      throw new Error(UNCONFIGURED_AGENT_MESSAGE);
+    }
     const client = this.deps.resolveClient();
     return client.generateEmbedding([...texts]);
   }
@@ -1152,7 +1186,8 @@ export class AgentImpl implements Agent {
     this.rebuild();
     return {
       changed: providerChanged,
-      previousProvider,
+      previousProvider:
+        previousProvider === UNCONFIGURED_PROVIDER ? null : previousProvider,
       nextProvider: provider,
       ...(defaultModel !== undefined ? { defaultModel } : {}),
       infoMessages,
@@ -1209,6 +1244,16 @@ export class AgentImpl implements Agent {
       approvalHandler: this.deps.approvalHandler,
       displayCallbacks: this.deps.displayCallbacks,
     });
+  }
+
+  /**
+   * Provider readiness: true when the manager reports an active provider.
+   * Used by the fail-closed guards on stream/generate/generateJson/
+   * generateEmbedding/compress/setModel to prevent model-dependent operations
+   * when no provider is configured.
+   */
+  private isProviderReady(): boolean {
+    return this.deps.providerManager.hasActiveProvider();
   }
 
   /** Computes the auth status for an explicit provider. @plan:PLAN-20260617-COREAPI.P18 @requirement:REQ-008 */

@@ -20,7 +20,8 @@ import {
   loadServerHierarchicalMemory,
   LLXPRT_CONFIG_DIR,
   DEFAULT_GEMINI_EMBEDDING_MODEL,
-  DEFAULT_GEMINI_MODEL,
+  PLACEHOLDER_MODEL,
+  UNCONFIGURED_PROVIDER,
   type LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
 import {
@@ -77,7 +78,8 @@ function createBaseConfigParameters(
 ): ConfigParameters {
   return {
     sessionId: taskId,
-    model: DEFAULT_GEMINI_MODEL,
+    model: PLACEHOLDER_MODEL,
+    provider: resolveProviderFromEnv(),
     embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
     sandbox: undefined, // Sandbox might not be relevant for a server-side agent
     targetDir: workspaceDir, // Or a specific directory the agent operates on
@@ -116,6 +118,19 @@ function getApprovalMode(): ApprovalMode {
   return process.env['LLXPRT_YOLO_MODE'] === 'true'
     ? ApprovalMode.YOLO
     : ApprovalMode.DEFAULT;
+}
+
+/**
+ * Resolve the provider from LLXPRT_DEFAULT_PROVIDER env var.
+ * Returns UNCONFIGURED_PROVIDER when no explicit provider is selected,
+ * keeping the A2A server provider-neutral by default.
+ */
+function resolveProviderFromEnv(): string {
+  const envProvider = process.env['LLXPRT_DEFAULT_PROVIDER'];
+  if (envProvider !== undefined && envProvider !== '') {
+    return envProvider;
+  }
+  return UNCONFIGURED_PROVIDER;
 }
 
 function createTelemetrySettings(
@@ -160,24 +175,62 @@ async function initializeConfig(config: Config): Promise<void> {
 }
 
 async function refreshConfigAuth(config: Config): Promise<void> {
-  if (process.env['USE_CCPA']) {
+  const authSelection = resolveAuthSelection();
+  if (authSelection === undefined) {
+    // No explicit Gemini credentials or provider selected — stay unconfigured.
+    // The A2A server must not assume Gemini as the default provider.
+    return;
+  }
+  if (authSelection === 'use-ccpa') {
     await refreshCcpaAuth(config);
     return;
   }
-  if (process.env['GEMINI_API_KEY']) {
+  if (authSelection === 'gemini-api-key') {
     logger.info('[Config] Using Gemini API Key');
     await config.refreshAuth('gemini-api-key');
     return;
   }
-  if (hasVertexCredentials()) {
+  if (authSelection === 'vertex-ai') {
     logger.info('[Config] Using Vertex AI credentials');
     await config.refreshAuth('vertex-ai');
     return;
   }
-  logger.warn(
-    `[Config] No GEMINI_API_KEY, USE_CCPA, or Vertex AI credentials configured. Falling back to OAuth.`,
+  // authSelection === 'gemini-oauth' — explicit Gemini provider via env,
+  // no API key. Fall back to Gemini OAuth.
+  logger.info(
+    '[Config] Explicit Gemini provider selected via LLXPRT_DEFAULT_PROVIDER, falling back to OAuth.',
   );
   await config.refreshAuth('oauth-personal');
+}
+
+type AuthSelection =
+  | 'gemini-api-key'
+  | 'use-ccpa'
+  | 'vertex-ai'
+  | 'gemini-oauth'
+  | undefined;
+
+/**
+ * Resolve which auth method to use based on explicit Gemini credentials or
+ * explicit Gemini provider selection. Returns undefined when no Gemini
+ * signals are present (unconfigured / neutral state).
+ */
+function resolveAuthSelection(): AuthSelection {
+  if (process.env['USE_CCPA']) {
+    return 'use-ccpa';
+  }
+  if (process.env['GEMINI_API_KEY']) {
+    return 'gemini-api-key';
+  }
+  if (hasVertexCredentials()) {
+    return 'vertex-ai';
+  }
+  // Only fall back to Gemini OAuth when Gemini is explicitly selected.
+  const defaultProvider = process.env['LLXPRT_DEFAULT_PROVIDER'];
+  if (defaultProvider === 'gemini') {
+    return 'gemini-oauth';
+  }
+  return undefined;
 }
 
 async function refreshCcpaAuth(config: Config): Promise<void> {

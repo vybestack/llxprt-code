@@ -145,9 +145,12 @@ export async function activateConfiguredProvider(
   const intent: ProviderActivationIntent = {
     ...(configProvider !== undefined && configProvider !== ''
       ? { provider: configProvider }
-      : {
-          defaultProvider: providerManager.getActiveProviderName() ?? 'gemini',
-        }),
+      : (() => {
+          const activeName = providerManager.getActiveProviderName();
+          return activeName !== undefined
+            ? { defaultProvider: activeName }
+            : {};
+        })()),
     ...(typeof cliModelOverride === 'string' &&
     cliModelOverride.trim().length > 0
       ? { model: cliModelOverride.trim() }

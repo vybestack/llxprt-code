@@ -28,6 +28,7 @@ import {
 import { getBaseUrlFromProvider } from '../baseUrlResolver.js';
 import { ProviderCapabilitiesService } from '../providerCapabilitiesService.js';
 import { normalizeRuntimeInputs } from '../runtimeNormalizer.js';
+import { ProviderRuntimeNormalizationError } from '../errors.js';
 import { buildRoundRobinResolvedOptions } from '../loadBalancing/resolvedOptionsBuilder.js';
 import { BackendMetricsCollector } from '../loadBalancing/backendMetrics.js';
 import { ConfigBasedRedactor } from '../logging/ConfigBasedRedactor.js';
@@ -39,6 +40,15 @@ import { extractSimpleContent } from '../logging/streamChunkUtils.js';
 import { accumulateTokenUsage } from '../logging/tokenAccumulator.js';
 import { extractTokenCountsFromResponse } from '../logging/tokenCounts.js';
 import { getBackendSkipReasons } from '../loadBalancing/backendRuntime.js';
+
+function captureThrown(fn: () => unknown): { error: unknown } {
+  try {
+    fn();
+  } catch (error) {
+    return { error };
+  }
+  throw new Error('expected the call to throw, but it did not');
+}
 
 function debugLoggerStub(): DebugLogger {
   return {
@@ -616,5 +626,54 @@ describe('extracted provider helper behavior', () => {
       max_tokens: 1024,
       maxTokens: 2048,
     });
+  });
+});
+
+describe('normalizeRuntimeInputs: fail-closed when no provider (#2481)', () => {
+  it('throws ProviderRuntimeNormalizationError when no target/active provider exists', () => {
+    const settingsService = new SettingsService();
+    const config = createRuntimeConfigStub(settingsService);
+    const rawOptions: GenerateChatOptions = {
+      contents: [],
+      runtime: {
+        settingsService,
+        config,
+        runtimeId: 'runtime-no-provider',
+        metadata: {},
+      },
+    };
+
+    expect(() =>
+      normalizeRuntimeInputs(rawOptions, {
+        getActiveProviderName: () => undefined,
+        getProvider: () => undefined,
+      }),
+    ).toThrow(ProviderRuntimeNormalizationError);
+  });
+
+  it('error mentions missing provider and runtimeId', () => {
+    const settingsService = new SettingsService();
+    const config = createRuntimeConfigStub(settingsService);
+    const rawOptions: GenerateChatOptions = {
+      contents: [],
+      runtime: {
+        settingsService,
+        config,
+        runtimeId: 'runtime-no-provider-2',
+        metadata: {},
+      },
+    };
+
+    const captured = captureThrown(() =>
+      normalizeRuntimeInputs(rawOptions, {
+        getActiveProviderName: () => undefined,
+        getProvider: () => undefined,
+      }),
+    );
+    expect(captured.error).toBeInstanceOf(ProviderRuntimeNormalizationError);
+    const e = captured.error as ProviderRuntimeNormalizationError;
+    expect(e.message).toContain('No provider');
+    expect(e.context.runtimeId).toBe('runtime-no-provider-2');
+    expect(e.context.metadata).toMatchObject({ missingFields: ['provider'] });
   });
 });

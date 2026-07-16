@@ -11,92 +11,45 @@
  */
 
 import type { Config } from '@vybestack/llxprt-code-core';
-import {
-  ExitCodes,
-  JsonFormatter,
-  OutputFormat,
-} from '@vybestack/llxprt-code-core';
-import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { LoadedSettings } from './config/settings.js';
+import { guardUnconfiguredProvider } from './unconfiguredProviderGuard.js';
 
 /**
- * Check if any authentication environment variables are set.
- */
-function hasAuthEnvVars(): boolean {
-  const authKeys = [
-    process.env.OPENAI_API_KEY,
-    process.env.ANTHROPIC_API_KEY,
-    process.env.GEMINI_API_KEY,
-    process.env.LLXPRT_API_KEY,
-  ];
-
-  return (
-    authKeys.some((key) => key !== undefined && key !== '') ||
-    process.env.GOOGLE_GENAI_USE_GCA === 'true' ||
-    process.env.GOOGLE_GENAI_USE_VERTEXAI === 'true'
-  );
-}
-
-function reportNonInteractiveAuthError(config: Config, message: string): void {
-  const outputFormat =
-    typeof config.getOutputFormat === 'function'
-      ? config.getOutputFormat()
-      : OutputFormat.TEXT;
-
-  if (outputFormat === OutputFormat.JSON) {
-    const formatter = new JsonFormatter();
-    process.stderr.write(`${formatter.formatError(new Error(message), 1)}\n`);
-    return;
-  }
-
-  debugLogger.error(message);
-}
-
-/**
- * Validates and initializes authentication for non-interactive mode.
+ * Gate-only validation for non-interactive mode. Checks for an explicit
+ * provider, then for auth credentials, applies compression settings, and
+ * wires the serverToolsProvider. Does NOT perform authentication.
  *
- * #2374 round-3 Fix 2: this function is now a GATE ONLY — it checks whether any
- * auth is configured (provider or env var), applies compression settings, and
- * wires the serverToolsProvider. It does NOT perform authentication. The actual
- * provider activation + auth refresh is delegated to fromConfig's activation
- * intent (constructed in nonInteractiveCli.ts processQuery), which executes
- * executeProviderActivation internally. This keeps the failure semantics
- * identical: at HEAD, the auth refresh threw here → runNonInteractiveSession
- * caught → SessionEnd + report + exit 1. Now fromConfig throws
- * AgentBootstrapError on authFailed → processQuery propagates → runNonInteractive
- * catches → same handler.
+ * When no provider is configured, this delegates to
+ * {@link guardUnconfiguredProvider} which reports the error, runs cleanup
+ * (when provided), and exits with FATAL_CONFIG_ERROR (52). This avoids
+ * inline `process.exit` + error reporting duplication — the guard owns the
+ * single centralized exit path.
  *
- * @param useExternalAuth Retained for the intent construction downstream (read
- *   from settings.merged.useExternalAuth in nonInteractiveCli); NOT used here.
- * @param nonInteractiveConfig The Config instance
- * @param settings Optional settings for compression config
+ * @param useExternalAuth Retained for the intent construction downstream; not
+ *   used here.
+ * @param nonInteractiveConfig The Config instance.
+ * @param settings Optional settings for compression config.
+ * @param runCleanup Optional async cleanup function invoked before the
+ *   unconfigured-provider exit (defaults to a no-op). When omitted, the guard
+ *   is still called with a no-op cleanup so the defensive path still fires.
  */
 export async function validateNonInteractiveAuth(
   useExternalAuth: boolean | undefined,
   nonInteractiveConfig: Config,
   settings?: LoadedSettings,
+  runCleanup: () => Promise<void> = () => Promise.resolve(),
 ) {
-  void useExternalAuth; // Gate-only; auth is performed by fromConfig's activation intent (#2374 Fix 2).
+  void useExternalAuth;
+
+  // Defensive guard: if no provider is configured, delegate to the
+  // centralized guard which reports the error and exits 52. The main CLI
+  // boundary already calls guardUnconfiguredProvider BEFORE this function,
+  // so this is a second line of defense for any caller that bypasses main.
+  await guardUnconfiguredProvider(nonInteractiveConfig, runCleanup);
 
   const providerManager = nonInteractiveConfig.getProviderManager();
-  const configProvider = nonInteractiveConfig.getProvider();
 
-  // Check if we have any auth configured (provider CLI args or env vars)
-  let hasProvider = false;
-  if (configProvider !== undefined && providerManager !== undefined) {
-    hasProvider = providerManager.hasActiveProvider();
-  }
-  const hasEnvAuth = hasAuthEnvVars();
-
-  if (!hasProvider && !hasEnvAuth) {
-    reportNonInteractiveAuthError(
-      nonInteractiveConfig,
-      `Please set an Auth method. Use one of the following environment variables: GEMINI_API_KEY, LLXPRT_API_KEY, GOOGLE_GENAI_USE_VERTEXAI (requires GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION), GOOGLE_GENAI_USE_GCA, OPENAI_API_KEY, ANTHROPIC_API_KEY`,
-    );
-    process.exit(ExitCodes.FATAL_AUTHENTICATION_ERROR);
-  }
-
-  // Apply compression settings after authentication
+  // Apply compression settings after the provider gate
   if (settings) {
     const merged = settings.merged as Record<string, unknown>;
     const contextLimit = merged['context-limit'] as number | undefined;
@@ -115,7 +68,7 @@ export async function validateNonInteractiveAuth(
     }
   }
 
-  // Ensure serverToolsProvider (Gemini) has config set if it's not the active provider
+  // Ensure serverToolsProvider has config set if it's not the active provider
   if (providerManager !== undefined) {
     const serverToolsProvider = providerManager.getServerToolsProvider();
     if (

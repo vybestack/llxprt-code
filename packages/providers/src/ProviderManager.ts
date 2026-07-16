@@ -446,22 +446,6 @@ export class ProviderManager implements IProviderManager {
         new ProviderCapabilityEvent(provider.name, capabilities, context),
       );
     }
-
-    // If this is the default provider and no provider is active, set it as active
-    const currentActiveProvider = this.settingsService.get('activeProvider');
-    if (provider.isDefault === true && isBlankValue(currentActiveProvider)) {
-      this.settingsService.set('activeProvider', provider.name);
-    }
-
-    // If registering Gemini and we don't have a serverToolsProvider, use it
-    if (provider.name === 'gemini' && !this.serverToolsProvider) {
-      this.serverToolsProvider = provider;
-    }
-
-    // If Gemini is the active provider, it should also be the serverToolsProvider
-    if (provider.name === 'gemini' && currentActiveProvider === 'gemini') {
-      this.serverToolsProvider = provider;
-    }
   }
 
   /**
@@ -471,7 +455,7 @@ export class ProviderManager implements IProviderManager {
    */
   setActiveProvider(name: string): void {
     if (!this.providers.has(name)) {
-      throw new Error('Provider not found');
+      throw new Error(`Provider '${name}' not found`);
     }
 
     // Store reference to the current active provider before switching
@@ -517,19 +501,11 @@ export class ProviderManager implements IProviderManager {
 
     // If switching to Gemini, use it as both active and serverTools provider
     // BUT only if we don't already have a Gemini serverToolsProvider with auth state
-    if (name === 'gemini') {
-      // Only replace serverToolsProvider if it's not already Gemini or if it's null
-      if (
-        !this.serverToolsProvider ||
-        this.serverToolsProvider.name !== 'gemini'
-      ) {
-        this.serverToolsProvider = this.providers.get(name) ?? null;
-      }
-    }
-    // If switching away from Gemini but serverToolsProvider is not set,
-    // configure a Gemini provider for serverTools if available
-    else if (!this.serverToolsProvider && this.providers.has('gemini')) {
-      this.serverToolsProvider = this.providers.get('gemini') ?? null;
+    if (
+      name === 'gemini' &&
+      (!this.serverToolsProvider || this.serverToolsProvider.name !== 'gemini')
+    ) {
+      this.serverToolsProvider = this.providers.get(name) ?? null;
     }
   }
 
@@ -537,43 +513,15 @@ export class ProviderManager implements IProviderManager {
     this.settingsService.set('activeProvider', '');
   }
 
-  getActiveProvider(): IProvider {
+  getActiveProvider(): IProvider | undefined {
     const activeProviderName =
       (this.settingsService.get('activeProvider') as string) || '';
 
-    let resolvedName = activeProviderName;
-
-    if (!resolvedName) {
-      const preferredFromConfig = this.config?.getProvider();
-      if (preferredFromConfig && this.providers.has(preferredFromConfig)) {
-        resolvedName = preferredFromConfig;
-      } else if (this.providers.has('openai')) {
-        resolvedName = 'openai';
-      } else {
-        const firstProvider = this.providers.keys().next();
-        resolvedName = firstProvider.done === true ? '' : firstProvider.value;
-      }
-
-      if (resolvedName) {
-        try {
-          this.setActiveProvider(resolvedName);
-        } catch (error) {
-          throw new Error(
-            `Unable to set default provider '${resolvedName}': ${String(error)}`,
-          );
-        }
-      }
+    if (!activeProviderName) {
+      return undefined;
     }
 
-    if (!resolvedName) {
-      throw new Error('No active provider set');
-    }
-
-    const provider = this.providers.get(resolvedName);
-    if (!provider) {
-      throw new Error('Active provider not found');
-    }
-    return provider;
+    return this.providers.get(activeProviderName);
   }
 
   async getAvailableModels(providerName?: string): Promise<HydratedModel[]> {
@@ -586,6 +534,9 @@ export class ProviderManager implements IProviderManager {
       }
     } else {
       provider = this.getActiveProvider();
+      if (!provider) {
+        throw new Error('No active provider set');
+      }
     }
 
     return resolveAvailableModels(provider);
@@ -628,8 +579,9 @@ export class ProviderManager implements IProviderManager {
     }
   }
 
-  getActiveProviderName(): string {
-    return (this.settingsService.get('activeProvider') as string) || '';
+  getActiveProviderName(): string | undefined {
+    const name = (this.settingsService.get('activeProvider') as string) || '';
+    return name === '' ? undefined : name;
   }
 
   hasActiveProvider(): boolean {
@@ -639,19 +591,7 @@ export class ProviderManager implements IProviderManager {
   }
 
   getServerToolsProvider(): IProvider | null {
-    // If we have a configured serverToolsProvider, return it
-    if (this.serverToolsProvider) {
-      return this.serverToolsProvider;
-    }
-
-    // Otherwise, try to get Gemini if available
-    const geminiProvider = this.providers.get('gemini');
-    if (geminiProvider) {
-      this.serverToolsProvider = geminiProvider;
-      return geminiProvider;
-    }
-
-    return null;
+    return this.serverToolsProvider;
   }
 
   setServerToolsProvider(provider: IProvider | null): void {

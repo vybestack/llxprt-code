@@ -36,6 +36,7 @@ import type {
   AppLayoutParams,
   AppLayoutResult,
 } from './containers/AppContainer/hooks/useAppLayout.js';
+import { useUnconfiguredProviderGuidance } from './hooks/useUnconfiguredProviderGuidance.js';
 
 const debug = new DebugLogger('llxprt:ui:appcontainer');
 
@@ -438,6 +439,12 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     ),
   );
   const layout = useAppLayout(buildLayoutParams(bootstrap, dialogs, input));
+  useUnconfiguredProviderGuidance({
+    hasActiveProvider:
+      props.uiRuntime.model.getProviderManager()?.hasActiveProvider() ?? false,
+    addItem: bootstrap.addItem,
+    isWelcomeDialogOpen: dialogs.isWelcomeDialogOpen,
+  });
   const r: HookResults = { bootstrap, dialogs, input, layout };
   const uiState = useUIStateBuilder({
     ...buildUIStateParamsCore(r, props.slashCommandRuntime),

@@ -259,4 +259,22 @@ describe('providerCommand /provider switch', () => {
       content: 'Failed to switch provider: provider not found',
     });
   });
+
+  it('rejects reserved sentinel alias name "unconfigured" (#2481)', async () => {
+    const context = createMockCommandContext({
+      services: {
+        config: { getEphemeralSetting: vi.fn(() => undefined) },
+      },
+    });
+
+    assertDefined(providerCommand.action);
+
+    const result = await providerCommand.action(context, 'save unconfigured');
+
+    expect(result).toStrictEqual({
+      type: 'message',
+      messageType: 'error',
+      content: expect.stringContaining('reserved name'),
+    });
+  });
 });

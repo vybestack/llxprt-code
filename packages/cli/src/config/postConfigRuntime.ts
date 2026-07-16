@@ -257,7 +257,7 @@ async function setupRuntimeContext(
  */
 async function activateProviderAndProfile(
   input: PostConfigInput,
-): Promise<string> {
+): Promise<string | undefined> {
   const { bootstrapArgs, argv, profileLoadResult, providerModelResult } = input;
 
   const profileApplicationResult = await applyProfileToRuntime({
@@ -280,7 +280,9 @@ async function activateProviderAndProfile(
     bootstrapArgs,
     profileApplication: {
       providerName:
-        profileApplicationResult.resolvedProviderAfterProfile ?? finalProvider,
+        profileApplicationResult.resolvedProviderAfterProfile ??
+        finalProvider ??
+        null,
       modelName:
         profileApplicationResult.resolvedModelAfterProfile ??
         providerModelResult.model,
@@ -302,7 +304,10 @@ async function activateProviderAndProfile(
     }
   }
 
-  if (!profileApplicationResult.appliedFromLoadedProfile) {
+  if (
+    finalProvider !== undefined &&
+    !profileApplicationResult.appliedFromLoadedProfile
+  ) {
     try {
       // The preflight's authMode 'none' path swallows the provider-switch error
       // internally (safeActivateProvider does not throw) and surfaces it via
@@ -360,7 +365,7 @@ function hasCliArgumentOverrides(args: BootstrapProfileArgs): boolean {
  */
 async function reapplyCliOverrides(
   input: ReapplyCliOverridesInput,
-  finalProvider: string,
+  finalProvider: string | undefined,
 ): Promise<void> {
   const { config, bootstrapArgs, argv } = input;
   const settingsService = getSettingsService(input);
@@ -378,11 +383,13 @@ async function reapplyCliOverrides(
   })();
 
   if (cliModelOverride) {
-    settingsService.setProviderSetting(
-      finalProvider,
-      'model',
-      cliModelOverride,
-    );
+    if (finalProvider !== undefined) {
+      settingsService.setProviderSetting(
+        finalProvider,
+        'model',
+        cliModelOverride,
+      );
+    }
     config.setModel(cliModelOverride);
     (config as Config & { _cliModelOverride?: string })._cliModelOverride =
       cliModelOverride;

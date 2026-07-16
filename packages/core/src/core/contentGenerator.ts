@@ -19,7 +19,7 @@ import type {
   EmbedContentRequest,
   EmbedContentResult,
 } from '../llm-types/index.js';
-import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
+import { PLACEHOLDER_MODEL } from '../config/models.js';
 import type { Config } from '../config/config.js';
 /**
  * @plan:PLAN-20260603-ISSUE1584.P05
@@ -103,8 +103,9 @@ export function createContentGeneratorConfig(
   );
   const googleCloudLocation = process.env.GOOGLE_CLOUD_LOCATION ?? undefined;
 
-  // Use runtime model from config if available; otherwise, fall back to parameter or default
-  const effectiveModel = config.getModel() || DEFAULT_GEMINI_MODEL;
+  // No implicit Gemini model fallback: when no model is configured, use the
+  // placeholder sentinel so the unconfigured state is observable.
+  const effectiveModel = config.getModel() || PLACEHOLDER_MODEL;
 
   const contentGeneratorConfig: ContentGeneratorConfig = {
     model: effectiveModel,

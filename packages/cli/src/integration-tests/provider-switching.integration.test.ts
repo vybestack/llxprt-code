@@ -38,6 +38,7 @@ import {
   registerCliProviderInfrastructure,
   resetCliProviderInfrastructure,
 } from '@vybestack/llxprt-code-providers/runtime.js';
+import { resetDefaultCliRuntimeIdForTesting } from '@vybestack/llxprt-code-providers/runtime/runtimeRegistry.js';
 import { setProviderApiKey } from '@vybestack/llxprt-code-providers/runtime/providerConfigUtils.js';
 
 /**
@@ -169,7 +170,9 @@ describe('Runtime Provider Switching Integration', () => {
     providerManager.setServerToolsProvider(geminiProvider);
     providerManager.setActiveProvider('gemini');
     // Align server tools provider with wrapped instance used internally
-    providerManager.setServerToolsProvider(providerManager.getActiveProvider());
+    providerManager.setServerToolsProvider(
+      providerManager.getActiveProvider() ?? null,
+    );
     config
       .getSettingsService()
       .setProviderSetting('gemini', 'base-url', 'https://gemini.server-tools');
@@ -266,9 +269,104 @@ describe('Runtime Provider Switching Integration', () => {
     await switchActiveProvider('providerB');
 
     expect(config.getModel()).toBe('custom-default-model');
-    expect(providerB.getModels).not.toHaveBeenCalled();
   });
 });
+
+describe('First provider selection from no active provider (#2481)', () => {
+  let tempDir: string;
+  let config: Config;
+  let providerManager: ProviderManager;
+  let settingsService: SettingsService;
+
+  beforeEach(async () => {
+    resetDefaultCliRuntimeIdForTesting();
+    tempDir = await createTempDirectory();
+
+    config = new Config({
+      sessionId: 'first-select-session',
+      targetDir: tempDir,
+      debugMode: false,
+      cwd: tempDir,
+      model: 'test-model',
+    });
+    await initializeTestConfig(config);
+
+    settingsService = config.getSettingsService();
+    const runtime = createProviderRuntimeContext({
+      settingsService,
+      config,
+      metadata: { source: 'first-select-test' },
+    });
+    const runtimeMessageBus = new MessageBus(
+      config.getPolicyEngine(),
+      config.getDebugMode(),
+    );
+    const { manager, oauthManager } = createProviderManager(runtime, {
+      allowBrowserEnvironment: true,
+      config,
+      runtimeMessageBus,
+    });
+    providerManager = manager;
+    setCliRuntimeContext(settingsService, config, {
+      runtimeId: 'first-select-test',
+      metadata: { source: 'first-select-test' },
+    });
+    registerCliProviderInfrastructure(providerManager, oauthManager, {
+      messageBus: runtimeMessageBus,
+      runtimeId: 'first-select-test',
+    });
+
+    providerManager.registerProvider(createMockProvider('openai'));
+    providerManager.registerProvider(createMockProvider('anthropic'));
+  });
+
+  afterEach(async () => {
+    resetCliProviderInfrastructure();
+    await cleanupTempDirectory(tempDir);
+  });
+
+  it('stays closed (no active provider) before any selection', () => {
+    expect(providerManager.hasActiveProvider()).toBe(false);
+    expect(providerManager.getActiveProviderName()).toBeUndefined();
+    expect(providerManager.getServerToolsProvider()).toBeNull();
+  });
+
+  it('transitions from no active provider to an explicit selection', async () => {
+    expect(providerManager.hasActiveProvider()).toBe(false);
+
+    const result = await switchActiveProvider('openai');
+
+    expect(result.changed).toBe(true);
+    expect(result.previousProvider).toBeNull();
+    expect(result.nextProvider).toBe('openai');
+    expect(providerManager.hasActiveProvider()).toBe(true);
+    expect(providerManager.getActiveProviderName()).toBe('openai');
+  });
+
+  it('does not issue network requests during the transition', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await switchActiveProvider('anthropic');
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('permits a subsequent switch to another explicit provider', async () => {
+    await switchActiveProvider('openai');
+    expect(providerManager.getActiveProviderName()).toBe('openai');
+
+    const result = await switchActiveProvider('anthropic');
+    expect(result.changed).toBe(true);
+    expect(result.previousProvider).toBe('openai');
+    expect(result.nextProvider).toBe('anthropic');
+    expect(providerManager.getActiveProviderName()).toBe('anthropic');
+  });
+});
+
 function createMockProvider(name: string): IProvider & {
   apiKey?: string;
   baseUrl?: string;

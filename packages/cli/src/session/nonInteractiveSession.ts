@@ -216,6 +216,7 @@ async function runNonInteractiveSession({
       settings.merged.useExternalAuth,
       config,
       settings,
+      runExitCleanup,
     );
   } catch (error) {
     // validateNonInteractiveAuth reports its own auth errors (and calls

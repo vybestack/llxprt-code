@@ -139,7 +139,7 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)('should handle errors for invalid provider', () => {
       // Try to set non-existent provider
       expect(() => manager.setActiveProvider('invalid-provider')).toThrow(
-        'Provider not found',
+        /Provider .* not found/,
       );
     });
   });

@@ -4,4 +4,4 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export { PLACEHOLDER_MODEL } from '../constants.js';
+export { PLACEHOLDER_MODEL, UNCONFIGURED_PROVIDER } from '../constants.js';

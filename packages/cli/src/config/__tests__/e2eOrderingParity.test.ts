@@ -479,7 +479,7 @@ describe('e2eOrderingParity: step ordering constraints', () => {
   });
 
   it('setCliRuntimeContext happens before switchActiveProvider', async () => {
-    await runConfig({});
+    await runConfig({}, ['--provider', 'gemini']);
     const entries = callLog.entries;
     const setIdx = entries.indexOf('setCliRuntimeContext');
     const switchIdx = entries.findIndex((c) =>
@@ -501,7 +501,7 @@ describe('e2eOrderingParity: step ordering constraints', () => {
   });
 
   it('switchActiveProvider is called exactly once', async () => {
-    await runConfig({});
+    await runConfig({}, ['--provider', 'gemini']);
     const switchCalls = callLog.entries.filter((c) =>
       c.startsWith('switchActiveProvider:'),
     );
@@ -570,7 +570,12 @@ describe('e2eOrderingParity: full precedence chain end-to-end', () => {
   });
 
   it('CLI --model is set on config and survives the provider switch', async () => {
-    const config = await runConfig({}, ['--model', 'cli-override-model']);
+    const config = await runConfig({}, [
+      '--provider',
+      'gemini',
+      '--model',
+      'cli-override-model',
+    ]);
     expect(config.getModel()).toBe('cli-override-model');
     expect(
       callLog.entries.some((c) => c.startsWith('switchActiveProvider:')),

@@ -171,7 +171,7 @@ describe('CLI provider manager creation uses concrete providers', () => {
         // The active provider is wrapped for logging, but it must expose
         // FakeProvider behavior registered from the providers package.
         const provider = manager.getActiveProvider();
-        expect(provider.name).toBe('fake');
+        expect(provider?.name).toBe('fake');
       } finally {
         if (originalEnv === undefined) {
           delete process.env.LLXPRT_FAKE_RESPONSES;

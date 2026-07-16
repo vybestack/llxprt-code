@@ -31,7 +31,10 @@ function createStubProvider(name: string): IProvider {
 
 describe('ProviderManager runtime context', () => {
   afterEach(() => {
-    const fallback = createProviderRuntimeContext();
+    const fallback = createProviderRuntimeContext({
+      settingsService: new SettingsService(),
+      runtimeId: 'fallback-context',
+    });
     setActiveProviderRuntimeContext(fallback);
   });
 
@@ -47,10 +50,11 @@ describe('ProviderManager runtime context', () => {
     const provider = createStubProvider('stub-provider');
 
     manager.registerProvider(provider);
+    manager.setActiveProvider('stub-provider');
 
     expect(settingsService.get('activeProvider')).toBe('stub-provider');
     expect(manager.getActiveProvider()).toBeDefined();
-    expect(manager.getActiveProvider().name).toBe('stub-provider');
+    expect(manager.getActiveProvider()?.name).toBe('stub-provider');
   });
 
   it('requires an explicit runtime and never reads ambient global state (issue #2300)', () => {
@@ -89,11 +93,12 @@ describe('ProviderManager runtime context', () => {
 
     const manager = new ProviderManager(runtime);
     manager.registerProvider(createStubProvider('explicit-provider'));
+    manager.setActiveProvider('explicit-provider');
 
     // The active provider is written to the EXPLICIT settings service, and the
     // ambient one is left untouched.
     expect(explicitSettings.get('activeProvider')).toBe('explicit-provider');
     expect(ambientSettings.get('activeProvider')).toBeUndefined();
-    expect(manager.getActiveProvider().name).toBe('explicit-provider');
+    expect(manager.getActiveProvider()?.name).toBe('explicit-provider');
   });
 });

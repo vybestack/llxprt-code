@@ -56,7 +56,7 @@ describe('Provider Switching Integration', () => {
 
     manager.clearActiveProvider();
     expect(manager.hasActiveProvider()).toBe(false);
-    expect(manager.getActiveProviderName()).toBe('');
+    expect(manager.getActiveProviderName()).toBeUndefined();
   });
 
   it('maintains custom providers in list without auto-registering gemini', () => {

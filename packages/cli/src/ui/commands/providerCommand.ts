@@ -30,6 +30,7 @@ import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
 import type { AgentProviderSwitchResult } from '@vybestack/llxprt-code-agents';
+import { UNCONFIGURED_PROVIDER } from '@vybestack/llxprt-code-core';
 import {
   getOptionalString,
   hasFunction,
@@ -157,6 +158,62 @@ function buildAliasConfig(
   return aliasConfig;
 }
 
+/**
+ * Reserved alias names that cannot be used for user-saved provider aliases.
+ * These are internal sentinel identities that must not collide with real
+ * provider names.
+ */
+const RESERVED_ALIAS_NAMES: ReadonlySet<string> = new Set([
+  UNCONFIGURED_PROVIDER,
+]);
+
+function validateAliasName(alias: string): string | null {
+  if (!alias) {
+    return 'Alias name is required. Usage: /provider save <alias>';
+  }
+  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(alias)) {
+    return "Alias names may contain letters, numbers, '.', '_' or '-' and must start with a letter or number.";
+  }
+  if (RESERVED_ALIAS_NAMES.has(alias.toLowerCase())) {
+    return `'${alias}' is a reserved name and cannot be used as a provider alias.`;
+  }
+  return null;
+}
+
+type AliasResolveResult =
+  | { ok: true; provider: IProvider }
+  | { ok: false; content: string };
+
+function resolveActiveProviderForAlias(
+  providerManager: ReturnType<typeof getProviderManager>,
+): AliasResolveResult {
+  try {
+    const provider = providerManager.getActiveProvider();
+    if (provider === undefined) {
+      return {
+        ok: false,
+        content: 'No active provider set. Use /setup to configure a provider.',
+      };
+    }
+    return { ok: true, provider };
+  } catch (error) {
+    return {
+      ok: false,
+      content: `Failed to determine active provider: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
+}
+
+function resolveAliasConfigBaseUrl(
+  config: NonNullable<CommandContext['services']['config']>,
+): string | undefined {
+  return typeof config.getEphemeralSetting === 'function'
+    ? (config.getEphemeralSetting('base-url') as string | undefined)
+    : undefined;
+}
+
 async function handleSaveAlias(
   providerManager: ReturnType<typeof getProviderManager>,
   context: CommandContext,
@@ -164,21 +221,9 @@ async function handleSaveAlias(
 ): Promise<MessageActionReturn> {
   const alias = rawArgs.replace(/^save\b\s*/i, '').trim();
 
-  if (!alias) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: 'Alias name is required. Usage: /provider save <alias>',
-    };
-  }
-
-  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(alias)) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content:
-        "Alias names may contain letters, numbers, '.', '_' or '-' and must start with a letter or number.",
-    };
+  const validationError = validateAliasName(alias);
+  if (validationError) {
+    return { type: 'message', messageType: 'error', content: validationError };
   }
 
   const config = context.services.config;
@@ -190,25 +235,17 @@ async function handleSaveAlias(
     };
   }
 
-  let activeProvider: IProvider;
-  try {
-    activeProvider = providerManager.getActiveProvider();
-  } catch (error) {
+  const resolveResult = resolveActiveProviderForAlias(providerManager);
+  if (!resolveResult.ok) {
     return {
       type: 'message',
       messageType: 'error',
-      content: `Failed to determine active provider: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      content: resolveResult.content,
     };
   }
 
-  const configBaseUrl =
-    typeof config.getEphemeralSetting === 'function'
-      ? (config.getEphemeralSetting('base-url') as string | undefined)
-      : undefined;
-
-  const aliasConfig = buildAliasConfig(activeProvider, configBaseUrl);
+  const configBaseUrl = resolveAliasConfigBaseUrl(config);
+  const aliasConfig = buildAliasConfig(resolveResult.provider, configBaseUrl);
   if (!aliasConfig) {
     return {
       type: 'message',
@@ -243,10 +280,11 @@ function resolveCurrentProvider(
   providerManager: ReturnType<typeof getProviderManager>,
 ): string | null {
   try {
-    return runtime.getActiveProviderName();
+    const name = runtime.getActiveProviderName();
+    return name;
   } catch {
     try {
-      return providerManager.getActiveProviderName();
+      return providerManager.getActiveProviderName() ?? null;
     } catch {
       return null;
     }

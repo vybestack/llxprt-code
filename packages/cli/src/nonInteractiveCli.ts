@@ -7,6 +7,7 @@
 import {
   type Config,
   parseAndFormatApiError,
+  ExitCodes,
   FatalInputError,
   EmojiFilter,
   OutputFormat,
@@ -52,6 +53,10 @@ import {
   resolveContentPrefixIdentity,
   createCliModelIdentityRuntime,
 } from './ui/utils/modelIdentity.js';
+import {
+  isProviderConfigured,
+  reportUnconfiguredProviderError,
+} from './unconfiguredProviderGuard.js';
 
 interface RunNonInteractiveParams {
   config: Config;
@@ -387,12 +392,17 @@ function buildNonInteractiveActivationIntent(
   const resolvedModel =
     bootstrapArgs?.modelOverride ??
     (configModel !== PLACEHOLDER_MODEL ? configModel : undefined);
+  const configProvider =
+    params.config.getProvider() ?? bootstrapArgs?.providerOverride ?? undefined;
+  const activeProvider =
+    configProvider === undefined
+      ? params.config.getProviderManager()?.getActiveProviderName()
+      : undefined;
   return {
-    provider:
-      params.config.getProvider() ??
-      bootstrapArgs?.providerOverride ??
-      undefined,
-    defaultProvider: 'gemini',
+    ...(configProvider !== undefined ? { provider: configProvider } : {}),
+    ...(activeProvider !== undefined
+      ? { defaultProvider: activeProvider }
+      : {}),
     authMode: useExternalAuth ? 'none' : 'auto',
     ...(typeof resolvedModel === 'string' && resolvedModel.trim().length > 0
       ? { model: resolvedModel.trim() }
@@ -485,6 +495,12 @@ export async function runNonInteractive(
   params: RunNonInteractiveParams,
 ): Promise<void> {
   const { config, deferTelemetryShutdown = false } = params;
+
+  if (!isProviderConfigured(config)) {
+    reportUnconfiguredProviderError(config);
+    process.exit(ExitCodes.FATAL_CONFIG_ERROR);
+  }
+
   const outputFormat = config.getOutputFormat();
   const jsonOutput = outputFormat === OutputFormat.JSON;
   const streamJsonOutput = outputFormat === OutputFormat.STREAM_JSON;

@@ -18,7 +18,7 @@ export interface ProfileRuntimeApplicationInput {
   readonly bootstrapArgs: BootstrapProfileArgs;
   readonly argv: CliArgs;
   readonly finalModel: string;
-  readonly finalProvider: string;
+  readonly finalProvider: string | undefined;
   readonly profileWarnings: readonly string[];
 }
 
@@ -34,7 +34,7 @@ export interface ProfileRuntimeApplicationResult {
   readonly resolvedProviderAfterProfile: string | undefined;
   readonly resolvedModelAfterProfile: string | undefined;
   readonly resolvedBaseUrlAfterProfile: string | undefined;
-  readonly resolvedFinalProvider: string;
+  readonly resolvedFinalProvider: string | undefined;
   readonly profileWarnings: readonly string[];
   readonly appliedFromLoadedProfile: boolean;
 }
@@ -85,9 +85,9 @@ async function applyProfileSnapshotAndCollect(
   profile: Profile,
   profileName: string,
   mutableWarnings: string[],
-  finalProvider: string,
+  finalProvider: string | undefined,
   appliedFromLoadedProfile: boolean,
-): Promise<SnapshotLocalState & { resolvedFinalProvider: string }> {
+): Promise<SnapshotLocalState & { resolvedFinalProvider: string | undefined }> {
   const snapshotResult = await applyProfileSnapshot(profile, {
     profileName,
   });
@@ -118,7 +118,7 @@ async function applyProfileSnapshotAndCollect(
 async function resolveAndApplyProfile(
   input: ProfileRuntimeApplicationInput,
   mutableWarnings: string[],
-): Promise<SnapshotLocalState & { resolvedFinalProvider: string }> {
+): Promise<SnapshotLocalState & { resolvedFinalProvider: string | undefined }> {
   const {
     loadedProfile,
     profileToLoad,

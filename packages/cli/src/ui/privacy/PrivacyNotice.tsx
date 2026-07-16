@@ -8,6 +8,7 @@ import { Box } from 'ink';
 
 import { GeminiPrivacyNotice } from './GeminiPrivacyNotice.js';
 import { MultiProviderPrivacyNotice } from './MultiProviderPrivacyNotice.js';
+import { UnconfiguredPrivacyNotice } from './UnconfiguredPrivacyNotice.js';
 import type { ModelState } from '../cliUiRuntime.js';
 
 interface PrivacyNoticeProps {
@@ -38,8 +39,13 @@ const PrivacyNoticeText = ({
     }
   }
 
+  // No active provider: show neutral setup notice
+  if (!activeProvider) {
+    return <UnconfiguredPrivacyNotice onExit={onExit} />;
+  }
+
   // If we have a non-Gemini provider active, show its specific notice
-  if (activeProvider && activeProvider.name !== 'gemini') {
+  if (activeProvider.name !== 'gemini') {
     return (
       <MultiProviderPrivacyNotice
         providerName={activeProvider.name}
@@ -48,7 +54,7 @@ const PrivacyNoticeText = ({
     );
   }
 
-  // Default to Gemini privacy notice (covers OAuth, API key, Vertex AI)
+  // Gemini is the explicit active provider
   return <GeminiPrivacyNotice onExit={onExit} />;
 };
 

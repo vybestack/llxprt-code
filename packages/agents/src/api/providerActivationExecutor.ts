@@ -315,6 +315,10 @@ async function executeAuto(
 /**
  * No-provider branch: switch to the manager's active provider or the intent's
  * defaultProvider, refreshAuth(), swallow errors. NOT a fatal failure.
+ *
+ * When neither defaultProvider nor an active provider exists, the system is
+ * unconfigured: no provider switch or auth refresh occurs, and the result
+ * reflects absence rather than an implicit fallback to a hosted provider.
  */
 async function executeAutoNoProvider(
   config: Config,
@@ -322,7 +326,15 @@ async function executeAutoNoProvider(
 ): Promise<ProviderActivationResult> {
   const manager = config.getProviderManager();
   const fallbackDefault =
-    intent.defaultProvider ?? manager?.getActiveProviderName() ?? 'gemini';
+    intent.defaultProvider ?? manager?.getActiveProviderName();
+
+  if (fallbackDefault === undefined) {
+    return {
+      authFailed: false,
+      infoMessages: [],
+    };
+  }
+
   try {
     await switchActiveProvider(fallbackDefault);
     await config.refreshAuth();

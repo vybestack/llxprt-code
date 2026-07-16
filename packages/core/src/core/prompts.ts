@@ -18,6 +18,7 @@ import {
   getProjectCoreMemoryFilePath,
 } from '@vybestack/llxprt-code-tools';
 import { tildeifyPath } from '../utils/paths.js';
+import { UNCONFIGURED_PROVIDER, PLACEHOLDER_MODEL } from '../config/models.js';
 import type {
   PromptContext,
   PromptEnvironment,
@@ -373,14 +374,16 @@ function resolveEnabledTools(tools?: string[]): string[] {
 
 function resolveProvider(provider?: string): string {
   let resolvedProvider =
-    provider !== undefined && provider !== '' ? provider : 'gemini';
+    provider !== undefined && provider !== ''
+      ? provider
+      : UNCONFIGURED_PROVIDER;
   if (!provider) {
     try {
       const settingsService = getRuntimeSettingsService();
       const activeProvider = settingsService.get('activeProvider') as string;
       if (activeProvider) resolvedProvider = activeProvider;
     } catch {
-      // Settings unavailable (e.g., during tests); use default provider.
+      // Settings unavailable (e.g., during tests); use neutral sentinel.
     }
   }
   return resolvedProvider;
@@ -441,7 +444,7 @@ async function buildPromptContext(
 
   return {
     provider: resolvedProvider,
-    model: model !== undefined && model !== '' ? model : 'gemini-1.5-pro',
+    model: model !== undefined && model !== '' ? model : PLACEHOLDER_MODEL,
     enabledTools,
     environment,
     enableToolPrompts,

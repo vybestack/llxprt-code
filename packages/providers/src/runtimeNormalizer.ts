@@ -91,7 +91,7 @@ function unwrapProvider(
 }
 
 export interface RuntimeNormalizerDeps {
-  getActiveProviderName: () => string;
+  getActiveProviderName: () => string | undefined;
   getProvider: (name: string) => IProvider | undefined;
 }
 
@@ -112,6 +112,17 @@ export function normalizeRuntimeInputs(
     rawOptions,
     runtimeId,
   );
+
+  if (targetProvider === undefined) {
+    throw new ProviderRuntimeNormalizationError({
+      providerKey: 'ProviderManager',
+      message: `No provider is active or targeted for runtimeId=${runtimeId}. Set an explicit provider via options or activate one on the manager.`,
+      requirement: 'REQ-SP4-003',
+      runtimeId,
+      stage: 'normalizeRuntimeInputs',
+      metadata: { missingFields: ['provider'] },
+    });
+  }
 
   const resolved = resolveFields(
     rawOptions,

@@ -48,8 +48,12 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
 }
 
 import { parseArguments } from './config/cliArgParser.js';
-import { loadSettings } from './config/settings.js';
-import { patchStdio, ExitCodes } from '@vybestack/llxprt-code-core';
+import { loadSettings, type LoadedSettings } from './config/settings.js';
+import {
+  type Config,
+  patchStdio,
+  ExitCodes,
+} from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import {
@@ -74,13 +78,16 @@ import {
   redirectConsoleForAcp,
   rejectPromptInteractiveWithPipedStdin,
   throwIfSettingsErrors,
+  type ParsedCliArgs,
 } from './cliBootstrap.js';
 import {
   activateConfiguredProvider,
   configureProvidersAndServices,
   connectIdeClientIfEnabled,
   ensureAcpProviderActivated,
+  type ConfiguredProviderActivationResult,
 } from './cliProviderInit.js';
+import { guardUnconfiguredProvider } from './unconfiguredProviderGuard.js';
 import {
   constructAgentWithSpinner,
   prepareTerminalSession,
@@ -144,6 +151,61 @@ function setupProcessLifecycle(): () => void {
     mkdirSync(llxprtDir, { recursive: true });
   }
   return cleanupStdio;
+}
+
+/**
+ * Zed/ACP runs its own runtime; it constructs per-session Agents via fromConfig
+ * internally, so the foreground Agent is NOT built in the main flow. Returns
+ * true when the Zed/ACP path was taken (main should return immediately).
+ */
+async function handleZedAcpIntegration(
+  config: Config,
+  settings: LoadedSettings,
+  cleanupStdio: () => void,
+): Promise<boolean> {
+  if (!config.getExperimentalZedIntegration()) {
+    return false;
+  }
+  cleanupStdio();
+  ensureAcpProviderActivated(config);
+  await runZedIntegration(config, settings);
+  return true;
+}
+
+/**
+ * Construct the SINGLE foreground Agent (#2378) and dispatch the interactive or
+ * non-interactive session. The spinner wraps agent construction, which (via
+ * fromConfig) owns Config.initialize() and the one session MessageBus. IDE
+ * connection and session recording run AFTER because they depend on the
+ * initialize() the Agent performs.
+ */
+async function constructForegroundAgentAndDispatch(
+  config: Config,
+  settings: LoadedSettings,
+  argv: ParsedCliArgs,
+  workspaceRoot: string,
+  providerActivation: ConfiguredProviderActivationResult,
+  hasPipedInput: boolean,
+  readStdinData: () => Promise<string>,
+): Promise<void> {
+  const agent = await constructAgentWithSpinner(
+    config,
+    providerActivation.token,
+    providerActivation.intent,
+  );
+  await connectIdeClientIfEnabled(config);
+
+  const recording = await setupSessionRecording(config, argv);
+
+  await dispatchInteractiveOrNonInteractive({
+    config,
+    agent,
+    settings,
+    workspaceRoot,
+    recording,
+    hasPipedInput,
+    readStdinData,
+  });
 }
 
 /**
@@ -230,6 +292,13 @@ export async function main() {
     process.exit(0);
   }
 
+  // Non-interactive unconfigured-provider gate: when no provider is
+  // active and we are NOT in interactive mode, exit FATAL_CONFIG_ERROR (52)
+  // BEFORE any provider activation or Agent construction. The interactive path
+  // falls through to guidance in the UI. Uses the shared
+  // guardUnconfiguredProvider helper (single message, single exit code).
+  await guardUnconfiguredProvider(config, runExitCleanup);
+
   // Declarative provider-activation PREFLIGHT runs PRE-AGENT (#2374/#2378): the
   // sandbox-hop decision and the FATAL_AUTHENTICATION_ERROR exit both need the
   // auth outcome BEFORE the Agent is constructed. activateConfiguredProvider
@@ -267,37 +336,17 @@ export async function main() {
   // Cleanup sessions before agent construction.
   await cleanupExpiredSessions(config, settings.merged);
 
-  // Zed/ACP runs its own runtime; it constructs per-session Agents via
-  // fromConfig internally, so the foreground Agent is NOT built here.
-  if (config.getExperimentalZedIntegration()) {
-    // Restore real stdout/stderr — ACP uses stdout as its protocol pipe
-    cleanupStdio();
-    ensureAcpProviderActivated(config);
-    await runZedIntegration(config, settings);
+  if (await handleZedAcpIntegration(config, settings, cleanupStdio)) {
     return;
   }
 
-  // Construct the SINGLE foreground Agent (#2378). The spinner wraps agent
-  // construction, which (via fromConfig) owns Config.initialize() and the one
-  // session MessageBus. IDE connection and session recording run AFTER because
-  // they depend on the initialize() the Agent performs (ideClient, agentClient
-  // for history restore).
-  const agent = await constructAgentWithSpinner(
+  await constructForegroundAgentAndDispatch(
     config,
-    providerActivation.token,
-    providerActivation.intent,
-  );
-  await connectIdeClientIfEnabled(config);
-
-  const recording = await setupSessionRecording(config, argv);
-
-  await dispatchInteractiveOrNonInteractive({
-    config,
-    agent,
     settings,
+    argv,
     workspaceRoot,
-    recording,
+    providerActivation,
     hasPipedInput,
-    readStdinData: readStdinOnce,
-  });
+    readStdinOnce,
+  );
 }

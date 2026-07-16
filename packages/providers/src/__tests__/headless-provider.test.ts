@@ -103,7 +103,7 @@ describe('headless provider-manager construction (issue #1594)', () => {
       createHeadlessProviderManager({
         provider: 'this-provider-does-not-exist',
       }),
-    ).toThrow('Provider not found');
+    ).toThrow(/Provider .* not found/);
   });
 
   it('applies the model option to the active provider', () => {

@@ -347,12 +347,13 @@ describe('providerModelPrecedenceParity: 4-level provider chain', () => {
     clearActiveProviderRuntimeContext();
   });
 
-  it('level 4 fallback: no CLI/profile/env → defaults to gemini', async () => {
+  it('level 4 fallback: no CLI/profile/env → no implicit provider (#2481)', async () => {
+    delete process.env.LLXPRT_DEFAULT_MODEL;
     const config = await runConfig({});
-    expect(config.getProvider()).toBe('gemini');
+    expect(config.getProvider()).toBeUndefined();
   });
 
-  it('level 3: LLXPRT_DEFAULT_PROVIDER env overrides gemini default', async () => {
+  it('level 3: LLXPRT_DEFAULT_PROVIDER env sets the provider', async () => {
     vi.stubEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
     const config = await runConfig({});
     expect(config.getProvider()).toBe('anthropic');
@@ -364,7 +365,7 @@ describe('providerModelPrecedenceParity: 4-level provider chain', () => {
     expect(config.getProvider()).toBe('openai');
   });
 
-  it('level 1: CLI --provider beats env and gemini default', async () => {
+  it('level 1: CLI --provider beats env', async () => {
     const config = await runConfig({}, ['--provider', 'openai']);
     expect(config.getProvider()).toBe('openai');
   });
@@ -399,8 +400,14 @@ describe('providerModelPrecedenceParity: 6-level model chain', () => {
     clearActiveProviderRuntimeContext();
   });
 
-  it('level 6 fallback: no override → DEFAULT_GEMINI_MODEL for gemini provider', async () => {
+  it('level 6 fallback: no provider → empty model (#2481)', async () => {
     const config = await runConfig({});
+    expect(config.getModel()).toBe('');
+  });
+
+  it('level 6 fallback: explicit gemini provider → DEFAULT_GEMINI_MODEL', async () => {
+    const config = await runConfig({}, ['--provider', 'gemini']);
+    expect(config.getProvider()).toBe('gemini');
     expect(config.getModel()).toBe(DEFAULT_GEMINI_MODEL);
   });
 
