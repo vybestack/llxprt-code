@@ -1,15 +1,20 @@
 /**
- * Bun native-module smoke harness (issue 2239, S2).
+ * Bun native-module smoke harness (issue 2239, S2; issue 2301 Windows).
  *
  * Verifies that the native modules the CLI depends on load and operate under
- * the Bun runtime on POSIX:
+ * the Bun runtime on the current platform:
  *
  * - @ast-grep/napi — native AST engine (parse a TS snippet)
  * - @napi-rs/keyring — native OS credential store (construct-only; no I/O)
  * - web-tree-sitter + tree-sitter-bash WASM — shell parser (parse a command)
- * - Bun.Terminal PTY adapter — the bun-pty seam (spawn, stream data, real exit)
+ * - @lydell/node-pty — Windows ConPTY spawn/data/exit (Windows-only)
+ * - Bun.Terminal PTY adapter — the bun-pty seam (spawn, stream data, real exit;
+ *   POSIX-only — skipped on Windows)
  *
- * Each check prints [PASS] or [FAIL]. Exits non-zero if any check fails.
+ * Each check prints [PASS], [FAIL], or [SKIP]. Exits non-zero if any check
+ * fails. Platform-inappropriate checks are skipped:
+ * - On Windows, the Bun.Terminal PTY adapter is skipped (POSIX-only).
+ * - On POSIX, the @lydell/node-pty ConPTY check is skipped (Windows-only).
  *
  * Usage: bun scripts/bun-native-modules-smoke.mjs
  */
@@ -28,11 +33,18 @@ if (!isBun) {
 }
 
 const isPosix = process.platform !== 'win32';
+const isWindows = process.platform === 'win32';
 let skippedChecks = 0;
 if (!isPosix) {
   skippedChecks += 1;
   console.log(
     '[SKIP] Bun.Terminal PTY adapter is POSIX-only; native module checks still run on Windows.',
+  );
+}
+if (!isWindows) {
+  skippedChecks += 1;
+  console.log(
+    '[SKIP] @lydell/node-pty ConPTY check is Windows-only; native module checks still run on POSIX.',
   );
 }
 
@@ -140,7 +152,76 @@ async function checkTreeSitter() {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Bun.Terminal PTY adapter (the bun-pty seam)
+// 4. @lydell/node-pty (Windows ConPTY path; Windows-only)
+// ---------------------------------------------------------------------------
+const NODE_PTY_TIMEOUT_MS = 10000;
+
+async function checkNodePty() {
+  if (!isWindows) {
+    return;
+  }
+  let ptyProcess;
+  try {
+    const nodePty = await import('@lydell/node-pty');
+    const spawn = nodePty.default?.spawn ?? nodePty.spawn;
+
+    let output = '';
+    const exitPromise = createExitPromise(NODE_PTY_TIMEOUT_MS);
+
+    ptyProcess = spawn(
+      process.env.COMSPEC ?? 'cmd.exe',
+      ['/c', 'echo node-pty-conpty-smoke-ok'],
+      {
+        cols: 80,
+        rows: 24,
+        name: 'xterm-256color',
+      },
+    );
+
+    if (typeof ptyProcess.pid !== 'number' || ptyProcess.pid <= 0) {
+      throw new Error(`invalid pid: ${ptyProcess.pid}`);
+    }
+
+    ptyProcess.onData((data) => {
+      output += data;
+    });
+
+    ptyProcess.onExit((exitInfo) => {
+      exitPromise.resolve(exitInfo);
+    });
+
+    const exitInfo = await exitPromise.promise;
+
+    if (!exitInfo) {
+      throw new Error('timeout waiting for ConPTY exit');
+    }
+
+    if (exitInfo.exitCode !== 0) {
+      throw new Error(`expected exit code 0, got ${exitInfo.exitCode}`);
+    }
+
+    if (!output.includes('node-pty-conpty-smoke-ok')) {
+      throw new Error(
+        `expected output to contain "node-pty-conpty-smoke-ok", got: ${JSON.stringify(output)}`,
+      );
+    }
+
+    pass('@lydell/node-pty ConPTY: spawn, stream data, real exit code');
+  } catch (e) {
+    fail('@lydell/node-pty ConPTY', e);
+  } finally {
+    if (ptyProcess) {
+      try {
+        ptyProcess.kill();
+      } catch {
+        // Process may already have exited.
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5. Bun.Terminal PTY adapter (the bun-pty seam; POSIX-only)
 // ---------------------------------------------------------------------------
 async function checkBunPty() {
   if (!isPosix) {
@@ -209,6 +290,7 @@ async function checkBunPty() {
 await checkAstGrep();
 await checkKeyring();
 await checkTreeSitter();
+await checkNodePty();
 await checkBunPty();
 
 if (failures > 0) {
@@ -217,7 +299,7 @@ if (failures > 0) {
 }
 if (skippedChecks > 0) {
   console.log(
-    `\nAll native-module smoke checks passed under Bun (${skippedChecks} POSIX-only check skipped).`,
+    `\nAll native-module smoke checks passed under Bun (${skippedChecks} platform-specific check(s) skipped).`,
   );
 } else {
   console.log('\nAll native-module smoke checks passed under Bun.');

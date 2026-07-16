@@ -309,6 +309,77 @@ jobs:
           RUN_EVALS: '1'
         run: 'npm run test:all_evals'
 
+  windows_bun_native_smoke:
+    name: 'Windows Bun native-modules smoke (Nightly)'
+    runs-on: 'windows-latest'
+    timeout-minutes: 15
+    permissions:
+      contents: 'read'
+    outputs:
+      smoke_output: '${{ steps.capture_smoke.outputs.smoke_output }}'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: 'Set up Node.js'
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
+        with:
+          node-version: '24.x'
+          cache: 'npm'
+
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
+      - name: 'Install dependencies'
+        run: 'npm ci'
+
+      - name: 'Run Bun native-modules smoke'
+        shell: 'bash'
+        run: |
+          SMOKE_OUTPUT_FILE=smoke_output.txt
+          set +e
+          bun scripts/bun-native-modules-smoke.mjs > "${SMOKE_OUTPUT_FILE}" 2>&1
+          SMOKE_EXIT=$?
+          set -e
+          cat "${SMOKE_OUTPUT_FILE}"
+          exit "${SMOKE_EXIT}"
+
+      - name: 'Capture smoke output'
+        if: always()
+        shell: 'bash'
+        id: capture_smoke
+        run: |
+          set -euo pipefail
+          SMOKE_OUTPUT_FILE=smoke_output.txt
+          TRIMMED_OUTPUT_FILE=smoke_output_trimmed.txt
+          # Reserve space below GitHub's 65,536-character issue-body limit for
+          # the affected-job summary, run URL, and Markdown wrapper.
+          MAX_OUTPUT_BYTES=60000
+          HEAD_BYTES=29000
+          TAIL_BYTES=29000
+
+          if [[ ! -f "${SMOKE_OUTPUT_FILE}" ]]; then
+            printf 'smoke_output=\n' >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          BYTE_COUNT="$(wc -c < "${SMOKE_OUTPUT_FILE}" | tr -d '[:space:]')"
+          if [[ "${BYTE_COUNT}" -gt "${MAX_OUTPUT_BYTES}" ]]; then
+            head -c "${HEAD_BYTES}" "${SMOKE_OUTPUT_FILE}" > "${TRIMMED_OUTPUT_FILE}"
+            printf '\n[output truncated: original output was %s bytes; showing first and final %s bytes]\n' \
+              "${BYTE_COUNT}" "${HEAD_BYTES}" >> "${TRIMMED_OUTPUT_FILE}"
+            tail -c "${TAIL_BYTES}" "${SMOKE_OUTPUT_FILE}" >> "${TRIMMED_OUTPUT_FILE}"
+          else
+            cp "${SMOKE_OUTPUT_FILE}" "${TRIMMED_OUTPUT_FILE}"
+          fi
+
+          ENCODED="$(base64 < "${TRIMMED_OUTPUT_FILE}" | tr -d '\r\n')"
+          printf 'smoke_output=%s\n' "${ENCODED}" >> "${GITHUB_OUTPUT}"
+
   notify_failure:
     name: 'Create Issue on Failure'
     runs-on: 'ubuntu-latest'
@@ -317,6 +388,7 @@ jobs:
       - 'windows_ci'
       - 'e2e_full'
       - 'behavioral_evals'
+      - 'windows_bun_native_smoke'
     if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
     permissions:
       issues: 'write'
@@ -328,10 +400,36 @@ jobs:
           WINDOWS_CI_RESULT: '${{ needs.windows_ci.result }}'
           E2E_FULL_RESULT: '${{ needs.e2e_full.result }}'
           BEHAVIORAL_EVALS_RESULT: '${{ needs.behavioral_evals.result }}'
+          WINDOWS_BUN_NATIVE_SMOKE_RESULT: '${{ needs.windows_bun_native_smoke.result }}'
+          SMOKE_OUTPUT_B64: '${{ needs.windows_bun_native_smoke.outputs.smoke_output }}'
         shell: 'bash'
         run: |
           set -euo pipefail
           ISSUE_TITLE="Nightly workflow failed"
+
+          FAILED_JOBS=()
+          [[ "${WINDOWS_CI_RESULT}" =~ ^(failure|cancelled)$ ]] && FAILED_JOBS+=("windows_ci=${WINDOWS_CI_RESULT}")
+          [[ "${E2E_FULL_RESULT}" =~ ^(failure|cancelled)$ ]] && FAILED_JOBS+=("e2e_full=${E2E_FULL_RESULT}")
+          [[ "${BEHAVIORAL_EVALS_RESULT}" =~ ^(failure|cancelled)$ ]] && FAILED_JOBS+=("behavioral_evals=${BEHAVIORAL_EVALS_RESULT}")
+
+          INCLUDE_SMOKE_OUTPUT=false
+          SMOKE_OUTPUT_FILE=smoke_output_decoded.txt
+          : > "${SMOKE_OUTPUT_FILE}"
+          if [[ "${WINDOWS_BUN_NATIVE_SMOKE_RESULT}" =~ ^(failure|cancelled)$ ]]; then
+            FAILED_JOBS+=("windows_bun_native_smoke=${WINDOWS_BUN_NATIVE_SMOKE_RESULT}")
+            INCLUDE_SMOKE_OUTPUT=true
+          fi
+          if [[ "${INCLUDE_SMOKE_OUTPUT}" == true && -n "${SMOKE_OUTPUT_B64}" ]] && \
+            ! printf '%s' "${SMOKE_OUTPUT_B64}" | base64 --decode > "${SMOKE_OUTPUT_FILE}"; then
+            echo "ERROR: Failed to decode Windows Bun smoke output; the transferred job output is malformed." >&2
+            exit 1
+          fi
+
+          if [[ ${#FAILED_JOBS[@]} -eq 0 ]]; then
+            echo "No failed or cancelled jobs detected; nothing to report."
+            exit 0
+          fi
+          FAILED_JOBS_TEXT="${FAILED_JOBS[*]}"
 
           ensure_label() {
             local name="$1"
@@ -363,16 +461,6 @@ jobs:
             echo "Warning: continuing without ci/cd label" >&2
           fi
 
-          FAILED_JOBS=()
-          [[ "${WINDOWS_CI_RESULT}" =~ ^(failure|cancelled)$ ]] && FAILED_JOBS+=("windows_ci=${WINDOWS_CI_RESULT}")
-          [[ "${E2E_FULL_RESULT}" =~ ^(failure|cancelled)$ ]] && FAILED_JOBS+=("e2e_full=${E2E_FULL_RESULT}")
-          [[ "${BEHAVIORAL_EVALS_RESULT}" =~ ^(failure|cancelled)$ ]] && FAILED_JOBS+=("behavioral_evals=${BEHAVIORAL_EVALS_RESULT}")
-          if [[ ${#FAILED_JOBS[@]} -eq 0 ]]; then
-            echo "No failed or cancelled jobs detected; nothing to report."
-            exit 0
-          fi
-          FAILED_JOBS_TEXT="${FAILED_JOBS[*]}"
-
           retry_gh() {
             local attempt
             for attempt in 1 2 3 4; do
@@ -388,6 +476,24 @@ jobs:
             return 1
           }
 
+          build_body_file() {
+            local body_file="$1"
+            local introduction="$2"
+            {
+              printf '%s\n\n' "${introduction}"
+              printf 'Full run: %s\n' "${RUN_URL}"
+              if [[ "${INCLUDE_SMOKE_OUTPUT}" == true ]]; then
+                printf '\n<details><summary>Windows Bun native-modules smoke output</summary>\n\n```text\n'
+                if [[ -s "${SMOKE_OUTPUT_FILE}" ]]; then
+                  cat "${SMOKE_OUTPUT_FILE}"
+                else
+                  printf '(No smoke output was captured.)'
+                fi
+                printf '\n```\n\n</details>\n'
+              fi
+            } > "${body_file}"
+          }
+
           if ! EXISTING_ISSUE="$(
             retry_gh gh issue list \
               --search "\"${ISSUE_TITLE}\" in:title is:issue state:open sort:created-desc" \
@@ -399,25 +505,22 @@ jobs:
             exit 1
           fi
 
+          BODY_FILE=issue_body.md
           if [[ -n "${EXISTING_ISSUE}" ]]; then
+            INTRODUCTION="Nightly workflow failed again on $(date +'%Y-%m-%d'). Affected jobs: ${FAILED_JOBS_TEXT}."
+            build_body_file "${BODY_FILE}" "${INTRODUCTION}"
             retry_gh gh issue comment "${EXISTING_ISSUE}" \
-              --body "Nightly workflow failed again on $(date +'%Y-%m-%d'). Affected jobs: ${FAILED_JOBS_TEXT}. Full run: ${RUN_URL}" || {
+              --body-file "${BODY_FILE}" || {
               echo "ERROR: Failed to comment on existing issue #${EXISTING_ISSUE}" >&2
               exit 1
             }
-          elif [[ ${#LABEL_ARGS[@]} -gt 0 ]]; then
-            retry_gh gh issue create \
-              --title "${ISSUE_TITLE}" \
-              --body "The nightly test workflow failed. Affected jobs: ${FAILED_JOBS_TEXT}. Full run: ${RUN_URL}" \
-              "${LABEL_ARGS[@]}" || {
-              echo "ERROR: Failed to create issue with labels" >&2
-              exit 1
-            }
           else
-            retry_gh gh issue create \
-              --title "${ISSUE_TITLE}" \
-              --body "The nightly test workflow failed. Affected jobs: ${FAILED_JOBS_TEXT}. Full run: ${RUN_URL}" || {
-              echo "ERROR: Failed to create issue without labels" >&2
+            INTRODUCTION="The nightly test workflow failed. Affected jobs: ${FAILED_JOBS_TEXT}."
+            build_body_file "${BODY_FILE}" "${INTRODUCTION}"
+            CREATE_ARGS=(--title "${ISSUE_TITLE}" --body-file "${BODY_FILE}")
+            CREATE_ARGS+=("${LABEL_ARGS[@]}")
+            retry_gh gh issue create "${CREATE_ARGS[@]}" || {
+              echo "ERROR: Failed to create nightly failure issue" >&2
               exit 1
             }
           fi

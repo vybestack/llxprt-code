@@ -813,11 +813,10 @@ describe('.github/workflows/nightly.yml', () => {
     expect(normalizedRun).toContain('No failed or cancelled jobs detected');
     expect(normalizedRun).toContain('retry_gh gh issue create');
     expect(normalizedRun).toContain('--title "${ISSUE_TITLE}"');
-    expect(normalizedRun).toContain('--body');
+    expect(normalizedRun).toContain('--body-file "${BODY_FILE}"');
     expect(normalizedRun).toContain('${FAILED_JOBS_TEXT}');
     expect(normalizedRun).toContain('${RUN_URL}');
-    expect(normalizedRun).toContain('elif [[ ${#LABEL_ARGS[@]} -gt 0 ]]');
-    expect(normalizedRun).toContain('"${LABEL_ARGS[@]}"');
+    expect(normalizedRun).toContain('CREATE_ARGS+=("${LABEL_ARGS[@]}")');
   });
 
   it('updates an existing open nightly failure issue instead of duplicating it', () => {
@@ -854,7 +853,7 @@ describe('.github/workflows/nightly.yml', () => {
       'retry_gh gh issue comment "${EXISTING_ISSUE}"',
     );
     expect(normalizedRun).toContain("$(date +'%Y-%m-%d')");
-    expect(normalizedRun).toContain('Full run: ${RUN_URL}');
+    expect(normalizedRun).toContain('printf \'Full run: %s\\n\' "${RUN_URL}"');
   });
 
   it('runs the failure notification job when a dependency fails or is cancelled', () => {
@@ -870,7 +869,12 @@ describe('.github/workflows/nightly.yml', () => {
   it('makes the failure notification job depend on all nightly test jobs', () => {
     // Keep in sync with .github/workflows/nightly.yml — every non-notify job
     // MUST be listed here, otherwise notify_failure won't fire on its failure.
-    const expectedNeeds = ['windows_ci', 'e2e_full', 'behavioral_evals'];
+    const expectedNeeds = [
+      'windows_ci',
+      'e2e_full',
+      'behavioral_evals',
+      'windows_bun_native_smoke',
+    ];
     const actualNeeds = Array.isArray(notifyFailureJob.needs)
       ? notifyFailureJob.needs
       : [notifyFailureJob.needs];
