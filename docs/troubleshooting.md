@@ -306,6 +306,8 @@ bun run typecheck
 
 On Windows, the `node-pty` module has a known terminal resize race condition (`Cannot resize a pty that has already exited`). The CLI silences this specific error at the process level and uses `@lydell/node-pty` (with `node-pty` as fallback) — **not** the Bun adapter. The `bun-pty` adapter (`packages/core/src/utils/bunPtyAdapter.ts`) is POSIX-only and is not used on Windows. If you encounter terminal sizing or resize issues on Windows, use a compatible terminal emulator; the resize race is in `node-pty` itself, not the Bun runtime.
 
+The `@lydell/node-pty` ConPTY path is verified under Bun on Windows by the nightly native-module smoke. A hosted Windows Server 2025 run passed with Bun 1.3.14, including streamed PTY data and a real zero exit callback, so Bun on Windows continues to use this path. See the [hosted smoke result](https://github.com/vybestack/llxprt-code/actions/runs/29534151672/job/87741315456).
+
 ## See Also
 
 - [Authentication](./cli/authentication.md) — key management, keyring, OAuth

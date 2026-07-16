@@ -396,6 +396,7 @@ jobs:
       - name: 'Create Issue on Failure'
         env:
           GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+          GH_REPO: '${{ github.repository }}'
           RUN_URL: '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
           WINDOWS_CI_RESULT: '${{ needs.windows_ci.result }}'
           E2E_FULL_RESULT: '${{ needs.e2e_full.result }}'
@@ -438,10 +439,10 @@ jobs:
             local existing=""
             local create_err=""
             # Capture stderr in create_err while discarding stdout; redirect order matters.
-            if create_err="$(gh label create "${name}" --color "${color}" --description "${description}" 2>&1 >/dev/null)"; then
+            if create_err="$(gh label create "${name}" --repo "${GH_REPO}" --color "${color}" --description "${description}" 2>&1 >/dev/null)"; then
               return
             fi
-            if ! existing="$(gh label list --search "${name}" --json name --jq ".[] | select(.name == \"${name}\") | .name" 2>&1)"; then
+            if ! existing="$(gh label list --repo "${GH_REPO}" --search "${name}" --json name --jq ".[] | select(.name == \"${name}\") | .name" 2>&1)"; then
               echo "Failed to check for label: ${name}" >&2
               echo "  create error: ${create_err}" >&2
               echo "  list error: ${existing}" >&2
@@ -496,6 +497,7 @@ jobs:
 
           if ! EXISTING_ISSUE="$(
             retry_gh gh issue list \
+              --repo "${GH_REPO}" \
               --search "\"${ISSUE_TITLE}\" in:title is:issue state:open sort:created-desc" \
               --limit 30 \
               --json number,title \
@@ -510,6 +512,7 @@ jobs:
             INTRODUCTION="Nightly workflow failed again on $(date +'%Y-%m-%d'). Affected jobs: ${FAILED_JOBS_TEXT}."
             build_body_file "${BODY_FILE}" "${INTRODUCTION}"
             retry_gh gh issue comment "${EXISTING_ISSUE}" \
+              --repo "${GH_REPO}" \
               --body-file "${BODY_FILE}" || {
               echo "ERROR: Failed to comment on existing issue #${EXISTING_ISSUE}" >&2
               exit 1
@@ -517,7 +520,7 @@ jobs:
           else
             INTRODUCTION="The nightly test workflow failed. Affected jobs: ${FAILED_JOBS_TEXT}."
             build_body_file "${BODY_FILE}" "${INTRODUCTION}"
-            CREATE_ARGS=(--title "${ISSUE_TITLE}" --body-file "${BODY_FILE}")
+            CREATE_ARGS=(--repo "${GH_REPO}" --title "${ISSUE_TITLE}" --body-file "${BODY_FILE}")
             CREATE_ARGS+=("${LABEL_ARGS[@]}")
             retry_gh gh issue create "${CREATE_ARGS[@]}" || {
               echo "ERROR: Failed to create nightly failure issue" >&2

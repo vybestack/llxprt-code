@@ -161,6 +161,7 @@ async function checkNodePty() {
     return;
   }
   let ptyProcess;
+  let didExit = false;
   try {
     const nodePty = await import('@lydell/node-pty');
     const spawn = nodePty.default?.spawn ?? nodePty.spawn;
@@ -187,6 +188,7 @@ async function checkNodePty() {
     });
 
     ptyProcess.onExit((exitInfo) => {
+      didExit = true;
       exitPromise.resolve(exitInfo);
     });
 
@@ -210,7 +212,7 @@ async function checkNodePty() {
   } catch (e) {
     fail('@lydell/node-pty ConPTY', e);
   } finally {
-    if (ptyProcess) {
+    if (ptyProcess && !didExit) {
       try {
         ptyProcess.kill();
       } catch {

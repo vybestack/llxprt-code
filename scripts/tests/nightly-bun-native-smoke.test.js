@@ -117,6 +117,7 @@ describe('nightly Windows Bun native-module smoke', () => {
     expect(needs).toContain('windows_bun_native_smoke');
     expect(notifyJob.permissions).toEqual({ issues: 'write' });
     expect(notifyStep.env?.GH_TOKEN).toBe('${{ secrets.GITHUB_TOKEN }}');
+    expect(notifyStep.env?.GH_REPO).toBe('${{ github.repository }}');
     expect(notifyStep.env?.WINDOWS_BUN_NATIVE_SMOKE_RESULT).toBe(
       '${{ needs.windows_bun_native_smoke.result }}',
     );
@@ -125,6 +126,7 @@ describe('nightly Windows Bun native-module smoke', () => {
     );
 
     const run = String(notifyStep.run).replace(/\s+/g, ' ').trim();
+    expect(run).toContain('--repo "${GH_REPO}"');
     expect(run).toContain(
       'if [[ "${WINDOWS_BUN_NATIVE_SMOKE_RESULT}" =~ ^(failure|cancelled)$ ]]',
     );

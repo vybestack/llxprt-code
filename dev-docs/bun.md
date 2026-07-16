@@ -134,6 +134,21 @@ names; introducing a native package outside those known families is a deliberate
 decision that must also update the allowlist (which the exact-match assertion
 forces).
 
+## Windows native-module smoke
+
+The nightly workflow runs `scripts/bun-native-modules-smoke.mjs` in a dedicated
+`windows-latest` job. The harness exercises `@ast-grep/napi`, constructs an
+`@napi-rs/keyring` entry without credential I/O, parses Bash with
+`web-tree-sitter` and `tree-sitter-bash`, and spawns a real ConPTY process with
+`@lydell/node-pty`. `Bun.Terminal` remains POSIX-only and is explicitly skipped
+on Windows.
+
+A hosted Windows Server 2025 run on 2026-07-16 verified the complete smoke with
+Bun 1.3.14, including streamed output and a real zero exit callback from the
+`@lydell/node-pty` ConPTY process. The Windows runtime therefore keeps using
+`@lydell/node-pty`; no JavaScript compile fallback is needed. The evidence is in
+[nightly run 29534151672](https://github.com/vybestack/llxprt-code/actions/runs/29534151672/job/87741315456).
+
 ## Dual Lockfile Policy
 
 During the migration, **two lockfiles coexist side-by-side** at the repository
