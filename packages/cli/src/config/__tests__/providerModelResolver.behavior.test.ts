@@ -426,4 +426,31 @@ describe('resolveProviderAndModel: alias default model preserved (#2481)', () =>
     expect(result.provider).toBe('myalias');
     expect(result.model).toBe('alias-default-model');
   });
+
+  it('prefers an explicit provider alias default over an unrelated environment model', () => {
+    vi.mocked(loadProviderAliasEntries).mockReturnValue([
+      {
+        alias: 'myalias',
+        config: {
+          baseProvider: 'openai',
+          defaultModel: 'alias-default-model',
+        },
+        filePath: '/test/providers/myalias.json',
+        source: 'user',
+      },
+    ]);
+
+    const result = resolveProviderAndModel({
+      cliProvider: 'myalias',
+      profileProvider: undefined,
+      envDefaultProvider: undefined,
+      cliModel: undefined,
+      profileModel: undefined,
+      settingsModel: undefined,
+      envDefaultModel: 'unrelated-environment-model',
+      envGeminiModel: undefined,
+    });
+    expect(result.provider).toBe('myalias');
+    expect(result.model).toBe('alias-default-model');
+  });
 });

@@ -62,7 +62,7 @@ function getAliasDefaultModel(provider: string): string | undefined {
  *
  * Provider: CLI --provider > profile > LLXPRT_DEFAULT_PROVIDER env > undefined
  * (no implicit hosted provider fallback)
- * Model: CLI --model > profile > settings > env vars > alias default > Gemini default
+ * Model: CLI --model > profile > settings > alias default > env vars > Gemini default
  */
 export function resolveProviderAndModel(
   input: ProviderModelInput,
@@ -99,18 +99,22 @@ export function resolveProviderAndModel(
 
   const providerDefault =
     provider === 'gemini' ? DEFAULT_GEMINI_MODEL : (aliasDefaultModel ?? '');
-  const cliOrProfileModel = firstNonEmptyString(
+  const configuredModel = firstNonEmptyString(
     trimIfString(cliModel),
     trimIfString(profileModel),
     trimIfString(settingsModel),
-    trimIfString(envDefaultModel),
   );
   // GEMINI_MODEL env is only relevant for the gemini provider — it must
   // never leak to non-Gemini providers.
   const scopedEnvModel =
     provider === 'gemini' ? trimIfString(envGeminiModel) : undefined;
+  const environmentModel = firstNonEmptyString(
+    trimIfString(envDefaultModel),
+    scopedEnvModel,
+  );
   const model: string =
-    firstNonEmptyString(cliOrProfileModel, scopedEnvModel) ?? providerDefault;
+    firstNonEmptyString(configuredModel, aliasDefaultModel, environmentModel) ??
+    providerDefault;
 
   return { provider, model };
 }
