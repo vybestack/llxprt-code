@@ -50,7 +50,7 @@ describe('TaskTool', () => {
       onMessage: undefined,
     };
     const launch = vi.fn().mockResolvedValue({
-      agentId: 'agent-stream',
+      agentId: 'agent-42',
       scope,
       dispose: vi.fn().mockResolvedValue(undefined),
       prompt: {} as unknown,
