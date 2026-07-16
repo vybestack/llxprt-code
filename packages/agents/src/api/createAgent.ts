@@ -257,8 +257,8 @@ export async function finalizeAgent(
   // @pseudocode createAgent.md steps 105-113: runtime state (runtimeId REQUIRED)
   const runtimeState = createAgentRuntimeState({
     runtimeId,
-    provider: parsed.provider || UNCONFIGURED_PROVIDER,
-    model: parsed.model || PLACEHOLDER_MODEL,
+    provider: parsed.provider.trim() || UNCONFIGURED_PROVIDER,
+    model: parsed.model.trim() || PLACEHOLDER_MODEL,
     baseUrl: resolvedAuth.baseUrl,
     modelParams: parsed.modelParams,
     sessionId: parsed.sessionId,
