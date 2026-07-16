@@ -176,11 +176,11 @@ export function formatSuccessContent(
 /**
  * Normalizes line endings in a streaming text fragment without forcing a
  * trailing newline. See taskAsyncExecution.ts for rationale.
+ *
+ * Preserved for backward compatibility; new callers should use
+ * {@link toLosslessTextDelta} from `@vybestack/llxprt-code-tools`.
  */
 export function normalizeSubagentStreamingText(text: string): string {
-  if (!text) {
-    return '';
-  }
   return text.replace(/\r\n?/g, '\n');
 }
 

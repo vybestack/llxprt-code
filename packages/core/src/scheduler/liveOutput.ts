@@ -23,6 +23,11 @@ import type { AnsiOutput } from '../utils/terminalSerializer.js';
  * drawn from a broader display union (e.g. `ToolResultDisplay`, which also
  * includes `FileDiff` / `FileRead`).  The function only ever appends when both
  * values are strings; any other combination replaces with the incoming chunk.
+ *
+ * Note: the append-vs-replace distinction is currently inferred from the
+ * payload type.  Migrating to an explicit tagged update protocol (e.g.
+ * `{ mode: 'append'; data: string } | { mode: 'replace'; data: AnsiOutput }`)
+ * is tracked in follow-up #2586.
  */
 export function accumulateLiveOutput(
   existing: unknown,

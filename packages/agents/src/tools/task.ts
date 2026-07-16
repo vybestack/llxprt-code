@@ -9,6 +9,7 @@ import {
   BaseToolInvocation,
   Kind,
   type ToolResult,
+  toLosslessTextDelta,
 } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
@@ -43,10 +44,7 @@ import {
   formatSuccessContent,
   formatSuccessDisplay,
 } from './taskResultHelpers.js';
-import {
-  executeAsyncTask,
-  normalizeSubagentStreamingText,
-} from './taskAsyncExecution.js';
+import { executeAsyncTask } from './taskAsyncExecution.js';
 
 const taskLogger = new DebugLogger('llxprt:task');
 
@@ -565,9 +563,9 @@ class TaskToolInvocation extends BaseToolInvocation<
 
       const existingHandler = scope.onMessage;
       scope.onMessage = (message: string) => {
-        const cleaned = normalizeSubagentStreamingText(message);
-        if (cleaned.trim().length > 0) {
-          updateOutput(cleaned);
+        const delta = toLosslessTextDelta(message);
+        if (delta !== undefined) {
+          updateOutput(delta);
         }
         existingHandler?.(message);
       };

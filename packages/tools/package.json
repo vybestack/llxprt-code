@@ -51,6 +51,11 @@
       "bun": "./src/utils/fetch.ts",
       "import": "./dist/src/utils/fetch.js"
     },
+    "./textDelta.js": {
+      "types": "./dist/src/utils/textDelta.d.ts",
+      "bun": "./src/utils/textDelta.ts",
+      "import": "./dist/src/utils/textDelta.js"
+    },
     "./activate-skill.js": {
       "types": "./dist/src/tools/activate-skill.d.ts",
       "bun": "./src/tools/activate-skill.ts",

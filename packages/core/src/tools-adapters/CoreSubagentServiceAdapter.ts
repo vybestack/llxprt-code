@@ -6,6 +6,7 @@
 
 import {
   ToolErrorType,
+  toLosslessTextDelta,
   type ISubagentService,
   type SubagentConfig as ToolsSubagentConfig,
   type SubagentExecutionOptions,
@@ -39,7 +40,6 @@ import {
   getToolNameCandidates,
   isExcludedToolName,
   isToolBlocked,
-  normalizeSubagentStreamingText,
   resolveTimeoutSeconds,
   stringifySubagentOutput,
   toToolsSubagentConfig,
@@ -624,9 +624,9 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
     updateOutput(`<subagent name="${subagentName}" id="${agentId}">\n`);
     const existingHandler = scope.onMessage;
     scope.onMessage = (message: string) => {
-      const cleaned = normalizeSubagentStreamingText(message);
-      if (cleaned.trim().length > 0) {
-        updateOutput(cleaned);
+      const delta = toLosslessTextDelta(message);
+      if (delta !== undefined) {
+        updateOutput(delta);
       }
       existingHandler?.(message);
     };

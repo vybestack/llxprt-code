@@ -369,7 +369,7 @@ describe('TaskTool', () => {
     expect(updateOutput).toHaveBeenCalledTimes(6);
   });
 
-  it('filters out empty messages when streaming', async () => {
+  it('preserves standalone newline chunks without dropping them', async () => {
     const dispose = vi.fn().mockResolvedValue(undefined);
     const updateOutput = vi.fn();
     const scope: {
@@ -386,10 +386,114 @@ describe('TaskTool', () => {
         terminate_reason: SubagentTerminateMode.GOAL,
       },
       runInteractive: vi.fn().mockImplementation(async (_ctx: ContextState) => {
-        // Simulate various empty/whitespace-only messages
+        scope.onMessage?.('Hello');
+        scope.onMessage?.('\n');
+        scope.onMessage?.('World');
+      }),
+      runNonInteractive: vi.fn(),
+      onMessage: undefined,
+    };
+    const launch = vi.fn().mockResolvedValue({
+      agentId: 'agent-nl',
+      scope,
+      dispose,
+      prompt: {} as unknown,
+      profile: {} as unknown,
+      config: {} as unknown,
+      runtime: {} as unknown,
+    });
+    const orchestrator = { launch } as unknown as SubagentOrchestrator;
+    const tool = new TaskTool(config, {
+      orchestratorFactory: () => orchestrator,
+      isInteractiveEnvironment: () => true,
+    });
+    const invocation = tool.build({
+      subagent_name: 'helper',
+      goal_prompt: 'Ship it',
+    });
+
+    await invocation.execute(new AbortController().signal, updateOutput);
+
+    const messageDeltas = updateOutput.mock.calls
+      .map((c) => c[0] as string)
+      .filter((s) => !s.startsWith('<subagent') && !s.startsWith('</subagent'));
+    const accumulated = messageDeltas.join('');
+    expect(accumulated).toBe('Hello\nWorld');
+  });
+
+  it('does not invent separators at word-token fragment boundaries', async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const updateOutput = vi.fn();
+    const scope: {
+      output: {
+        emitted_vars: Record<string, string>;
+        terminate_reason: SubagentTerminateMode;
+      };
+      runInteractive: ReturnType<typeof vi.fn>;
+      runNonInteractive: ReturnType<typeof vi.fn>;
+      onMessage?: (message: string) => void;
+    } = {
+      output: {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+      },
+      runInteractive: vi.fn().mockImplementation(async (_ctx: ContextState) => {
+        for (const token of 'Hello World'.match(/(\w+|\s)/g) ?? []) {
+          scope.onMessage?.(token);
+        }
+      }),
+      runNonInteractive: vi.fn(),
+      onMessage: undefined,
+    };
+    const launch = vi.fn().mockResolvedValue({
+      agentId: 'agent-frag',
+      scope,
+      dispose,
+      prompt: {} as unknown,
+      profile: {} as unknown,
+      config: {} as unknown,
+      runtime: {} as unknown,
+    });
+    const orchestrator = { launch } as unknown as SubagentOrchestrator;
+    const tool = new TaskTool(config, {
+      orchestratorFactory: () => orchestrator,
+      isInteractiveEnvironment: () => true,
+    });
+    const invocation = tool.build({
+      subagent_name: 'helper',
+      goal_prompt: 'Ship it',
+    });
+
+    await invocation.execute(new AbortController().signal, updateOutput);
+
+    const messageDeltas = updateOutput.mock.calls
+      .map((c) => c[0] as string)
+      .filter((s) => !s.startsWith('<subagent') && !s.startsWith('</subagent'));
+    const accumulated = messageDeltas.join('');
+    expect(accumulated).toBe('Hello World');
+  });
+
+  it('filters out only truly empty messages when streaming', async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const updateOutput = vi.fn();
+    const scope: {
+      output: {
+        emitted_vars: Record<string, string>;
+        terminate_reason: SubagentTerminateMode;
+      };
+      runInteractive: ReturnType<typeof vi.fn>;
+      runNonInteractive: ReturnType<typeof vi.fn>;
+      onMessage?: (message: string) => void;
+    } = {
+      output: {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+      },
+      runInteractive: vi.fn().mockImplementation(async (_ctx: ContextState) => {
         scope.onMessage?.('');
         scope.onMessage?.('  ');
         scope.onMessage?.('\n');
+        scope.onMessage?.('\t');
         scope.onMessage?.('actual message');
       }),
       runNonInteractive: vi.fn(),
@@ -416,18 +520,19 @@ describe('TaskTool', () => {
 
     await invocation.execute(new AbortController().signal, updateOutput);
 
-    // XML wrapping: opening tag, actual message (without agent prefix), closing tag
-    // Empty/whitespace-only messages are filtered
     expect(updateOutput).toHaveBeenNthCalledWith(
       1,
       '<subagent name="helper" id="agent-42">\n',
     );
-    expect(updateOutput).toHaveBeenNthCalledWith(2, 'actual message');
+    expect(updateOutput).toHaveBeenNthCalledWith(2, '  ');
+    expect(updateOutput).toHaveBeenNthCalledWith(3, '\n');
+    expect(updateOutput).toHaveBeenNthCalledWith(4, '\t');
+    expect(updateOutput).toHaveBeenNthCalledWith(5, 'actual message');
     expect(updateOutput).toHaveBeenNthCalledWith(
-      3,
+      6,
       '</subagent name="helper" id="agent-42">\n',
     );
-    expect(updateOutput).toHaveBeenCalledTimes(3);
+    expect(updateOutput).toHaveBeenCalledTimes(6);
   });
 
   /**

@@ -14,6 +14,7 @@ import { type ContextState } from '@vybestack/llxprt-code-core/core/subagentType
 import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
 import { type ToolResult, ToolErrorType } from '@vybestack/llxprt-code-tools';
+import { toLosslessTextDelta } from '@vybestack/llxprt-code-tools';
 import { type TaskToolInvocationParams } from './taskToolGovernance.js';
 import {
   handleBackgroundAbort,
@@ -57,11 +58,11 @@ export interface AsyncTaskCollaborators {
  * that broke LLM token streaming — each word landed on its own line. The
  * LLM's own whitespace and newlines are authoritative; we only normalize
  * carriage-return variants to '\n'.
+ *
+ * Preserved for backward compatibility; new callers should use
+ * {@link toLosslessTextDelta} from `@vybestack/llxprt-code-tools`.
  */
 export function normalizeSubagentStreamingText(text: string): string {
-  if (!text) {
-    return '';
-  }
   return text.replace(/\r\n?/g, '\n');
 }
 
@@ -304,9 +305,9 @@ export function setupAsyncStreaming(
 
   const existingHandler = scope.onMessage;
   scope.onMessage = (message: string) => {
-    const cleaned = normalizeSubagentStreamingText(message);
-    if (cleaned.trim().length > 0) {
-      updateOutput(cleaned);
+    const delta = toLosslessTextDelta(message);
+    if (delta !== undefined) {
+      updateOutput(delta);
     }
     existingHandler?.(message);
   };
