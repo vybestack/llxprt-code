@@ -57,21 +57,22 @@ export function getToolGovernanceEphemerals(config: Config):
       disabled?: string[];
     }
   | undefined {
-  const allowedList = readToolList(config.getEphemeralSetting('tools.allowed'));
+  const rawAllowed = config.getEphemeralSetting('tools.allowed');
+  const allowedList = readToolList(rawAllowed);
   const disabledList = readToolList(
     config.getEphemeralSetting('tools.disabled') ??
       config.getEphemeralSetting('disabled-tools'),
   );
 
-  const hasAllowed = allowedList.length > 0;
+  const allowedExplicit = Array.isArray(rawAllowed);
   const hasDisabled = disabledList.length > 0;
 
-  if (!hasAllowed && !hasDisabled) {
+  if (!allowedExplicit && !hasDisabled) {
     return undefined;
   }
 
   return {
-    allowed: hasAllowed ? allowedList : undefined,
+    allowed: allowedExplicit ? allowedList : undefined,
     disabled: hasDisabled ? disabledList : undefined,
   };
 }

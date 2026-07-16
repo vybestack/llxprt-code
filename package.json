@@ -111,7 +111,8 @@
     "release:version": "bun scripts/version.ts",
     "telemetry": "bun scripts/telemetry.ts",
     "check:lockfile": "bun scripts/check-lockfile.ts",
-    "clean": "bun scripts/clean.ts"
+    "clean": "bun scripts/clean.ts",
+    "generate:release-notes": "bun scripts/generate-release-notes.ts"
   },
   "overrides": {
     "@tootallnate/once": "3.0.1",
