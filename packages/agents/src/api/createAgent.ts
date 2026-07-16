@@ -58,7 +58,7 @@ import {
 } from './loop/rebuildLoop.js';
 import { buildAgent } from './agentImpl.js';
 import { executeProviderActivation } from './providerActivationExecutor.js';
-import { PLACEHOLDER_MODEL } from './constants.js';
+import { PLACEHOLDER_MODEL, UNCONFIGURED_PROVIDER } from './constants.js';
 import {
   resolveAuthType,
   generateRuntimeId,
@@ -257,8 +257,8 @@ export async function finalizeAgent(
   // @pseudocode createAgent.md steps 105-113: runtime state (runtimeId REQUIRED)
   const runtimeState = createAgentRuntimeState({
     runtimeId,
-    provider: parsed.provider,
-    model: parsed.model,
+    provider: parsed.provider || UNCONFIGURED_PROVIDER,
+    model: parsed.model || PLACEHOLDER_MODEL,
     baseUrl: resolvedAuth.baseUrl,
     modelParams: parsed.modelParams,
     sessionId: parsed.sessionId,
