@@ -11,7 +11,7 @@
  * UNCONFIGURED_PROVIDER — not 'gemini'.
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { Task } from './task.js';
 import { createMockConfig } from '../utils/testing_utils.js';
 import {
@@ -37,9 +37,11 @@ void vi.mock('@vybestack/llxprt-code-agents', () => ({
 }));
 
 describe('Task: provider-neutral default (not gemini)', () => {
-  it('passes UNCONFIGURED_PROVIDER sentinel (not gemini) to createAgentClient when config has no provider set', async () => {
+  beforeEach(() => {
     capturedRuntimeStates.length = 0;
+  });
 
+  it('passes UNCONFIGURED_PROVIDER sentinel (not gemini) to createAgentClient when config has no provider set', async () => {
     const mockConfig = createMockConfig({
       getProvider: () => undefined,
       getModel: () => '',
@@ -54,8 +56,6 @@ describe('Task: provider-neutral default (not gemini)', () => {
   });
 
   it('passes PLACEHOLDER_MODEL (not gemini-pro) to createAgentClient when no model is configured', async () => {
-    capturedRuntimeStates.length = 0;
-
     const mockConfig = createMockConfig({
       getProvider: () => undefined,
       getModel: () => '',
@@ -70,8 +70,6 @@ describe('Task: provider-neutral default (not gemini)', () => {
   });
 
   it('passes an explicit provider through to createAgentClient', async () => {
-    capturedRuntimeStates.length = 0;
-
     const mockConfig = createMockConfig({
       getProvider: () => 'openai',
       getModel: () => 'gpt-4o',
@@ -86,8 +84,6 @@ describe('Task: provider-neutral default (not gemini)', () => {
   });
 
   it('treats whitespace-only provider as UNCONFIGURED_PROVIDER', async () => {
-    capturedRuntimeStates.length = 0;
-
     const mockConfig = createMockConfig({
       getProvider: () => '   ',
       getModel: () => '',
@@ -101,8 +97,6 @@ describe('Task: provider-neutral default (not gemini)', () => {
   });
 
   it('treats empty-string provider as UNCONFIGURED_PROVIDER', async () => {
-    capturedRuntimeStates.length = 0;
-
     const mockConfig = createMockConfig({
       getProvider: () => '',
       getModel: () => '',

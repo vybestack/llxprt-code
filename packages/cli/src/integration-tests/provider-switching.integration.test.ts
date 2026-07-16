@@ -94,6 +94,7 @@ describe('Runtime Provider Switching Integration', () => {
 
   afterEach(async () => {
     resetCliProviderInfrastructure();
+    resetDefaultCliRuntimeIdForTesting();
     await cleanupTempDirectory(tempDir);
   });
 
@@ -322,6 +323,7 @@ describe('First provider selection from no active provider (#2481)', () => {
 
   afterEach(async () => {
     resetCliProviderInfrastructure();
+    resetDefaultCliRuntimeIdForTesting();
     await cleanupTempDirectory(tempDir);
   });
 

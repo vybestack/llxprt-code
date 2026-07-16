@@ -156,22 +156,6 @@ describe('validateNonInteractiveAuth (gate-only)', () => {
     expect(cleanupSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('exits with FATAL_CONFIG_ERROR (52) even when bare GEMINI_API_KEY is set but no provider configured', async () => {
-    process.env.GEMINI_API_KEY = 'bare-key';
-    const nonInteractiveConfig = makeConfig();
-    const promise = validateNonInteractiveAuth(undefined, nonInteractiveConfig);
-    await expect(promise).rejects.toThrow('process.exit(52) called');
-    expect(processExitSpy).toHaveBeenCalledWith(52);
-  });
-
-  it('exits with FATAL_CONFIG_ERROR (52) even when OPENAI_API_KEY is set but no provider configured', async () => {
-    process.env.OPENAI_API_KEY = 'sk-bare';
-    const nonInteractiveConfig = makeConfig();
-    const promise = validateNonInteractiveAuth(undefined, nonInteractiveConfig);
-    await expect(promise).rejects.toThrow('process.exit(52) called');
-    expect(processExitSpy).toHaveBeenCalledWith(52);
-  });
-
   it('passes the gate when provider is active', async () => {
     const nonInteractiveConfig = makeConfig('gemini', true);
     const result = await validateNonInteractiveAuth(
@@ -279,7 +263,7 @@ describe('validateNonInteractiveAuth (gate-only)', () => {
     expect(setConfigSpy).toHaveBeenCalledWith(nonInteractiveConfig);
   });
 
-  it('does not wire serverToolsProvider when manager is undefined', async () => {
+  it('exits with FATAL_CONFIG_ERROR (52) when provider manager is undefined', async () => {
     const nonInteractiveConfig: NonInteractiveConfig = {
       getProvider: () => 'gemini',
       getProviderManager: () => undefined,

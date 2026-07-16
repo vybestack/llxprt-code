@@ -15,6 +15,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core';
 import { resolveProviderAndModel } from '../providerModelResolver.js';
+import { loadProviderAliasEntries } from '@vybestack/llxprt-code-providers/composition.js';
 
 vi.mock('@vybestack/llxprt-code-providers/composition.js', () => ({
   loadProviderAliasEntries: vi.fn(() => []),
@@ -300,5 +301,129 @@ describe('resolveProviderAndModel: explicit non-Gemini provider with no model (#
     });
     expect(result.provider).toBe('anthropic');
     expect(result.model).toBe('');
+  });
+});
+
+describe('resolveProviderAndModel: envGeminiModel must not leak to non-Gemini (#2481)', () => {
+  it('does NOT use envGeminiModel when provider is openai', () => {
+    const result = resolveProviderAndModel({
+      cliProvider: 'openai',
+      profileProvider: undefined,
+      envDefaultProvider: undefined,
+      cliModel: undefined,
+      profileModel: undefined,
+      settingsModel: undefined,
+      envDefaultModel: undefined,
+      envGeminiModel: 'gemini-2.5-flash',
+    });
+    expect(result.provider).toBe('openai');
+    expect(result.model).not.toBe('gemini-2.5-flash');
+    expect(result.model).toBe('');
+  });
+
+  it('does NOT use envGeminiModel when provider is anthropic', () => {
+    const result = resolveProviderAndModel({
+      cliProvider: 'anthropic',
+      profileProvider: undefined,
+      envDefaultProvider: undefined,
+      cliModel: undefined,
+      profileModel: undefined,
+      settingsModel: undefined,
+      envDefaultModel: undefined,
+      envGeminiModel: 'gemini-2.5-flash',
+    });
+    expect(result.provider).toBe('anthropic');
+    expect(result.model).not.toBe('gemini-2.5-flash');
+  });
+
+  it('DOES use envGeminiModel when provider IS gemini', () => {
+    const result = resolveProviderAndModel({
+      cliProvider: 'gemini',
+      profileProvider: undefined,
+      envDefaultProvider: undefined,
+      cliModel: undefined,
+      profileModel: undefined,
+      settingsModel: undefined,
+      envDefaultModel: undefined,
+      envGeminiModel: 'gemini-2.5-flash',
+    });
+    expect(result.provider).toBe('gemini');
+    expect(result.model).toBe('gemini-2.5-flash');
+  });
+});
+
+describe('resolveProviderAndModel: whitespace model sources treated as absent (#2481)', () => {
+  it('treats whitespace-only cliModel as absent', () => {
+    const result = resolveProviderAndModel({
+      cliProvider: 'gemini',
+      profileProvider: undefined,
+      envDefaultProvider: undefined,
+      cliModel: '   ',
+      profileModel: undefined,
+      settingsModel: undefined,
+      envDefaultModel: undefined,
+      envGeminiModel: undefined,
+    });
+    expect(result.provider).toBe('gemini');
+    expect(result.model).toBe(DEFAULT_GEMINI_MODEL);
+  });
+
+  it('treats whitespace-only profileModel as absent', () => {
+    const result = resolveProviderAndModel({
+      cliProvider: 'gemini',
+      profileProvider: undefined,
+      envDefaultProvider: undefined,
+      cliModel: undefined,
+      profileModel: '  ',
+      settingsModel: undefined,
+      envDefaultModel: undefined,
+      envGeminiModel: undefined,
+    });
+    expect(result.provider).toBe('gemini');
+    expect(result.model).toBe(DEFAULT_GEMINI_MODEL);
+  });
+
+  it('treats whitespace-only settingsModel as absent', () => {
+    const result = resolveProviderAndModel({
+      cliProvider: 'gemini',
+      profileProvider: undefined,
+      envDefaultProvider: undefined,
+      cliModel: undefined,
+      profileModel: undefined,
+      settingsModel: '   ',
+      envDefaultModel: undefined,
+      envGeminiModel: undefined,
+    });
+    expect(result.provider).toBe('gemini');
+    expect(result.model).toBe(DEFAULT_GEMINI_MODEL);
+  });
+});
+
+describe('resolveProviderAndModel: alias default model preserved (#2481)', () => {
+  it('falls back to alias default model for a non-gemini provider with no explicit model', () => {
+    vi.mocked(loadProviderAliasEntries).mockReturnValue([
+      {
+        alias: 'myalias',
+        config: {
+          baseProvider: 'openai',
+          defaultModel: 'alias-default-model',
+        },
+        filePath: '/test/providers/myalias.json',
+        source: 'user',
+      },
+    ]);
+
+    const result = resolveProviderAndModel({
+      cliProvider: 'myalias',
+      profileProvider: undefined,
+      envDefaultProvider: undefined,
+      cliModel: undefined,
+      profileModel: undefined,
+      settingsModel: undefined,
+      envDefaultModel: undefined,
+      envGeminiModel: undefined,
+    });
+    expect(result.provider).toBe('myalias');
+    expect(result.model).toBe('alias-default-model');
   });
 });

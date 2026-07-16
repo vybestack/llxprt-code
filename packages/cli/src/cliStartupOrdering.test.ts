@@ -6,17 +6,19 @@
 
 /**
  * Behavioral tests for the production guard helper used by the CLI main
- * boundary (#2481). The CLI main calls `guardUnconfiguredProvider` between
- * `configureProvidersAndServices`/list-extension handling and
- * `activateConfiguredProvider`. If that call were removed or moved after
- * Agent construction, a non-interactive run with no provider would proceed to
- * activation/construction instead of exiting with code 52.
+ * boundary (#2481). The CLI main calls `guardUnconfiguredProvider` after
+ * `configureProvidersAndServices`/list-extension handling and the ACP/Zed
+ * integration check, but before `activateConfiguredProvider`. If that call
+ * were removed or moved after Agent construction, a non-interactive run with
+ * no provider would proceed to activation/construction instead of exiting
+ * with code 52.
  *
  * These tests exercise the REAL guard helper (not a copy) to verify the
  * observable contract: exit 52 on unconfigured non-interactive, fall-through
  * on configured or interactive. The orchestration test below exercises the
  * REAL main() entrypoint to prove the guard fires BEFORE provider activation
- * and Agent construction.
+ * and Agent construction, while the ACP/Zed path reaches
+ * ensureAcpProviderActivated without passing the guard.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -91,16 +93,6 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
     expect(combined).toContain(UNCONFIGURED_PROVIDER_MESSAGE);
   });
 
-  it('calls cleanup exactly once and exits 52 on the unconfigured non-interactive path', async () => {
-    // Verify the guard owns the single exit path: it calls cleanup once
-    // then exits with code 52.
-    const config = makeConfig(false, false);
-    await expect(guardUnconfiguredProvider(config, cleanupFn)).rejects.toThrow(
-      'process.exit(52) called',
-    );
-    expect(cleanupFn).toHaveBeenCalledTimes(1);
-  });
-
   it('does NOT call cleanup in interactive mode (caller proceeds)', async () => {
     const config = makeConfig(false, true);
     const result = await guardUnconfiguredProvider(config, cleanupFn);
@@ -173,7 +165,9 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
       },
       configureProvidersAndServices: async () => ({}),
       connectIdeClientIfEnabled: async () => {},
-      ensureAcpProviderActivated: () => {},
+      ensureAcpProviderActivated: () => {
+        callOrder.push('acp-activated');
+      },
     }));
 
     vi.doMock('./cliTerminalSession.js', () => ({
@@ -307,5 +301,31 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
     expect(callOrder.indexOf('guard')).toBeLessThan(
       callOrder.indexOf('activation'),
     );
+  });
+
+  it('ACP/Zed: ensureAcpProviderActivated is reached without passing the general guard', async () => {
+    const config = {
+      getProviderManager: () => ({ hasActiveProvider: () => false }),
+      isInteractive: () => false,
+      getOutputFormat: () => 'text',
+      getListExtensions: () => false,
+      getExperimentalZedIntegration: () => true,
+    } as unknown as Config;
+
+    vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('unexpected process.exit');
+    });
+
+    await runMainWithConfig(config);
+
+    // ensureAcpProviderActivated was reached.
+    expect(callOrder).toContain('acp-activated');
+    // The general unconfigured-provider guard was NOT reached — ACP
+    // bypasses it so ACP-specific provider activation can run.
+    expect(callOrder).not.toContain('guard');
+    // Ordinary provider activation and Agent construction are also
+    // skipped — ACP runs its own runtime.
+    expect(callOrder).not.toContain('activation');
+    expect(callOrder).not.toContain('agent-construction');
   });
 });

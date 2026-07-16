@@ -11,6 +11,18 @@ import { firstNonEmptyString } from '../utils/coalesce.js';
 
 const logger = new DebugLogger('llxprt:config:providerModelResolver');
 
+/**
+ * Trims a string candidate; returns undefined for whitespace-only strings so
+ * they are treated as absent by firstNonEmptyString.
+ */
+function trimIfString(value: string | undefined | null): string | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
 export interface ProviderModelInput {
   cliProvider: string | undefined;
   profileProvider: string | undefined;
@@ -88,13 +100,18 @@ export function resolveProviderAndModel(
   const providerDefault =
     provider === 'gemini' ? DEFAULT_GEMINI_MODEL : (aliasDefaultModel ?? '');
   const cliOrProfileModel = firstNonEmptyString(
-    cliModel,
-    profileModel,
-    settingsModel,
-    envDefaultModel,
+    trimIfString(cliModel),
+    trimIfString(profileModel),
+    trimIfString(settingsModel),
+    trimIfString(envDefaultModel),
   );
+  // GEMINI_MODEL env is only relevant for the gemini provider — it must
+  // never leak to non-Gemini providers.
+  const geminiScopedEnvModel =
+    provider === 'gemini' ? trimIfString(envGeminiModel) : undefined;
   const model: string =
-    firstNonEmptyString(cliOrProfileModel, envGeminiModel) ?? providerDefault;
+    firstNonEmptyString(cliOrProfileModel, geminiScopedEnvModel) ??
+    providerDefault;
 
   return { provider, model };
 }

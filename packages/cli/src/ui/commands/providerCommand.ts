@@ -280,8 +280,7 @@ function resolveCurrentProvider(
   providerManager: ReturnType<typeof getProviderManager>,
 ): string | null {
   try {
-    const name = runtime.getActiveProviderName();
-    return name;
+    return runtime.getActiveProviderName();
   } catch {
     try {
       return providerManager.getActiveProviderName() ?? null;

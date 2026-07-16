@@ -9,7 +9,7 @@ import { MessageType, type HistoryItemWithoutId } from '../types.js';
 
 export interface UnconfiguredProviderGuidanceOptions {
   hasActiveProvider: boolean;
-  addItem: (item: HistoryItemWithoutId, timestamp?: number) => void;
+  addItem: (item: HistoryItemWithoutId, timestamp?: number) => number;
   isWelcomeDialogOpen: boolean;
 }
 

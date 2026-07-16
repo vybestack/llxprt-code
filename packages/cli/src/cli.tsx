@@ -292,6 +292,14 @@ export async function main() {
     process.exit(0);
   }
 
+  // ACP/Zed runs its own runtime and constructs per-session Agents via
+  // fromConfig internally; it must be handled BEFORE the general
+  // non-interactive unconfigured-provider guard so that
+  // ensureAcpProviderActivated can perform ACP-specific provider activation.
+  if (await handleZedAcpIntegration(config, settings, cleanupStdio)) {
+    return;
+  }
+
   // Non-interactive unconfigured-provider gate: when no provider is
   // active and we are NOT in interactive mode, exit FATAL_CONFIG_ERROR (52)
   // BEFORE any provider activation or Agent construction. The interactive path
@@ -335,10 +343,6 @@ export async function main() {
 
   // Cleanup sessions before agent construction.
   await cleanupExpiredSessions(config, settings.merged);
-
-  if (await handleZedAcpIntegration(config, settings, cleanupStdio)) {
-    return;
-  }
 
   await constructForegroundAgentAndDispatch(
     config,
