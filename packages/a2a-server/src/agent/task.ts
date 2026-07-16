@@ -30,6 +30,12 @@ import type {
   AgentClientContract,
 } from '@vybestack/llxprt-code-core';
 import { createAgentClient } from '@vybestack/llxprt-code-agents';
+
+type AgentClientFactory = typeof createAgentClient;
+
+interface TaskDependencies {
+  readonly agentClientFactory?: AgentClientFactory;
+}
 import type { RequestContext } from '@a2a-js/sdk/server';
 import { type ExecutionEventBus } from '@a2a-js/sdk/server';
 import type {
@@ -115,6 +121,7 @@ export class Task {
     config: Config,
     eventBus?: ExecutionEventBus,
     autoExecute = false,
+    dependencies: TaskDependencies = {},
   ) {
     this.id = id;
     this.contextId = contextId;
@@ -141,7 +148,10 @@ export class Task {
       proxyUrl: this.config.getProxy(),
       sessionId: this.config.getSessionId(),
     });
-    this.agentClient = createAgentClient(this.config, runtimeState);
+    this.agentClient = (dependencies.agentClientFactory ?? createAgentClient)(
+      this.config,
+      runtimeState,
+    );
     this.pendingToolConfirmationDetails = new Map();
     this.taskState = 'submitted';
     this.eventBus = eventBus;
@@ -156,8 +166,16 @@ export class Task {
     config: Config,
     eventBus?: ExecutionEventBus,
     autoExecute?: boolean,
+    dependencies?: TaskDependencies,
   ): Promise<Task> {
-    const task = new Task(id, contextId, config, eventBus, autoExecute);
+    const task = new Task(
+      id,
+      contextId,
+      config,
+      eventBus,
+      autoExecute,
+      dependencies,
+    );
     task.scheduler = await task.createScheduler();
     return task;
   }

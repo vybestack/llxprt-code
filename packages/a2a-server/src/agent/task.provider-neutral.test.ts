@@ -11,31 +11,38 @@
  * UNCONFIGURED_PROVIDER — not 'gemini'.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { Task } from './task.js';
 import { createMockConfig } from '../utils/testing_utils.js';
 import {
   UNCONFIGURED_PROVIDER,
   PLACEHOLDER_MODEL,
 } from '@vybestack/llxprt-code-core';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core';
+import type {
+  AgentClientContract,
+  AgentRuntimeState,
+  Config,
+} from '@vybestack/llxprt-code-core';
 
 const capturedRuntimeStates: Array<{ provider: string; model: string }> = [];
 
-void vi.mock('@vybestack/llxprt-code-agents', () => ({
-  createAgentClient: vi.fn((_, runtimeState) => {
-    capturedRuntimeStates.push({
-      provider: runtimeState.provider,
-      model: runtimeState.model,
-    });
-    return {
-      getUserTier: () => undefined,
-      addHistory: () => Promise.resolve(undefined),
-      sendMessageStream: () => {},
-      initialize: () => Promise.resolve(undefined),
-    } as unknown as AgentClientContract;
-  }),
-}));
+function captureAgentClientFactory(
+  _config: Config,
+  runtimeState: AgentRuntimeState,
+): AgentClientContract {
+  capturedRuntimeStates.push({
+    provider: runtimeState.provider,
+    model: runtimeState.model,
+  });
+  return {
+    getUserTier: () => undefined,
+    addHistory: () => Promise.resolve(undefined),
+    sendMessageStream: () => (async function* () {})(),
+    initialize: () => Promise.resolve(undefined),
+  } as unknown as AgentClientContract;
+}
+
+const taskDependencies = { agentClientFactory: captureAgentClientFactory };
 
 describe('Task: provider-neutral default (not gemini)', () => {
   beforeEach(() => {
@@ -49,7 +56,14 @@ describe('Task: provider-neutral default (not gemini)', () => {
       getContentGeneratorConfig: () => undefined,
     });
 
-    await Task.create('task-id', 'context-id', mockConfig as never, undefined);
+    await Task.create(
+      'task-id',
+      'context-id',
+      mockConfig as never,
+      undefined,
+      undefined,
+      taskDependencies,
+    );
 
     expect(capturedRuntimeStates.length).toBe(1);
     expect(capturedRuntimeStates[0].provider).toBe(UNCONFIGURED_PROVIDER);
@@ -63,7 +77,14 @@ describe('Task: provider-neutral default (not gemini)', () => {
       getContentGeneratorConfig: () => undefined,
     });
 
-    await Task.create('task-id', 'context-id', mockConfig as never, undefined);
+    await Task.create(
+      'task-id',
+      'context-id',
+      mockConfig as never,
+      undefined,
+      undefined,
+      taskDependencies,
+    );
 
     expect(capturedRuntimeStates.length).toBe(1);
     expect(capturedRuntimeStates[0].model).toBe(PLACEHOLDER_MODEL);
@@ -77,7 +98,14 @@ describe('Task: provider-neutral default (not gemini)', () => {
       getContentGeneratorConfig: () => ({ model: 'gpt-4o' }),
     });
 
-    await Task.create('task-id', 'context-id', mockConfig as never, undefined);
+    await Task.create(
+      'task-id',
+      'context-id',
+      mockConfig as never,
+      undefined,
+      undefined,
+      taskDependencies,
+    );
 
     expect(capturedRuntimeStates.length).toBe(1);
     expect(capturedRuntimeStates[0].provider).toBe('openai');
@@ -91,7 +119,14 @@ describe('Task: provider-neutral default (not gemini)', () => {
       getContentGeneratorConfig: () => undefined,
     });
 
-    await Task.create('task-id', 'context-id', mockConfig as never, undefined);
+    await Task.create(
+      'task-id',
+      'context-id',
+      mockConfig as never,
+      undefined,
+      undefined,
+      taskDependencies,
+    );
 
     expect(capturedRuntimeStates.length).toBe(1);
     expect(capturedRuntimeStates[0].provider).toBe(UNCONFIGURED_PROVIDER);
@@ -104,7 +139,14 @@ describe('Task: provider-neutral default (not gemini)', () => {
       getContentGeneratorConfig: () => undefined,
     });
 
-    await Task.create('task-id', 'context-id', mockConfig as never, undefined);
+    await Task.create(
+      'task-id',
+      'context-id',
+      mockConfig as never,
+      undefined,
+      undefined,
+      taskDependencies,
+    );
 
     expect(capturedRuntimeStates.length).toBe(1);
     expect(capturedRuntimeStates[0].provider).toBe(UNCONFIGURED_PROVIDER);
@@ -119,7 +161,14 @@ describe('Task: provider-neutral default (not gemini)', () => {
       getContentGeneratorConfig: () => ({ model: 'gpt-4o' }),
     });
 
-    await Task.create('task-id', 'context-id', mockConfig as never, undefined);
+    await Task.create(
+      'task-id',
+      'context-id',
+      mockConfig as never,
+      undefined,
+      undefined,
+      taskDependencies,
+    );
 
     expect(capturedRuntimeStates.length).toBe(1);
     expect(capturedRuntimeStates[0].provider).toBe('openai');
