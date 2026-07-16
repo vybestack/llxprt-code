@@ -306,3 +306,4 @@ if (skippedChecks > 0) {
 } else {
   console.log('\nAll native-module smoke checks passed under Bun.');
 }
+process.exit(0);
