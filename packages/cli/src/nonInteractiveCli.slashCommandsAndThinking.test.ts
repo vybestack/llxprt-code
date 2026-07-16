@@ -155,7 +155,10 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       getDebugMode: vi.fn().mockReturnValue(false),
       getProvider: vi.fn().mockReturnValue(undefined),
       getModel: vi.fn().mockReturnValue(PLACEHOLDER_MODEL),
-      getProviderManager: vi.fn().mockReturnValue(undefined),
+      getProviderManager: vi.fn().mockReturnValue({
+        hasActiveProvider: vi.fn().mockReturnValue(true),
+        getActiveProviderName: vi.fn().mockReturnValue('openai'),
+      }),
       getOutputFormat: vi.fn().mockReturnValue('text'),
       getFolderTrust: vi.fn().mockReturnValue(false),
       isTrustedFolder: vi.fn().mockReturnValue(false),

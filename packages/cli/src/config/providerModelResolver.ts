@@ -107,11 +107,10 @@ export function resolveProviderAndModel(
   );
   // GEMINI_MODEL env is only relevant for the gemini provider — it must
   // never leak to non-Gemini providers.
-  const geminiScopedEnvModel =
+  const scopedEnvModel =
     provider === 'gemini' ? trimIfString(envGeminiModel) : undefined;
   const model: string =
-    firstNonEmptyString(cliOrProfileModel, geminiScopedEnvModel) ??
-    providerDefault;
+    firstNonEmptyString(cliOrProfileModel, scopedEnvModel) ?? providerDefault;
 
   return { provider, model };
 }

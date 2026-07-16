@@ -145,6 +145,22 @@ vi.mock('ink', () => ({
   render: vi.fn().mockReturnValue({ unmount: vi.fn() }),
 }));
 
+const preflightAgentActivationMock = vi.hoisted(() =>
+  vi.fn(async () => ({
+    authFailed: false,
+    token: { established: true },
+  })),
+);
+
+vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
+  return {
+    ...actual,
+    preflightAgentActivation: preflightAgentActivationMock,
+  };
+});
+
 function makeResumeResult(historyText = 'resumed'): ResumeResult {
   return {
     ok: true,
@@ -202,6 +218,8 @@ describe('cli main provider initialization', () => {
       getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
       getActiveProviderName: vi.fn().mockReturnValue('gemini'),
       getServerToolsProvider: vi.fn().mockReturnValue(null),
+      hasActiveProvider: vi.fn().mockReturnValue(true),
+      setActiveProvider: vi.fn().mockReturnValue(undefined),
     };
 
     const mockConfig = {
@@ -270,14 +288,14 @@ describe('cli main provider initialization', () => {
       .mockImplementation(() => {});
 
     // main() may complete or throw from process.exit in this mocked environment.
-    // We only need to verify that provider initialization refreshes auth.
+    // We only need to verify that provider initialization runs before UI.
     try {
       await cli.main();
     } catch {
       // Ignore exits or other throws.
     }
 
-    expect(mockConfig.refreshAuth).toHaveBeenCalledTimes(1);
+    expect(preflightAgentActivationMock).toHaveBeenCalledTimes(1);
     exitSpy.mockRestore();
     consoleErrorSpy.mockRestore();
   });

@@ -32,6 +32,7 @@ void vi.mock('@vybestack/llxprt-code-agents', () => ({
       getUserTier: () => undefined,
       addHistory: () => Promise.resolve(undefined),
       sendMessageStream: () => {},
+      initialize: () => Promise.resolve(undefined),
     } as unknown as AgentClientContract;
   }),
 }));

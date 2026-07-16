@@ -411,9 +411,10 @@ describe('providerModelPrecedenceParity: 6-level model chain', () => {
     expect(config.getModel()).toBe(DEFAULT_GEMINI_MODEL);
   });
 
-  it('level 5: GEMINI_MODEL env provides model when no other override', async () => {
+  it('level 5: GEMINI_MODEL env provides model when resolved provider is explicit gemini', async () => {
     vi.stubEnv('GEMINI_MODEL', 'gemini-1.5-flash');
-    const config = await runConfig({});
+    const config = await runConfig({}, ['--provider', 'gemini']);
+    expect(config.getProvider()).toBe('gemini');
     expect(config.getModel()).toBe('gemini-1.5-flash');
   });
 
