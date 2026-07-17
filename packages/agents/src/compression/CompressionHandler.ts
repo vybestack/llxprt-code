@@ -67,6 +67,7 @@ import {
  * @requirement Module 3 specification
  */
 export class CompressionHandler {
+  // Preserve the existing public static constants while centralizing the policy.
   static readonly TOKEN_SAFETY_MARGIN = TOKEN_SAFETY_MARGIN;
   static readonly CONTEXT_LIMIT_FUDGE_FACTOR = CONTEXT_LIMIT_FUDGE_FACTOR;
   static readonly DEFAULT_COMPLETION_BUDGET = 65_536;

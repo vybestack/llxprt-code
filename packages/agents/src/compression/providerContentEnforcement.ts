@@ -154,6 +154,11 @@ export class ProviderContentEnforcer {
     });
   }
 
+  /**
+   * Compresses history and recomposes it with pending content.
+   *
+   * @throws When compression throws or returns a non-COMPRESSED result.
+   */
   async compressAndRecompose(
     pendingContents: IContent[],
     promptId: string,
